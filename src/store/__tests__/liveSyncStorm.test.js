@@ -188,13 +188,13 @@ describe('a stale background refresh cannot clobber a newer realtime patch', () 
 // peer stroke arrives as two realtime events. Applied separately that is two
 // saves and two whole-screen re-renders for one fact -- measured at ~32 ms per
 // HoleView commit. They must collapse into one read-modify-write.
-describe('sibling rows from one score collapse into a single save', () => {
+describe('sibling rows from one card publication collapse into a single save', () => {
   beforeEach(() => {
     jest.resetModules();
     AsyncStorage.clear();
   });
 
-  test('the entries row and the scores row produce one saveLocal', async () => {
+  test('the projected scores row and shot-detail row produce one saveLocal', async () => {
     const saveLocal = jest.fn(() => Promise.resolve());
     const cached = tournamentFixture();
     jest.doMock('../tournamentStore', () => ({
@@ -203,7 +203,6 @@ describe('sibling rows from one score collapse into a single save', () => {
     }));
     jest.doMock('../mutate', () => ({
       applyPendingMutations: jest.fn((t) => t),
-      preserveLocalConflictState: jest.fn((target) => target),
       unionLocalRoster: jest.fn((target) => target),
     }));
     jest.doMock('../syncQueue', () => ({
@@ -212,8 +211,6 @@ describe('sibling rows from one score collapse into a single save', () => {
     const channel = {
       on: jest.fn(function on() { return this; }),
       subscribe: jest.fn(function subscribe() { return this; }),
-      track: jest.fn(),
-      presenceState: jest.fn(() => ({})),
     };
     jest.doMock('../../lib/supabase', () => ({
       supabase: { channel: jest.fn(() => channel), removeChannel: jest.fn() },
@@ -225,18 +222,19 @@ describe('sibling rows from one score collapse into a single save', () => {
     const handlerFor = (table) => channel.on.mock.calls
       .find(([, cfg]) => cfg.table === table)[2];
 
-    // Both rows of one score, back to back, exactly as the server emits them.
-    const a = handlerFor('game_score_entries')({
-      eventType: 'INSERT',
-      new: {
-        round_id: 'r1', tournament_id: 't1', player_id: 'p2', hole: 4,
-        author_id: 'peer', strokes: 5, updated_at: '2026-07-28T10:00:00.000Z',
-      },
-    });
-    const b = handlerFor('game_scores')({
+    // One peer leaving a hole re-projects the whole round, so game_scores and
+    // game_shot_details rows arrive back to back.
+    const a = handlerFor('game_scores')({
       eventType: 'UPDATE',
       new: {
         round_id: 'r1', tournament_id: 't1', player_id: 'p2', hole: 4, strokes: 5,
+      },
+    });
+    const b = handlerFor('game_shot_details')({
+      eventType: 'UPDATE',
+      new: {
+        round_id: 'r1', tournament_id: 't1', player_id: 'p2', hole: 4,
+        detail: { putts: 2 },
       },
     });
     await Promise.all([a, b]);
@@ -246,67 +244,6 @@ describe('sibling rows from one score collapse into a single save', () => {
     const [saved] = saveLocal.mock.calls[0];
     const round = saved.rounds.find((r) => r.id === 'r1');
     expect(round.scores.p2['4']).toBe(5);
-    expect(round.scoreEntries.p2[4].peer.value).toBe(5);
-  });
-});
-
-describe('applyPlayerRow anchors identity on the row primary key', () => {
-  beforeEach(() => {
-    jest.resetModules();
-    jest.doMock('../tournamentStore', () => ({
-      readLocal: jest.fn(), saveLocal: jest.fn(() => Promise.resolve()),
-    }));
-    jest.doMock('../../lib/supabase', () => ({
-      supabase: { channel: jest.fn(), removeChannel: jest.fn() },
-    }));
-  });
-
-  test('a body missing id still yields an identifiable player', () => {
-    const { applyPlayerRow } = require('../realtimeSync');
-
-    const t = { id: 't1', players: [{ id: 'p1', name: 'Yeyen' }], rounds: [] };
-    const out = applyPlayerRow(t, {
-      tournament_id: 't1', player_id: 'p2', pos: 1, body: { name: 'Labarga' },
-    }, 'INSERT');
-
-    expect(out.players).toEqual([
-      { id: 'p1', name: 'Yeyen' },
-      { id: 'p2', name: 'Labarga' },
-    ]);
-  });
-
-  // Server-side counterpart: migration 20260728000000 adds
-  // CHECK (body->>'id' = player_id) and makes get_game_tournament project the
-  // id from the column, so a disagreeing body can be neither stored nor
-  // served. This pins the client's half of that contract.
-  test('a body whose id disagrees with the row key does not win', () => {
-    const { applyPlayerRow } = require('../realtimeSync');
-
-    const t = { id: 't1', players: [{ id: 'p1', name: 'Yeyen' }], rounds: [] };
-    const out = applyPlayerRow(t, {
-      tournament_id: 't1', player_id: 'p2', pos: 1,
-      body: { id: 'WRONG', name: 'Labarga' },
-    }, 'INSERT');
-
-    expect(out.players.map((p) => p.id)).toEqual(['p1', 'p2']);
-  });
-
-  test('a second event for the same player updates rather than duplicates', () => {
-    const { applyPlayerRow } = require('../realtimeSync');
-
-    const t = { id: 't1', players: [{ id: 'p1', name: 'Yeyen' }], rounds: [] };
-    const once = applyPlayerRow(t, {
-      tournament_id: 't1', player_id: 'p2', pos: 1, body: { name: 'Labarga' },
-    }, 'INSERT');
-    // user_id rides the COLUMN (the body copy is ignored since the
-    // player-identity-from-columns fix) — mirror repo.upsertPlayer, which
-    // writes both.
-    const twice = applyPlayerRow(once, {
-      tournament_id: 't1', player_id: 'p2', pos: 1, user_id: 'u2',
-      body: { name: 'Labarga', user_id: 'u2' },
-    }, 'UPDATE');
-
-    expect(twice.players).toHaveLength(2);
-    expect(twice.players[1]).toEqual({ id: 'p2', name: 'Labarga', user_id: 'u2' });
+    expect(round.shotDetails.p2['4']).toEqual({ putts: 2 });
   });
 });

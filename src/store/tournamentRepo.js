@@ -18,16 +18,12 @@ async function getCurrentUserId() {
 }
 
 // Keys split off `round` before it becomes game_rounds.body — mirrors the
-// server's own strip contract (get_game_tournament's reassembly / the
-// backfill script), so a stale local computed field never lands in body.
-// scoreEntries/scoreResolutions stay on this list even though fetches now
-// carry them back (20260815000000_fetch_score_entries.sql): the RPC rebuilds
-// them from game_score_entries/game_score_resolutions, so a copy in body
-// would only be a stale duplicate the reassembly overwrites anyway.
+// server's own strip contract (get_game_tournament's reassembly), so a stale
+// local computed field never lands in body. All three are reassembled by the
+// RPC from their own tables, `scores`/`shotDetails` now as a projection of
+// the scorer_cards the phones own.
 function stripRoundHotKeys(round) {
-  const {
-    scores, shotDetails, notes, scoreEntries, scoreResolutions, removedPlayerIds, ...body
-  } = round;
+  const { scores, shotDetails, notes, ...body } = round;
   // Defense in depth: pairs persist ids only (see scoring.js thinPairs). The
   // patch builders in tournamentStore already thin, so in practice this is a
   // no-op; it catches any future caller that assembles a round body without
@@ -71,67 +67,8 @@ export async function fetchRoundActivity(tournamentIds) {
 
 // -- Per-cell writes ------------------------------------------------------
 
-export async function setScore({
-  tournamentId, roundId, playerId, hole, strokes,
-}) {
-  const { data, error } = await supabase.rpc('set_game_score', {
-    p_round_id: roundId,
-    p_tournament_id: tournamentId,
-    p_player_id: playerId,
-    p_hole: hole,
-    p_strokes: strokes,
-  });
-  if (error) throw error;
-  return data;
-}
-
-export async function submitScore({
-  tournamentId, roundId, playerId, hole, authorId, strokes,
-}) {
-  const { data, error } = await supabase.rpc('submit_game_score', {
-    p_tournament_id: tournamentId,
-    p_round_id: roundId,
-    p_player_id: playerId,
-    p_hole: hole,
-    p_author_id: authorId,
-    p_strokes: strokes,
-  });
-  if (error) throw error;
-  return data;
-}
-
-export async function resolveScore({
-  tournamentId, roundId, playerId, hole, value, resolvedBy,
-}) {
-  const { error } = await supabase.rpc('resolve_game_score', {
-    p_tournament_id: tournamentId,
-    p_round_id: roundId,
-    p_player_id: playerId,
-    p_hole: hole,
-    p_value: value,
-    p_resolver: resolvedBy,
-  });
-  if (error) throw error;
-}
-
-// detail === null is a tombstone (a cleared cell), not "skip the write" —
-// the row is upserted either way so deletes replicate correctly.
-export async function setShotDetail({
-  tournamentId, roundId, playerId, hole, detail,
-}) {
-  const { error } = await supabase.from('game_shot_details').upsert({
-    tournament_id: tournamentId,
-    round_id: roundId,
-    player_id: playerId,
-    hole,
-    detail: detail ?? null,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'tournament_id,round_id,player_id,hole' });
-  if (error) throw error;
-}
-
-// note === null/'' both write a null tombstone row (same reasoning as
-// setShotDetail above).
+// note === null/'' both write a null tombstone row: the row is upserted
+// either way so deletes replicate correctly.
 export async function setNote({
   tournamentId, roundId, holeKey, note,
 }) {
@@ -207,14 +144,11 @@ export async function deletePlayer(tournamentId, playerId) {
 
 // -- Deletions ----------------------------------------------------------------
 
-// Drops every server row that mirrors a removed player's per-round state.
-// game_score_entries (the per-author submission layer added in
-// 20260713000000_score_entries.sql) has no FK cascade off game_players, so
-// without an explicit delete here a removed player's rows survive on the
-// server and a later realtime INSERT/reconcile fetch can re-patch them into
-// a device's local cache, resurrecting the phantom-conflict bug that
-// mutate.js's removePlayer branch + preserveLocalConflictState's
-// pruneToKnownPlayers guard otherwise kill locally.
+// Drops the projected rows that mirror a removed player's per-round state.
+// The scorer_cards these are projected FROM are not touched: a card is one
+// scorer's document, only that device writes it, and the next publication of
+// any hole re-projects the round anyway. Removing a player is a roster fact;
+// the cells they were marked on stay in whoever's card recorded them.
 export async function clearPlayerRound(tournamentId, roundId, playerId) {
   const { error: scoresError } = await supabase.from('game_scores')
     .delete()
@@ -225,11 +159,6 @@ export async function clearPlayerRound(tournamentId, roundId, playerId) {
     .delete()
     .match({ tournament_id: tournamentId, round_id: roundId, player_id: playerId });
   if (shotDetailsError) throw shotDetailsError;
-
-  const { error: scoreEntriesError } = await supabase.from('game_score_entries')
-    .delete()
-    .match({ tournament_id: tournamentId, round_id: roundId, player_id: playerId });
-  if (scoreEntriesError) throw scoreEntriesError;
 }
 
 // Cascades to game_scores/game_shot_details/game_round_notes via the FK ON

@@ -71,6 +71,39 @@ describe('loadTournament cached reads', () => {
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
+  // Fix C (plan §6): an index-only row (never opened on this device, so
+  // there is no full blob under @golf_tournament_<id>) used to come back
+  // with no players at all, so the offline Home list card rendered blank
+  // instead of "Marcos · Guille". summarize()'s playerNames now survives
+  // into the reconstructed row.
+  test('loadCachedTournamentsList reconstructs player names for an index-only row', async () => {
+    jest.doMock('../../lib/supabase', () => ({
+      supabase: {
+        from: jest.fn(),
+        auth: {
+          getUser: jest.fn(() => Promise.resolve({ data: { user: null } })),
+        },
+      },
+    }));
+
+    const { tournamentsIndex } = require('../tournamentsIndex');
+    await tournamentsIndex.writeIndex([{
+      id: 'index-only-1',
+      name: 'Never Opened Cup',
+      kind: 'casual',
+      createdAt: '2026-06-02T10:00:00.000Z',
+      _role: 'member',
+      players: [{ id: 'p1', name: 'Marcos' }, { id: 'p2', name: 'Guille' }],
+    }]);
+
+    const store = require('../tournamentStore');
+    const list = await store.loadCachedTournamentsList();
+    const row = list.find((t) => t.id === 'index-only-1');
+
+    expect(row).toBeTruthy();
+    expect(row.players.map((p) => p.name)).toEqual(['Marcos', 'Guille']);
+  });
+
   test('does not restore a cached finished tournament as active', async () => {
     jest.doMock('../../lib/connectivity', () => ({
       isOnline: () => true,
@@ -176,19 +209,20 @@ describe('loadTournament cached reads', () => {
       id: 't1',
       name: 'Saturday',
       players: [{ id: 'p1' }, { id: 'p2' }],
-      rounds: [{ id: 'r1', holes: [{ number: 1 }], scores: { p1: { 1: 4 } } }],
+      rounds: [{ id: 'r1', holes: [{ number: 1 }], playerHandicaps: { p1: 4 } }],
       currentRound: 0,
     };
     await saveLocal(cached);
 
-    // A score for p2 was entered locally but has not drained to the server
-    // yet — the background refresh must not clobber it with server truth.
+    // A handicap edit for p2 was made locally but has not drained to the
+    // server yet — the background refresh must not clobber it with server
+    // truth.
     await syncQueue.enqueue({
       tournamentId: 't1',
       mutation: {
-        type: 'score.set', roundId: 'r1', playerId: 'p2', hole: 1, value: 5, ts: Date.now(),
+        type: 'handicap.set', roundId: 'r1', playerId: 'p2', handicap: 5, ts: Date.now(),
       },
-      path: 'rounds.r1.scores.p2.h1',
+      path: 'rounds.r1.playerHandicaps.p2',
     });
 
     await loadTournament({ refreshRemote: true, resolveIdentity: false });
@@ -197,6 +231,6 @@ describe('loadTournament cached reads', () => {
 
     expect(fetchTournament).toHaveBeenCalledWith('t1');
     const persisted = await readLocal('t1');
-    expect(persisted.rounds[0].scores.p2[1]).toBe(5);
+    expect(persisted.rounds[0].playerHandicaps.p2).toBe(5);
   });
 });

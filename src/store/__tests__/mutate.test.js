@@ -149,29 +149,29 @@ describe('tournament.addPlayer mutation', () => {
 });
 
 describe('applyPendingMutations', () => {
-  test('applies a queued score.set on top of a fetched object without mutating the input', () => {
-    const fetched = { id: 't1', rounds: [{ id: 'r1', scores: {} }] };
+  test('applies a queued setup mutation on top of a fetched object without mutating the input', () => {
+    const fetched = { id: 't1', rounds: [{ id: 'r1', notes: {} }] };
     const entries = [
-      { mutation: { type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 3, value: 5 }, path: 'rounds.r1.scores.p1.h3', ts: 100 },
+      { mutation: { type: 'note.set', roundId: 'r1', scope: 'round', text: 'Windy' }, path: 'rounds.r1.notes.round', ts: 100 },
     ];
 
     const result = applyPendingMutations(fetched, entries);
 
-    expect(result.rounds[0].scores.p1[3]).toBe(5);
-    expect(fetched.rounds[0].scores).toEqual({});
+    expect(result.rounds[0].notes.round).toBe('Windy');
+    expect(fetched.rounds[0].notes).toEqual({});
   });
 
   test('applies multiple entries in order', () => {
-    const fetched = { id: 't1', currentRound: 0, rounds: [{ id: 'r1', scores: {} }] };
+    const fetched = { id: 't1', currentRound: 0, rounds: [{ id: 'r1', notes: {} }] };
     const entries = [
-      { mutation: { type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 1, value: 4 } },
-      { mutation: { type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 1, value: 5 } },
+      { mutation: { type: 'note.set', roundId: 'r1', scope: 'round', text: 'Windy' } },
+      { mutation: { type: 'note.set', roundId: 'r1', scope: 'round', text: 'Calm' } },
       { mutation: { type: 'tournament.advanceRound', roundIndex: 1 } },
     ];
 
     const result = applyPendingMutations(fetched, entries);
 
-    expect(result.rounds[0].scores.p1[1]).toBe(5);
+    expect(result.rounds[0].notes.round).toBe('Calm');
     expect(result.currentRound).toBe(1);
   });
 

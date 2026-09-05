@@ -3,10 +3,10 @@
 import {
   applyScoreRow, applyShotDetailRow, applyNoteRow, applyRoundRow,
   applyPlayerRow, applyTournamentRow,
-  ensureRealtimeForTournament, stopRealtime, setPresenceHole,
+  ensureRealtimeForTournament, stopRealtime,
 } from '../realtimeSync';
 import { readLocal, saveLocal } from '../tournamentStore';
-import { applyPendingMutations, preserveLocalConflictState } from '../mutate';
+import { applyPendingMutations } from '../mutate';
 import { syncQueue } from '../syncQueue';
 import { supabase } from '../../lib/supabase';
 
@@ -17,7 +17,6 @@ jest.mock('../tournamentStore', () => ({
 
 jest.mock('../mutate', () => ({
   applyPendingMutations: jest.fn((t) => t),
-  preserveLocalConflictState: jest.fn((target) => target),
   unionLocalRoster: jest.fn((target) => target),
 }));
 
@@ -269,10 +268,22 @@ describe('applyPlayerRow', () => {
     expect(out.players).toEqual([{ id: 'p0', name: 'New' }]);
   });
 
-  test('reorders when pos changes for an existing player', () => {
+  test('keeps an existing player at its current index even when pos disagrees', () => {
     const t = { id: 't1', players: [{ id: 'p0' }, { id: 'p1' }] };
     const out = applyPlayerRow(t, { player_id: 'p0', pos: 1, body: { id: 'p0' } });
-    expect(out.players.map((p) => p.id)).toEqual(['p1', 'p0']);
+    expect(out.players.map((p) => p.id)).toEqual(['p0', 'p1']);
+  });
+
+  test('a body-less UPDATE on an existing player keeps the cached name', () => {
+    const t = { id: 't1', players: [{ id: 'p0', name: 'Marcos' }] };
+    const out = applyPlayerRow(t, { player_id: 'p0', pos: 0, body: {} }, 'UPDATE');
+    expect(out.players).toEqual([{ id: 'p0', name: 'Marcos' }]);
+  });
+
+  test('a body-less INSERT of an unknown player inserts an id-only stub', () => {
+    const t = { id: 't1', players: [{ id: 'p0', name: 'Marcos' }] };
+    const out = applyPlayerRow(t, { player_id: 'p1', pos: 1, body: {} }, 'INSERT');
+    expect(out.players).toEqual([{ id: 'p0', name: 'Marcos' }, { id: 'p1' }]);
   });
 
   test('clamps an index beyond current length to append at the end', () => {
@@ -339,43 +350,6 @@ describe('applyPlayerRow', () => {
     const t = { id: 't1', players: [{ id: 'p1' }] };
     const out = applyPlayerRow(t, { tournament_id: 't1', player_id: 'p0' }, 'DELETE');
     expect(out.players.map((p) => p.id)).toEqual(['p1']);
-  });
-
-  // Task 8: a peer device's removePlayer already stripped scoreEntries on
-  // ITS side, but THIS device's local cache may still carry a stale copy —
-  // stamping the tombstone here guards preserveLocalConflictState's later
-  // union-merge from resurrecting it (see mutate.js). CRITICAL: only the
-  // not-yet-played rounds (idx >= currentRound) the removal actually cleared
-  // are tombstoned — already-played earlier rounds keep the removed player's
-  // scores/entries as history (mirrors removePlayerRoundPatches).
-  test('DELETE stamps removedPlayerIds only on rounds at/after currentRound, sparing already-played rounds', () => {
-    const t = {
-      id: 't1',
-      currentRound: 1,
-      players: [{ id: 'p0' }],
-      rounds: [
-        // r0 is already played (idx 0 < currentRound 1) — must NOT be tombstoned
-        { id: 'r0', scoreEntries: { p0: { 3: { a: { value: 4, ts: 1 } } } } },
-        // r1 is the current round; r2 is future — both cleared by the removal
-        { id: 'r1', scoreEntries: { p0: { 5: { a: { value: 5, ts: 2 } } } } },
-        { id: 'r2', removedPlayerIds: ['pOther'] },
-      ],
-    };
-    const out = applyPlayerRow(t, { tournament_id: 't1', player_id: 'p0' }, 'DELETE');
-    expect(out.rounds[0].removedPlayerIds).toBeUndefined();
-    expect(out.rounds[1].removedPlayerIds).toEqual(['p0']);
-    expect(out.rounds[2].removedPlayerIds).toEqual(['pOther', 'p0']);
-  });
-
-  test('DELETE with no currentRound treats every round as not-yet-played and tombstones all', () => {
-    const t = {
-      id: 't1',
-      players: [{ id: 'p0' }],
-      rounds: [{ id: 'r0' }, { id: 'r1' }],
-    };
-    const out = applyPlayerRow(t, { tournament_id: 't1', player_id: 'p0' }, 'DELETE');
-    expect(out.rounds[0].removedPlayerIds).toEqual(['p0']);
-    expect(out.rounds[1].removedPlayerIds).toEqual(['p0']);
   });
 
   test('DELETE on a tournament with no rounds array does not add one', () => {
@@ -446,19 +420,22 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
     stopRealtime();
   });
 
-  test('subscribes a channel named game-<id> with eight postgres_changes bindings plus a presence binding', async () => {
+  test('subscribes a channel named game-<id> with one postgres_changes binding per setup/projection table', async () => {
     await ensureRealtimeForTournament('t1');
     expect(supabase.channel).toHaveBeenCalledWith('game-t1');
     const channel = supabase.channel.mock.results[0].value;
-    expect(channel.on).toHaveBeenCalledTimes(9);
+    expect(channel.on).toHaveBeenCalledTimes(6);
     expect(channel.subscribe).toHaveBeenCalledTimes(1);
     const postgresCalls = channel.on.mock.calls.filter(([type]) => type === 'postgres_changes');
-    const presenceCalls = channel.on.mock.calls.filter(([type]) => type === 'presence');
-    expect(presenceCalls).toHaveLength(1);
+    // No presence binding: "both moved past the hole" is now the existence of
+    // both scorers' published card holes (plan §10).
+    expect(channel.on.mock.calls.filter(([type]) => type === 'presence')).toHaveLength(0);
     const tables = postgresCalls.map(([, cfg]) => cfg.table);
+    // scorer_cards / score_resolutions ride their own channel — see
+    // src/engine/store/replicator.js.
     expect(tables.sort()).toEqual([
-      'game_players', 'game_round_notes', 'game_rounds', 'game_score_entries',
-      'game_score_resolutions', 'game_scores', 'game_shot_details', 'tournaments',
+      'game_players', 'game_round_notes', 'game_rounds',
+      'game_scores', 'game_shot_details', 'tournaments',
     ].sort());
   });
 
@@ -519,12 +496,12 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
     expect(supabase.removeChannel).not.toHaveBeenCalled();
   });
 
-  test('row handler patches the cache, re-applies pending mutations, restores meId, preserves score conflicts, and saves', async () => {
+  test('row handler patches the cache, re-applies pending mutations, restores meId, and saves', async () => {
     const cached = {
-      id: 't1', kind: 'game', meId: 'p9', rounds: [{ id: 'r1', scores: {}, scoreConflicts: { p1: { 1: { candidates: [] } } } }], players: [],
+      id: 't1', kind: 'game', meId: 'p9', rounds: [{ id: 'r1', scores: {} }], players: [],
     };
     readLocal.mockResolvedValue(cached);
-    const pendingEntry = { id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } };
+    const pendingEntry = { id: 'e1', tournamentId: 't1', mutation: { type: 'note.set' } };
     syncQueue.all.mockResolvedValue([pendingEntry, { id: 'e2', tournamentId: 'other', mutation: {} }]);
 
     await ensureRealtimeForTournament('t1');
@@ -538,7 +515,6 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
       expect.objectContaining({ id: 't1' }),
       [pendingEntry],
     );
-    expect(preserveLocalConflictState).toHaveBeenCalled();
     expect(saveLocal).toHaveBeenCalledTimes(1);
     const [savedArg] = saveLocal.mock.calls[0];
     expect(savedArg.meId).toBe('p9');
@@ -551,7 +527,6 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
     readLocal.mockResolvedValue(cached);
     // Pass-through so the patched (round removed) object is what reaches saveLocal.
     applyPendingMutations.mockImplementation((t) => t);
-    preserveLocalConflictState.mockImplementation((target) => target);
 
     await ensureRealtimeForTournament('t1');
     const channel = supabase.channel.mock.results[0].value;
@@ -613,7 +588,6 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
       }
       return nextT;
     });
-    preserveLocalConflictState.mockImplementation((target) => target);
 
     await ensureRealtimeForTournament('t1');
     const channel = supabase.channel.mock.results[0].value;
@@ -642,7 +616,6 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
     readLocal.mockImplementation(async () => JSON.parse(JSON.stringify(localBlob)));
     saveLocal.mockImplementation(async (blob) => { localBlob = blob; });
     applyPendingMutations.mockImplementation((t) => t);
-    preserveLocalConflictState.mockImplementation((target) => target);
 
     // Block the FIRST handler invocation's pendingEntriesFor call (a real
     // async gap in the real code) so the second invocation is issued while
@@ -726,54 +699,5 @@ describe('channel error recovery (backoff rejoin)', () => {
 
     // No rejoin fired after the manual stop.
     expect(supabase.channel).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('presence state reset on tournament switch', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    readLocal.mockResolvedValue({ id: 't1', kind: 'game', rounds: [], players: [] });
-    saveLocal.mockResolvedValue();
-    syncQueue.all.mockResolvedValue([]);
-  });
-
-  afterEach(() => {
-    stopRealtime();
-  });
-
-  test('switching to a different tournament resets _lastAuthor/_lastHole so SUBSCRIBED does not track the previous tournament\'s hole', async () => {
-    await ensureRealtimeForTournament('t1');
-    setPresenceHole('author-on-t1', 7);
-
-    readLocal.mockResolvedValue({ id: 't2', kind: 'game', rounds: [], players: [] });
-    await ensureRealtimeForTournament('t2');
-
-    const channel = supabase.channel.mock.results[1].value;
-    const statusCb = channel.subscribe.mock.calls[1][0];
-    channel.track.mockClear();
-    statusCb('SUBSCRIBED');
-
-    expect(channel.track).not.toHaveBeenCalled();
-  });
-
-  test('a same-tournament reconnect (rejoin) preserves the last known presence hole', async () => {
-    jest.useFakeTimers();
-    try {
-      await ensureRealtimeForTournament('t1');
-      const channel = supabase.channel.mock.results[0].value;
-      const statusCb = channel.subscribe.mock.calls[0][0];
-
-      setPresenceHole('author-on-t1', 7);
-      statusCb('CHANNEL_ERROR');
-      await jest.advanceTimersByTimeAsync(30000);
-
-      const rejoinStatusCb = channel.subscribe.mock.calls[1][0];
-      channel.track.mockClear();
-      rejoinStatusCb('SUBSCRIBED');
-
-      expect(channel.track).toHaveBeenCalledWith({ authorId: 'author-on-t1', currentHole: 7 });
-    } finally {
-      jest.useRealTimers();
-    }
   });
 });

@@ -26,7 +26,6 @@ import { isScrambleMode } from '../scoringModes';
 import { scrambleUnits } from '../../store/tournamentStore';
 import DiscrepancySheet from '../DiscrepancySheet';
 import ConflictWizardSheet from './ConflictWizardSheet';
-import { deriveCell } from '../../store/scoreEntries';
 import { getShotDetailCollapsed, setShotDetailCollapsed } from '../../lib/prefs';
 import { prefetchCourseTiles } from '../../store/tileCache';
 import { useTourTarget } from '../tour/tourTargets';
@@ -48,6 +47,10 @@ const PAGER_SNAP_TYPE_STYLE = Platform.OS === 'web' ? { scrollSnapType: 'x manda
 // page positions are unchanged (see HolePagePlaceholder).
 const PAGER_WINDOW = 1;
 
+// Stable identity so a default `[]` does not re-run the conflict-sheet memo
+// on every render.
+const EMPTY_CONFLICT_ROWS = [];
+
 // Belt-and-braces: inject the snap rules via a real <style> tag so they
 // apply even if RNW's atomic-CSS pipeline ever filters an unknown CSS
 // property. Targeted by a data attribute we set on each page.
@@ -61,7 +64,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   }
 }
 
-export function HoleView({ round, roundIndex, players, scores, myScores = null, verifiedUpTo = 0, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled, conflictHoles = new Set(), authorName, localAuthorIds }) {
+export function HoleView({ round, roundIndex, players, scores, myScores = null, ghostAuthors = null, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled, conflictHoles = new Set(), conflictCells = new Set(), conflictRows = EMPTY_CONFLICT_ROWS, localAuthorIds }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
@@ -334,18 +337,16 @@ export function HoleView({ round, roundIndex, players, scores, myScores = null, 
                   roundIndex={roundIndex}
                   round={round}
                   players={players}
-                  // Unverified holes show only this scorer's own entries
-                  // (authorScores) — peers' synced values must not pre-fill a
-                  // hole that hasn't been walked off and verified yet.
-                  scores={myScores && pageHole.number > verifiedUpTo ? myScores : scores}
-                  // The merged/effective card, plus whether this page is
-                  // showing the own-entries-only view above. HolePage uses
-                  // both to render a read-only "ghost" of a peer's entry when
-                  // this scorer hasn't marked that cell themselves — display
-                  // only, never fed back into scores/onStep/onSetScore.
+                  // The card as THIS scorer has marked it: a peer's value
+                  // must never pre-fill a cell they still owe (R3).
+                  scores={myScores ?? scores}
+                  // `shown` — my card with peers' values filling my blanks.
+                  // Where the two differ, HolePage renders the peer's number
+                  // as a read-only "ghost": display only, never fed back into
+                  // scores/onStep/onSetScore.
                   peerScores={scores}
-                  ghostEnabled={!!myScores && pageHole.number > verifiedUpTo}
-                  authorName={authorName}
+                  ghostEnabled={!!myScores}
+                  ghostAuthors={ghostAuthors}
                   shotDetails={shotDetails}
                   meId={meId}
                   onSetShot={onSetShot}
@@ -368,8 +369,7 @@ export function HoleView({ round, roundIndex, players, scores, myScores = null, 
                   shotCollapsed={shotCollapsed}
                   onToggleShotDetail={toggleShotDetail}
                   totalsMap={scorecardTotals}
-                  conflictHoles={conflictHoles}
-                  localAuthorIds={localAuthorIds}
+                  conflictCells={conflictCells}
                   gps={gps}
                   onOpenFlyover={openFlyover}
                 />
@@ -590,22 +590,10 @@ export function HoleView({ round, roundIndex, players, scores, myScores = null, 
           card flagged with a conflict marker. */}
       {conflictTarget && (() => {
         const { hole: cHole, playerId } = conflictTarget;
-        const d = deriveCell(round, playerId, cHole, localAuthorIds);
-        const subject = players.find((p) => p.id === playerId);
         // Once resolved the cell stops being a conflict, but the sheet stays
         // mounted on an empty row list so the wizard can show its "all agreed"
         // confirmation instead of vanishing mid-tap.
-        const rows = d.status === 'conflict' ? [{
-          playerId,
-          hole: cHole,
-          par: round.holes?.[cHole - 1]?.par ?? null,
-          playerName: subject?.name ?? 'Player',
-          currentValue: d.effective,
-          candidates: d.candidates.map((c) => ({
-            value: c.value, ts: c.ts, authorId: c.authorId, authorName: authorName?.(c.authorId) ?? 'Another phone',
-          })),
-          blankAuthors: d.blankAuthors.map((a) => authorName?.(a) ?? 'Another phone'),
-        }] : [];
+        const rows = conflictRows.filter((r) => r.playerId === playerId && r.hole === cHole);
         return (
           <ConflictWizardSheet
             visible

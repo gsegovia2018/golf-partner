@@ -1,11 +1,11 @@
 import { supabase } from '../lib/supabase';
 import { syncQueue } from './syncQueue';
 import {
-  saveLocal, readLocal, _setSyncStatus, _setLastSyncAt,
+  saveLocal, readLocal, _setSyncStatus, _setLastSyncAt, recordSyncFailure,
 } from './tournamentStore';
 import { fetchTournament } from './tournamentRepo';
 import { executeMutation } from './mutationWrites';
-import { applyPendingMutations, preserveLocalConflictState, unionLocalRoster } from './mutate';
+import { applyPendingMutations, unionLocalRoster } from './mutate';
 import { upsertPlayer } from './libraryStore';
 import { isOnline, subscribeConnectivity } from '../lib/connectivity';
 import { runExclusiveForTournament } from './tournamentMutex';
@@ -20,15 +20,6 @@ let _running = false;
 // entry as poison (see isPermanentSyncError below for why "has a .code"
 // alone can't be trusted to mean "give up now").
 const RECOVERABLE_ATTEMPT_CAP = 8;
-
-// Grace before the post-drain reconcile prunes a local-cache score entry /
-// resolution that neither the fresh server state nor the pending queue
-// knows about (its write was dropped by the drain or died before enqueue —
-// it can never sync, and kept around it becomes a phantom conflict author).
-// Generous on purpose: the races it guards (mutate's save-before-enqueue
-// gap, the reconcile settle loop) are millisecond-scale, and both cutoff
-// and entry ts come from this device's clock, so no skew is involved.
-const ORPHAN_ENTRY_GRACE_MS = 10 * 60 * 1000;
 
 // Classifies a write failure as PERMANENT (retrying can never succeed, so
 // drop the mutation now) vs RECOVERABLE (the write may succeed on a later
@@ -146,6 +137,7 @@ export async function drainLibrary(libraryMuts) {
           // will never succeed, so drop the entry — but still flip the
           // sync indicator so the failure isn't invisible.
           captureException(error, { op: 'rpc.call', fn: m.fn, drop: 'permanent' });
+          await recordSyncFailure(entry.tournamentId, { entry, error });
           await syncQueue.drop(entry.id);
           _setSyncStatus('error');
           continue;
@@ -168,6 +160,7 @@ export async function drainLibrary(libraryMuts) {
           captureException(error, {
             op: 'rpc.call', fn: m.fn, drop: 'poison-cap', attempts,
           });
+          await recordSyncFailure(entry.tournamentId, { entry, error });
           await syncQueue.drop(entry.id);
           _setSyncStatus('error');
           continue;
@@ -222,6 +215,7 @@ export async function drainTournament(tournamentId, entries) {
         captureException(error, {
           op: 'mutation', type: entry.mutation?.type, tournamentId, drop: 'permanent',
         });
+        await recordSyncFailure(tournamentId, { entry, error });
         await syncQueue.drop(entry.id);
         _setSyncStatus('error');
         continue;
@@ -238,6 +232,7 @@ export async function drainTournament(tournamentId, entries) {
         captureException(error, {
           op: 'mutation', type: entry.mutation?.type, tournamentId, drop: 'poison-cap', attempts,
         });
+        await recordSyncFailure(tournamentId, { entry, error });
         await syncQueue.drop(entry.id);
         _setSyncStatus('error');
         continue;
@@ -276,42 +271,25 @@ export async function drainTournament(tournamentId, entries) {
     await runExclusiveForTournament(tournamentId, async () => {
       const fresh = await fetchTournament(tournamentId);
       if (fresh) {
-        // Snapshot local's CURRENT scoreEntries/scoreResolutions once, before
-        // the settle loop below — conflict state is derived from these synced
-        // entries elsewhere, not raised by this drain, and any resolve already
-        // cleared its winning value from local directly (mutate()
-        // saves locally before it ever reaches this drain). `fresh` now DOES
-        // carry the server's scoreEntries/scoreResolutions (see
-        // preserveLocalConflictState), but not the ones still queued here, so
-        // every pass below must merge local's back onto the freshly computed
-        // state — ts-aware, so a stale server copy of an entry we have already
-        // re-edited locally never wins — or the reconcile save loses them.
-        const localForConflicts = await readLocal(tournamentId);
+        const localBefore = await readLocal(tournamentId);
         const queuedForTournament = async () => (await syncQueue.all())
           .filter((e) => e.tournamentId === tournamentId);
         // Same roster rule the fetch path applies (tournamentStore's
         // _overlayAndSave): `fresh` replaces players wholesale, so a player
         // the server has never heard of has to be carried over rather than
         // erased. Tombstoned ids still drop — see unionLocalRoster.
-        const rosterSafeFresh = unionLocalRoster({ ...fresh }, localForConflicts);
+        const rosterSafeFresh = unionLocalRoster({ ...fresh }, localBefore);
         let snapshot = await queuedForTournament();
         for (let pass = 0; pass < 3; pass++) {
-          const merged = preserveLocalConflictState(
-            applyPendingMutations(rosterSafeFresh, snapshot), localForConflicts,
-            // The one caller allowed to prune orphans: `fresh` is server
-            // truth and applyPendingMutations just re-created everything the
-            // queue still holds, so an entry unknown to the target here can
-            // never sync — see dropOrphanEntries (mutate.js).
-            { pruneOrphansBefore: Date.now() - ORPHAN_ENTRY_GRACE_MS },
-          );
+          const merged = applyPendingMutations(rosterSafeFresh, snapshot);
           // meId is device-local and the server never returns it — without this
           // re-stamp every reconcile saved a blob with the key ABSENT, wiping
-          // identity after each drained score batch for any player whose roster
+          // identity after each drained setup batch for any player whose roster
           // slot has no user_id link to re-derive it from ("Who are you?" mid
           // round). Same rule as _overlayAndSave (tournamentStore.js): local
           // wins, including an explicit null.
-          if (localForConflicts && 'meId' in localForConflicts) {
-            merged.meId = localForConflicts.meId;
+          if (localBefore && 'meId' in localBefore) {
+            merged.meId = localBefore.meId;
           }
           await saveLocal(merged);
           const latest = await queuedForTournament();

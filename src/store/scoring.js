@@ -1227,13 +1227,6 @@ export function reconcileShotDetail(detail, strokes) {
   return out;
 }
 
-// ── Score conflict helpers ───────────────────────────────
-// Conflicts are DERIVED from the per-author submission layer (store/
-// scoreEntries.js): a cell is in conflict when two different non-blank values
-// coexist. Re-exported here for the screens/components that import from
-// scoring.js.
-export { listRoundConflicts, roundHasConflicts } from './scoreEntries';
-
 // ── Match Play tournament ────────────────────────────────────────────────────
 
 // Match Play tournament standing. Across played rounds, sums each of the two

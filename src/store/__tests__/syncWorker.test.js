@@ -4,7 +4,9 @@ import {
   drainTournament, drainLibrary, syncNow, syncSettled,
   isPermanentSyncError, isTransportError,
 } from '../syncWorker';
-import { readLocal, saveLocal, _setSyncStatus } from '../tournamentStore';
+import {
+  readLocal, saveLocal, _setSyncStatus, recordSyncFailure,
+} from '../tournamentStore';
 import { executeMutation } from '../mutationWrites';
 import { applyPendingMutations } from '../mutate';
 import { fetchTournament } from '../tournamentRepo';
@@ -31,6 +33,7 @@ jest.mock('../tournamentStore', () => ({
   saveLocal: jest.fn(() => Promise.resolve()),
   _setSyncStatus: jest.fn(),
   _setLastSyncAt: jest.fn(() => Promise.resolve()),
+  recordSyncFailure: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock('../syncQueue', () => ({
@@ -115,6 +118,11 @@ describe('drainTournament', () => {
     // Permanent drops must be visible on the sync indicator, not just a
     // console.warn nobody sees.
     expect(_setSyncStatus).toHaveBeenCalledWith('error');
+    // ...and recorded (Fix B) BEFORE the drop, so a dropped setup write is
+    // never silently lost — the sync sheet can list it and offer Retry.
+    expect(recordSyncFailure).toHaveBeenCalledWith('t1', {
+      entry: e1, error: expect.objectContaining({ code: '23505' }),
+    });
   });
 
   test('a recoverable coded error (expired session) is NOT dropped — it stays queued and stops the drain', async () => {
@@ -177,6 +185,9 @@ describe('drainTournament', () => {
     await drainTournament('t1', [e1]);
     expect(syncQueue.drop).toHaveBeenCalledWith('e1');
     expect(_setSyncStatus).toHaveBeenCalledWith('error');
+    expect(recordSyncFailure).toHaveBeenCalledWith('t1', {
+      entry: e1, error: expect.objectContaining({ code: 'PGRST202' }),
+    });
   });
 
   test('a transport error (no code — server unreachable) is retried forever and NEVER dropped, even far past the poison cap', async () => {
@@ -437,6 +448,9 @@ describe('drainLibrary', () => {
     await drainLibrary([e1]);
 
     expect(syncQueue.drop).toHaveBeenCalledWith('e1');
+    expect(recordSyncFailure).toHaveBeenCalledWith(undefined, {
+      entry: e1, error: expect.objectContaining({ code: '23505' }),
+    });
   });
 
   test('rpc.call: a P0001 business-rule raise (e.g. "party locked" from submit_score) is dropped + surfaced, never retried', async () => {
@@ -472,6 +486,9 @@ describe('drainLibrary', () => {
     await drainLibrary([e1]);
     expect(syncQueue.drop).toHaveBeenCalledWith('e1');
     expect(_setSyncStatus).toHaveBeenCalledWith('error');
+    expect(recordSyncFailure).toHaveBeenCalledWith(undefined, {
+      entry: e1, error: expect.objectContaining({ code: 'PGRST202' }),
+    });
   });
 
   test('rpc.call: a transport error (no code / 5xx) is retried forever and NEVER dropped as poison', async () => {

@@ -33,7 +33,7 @@ export function initDeviceAuthorId() {
       // AsyncStorage unavailable/failed: fall back to an in-memory-only id
       // for this session rather than leaving getDeviceAuthorId() stuck
       // returning null forever. It won't survive a reload, but it's stable
-      // for the lifetime of this process, which is what deriveCell() needs.
+      // for the lifetime of this process, which is what the card model needs.
       if (!_cached) _cached = generateId();
       return _cached;
     })
@@ -49,7 +49,7 @@ export function initDeviceAuthorId() {
 // caused the same physical device to stamp two different author ids on the
 // same player/hole (one for scores authored before hydration, one after),
 // which surfaced as a spurious, unresolvable "two phones recorded different
-// scores" conflict in deriveCell() (see scoreEntries.js).
+// scores" discrepancy (see src/engine/cards.js).
 export function getDeviceAuthorId() {
   return _cached;
 }

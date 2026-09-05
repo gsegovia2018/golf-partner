@@ -23,8 +23,14 @@ Core features:
 - **Navigation:** `@react-navigation` — stack + bottom-tabs.
 - **Local state:** Plain JS store modules in `src/store/` (no Redux).
   `AsyncStorage` for persistence.
-- **Offline-first:** Local writes queue and replay against Supabase —
-  see `store/syncQueue.js`, `syncWorker.js`, `merge.js`, `conflictLabels.js`.
+- **Offline-first, two layers.** *Scores* run on the cards engine
+  (`src/engine/`): taps write a private per-hole draft, leaving the hole
+  publishes it as one packet into my own `scorer_cards` row, and a SQL
+  trigger projects the settled cells into `game_scores`. Only my device
+  writes my card, so a card is retried forever and never merged.
+  *Setup* (roster, rounds, teams, courses, notes) still queues mutations and
+  replays them against the normalized `game_*` tables — see
+  `store/syncQueue.js` / `syncWorker.js`.
 - **Config:** `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY`
   via `.env` (see `.env.example`).
 
@@ -83,8 +89,14 @@ than a day-old bundle.
 
 - Course data model: `Course → Holes[]`, each hole with `par`,
   `strokeIndex`, and optional `distance`; courses also carry tee sets.
-- `src/store/` holds domain logic (scoring, stats, sync, official mode);
-  `src/screens/` holds UI. Keep domain logic in stores, not screens.
+- `src/store/` holds domain logic (scoring, stats, setup sync, official
+  mode); `src/screens/` holds UI. Keep domain logic in stores, not screens.
+- `src/engine/` is the scoring data layer: `cards.js` derives every cell view
+  (mine / peers' / agreed / disputed) purely, `publish.js` writes a hole,
+  `store/` persists and replicates, `hooks/useRoundCards.js` is the
+  scorecard's single source of truth. Agreements are anchored to card
+  versions, so an edit re-opens exactly the disputes it should. The plan is
+  `docs/superpowers/plans/2026-09-04-scorecard-cards-engine.md`.
 - Some screens are large monoliths (`ScorecardScreen`, `StatsScreen`) —
   prefer extracting components/hooks over growing them further.
 - Plans and design specs are tracked under `docs/superpowers/`.

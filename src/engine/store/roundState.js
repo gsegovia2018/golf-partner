@@ -1,0 +1,177 @@
+// In-memory round state and change notification (plan §4).
+//
+// One record per (tournament, round). `getRoundState` returns a STABLE object
+// reference that changes identity only when the data behind it changed, which
+// is exactly the contract `useSyncExternalStore` needs — see
+// src/hooks/useRoundCards.js.
+//
+// The snapshot is the engine's `ctx` plus the bookkeeping the screen needs:
+//
+//   { myAuthorId, cardsByAuthor, resolutions, draft,
+//     pending: { cards, resolutions }, lastPulledAt, loaded }
+//
+// `cardsByAuthor` carries my own card under `myAuthorId` alongside the peers',
+// so it can be handed straight to cards.js. `resolutions` is the engine shape
+// for this round only (`{ [playerId]: { [hole]: resolution } }`); a resolution
+// this device has not pushed yet also carries `pending: true`, which the
+// engine ignores.
+//
+// Nothing here touches the network. Persistence is storage.js; the network is
+// replicator.js.
+
+import { getDeviceAuthorId, initDeviceAuthorId } from '../../store/deviceId';
+import { getCardStorage } from './storage';
+
+const EMPTY_STATE = Object.freeze({
+  myAuthorId: null,
+  cardsByAuthor: Object.freeze({}),
+  resolutions: Object.freeze({}),
+  draft: Object.freeze({}),
+  pending: Object.freeze({ cards: false, resolutions: false }),
+  lastPulledAt: null,
+  loaded: false,
+});
+
+const records = new Map();
+
+const recordKey = (tid, roundId) => `${tid}\u0000${roundId}`;
+
+function getRecord(tid, roundId) {
+  const k = recordKey(tid, roundId);
+  let rec = records.get(k);
+  if (rec) return rec;
+  rec = {
+    tid,
+    roundId,
+    myCard: null,
+    minePending: false,
+    peers: {},
+    resolutions: {},
+    draft: {},
+    lastPulledAt: null,
+    loaded: false,
+    loadPromise: null,
+    subs: new Set(),
+    snapshot: null,
+  };
+  rebuild(rec);
+  records.set(k, rec);
+  return rec;
+}
+
+function rebuild(rec) {
+  // Resolved on every rebuild rather than captured once: deviceId hydration
+  // is async, so a record created before it resolves must pick the id up as
+  // soon as it exists instead of caching null forever.
+  const myAuthorId = getDeviceAuthorId();
+  const cardsByAuthor = { ...rec.peers };
+  if (myAuthorId && rec.myCard) cardsByAuthor[myAuthorId] = rec.myCard;
+
+  let resolutionsPending = false;
+  for (const byHole of Object.values(rec.resolutions)) {
+    for (const resolution of Object.values(byHole ?? {})) {
+      if (resolution?.pending) { resolutionsPending = true; break; }
+    }
+    if (resolutionsPending) break;
+  }
+
+  rec.snapshot = {
+    myAuthorId,
+    cardsByAuthor,
+    resolutions: rec.resolutions,
+    draft: rec.draft,
+    pending: { cards: !!rec.minePending, resolutions: resolutionsPending },
+    lastPulledAt: rec.lastPulledAt,
+    loaded: rec.loaded,
+  };
+}
+
+/**
+ * Apply a batch of changes to one round and notify subscribers ONCE. Callers
+ * batch on purpose: a pull that lands seven holes of a peer's card must cost
+ * one render, not seven (S5).
+ *
+ * Recognised patch keys: `draft`, `myCard`, `minePending`, `peers` (merged
+ * into the existing map), `resolutions`, `lastPulledAt`, `loaded`.
+ */
+export function applyRound(tid, roundId, patch) {
+  if (!tid || !roundId || !patch) return;
+  const rec = getRecord(tid, roundId);
+  if ('draft' in patch) rec.draft = patch.draft ?? {};
+  if ('myCard' in patch) rec.myCard = patch.myCard ?? null;
+  if ('minePending' in patch) rec.minePending = !!patch.minePending;
+  if ('peers' in patch) rec.peers = { ...rec.peers, ...(patch.peers ?? {}) };
+  if ('resolutions' in patch) rec.resolutions = patch.resolutions ?? {};
+  if ('lastPulledAt' in patch) rec.lastPulledAt = patch.lastPulledAt ?? null;
+  if ('loaded' in patch) rec.loaded = !!patch.loaded;
+  rebuild(rec);
+  for (const cb of [...rec.subs]) {
+    try { cb(); } catch { /* a bad subscriber must not stop the others */ }
+  }
+}
+
+/** The stable snapshot for this round. Safe to call before `loadRound`. */
+export function getRoundState(tid, roundId) {
+  if (!tid || !roundId) return EMPTY_STATE;
+  return getRecord(tid, roundId).snapshot;
+}
+
+export function subscribeRound(tid, roundId, cb) {
+  if (!tid || !roundId) return () => {};
+  const rec = getRecord(tid, roundId);
+  rec.subs.add(cb);
+  return () => rec.subs.delete(cb);
+}
+
+/** Rounds of this tournament that have an in-memory record. */
+export function knownRounds(tid) {
+  const out = [];
+  for (const rec of records.values()) if (rec.tid === tid) out.push(rec.roundId);
+  return out;
+}
+
+/**
+ * Hydrate one round from storage. Idempotent: concurrent and repeat calls
+ * share the same in-flight work and never re-read a loaded round.
+ */
+export function loadRound(tid, roundId) {
+  if (!tid || !roundId) return Promise.resolve(EMPTY_STATE);
+  const rec = getRecord(tid, roundId);
+  if (rec.loaded) return Promise.resolve(rec.snapshot);
+  if (rec.loadPromise) return rec.loadPromise;
+
+  rec.loadPromise = (async () => {
+    // The author id is the key my own card hangs on; hydrating without it
+    // would drop my card out of cardsByAuthor entirely.
+    await initDeviceAuthorId();
+    const store = getCardStorage();
+    const [meta, mine, drafts, resolutions] = await Promise.all([
+      store.getMeta(tid),
+      store.getMine(tid, roundId),
+      store.getDraft(tid),
+      store.getResolutions(tid),
+    ]);
+    const authorIds = meta.peers?.[roundId] ?? [];
+    const peerCards = await Promise.all(authorIds.map((a) => store.getPeer(tid, roundId, a)));
+    const peers = {};
+    authorIds.forEach((authorId, i) => { if (peerCards[i]) peers[authorId] = peerCards[i]; });
+
+    applyRound(tid, roundId, {
+      myCard: mine?.card ?? null,
+      minePending: !!mine?.pending,
+      peers,
+      draft: drafts?.[roundId] ?? {},
+      resolutions: resolutions?.[roundId] ?? {},
+      lastPulledAt: meta.lastPulledAt ?? null,
+      loaded: true,
+    });
+    return rec.snapshot;
+  })().finally(() => { rec.loadPromise = null; });
+
+  return rec.loadPromise;
+}
+
+/** Test-only: drop every cached record and subscriber. */
+export function _resetRoundStateForTests() {
+  records.clear();
+}

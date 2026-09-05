@@ -1,7 +1,7 @@
 # Scorecard Round Settings — Shared Settings Sheet
 
 **Date:** 2026-07-20
-**Status:** Approved
+**Status:** Approved. Partially superseded 2026-09-05: the Reset Round, Undo and Restore-previous-scores items described below were removed with the per-scorer cards engine (a reset cannot be authoritative over an offline peer's card) — see `docs/superpowers/plans/2026-09-04-scorecard-cards-engine.md` §12.
 
 ## Goal
 

@@ -222,18 +222,17 @@ describe('HolePage scramble rounds: no shot-detail section', () => {
   });
 });
 
-// Two authors submitted different values for the same cell — deriveCell
-// reports 'conflict' regardless of presence. The hero-card flag must only
-// light up once the hole is in the presence-gated `conflictHoles` set (the
-// same set HoleView's go-to-hole dots use), matching the "everyone off the
-// hole" surfacing rule elsewhere in the conflict-sync overhaul.
+// Two scorers published different values for the same cell. The hero-card
+// flag lights up only for the cells the cards engine reports as disputed —
+// `conflictCells`, keyed `${playerId}:${hole}` (ScorecardScreen builds it
+// from discrepancies()), so an undisputed player on a disputed hole is
+// untouched.
 function renderConflictHole(overrides = {}) {
   const players = [{ id: 'a', name: 'Alice', handicap: 10 }];
   const round = {
     id: 'r1',
     holes: [],
     playerHandicaps: { a: 10 },
-    scoreEntries: { a: { 1: { m1: { value: 4, ts: 1 }, m2: { value: 5, ts: 2 } } } },
   };
   const props = {
     pageHole: { number: 1, par: 4, strokeIndex: 5 },
@@ -262,23 +261,23 @@ function renderConflictHole(overrides = {}) {
     shotCollapsed: false,
     onToggleShotDetail: () => {},
     totalsMap: new Map(),
-    conflictHoles: new Set(),
+    conflictCells: new Set(),
     ...overrides,
   };
 
   return render(<HolePage {...props} />);
 }
 
-describe('HolePage hero-card conflict flag: gated by presence (conflictHoles)', () => {
-  test('conflicting cell on a NOT-yet-surfaceable hole → score controls stay visible, no resolve state', () => {
+describe('HolePage hero-card conflict flag: driven by conflictCells', () => {
+  test('a cell the engine does not dispute → score controls stay visible, no resolve state', () => {
     const { getByLabelText, queryByLabelText } = renderConflictHole();
 
     expect(getByLabelText('Decrease strokes on hole 1')).toBeTruthy();
     expect(queryByLabelText("Resolve Alice's conflicting score on hole 1")).toBeNull();
   });
 
-  test('conflicting cell on a surfaceable hole (in conflictHoles) → resolve state shown, score controls hidden', () => {
-    const { getByLabelText, queryByLabelText } = renderConflictHole({ conflictHoles: new Set([1]) });
+  test('a disputed cell → resolve state shown, score controls hidden', () => {
+    const { getByLabelText, queryByLabelText } = renderConflictHole({ conflictCells: new Set(['a:1']) });
 
     expect(getByLabelText("Resolve Alice's conflicting score on hole 1")).toBeTruthy();
     expect(queryByLabelText('Decrease strokes on hole 1')).toBeNull();
@@ -288,15 +287,14 @@ describe('HolePage hero-card conflict flag: gated by presence (conflictHoles)', 
 // Casual, unverified holes: when this scorer has no own entry for a cell but
 // a peer's synced value exists in the merged card, HolePage should render it
 // as a read-only "ghost" with attribution — but only when the caller signals
-// this page is on the own-entries-only view (ghostEnabled), which mirrors
-// HoleView's `myScores && pageHole.number > verifiedUpTo` gate.
+// this page renders the own-entries-only card (ghostEnabled), which mirrors
+// HoleView's `myScores` gate.
 describe('HolePage ghost preview wiring', () => {
   const players = [{ id: 'a', name: 'Alice', handicap: 10 }];
   const round = {
     id: 'r1',
     holes: [],
     playerHandicaps: { a: 10 },
-    scoreEntries: { a: { 1: { m1: { value: 4, ts: 1 } } } },
   };
 
   function renderGhostHole(overrides = {}) {
@@ -314,7 +312,7 @@ describe('HolePage ghost preview wiring', () => {
       scores: { a: {} }, // viewer's own-entries card — no entry for hole 1
       peerScores: { a: { 1: 4 } }, // merged card — a peer already entered 4
       ghostEnabled: true,
-      authorName: (id) => (id === 'm1' ? 'Marker' : 'Someone'),
+      ghostAuthors: { a: { 1: 'Marker' } },
       shotDetails: {},
       meId: 'a',
       onSetShot: () => {},
@@ -333,7 +331,7 @@ describe('HolePage ghost preview wiring', () => {
       shotCollapsed: false,
       onToggleShotDetail: () => {},
       totalsMap: new Map(),
-      conflictHoles: new Set(),
+      conflictCells: new Set(),
       ...overrides,
     };
     return render(<HolePage {...props} />);
@@ -383,10 +381,10 @@ describe('HolePage ghost preview wiring', () => {
     expect(queryByText(/^by /)).toBeNull();
   });
 
-  test('below-watermark page (ghostEnabled false) → merged rendering unchanged, no ghost treatment', () => {
-    // Below the watermark HoleView passes the merged card as `scores` itself,
-    // so the cell already reads 4 directly — this only pins that ghostEnabled
-    // false suppresses the ghost overlay even when a "peer value" is present.
+  test('ghostEnabled false (official / view-only) → merged rendering unchanged, no ghost treatment', () => {
+    // There HoleView passes the merged card as `scores` itself, so the cell
+    // already reads 4 directly — this only pins that ghostEnabled false
+    // suppresses the ghost overlay even when a "peer value" is present.
     const { getByText, queryByText } = renderGhostHole({
       ghostEnabled: false,
       scores: { a: { 1: 4 } },
@@ -454,16 +452,16 @@ describe('holePagePropsEqual', () => {
     expect(holePagePropsEqual(prev, next)).toBe(false);
   });
 
-  test('new conflictHoles reference → re-render (gates the hero-card conflict flag)', () => {
+  test('new conflictCells reference → re-render (gates the hero-card conflict flag)', () => {
     const prev = baseProps();
-    const next = { ...prev, conflictHoles: new Set([3]) };
+    const next = { ...prev, conflictCells: new Set(['a:3']) };
     expect(holePagePropsEqual(prev, next)).toBe(false);
   });
 
-  test('same conflictHoles reference (memoized upstream) → skip re-render', () => {
-    const conflictHoles = new Set([3]);
-    const prev = { ...baseProps(), conflictHoles };
-    const next = { ...prev, conflictHoles };
+  test('same conflictCells reference (memoized upstream) → skip re-render', () => {
+    const conflictCells = new Set(['a:3']);
+    const prev = { ...baseProps(), conflictCells };
+    const next = { ...prev, conflictCells };
     expect(holePagePropsEqual(prev, next)).toBe(true);
   });
 });

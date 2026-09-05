@@ -1,15 +1,12 @@
 import {
   canShowQuickFinish,
+  buildConflictRows,
   buildScorecardTournamentBackState,
   getScorecardBackTarget,
-  mergeScores,
-  mergeShotDetails,
   shouldMarkTournamentFinishedFromScorecard,
-  shouldApplyReloadSnapshot,
   clampEnteredScore,
-  buildHoleMismatchRows,
   resumeVerifiedUpTo,
-  changedScoreCells,
+  resumeHole,
 } from '../ScorecardScreen';
 
 // ScorecardScreen imports useFocusEffect from @react-navigation/native, whose
@@ -17,48 +14,6 @@ import {
 // the import) so pulling in the screen's helper exports doesn't load the
 // untransformed module.
 jest.mock('@react-navigation/native', () => ({ useFocusEffect: jest.fn() }));
-
-describe('mergeScores', () => {
-  test('adopts blob values for clean cells', () => {
-    const blob = { a: { 1: 4, 2: 5 } };
-    const local = { a: { 1: 4 } };
-    const merged = mergeScores(blob, local, new Set());
-    expect(merged).toEqual({ a: { 1: 4, 2: 5 } });
-  });
-
-  test('keeps the local value for a dirty cell the blob disagrees with', () => {
-    const blob = { a: { 1: 4 } };       // stale: missing the newer tap
-    const local = { a: { 1: 7 } };      // user tapped up to 7
-    const merged = mergeScores(blob, local, new Set(['a:1']));
-    expect(merged.a[1]).toBe(7);        // local edit survives the stale reload
-  });
-
-  test('a dirty cell the blob now agrees with adopts the blob value', () => {
-    const blob = { a: { 1: 7 } };       // save round-tripped
-    const local = { a: { 1: 7 } };
-    const merged = mergeScores(blob, local, new Set(['a:1']));
-    expect(merged.a[1]).toBe(7);
-  });
-});
-
-describe('mergeShotDetails', () => {
-  test('keeps the local detail for a dirty shot cell the blob disagrees with', () => {
-    const blob = { me: { 5: { putts: null, drive: null } } };
-    const local = { me: { 5: { putts: 2, drive: 'fairway' } } };
-    const merged = mergeShotDetails(blob, local, new Set(['me:5']));
-    expect(merged.me[5]).toEqual({ putts: 2, drive: 'fairway' });
-  });
-
-  test('a locally-deleted dirty shot cell stays deleted despite a stale blob copy', () => {
-    // Hold-to-clear removed hole 5's detail locally; a reload that raced the
-    // save still carries the old detail. The deletion must win — not be
-    // resurrected, and not linger as an explicit `undefined` key either.
-    const blob = { me: { 5: { putts: 2, drive: 'fairway' } } };
-    const local = { me: {} };
-    const merged = mergeShotDetails(blob, local, new Set(['me:5']));
-    expect('5' in merged.me).toBe(false);
-  });
-});
 
 describe('clampEnteredScore (screen-level score entry clamp)', () => {
   // Par-4, SI-1 hole. Scratch pickup = par + 2 + 0 extra = 6; ceiling = pickup
@@ -196,81 +151,6 @@ describe('scorecard finish behavior', () => {
   });
 });
 
-describe('shouldApplyReloadSnapshot', () => {
-  test('skips a reload snapshot when a local save started while the reload was in flight', () => {
-    expect(shouldApplyReloadSnapshot({
-      preserveLocalEdits: false,
-      pendingSave: true,
-      hasTournament: true,
-    })).toBe(false);
-  });
-
-  test('still applies the initial load even if pending state is set defensively', () => {
-    expect(shouldApplyReloadSnapshot({
-      preserveLocalEdits: false,
-      pendingSave: true,
-      hasTournament: false,
-    })).toBe(true);
-  });
-});
-
-describe('buildHoleMismatchRows', () => {
-  const players = [{ id: 'p1', name: 'Pedro' }, { id: 'p2', name: 'Luis' }];
-  const authorName = (a) => ({ me: 'Me', juan: 'Juan', ana: 'Ana' }[a] ?? a);
-
-  test('mine-first candidate list, named per author, playerName resolved', () => {
-    const rows = buildHoleMismatchRows({
-      hole: 7,
-      par: 4,
-      players,
-      authorName,
-      authorId: 'me',
-      mismatches: [
-        { playerId: 'p1', mine: 5, others: [{ authorId: 'juan', value: 6 }] },
-        { playerId: 'p2', mine: 3, others: [{ authorId: 'juan', value: 4 }, { authorId: 'ana', value: 5 }] },
-      ],
-    });
-    expect(rows).toEqual([
-      {
-        playerId: 'p1',
-        hole: 7,
-        par: 4,
-        playerName: 'Pedro',
-        currentValue: 5,
-        candidates: [
-          { value: 5, ts: 0, authorId: 'me', authorName: 'You' },
-          { value: 6, ts: 0, authorId: 'juan', authorName: 'Juan' },
-        ],
-        blankAuthors: [],
-      },
-      {
-        playerId: 'p2',
-        hole: 7,
-        par: 4,
-        playerName: 'Luis',
-        currentValue: 3,
-        candidates: [
-          { value: 3, ts: 0, authorId: 'me', authorName: 'You' },
-          { value: 4, ts: 0, authorId: 'juan', authorName: 'Juan' },
-          { value: 5, ts: 0, authorId: 'ana', authorName: 'Ana' },
-        ],
-        blankAuthors: [],
-      },
-    ]);
-  });
-
-  test('unknown player falls back to a generic label', () => {
-    const rows = buildHoleMismatchRows({
-      hole: 1,
-      players,
-      authorName,
-      authorId: 'me',
-      mismatches: [{ playerId: 'ghost', mine: 4, others: [{ authorId: 'juan', value: 5 }] }],
-    });
-    expect(rows[0].playerName).toBe('Player');
-  });
-});
-
 describe('resumeVerifiedUpTo', () => {
   const holes = [1, 2, 3, 4].map((number) => ({ number }));
   const players = [{ id: 'p1' }, { id: 'p2' }];
@@ -297,62 +177,64 @@ describe('resumeVerifiedUpTo', () => {
   });
 });
 
-describe('changedScoreCells', () => {
-  test('writes cells whose value differs from the committed blob', () => {
-    const cells = changedScoreCells({
-      prevScores: { p1: { 1: 4 } },
-      newScores: { p1: { 1: 5 } },
-      dirtyKeys: new Set(['p1:1']),
-      scoreEntries: {},
-      authorId: 'me',
-    });
-    expect(cells).toEqual([{ playerId: 'p1', hole: 1, value: 5 }]);
+describe('resumeHole', () => {
+  const holes = [1, 2, 3, 4].map((number) => ({ number }));
+
+  test('a scorer part-way through their own card resumes at the next hole', () => {
+    expect(resumeHole(holes, 2)).toBe(3);
   });
 
-  test('writes a cell I just marked that only a PEER had entered', () => {
-    // The merged card already reads 5 because the other scorer entered it, so
-    // the plain value diff sees nothing to do — but nothing is stamped under
-    // me, and the cell would fall back to a ghost once the dirty flag clears.
-    const cells = changedScoreCells({
-      prevScores: { p1: { 1: 5 } },
-      newScores: { p1: { 1: 5 } },
-      dirtyKeys: new Set(['p1:1']),
-      scoreEntries: { p1: { 1: { juan: { value: 5, ts: 1 } } } },
-      authorId: 'me',
-    });
-    expect(cells).toEqual([{ playerId: 'p1', hole: 1, value: 5 }]);
+  test('a fully marked card resumes on the last hole', () => {
+    expect(resumeHole(holes, 4)).toBe(4);
   });
 
-  test('a cell already stamped by me is not re-written', () => {
-    const cells = changedScoreCells({
-      prevScores: { p1: { 1: 5 } },
-      newScores: { p1: { 1: 5 } },
-      dirtyKeys: new Set(['p1:1']),
-      scoreEntries: { p1: { 1: { me: { value: 5, ts: 1 }, juan: { value: 5, ts: 1 } } } },
-      authorId: 'me',
-    });
-    expect(cells).toEqual([]);
-  });
-
-  test('an untouched cell is never written just because a peer owns it', () => {
-    const cells = changedScoreCells({
-      prevScores: { p1: { 1: 5 } },
-      newScores: { p1: { 1: 5 } },
-      dirtyKeys: new Set(),
-      scoreEntries: { p1: { 1: { juan: { value: 5, ts: 1 } } } },
-      authorId: 'me',
-    });
-    expect(cells).toEqual([]);
-  });
-
-  test('a cleared cell is written as null', () => {
-    const cells = changedScoreCells({
-      prevScores: { p1: { 1: 5 } },
-      newScores: { p1: {} },
-      dirtyKeys: new Set(['p1:1']),
-      scoreEntries: { p1: { 1: { me: { value: 5, ts: 1 } } } },
-      authorId: 'me',
-    });
-    expect(cells).toEqual([{ playerId: 'p1', hole: 1, value: null }]);
+  test('a completed round opens on the last hole even for a phone that marked nothing', () => {
+    expect(resumeHole(holes, 0, { complete: true })).toBe(4);
   });
 });
+
+// The one adapter every conflict surface reads: the leave-hole prompt, the
+// peer-arrival prompt and the finish gate all filter these rows.
+describe('buildConflictRows', () => {
+  const round = { holes: [{ number: 1, par: 4 }, { number: 2, par: 5 }] };
+  const players = [{ id: 'pm', name: 'Marcos' }, { id: 'pg', name: 'Guille' }];
+  const disputes = [{
+    hole: 2,
+    rows: [{
+      playerId: 'pm',
+      values: [
+        { scorerKey: 'me', name: 'Marcos', value: 5, ts: 100 },
+        { scorerKey: 'peer', name: 'Guille', value: 4, ts: 200 },
+      ],
+    }],
+  }];
+  const cells = { pm: { 2: { shown: 5 } } };
+
+  test('one row per disputed cell, one candidate per scorer', () => {
+    const rows = buildConflictRows({ disputes, cells, round, players, names: {} });
+    expect(rows).toEqual([{
+      playerId: 'pm',
+      hole: 2,
+      par: 5,
+      playerName: 'Marcos',
+      currentValue: 5,
+      candidates: [
+        { value: 5, ts: 100, authorId: 'me', authorName: 'Marcos' },
+        { value: 4, ts: 200, authorId: 'peer', authorName: 'Guille' },
+      ],
+      // A blank is not an opinion, so nothing is ever listed as a blank here.
+      blankAuthors: [],
+    }]);
+  });
+
+  test('an unnamed scorer falls back to the generic label', () => {
+    const unnamed = [{ hole: 2, rows: [{ playerId: 'pm', values: [{ scorerKey: 'x', name: null, value: 4, ts: 1 }] }] }];
+    const rows = buildConflictRows({ disputes: unnamed, cells, round, players, names: {} });
+    expect(rows[0].candidates[0].authorName).toBe('Another phone');
+  });
+
+  test('no disputes, no rows', () => {
+    expect(buildConflictRows({ disputes: [], cells, round, players, names: {} })).toEqual([]);
+  });
+});
+

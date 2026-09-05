@@ -13,7 +13,7 @@
 // the assembled tournament object cached locally.
 import { supabase } from '../lib/supabase';
 import { readLocal, saveLocal } from './tournamentStore';
-import { applyPendingMutations, preserveLocalConflictState } from './mutate';
+import { applyPendingMutations } from './mutate';
 import { syncQueue } from './syncQueue';
 import { runExclusiveForTournament } from './tournamentMutex';
 
@@ -62,50 +62,6 @@ export function applyScoreRow(t, row, eventType) {
   if (Object.keys(playerScores).length === 0) delete scores[row.player_id];
   else scores[row.player_id] = playerScores;
   round.scores = scores;
-  return next;
-}
-
-// game_score_entries row: { round_id, tournament_id, player_id, hole,
-// author_id, strokes, updated_at }. Per-author scoring entries, keyed three
-// levels deep (player → hole → author) so each contributor's independent
-// entry survives alongside the others — unlike game_scores (one settled
-// value per player+hole), this table can hold multiple simultaneous authors
-// for the same cell pending resolution. DELETE (or the row simply being
-// retracted) removes just that author's entry; empty author/hole/player
-// buckets are pruned the same way applyScoreRow prunes empty player buckets.
-export function applyScoreEntryRow(t, row, eventType) {
-  const next = deepClone(t);
-  const round = next.rounds?.find((r) => r.id === row.round_id);
-  if (!round) return next;
-  const entries = { ...(round.scoreEntries ?? {}) };
-  const byHole = { ...(entries[row.player_id] ?? {}) };
-  const byAuthor = { ...(byHole[row.hole] ?? {}) };
-  if (isDeleteEvent(eventType)) delete byAuthor[row.author_id];
-  else byAuthor[row.author_id] = { value: row.strokes ?? null, ts: new Date(row.updated_at).getTime() };
-  if (Object.keys(byAuthor).length === 0) delete byHole[row.hole];
-  else byHole[row.hole] = byAuthor;
-  if (Object.keys(byHole).length === 0) delete entries[row.player_id];
-  else entries[row.player_id] = byHole;
-  round.scoreEntries = entries;
-  return next;
-}
-
-// game_score_resolutions row: { round_id, tournament_id, player_id, hole,
-// value, resolved_by, resolved_at }. The settled outcome once conflicting
-// game_score_entries rows for a cell have been reconciled — one resolution
-// per player+hole. DELETE removes it outright; empty per-player buckets are
-// pruned the same way applyScoreRow prunes empty player buckets.
-export function applyScoreResolutionRow(t, row, eventType) {
-  const next = deepClone(t);
-  const round = next.rounds?.find((r) => r.id === row.round_id);
-  if (!round) return next;
-  const res = { ...(round.scoreResolutions ?? {}) };
-  const byHole = { ...(res[row.player_id] ?? {}) };
-  if (isDeleteEvent(eventType)) delete byHole[row.hole];
-  else byHole[row.hole] = { value: row.value ?? null, by: row.resolved_by, ts: new Date(row.resolved_at).getTime() };
-  if (Object.keys(byHole).length === 0) delete res[row.player_id];
-  else res[row.player_id] = byHole;
-  round.scoreResolutions = res;
   return next;
 }
 
@@ -217,44 +173,31 @@ export function applyPlayerRow(t, row, eventType) {
   if (isDeleteEvent(eventType) || row.deleted_at != null) {
     if (existingIdx !== -1) players.splice(existingIdx, 1);
     next.players = players;
-    // Stamp the removedPlayerIds tombstone (see mutate.js's
-    // preserveLocalConflictState) so a later union-merge on THIS device
-    // never resurrects the removed player's scoreEntries/scoreResolutions
-    // from a stale cache copy — this device may not be the one that ran
-    // removePlayer, and the corresponding game_score_entries DELETE rows can
-    // arrive out of order (or not at all, e.g. this device was offline for
-    // part of the removal window).
-    //
-    // CRITICAL: scope the tombstone to the SAME rounds the removal actually
-    // cleared — not-yet-played rounds only (idx >= currentRound), mirroring
-    // removePlayerRoundPatches (tournamentStore.js), which leaves
-    // already-played earlier rounds untouched and preserves the removed
-    // player's scores/entries there as history. Tombstoning a played round
-    // would make preserveLocalConflictState strip that legitimate history —
-    // a data-loss regression, since repo.deletePlayer broadcasts this DELETE
-    // to every device.
-    if (Array.isArray(next.rounds)) {
-      const currentRound = next.currentRound ?? 0;
-      next.rounds = next.rounds.map((round, idx) => {
-        if (idx < currentRound) return round; // already-played — leave history intact
-        const removedPlayerIds = new Set(round.removedPlayerIds ?? []);
-        removedPlayerIds.add(row.player_id);
-        return { ...round, removedPlayerIds: [...removedPlayerIds] };
-      });
-    }
     return next;
   }
 
-  if (existingIdx !== -1) players.splice(existingIdx, 1);
   // Anchor identity on the row PRIMARY KEY, never on body alone — the same
   // rule applyRoundRow uses for `id`. body is written by four independent
   // paths (createTournament, upsertPlayer, add_tournament_player_if_room,
   // claim_tournament_player) and the column defaults to '{}', so a body
-  // without an id is representable. Spreading it bare produced a player with
-  // no id: nameless in every roster row, and — because the findIndex above
-  // could never match it again — DUPLICATED by the next event for that same
-  // player rather than updated.
-  const assembled = { ...(row.body ?? {}), id: row.player_id };
+  // without an id — and, for the claim/add RPCs, without a `name` at all —
+  // is representable. Spreading it bare over an EXISTING player blanked the
+  // name (and any other field the writer didn't touch) until the next full
+  // fetch. So: for an existing player, start from the cached object and
+  // overlay only the body keys the row actually carries (present, non-null);
+  // for a brand-new player there is no cached object to fall back to, so it
+  // is inserted as-is — even nameless — and the name arrives on the next
+  // fetch.
+  let assembled;
+  if (existingIdx !== -1) {
+    assembled = { ...players[existingIdx] };
+    for (const [k, v] of Object.entries(row.body ?? {})) {
+      if (v != null) assembled[k] = v;
+    }
+  } else {
+    assembled = { ...(row.body ?? {}) };
+  }
+  assembled.id = row.player_id;
   // user_id also comes from the COLUMN, mirroring get_game_tournament's
   // projection (20260728000000_player_identity_from_columns.sql): the
   // claim/release RPCs write only the column and leave body untouched, so
@@ -262,8 +205,16 @@ export function applyPlayerRow(t, row, eventType) {
   // null → key absent, exactly like the read path's CASE.
   delete assembled.user_id;
   if (row.user_id != null) assembled.user_id = row.user_id;
-  const idx = clampIndex(row.pos, players.length);
-  players.splice(idx, 0, assembled);
+  if (existingIdx !== -1) {
+    // Existing player: keep its current index. Row order is set once at
+    // roster build time and never moves mid-session — re-splicing at
+    // row.pos on every UPDATE let a stale/out-of-order pos shuffle rows out
+    // from under whoever was mid-round.
+    players[existingIdx] = assembled;
+  } else {
+    const idx = clampIndex(row.pos, players.length);
+    players.splice(idx, 0, assembled);
+  }
   next.players = players;
   return next;
 }
@@ -300,10 +251,12 @@ export function applyTournamentRow(t, row) {
   return next;
 }
 
+// game_scores / game_shot_details are the SQL projection of the scorer_cards
+// (20260905000000) — kept here because Home, the feed and the leaderboard read
+// them from the blob. The cards themselves have their own channel; see
+// src/engine/store/replicator.js.
 const APPLIERS = {
   game_scores: applyScoreRow,
-  game_score_entries: applyScoreEntryRow,
-  game_score_resolutions: applyScoreResolutionRow,
   game_shot_details: applyShotDetailRow,
   game_round_notes: applyNoteRow,
   game_rounds: applyRoundRow,
@@ -321,41 +274,6 @@ let _channelId = null;
 // rejoin — see stopRealtime — so this never fires for a superseded channel.
 let _reconnectTimer = null;
 let _reconnectAttempts = 0;
-
-// ── Presence: per-device currentHole broadcast ───────────────────────────────
-// Supabase presence state shape: { [presenceKey]: [{ authorId, currentHole },
-// ...] }. Reduced to the highest currentHole seen per authorId — pure, so the
-// conflict-surfacing gate (authorProgress/isCellSurfaceable) can consume it
-// without touching the channel itself.
-export function reducePresenceProgress(state) {
-  const out = {};
-  for (const metas of Object.values(state ?? {})) {
-    for (const m of metas ?? []) {
-      if (m?.authorId && (m.currentHole ?? 0) > (out[m.authorId] ?? 0)) out[m.authorId] = m.currentHole;
-    }
-  }
-  return out;
-}
-
-const _presenceCbs = new Set();
-let _lastHole = null;
-let _lastAuthor = null;
-
-export function getPresenceProgress() {
-  if (!_channel) return {};
-  return reducePresenceProgress(_channel.presenceState());
-}
-
-export function subscribeProgress(cb) {
-  _presenceCbs.add(cb);
-  return () => _presenceCbs.delete(cb);
-}
-
-export function setPresenceHole(authorId, hole) {
-  _lastAuthor = authorId;
-  _lastHole = hole;
-  if (_channel && authorId) _channel.track({ authorId, currentHole: hole });
-}
 
 // This tournament's still-undrained queue entries, read fresh (not captured
 // earlier) so each settle pass sees whatever is queued right now.
@@ -377,13 +295,9 @@ async function pendingEntriesFor(id) {
 // mutations on top (a realtime row is SERVER state — replaying pending
 // mutations mirrors tournamentStore's own read-path overlay, so we never
 // clobber an optimistic local edit whose write hasn't round-tripped yet),
-// restores the device-local meId (never trusted from a realtime row, same as
-// _overlayAndSave), and merges round.scoreEntries/scoreResolutions forward
-// (see mutate.js's preserveLocalConflictState — every row event OTHER than a
-// game_score_entries/game_score_resolutions one carries none of them, so
-// without the merge one unrelated row would wipe the cell state) before
-// saving. Skips entirely if this tournament
-// has no local cache to patch (nothing to preserve, nothing to render).
+// and restores the device-local meId (never trusted from a realtime row, same
+// as _overlayAndSave) before saving. Skips entirely if this tournament has no
+// local cache to patch (nothing to preserve, nothing to render).
 //
 // Bounded settle loop — the SAME race guard as syncWorker.drainTournament and
 // tournamentStore._overlayAndSave (neither is exported, so this mirrors their
@@ -398,8 +312,8 @@ async function pendingEntriesFor(id) {
 // (local wins; the still-queued mutations drain and re-reconcile on the next
 // worker pass / poll anyway).
 // Row events arrive one WebSocket message at a time, but they come in RELATED
-// GROUPS: one submit_game_score writes game_score_entries AND game_scores, so
-// a single peer stroke lands as two events milliseconds apart. Handled
+// GROUPS: one card publication re-projects the whole round, so a peer leaving
+// a hole lands as several rows milliseconds apart. Handled
 // individually that is two read-modify-writes, two saveLocal calls, two change
 // events and two full re-render passes on every other device — for one fact.
 //
@@ -433,9 +347,8 @@ function flushBatch(id) {
     }
     let snapshot = await pendingEntriesFor(id);
     for (let pass = 0; pass < 3; pass++) {
-      let merged = applyPendingMutations(patched, snapshot);
+      const merged = applyPendingMutations(patched, snapshot);
       if ('meId' in cached) merged.meId = cached.meId;
-      merged = preserveLocalConflictState(merged, cached);
       await saveLocal(merged, { makeActive: false });
       const latest = await pendingEntriesFor(id);
       const stable = latest.length === snapshot.length
@@ -483,14 +396,10 @@ function flushPendingBatches() {
 }
 
 // Builds and subscribes a channel for `id`, wiring the same bindings every
-// time: the eight postgres_changes row handlers, the presence 'sync' relay,
-// and a subscribe status callback that (a) flushes the last known presence
-// hole once SUBSCRIBED and resets the backoff counter, and (b) schedules a
-// backoff rejoin on CHANNEL_ERROR/TIMED_OUT/CLOSED. Deliberately NOT exported
-// and does not touch _lastAuthor/_lastHole itself — callers decide whether
-// this is a fresh tournament (ensureRealtimeForTournament resets presence
-// first) or a same-tournament reconnect (scheduleRejoin's callback, which
-// must preserve presence so the rejoin resumes broadcasting the right hole).
+// time: one postgres_changes row handler per table in APPLIERS, plus a
+// subscribe status callback that resets the backoff counter on SUBSCRIBED and
+// schedules a backoff rejoin on CHANNEL_ERROR/TIMED_OUT/CLOSED. Deliberately
+// NOT exported.
 function buildChannel(id) {
   const channel = supabase.channel(`game-${id}`);
   for (const [table, applyFn] of Object.entries(APPLIERS)) {
@@ -501,14 +410,9 @@ function buildChannel(id) {
       makeHandler(id, applyFn),
     );
   }
-  channel.on('presence', { event: 'sync' }, () => {
-    const progress = reducePresenceProgress(channel.presenceState());
-    for (const cb of _presenceCbs) cb(progress);
-  });
   channel.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
       _reconnectAttempts = 0;
-      if (_lastAuthor) channel.track({ authorId: _lastAuthor, currentHole: _lastHole });
     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
       scheduleRejoin(id);
     }
@@ -560,15 +464,6 @@ export function stopRealtime() {
 // different id tears down the old channel first. null/undefined and
 // official-kind tournaments never get a channel (official tournaments have
 // no game_*-backed local blob for these patchers to act on).
-//
-// _lastAuthor/_lastHole are reset here (not in buildChannel) whenever this
-// call actually proceeds past the idempotent guard above — i.e. on a genuine
-// channel-id change. Without this, switching tournaments left the previous
-// tournament's presence state in place, so the new channel's first
-// SUBSCRIBED would broadcast/gate conflict-surfacing off the WRONG
-// tournament's last-known hole. A backoff rejoin of the SAME tournament
-// (scheduleRejoin, above) intentionally bypasses this function so a
-// reconnect keeps broadcasting the right hole instead of resetting it.
 export async function ensureRealtimeForTournament(id) {
   if (!id) {
     stopRealtime();
@@ -583,8 +478,5 @@ export async function ensureRealtimeForTournament(id) {
   }
 
   stopRealtime();
-  _lastAuthor = null;
-  _lastHole = null;
-
   buildChannel(id);
 }

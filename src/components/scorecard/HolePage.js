@@ -11,7 +11,6 @@ import {
 } from '../../store/tournamentStore';
 import { holeCountOf } from '../../store/scoring';
 import { scoreCellState } from '../../store/officialScoring';
-import { deriveCell } from '../../store/scoreEntries';
 import { isScrambleMode } from '../scoringModes';
 import { HoleDistanceBlock } from './HoleDistanceBlock';
 import { PlayerCard } from './PlayerCard';
@@ -105,11 +104,9 @@ export function holePagePropsEqual(prev, next) {
     || prev.onOpenConflict !== next.onOpenConflict
     || prev.shotCollapsed !== next.shotCollapsed
     || prev.onToggleShotDetail !== next.onToggleShotDetail
-    || prev.conflictHoles !== next.conflictHoles
+    || prev.conflictCells !== next.conflictCells
     || prev.onOpenFlyover !== next.onOpenFlyover
     || prev.ghostEnabled !== next.ghostEnabled
-    || prev.authorName !== next.authorName
-    || prev.localAuthorIds !== next.localAuthorIds
   ) {
     return false;
   }
@@ -147,14 +144,14 @@ export const HolePage = React.memo(function HolePage({
   onOpenConflict,
   shotCollapsed, onToggleShotDetail,
   totalsMap,
-  conflictHoles = new Set(),
+  conflictCells = new Set(),
   gps, onOpenFlyover,
   // Read-only "ghost" of a peer's entry for a cell this scorer hasn't
-  // marked themselves — see HoleView's wiring comment. `peerScores` is the
-  // merged/effective card; `ghostEnabled` is true only on the casual,
-  // non-official, non-view-only "own entries" pages above the watermark
-  // (where `scores` above is myScores, not the merged card).
-  peerScores, ghostEnabled, authorName, localAuthorIds,
+  // marked themselves — see HoleView's wiring comment. `scores` above is MY
+  // card; `peerScores` is `shown` (mine, with peers filling my blanks), so a
+  // value present there and absent from mine is a peer's alone.
+  // `ghostAuthors` names the scorer it came from.
+  peerScores, ghostEnabled, ghostAuthors,
 }) {
   // Every game mode now renders the unified PlayerCard. Scramble modes score
   // one ball per team under the captain — swap the roster for synthetic team
@@ -333,15 +330,10 @@ export const HolePage = React.memo(function HolePage({
               canResolveHere = canEdit;
             }
 
-            // Casual-mode conflict flag: derived live from per-author score
-            // entries via deriveCell, but gated by the same "everyone off the
-            // hole" presence set the go-to-hole dots use (ScorecardScreen's
-            // surfaceable-gated conflictHoles). Surfacing a disagreement on the
-            // hole you're actively playing — before every scorer has even left
-            // it — is the premature-surfacing problem the overhaul removes
-            // elsewhere; gating here keeps the hero card consistent with that.
-            const conflict = deriveCell(round, player.id, pageHole.number, localAuthorIds).status === 'conflict'
-              && conflictHoles.has(pageHole.number);
+            // Casual-mode conflict flag: the cards engine only reports a
+            // discrepancy once two scorers have PUBLISHED the hole, so a
+            // disagreement can never flash on the hole you are still playing.
+            const conflict = conflictCells.has(`${player.id}:${pageHole.number}`);
 
             // Read-only ghost of a peer's entry: only when this page is
             // showing the viewer's own-entries-only card (ghostEnabled),
@@ -355,11 +347,9 @@ export const HolePage = React.memo(function HolePage({
             if (ghostEnabled && strokes == null) {
               const peerValue = peerScores?.[player.id]?.[pageHole.number];
               if (peerValue != null) {
-                const candidates = deriveCell(round, player.id, pageHole.number, localAuthorIds).candidates;
-                const mostRecent = candidates.length ? candidates[candidates.length - 1] : null;
                 ghost = {
                   value: peerValue,
-                  authorName: mostRecent ? (authorName?.(mostRecent.authorId) ?? 'Someone') : 'Someone',
+                  authorName: ghostAuthors?.[player.id]?.[pageHole.number] ?? 'Someone',
                 };
               }
             }

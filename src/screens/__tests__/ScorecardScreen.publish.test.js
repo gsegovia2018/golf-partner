@@ -3,8 +3,7 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import ScorecardScreen from '../ScorecardScreen';
-import { mutate } from '../../store/mutate';
-import { syncNow } from '../../store/syncWorker';
+import { reconnect } from '../../engine/store/replicator';
 
 // The screen uses useFocusEffect for its cross-device live pull; run the effect
 // on mount (and its cleanup on unmount) without needing a NavigationContainer.
@@ -44,6 +43,45 @@ const mockTournament = {
   }],
 };
 
+// The card engine is exercised in src/engine/**; here it is mocked so the
+// screen's own wiring is what the test observes.
+const mockCardActions = {
+  setDraftEntry: jest.fn(() => Promise.resolve()),
+  setDraftShot: jest.fn(() => Promise.resolve()),
+  publishHole: jest.fn(() => Promise.resolve(true)),
+  resolve: jest.fn(() => Promise.resolve()),
+  identify: jest.fn(() => Promise.resolve()),
+};
+
+let mockCardState = {
+  myAuthorId: 'dev-me',
+  cardsByAuthor: {},
+  resolutions: {},
+  draft: {},
+  pending: { cards: false, resolutions: false },
+  lastPulledAt: null,
+  loaded: true,
+};
+
+jest.mock('../../hooks/useRoundCards', () => ({
+  useRoundCards: () => ({ state: mockCardState, actions: mockCardActions }),
+  useSyncStatus: () => 'idle',
+}));
+
+jest.mock('../../engine/store/roundState', () => ({
+  getRoundState: () => mockCardState,
+}));
+
+jest.mock('../../engine/store/replicator', () => ({
+  closeLive: jest.fn(),
+  getLastError: jest.fn(() => null),
+  onSynced: jest.fn(() => jest.fn()),
+  openLive: jest.fn(),
+  pull: jest.fn(() => Promise.resolve(true)),
+  reconnect: jest.fn(() => Promise.resolve('t1')),
+  schedulePush: jest.fn(),
+}));
+
 jest.mock('@expo/vector-icons', () => ({
   Feather: 'Feather',
 }));
@@ -60,7 +98,7 @@ jest.mock('../../components/scorecard/HoleView', () => {
   const React = require('react');
   const { Text, TouchableOpacity, View } = require('react-native');
   return {
-    HoleView: ({ onSetScore, onNext, onFinish }) => (
+    HoleView: ({ onSetScore, onNext, onGoToHole, onFinish, currentHole }) => (
       <View>
         <TouchableOpacity
           accessibilityRole="button"
@@ -78,11 +116,26 @@ jest.mock('../../components/scorecard/HoleView', () => {
         </TouchableOpacity>
         <TouchableOpacity
           accessibilityRole="button"
+          accessibilityLabel="Swipe to hole 2"
+          onPress={() => onGoToHole(2)}
+        >
+          <Text>Swipe to hole 2</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Swipe to hole 1"
+          onPress={() => onGoToHole(1)}
+        >
+          <Text>Swipe to hole 1</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
           accessibilityLabel="Finish round"
           onPress={onFinish}
         >
           <Text>Finish round</Text>
         </TouchableOpacity>
+        <Text accessibilityLabel="Current hole">{String(currentHole)}</Text>
       </View>
     ),
   };
@@ -166,19 +219,49 @@ jest.mock('../../lib/mediaCapture', () => ({
   attachMedia: jest.fn(() => Promise.resolve()),
 }));
 
-describe('ScorecardScreen batched score sync', () => {
+// Publication on leaving the hole (plan §1: R1, R2, R7, R9). A tap writes
+// only the private draft; the hole goes out as one packet when the scorer
+// walks off it — never on unmount, never on background.
+const EMPTY_CARDS = {
+  myAuthorId: 'dev-me',
+  cardsByAuthor: {},
+  resolutions: {},
+  draft: {},
+  pending: { cards: false, resolutions: false },
+  lastPulledAt: null,
+  loaded: true,
+};
+
+// Hole 1: I published 5 for p1, another phone published 4.
+const DISAGREEING_CARDS = {
+  ...EMPTY_CARDS,
+  cardsByAuthor: {
+    'dev-me': {
+      scorer: { playerId: 'p1', userId: null },
+      holes: { 1: { v: 1, ts: 1000, entries: { p1: 5 } } },
+    },
+    'dev-peer': {
+      scorer: { playerId: 'p2', userId: null },
+      holes: { 1: { v: 1, ts: 2000, entries: { p1: 4 } } },
+    },
+  },
+};
+
+describe('ScorecardScreen publication on leaving the hole', () => {
   const originalWindow = global.window;
   const originalPlatformOS = Platform.OS;
   const navigation = {
     canGoBack: jest.fn(() => true),
     goBack: jest.fn(),
     navigate: jest.fn(),
+    dispatch: jest.fn(),
   };
   const route = { params: { roundIndex: 0 } };
   const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCardState = EMPTY_CARDS;
     mockOfficialRoundState = {
       loading: false,
       error: null,
@@ -206,98 +289,110 @@ describe('ScorecardScreen batched score sync', () => {
     global.window = originalWindow;
   });
 
-  test('a score tap saves with deferSync and does not kick syncNow', async () => {
+  test('a score tap writes the draft and publishes nothing (R1, R2)', async () => {
     const { findByLabelText } = render(wrap(
       <ScorecardScreen navigation={navigation} route={route} />
     ));
 
-    // Let the mount-time flush effect (and any initial load) settle before
-    // snapshotting the call count — the mount effect may legitimately fire
-    // syncNow once on an empty queue.
-    await waitFor(() => {
-      expect(mockOfficialRoundState.editableSource).toBeDefined();
-    });
-    const callsBeforeTap = syncNow.mock.calls.length;
-
     fireEvent.press(await findByLabelText('Score plus'));
 
     await waitFor(() => {
-      expect(mutate).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ type: 'score.set' }),
-        expect.objectContaining({ deferSync: true }),
-      );
+      expect(mockCardActions.setDraftEntry).toHaveBeenCalledWith(1, 'p1', 4);
     });
-
-    expect(syncNow.mock.calls.length).toBe(callsBeforeTap);
+    expect(mockCardActions.publishHole).not.toHaveBeenCalled();
   });
 
-  test('navigating to the next hole kicks syncNow', async () => {
-    const { findByLabelText } = render(wrap(
+  test('tapping Next publishes the hole being left, then advances (R7)', async () => {
+    const { findByLabelText, getByLabelText } = render(wrap(
       <ScorecardScreen navigation={navigation} route={route} />
     ));
 
     fireEvent.press(await findByLabelText('Score plus'));
+    await waitFor(() => expect(mockCardActions.setDraftEntry).toHaveBeenCalled());
+
+    fireEvent.press(getByLabelText('Next hole'));
+
     await waitFor(() => {
-      expect(mutate).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ type: 'score.set' }),
-        expect.objectContaining({ deferSync: true }),
-      );
+      expect(mockCardActions.publishHole).toHaveBeenCalledWith(1);
     });
-
-    syncNow.mockClear();
-
-    fireEvent.press(await findByLabelText('Next hole'));
-
     await waitFor(() => {
-      expect(syncNow).toHaveBeenCalled();
+      expect(getByLabelText('Current hole').props.children).toBe('2');
     });
   });
 
-  test('a failing save at finish time surfaces the finish-failed alert and aborts', async () => {
-    const { findByLabelText } = render(wrap(
+  test('a swipe to another hole publishes the one being left too', async () => {
+    const { findByLabelText, getByLabelText } = render(wrap(
       <ScorecardScreen navigation={navigation} route={route} />
     ));
 
-    // Dirty a cell. In this fixture the real mutate rejects (the
-    // tournamentStore mock has no saveLocal), so the tap's own autoSave fails
-    // and the score stays uncommitted — exactly the dirty state the
-    // finish-time flush has to re-push (and fail on again).
-    fireEvent.press(await findByLabelText('Score plus'));
+    fireEvent.press(await findByLabelText('Swipe to hole 2'));
+
     await waitFor(() => {
-      expect(mutate).toHaveBeenCalled();
+      expect(mockCardActions.publishHole).toHaveBeenCalledWith(1);
+    });
+    await waitFor(() => {
+      expect(getByLabelText('Current hole').props.children).toBe('2');
+    });
+  });
+
+  test('a disagreement on the hole just left holds the move and opens the sheet', async () => {
+    mockCardState = DISAGREEING_CARDS;
+    const { findByLabelText, getByLabelText, getByText } = render(wrap(
+      <ScorecardScreen navigation={navigation} route={route} />
+    ));
+
+    // My card ends on hole 1, so the round resumes on hole 2. Go back to the
+    // disputed hole, then walk off it again.
+    fireEvent.press(await findByLabelText('Swipe to hole 1'));
+    await waitFor(() => {
+      expect(getByLabelText('Current hole').props.children).toBe('1');
     });
 
-    syncNow.mockClear();
-    navigation.navigate.mockClear();
+    fireEvent.press(getByLabelText('Next hole'));
+
+    await waitFor(() => {
+      expect(mockCardActions.publishHole).toHaveBeenCalledWith(1);
+    });
+    // The sheet names the hole, and the pager has not moved off it.
+    await waitFor(() => expect(getByText(/^Hole 1 ·/)).toBeTruthy());
+    expect(getByLabelText('Current hole').props.children).toBe('1');
+  });
+
+  test('Finish publishes the hole in hand and reconnects once (R9)', async () => {
+    const { findByLabelText } = render(wrap(
+      <ScorecardScreen navigation={navigation} route={route} />
+    ));
 
     fireEvent.press(await findByLabelText('Finish round'));
 
-    // The flush's catch must surface the failure (web branch: window.alert)…
     await waitFor(() => {
-      expect(global.window.alert).toHaveBeenCalled();
+      expect(mockCardActions.publishHole).toHaveBeenCalledWith(1);
     });
-    // …and abort the finish: no sync kick, no navigation.
-    expect(syncNow).not.toHaveBeenCalled();
-    expect(navigation.navigate).not.toHaveBeenCalled();
+    expect(reconnect).toHaveBeenCalled();
   });
 
-  test('unmounting the screen kicks syncNow', async () => {
-    const { unmount } = render(wrap(
+  test('Finish stays blocked while two cards disagree', async () => {
+    mockCardState = DISAGREEING_CARDS;
+    const { findByLabelText, getByText } = render(wrap(
       <ScorecardScreen navigation={navigation} route={route} />
     ));
 
-    await waitFor(() => {
-      expect(mockOfficialRoundState.editableSource).toBeDefined();
-    });
+    fireEvent.press(await findByLabelText('Finish round'));
 
-    syncNow.mockClear();
+    await waitFor(() => expect(getByText(/^Hole 1 ·/)).toBeTruthy());
+    expect(navigation.dispatch).not.toHaveBeenCalled();
+  });
 
-    act(() => {
-      unmount();
-    });
+  test('unmounting never publishes (the hole was not left)', async () => {
+    const { findByLabelText, unmount } = render(wrap(
+      <ScorecardScreen navigation={navigation} route={route} />
+    ));
 
-    expect(syncNow).toHaveBeenCalled();
+    fireEvent.press(await findByLabelText('Score plus'));
+    await waitFor(() => expect(mockCardActions.setDraftEntry).toHaveBeenCalled());
+
+    act(() => { unmount(); });
+
+    expect(mockCardActions.publishHole).not.toHaveBeenCalled();
   });
 });

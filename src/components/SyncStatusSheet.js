@@ -39,16 +39,23 @@ function formatRelative(ts) {
   return `hace ${day} d`;
 }
 
-export default function SyncStatusSheet({ visible, onClose }) {
+// `status` / `lastError` / `cardsPending` / `unsentHole` are supplied by the
+// scorecard from the card engine (src/engine/store/replicator.js). Everywhere
+// else the sheet keeps subscribing to the setup-layer sync status itself.
+export default function SyncStatusSheet({
+  visible, onClose,
+  status: statusOverride, lastError = null, cardsPending = false, unsentHole = null,
+}) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
-  const [status, setStatus] = useState('idle');
+  const [storeStatus, setStoreStatus] = useState('idle');
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [pending, setPending] = useState(0);
+  const status = statusOverride ?? storeStatus;
 
   useEffect(() => {
     if (!visible) return;
-    const offStatus = subscribeSyncStatus(setStatus);
+    const offStatus = subscribeSyncStatus(setStoreStatus);
     const offConflicts = subscribeConflicts(({ lastSyncAt: nextTs }) => {
       setLastSyncAt(nextTs);
     });
@@ -78,6 +85,13 @@ export default function SyncStatusSheet({ visible, onClose }) {
           </View>
           <Text style={s.meta}>Pendientes: {pending}</Text>
           <Text style={s.meta}>Último sync: {formatRelative(lastSyncAt)}</Text>
+          {unsentHole != null && (
+            <Text style={s.meta}>
+              {`Hoyo ${unsentHole} sin enviar — sal del hoyo para enviarlo`}
+            </Text>
+          )}
+          {cardsPending && <Text style={s.meta}>Tarjeta pendiente de enviar</Text>}
+          {!!lastError?.message && <Text style={s.meta}>{`Error: ${lastError.message}`}</Text>}
           {(status === 'error' || status === 'pending') && (
             <TouchableOpacity onPress={onRetry} style={s.retry}>
               <Text style={s.retryLabel}>Reintentar</Text>
