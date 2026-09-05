@@ -105,15 +105,6 @@ export function metaPathFor(m) {
     // Tournament creation: the row is already saved locally by the creation
     // flow itself, so this mutation only needs to reach the server queue.
     case 'tournament.create': return 'create';
-    // Round notes + the snapshot log for Reset Round / Undo / Restore
-    // (HomeScreen). SCORES ARE NOT HERE: they belong to the cards engine
-    // (src/engine/store) — HomeScreen calls resetRound/restoreRound alongside
-    // this mutation, and the blob's `round.scores` is a read-only projection
-    // of the server's settled cells.
-    case 'round.resetContent': return [
-      `rounds.${m.roundId}.notes`,
-      `rounds.${m.roundId}.resetHistory`,
-    ];
     // Whole-round upsert (EditTournamentScreen / PlayersScreen bulk round
     // save — course/holes/tees/handicaps edited together). Mirrors
     // tournament.create: a coarse path, not a per-field one. `m.isNew` (see
@@ -335,21 +326,6 @@ export function applyToTournament(t, m) {
     case 'tournament.create': {
       // No-op: the tournament creation flow already saves this tournament
       // locally before this mutation is enqueued.
-      break;
-    }
-    case 'round.resetContent': {
-      const round = t.rounds?.find((r) => r.id === m.roundId);
-      if (!round) return;
-      // Notes and the snapshot log. `round.scores` is owned by the server
-      // projection of the cards engine — HomeScreen's reset/undo/restore
-      // drive it through engine/store's resetRound/restoreRound — but the
-      // blob is this phone's cached copy of that projection, so when the
-      // caller passes `scores` it is applied LOCALLY ONLY (mutationWrites
-      // never sends it) so Home shows the reset immediately, offline too,
-      // instead of the stale numbers until the server delete lands.
-      round.notes = normalizeRoundNotes(m.notes);
-      round.resetHistory = m.resetHistory ?? [];
-      if (m.scores !== undefined) round.scores = m.scores ?? {};
       break;
     }
     case 'round.upsert': {

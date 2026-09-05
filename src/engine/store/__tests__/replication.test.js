@@ -25,7 +25,7 @@ jest.mock('../../../lib/connectivity', () => {
 });
 
 const {
-  publishHole, resetRound, resolve, restoreRound, setDraftEntry,
+  publishHole, resolve, setDraftEntry,
 } = require('../actions');
 const {
   _resetReplicatorForTests,
@@ -191,78 +191,6 @@ describe('push', () => {
     } finally {
       jest.useRealTimers();
     }
-  });
-});
-
-describe('reset', () => {
-  it('deletes both tables for the round, clears the marker, and drops the pending tid', async () => {
-    await setDraftEntry(TID, RID, 3, 'p1', 5);
-    await publishHole(TID, RID, 3, 1000);
-    await pushAll();
-    fake.seed('score_resolutions', {
-      tournament_id: TID, round_id: RID, player_id: 'p1', hole: 3,
-      value: 4, resolved_by: PEER, basis: { [PEER]: 1 },
-    });
-
-    await resetRound(TID, RID, 7777);
-    await pushAll();
-
-    expect(fake.deletesFor('scorer_cards')).toEqual([
-      { table: 'scorer_cards', filters: [['tournament_id', TID], ['round_id', RID]] },
-    ]);
-    expect(fake.deletesFor('score_resolutions')).toEqual([
-      { table: 'score_resolutions', filters: [['tournament_id', TID], ['round_id', RID]] },
-    ]);
-    expect(fake.tables.scorer_cards).toHaveLength(0);
-    expect(fake.tables.score_resolutions).toHaveLength(0);
-
-    const meta = JSON.parse(memory.map.get(cardKeys.meta(TID)));
-    expect(meta.pendingResets).toEqual({});
-    expect(getSyncStatus()).toBe('idle');
-    expect(JSON.parse(memory.map.get('@cards:pending'))).toEqual([]);
-  });
-
-  it('a failed delete keeps the marker and retries on the same backoff (R8)', async () => {
-    jest.useFakeTimers();
-    silenceReporting();
-    try {
-      await setDraftEntry(TID, RID, 3, 'p1', 5);
-      await publishHole(TID, RID, 3, 1000);
-      await pushAll();
-
-      fake.failDeletes('scorer_cards', 1, { message: 'network down', code: 'PGRST000' });
-      await resetRound(TID, RID, 7777);
-      await pushAll();
-
-      expect(fake.tables.scorer_cards).toHaveLength(1);          // still there
-      expect(fake.deletesFor('score_resolutions')).toHaveLength(0); // aborted after the first failure
-      expect(getSyncStatus()).toBe('error');
-      expect(JSON.parse(memory.map.get(cardKeys.meta(TID))).pendingResets).toEqual({ [RID]: 7777 });
-
-      await jest.advanceTimersByTimeAsync(1000);
-
-      expect(fake.tables.scorer_cards).toHaveLength(0);
-      expect(JSON.parse(memory.map.get(cardKeys.meta(TID))).pendingResets).toEqual({});
-      expect(getSyncStatus()).toBe('idle');
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  it('a restore queued on top of a reset lands AFTER the delete', async () => {
-    await setDraftEntry(TID, RID, 3, 'p1', 5);
-    await publishHole(TID, RID, 3, 1000);
-    await pushAll();
-
-    await resetRound(TID, RID, 7777);
-    await restoreRound(TID, RID, { p1: { 3: 4 } }, 8888);
-    fake.upserts.length = 0;
-    await pushAll();
-
-    // The row on the server is the restored card, not the deleted one.
-    expect(fake.tables.scorer_cards).toHaveLength(1);
-    expect(fake.tables.scorer_cards[0].card.holes[3].entries).toEqual({ p1: 4 });
-    expect((await mine()).pending).toBe(false);
   });
 });
 

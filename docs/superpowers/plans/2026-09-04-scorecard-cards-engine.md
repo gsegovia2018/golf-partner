@@ -239,15 +239,16 @@ Deliberately out of the implemented scope; each is a known gap, not a bug.
   mid-round and finish sheets close themselves when their last row is agreed
   (a leave prompt resumes the held navigation; the finish sheet continues the
   finish). The "all scores agreed" screen is no longer reachable.
-- **The server projection does not fold two devices of one account.**
-  `src/engine/cards.js` collapses them by `scorerKey` (newest hole version
-  wins); `settled_round_cells` treats every `author_id` separately, so such a
-  pair disagreeing with itself projects as disputed (NULL) rather than as the
-  later value. The phones' own view is authoritative during play, so this only
-  shows in Home/feed/stats. Fold in SQL if it ever bites.
-- **A reset is not authoritative over an offline peer.** `resetRound` deletes
-  the round's `scorer_cards` / `score_resolutions` rows, but a peer who was
-  offline holding a card for that round re-upserts it whole on reconnect and
-  its entries reappear as unverified values. Nothing on one phone can revoke a
-  row on a phone the server has not heard from; resetting again after that
-  card lands clears it for good.
+- **Accepted: the server projection does not fold two devices of one
+  account.** `src/engine/cards.js` collapses them by `scorerKey` (newest hole
+  version wins); `settled_round_cells` treats every `author_id` separately, so
+  such a pair disagreeing with itself projects as disputed (NULL) rather than
+  as the later value. The phones' own view is authoritative during play, so
+  this only shows in Home/feed/stats. Won't fix: one account on two phones in
+  the same round is not a real use case.
+- **Removed 2026-09-05: Reset Round, its Undo snackbar, and the "Restore
+  previous scores" history.** A reset could not be made authoritative over an
+  offline peer — `resetRound` deleted the round's `scorer_cards` /
+  `score_resolutions` rows, but a peer who was offline holding a card for that
+  round would re-upsert it whole on reconnect, so the feature was dropped
+  rather than kept half-working.

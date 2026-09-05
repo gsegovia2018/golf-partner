@@ -419,39 +419,6 @@ describe('tournament.create', () => {
   });
 });
 
-describe('round.resetContent', () => {
-  test('writes the notes grid key by key, plus the resetHistory patch — and no scores', async () => {
-    const local = baseTournament({
-      rounds: [{
-        id: 'r1',
-        holes: [{ number: 1 }, { number: 2 }],
-        scores: { p1: { 1: 4 }, p2: {} },
-        notes: { round: 'Windy', hole: { 2: 'GIR miss' } },
-        resetHistory: [{ at: '2026-01-01T00:00:00Z' }],
-      }],
-    });
-    const mutation = { type: 'round.resetContent', roundId: 'r1', notes: {}, resetHistory: [] };
-
-    await executeMutation(entry(mutation), local);
-
-    expect(repo.setNote).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', holeKey: 'round', note: 'Windy' });
-    expect(repo.setNote).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', holeKey: '1', note: null });
-    expect(repo.setNote).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', holeKey: '2', note: 'GIR miss' });
-    expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', { resetHistory: [{ at: '2026-01-01T00:00:00Z' }] });
-    // The scores half is the cards engine's — the repo no longer exposes a
-    // per-cell score write at all, and only the notes go out here.
-    expect(repo.setNote).toHaveBeenCalledTimes(3);
-    expect(Object.keys(repo)).not.toContain('setScore');
-  });
-
-  test('is a no-op when the round no longer exists locally', async () => {
-    const mutation = { type: 'round.resetContent', roundId: 'gone', notes: {}, resetHistory: [] };
-    const result = await executeMutation(entry(mutation), baseTournament());
-    expect(repo.setNote).not.toHaveBeenCalled();
-    expect(result).toEqual({ conflict: null });
-  });
-});
-
 describe('round.upsert', () => {
   // Regression fix (review-mandated): EditTournamentScreen/PlayersScreen fire
   // this mutation from a debounced bulk-save that loops over EVERY round with

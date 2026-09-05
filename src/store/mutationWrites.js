@@ -289,29 +289,6 @@ export async function executeMutation(entry, localTournament) {
       return NO_CONFLICT;
     }
 
-    case 'round.resetContent': {
-      // Reset Round / Undo / Restore snapshot (HomeScreen): the NOTES half.
-      // There is no bulk-replace RPC for game_round_notes, so the round's
-      // notes are written key by key — a rare, low-frequency action, so the
-      // extra round trips are cheaper than a bulk endpoint. The scores half
-      // is the cards engine's: HomeScreen calls resetRound/restoreRound, and
-      // the replicator deletes or re-upserts the round's scorer_cards rows.
-      const round = findRound(localTournament, m.roundId);
-      if (!round) return NO_CONFLICT;
-      const holes = round.holes ?? [];
-      const notes = round.notes ?? {};
-      await repo.setNote({
-        tournamentId: id, roundId: m.roundId, holeKey: 'round', note: notes.round ?? null,
-      });
-      for (const h of holes) {
-        await repo.setNote({
-          tournamentId: id, roundId: m.roundId, holeKey: String(h.number), note: notes.hole?.[h.number] ?? null,
-        });
-      }
-      await repo.patchRound(id, m.roundId, { resetHistory: round.resetHistory ?? [] });
-      return NO_CONFLICT;
-    }
-
     case 'round.upsert': {
       // Whole-round upsert (EditTournamentScreen / PlayersScreen bulk save,
       // plus tournamentStore's propagatePlayerToTournaments /

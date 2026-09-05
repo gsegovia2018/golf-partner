@@ -12,8 +12,7 @@
 //   @cards:<tid>:mine:<roundId>           { card, pending: boolean }
 //   @cards:<tid>:peer:<roundId>:<author>  card
 //   @cards:<tid>:resolutions              { [roundId]: { [playerId]: { [hole]: resolution } } }
-//   @cards:<tid>:meta                     { scorer, rounds, peers, lastPulledAt,
-//                                           pendingResets }
+//   @cards:<tid>:meta                     { scorer, rounds, peers, lastPulledAt }
 //   @cards:pending                        [tid...]
 //
 // The peer keys are NOT enumerable through this interface on purpose (the
@@ -44,10 +43,6 @@ export function emptyMeta() {
     rounds: [],
     peers: {},
     lastPulledAt: null,
-    // roundId -> ts of a local Reset Round whose server-side delete has not
-    // landed yet. Kept until the replicator has removed every card and
-    // resolution of that round on the server (see actions.resetRound).
-    pendingResets: {},
   };
 }
 
@@ -96,12 +91,8 @@ export function createCardStorage({ storage = AsyncStorage } = {}) {
     /** ONE storage write: the card row is the atomic unit (R7). */
     setMine: (tid, roundId, row) => writeJson(cardKeys.mine(tid, roundId), row),
 
-    /** Drop my own row for a round entirely (Reset Round). */
-    removeMine: (tid, roundId) => storage.removeItem(cardKeys.mine(tid, roundId)),
-
     getPeer: (tid, roundId, authorId) => readJson(cardKeys.peer(tid, roundId, authorId), null),
     setPeer: (tid, roundId, authorId, card) => writeJson(cardKeys.peer(tid, roundId, authorId), card),
-    removePeer: (tid, roundId, authorId) => storage.removeItem(cardKeys.peer(tid, roundId, authorId)),
 
     getResolutions: (tid) => readJson(cardKeys.resolutions(tid), {}),
     setResolutions: (tid, byRound) => writeJson(cardKeys.resolutions(tid), byRound),

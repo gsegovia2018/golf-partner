@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, startTransition } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share, Animated, Easing } from 'react-native';
-import { useReducedMotion } from 'react-native-reanimated';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { markBootReady } from '../store/bootReveal';
 import IconButton from '../components/ui/IconButton';
@@ -46,8 +45,6 @@ import {
   resolveQuickStartPlayerTees,
 } from '../lib/quickStartGame';
 import { mutate } from '../store/mutate';
-import { loadRound, getRoundState, resetRound, restoreRound } from '../engine/store';
-import { shownScores } from '../engine/cards';
 import { roundScoringMode, tournamentHasMixedModes, tournamentStablefordLeaderboard, buildTeamsForMode, roundBestBallValues } from '../store/scoring';
 import { assignPlacements, comparatorForBoardMode } from '../store/leaderboardPlacement';
 import { subscribeConnectivity, isOnline } from '../lib/connectivity';
@@ -132,93 +129,6 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   }
 }
 
-const SNACK_ENTER_DURATION = 200;
-const SNACK_EXIT_DURATION = 160;
-const SNACK_EASING = Easing.out(Easing.ease);
-const SNACK_OFFSET = 60;
-
-// Wraps the undo snackbar's data-driven visibility (`data` is null when
-// hidden) so it can animate in *and* out without touching the timeout logic
-// that owns `undoSnack` state — this component just watches `data` flip
-// between an object and null and plays the matching transition. Keeps
-// rendering its last known data through the exit animation since `data`
-// is already null by the time that plays.
-function UndoSnackbar({ data, onUndo, theme, s }) {
-  const reduced = useReducedMotion();
-  const [mounted, setMounted] = useState(!!data);
-  const lastDataRef = useRef(data);
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(SNACK_OFFSET)).current;
-  const exitTimerRef = useRef(null);
-  // Guards the exit animation's completion callback (and its fallback timer)
-  // against firing setState after the component itself has really unmounted
-  // — mirrors BottomSheet's isMountedRef pattern.
-  const isMountedRef = useRef(true);
-  useEffect(() => () => { isMountedRef.current = false; }, []);
-
-  useEffect(() => {
-    if (exitTimerRef.current) { clearTimeout(exitTimerRef.current); exitTimerRef.current = null; }
-    if (data) {
-      lastDataRef.current = data;
-      setMounted(true);
-      opacity.setValue(0);
-      const animations = [
-        Animated.timing(opacity, {
-          toValue: 1, duration: SNACK_ENTER_DURATION, easing: SNACK_EASING, useNativeDriver: true,
-        }),
-      ];
-      if (reduced) {
-        translateY.setValue(0);
-      } else {
-        translateY.setValue(SNACK_OFFSET);
-        animations.push(Animated.timing(translateY, {
-          toValue: 0, duration: SNACK_ENTER_DURATION, easing: SNACK_EASING, useNativeDriver: true,
-        }));
-      }
-      Animated.parallel(animations).start();
-      return undefined;
-    }
-    if (!mounted) return undefined;
-    // finished === false → exit tween interrupted by a new snackbar; keep mounted.
-    const finish = ({ finished } = {}) => {
-      if (finished !== false && isMountedRef.current) setMounted(false);
-    };
-    const animations = [
-      Animated.timing(opacity, {
-        toValue: 0, duration: SNACK_EXIT_DURATION, easing: SNACK_EASING, useNativeDriver: true,
-      }),
-    ];
-    if (!reduced) {
-      animations.push(Animated.timing(translateY, {
-        toValue: SNACK_OFFSET, duration: SNACK_EXIT_DURATION, easing: SNACK_EASING, useNativeDriver: true,
-      }));
-    }
-    Animated.parallel(animations).start(finish);
-    // Safety net matching BottomSheet's: guarantees unmount even if the
-    // native-driver completion callback never fires.
-    exitTimerRef.current = setTimeout(finish, SNACK_EXIT_DURATION + 50);
-    return undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
-
-  useEffect(() => () => {
-    if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
-  }, []);
-
-  if (!mounted) return null;
-  const shown = data ?? lastDataRef.current;
-
-  return (
-    <Animated.View style={[s.undoSnack, { opacity, transform: [{ translateY }] }]}>
-      <Feather name="rotate-ccw" size={14} color="#fff" />
-      <Text style={s.undoSnackText}>Round {(shown?.roundIndex ?? 0) + 1} reset</Text>
-      <TouchableOpacity onPress={onUndo} style={s.undoSnackBtn} activeOpacity={0.7}>
-        <Text style={s.undoSnackBtnText}>UNDO</Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
-
 export default function HomeScreen({ navigation, route }) {
   const viewMode = route?.params?.viewMode ?? 'auto';
   const routeTournamentId = route?.params?.tournamentId ?? null;
@@ -294,9 +204,6 @@ export default function HomeScreen({ navigation, route }) {
   const [showRoundEdit, setShowRoundEdit] = useState(false);
   // Per-round "Scoring Mode" picker, opened from the Round N sheet.
   const [showRoundModeSheet, setShowRoundModeSheet] = useState(false);
-  const [showResetHistory, setShowResetHistory] = useState(false);
-  const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
-  const undoTimerRef = useRef(null);
   const [leaderboardAlt, setLeaderboardAlt] = useState(false);
   // false = follows the pager's selected round; true = whole-tournament board.
   // Defaults to true so a multi-round tournament opens on Overall standings;
@@ -592,117 +499,6 @@ export default function HomeScreen({ navigation, route }) {
     roundScrollOffset.current = target;
     roundPagerInitialized.current = true;
   }, [selectedRound, roundPagerWidth]);
-
-  // The scores of a round as THIS device currently sees them (plan §3.3
-  // `shown`): the reset snapshot has to come from the cards engine, not from
-  // `round.scores` — that key is now a projection of the server's settled
-  // cells and is empty for anything this phone has not managed to push yet.
-  async function engineRoundScores(round) {
-    if (!tournament?.id || !round?.id) return {};
-    await loadRound(tournament.id, round.id);
-    const ctx = getRoundState(tournament.id, round.id);
-    const playerIds = (tournament.players ?? []).map((p) => p.id).filter(Boolean);
-    const holes = (round.holes ?? []).map((h) => h.number);
-    return shownScores(ctx, playerIds, holes);
-  }
-
-  async function resetCurrentRound() {
-    if (!tournament) return;
-    const idx = selectedRound;
-    const confirmed = await confirm({
-      title: 'Reset Round',
-      message: `Reset Round ${idx + 1}? Scores and notes will be cleared.`,
-      confirmLabel: 'Reset',
-      destructive: true,
-    });
-    if (!confirmed) return;
-
-    const roundBefore = tournament.rounds[idx];
-    const prevScores = await engineRoundScores(roundBefore);
-    const prevNotes = roundBefore?.notes ?? {};
-    // Notes are an object { round, hole: { [n]: text } }; treat the round as
-    // having note content if the round-level note or any hole note is set.
-    const hasNoteContent = typeof prevNotes === 'string'
-      ? prevNotes.trim().length > 0
-      : [prevNotes.round, ...Object.values(prevNotes.hole ?? {})]
-          .some((t) => typeof t === 'string' && t.trim().length > 0);
-    const hasContent = Object.keys(prevScores).length > 0 || hasNoteContent;
-    const snapshot = { scores: prevScores, notes: prevNotes, at: new Date().toISOString() };
-
-    const history = [...(roundBefore?.resetHistory ?? [])];
-    if (hasContent) {
-      history.push(snapshot);
-      // Cap to last 10 entries to avoid unbounded growth
-      if (history.length > 10) history.splice(0, history.length - 10);
-    }
-    // Two layers, two owners: notes and the snapshot log are setup data and
-    // ride the blob mutation; the scores live in the cards engine, which wipes
-    // its local cards/drafts/agreements and queues the server-side delete.
-    await mutate(tournament, {
-      type: 'round.resetContent', roundId: roundBefore.id, notes: {}, resetHistory: history, scores: {},
-    });
-    await resetRound(tournament.id, roundBefore.id);
-    await reload();
-
-    if (hasContent) {
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-      setUndoSnack({ roundIndex: idx, snapshot });
-      undoTimerRef.current = setTimeout(() => setUndoSnack(null), 3000);
-    }
-  }
-
-  async function performUndoReset() {
-    if (!undoSnack || !tournament) return;
-    const { roundIndex, snapshot } = undoSnack;
-    if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
-    const round = tournament.rounds[roundIndex];
-    // Pop the entry we just pushed (the snapshot we're restoring)
-    const history = [...(round?.resetHistory ?? [])];
-    if (history.length > 0 && history[history.length - 1].at === snapshot.at) history.pop();
-    await mutate(tournament, {
-      type: 'round.resetContent',
-      roundId: round.id,
-      notes: snapshot.notes ?? {},
-      resetHistory: history,
-      scores: snapshot.scores ?? {},
-    });
-    // The reset already emptied the round, so re-publishing the snapshot as my
-    // card is exactly the undo.
-    await restoreRound(tournament.id, round.id, snapshot.scores ?? {});
-    await reload();
-    setUndoSnack(null);
-  }
-
-  async function restoreFromHistory(entryIndex) {
-    if (!tournament) return;
-    const idx = selectedRound;
-    const round = tournament.rounds[idx];
-    const entry = round?.resetHistory?.[entryIndex];
-    if (!entry) return;
-    const confirmed = await confirm({
-      title: 'Restore snapshot',
-      message: 'Restore this snapshot? Current scores for this round will be overwritten.',
-      confirmLabel: 'Restore',
-    });
-    if (!confirmed) return;
-    await mutate(tournament, {
-      type: 'round.resetContent',
-      roundId: round.id,
-      notes: entry.notes ?? {},
-      resetHistory: round.resetHistory ?? [],
-      scores: entry.scores ?? {},
-    });
-    // "Current scores will be overwritten": clear the round on every device
-    // first, then publish the snapshot as my card.
-    await resetRound(tournament.id, round.id);
-    await restoreRound(tournament.id, round.id, entry.scores ?? {});
-    await reload();
-    setShowResetHistory(false);
-  }
-
-  useEffect(() => () => {
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-  }, []);
 
   async function selectTournament(id) {
     await setActiveTournament(id);
@@ -1317,36 +1113,6 @@ export default function HomeScreen({ navigation, route }) {
         </View>
         <Feather name="chevron-right" size={16} color={theme.text.muted} />
       </TouchableOpacity>
-    );
-  }
-
-  // Restore-scores + Reset-Round items for the selected round. Shared by the
-  // per-round sheet (multi-round) and the single settings sheet (single-
-  // round, where the two menus are merged). `onClose` dismisses the host.
-  function renderRoundActions(onClose) {
-    const historyCount = tournament.rounds[selectedRound]?.resetHistory?.length ?? 0;
-    return (
-      <>
-        {historyCount > 0 && (
-          <TouchableOpacity
-            style={s.menuItem}
-            onPress={() => { onClose(); setShowResetHistory(true); }}
-            activeOpacity={0.7}
-          >
-            <Feather name="rotate-cw" size={14} color={theme.text.primary} />
-            <Text style={s.menuItemText}>Restore previous scores ({historyCount})</Text>
-            <Feather name="chevron-right" size={16} color={theme.text.muted} />
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={[s.menuItem, s.menuItemDestructive]}
-          onPress={() => { onClose(); resetCurrentRound(); }}
-          activeOpacity={0.7}
-        >
-          <Feather name="rotate-ccw" size={14} color={theme.destructive} />
-          <Text style={[s.menuItemText, { color: theme.destructive }]}>Reset Round</Text>
-        </TouchableOpacity>
-      </>
     );
   }
 
@@ -2118,8 +1884,6 @@ export default function HomeScreen({ navigation, route }) {
       </View>
     </PullToRefresh>
 
-    <UndoSnackbar data={undoSnack} onUndo={performUndoReset} theme={theme} s={s} />
-
     {tournament.rounds.length > 0 && (() => {
       const isCurrentRound = selectedRound === tournament.currentRound;
       const canShowNext = isCurrentRound && tournament.currentRound < tournament.rounds.length - 1;
@@ -2346,7 +2110,6 @@ export default function HomeScreen({ navigation, route }) {
           </TouchableOpacity>
           {renderPointValuesMenuItem(() => setShowRoundEdit(false))}
           {renderTeamsMenuItem(() => setShowRoundEdit(false))}
-          {renderRoundActions(() => setShowRoundEdit(false))}
         </Pressable>
       </Pressable>
     </Modal>
@@ -2358,47 +2121,6 @@ export default function HomeScreen({ navigation, route }) {
       onSelect={saveRoundScoringMode}
       onClose={() => setShowRoundModeSheet(false)}
     />
-
-    <Modal statusBarTranslucent hardwareAccelerated
-      visible={showResetHistory}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setShowResetHistory(false)}
-    >
-      <Pressable style={s.modalBackdrop} onPress={() => setShowResetHistory(false)}>
-        <Pressable style={s.modalSheet} onPress={() => {}}>
-          <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>Restore Round {selectedRound + 1}</Text>
-          <Text style={s.modalSubtitle}>Pick a pre-reset snapshot to restore.</Text>
-          {(tournament.rounds[selectedRound]?.resetHistory ?? [])
-            .map((entry, idx) => ({ entry, idx }))
-            .reverse()
-            .map(({ entry, idx }) => {
-              const playerCount = Object.keys(entry.scores ?? {}).length;
-              const holeCount = Object.values(entry.scores ?? {})
-                .reduce((max, pScores) => Math.max(max, Object.keys(pScores ?? {}).length), 0);
-              const when = (() => {
-                try { return new Date(entry.at).toLocaleString(); } catch { return entry.at; }
-              })();
-              return (
-                <TouchableOpacity
-                  key={entry.at ?? idx}
-                  style={s.menuItem}
-                  onPress={() => restoreFromHistory(idx)}
-                  activeOpacity={0.7}
-                >
-                  <Feather name="clock" size={14} color={theme.text.primary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.menuItemText}>{when}</Text>
-                    <Text style={s.modalSubtle}>{playerCount} players · up to hole {holeCount}</Text>
-                  </View>
-                  <Feather name="chevron-right" size={16} color={theme.text.muted} />
-                </TouchableOpacity>
-              );
-            })}
-        </Pressable>
-      </Pressable>
-    </Modal>
 
     <BottomSheet visible={showSettings} onClose={() => setShowSettings(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
@@ -2487,11 +2209,6 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
-
-          {/* Round-scoped actions — single-round only, since multi-round
-              tournaments expose these in the per-round (•••) sheet. */}
-          {!isViewer && tournament.rounds.length === 1
-            && renderRoundActions(() => setShowSettings(false))}
 
           {!isViewer && (() => {
             const kindLabel = tournamentNounCapitalized(tournament);
@@ -3145,45 +2862,9 @@ const makeStyles = (t) => StyleSheet.create({
     fontSize: 10, color: t.accent.primary, marginBottom: 8,
     letterSpacing: 1.5, textTransform: 'uppercase', paddingHorizontal: 4,
   },
-  modalSubtitle: {
-    fontFamily: 'PlusJakartaSans-Regular',
-    fontSize: 13, color: t.text.secondary,
-    paddingHorizontal: 4, marginBottom: 8,
-  },
   modalSubtle: {
     fontFamily: 'PlusJakartaSans-Regular',
     fontSize: 11, color: t.text.muted, marginTop: 2,
-  },
-  undoSnack: {
-    position: 'absolute',
-    left: 16, right: 16, bottom: 80,
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 14, paddingVertical: 12,
-    backgroundColor: t.isDark ? t.bg.elevated : '#1a1a1a',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: t.accent.primary + '40',
-    ...(t.isDark ? {} : t.shadow.elevated),
-    zIndex: 20,
-  },
-  undoSnackText: {
-    flex: 1,
-    color: '#ffffff',
-    fontFamily: 'PlusJakartaSans-SemiBold',
-    fontSize: 13,
-  },
-  undoSnackBtn: {
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: t.accent.primary + '22',
-    borderWidth: 1,
-    borderColor: t.accent.primary + '55',
-  },
-  undoSnackBtnText: {
-    color: t.accent.primary,
-    fontFamily: 'PlusJakartaSans-ExtraBold',
-    fontSize: 12,
-    letterSpacing: 1,
   },
   menuItem: {
     flexDirection: 'row', alignItems: 'center', gap: 14,

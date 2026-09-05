@@ -7,8 +7,7 @@
 // mutations used to always force `hole: {}`, so a device that authored a
 // note locally disagreed with the shape of the same tournament refetched
 // from the server, which never emits an empty `hole`). Callers that read
-// notes.hole must use `notes.hole ?? {}` — see mutate.js's note.set and
-// mutationWrites.js's round.resetContent.
+// notes.hole must use `notes.hole ?? {}` — see mutate.js's note.set.
 export function normalizeRoundNotes(rawNotes) {
   if (rawNotes && typeof rawNotes === 'object' && !Array.isArray(rawNotes)) {
     const notes = { ...rawNotes };

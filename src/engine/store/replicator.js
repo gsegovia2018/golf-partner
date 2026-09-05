@@ -185,63 +185,16 @@ async function pushResolutions(tid) {
   return { failed, remaining };
 }
 
-/**
- * Execute the Reset Round markers (`meta.pendingResets`) as a delete of every
- * card and agreement the server holds for that round — the projection trigger
- * then rebuilds `game_scores` for it as empty.
- *
- * Runs BEFORE the card push so a restore queued on top of a reset lands in
- * order: delete the round, then upsert the restored card. A failure keeps the
- * marker and rides the same backoff as every other pending write (R8).
- */
-async function pushResets(tid) {
-  const store = getCardStorage();
-  const meta = await store.getMeta(tid);
-  const pending = meta.pendingResets ?? {};
-  let failed = false;
-  let remaining = false;
-
-  for (const [roundId, ts] of Object.entries(pending)) {
-    let ok = true;
-    for (const table of [CARDS_TABLE, RESOLUTIONS_TABLE]) {
-      const { error } = await _client.from(table)
-        .delete()
-        .eq('tournament_id', tid)
-        .eq('round_id', roundId);
-      if (!error) continue;
-      ok = false;
-      failed = true;
-      remaining = true;
-      noteError(error, { table, tid, roundId, op: 'reset' });
-      break;
-    }
-    if (!ok) continue;
-
-    await store.withTid(tid, async () => {
-      const cur = await store.getMeta(tid);
-      const next = { ...(cur.pendingResets ?? {}) };
-      // A reset recorded again while this delete was in flight is a NEWER
-      // marker — leave it for the next pass.
-      if (next[roundId] !== ts) return;
-      delete next[roundId];
-      await store.setMeta(tid, { ...cur, pendingResets: next });
-    });
-  }
-
-  return { failed, remaining };
-}
-
 async function pushTournament(tid) {
   const store = getCardStorage();
   const myAuthorId = getDeviceAuthorId();
   const meta = await store.getMeta(tid);
   const rounds = [...new Set([...(meta.rounds ?? []), ...knownRounds(tid)])];
 
-  const resets = await pushResets(tid);
   const cards = await pushCards(tid, myAuthorId, rounds);
   const resolutions = await pushResolutions(tid);
-  const failed = resets.failed || cards.failed || resolutions.failed;
-  const remaining = resets.remaining || cards.remaining || resolutions.remaining;
+  const failed = cards.failed || resolutions.failed;
+  const remaining = cards.remaining || resolutions.remaining;
 
   if (!remaining) await store.removePendingTid(tid);
   return { failed, remaining };

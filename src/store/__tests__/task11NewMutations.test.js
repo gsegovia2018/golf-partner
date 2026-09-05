@@ -1,63 +1,8 @@
 // Task 11: new mutation types introduced to convert the last blob-push call
-// sites (HomeScreen reset/undo/restore, EditTournamentScreen/PlayersScreen
-// bulk round+roster saves) to mutations. Pure applyToTournament/metaPathFor
-// coverage — mutationWrites.test.js covers the server-write (repo call) side.
+// sites (EditTournamentScreen/PlayersScreen bulk round+roster saves) to
+// mutations. Pure applyToTournament/metaPathFor coverage — mutationWrites.test.js
+// covers the server-write (repo call) side.
 import { applyToTournament, metaPathFor } from '../mutate';
-
-describe('round.resetContent mutation', () => {
-  function baseTournament() {
-    return {
-      id: 't1',
-      rounds: [{
-        id: 'r1',
-        scores: { p1: { 1: 4, 2: 5 } },
-        notes: { round: 'Windy', hole: { 1: 'Lost ball' } },
-        resetHistory: [{ scores: {}, notes: {}, at: '2026-01-01T00:00:00Z' }],
-      }],
-    };
-  }
-
-  test('bumps the coarse notes/resetHistory paths — never scores', () => {
-    expect(metaPathFor({ type: 'round.resetContent', roundId: 'r1' })).toEqual([
-      'rounds.r1.notes', 'rounds.r1.resetHistory',
-    ]);
-  });
-
-  test('replaces notes/resetHistory wholesale and LEAVES scores alone', () => {
-    const t = baseTournament();
-    const history = [...t.rounds[0].resetHistory, { scores: { p1: { 1: 4, 2: 5 } }, notes: { round: 'Windy', hole: { 1: 'Lost ball' } }, at: '2026-02-01T00:00:00Z' }];
-
-    applyToTournament(t, {
-      type: 'round.resetContent', roundId: 'r1', notes: {}, resetHistory: history,
-    });
-
-    // round.scores is a projection of the cards engine's settled cells —
-    // HomeScreen clears it through engine/store's resetRound, not here.
-    expect(t.rounds[0].scores).toEqual({ p1: { 1: 4, 2: 5 } });
-    // normalizeRoundNotes no longer forces an empty `hole: {}` bucket (parity
-    // fix, task 13.1) — an empty notes input round-trips to an empty object.
-    expect(t.rounds[0].notes).toEqual({});
-    expect(t.rounds[0].resetHistory).toHaveLength(2);
-  });
-
-  test('restores a historical snapshot\'s notes verbatim (Restore / Undo)', () => {
-    const t = baseTournament();
-    applyToTournament(t, {
-      type: 'round.resetContent',
-      roundId: 'r1',
-      notes: { round: 'Calm', hole: {} },
-      resetHistory: [],
-    });
-    expect(t.rounds[0].notes.round).toBe('Calm');
-    expect(t.rounds[0].resetHistory).toEqual([]);
-  });
-
-  test('is a no-op when the round no longer exists', () => {
-    const t = baseTournament();
-    applyToTournament(t, { type: 'round.resetContent', roundId: 'gone', notes: {}, resetHistory: [] });
-    expect(t.rounds[0].notes).toEqual({ round: 'Windy', hole: { 1: 'Lost ball' } }); // untouched
-  });
-});
 
 describe('round.upsert mutation', () => {
   function baseTournament() {
