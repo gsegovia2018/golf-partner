@@ -146,9 +146,22 @@ export async function deletePlayer(tournamentId, playerId) {
 
 // Drops the projected rows that mirror a removed player's per-round state.
 // The scorer_cards these are projected FROM are not touched: a card is one
-// scorer's document, only that device writes it, and the next publication of
-// any hole re-projects the round anyway. Removing a player is a roster fact;
-// the cells they were marked on stay in whoever's card recorded them.
+// scorer's document, only that device writes it. Removing a player is a roster
+// fact; the cells they were marked on stay in whoever's card recorded them.
+//
+// This delete is now only the FAST PATH. Since
+// 20260906000001_projection_roster_and_noop.sql the projection itself refuses
+// to write a cell whose player is not a current member of the tournament (a
+// game_players row with deleted_at IS NULL), and its orphan-delete step
+// removes any rows such a player still has — so the removal survives the next
+// publication instead of being undone by it, and stamping deleted_at alone
+// (deletePlayer above) already re-projects the round through the game_players
+// trigger. What this call buys is immediacy on the device that did the
+// removing, without waiting for anyone to publish a hole.
+//
+// The corollary: re-adding someone must clear deleted_at
+// (add_tournament_player_if_room does), and when it does their scores come
+// straight back out of the cards that never lost them.
 export async function clearPlayerRound(tournamentId, roundId, playerId) {
   const { error: scoresError } = await supabase.from('game_scores')
     .delete()
@@ -168,6 +181,11 @@ export async function deleteRound(tournamentId, roundId) {
     .delete()
     .match({ tournament_id: tournamentId, id: roundId });
   if (error) throw error;
+  // The scorer cards for this round can never land now: their projection onto
+  // game_scores has no round row to hang off (23503 forever). Lazy require —
+  // the engine store imports back into this layer. See engine/store/roundState.
+  const { dropRound } = require('../engine/store/roundState');
+  await dropRound(tournamentId, roundId);
 }
 
 // -- Round upsert -------------------------------------------------------------

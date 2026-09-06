@@ -1,7 +1,7 @@
 // The plan's acceptance scenarios (§8) as engine-level state transitions.
 // Two scorers keep cards: Marcos on device 'dev-m', Guille on 'dev-g'.
 // Four players: alex, bea, marcos, guille.
-import { cellView, roundCells, shownScores, settledScores, discrepancies, singleScorerCells } from '../cards';
+import { cellView, roundCells, shownScores, discrepancies } from '../cards';
 import { emptyCard, publishHole, makeResolution } from '../publish';
 import { calcBestWorstBall } from '../../store/tournamentStore';
 
@@ -65,10 +65,6 @@ describe('S3 — publishing the hole makes it unverified on the other phone', ()
     expect(cells.alex['3'].mine).toBe(null);
     expect(cells.alex['3'].others).toEqual([{ scorerKey: 'dev-m', value: 5, ts: 1000 }]);
   });
-
-  it('nothing is final while one scorer alone has marked the hole', () => {
-    expect(settledScores(guille, PLAYERS, HOLE_NUMBERS).provisional).toBe(true);
-  });
 });
 
 describe('S4 — one disagreement, one agreement clears it everywhere', () => {
@@ -105,7 +101,6 @@ describe('S4 — one disagreement, one agreement clears it everywhere', () => {
       expect(cell.status).toBe('resolved');
       expect(cell.shown).toBe(5);
       expect(discrepancies(ctx, PLAYERS, HOLE_NUMBERS)).toEqual([]);
-      expect(settledScores(ctx, ['alex'], [3]).scores).toEqual({ alex: { 3: 5 } });
     }
   });
 });
@@ -210,18 +205,9 @@ describe('S9 — Finish over a full round', () => {
     expect(discrepancies(marcos, PLAYERS, HOLE_NUMBERS).map((d) => d.hole)).toEqual([6, 14]);
   });
 
-  it('lists the cells only one scorer marked, which do not block', () => {
-    expect(singleScorerCells(marcos, PLAYERS, HOLE_NUMBERS)).toEqual([
-      { playerId: 'guille', hole: 1, scorerKey: 'dev-m', value: 5 },
-    ]);
-  });
-
-  it('settles every agreed cell and stays provisional until the two are agreed', () => {
-    const { scores, provisional } = settledScores(marcos, PLAYERS, HOLE_NUMBERS);
-    expect(provisional).toBe(true);
-    expect(scores.alex[6]).toBeUndefined();
-    expect(scores.bea[14]).toBeUndefined();
-    expect(scores.alex[7]).toBe(4);
+  it('leaves the cell only Marcos marked showing his value, unverified', () => {
+    expect(cellView(marcos, 'guille', 1).status).toBe('mine');
+    expect(cellView(marcos, 'guille', 1).shown).toBe(5);
   });
 });
 
@@ -273,7 +259,7 @@ describe('S13 — four scorers, three against one', () => {
     ]);
   });
 
-  it('any scorer agreeing clears it, and any re-publication reopens it', () => {
+  it('any scorer agreeing clears it, and any scorer editing the hole reopens it', () => {
     const res = makeResolution(ctx, { roundId: 'r1', playerId: 'alex', hole: 11, value: 4, by: 'dev-d', ts: 5000 });
     expect(res.basis).toEqual({ 'dev-a': 1, 'dev-b': 1, 'dev-c': 1, 'dev-d': 1 });
     const resolutions = { alex: { 11: res } };
@@ -283,7 +269,9 @@ describe('S13 — four scorers, three against one', () => {
       const reopened = {
         ...ctx,
         resolutions,
-        cardsByAuthor: { ...cards, [authorId]: publishHole(cards[authorId], 11, { entries: { alex: 5 } }, 6000) },
+        // A real edit, not a walk back through the hole: re-publishing the
+        // same numbers keeps the version and leaves the agreement standing.
+        cardsByAuthor: { ...cards, [authorId]: publishHole(cards[authorId], 11, { entries: { alex: 7 } }, 6000) },
       };
       expect(cellView(reopened, 'alex', 11).resolution).toBe(null);
       expect(discrepancies(reopened, PLAYERS, HOLE_NUMBERS)).toHaveLength(1);
