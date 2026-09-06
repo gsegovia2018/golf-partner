@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { formatRoundDuration } from '../../store/roundDuration';
 import { semantic } from '../../theme/tokens';
 import { getScoringMode } from '../scoringModes';
 
@@ -338,6 +339,12 @@ export default function FeedRoundCard({
                 <Text style={[s.infoChipText, s.teamsChipText]} numberOfLines={1}>
                   {item.teamsLabel}
                 </Text>
+              </View>
+            ) : null}
+            {formatRoundDuration(item.durationMs) ? (
+              <View style={s.infoChip} testID="feed-round-duration">
+                <Feather name="clock" size={11} color={theme.text.muted} />
+                <Text style={s.infoChipText}>{formatRoundDuration(item.durationMs)}</Text>
               </View>
             ) : null}
             {item.topHighlight ? (
