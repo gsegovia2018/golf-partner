@@ -39,8 +39,13 @@ export function roundSpan(cardsByAuthor) {
 // score fixed days later must not stretch a stamped round, and a game
 // archived from Home the next morning must not stretch an unstamped one.
 export function roundDurationMs({ endAt = null, cardsByAuthor } = {}) {
-  const span = roundSpan(cardsByAuthor);
-  if (!span) return null;
+  return spanDurationMs(roundSpan(cardsByAuthor), endAt);
+}
+
+// Same rule over a span computed elsewhere — the feed gets first/last hole
+// per round from the get_round_activity RPC instead of pulling every card.
+export function spanDurationMs(span, endAt = null) {
+  if (!span || !Number.isFinite(span.firstAt) || !Number.isFinite(span.lastAt)) return null;
   const ends = endAt != null ? [Math.max(endAt, span.lastAt), endAt] : [];
   ends.push(span.lastAt);
   for (const end of ends) {
