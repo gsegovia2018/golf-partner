@@ -18,7 +18,8 @@ import {
 } from './scoring';
 import { loadMediaForTournaments } from './mediaStore';
 import { roundFinalizedAt, roundEndedAt } from './finishStamp';
-import { spanDurationMs } from './roundDuration';
+import { roundDurationMs } from './roundDuration';
+import { isRoundLive } from './liveRound';
 import { buildRoundHighlights, selectAchievements } from './roundAchievements';
 import { listFriends, getCachedFriends } from './friendStore';
 
@@ -658,12 +659,21 @@ export async function buildFeed(options = {}) {
       }
       if (results.length === 0) return;
 
-      // A round is "live" when the tournament is still open and the leading
-      // player has scored at least one hole but not the whole round. Drives
-      // the feed card's LIVE pill and per-player glowing "on hole N" badge.
+      // A round is "live" when the tournament is still open, the leading
+      // player has scored at least one hole but not the whole round, AND a
+      // hole was published recently (see liveRound.js) — an abandoned round
+      // is unfinished, not live. Drives the feed card's LIVE pill and
+      // per-player glowing "on hole N" badge.
       const totalHoles = round.holes?.length ?? 18;
       const maxHoles = Math.max(0, ...results.map((r) => r.holes ?? 0));
-      const live = !finished && maxHoles > 0 && maxHoles < totalHoles;
+      const roundKey = `${t.id}:${round.id}`;
+      const holeSpan = holeSpanByKey?.get(roundKey) ?? null;
+      const live = isRoundLive({
+        finished,
+        holesPlayed: maxHoles,
+        totalHoles,
+        lastActivityAt: holeSpan?.lastAt ?? activityTsByKey?.get(roundKey) ?? null,
+      });
 
       // Best result (most points) leads the card. Mine wins ties so the feed
       // foregrounds the current user when they were in the round.
@@ -707,7 +717,7 @@ export async function buildFeed(options = {}) {
         // the cards can't say.
         durationMs: live
           ? null
-          : spanDurationMs(holeSpanByKey?.get(`${t.id}:${round.id}`), roundEndedAt(t, round)),
+          : roundDurationMs({ span: holeSpan, endAt: roundEndedAt(t, round), createdAt: t.createdAt }),
         // Live-round + mode metadata for the feed card.
         live,
         totalHoles,

@@ -30,9 +30,10 @@ import CommentThread from '../components/CommentThread';
 import { ScorecardTable, resolveScorecardRows } from '../components/scorecard/GridView';
 import { useRoundRoster } from '../hooks/useRoundRoster';
 import { buildRoundRecap } from './roundSummaryModel';
-import { useRoundDuration } from '../hooks/useRoundDuration';
+import { useRoundSpan } from '../hooks/useRoundDuration';
+import { isRoundLive } from '../store/liveRound';
 import { roundEndedAt } from '../store/finishStamp';
-import { formatRoundDuration } from '../store/roundDuration';
+import { formatRoundDuration, roundDurationMs } from '../store/roundDuration';
 import { normalizeRoundNotes } from '../store/roundNotes';
 import { buildRoundAchievements } from '../store/roundAchievements';
 import { collectMyRounds } from '../store/personalStats';
@@ -142,20 +143,25 @@ export default function RoundSummaryScreen({ navigation, route }) {
     ? buildBoardLink(typeof window !== 'undefined' ? window.location?.origin : '', tournament.shareToken)
     : null;
   const totalHoles = round?.holes?.length ?? 18;
-  // Round is live when the tournament is still open and play has started but
-  // not everyone has finished — mirrors the feed's `live` flag.
-  const live = !!round
-    && !isTournamentFinished(tournament)
-    && (recap?.holesPlayed ?? 0) > 0
-    && (recap?.holesPlayed ?? 0) < totalHoles;
+  // Round is live when the tournament is still open, play has started but
+  // not everyone has finished, and a hole was published recently — the same
+  // rule as the feed's `live` flag (liveRound.js). The span comes from the
+  // cards, like the duration below.
+  const holeSpan = useRoundSpan(tournamentId, roundId);
+  const live = !!round && isRoundLive({
+    finished: isTournamentFinished(tournament),
+    holesPlayed: recap?.holesPlayed ?? 0,
+    totalHoles,
+    lastActivityAt: holeSpan?.lastAt ?? null,
+  });
 
   const liveRef = useRef(false);
   liveRef.current = live;
 
-  // "3h 52m" from the cards' hole timestamps to the finish stamp. Mid-round
+  // "3h 52m" from creation (or the first hole) to the finish stamp. Mid-round
   // there is no end yet, so the recap stays silent until the round settles.
-  const durationMs = useRoundDuration({
-    tournamentId, roundId, endAt: roundEndedAt(tournament, round),
+  const durationMs = roundDurationMs({
+    span: holeSpan, endAt: roundEndedAt(tournament, round), createdAt: tournament?.createdAt,
   });
   const durationLabel = live ? null : formatRoundDuration(durationMs);
 

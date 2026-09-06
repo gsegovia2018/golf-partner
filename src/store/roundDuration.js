@@ -7,13 +7,18 @@
 // at the last hole published when nothing stamped it. Both ends are the
 // round's own record, so the figure is the same on every phone.
 //
-// Caveats, by construction: a hole's ts is when it was LEFT, so the first
-// hole's own play time is not counted; and a hole re-published later (a
-// score fix) moves only that hole's ts, which the min/max over 18 holes
-// absorbs.
+// A hole's ts is when it was LEFT, so the first hole would be missing from
+// the span. A game is normally created on the first tee, though: across the
+// hosted data, creation runs 10–28 min before hole 1 is left — tee-off plus
+// one hole. So creation is the start whenever it sits within START_WINDOW_MS
+// before the first hole; a game set up the night before, or a tournament
+// planned days ahead, falls outside it and the first hole stands in.
+// A hole re-published later (a score fix) moves only that hole's ts, which
+// the min/max over 18 holes absorbs.
 
 const MIN_ROUND_MS = 10 * 60 * 1000;
 const MAX_ROUND_MS = 10 * 60 * 60 * 1000;
+const START_WINDOW_MS = 45 * 60 * 1000;
 
 // Earliest and latest hole publication across all cards, or null when no
 // hole has been published yet.
@@ -32,27 +37,39 @@ export function roundSpan(cardsByAuthor) {
 }
 
 // Duration in ms, or null when it cannot be known or is implausible.
-// Anything outside 10 min – 10 h is noise, not a round. The end is the later
-// of the finish stamp and the last published hole — a phone that tapped
-// Finish while another was still scoring must not cut the round short —
-// unless that is implausible, in which case each on its own is tried: a
-// score fixed days later must not stretch a stamped round, and a game
-// archived from Home the next morning must not stretch an unstamped one.
-export function roundDurationMs({ endAt = null, cardsByAuthor } = {}) {
-  return spanDurationMs(roundSpan(cardsByAuthor), endAt);
-}
-
-// Same rule over a span computed elsewhere — the feed gets first/last hole
-// per round from the get_round_activity RPC instead of pulling every card.
-export function spanDurationMs(span, endAt = null) {
-  if (!span || !Number.isFinite(span.firstAt) || !Number.isFinite(span.lastAt)) return null;
-  const ends = endAt != null ? [Math.max(endAt, span.lastAt), endAt] : [];
-  ends.push(span.lastAt);
+// Anything outside 10 min – 10 h is noise, not a round.
+//
+// Start: creation (`createdAt`, ISO or ms) when it falls within
+// START_WINDOW_MS before the first published hole, else that hole.
+// End: the later of the finish stamp and the last published hole — a phone
+// that tapped Finish while another was still scoring must not cut the round
+// short — unless that is implausible, in which case each on its own is
+// tried: a score fixed days later must not stretch a stamped round, and a
+// game archived from Home the next morning must not stretch an unstamped one.
+//
+// Pass either `span` ({ firstAt, lastAt }, e.g. from the get_round_activity
+// RPC) or `cardsByAuthor` (the card store's snapshot) — the feed has the
+// former without pulling every card, the screens have the latter.
+export function roundDurationMs({
+  span = null, cardsByAuthor = null, endAt = null, createdAt = null,
+} = {}) {
+  const s = span ?? roundSpan(cardsByAuthor);
+  if (!s || !Number.isFinite(s.firstAt) || !Number.isFinite(s.lastAt)) return null;
+  const start = roundStartAt(s, createdAt);
+  const ends = endAt != null ? [Math.max(endAt, s.lastAt), endAt] : [];
+  ends.push(s.lastAt);
   for (const end of ends) {
-    const ms = end - span.firstAt;
+    const ms = end - start;
     if (ms >= MIN_ROUND_MS && ms <= MAX_ROUND_MS) return ms;
   }
   return null;
+}
+
+function roundStartAt(span, createdAt) {
+  const created = typeof createdAt === 'number' ? createdAt : Date.parse(createdAt ?? '');
+  if (!Number.isFinite(created)) return span.firstAt;
+  const lead = span.firstAt - created;
+  return lead >= 0 && lead <= START_WINDOW_MS ? created : span.firstAt;
 }
 
 // "48m", "4h", "3h 52m". Null in → null out, so callers can render nothing.

@@ -10,9 +10,10 @@ import { useEffect, useMemo } from 'react';
 import { useRoundCards } from './useRoundCards';
 import { pull } from '../engine/store/replicator';
 import { isOnline } from '../lib/connectivity';
-import { roundDurationMs } from '../store/roundDuration';
+import { roundDurationMs, roundSpan } from '../store/roundDuration';
 
-export function useRoundDuration({ tournamentId, roundId, endAt = null } = {}) {
+/** { firstAt, lastAt } of the round's published holes, or null. */
+export function useRoundSpan(tournamentId, roundId) {
   const { state } = useRoundCards(tournamentId, roundId);
 
   useEffect(() => {
@@ -20,9 +21,16 @@ export function useRoundDuration({ tournamentId, roundId, endAt = null } = {}) {
     pull(tournamentId, roundId).catch(() => {});
   }, [tournamentId, roundId]);
 
+  return useMemo(() => roundSpan(state.cardsByAuthor), [state.cardsByAuthor]);
+}
+
+export function useRoundDuration({
+  tournamentId, roundId, endAt = null, createdAt = null,
+} = {}) {
+  const span = useRoundSpan(tournamentId, roundId);
   return useMemo(
-    () => roundDurationMs({ endAt, cardsByAuthor: state.cardsByAuthor }),
-    [endAt, state.cardsByAuthor],
+    () => roundDurationMs({ span, endAt, createdAt }),
+    [span, endAt, createdAt],
   );
 }
 

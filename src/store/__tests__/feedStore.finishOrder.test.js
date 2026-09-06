@@ -134,7 +134,8 @@ describe('feed ordering by round finish time', () => {
 
     const items = await buildItems();
     expect(items.map((i) => i.tournamentId)).toEqual(['T-live', 'T-done']);
-    expect(items[0].live).toBe(true);
+    // Ordered by its activity, but that activity is months old: not LIVE.
+    expect(items[0].live).toBe(false);
   });
 
   test('a complete round with no stamp freezes on its creation instant, not activity', async () => {
@@ -174,7 +175,24 @@ describe('feed ordering by round finish time', () => {
     const items = await buildItems();
     expect(items.map((i) => i.tournamentId)).toEqual(['T-aug', 'T-july']);
     expect(items[1].ts).toBe(ts('2026-07-27T15:40:00.000Z'));
-    expect(items[1].live).toBe(true);
+    // Abandoned, not live: nobody has published a hole since July.
+    expect(items[1].live).toBe(false);
+    expect(items[1].finished).toBe(false);
+  });
+
+  test('a round with a hole published minutes ago is live', async () => {
+    const now = Date.now();
+    mockSupabaseState.myTournaments = [
+      tournament('T-now', { rounds: [{ id: 'r1', scores: { p1: { 1: 4 } } }] }),
+    ];
+    mockSupabaseState.roundActivityRows = [
+      { tournament_id: 'T-now', round_id: 'r1', activity_ts: new Date(now).toISOString(),
+        first_hole_ts: now - 30 * 60 * 1000, last_hole_ts: now - 5 * 60 * 1000 },
+    ];
+
+    const items = await buildItems();
+    expect(items[0].live).toBe(true);
+    expect(items[0].durationMs).toBeNull();
   });
 
   test('a finished round carries its duration from the hole span to the stamp; a live one does not', async () => {
@@ -185,8 +203,8 @@ describe('feed ordering by round finish time', () => {
     mockSupabaseState.roundActivityRows = [
       { tournament_id: 'T-done', round_id: 'r1', activity_ts: '2026-08-20T14:00:00.000Z',
         first_hole_ts: ts('2026-08-20T10:10:00.000Z'), last_hole_ts: ts('2026-08-20T14:00:00.000Z') },
-      { tournament_id: 'T-live', round_id: 'r1', activity_ts: '2026-09-01T10:00:00.000Z',
-        first_hole_ts: ts('2026-09-01T09:00:00.000Z'), last_hole_ts: ts('2026-09-01T10:00:00.000Z') },
+      { tournament_id: 'T-live', round_id: 'r1', activity_ts: new Date().toISOString(),
+        first_hole_ts: Date.now() - 60 * 60 * 1000, last_hole_ts: Date.now() - 60 * 1000 },
     ];
 
     const items = await buildItems();
