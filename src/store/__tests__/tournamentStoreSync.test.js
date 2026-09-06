@@ -20,6 +20,12 @@ let mockState;
 
 function installMocks({ online = true } = {}) {
   jest.resetModules();
+  // jest.doMock('../syncQueue', ...) (used by one test below to control the
+  // queue's exact read timing) registers an explicit mock that OUTLIVES
+  // resetModules() — it stays active for every later require() in this file
+  // until undone. Every test starts from the real syncQueue unless it opts
+  // back into that doMock itself.
+  jest.dontMock('../syncQueue');
   AsyncStorage.clear();
   mockState = {
     online,
@@ -43,6 +49,7 @@ function installMocks({ online = true } = {}) {
         or: () => builder,
         order: () => builder,
         maybeSingle: () => Promise.resolve({ data: null, error: null }),
+        update: () => builder,
         upsert: (row) => {
           mockState.upserts.push({ table, row });
           return Promise.resolve({ error: null });
@@ -238,6 +245,64 @@ describe('background refresh overlays undrained pending mutations onto fresh rem
     expect(persisted.rounds[0].playerHandicaps.p2).toBe(5);
     // The settle loop re-read the queue after saving (>= 2 reads).
     expect(queueReads).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// Fix A: a purged tournament (server tombstone, or this device's own
+// deleteTournament) must not leave its queued mutations behind — otherwise
+// drainTournament's next pass finds a null local blob for a tournament that
+// still has queue entries, and (pre-fix) wedges them forever.
+describe('purging a tournament drops its queued sync entries too', () => {
+  test('a tombstoned fetch result purges the tournament and drops its queue entries', async () => {
+    installMocks({ online: true });
+    mockState.userId = 'u1';
+    mockState.remote = { id: 't1', deletedAt: '2026-09-01T00:00:00Z' };
+
+    const store = require('../tournamentStore');
+    await store.saveLocal(blob({ playerHandicaps: { p1: 4 } }));
+
+    const { syncQueue } = require('../syncQueue');
+    await syncQueue.enqueue({
+      tournamentId: 't1',
+      mutation: {
+        type: 'handicap.set', roundId: 'r1', playerId: 'p2', handicap: 5, ts: Date.now(),
+      },
+      path: 'rounds.r1.playerHandicaps.p2',
+    });
+
+    const result = await store.refreshTournamentFromRemote('t1');
+    expect(result).toBeNull();
+
+    const remaining = await syncQueue.all();
+    expect(remaining).toEqual([]);
+  });
+
+  test('deleteTournament drops its own queued entries', async () => {
+    installMocks({ online: true });
+    mockState.userId = 'u1';
+
+    const store = require('../tournamentStore');
+    await store.saveLocal(blob({ playerHandicaps: { p1: 4 } }));
+
+    const { syncQueue } = require('../syncQueue');
+    await syncQueue.enqueue({
+      tournamentId: 't1',
+      mutation: {
+        type: 'handicap.set', roundId: 'r1', playerId: 'p2', handicap: 5, ts: Date.now(),
+      },
+      path: 'rounds.r1.playerHandicaps.p2',
+    });
+    // A different tournament's entry must survive the delete.
+    await syncQueue.enqueue({
+      tournamentId: 't2',
+      mutation: { type: 'handicap.set', roundId: 'r1', playerId: 'p1', handicap: 9, ts: Date.now() },
+      path: 'rounds.r1.playerHandicaps.p1',
+    });
+
+    await store.deleteTournament('t1');
+
+    const remaining = await syncQueue.all();
+    expect(remaining.map((e) => e.tournamentId)).toEqual(['t2']);
   });
 });
 

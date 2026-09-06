@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { syncQueue } from './syncQueue';
 import {
-  saveLocal, readLocal, _setSyncStatus, _setLastSyncAt, recordSyncFailure,
+  saveLocal, readLocal, _setSyncStatus, _setLastSyncAt, recordSyncFailure, _purgeLocalTournament,
 } from './tournamentStore';
 import { fetchTournament } from './tournamentRepo';
 import { executeMutation } from './mutationWrites';
@@ -207,6 +207,21 @@ export async function drainLibrary(libraryMuts) {
 export async function drainTournament(tournamentId, entries) {
   for (const entry of entries) {
     const local = await readLocal(tournamentId);
+    if (!local) {
+      // The tournament no longer exists locally (a server tombstone purged
+      // it via _purgeLocalTournament, or this device deleted it) but its
+      // queue entries survived — readLocal returning null makes
+      // executeMutation throw a TypeError with no `.code` (e.g. reading
+      // `localTournament.rounds`), which isTransportError treats as
+      // retryable, wedging this entry forever and pinning the sync dot red.
+      // These entries are for a game that no longer exists locally: drop
+      // them all rather than retrying.
+      captureMessage(`dropping queued entries for purged tournament ${tournamentId}`, {
+        op: 'drainTournament', tournamentId, droppedCount: entries.length,
+      });
+      await syncQueue.dropForTournament(tournamentId);
+      return;
+    }
     try {
       await executeMutation(entry, local);
       await syncQueue.drop(entry.id);
@@ -271,14 +286,30 @@ export async function drainTournament(tournamentId, entries) {
     await runExclusiveForTournament(tournamentId, async () => {
       const fresh = await fetchTournament(tournamentId);
       if (fresh) {
+        // Same tombstone rule _overlayAndSave applies on every other read
+        // path (tournamentStore.js): a deleted-elsewhere game must never be
+        // cached, or resurface as ACTIVE — this is a "some other device
+        // deleted it" reconcile, not a fetch of a live game.
+        if (fresh.deletedAt) {
+          await _purgeLocalTournament(tournamentId);
+          return;
+        }
         const localBefore = await readLocal(tournamentId);
         const queuedForTournament = async () => (await syncQueue.all())
           .filter((e) => e.tournamentId === tournamentId);
+        // Same partial-write guard as _overlayAndSave: createTournament
+        // upserts the tournament row before its rounds (no transaction), so
+        // a fetch landing in that window returns a round-less snapshot.
+        // Replacing rounds wholesale with it would erase a just-created
+        // game's rounds locally.
+        const safeFresh = (localBefore?.rounds?.length && !fresh?.rounds?.length)
+          ? { ...fresh, rounds: localBefore.rounds }
+          : fresh;
         // Same roster rule the fetch path applies (tournamentStore's
         // _overlayAndSave): `fresh` replaces players wholesale, so a player
         // the server has never heard of has to be carried over rather than
         // erased. Tombstoned ids still drop — see unionLocalRoster.
-        const rosterSafeFresh = unionLocalRoster({ ...fresh }, localBefore);
+        const rosterSafeFresh = unionLocalRoster({ ...safeFresh }, localBefore);
         let snapshot = await queuedForTournament();
         for (let pass = 0; pass < 3; pass++) {
           const merged = applyPendingMutations(rosterSafeFresh, snapshot);
@@ -291,7 +322,12 @@ export async function drainTournament(tournamentId, entries) {
           if (localBefore && 'meId' in localBefore) {
             merged.meId = localBefore.meId;
           }
-          await saveLocal(merged);
+          // makeActive: false — this is a background drain of whatever
+          // tournament happened to have queued mutations, not the user
+          // opening it. Defaulting to true (the old bug) made draining game
+          // A's queue while playing game B silently switch the ACTIVE
+          // tournament to A.
+          await saveLocal(merged, { makeActive: false });
           const latest = await queuedForTournament();
           const stable = latest.length === snapshot.length
             && latest.every((e, i) => e.id === snapshot[i].id);

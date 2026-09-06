@@ -69,7 +69,7 @@ const NO_CONFLICT = { conflict: null };
 // regression this fixes). Kept as an explicit allowlist (not a blocklist) so
 // a future round field defaults to NOT syncing here until someone deliberately
 // adds it.
-const ROUND_UPSERT_OWNED_FIELDS = ['courseName', 'courseId', 'holes', 'tees', 'playerTees'];
+export const ROUND_UPSERT_OWNED_FIELDS = ['courseName', 'courseId', 'holes', 'tees', 'playerTees'];
 
 // Task 13: the round-holes editor (CourseEditorScreen opened WITHOUT a
 // courseId, from SetupScreen/EditTournamentScreen) writes round.holes/tees

@@ -148,6 +148,67 @@ describe('tournament.addPlayer mutation', () => {
   });
 });
 
+describe('round.upsert mutation', () => {
+  test('a NEW round (idx === -1) inserts the whole object at roundIndex', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1' }] };
+    const newRound = { id: 'r2', courseName: 'Links', scores: {} };
+    applyToTournament(t, {
+      type: 'round.upsert', roundId: 'r2', roundIndex: 1, round: newRound, isNew: true,
+    });
+    expect(t.rounds).toEqual([{ id: 'r1' }, newRound]);
+  });
+
+  test('an EXISTING round merges only the owned fields (courseName/courseId/holes/tees/playerTees), preserving scores/pairs/revealed/scoringMode/notes', () => {
+    const existing = {
+      id: 'r1',
+      courseName: 'Old Course',
+      holes: [{ number: 1, par: 4 }],
+      scores: { p1: { 1: 4 } },
+      shotDetails: { p1: { 1: { putts: 2 } } },
+      pairs: [['p1'], ['p2']],
+      revealed: true,
+      scoringMode: 'matchplay',
+      notes: { round: 'windy' },
+    };
+    const t = { id: 't1', rounds: [existing] };
+    // A stale snapshot from EditTournamentScreen: the course was renamed, but
+    // pairs/scores/revealed/scoringMode/notes are all stale (server-side
+    // truth for those has since moved on via their own dedicated mutations).
+    const staleSnapshot = {
+      id: 'r1',
+      courseName: 'New Course',
+      courseId: 'course-2',
+      holes: [{ number: 1, par: 5 }],
+      tees: [{ label: 'White' }],
+      playerTees: { p1: { label: 'White' } },
+      scores: {},
+      shotDetails: {},
+      pairs: [['p1', 'p2']],
+      revealed: false,
+      scoringMode: 'stableford',
+      notes: { round: 'stale note' },
+    };
+
+    applyToTournament(t, {
+      type: 'round.upsert', roundId: 'r1', roundIndex: 0, round: staleSnapshot, isNew: false,
+    });
+
+    // Owned fields updated from the snapshot.
+    expect(t.rounds[0].courseName).toBe('New Course');
+    expect(t.rounds[0].courseId).toBe('course-2');
+    expect(t.rounds[0].holes).toEqual([{ number: 1, par: 5 }]);
+    expect(t.rounds[0].tees).toEqual([{ label: 'White' }]);
+    expect(t.rounds[0].playerTees).toEqual({ p1: { label: 'White' } });
+    // Everything else is the EXISTING round's value, not the stale snapshot's.
+    expect(t.rounds[0].scores).toEqual({ p1: { 1: 4 } });
+    expect(t.rounds[0].shotDetails).toEqual({ p1: { 1: { putts: 2 } } });
+    expect(t.rounds[0].pairs).toEqual([['p1'], ['p2']]);
+    expect(t.rounds[0].revealed).toBe(true);
+    expect(t.rounds[0].scoringMode).toBe('matchplay');
+    expect(t.rounds[0].notes).toEqual({ round: 'windy' });
+  });
+});
+
 describe('applyPendingMutations', () => {
   test('applies a queued setup mutation on top of a fetched object without mutating the input', () => {
     const fetched = { id: 't1', rounds: [{ id: 'r1', notes: {} }] };

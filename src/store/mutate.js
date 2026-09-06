@@ -2,6 +2,7 @@ import { syncQueue } from './syncQueue';
 import { saveLocal, readLocal, _setSyncStatus } from './tournamentStore';
 import { isOnline } from '../lib/connectivity';
 import { normalizeRoundNotes } from './roundNotes';
+import { ROUND_UPSERT_OWNED_FIELDS } from './mutationWrites';
 
 // Maps a mutation to a stable dotted path identifying what it touches.
 // Asserted on directly by tests/legacy call sites — it is NOT a queue
@@ -329,13 +330,26 @@ export function applyToTournament(t, m) {
       break;
     }
     case 'round.upsert': {
-      // Local apply always writes the full round (the UI's own view is never
-      // stale to itself) regardless of `m.isNew` — that flag only steers
-      // mutationWrites.js's server write (full upsert vs owned-fields patch).
+      // A brand-new round (idx === -1) writes the full object — there is
+      // nothing to clobber yet. An EXISTING round's local replay must be
+      // symmetric with the server write (mutationWrites.js narrows that
+      // write to ROUND_UPSERT_OWNED_FIELDS): `m.round` is a snapshot from
+      // the emitting screen (EditTournamentScreen / PlayersScreen) that can
+      // be stale w.r.t. fields owned by other mutations — scores,
+      // shotDetails, pairs, revealed, scoringMode, notes — so swapping in
+      // the whole object would clobber a peer's concurrent write to one of
+      // those. Merge only the owned fields onto the existing round instead.
       const rounds = [...(t.rounds ?? [])];
       const idx = rounds.findIndex((r) => r.id === m.roundId);
-      if (idx === -1) rounds.splice(m.roundIndex ?? rounds.length, 0, m.round);
-      else rounds[idx] = m.round;
+      if (idx === -1) {
+        rounds.splice(m.roundIndex ?? rounds.length, 0, m.round);
+      } else {
+        const patch = {};
+        for (const key of ROUND_UPSERT_OWNED_FIELDS) {
+          if (m.round?.[key] !== undefined) patch[key] = m.round[key];
+        }
+        rounds[idx] = { ...rounds[idx], ...patch };
+      }
       t.rounds = rounds;
       break;
     }
