@@ -58,6 +58,28 @@ describe('roundDurationMs', () => {
   });
 });
 
+describe('roundDurationMs start', () => {
+  const END = T0 + 3 * H + 55 * M;
+
+  test('creation counts as tee-off when it sits shortly before the first hole', () => {
+    // Created 18 min before leaving hole 1 — the usual quick-start shape.
+    const createdAt = new Date(T0 - 18 * M).toISOString();
+    expect(roundDurationMs({ cardsByAuthor: cards, endAt: END, createdAt })).toBe(4 * H + 13 * M);
+  });
+
+  test('a game set up the night before starts at the first hole instead', () => {
+    expect(roundDurationMs({ cardsByAuthor: cards, endAt: END, createdAt: T0 - 14 * H })).toBe(3 * H + 55 * M);
+    // Created AFTER the first hole (scores entered later) — also ignored.
+    expect(roundDurationMs({ cardsByAuthor: cards, endAt: END, createdAt: T0 + 5 * M })).toBe(3 * H + 55 * M);
+  });
+
+  test('accepts a precomputed span (the feed RPC) in place of cards', () => {
+    const span = { firstAt: T0, lastAt: T0 + 3 * H };
+    expect(roundDurationMs({ span, endAt: null, createdAt: T0 - 20 * M })).toBe(3 * H + 20 * M);
+    expect(roundDurationMs({ span: null, cardsByAuthor: null })).toBeNull();
+  });
+});
+
 describe('formatRoundDuration', () => {
   test.each([
     [48 * M, '48m'],
