@@ -233,6 +233,24 @@ describe('buildHistorySections', () => {
     expect(sections[1].items.map((i) => i.id)).toEqual(['1780000000003']);
   });
 
+  test('a game sorts on its round finish stamp, not a later tournament stamp', () => {
+    // Reopened and re-finished: the tournament stamp moved, the round stamp
+    // (first Finish tap) did not. History keys on the first tap.
+    const refinished = {
+      ...game,
+      id: '1780000000009',
+      finishedAt: '2026-09-06T00:50:00.000Z',
+      rounds: [{ ...game.rounds[0], finishedAt: '2026-06-07T15:00:00.000Z' }],
+    };
+    const sections = buildHistorySections([refinished], identity);
+    expect(sections[0].items[0].when).toBe(Date.parse('2026-06-07T15:00:00.000Z'));
+  });
+
+  test('a multi-round tournament sorts on its archive stamp', () => {
+    const sections = buildHistorySections([wonTournament], identity);
+    expect(sections[0].items[0].when).toBe(Date.parse(wonTournament.finishedAt));
+  });
+
   test('falls back to the numeric id timestamp when dates are missing', () => {
     const bare = { ...game, id: '1750000000000', createdAt: undefined, finishedAt: undefined };
     const sections = buildHistorySections([bare], identity);

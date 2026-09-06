@@ -87,7 +87,10 @@ function baseTournament(id, { createdAt, roundId, players }) {
         { number: 1, par: 4, strokeIndex: 1 },
         { number: 2, par: 4, strokeIndex: 2 },
       ],
-      scores: { p1: { 1: 4, 2: 5 } },
+      // Mid-round (one of two holes scored): activity ordering applies only
+      // while a round is live — a finished round freezes on its finish stamp
+      // (see feedStore.finishOrder.test.js).
+      scores: { p1: { 1: 4 } },
     }],
   };
 }

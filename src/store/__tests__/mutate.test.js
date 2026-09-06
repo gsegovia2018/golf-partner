@@ -20,6 +20,28 @@ describe('tournament.advanceRound mutation', () => {
   });
 });
 
+describe('tournament.setFinished mutation', () => {
+  test('stamps an unfinished tournament', () => {
+    const t = { id: 't1', rounds: [] };
+    applyToTournament(t, { type: 'tournament.setFinished', finishedAt: '2026-08-04T19:24:55.450Z' });
+    expect(t.finishedAt).toBe('2026-08-04T19:24:55.450Z');
+  });
+
+  test('first write wins: a later stamp does not move an existing one', () => {
+    const t = { id: 't1', rounds: [], finishedAt: '2026-08-04T19:24:55.450Z' };
+    applyToTournament(t, { type: 'tournament.setFinished', finishedAt: '2026-09-06T00:50:07.516Z' });
+    expect(t.finishedAt).toBe('2026-08-04T19:24:55.450Z');
+  });
+
+  test('null reopens, and a fresh stamp lands afterwards', () => {
+    const t = { id: 't1', rounds: [], finishedAt: '2026-08-04T19:24:55.450Z' };
+    applyToTournament(t, { type: 'tournament.setFinished', finishedAt: null });
+    expect(t.finishedAt).toBeNull();
+    applyToTournament(t, { type: 'tournament.setFinished', finishedAt: '2026-09-06T00:50:07.516Z' });
+    expect(t.finishedAt).toBe('2026-09-06T00:50:07.516Z');
+  });
+});
+
 describe('round.reveal mutation', () => {
   function tournamentWithRound() {
     return {
