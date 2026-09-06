@@ -16,7 +16,7 @@ const CHAPTER_ICONS = {
 };
 
 // Memoised — see the note in CoachTab.
-function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound }) {
+function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound, durationLabel = null }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -51,7 +51,7 @@ function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound }) {
         </PressableScale>
       </View>
 
-      <ReportVerdictHero headline={headline} round={round} hasHistory={hasHistory} />
+      <ReportVerdictHero headline={headline} round={round} hasHistory={hasHistory} durationLabel={durationLabel} />
 
       <ReportCalloutTiles callouts={callouts} />
 

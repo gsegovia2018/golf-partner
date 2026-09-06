@@ -24,6 +24,7 @@ import { buildCoachInsights } from './coachInsights';
 import { buildStrategyTips } from './coachStrategy';
 import { shotBenchmarkForHandicap } from './shotBenchmarks';
 import { roundDifferential } from './handicapIndex';
+import { roundEndedAt } from './finishStamp';
 
 // Canonical player id used inside the synthetic tournament.
 export const CANON_ID = 'me';
@@ -389,6 +390,9 @@ export function collectMyRounds(tournaments, userId, displayName, opts = {}) {
         holesPlayed,
         // Total Stableford points; partial for in-progress (incomplete) rounds.
         points,
+        // Finish stamp in ms (null when never stamped) — the report card's
+        // round duration ends here; see store/roundDuration.js.
+        endedAt: roundEndedAt(t, round),
       });
     });
   });

@@ -15,7 +15,7 @@ function heroBg(theme, tone) {
   return theme.accent.primary;
 }
 
-export default function ReportVerdictHero({ headline, round, hasHistory }) {
+export default function ReportVerdictHero({ headline, round, hasHistory, durationLabel = null }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const reduced = useReducedMotion();
@@ -25,6 +25,7 @@ export default function ReportVerdictHero({ headline, round, hasHistory }) {
   if (headline.vsAvg != null) chips.push(`${fmtDelta(headline.vsAvg)} vs your avg`);
   chips.push(headline.clearedBenchmark ? '✓ above 2.0 mark' : 'below 2.0 mark');
   if (!round.complete) chips.push(`through ${round.holesPlayed} holes`);
+  if (durationLabel) chips.push(`${durationLabel} on course`);
 
   return (
     <View testID="report-card-verdict" style={[s.hero, { backgroundColor: bg }]}>
