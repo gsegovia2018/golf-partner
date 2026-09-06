@@ -94,6 +94,24 @@ describe('findPlayerForIdentity', () => {
     expect(findPlayerForIdentity(players, { displayName: 'Zoe' })).toBeNull();
     expect(findPlayerForIdentity(players, {})).toBeNull();
   });
+  test('skips a same-named player linked to another account, matches one without user_id', () => {
+    const list = [
+      P('a', 'Marcos', { user_id: 'other-user' }),
+      P('b', 'Marcos'),
+    ];
+    // When userId is set to 'u1', should skip 'a' (linked to other-user)
+    // and match 'b' (no user_id to block it)
+    const result = findPlayerForIdentity(list, { userId: 'u1', displayName: 'Marcos' });
+    expect(result.id).toBe('b');
+  });
+  test('still matches a same-named player with no user_id', () => {
+    const list = [
+      P('a', 'Marcos'),
+      P('b', 'Friend'),
+    ];
+    // Should match 'a' by name (no user_id to block it)
+    expect(findPlayerForIdentity(list, { userId: 'u1', displayName: 'Marcos' }).id).toBe('a');
+  });
 });
 
 describe('placeLabel', () => {

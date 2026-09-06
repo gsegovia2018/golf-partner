@@ -12,9 +12,9 @@ describe('scrambleTeamHandicap (USGA Appendix C)', () => {
     // 35% of 8 + 15% of 20 = 2.8 + 3.0 = 5.8 → 6
     expect(scrambleTeamHandicap([20, 8])).toBe(6);
   });
-  it('3-man: 20/15/10 low→high', () => {
-    // 20% of 5 + 15% of 10 + 10% of 20 = 1 + 1.5 + 2 = 4.5 → 5 (Math.round)
-    expect(scrambleTeamHandicap([10, 20, 5])).toBe(5);
+  it('3-man: 30/20/10 low→high', () => {
+    // 30% of 5 + 20% of 10 + 10% of 20 = 1.5 + 2 + 2 = 5.5 → 6 (Math.round)
+    expect(scrambleTeamHandicap([10, 20, 5])).toBe(6);
   });
   it('4-man: 25/20/15/10 low→high', () => {
     // 25% of 4 + 20% of 8 + 15% of 12 + 10% of 20 = 1+1.6+1.8+2 = 6.4 → 6
@@ -90,8 +90,8 @@ describe('scramble round', () => {
       scores: { a: { 1: 4 }, d: { 1: 4 } },
     };
     const units = scrambleUnits(round, players);
-    // 20% of 5 + 15% of 10 + 10% of 20 = 1 + 1.5 + 2 = 4.5 → 5
-    expect(units[0].handicap).toBe(5);
+    // 30% of 5 + 20% of 10 + 10% of 20 = 1.5 + 2 + 2 = 5.5 → 6
+    expect(units[0].handicap).toBe(6);
     expect(units[1].handicap).toBe(8);
     const tally = scrambleRoundTally(round, players);
     expect(tally.totals.map((t) => t.points).every((p) => p >= 2)).toBe(true);

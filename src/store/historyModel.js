@@ -14,7 +14,8 @@ export function playerInitials(name) {
 }
 
 // Same resolution order as profileStore's me-matching: stamped user_id
-// first, then a case-insensitive name match for legacy data.
+// first, then a case-insensitive name match for legacy data. Skip a name match
+// if the player is linked to a different account.
 export function findPlayerForIdentity(players, { userId, displayName } = {}) {
   const list = players ?? [];
   if (userId) {
@@ -23,7 +24,13 @@ export function findPlayerForIdentity(players, { userId, displayName } = {}) {
   }
   if (displayName) {
     const target = displayName.trim().toLowerCase();
-    return list.find((p) => p.name.trim().toLowerCase() === target) ?? null;
+    return list.find((p) => {
+      const match = p.name.trim().toLowerCase() === target;
+      if (!match) return false;
+      // Skip if this player is linked to a different account
+      if (p.user_id && p.user_id !== userId) return false;
+      return true;
+    }) ?? null;
   }
   return null;
 }
