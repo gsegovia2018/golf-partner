@@ -45,6 +45,11 @@ describe('roundDurationMs', () => {
     expect(roundDurationMs({ endAt: T0 + 14 * M, cardsByAuthor: cards })).toBe(3 * H + 55 * M);
   });
 
+  test('a hole fixed shortly after Finish does not extend the round (Lomas 4 Sep: hole 14 at 21:20, finish 21:07)', () => {
+    const fixed = { ...cards, me: { holes: { ...cards.me.holes, 14: { v: 2, entries: { p1: 5 }, ts: T0 + 4 * H + 18 * M } } } };
+    expect(roundDurationMs({ endAt: T0 + 4 * H + 5 * M, cardsByAuthor: fixed })).toBe(4 * H + 5 * M);
+  });
+
   test('a score fixed days later does not stretch a stamped round', () => {
     const fixed = { ...cards, me: { holes: { ...cards.me.holes, 7: { v: 2, entries: { p1: 5 }, ts: T0 + 12 * 24 * H } } } };
     expect(roundDurationMs({ endAt: T0 + 4 * H, cardsByAuthor: fixed })).toBe(4 * H);

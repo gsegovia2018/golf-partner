@@ -19,6 +19,10 @@
 const MIN_ROUND_MS = 10 * 60 * 1000;
 const MAX_ROUND_MS = 10 * 60 * 60 * 1000;
 const START_WINDOW_MS = 45 * 60 * 1000;
+// A hole (re)published this soon after Finish is a fix to the card just
+// closed — the round still ended at Finish. Later than this, the other
+// phone was still out on the course and the stamp was premature.
+const POST_FINISH_GRACE_MS = 30 * 60 * 1000;
 
 // Earliest and latest hole publication across all cards, or null when no
 // hole has been published yet.
@@ -41,11 +45,14 @@ export function roundSpan(cardsByAuthor) {
 //
 // Start: creation (`createdAt`, ISO or ms) when it falls within
 // START_WINDOW_MS before the first published hole, else that hole.
-// End: the later of the finish stamp and the last published hole — a phone
-// that tapped Finish while another was still scoring must not cut the round
-// short — unless that is implausible, in which case each on its own is
-// tried: a score fixed days later must not stretch a stamped round, and a
-// game archived from Home the next morning must not stretch an unstamped one.
+// End: the finish stamp, unless holes were still being published more than
+// POST_FINISH_GRACE_MS after it — then a phone that tapped Finish while
+// another was still scoring must not cut the round short, and the last hole
+// ends it. A hole fixed within the grace (hole 14 filled in right after the
+// finish gate) keeps the stamp. If the chosen end is implausible, each is
+// tried on its own: a score fixed days later must not stretch a stamped
+// round, and a game archived from Home the next morning must not stretch
+// an unstamped one.
 //
 // Pass either `span` ({ firstAt, lastAt }, e.g. from the get_round_activity
 // RPC) or `cardsByAuthor` (the card store's snapshot) — the feed has the
@@ -56,7 +63,10 @@ export function roundDurationMs({
   const s = span ?? roundSpan(cardsByAuthor);
   if (!s || !Number.isFinite(s.firstAt) || !Number.isFinite(s.lastAt)) return null;
   const start = roundStartAt(s, createdAt);
-  const ends = endAt != null ? [Math.max(endAt, s.lastAt), endAt] : [];
+  const ends = [];
+  if (endAt != null) {
+    ends.push(s.lastAt - endAt <= POST_FINISH_GRACE_MS ? endAt : s.lastAt, endAt);
+  }
   ends.push(s.lastAt);
   for (const end of ends) {
     const ms = end - start;
