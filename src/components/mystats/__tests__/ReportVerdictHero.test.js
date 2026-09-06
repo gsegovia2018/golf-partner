@@ -62,4 +62,13 @@ describe('ReportVerdictHero', () => {
     );
     expect(getByText(/through 13 holes/)).toBeTruthy();
   });
+
+  test('adds an on-course chip when the duration is known', async () => {
+    const withIt = await renderHero(
+      <ReportVerdictHero headline={headline('good')} round={round} hasHistory durationLabel="3h 52m" />,
+    );
+    expect(withIt.getByText('3h 52m on course')).toBeTruthy();
+    const without = await renderHero(<ReportVerdictHero headline={headline('good')} round={round} hasHistory />);
+    expect(without.queryByText(/on course/)).toBeNull();
+  });
 });

@@ -158,4 +158,41 @@ describe('feed ordering by round finish time', () => {
     expect(items[1].ts).toBe(ts('2025-12-01T10:00:00.000Z'));
     expect(items[1].finished).toBe(true);
   });
+
+  test('an unstamped round orders on its last published hole, not on projected activity', async () => {
+    // Abandoned in July after three holes; the cutover backfill bumped its
+    // game_scores activity to September. The cards still say July.
+    mockSupabaseState.myTournaments = [
+      tournament('T-july', { rounds: [{ id: 'r1', scores: { p1: { 1: 4 } } }] }),
+      tournament('T-aug', { rounds: [{ id: 'r1', finishedAt: '2026-08-20T10:00:00.000Z' }] }),
+    ];
+    mockSupabaseState.roundActivityRows = [
+      { tournament_id: 'T-july', round_id: 'r1', activity_ts: '2026-09-04T23:25:00.000Z',
+        first_hole_ts: ts('2026-07-27T15:00:00.000Z'), last_hole_ts: ts('2026-07-27T15:40:00.000Z') },
+    ];
+
+    const items = await buildItems();
+    expect(items.map((i) => i.tournamentId)).toEqual(['T-aug', 'T-july']);
+    expect(items[1].ts).toBe(ts('2026-07-27T15:40:00.000Z'));
+    expect(items[1].live).toBe(true);
+  });
+
+  test('a finished round carries its duration from the hole span to the stamp; a live one does not', async () => {
+    mockSupabaseState.myTournaments = [
+      tournament('T-done', { rounds: [{ id: 'r1', finishedAt: '2026-08-20T14:05:00.000Z' }] }),
+      tournament('T-live', { rounds: [{ id: 'r1', scores: { p1: { 1: 4 } } }] }),
+    ];
+    mockSupabaseState.roundActivityRows = [
+      { tournament_id: 'T-done', round_id: 'r1', activity_ts: '2026-08-20T14:00:00.000Z',
+        first_hole_ts: ts('2026-08-20T10:10:00.000Z'), last_hole_ts: ts('2026-08-20T14:00:00.000Z') },
+      { tournament_id: 'T-live', round_id: 'r1', activity_ts: '2026-09-01T10:00:00.000Z',
+        first_hole_ts: ts('2026-09-01T09:00:00.000Z'), last_hole_ts: ts('2026-09-01T10:00:00.000Z') },
+    ];
+
+    const items = await buildItems();
+    const done = items.find((i) => i.tournamentId === 'T-done');
+    const live = items.find((i) => i.tournamentId === 'T-live');
+    expect(done.durationMs).toBe(3 * 60 * 60 * 1000 + 55 * 60 * 1000);
+    expect(live.durationMs).toBeNull();
+  });
 });

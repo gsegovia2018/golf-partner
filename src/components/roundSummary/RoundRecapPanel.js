@@ -14,6 +14,7 @@ export default function RoundRecapPanel({
   recap,
   live = false,
   totalHoles = 18,
+  durationLabel = null,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -48,6 +49,12 @@ export default function RoundRecapPanel({
         <Text style={s.metaText}>{holesLabel}</Text>
         <View style={s.metaDot} />
         <Text style={s.metaText}>{playersLabel}</Text>
+        {durationLabel ? (
+          <>
+            <View style={s.metaDot} />
+            <Text style={s.metaText} testID="round-recap-duration">{durationLabel}</Text>
+          </>
+        ) : null}
       </View>
     </View>
   );

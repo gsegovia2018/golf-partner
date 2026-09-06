@@ -34,3 +34,13 @@ export function tournamentFinalizedAt(tournament) {
   }
   return parseFinishedAt(tournament.finishedAt);
 }
+
+// When this round ENDED, for durations: the round's own stamp, else — for a
+// game, which IS its one round — the archive stamp. A tournament's archive
+// stamp says nothing about when round 2 of 4 ended, so it is not used there.
+export function roundEndedAt(tournament, round) {
+  const roundFinished = parseFinishedAt(round?.finishedAt);
+  if (roundFinished != null) return roundFinished;
+  if (tournament?.kind === 'game') return parseFinishedAt(tournament.finishedAt);
+  return null;
+}

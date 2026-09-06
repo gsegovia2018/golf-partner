@@ -42,6 +42,20 @@ function makeRoundItem(media) {
 }
 
 describe('FeedRoundCard', () => {
+  test('shows how long the round took when the item carries a duration', async () => {
+    const media = { id: 'm1', kind: 'photo', url: 'https://x/p.jpg', thumbUrl: 'https://x/t.jpg' };
+    const item = { ...makeRoundItem(media), durationMs: (3 * 60 + 52) * 60 * 1000 };
+    const { getByText, queryByTestId, rerender } = render(wrap(
+      <FeedRoundCard item={item} roundLabel="Lomas-Bosque" timestamp="2d" onPress={() => {}} />,
+    ));
+    await flush();
+    expect(getByText('3h 52m')).toBeTruthy();
+    rerender(wrap(
+      <FeedRoundCard item={{ ...item, durationMs: null }} roundLabel="Lomas-Bosque" timestamp="2d" onPress={() => {}} />,
+    ));
+    expect(queryByTestId('feed-round-duration')).toBeNull();
+  });
+
   test('shows video thumbnails without cropping the frame', async () => {
     const video = {
       id: 'video-1',

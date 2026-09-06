@@ -26,6 +26,8 @@ import { collectMyRounds, resolveSelection, computeMyStats } from '../store/pers
 import { pruneShotsToRounds, getShots, subscribeShots, getShotsVersion } from '../store/shotStore';
 import { buildRoundReportCard } from '../store/roundReportCard';
 import RoundReportCard from '../components/RoundReportCard';
+import { useRoundDuration } from '../hooks/useRoundDuration';
+import { formatRoundDuration } from '../store/roundDuration';
 import MyStatsRoundSelector from '../components/MyStatsRoundSelector';
 import StatDetailSheet from '../components/StatDetailSheet';
 import CoachTab from '../components/mystats/tabs/CoachTab';
@@ -497,6 +499,19 @@ export default function MyStatsScreen({ navigation, route }) {
       : null),
     [myRounds, reportRoundKey],
   );
+  // The selected round's duration comes from its cards, not from myRounds —
+  // see store/roundDuration.js. Ids are undefined until a round is picked,
+  // which the hook treats as "nothing to load".
+  const reportRound = useMemo(
+    () => (myRounds && reportRoundKey ? myRounds.find((r) => r.key === reportRoundKey) : null),
+    [myRounds, reportRoundKey],
+  );
+  const reportDurationMs = useRoundDuration({
+    tournamentId: reportRound?.tournamentId,
+    roundId: reportRound?.round?.id,
+    endAt: reportRound?.endedAt ?? null,
+  });
+  const reportDurationLabel = formatRoundDuration(reportDurationMs);
 
   // Link to the full statistics screen (holes, players, etc.) scoped to the
   // selected round — only when the round is resolvable there (StatsScreen
@@ -661,6 +676,7 @@ export default function MyStatsScreen({ navigation, route }) {
           selectedKey={reportRoundKey}
           onSelect={setReportRoundKey}
           onOpenRound={openReportRound}
+          durationLabel={reportDurationLabel}
         />
       );
     } else if (key === 'coach') {

@@ -17,7 +17,8 @@ import {
   holeCountOf,
 } from './scoring';
 import { loadMediaForTournaments } from './mediaStore';
-import { roundFinalizedAt } from './finishStamp';
+import { roundFinalizedAt, roundEndedAt } from './finishStamp';
+import { spanDurationMs } from './roundDuration';
 import { buildRoundHighlights, selectAchievements } from './roundAchievements';
 import { listFriends, getCachedFriends } from './friendStore';
 
@@ -71,9 +72,16 @@ async function currentUserId() {
 // as "timestamp unknown", not zero, and fall back accordingly.
 const ROUND_ACTIVITY_CHUNK = 200;
 
+// Returns { activityTsByKey, holeSpanByKey }, both keyed `${tournamentId}:${roundId}`.
+// activityTsByKey: ms of game_scores / game_rounds.updated_at (see above).
+// holeSpanByKey: { firstAt, lastAt } ms of the earliest and latest hole any
+// scorer published on the round, from the cards — absent when nobody has
+// scored it, or when the server predates the columns.
 async function fetchRoundActivityTimestamps(tournamentIds) {
   const map = new Map();
-  if (tournamentIds.length === 0 || !isOnline()) return map;
+  const spans = new Map();
+  const out = { activityTsByKey: map, holeSpanByKey: spans };
+  if (tournamentIds.length === 0 || !isOnline()) return out;
   const chunks = [];
   for (let i = 0; i < tournamentIds.length; i += ROUND_ACTIVITY_CHUNK) {
     chunks.push(tournamentIds.slice(i, i + ROUND_ACTIVITY_CHUNK));
@@ -82,11 +90,15 @@ async function fetchRoundActivityTimestamps(tournamentIds) {
   for (const res of settled) {
     if (res.status !== 'fulfilled') continue; // failed chunk → its rounds fall back
     for (const row of res.value ?? []) {
+      const key = `${row.tournament_id}:${row.round_id}`;
       const ms = Date.parse(row.activity_ts);
-      if (Number.isFinite(ms)) map.set(`${row.tournament_id}:${row.round_id}`, ms);
+      if (Number.isFinite(ms)) map.set(key, ms);
+      const firstAt = Number(row.first_hole_ts);
+      const lastAt = Number(row.last_hole_ts);
+      if (firstAt > 0 && lastAt > 0) spans.set(key, { firstAt, lastAt });
     }
   }
-  return map;
+  return out;
 }
 
 // "When did this round last see activity" for feed ordering. Prefers the
@@ -114,18 +126,21 @@ function roundActivityTs(t, roundId, roundIndex, activityTsByKey) {
 // Order of preference:
 //   1. roundFinalizedAt — round.finishedAt, else the tournament archive stamp
 //      offset by round index (see finishStamp.js).
-//   2. A finished tournament with no stamp at all (every round complete, but
-//      nobody ever tapped Finish — pre-stamp history): the tournament's
-//      creation instant folded with the round's position. Not a recency
-//      signal, but FROZEN. Activity would be wrong here: the cards engine
+//   2. The last hole any scorer published (holeSpanByKey, from the cards).
+//      Real and frozen unless someone actually scores: a round abandoned in
+//      July stays in July. Activity would be wrong here: the cards engine
 //      re-projects game_scores (bumping updated_at) on every card write, and
 //      the 2026-09-04 cutover backfill re-projected every round at once, so
-//      sorting a played round on activity reshuffles the feed each time.
-//   3. roundActivityTs — a round still in progress, correctly recency-ordered
-//      while it's live.
-function roundFeedTs(t, round, roundIndex, finished, activityTsByKey) {
+//      every unstamped round claimed that night and the feed reshuffled.
+//   3. A finished tournament with no stamp and no cards (pre-engine history):
+//      the tournament's creation instant folded with the round's position.
+//      Not a recency signal, but FROZEN.
+//   4. roundActivityTs — an unstamped, card-less round still in progress.
+function roundFeedTs(t, round, roundIndex, finished, activityTsByKey, holeSpanByKey) {
   const finalized = roundFinalizedAt(t, round, roundIndex);
   if (finalized != null) return finalized;
+  const span = holeSpanByKey?.get(`${t.id}:${round.id}`);
+  if (span) return span.lastAt;
   if (finished) return (Date.parse(t.createdAt) || Number(t.id) || 0) + roundIndex;
   return roundActivityTs(t, round.id, roundIndex, activityTsByKey);
 }
@@ -308,7 +323,7 @@ async function resolveFeedUserId(userId) {
 // refocus can never show data older than FEED_CACHE_TTL_MS, without
 // defeating the point of caching rapid pagination/refocus bursts.
 const FEED_CACHE_TTL_MS = 3 * 60 * 1000;
-let feedBuildCache = null; // { key, ts, friends, friendSet, friendById, all, activityTsByKey, partial }
+let feedBuildCache = null; // { key, ts, friends, friendSet, friendById, all, activityTsByKey, holeSpanByKey, partial }
 
 function feedCacheKey(userId, source) {
   return `${userId ?? 'anon'}::${source}`;
@@ -448,13 +463,14 @@ export async function buildFeed(options = {}) {
   let friendById;
   let all;
   let activityTsByKey;
+  let holeSpanByKey;
   // Set when the media read is kicked off early to overlap the activity RPC
   // (see below); the media block awaits it instead of issuing its own fetch.
   let mediaPromise = null;
 
   if (canReuseCache) {
     ({
-      friends, friendSet, friendById, all, activityTsByKey,
+      friends, friendSet, friendById, all, activityTsByKey, holeSpanByKey,
     } = cached);
     partial = partial || cached.partial;
   } else {
@@ -526,15 +542,15 @@ export async function buildFeed(options = {}) {
     // for a cache-only build — same as fetchFriendTournaments above, there's no
     // network to query and every round falls back to the deterministic (not
     // recency-based) ordering instead.
-    activityTsByKey = source === 'cache'
-      ? new Map()
-      : await fetchRoundActivityTimestamps(allIds);
+    ({ activityTsByKey, holeSpanByKey } = source === 'cache'
+      ? { activityTsByKey: new Map(), holeSpanByKey: new Map() }
+      : await fetchRoundActivityTimestamps(allIds));
 
     partial = partial || basePartial;
 
     if (source !== 'cache') {
       feedBuildCache = {
-        key: cacheKey, ts: Date.now(), friends, friendSet, friendById, all, activityTsByKey, partial: basePartial,
+        key: cacheKey, ts: Date.now(), friends, friendSet, friendById, all, activityTsByKey, holeSpanByKey, partial: basePartial,
       };
     }
   }
@@ -553,7 +569,7 @@ export async function buildFeed(options = {}) {
 
     (t.rounds ?? []).forEach((round, roundIndex) => {
       if (!round || round._deleted || !round.scores) return;
-      const ts = roundFeedTs(t, round, roundIndex, finished, activityTsByKey);
+      const ts = roundFeedTs(t, round, roundIndex, finished, activityTsByKey, holeSpanByKey);
       const mode = roundScoringMode(t, round);
 
       const results = [];
@@ -686,6 +702,12 @@ export async function buildFeed(options = {}) {
         // "Marcos + Noé vs Guille + Alex" (null when the round has no pairs).
         teamsLabel,
         finished,
+        // How long the round took (ms), from the cards' hole span to the
+        // finish stamp — see store/roundDuration.js. Null mid-round, or when
+        // the cards can't say.
+        durationMs: live
+          ? null
+          : spanDurationMs(holeSpanByKey?.get(`${t.id}:${round.id}`), roundEndedAt(t, round)),
         // Live-round + mode metadata for the feed card.
         live,
         totalHoles,

@@ -60,6 +60,15 @@ describe('RoundRecapPanel', () => {
     expect(queryByText(/birdies|pars|bogeys|eagle/i)).toBeNull();
   });
 
+  test('appends the round duration to the meta line when known', async () => {
+    const { getByText, queryByTestId, rerender } = await renderPanel(
+      <RoundRecapPanel recap={recap} roundLabel="Round 1" live={false} totalHoles={18} durationLabel="3h 52m" />,
+    );
+    expect(getByText('3h 52m')).toBeTruthy();
+    rerender(wrap(<RoundRecapPanel recap={recap} roundLabel="Round 1" live={false} totalHoles={18} />));
+    expect(queryByTestId('round-recap-duration')).toBeNull();
+  });
+
   test('omits the winner pill when there is no recap yet', async () => {
     const { queryByText } = await renderPanel(
       <RoundRecapPanel
