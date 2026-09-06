@@ -215,6 +215,45 @@ describe('collectMyRounds', () => {
     expect(result[0].playerId).toBe('p1');
   });
 
+  test('does not claim a same-named player linked to another account', () => {
+    const h = holes18();
+    // Tournament with two Marcos: one linked to another user_id, one with no user_id
+    // resolveMyPlayer skips p1 (linked to other-user) and matches p2 (no user_id)
+    const tournaments = [{
+      id: 33, name: 'Tournament', kind: 'tournament',
+      players: [
+        { id: 'p1', name: 'Marcos', user_id: 'other-user' },
+        { id: 'p2', name: 'Marcos' },
+      ],
+      rounds: [mkRound({ holes: h, scores: {
+        p1: evenScores(h, 4), p2: evenScores(h, 5),
+      } })],
+    }];
+    const result = collectMyRounds(tournaments, 'u1', 'Marcos');
+    // Should skip p1 (linked to other-user) and match p2 (no user_id to block it)
+    expect(result).toHaveLength(1);
+    expect(result[0].playerId).toBe('p2');
+  });
+
+  test('still matches a same-named player with no user_id in the fallback', () => {
+    const h = holes18();
+    // Tournament with same-named player who has no user_id
+    const tournaments = [{
+      id: 34, name: 'Tournament', kind: 'tournament',
+      players: [
+        { id: 'p1', name: 'Marcos' },
+        { id: 'p2', name: 'Friend' },
+      ],
+      rounds: [mkRound({ holes: h, scores: {
+        p1: evenScores(h, 4), p2: evenScores(h, 5),
+      } })],
+    }];
+    const result = collectMyRounds(tournaments, 'u1', 'Marcos');
+    // Should match p1 by name (no user_id to block it)
+    expect(result).toHaveLength(1);
+    expect(result[0].playerId).toBe('p1');
+  });
+
   test('gains holesPlayed and isComplete — an early-finished 6-hole game is incomplete', () => {
     const h = holes18();
     const sixHoles = evenScores(h, 4);

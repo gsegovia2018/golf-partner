@@ -6,12 +6,10 @@ import {
   cellView,
   roundCells,
   shownScores,
-  settledScores,
   discrepancies,
   unverifiedCells,
-  singleScorerCells,
 } from '../cards';
-import { emptyCard, identifyScorer, publishHole, makeResolution } from '../publish';
+import { adoptEntry, emptyCard, identifyScorer, publishHole, makeResolution } from '../publish';
 
 const hole = (v, entries, ts) => ({ v, entries, ts });
 const card = (holes, scorer = { playerId: null, userId: null }) => ({ scorer, holes });
@@ -239,36 +237,6 @@ describe('roundCells / shownScores', () => {
   });
 });
 
-describe('settledScores', () => {
-  it('settles on agreement and is not provisional', () => {
-    expect(settledScores(twoScorers(5, 5), ['p1'], [3])).toEqual({ scores: { p1: { 3: 5 } }, provisional: false });
-  });
-
-  it('leaves a disagreement unsettled and provisional', () => {
-    expect(settledScores(twoScorers(5, 4), ['p1'], [3])).toEqual({ scores: {}, provisional: true });
-  });
-
-  it('settles a single scorer but flags it provisional', () => {
-    const ctx = {
-      myAuthorId: 'dev-m',
-      cardsByAuthor: { 'dev-m': card({ 3: hole(1, { p1: 5 }, 100) }) },
-      resolutions: {},
-      draft: {},
-    };
-    expect(settledScores(ctx, ['p1'], [3])).toEqual({ scores: { p1: { 3: 5 } }, provisional: true });
-  });
-
-  it('ignores my unpublished draft', () => {
-    const ctx = {
-      myAuthorId: 'dev-m',
-      cardsByAuthor: { 'dev-m': emptyCard() },
-      resolutions: {},
-      draft: { 3: { entries: { p1: 5 } } },
-    };
-    expect(settledScores(ctx, ['p1'], [3])).toEqual({ scores: {}, provisional: false });
-  });
-});
-
 describe('discrepancies', () => {
   it('groups by hole with one row per player, values oldest first and named', () => {
     const ctx = twoScorers(5, 4);
@@ -294,7 +262,7 @@ describe('discrepancies', () => {
   });
 });
 
-describe('unverifiedCells / singleScorerCells', () => {
+describe('unverifiedCells', () => {
   const ctx = {
     myAuthorId: 'dev-m',
     cardsByAuthor: {
@@ -309,21 +277,6 @@ describe('unverifiedCells / singleScorerCells', () => {
     expect(unverifiedCells(ctx, ['p1', 'p2'], [3])).toEqual([
       { playerId: 'p2', hole: 3, scorerKey: 'dev-g', value: 4 },
     ]);
-  });
-
-  it('lists every cell exactly one scorer marked, mine included', () => {
-    expect(singleScorerCells(ctx, ['p1', 'p2'], [3])).toEqual([
-      { playerId: 'p1', hole: 3, scorerKey: 'dev-m', value: 5 },
-      { playerId: 'p2', hole: 3, scorerKey: 'dev-g', value: 4 },
-    ]);
-  });
-
-  it('drops a single-scorer cell that carries a valid resolution', () => {
-    const resolved = {
-      ...ctx,
-      resolutions: { p1: { 3: makeResolution(ctx, { roundId: 'r1', playerId: 'p1', hole: 3, value: 5, by: 'dev-m', ts: 300 }) } },
-    };
-    expect(singleScorerCells(resolved, ['p1', 'p2'], [3]).map((c) => c.playerId)).toEqual(['p2']);
   });
 });
 
@@ -357,6 +310,73 @@ describe('publishHole', () => {
   it('treats a number and a string hole identically', () => {
     expect(publishHole(emptyCard(), 3, { entries: { p1: 5 } }, 100))
       .toEqual(publishHole(emptyCard(), '3', { entries: { p1: 5 } }, 100));
+  });
+});
+
+describe('publishHole — a revisit that changed nothing keeps the version', () => {
+  it('returns the same card when entries and shots are unchanged', () => {
+    const first = publishHole(emptyCard(), 3, { entries: { p1: 5, p2: 4 }, shots: { p1: { club: 'D' } } }, 100);
+    // Re-published from a draft seeded off the card, keys in another order.
+    const again = publishHole(first, 3, { entries: { p2: 4, p1: 5 }, shots: { p1: { club: 'D' } } }, 200);
+    expect(again).toBe(first);
+    expect(again.holes['3'].v).toBe(1);
+    expect(again.holes['3'].ts).toBe(100);
+  });
+
+  it('drops a blank the same way, so a draft with cleared cells still matches', () => {
+    const first = publishHole(emptyCard(), 3, { entries: { p1: 5 } }, 100);
+    expect(publishHole(first, 3, { entries: { p1: 5, p2: null } }, 200)).toBe(first);
+  });
+
+  it('bumps the version for a real edit', () => {
+    const first = publishHole(emptyCard(), 3, { entries: { p1: 5 } }, 100);
+    expect(publishHole(first, 3, { entries: { p1: 6 } }, 200).holes['3'].v).toBe(2);
+  });
+
+  it('bumps the version when only the shot detail changed', () => {
+    const first = publishHole(emptyCard(), 3, { entries: { p1: 5 }, shots: { p1: { club: 'D' } } }, 100);
+    const edited = publishHole(first, 3, { entries: { p1: 5 }, shots: { p1: { club: '3W' } } }, 200);
+    expect(edited.holes['3'].v).toBe(2);
+  });
+
+  it('a standing agreement survives a revisit and lapses on a real edit', () => {
+    const mineV1 = publishHole(emptyCard(), 3, { entries: { p1: 5 } }, 100);
+    const theirs = publishHole(emptyCard(), 3, { entries: { p1: 4 } }, 200);
+    const cards = { 'dev-m': mineV1, 'dev-g': theirs };
+    const res = makeResolution({ cardsByAuthor: cards },
+      { roundId: 'r1', playerId: 'p1', hole: 3, value: 4, by: 'dev-g', ts: 300 });
+
+    const revisited = publishHole(mineV1, 3, { entries: { p1: 5 } }, 400);
+    expect(isResolutionValid(res, { ...cards, 'dev-m': revisited })).toBe(true);
+
+    const edited = publishHole(mineV1, 3, { entries: { p1: 6 } }, 500);
+    expect(isResolutionValid(res, { ...cards, 'dev-m': edited })).toBe(false);
+  });
+});
+
+describe('adoptEntry', () => {
+  it('writes the agreed value onto my own hole and bumps its version', () => {
+    const before = publishHole(emptyCard(), 3, { entries: { p1: 5, p2: 4 } }, 100);
+    const after = adoptEntry(before, 3, 'p1', 4, 900);
+    expect(after.holes['3']).toEqual({ v: 2, entries: { p1: 4, p2: 4 }, ts: 900 });
+    expect(before.holes['3'].entries.p1).toBe(5);
+  });
+
+  it('leaves the card alone when it does not mark the cell', () => {
+    const before = publishHole(emptyCard(), 3, { entries: { p2: 4 } }, 100);
+    expect(adoptEntry(before, 3, 'p1', 4, 900)).toBe(before);
+    expect(adoptEntry(before, 9, 'p2', 4, 900)).toBe(before);
+    expect(adoptEntry(null, 3, 'p1', 4, 900)).toBe(null);
+  });
+
+  it('leaves the card alone when it already holds the agreed value', () => {
+    const before = publishHole(emptyCard(), 3, { entries: { p1: 4 } }, 100);
+    expect(adoptEntry(before, 3, 'p1', 4, 900)).toBe(before);
+  });
+
+  it('keeps the shot detail of the hole', () => {
+    const before = publishHole(emptyCard(), 3, { entries: { p1: 5 }, shots: { p1: { club: 'D' } } }, 100);
+    expect(adoptEntry(before, 3, 'p1', 4, 900).holes['3'].shots).toEqual({ p1: { club: 'D' } });
   });
 });
 

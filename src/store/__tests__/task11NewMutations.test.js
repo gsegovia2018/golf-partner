@@ -16,14 +16,21 @@ describe('round.upsert mutation', () => {
     expect(metaPathFor({ type: 'round.upsert', roundId: 'r1' })).toBe('rounds.r1.upsert');
   });
 
-  test('replaces an existing round in place, preserving array position', () => {
+  // Fix: an EXISTING round's local replay mirrors the server write
+  // (mutationWrites.js's ROUND_UPSERT_OWNED_FIELDS) — only courseName/
+  // courseId/holes/tees/playerTees are taken from the snapshot; everything
+  // else (playerHandicaps here) is owned elsewhere and stays as it was,
+  // rather than the whole round object being swapped in.
+  test('merges only the owned fields onto an existing round, preserving position and non-owned fields', () => {
     const t = baseTournament();
     const newRound = { id: 'r1', courseName: 'New Course', holes: [{ number: 1, par: 4 }], playerHandicaps: { p1: 12 } };
 
     applyToTournament(t, { type: 'round.upsert', roundId: 'r1', roundIndex: 0, round: newRound });
 
     expect(t.rounds).toHaveLength(1);
-    expect(t.rounds[0]).toEqual(newRound);
+    expect(t.rounds[0]).toEqual({
+      id: 'r1', courseName: 'New Course', holes: [{ number: 1, par: 4 }], playerHandicaps: { p1: 10 },
+    });
   });
 
   test('inserts a brand-new round at roundIndex (EditTournamentScreen addRound)', () => {
@@ -37,8 +44,8 @@ describe('round.upsert mutation', () => {
 
   // Regression fix follow-up: `isNew` is a hint consumed ONLY by
   // mutationWrites.js (server-write side, to pick upsertRound vs patchRound)
-  // — it's pure metadata here and must not change the local full-replace
-  // apply, nor the coarse path metaPathFor returns.
+  // — it's pure metadata here and must not change the local owned-fields-only
+  // apply for an existing round, nor the coarse path metaPathFor returns.
   test('isNew is inert for local apply/metaPathFor (server-write-only signal)', () => {
     const t = baseTournament();
     const newRound = { id: 'r1', courseName: 'New Course', holes: [{ number: 1, par: 4 }], playerHandicaps: { p1: 12 } };
@@ -47,7 +54,9 @@ describe('round.upsert mutation', () => {
       type: 'round.upsert', roundId: 'r1', roundIndex: 0, round: newRound, isNew: true,
     });
 
-    expect(t.rounds[0]).toEqual(newRound);
+    expect(t.rounds[0]).toEqual({
+      id: 'r1', courseName: 'New Course', holes: [{ number: 1, par: 4 }], playerHandicaps: { p1: 10 },
+    });
     expect(metaPathFor({ type: 'round.upsert', roundId: 'r1', isNew: true })).toBe('rounds.r1.upsert');
   });
 });

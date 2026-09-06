@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import { ShareableRoundCard, roundSummaryToText } from '../ShareableCard';
 
@@ -13,6 +13,11 @@ jest.mock('react-native-view-shot', () => ({
 }));
 
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
+
+// ThemeProvider reads its persisted preference from AsyncStorage in a
+// useEffect; flush that pending promise (inside act) after every render so
+// its follow-up setState doesn't land outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
 const ranked = [
   { player: { id: 'p1', name: 'Marcos' }, points: 36, strokes: 72 },
@@ -57,7 +62,7 @@ describe('roundSummaryToText', () => {
 });
 
 describe('ShareableRoundCard', () => {
-  test('renders the winner, podium and branding without crashing', () => {
+  test('renders the winner, podium and branding without crashing', async () => {
     const { getByText, getAllByText } = render(wrap(
       <ShareableRoundCard
         tournamentName="Weekend Cup"
@@ -68,6 +73,7 @@ describe('ShareableRoundCard', () => {
         unit="pts"
       />,
     ));
+    await flush();
 
     // "Marcos" appears twice: the winner hero and the podium's 1st-place cell.
     expect(getAllByText('Marcos').length).toBe(2);
@@ -77,10 +83,11 @@ describe('ShareableRoundCard', () => {
     expect(getByText('Golf Partner 🏌️')).toBeTruthy();
   });
 
-  test('falls back gracefully with no recap or ranked entries', () => {
+  test('falls back gracefully with no recap or ranked entries', async () => {
     const { getByText } = render(wrap(
       <ShareableRoundCard tournamentName="Weekend Cup" roundLabel="Round 1" ranked={[]} />,
     ));
+    await flush();
     expect(getByText('No winner yet')).toBeTruthy();
   });
 });

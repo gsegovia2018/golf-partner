@@ -322,7 +322,13 @@ function resolveMyPlayer(tournament, userId, displayName, { strictUserId = false
   if (strictUserId) return null;
   const name = displayName?.trim().toLowerCase();
   if (name) {
-    const byName = players.find((p) => (p.name || '').trim().toLowerCase() === name);
+    const byName = players.find((p) => {
+      const match = (p.name || '').trim().toLowerCase() === name;
+      if (!match) return false;
+      // Skip if this player is linked to a different account
+      if (p.user_id && p.user_id !== userId) return false;
+      return true;
+    });
     if (byName) return byName;
   }
   if (tournament.kind === 'game' && players.length === 1) return players[0];

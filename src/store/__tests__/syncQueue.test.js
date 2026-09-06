@@ -160,3 +160,29 @@ describe('syncQueue concurrency (mutex serialization)', () => {
     expect(all.find((e) => e.id === e2.id).attempts).toBe(1);
   });
 });
+
+describe('syncQueue.dropForTournament', () => {
+  test('drops every entry for the given tournament, leaving others untouched', async () => {
+    const queue = createSyncQueue({ storage: memoryStorage(), key: 'q11' });
+    const a1 = await queue.enqueue({ tournamentId: 'tA', mutation: { type: 'score.set' } });
+    const a2 = await queue.enqueue({ tournamentId: 'tA', mutation: { type: 'shot.set' } });
+    const b1 = await queue.enqueue({ tournamentId: 'tB', mutation: { type: 'score.set' } });
+
+    await queue.dropForTournament('tA');
+
+    const all = await queue.all();
+    expect(all.map((e) => e.id)).toEqual([b1.id]);
+    // Sanity: the dropped ids are actually the ones that were tA's.
+    expect([a1.id, a2.id]).not.toContain(b1.id);
+  });
+
+  test('is a no-op when no entries match the tournament', async () => {
+    const queue = createSyncQueue({ storage: memoryStorage(), key: 'q12' });
+    const e1 = await queue.enqueue({ tournamentId: 'tA', mutation: { type: 'score.set' } });
+
+    await queue.dropForTournament('does-not-exist');
+
+    const all = await queue.all();
+    expect(all.map((e) => e.id)).toEqual([e1.id]);
+  });
+});

@@ -1,8 +1,14 @@
 import React from 'react';
 import { Animated } from 'react-native';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import { holePagePropsEqual, HolePage } from '../HolePage';
 import { __resetTourTargetsForTests, __getRegisteredTourKeysForTests } from '../../tour/tourTargets';
+
+// The shot-detail rows (ShotDetailExplainer) read their dismissed state from
+// AsyncStorage in a useEffect; flush that pending promise (inside act) after
+// every render that shows shot detail so the follow-up setState doesn't land
+// outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => {
@@ -119,20 +125,23 @@ function renderMatchPlayHole(overrides = {}) {
 describe('HolePage tour target: score-entry registers only when active', () => {
   beforeEach(() => __resetTourTargetsForTests());
 
-  test('isActive=false does not register score-entry', () => {
+  test('isActive=false does not register score-entry', async () => {
     renderMatchPlayHole({ isActive: false });
+    await flush();
     expect(__getRegisteredTourKeysForTests()).not.toContain('score-entry');
   });
 
-  test('isActive=true registers score-entry', () => {
+  test('isActive=true registers score-entry', async () => {
     renderMatchPlayHole({ isActive: true });
+    await flush();
     expect(__getRegisteredTourKeysForTests()).toContain('score-entry');
   });
 });
 
 describe('HolePage match play: full vs relative handicap', () => {
-  test('HCP label shows the FULL handicap for both players, not the relative one', () => {
+  test('HCP label shows the FULL handicap for both players, not the relative one', async () => {
     const { getByText, queryByText } = renderMatchPlayHole();
+    await flush();
 
     // Alice (hcp 25, relative 20) still has a relative extra shot at SI 5.
     expect(getByText('HCP 25  ·  +1 on this hole')).toBeTruthy();
@@ -141,8 +150,9 @@ describe('HolePage match play: full vs relative handicap', () => {
     expect(queryByText('HCP 0')).toBeNull();
   });
 
-  test('pickup button records the FULL-handicap pickup value for Bob, not the relative one', () => {
+  test('pickup button records the FULL-handicap pickup value for Bob, not the relative one', async () => {
     const { getByLabelText, queryByLabelText } = renderMatchPlayHole();
+    await flush();
 
     // Full handicap: pickupStrokes(par 4, hcp 5, SI 5) = 7.
     expect(getByLabelText('Pickup at 7 strokes')).toBeTruthy();
@@ -216,8 +226,9 @@ describe('HolePage scramble rounds: no shot-detail section', () => {
     expect(queryByText('Shot detail')).toBeNull();
   });
 
-  test('a non-scramble round for the same players still renders shot detail for "me"', () => {
+  test('a non-scramble round for the same players still renders shot detail for "me"', async () => {
     const { getByText } = renderMatchPlayHole({ mode: 'stableford' });
+    await flush();
     expect(getByText('Shot detail')).toBeTruthy();
   });
 });
@@ -269,15 +280,17 @@ function renderConflictHole(overrides = {}) {
 }
 
 describe('HolePage hero-card conflict flag: driven by conflictCells', () => {
-  test('a cell the engine does not dispute → score controls stay visible, no resolve state', () => {
+  test('a cell the engine does not dispute → score controls stay visible, no resolve state', async () => {
     const { getByLabelText, queryByLabelText } = renderConflictHole();
+    await flush();
 
     expect(getByLabelText('Decrease strokes on hole 1')).toBeTruthy();
     expect(queryByLabelText("Resolve Alice's conflicting score on hole 1")).toBeNull();
   });
 
-  test('a disputed cell → resolve state shown, score controls hidden', () => {
+  test('a disputed cell → resolve state shown, score controls hidden', async () => {
     const { getByLabelText, queryByLabelText } = renderConflictHole({ conflictCells: new Set(['a:1']) });
+    await flush();
 
     expect(getByLabelText("Resolve Alice's conflicting score on hole 1")).toBeTruthy();
     expect(queryByLabelText('Decrease strokes on hole 1')).toBeNull();
@@ -337,8 +350,9 @@ describe('HolePage ghost preview wiring', () => {
     return render(<HolePage {...props} />);
   }
 
-  test('peer-entered value + no own entry + ghostEnabled → ghost visible with attribution', () => {
+  test('peer-entered value + no own entry + ghostEnabled → ghost visible with attribution', async () => {
     const { getByText, getByLabelText } = renderGhostHole();
+    await flush();
     expect(getByText('4')).toBeTruthy();
     expect(getByText('by Marker')).toBeTruthy();
     expect(getByLabelText(
@@ -346,42 +360,46 @@ describe('HolePage ghost preview wiring', () => {
     )).toBeTruthy();
   });
 
-  test('tapping a ghost accepts the peer value as this scorer\'s own entry', () => {
+  test('tapping a ghost accepts the peer value as this scorer\'s own entry', async () => {
     // The whole point of the ghost: the peer's number is visible but unmarked
     // here. One tap writes it under this author, which is what turns the cell
     // from "not verified" into an agreement between the two cards.
     const onSetScore = jest.fn();
     const { getByLabelText } = renderGhostHole({ onSetScore });
+    await flush();
     fireEvent.press(getByLabelText(
       'Hole 1, Alice: 4 entered by Marker, not verified by you — tap to accept',
     ));
     expect(onSetScore).toHaveBeenCalledWith('a', 1, '4');
   });
 
-  test('a read-only card offers no tap-to-accept', () => {
+  test('a read-only card offers no tap-to-accept', async () => {
     const onSetScore = jest.fn();
     const { getByLabelText, getByText } = renderGhostHole({
       onSetScore,
       editable: () => false,
     });
+    await flush();
     expect(getByText('NOT VERIFIED')).toBeTruthy();
     fireEvent.press(getByLabelText('Hole 1, Alice: 4 entered by Marker, not verified by you'));
     expect(onSetScore).not.toHaveBeenCalled();
   });
 
-  test('own entry present → no ghost even though the merged card also has a peer value', () => {
+  test('own entry present → no ghost even though the merged card also has a peer value', async () => {
     const { getByText, queryByText } = renderGhostHole({ scores: { a: { 1: 5 } } });
+    await flush();
     expect(getByText('5')).toBeTruthy();
     expect(queryByText('by Marker')).toBeNull();
   });
 
-  test('no data at all → empty state unchanged', () => {
+  test('no data at all → empty state unchanged', async () => {
     const { getByText, queryByText } = renderGhostHole({ peerScores: { a: {} } });
+    await flush();
     expect(getByText('—')).toBeTruthy();
     expect(queryByText(/^by /)).toBeNull();
   });
 
-  test('ghostEnabled false (official / view-only) → merged rendering unchanged, no ghost treatment', () => {
+  test('ghostEnabled false (official / view-only) → merged rendering unchanged, no ghost treatment', async () => {
     // There HoleView passes the merged card as `scores` itself, so the cell
     // already reads 4 directly — this only pins that ghostEnabled false
     // suppresses the ghost overlay even when a "peer value" is present.
@@ -389,6 +407,7 @@ describe('HolePage ghost preview wiring', () => {
       ghostEnabled: false,
       scores: { a: { 1: 4 } },
     });
+    await flush();
     expect(getByText('4')).toBeTruthy();
     expect(queryByText('by Marker')).toBeNull();
   });
@@ -523,9 +542,10 @@ describe('header distance block wiring', () => {
     expect(holePagePropsEqual(prev, next)).toBe(false);
   });
 
-  it('renders PAR and SI beside the hole number and the distance block on the right', () => {
+  it('renders PAR and SI beside the hole number and the distance block on the right', async () => {
     const props = { ...baseProps(), isActive: true, gps: gps(326), onOpenFlyover: jest.fn() };
     const { getByText, getByLabelText } = render(<HolePage {...props} />);
+    await flush();
     getByText('PAR');
     getByText('SI');
     getByText('326');
@@ -533,9 +553,10 @@ describe('header distance block wiring', () => {
     expect(props.onOpenFlyover).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the plain header when gps is unavailable', () => {
+  it('renders the plain header when gps is unavailable', async () => {
     const props = { ...baseProps(), gps: { available: false, distances: null, accuracy: null, position: null }, onOpenFlyover: () => {} };
     const { getByText, queryByLabelText } = render(<HolePage {...props} />);
+    await flush();
     getByText('PAR');
     expect(queryByLabelText('Open hole map')).toBeNull();
   });
@@ -547,22 +568,25 @@ describe('HolePage collapsing slim header', () => {
     distances: { front: center - 14, center, back: center + 13, pin: null, kind: 'hole', hazards: [] },
   });
 
-  it('renders the slim bar with combined HOLE · PAR · SI info', () => {
+  it('renders the slim bar with combined HOLE · PAR · SI info', async () => {
     const props = { ...baseProps(), isActive: true, gps: gps(326), onOpenFlyover: jest.fn() };
     const { getByText } = render(<HolePage {...props} />);
+    await flush();
     getByText('HOLE 3 · PAR 4 · SI 6');
   });
 
-  it('slim bar compact distance opens the flyover on tap ("Hole map")', () => {
+  it('slim bar compact distance opens the flyover on tap ("Hole map")', async () => {
     const props = { ...baseProps(), isActive: true, gps: gps(326), onOpenFlyover: jest.fn() };
     const { getByLabelText } = render(<HolePage {...props} />);
+    await flush();
     fireEvent.press(getByLabelText('Hole map'));
     expect(props.onOpenFlyover).toHaveBeenCalledTimes(1);
   });
 
-  it('still renders the full header block as the primary map entry ("Open hole map")', () => {
+  it('still renders the full header block as the primary map entry ("Open hole map")', async () => {
     const props = { ...baseProps(), isActive: true, gps: gps(326), onOpenFlyover: jest.fn() };
     const { getByText, getByLabelText } = render(<HolePage {...props} />);
+    await flush();
     getByText('326'); // full-block hero number (unit rendered separately)
     fireEvent.press(getByLabelText('Open hole map'));
     expect(props.onOpenFlyover).toHaveBeenCalledTimes(1);

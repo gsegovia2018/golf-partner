@@ -209,37 +209,6 @@ export function shownScores(ctx, playerIds, holes) {
 }
 
 /**
- * What everyone agrees on: a valid resolution, else the value when every
- * scorer who marked the cell (at least one, my draft excluded) said the same.
- * `provisional` flags a round that is not final yet — some cell disagrees, or
- * rests on a single scorer with no agreement recorded.
- */
-export function settledScores(ctx, playerIds, holes) {
-  const view = contextView(ctx);
-  const scores = {};
-  let provisional = false;
-  for (const playerId of playerIds) {
-    for (const hole of holes) {
-      const h = key(hole);
-      const cell = cellFrom(view, playerId, hole);
-      const values = cell.others.map((o) => o.value);
-      if (cell.myPublished != null) values.push(cell.myPublished);
-
-      if (cell.discrepancy) provisional = true;
-      else if (values.length === 1 && !cell.resolution) provisional = true;
-
-      let value = null;
-      if (cell.resolution) value = cell.resolution.value;
-      else if (values.length > 0 && new Set(values).size === 1) value = values[0];
-      if (value == null) continue;
-      if (!scores[playerId]) scores[playerId] = {};
-      scores[playerId][h] = value;
-    }
-  }
-  return { scores, provisional };
-}
-
-/**
  * Disputed cells grouped by hole for the discrepancy sheet (R4): one row per
  * player, one value per scorer who marked it — mine included — oldest first.
  */
@@ -274,26 +243,6 @@ export function unverifiedCells(ctx, playerIds, holes) {
       if (cell.status !== 'unverified') continue;
       const top = cell.others[0];
       out.push({ playerId, hole, scorerKey: top.scorerKey, value: top.value });
-    }
-  }
-  return out;
-}
-
-/**
- * Cells exactly one scorer marked and nobody agreed on. Listed for
- * information at Finish; they never block it (blank rule).
- */
-export function singleScorerCells(ctx, playerIds, holes) {
-  const view = contextView(ctx);
-  const out = [];
-  for (const hole of [...holes].sort((a, b) => Number(a) - Number(b))) {
-    for (const playerId of playerIds) {
-      const h = key(hole);
-      const cell = cellFrom(view, playerId, hole);
-      if (cell.resolution) continue;
-      const markers = markersOf(view, playerId, h);
-      if (markers.length !== 1) continue;
-      out.push({ playerId, hole, scorerKey: markers[0].scorerKey, value: markers[0].value });
     }
   }
   return out;

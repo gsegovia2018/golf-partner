@@ -8,6 +8,7 @@
 import { getDeviceAuthorId } from '../../store/deviceId';
 import { scorerKeyOf } from '../cards';
 import {
+  adoptEntry,
   emptyCard,
   identifyScorer,
   makeResolution,
@@ -78,9 +79,11 @@ export async function setDraftShot(tid, roundId, hole, playerId, detail) {
  * previous card or the new one — never half a hole.
  *
  * Returns true when a card version was published, false when there was
- * nothing to publish: no draft at all, or a draft that is entirely blank on a
+ * nothing to publish: no draft at all, a draft that is entirely blank on a
  * hole that was never published (a blank is not an opinion, so there is no
- * empty version worth pushing).
+ * empty version worth pushing), or a draft identical to what the hole already
+ * holds (a walk back through the hole must not lapse its agreements). The
+ * draft is consumed either way — the scorer has left the hole.
  */
 export async function publishHole(tid, roundId, hole, now = Date.now()) {
   await loadRound(tid, roundId);
@@ -102,7 +105,9 @@ export async function publishHole(tid, roundId, hole, now = Date.now()) {
     delete round[h];
     await store.setDraft(tid, { ...drafts, [roundId]: round });
 
-    if (!next.holes?.[h]) return { published: false, draft: round };
+    // Identity means the engine published no version: nothing to say on a
+    // hole never published, or a revisit that changed nothing.
+    if (next === base) return { published: false, draft: round };
 
     await store.setMine(tid, roundId, { card: next, pending: true });
     await store.setMeta(tid, withRound(meta, roundId));
@@ -122,32 +127,59 @@ export async function publishHole(tid, roundId, hole, now = Date.now()) {
 }
 
 /**
- * Agree a cell. The resolution is anchored to the card versions of every
- * author who currently marks it, so it lapses the moment any of them
- * re-publishes the hole (plan §3.3). Throws when nobody marks the cell.
+ * Agree a cell.
+ *
+ * Agreeing also takes the agreed value onto MY OWN card when my card marks
+ * the cell, as one more version of that hole. Without it the card keeps the
+ * number I was overruled on, the screen re-seeds a revisited hole's draft
+ * from it, and leaving the hole re-publishes it — lapsing the agreement I had
+ * just made. A card that never marked the cell is left alone: a blank is not
+ * an opinion and agreeing must not invent one.
+ *
+ * The resolution is anchored to the card versions of every author who marks
+ * the cell AFTER that update, so it is valid the instant it is made and
+ * lapses only when someone genuinely re-publishes (plan §3.3). Throws when
+ * nobody marks the cell.
  */
 export async function resolve(tid, roundId, { playerId, hole, value, now = Date.now() }) {
   await loadRound(tid, roundId);
   const state = getRoundState(tid, roundId);
   const myAuthorId = getDeviceAuthorId();
   const by = scorerKeyOf(state.cardsByAuthor[myAuthorId], myAuthorId);
-  const resolution = makeResolution(state, { roundId, playerId, hole, value, by, ts: now });
 
   const store = getCardStorage();
   const h = key(hole);
-  const forRound = await store.withTid(tid, async () => {
+  const outcome = await store.withTid(tid, async () => {
+    const mine = await store.getMine(tid, roundId);
+    // Only a real stroke count can be adopted; an agreed "no score" would
+    // un-mark the cell, which is a withdrawal, not an agreement.
+    const card = Number.isFinite(value)
+      ? adoptEntry(mine?.card ?? null, h, playerId, value, now)
+      : (mine?.card ?? null);
+    const cardChanged = !!card && card !== mine?.card;
+
+    const cardsByAuthor = { ...state.cardsByAuthor };
+    if (card) cardsByAuthor[myAuthorId] = card;
+    // Throws before anything is written when nobody marks the cell.
+    const made = makeResolution({ cardsByAuthor }, { roundId, playerId, hole, value, by, ts: now });
+
+    if (cardChanged) await store.setMine(tid, roundId, { card, pending: true });
+
     const all = await store.getResolutions(tid);
     const round = { ...(all[roundId] ?? {}) };
-    round[playerId] = { ...(round[playerId] ?? {}), [h]: { ...resolution, pending: true } };
+    round[playerId] = { ...(round[playerId] ?? {}), [h]: { ...made, pending: true } };
     await store.setResolutions(tid, { ...all, [roundId]: round });
     await store.setMeta(tid, withRound(await store.getMeta(tid), roundId));
-    return round;
+    return { resolution: made, forRound: round, card: cardChanged ? card : null };
   });
 
   await store.addPendingTid(tid);
-  applyRound(tid, roundId, { resolutions: forRound });
+  applyRound(tid, roundId, {
+    resolutions: outcome.forRound,
+    ...(outcome.card ? { myCard: outcome.card, minePending: true } : {}),
+  });
   schedulePush();
-  return resolution;
+  return outcome.resolution;
 }
 
 /**

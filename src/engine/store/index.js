@@ -10,6 +10,7 @@ export {
 
 export {
   applyRound,
+  dropRound,
   getRoundState,
   knownRounds,
   loadRound,
@@ -36,6 +37,7 @@ export {
   pushAll,
   reconnect,
   schedulePush,
+  setRoundExistsResolver,
   startReplication,
   stopReplication,
   subscribeSyncStatus,

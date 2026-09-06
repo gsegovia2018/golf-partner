@@ -1,10 +1,16 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor, act } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import EditTeamsScreen from '../EditTeamsScreen';
 import * as store from '../../store/tournamentStore';
 import { mutate } from '../../store/mutate';
+
+// ThemeProvider and EditTeamsScreen's own tournament load both resolve in a
+// microtask after the initial render; flush that (inside act) so a test that
+// asserts synchronously right after render doesn't leave their follow-up
+// setState outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
 jest.mock('@expo/vector-icons', () => ({ Feather: 'Feather' }));
 
@@ -46,7 +52,7 @@ const metrics = {
   insets: { top: 0, left: 0, right: 0, bottom: 0 },
 };
 
-function renderScreen(params) {
+async function renderScreen(params) {
   const navigation = { goBack: jest.fn(), navigate: jest.fn(), isFocused: () => true };
   const utils = render(
     <SafeAreaProvider initialMetrics={metrics}>
@@ -55,18 +61,19 @@ function renderScreen(params) {
       </ThemeProvider>
     </SafeAreaProvider>,
   );
+  await flush();
   return { navigation, ...utils };
 }
 
 beforeEach(() => jest.clearAllMocks());
 
 describe('EditTeamsScreen — linked tournament', () => {
-  test('loads the tournament named by route.params.tournamentId, not the active one', () => {
+  test('loads the tournament named by route.params.tournamentId, not the active one', async () => {
     const linked = makeTournament('linked');
     store.getTournamentSnapshot.mockReturnValue(linked);
     store.getTournament.mockResolvedValue(linked);
 
-    const { getByText } = renderScreen({ roundIndex: 0, tournamentId: 'linked' });
+    const { getByText } = await renderScreen({ roundIndex: 0, tournamentId: 'linked' });
 
     expect(store.getTournamentSnapshot).toHaveBeenCalledWith('linked');
     expect(store.getActiveTournamentSnapshot).not.toHaveBeenCalled();
@@ -78,7 +85,7 @@ describe('EditTeamsScreen — linked tournament', () => {
     store.getTournamentSnapshot.mockReturnValue(linked);
     store.getTournament.mockResolvedValue(linked);
 
-    const { getByText } = renderScreen({ roundIndex: 0, tournamentId: 'linked' });
+    const { getByText } = await renderScreen({ roundIndex: 0, tournamentId: 'linked' });
     fireEvent.press(getByText('Save Teams'));
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -92,7 +99,7 @@ describe('EditTeamsScreen — linked tournament', () => {
     store.getTournamentSnapshot.mockReturnValue(linked);
     store.getTournament.mockResolvedValue(linked);
 
-    const { getByText } = renderScreen({ roundIndex: 0, tournamentId: 'linked' });
+    const { getByText } = await renderScreen({ roundIndex: 0, tournamentId: 'linked' });
     fireEvent.press(getByText('Save Teams'));
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -102,12 +109,12 @@ describe('EditTeamsScreen — linked tournament', () => {
     expect(roundIds).not.toContain('linked-r1');
   });
 
-  test('falls back to the active tournament when no id is passed', () => {
+  test('falls back to the active tournament when no id is passed', async () => {
     const active = makeTournament('active');
     store.getActiveTournamentSnapshot.mockReturnValue(active);
     store.loadTournament.mockResolvedValue(active);
 
-    renderScreen({ roundIndex: 0 });
+    await renderScreen({ roundIndex: 0 });
 
     expect(store.getActiveTournamentSnapshot).toHaveBeenCalled();
     expect(store.getTournamentSnapshot).not.toHaveBeenCalled();

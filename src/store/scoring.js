@@ -821,12 +821,13 @@ export function tournamentSindicatoClinched(tournament) {
 // One ball per team, scored Stableford off a team handicap. The team score
 // lives under the CAPTAIN (first member) in round.scores, so the sync layer
 // is untouched. USGA Rules of Handicapping Appendix C allowances, low→high
-// course handicap. A solo "team" (3v1's individual) plays 100%.
+// course handicap. A solo "team" (3v1's individual) plays 100%. USGA publishes
+// 2- and 4-player allowances; 3-player uses the commonly accepted 30/20/10.
 
 export const SCRAMBLE_ALLOWANCES = {
   1: [1],
   2: [0.35, 0.15],
-  3: [0.20, 0.15, 0.10],
+  3: [0.30, 0.20, 0.10],
   4: [0.25, 0.20, 0.15, 0.10],
 };
 

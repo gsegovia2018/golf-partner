@@ -677,13 +677,18 @@ export async function clearActiveTournament() {
 // (some other device did, and the server told us via the deletedAt tombstone).
 // Nothing here touches the server: the rows stay, and restoreTournament pulls
 // them back.
-async function _purgeLocalTournament(id, { activeId } = {}) {
+export async function _purgeLocalTournament(id, { activeId } = {}) {
   const active = activeId ?? await AsyncStorage.getItem(ACTIVE_ID_KEY);
   if (active === id) await AsyncStorage.removeItem(ACTIVE_ID_KEY);
   if (_activeTournamentId === id) _activeTournamentId = null;
   await AsyncStorage.removeItem(ACTIVE_TOURNAMENT_KEY + id);
   _localTournamentCache.delete(id);
   _lastWrittenJson.delete(id);
+  // The tournament is gone locally — any of its queued mutations can never
+  // be applied against a local blob that no longer exists. Drop them now
+  // rather than leaving them to retry forever (drainTournament's readLocal
+  // guard is the safety net if this fails or races a concurrent enqueue).
+  try { await syncQueue.dropForTournament(id); } catch (_) { /* best-effort */ }
   try {
     const current = await tournamentsIndex.readIndex();
     const next = current.filter((row) => row.id !== id);

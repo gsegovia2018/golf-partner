@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import AttachMediaSheet from '../AttachMediaSheet';
 
@@ -23,7 +23,12 @@ const ROUNDS = [
 ];
 const ASSET = { kind: 'photo', localUri: 'file://a.jpg' };
 
-const setup = (props = {}) => {
+// ThemeProvider reads its persisted preference from AsyncStorage in a
+// useEffect; flush that pending promise (inside act) after every render so
+// its follow-up setState doesn't land outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
+
+const setup = async (props = {}) => {
   const onConfirm = jest.fn();
   const utils = render(wrap(
     <AttachMediaSheet
@@ -37,24 +42,25 @@ const setup = (props = {}) => {
       {...props}
     />
   ));
+  await flush();
   return { onConfirm, ...utils };
 };
 
 describe('AttachMediaSheet', () => {
-  test('shows round and hole wheels for a multi-round tournament', () => {
-    const { getByTestId } = setup();
+  test('shows round and hole wheels for a multi-round tournament', async () => {
+    const { getByTestId } = await setup();
     expect(getByTestId('attach-round-wheel')).toBeTruthy();
     expect(getByTestId('attach-hole-wheel')).toBeTruthy();
   });
 
-  test('hides the round wheel when there is a single round', () => {
-    const { queryByTestId, getByTestId } = setup({ rounds: [ROUNDS[0]] });
+  test('hides the round wheel when there is a single round', async () => {
+    const { queryByTestId, getByTestId } = await setup({ rounds: [ROUNDS[0]] });
     expect(queryByTestId('attach-round-wheel')).toBeNull();
     expect(getByTestId('attach-hole-wheel')).toBeTruthy();
   });
 
   test('confirm payload carries the picked round and hole', async () => {
-    const { onConfirm, getByLabelText, getByText } = setup();
+    const { onConfirm, getByLabelText, getByText } = await setup();
     fireEvent.press(getByLabelText('Hole 3, Par 5'));
     fireEvent.press(getByText('Save'));
     await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({
@@ -67,7 +73,7 @@ describe('AttachMediaSheet', () => {
   });
 
   test('switching to a shorter round resets an out-of-range hole to No hole', async () => {
-    const { onConfirm, getByLabelText, getByText } = setup();
+    const { onConfirm, getByLabelText, getByText } = await setup();
     fireEvent.press(getByLabelText('Hole 12, Par 4'));
     fireEvent.press(getByLabelText('R2, Levante'));
     fireEvent.press(getByText('Save'));
@@ -81,7 +87,7 @@ describe('AttachMediaSheet', () => {
   });
 
   test('clamps an out-of-range defaultRoundIndex from a stale feed item', async () => {
-    const { onConfirm, getByText } = setup({ defaultRoundIndex: 5 });
+    const { onConfirm, getByText } = await setup({ defaultRoundIndex: 5 });
     fireEvent.press(getByText('Save'));
     await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({
       roundIndex: 1,

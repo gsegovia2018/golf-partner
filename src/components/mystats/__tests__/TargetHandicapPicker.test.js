@@ -1,13 +1,23 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import { TargetHandicapPicker } from '../TargetHandicapPicker';
 
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
+// ThemeProvider reads its persisted preference from AsyncStorage in a
+// useEffect; flush that pending promise (inside act) after every render so
+// its follow-up setState doesn't land outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
+async function renderPicker(ui) {
+  const utils = render(wrap(ui));
+  await flush();
+  return utils;
+}
+
 describe('TargetHandicapPicker', () => {
-  test('renders current value when one is set', () => {
-    const { getByDisplayValue } = render(wrap(
+  test('renders current value when one is set', async () => {
+    const { getByDisplayValue } = await renderPicker(
       <TargetHandicapPicker
         visible
         currentValue={12.5}
@@ -15,12 +25,12 @@ describe('TargetHandicapPicker', () => {
         onSave={() => {}}
         onCancel={() => {}}
       />
-    ));
+    );
     expect(getByDisplayValue('12.5')).toBeTruthy();
   });
 
-  test('renders empty input when currentValue is null', () => {
-    const { queryByDisplayValue } = render(wrap(
+  test('renders empty input when currentValue is null', async () => {
+    const { queryByDisplayValue } = await renderPicker(
       <TargetHandicapPicker
         visible
         currentValue={null}
@@ -28,12 +38,12 @@ describe('TargetHandicapPicker', () => {
         onSave={() => {}}
         onCancel={() => {}}
       />
-    ));
+    );
     expect(queryByDisplayValue('12.5')).toBeNull();
   });
 
-  test('preset button fills input from currentHandicap', () => {
-    const { getByText, getByDisplayValue } = render(wrap(
+  test('preset button fills input from currentHandicap', async () => {
+    const { getByText, getByDisplayValue } = await renderPicker(
       <TargetHandicapPicker
         visible
         currentValue={null}
@@ -41,14 +51,14 @@ describe('TargetHandicapPicker', () => {
         onSave={() => {}}
         onCancel={() => {}}
       />
-    ));
+    );
     fireEvent.press(getByText(/Use my current handicap/));
     expect(getByDisplayValue('15.4')).toBeTruthy();
   });
 
-  test('Save calls onSave with parsed numeric value', () => {
+  test('Save calls onSave with parsed numeric value', async () => {
     const onSave = jest.fn();
-    const { getByText } = render(wrap(
+    const { getByText } = await renderPicker(
       <TargetHandicapPicker
         visible
         currentValue={10}
@@ -56,15 +66,15 @@ describe('TargetHandicapPicker', () => {
         onSave={onSave}
         onCancel={() => {}}
       />
-    ));
+    );
     fireEvent.press(getByText('Save'));
     expect(onSave).toHaveBeenCalledWith(10);
   });
 
-  test('Cancel calls onCancel and does not call onSave', () => {
+  test('Cancel calls onCancel and does not call onSave', async () => {
     const onSave = jest.fn();
     const onCancel = jest.fn();
-    const { getByText } = render(wrap(
+    const { getByText } = await renderPicker(
       <TargetHandicapPicker
         visible
         currentValue={10}
@@ -72,7 +82,7 @@ describe('TargetHandicapPicker', () => {
         onSave={onSave}
         onCancel={onCancel}
       />
-    ));
+    );
     fireEvent.press(getByText('Cancel'));
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onSave).not.toHaveBeenCalled();

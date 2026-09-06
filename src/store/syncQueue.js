@@ -71,6 +71,17 @@ export function createSyncQueue({ storage = AsyncStorage, key = QUEUE_KEY } = {}
         await writeAll(all.filter((e) => e.id !== id));
       });
     },
+    // Drops every queued entry for one tournament in a single write. Used
+    // when a tournament no longer exists locally (a server tombstone purged
+    // it, or this device deleted it): its queued entries can never be
+    // applied against a local blob that's gone, so retrying them forever
+    // would wedge the queue (see syncWorker.js's drainTournament).
+    async dropForTournament(tournamentId) {
+      return runExclusive(async () => {
+        const all = await readAll();
+        await writeAll(all.filter((e) => e.tournamentId !== tournamentId));
+      });
+    },
     // Persists a bumped attempts count for one entry and returns the new
     // count. Used by the sync worker to cap retries of a RECOVERABLE coded
     // error (see syncWorker.js's isPermanentSyncError) so a mutation that

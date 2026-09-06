@@ -152,21 +152,30 @@ function renderScreen(route = {}, navigation = undefined) {
   return render(navigation ? screenElement(route, navigation) : screenElement(route));
 }
 
+// ThemeProvider and MyStatsScreen's own profile/stats load both resolve in a
+// microtask after the initial render; flush that (inside act) so a test that
+// asserts synchronously right after render doesn't leave their follow-up
+// setState outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
+
 describe('MyStatsScreen navigation chrome', () => {
-  test('shows Back when presented from the root stack', () => {
+  test('shows Back when presented from the root stack', async () => {
     const { getByLabelText } = renderScreen();
+    await flush();
 
     expect(getByLabelText('Back')).toBeTruthy();
   });
 
-  test('hides Back when mounted as a primary tab', () => {
+  test('hides Back when mounted as a primary tab', async () => {
     const { queryByLabelText } = renderScreen({ params: { presentation: 'tab' } });
+    await flush();
 
     expect(queryByLabelText('Back')).toBeNull();
   });
 
-  test('header shows only the My Stats title, no kicker', () => {
+  test('header shows only the My Stats title, no kicker', async () => {
     const { getByText, queryByText } = renderScreen();
+    await flush();
 
     expect(getByText('My Stats')).toBeTruthy();
     expect(queryByText('CLUBHOUSE · MEMBER RECORD')).toBeNull();

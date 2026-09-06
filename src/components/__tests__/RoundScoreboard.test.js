@@ -1,7 +1,12 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import RoundScoreboard from '../RoundScoreboard';
+
+// ThemeProvider reads its persisted preference from AsyncStorage in a
+// useEffect; flush that pending promise (inside act) after every render so
+// its follow-up setState doesn't land outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
 jest.mock('@expo/vector-icons', () => ({ Feather: 'Feather' }));
 
@@ -26,7 +31,7 @@ const fullScores = Object.fromEntries(
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
 describe('RoundScoreboard', () => {
-  test('renders a stat card per player, me first', () => {
+  test('renders a stat card per player, me first', async () => {
     const { getByText, getAllByText } = render(wrap(
       <RoundScoreboard
         round={{ holes, scores: { p1: fullScores, p2: fullScores } }}
@@ -34,6 +39,7 @@ describe('RoundScoreboard', () => {
         meId="p2"
       />,
     ));
+    await flush();
     expect(getByText('Ana')).toBeTruthy();
     expect(getByText('Bea')).toBeTruthy();
     // "Points" / "vs Par" labels appear once per player card — two players
@@ -43,7 +49,7 @@ describe('RoundScoreboard', () => {
     expect(getAllByText('vs Par').length).toBe(2);
   });
 
-  test('ranked mode orders by points and shows rank badges', () => {
+  test('ranked mode orders by points and shows rank badges', async () => {
     const { getByLabelText } = render(wrap(
       <RoundScoreboard
         round={{ holes, scores: { p1: fullScores, p2: fullScores } }}
@@ -52,12 +58,13 @@ describe('RoundScoreboard', () => {
         ranked
       />,
     ));
+    await flush();
     // Bea has 40 pts (mock) -> rank 1
     expect(getByLabelText('Rank 1: Bea')).toBeTruthy();
     expect(getByLabelText('Rank 2: Ana')).toBeTruthy();
   });
 
-  test('shows glowing HOLE badge only mid-round', () => {
+  test('shows glowing HOLE badge only mid-round', async () => {
     const partial = Object.fromEntries(
       Array.from({ length: 5 }, (_, i) => [i + 1, 4]),
     );
@@ -68,6 +75,7 @@ describe('RoundScoreboard', () => {
         meId="p1"
       />,
     ));
+    await flush();
     expect(getByLabelText('On hole 6')).toBeTruthy();
 
     rerender(wrap(
@@ -80,7 +88,7 @@ describe('RoundScoreboard', () => {
     expect(queryByLabelText(/On hole/)).toBeNull();
   });
 
-  test('shows tee badge when teeLabels provided', () => {
+  test('shows tee badge when teeLabels provided', async () => {
     const { getByText } = render(wrap(
       <RoundScoreboard
         round={{ holes, scores: { p1: fullScores, p2: fullScores } }}
@@ -89,10 +97,11 @@ describe('RoundScoreboard', () => {
         teeLabels={{ p1: { label: 'Yellow' } }}
       />,
     ));
+    await flush();
     expect(getByText('Yellow')).toBeTruthy();
   });
 
-  test('scramble round: both teammates show the team ball, not just the captain', () => {
+  test('scramble round: both teammates show the team ball, not just the captain', async () => {
     // Team ball is stored under the captain (pair[0]). The non-captain teammate
     // must still show scores (strokes/vs Par), not a blank card.
     const capScores = Object.fromEntries(
@@ -114,13 +123,14 @@ describe('RoundScoreboard', () => {
         scoringMode="scramblepairs"
       />,
     ));
+    await flush();
     // 18 pars → 72 strokes, E vs par — both cards show the team's strokes.
     expect(getAllByText('72').length).toBe(2);
     // Neither card is blank: no "—" strokes placeholder for the teammate.
     expect(queryAllByText('—').length).toBe(0);
   });
 
-  test('suppresses HOLE badge when showHoleBadges={false}', () => {
+  test('suppresses HOLE badge when showHoleBadges={false}', async () => {
     const partial = Object.fromEntries(
       Array.from({ length: 5 }, (_, i) => [i + 1, 4]),
     );
@@ -132,6 +142,7 @@ describe('RoundScoreboard', () => {
         showHoleBadges={false}
       />,
     ));
+    await flush();
     expect(queryByLabelText(/On hole/)).toBeNull();
     expect(getByText('Points')).toBeTruthy();
   });

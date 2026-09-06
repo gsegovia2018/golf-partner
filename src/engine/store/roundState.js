@@ -171,6 +171,90 @@ export function loadRound(tid, roundId) {
   return rec.loadPromise;
 }
 
+/** Does this tournament still hold anything the replicator owes the server? */
+async function tidHasPending(tid, rounds) {
+  const store = getCardStorage();
+  for (const roundId of rounds) {
+    const row = await store.getMine(tid, roundId);
+    if (row?.pending) return true;
+  }
+  const all = await store.getResolutions(tid);
+  for (const byPlayer of Object.values(all)) {
+    for (const byHole of Object.values(byPlayer ?? {})) {
+      for (const resolution of Object.values(byHole ?? {})) {
+        if (resolution?.pending) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Forget one round completely: my card, every peer card, the draft, the
+ * agreements, the meta index entries, and any pending flag they carried.
+ *
+ * This exists because a card is otherwise retried forever (R8) — which is the
+ * right answer until the round is *gone*. `scorer_cards` has no FK of its own,
+ * but the projection trigger writes `game_scores`, which does, so a card whose
+ * `game_rounds` row was deleted fails with 23503 on every attempt and the game
+ * never leaves 'pending'. Called from tournamentRepo.deleteRound once the
+ * server delete lands, and from the replicator when a blocked card turns out
+ * to belong to a round another device deleted.
+ *
+ * Subscribers are kept and notified: a screen still mounted on the round must
+ * re-render onto the empty state rather than keep stale cells.
+ */
+export async function dropRound(tid, roundId) {
+  if (!tid || !roundId) return false;
+  const store = getCardStorage();
+
+  const remainingRounds = await store.withTid(tid, async () => {
+    const meta = await store.getMeta(tid);
+    const authorIds = meta.peers?.[roundId] ?? [];
+    await store.removeMine(tid, roundId);
+    await Promise.all(authorIds.map((a) => store.removePeer(tid, roundId, a)));
+
+    const drafts = await store.getDraft(tid);
+    if (roundId in drafts) {
+      const { [roundId]: _draft, ...rest } = drafts;
+      await store.setDraft(tid, rest);
+    }
+
+    const resolutions = await store.getResolutions(tid);
+    if (roundId in resolutions) {
+      const { [roundId]: _res, ...rest } = resolutions;
+      await store.setResolutions(tid, rest);
+    }
+
+    const { [roundId]: _peers, ...peers } = meta.peers ?? {};
+    const rounds = (meta.rounds ?? []).filter((r) => r !== roundId);
+    await store.setMeta(tid, { ...meta, peers, rounds });
+    return rounds;
+  });
+
+  // The pending index is what pushAll walks. Dropping the last pending round
+  // of a tournament has to take the tournament out of it, or every future
+  // push re-reads a tournament with nothing to send.
+  const others = [...new Set([...remainingRounds, ...knownRounds(tid)])].filter((r) => r !== roundId);
+  if (!(await tidHasPending(tid, others))) await store.removePendingTid(tid);
+
+  const rec = records.get(recordKey(tid, roundId));
+  if (rec) {
+    rec.myCard = null;
+    rec.minePending = false;
+    rec.peers = {};
+    rec.resolutions = {};
+    rec.draft = {};
+    rec.lastPulledAt = null;
+    rec.loaded = false;
+    rebuild(rec);
+    for (const cb of [...rec.subs]) {
+      try { cb(); } catch { /* a bad subscriber must not stop the others */ }
+    }
+  }
+  return true;
+}
+
 /** Test-only: drop every cached record and subscriber. */
 export function _resetRoundStateForTests() {
   records.clear();

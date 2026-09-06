@@ -5,7 +5,7 @@ import {
   isPermanentSyncError, isTransportError,
 } from '../syncWorker';
 import {
-  readLocal, saveLocal, _setSyncStatus, recordSyncFailure,
+  readLocal, saveLocal, _setSyncStatus, recordSyncFailure, _purgeLocalTournament,
 } from '../tournamentStore';
 import { executeMutation } from '../mutationWrites';
 import { applyPendingMutations } from '../mutate';
@@ -13,6 +13,7 @@ import { fetchTournament } from '../tournamentRepo';
 import { upsertPlayer } from '../libraryStore';
 import { syncQueue } from '../syncQueue';
 import { supabase } from '../../lib/supabase';
+import * as errorReporting from '../../lib/errorReporting';
 
 jest.mock('../../lib/supabase', () => ({
   supabase: { rpc: jest.fn(() => Promise.resolve({ error: null })) },
@@ -34,11 +35,13 @@ jest.mock('../tournamentStore', () => ({
   _setSyncStatus: jest.fn(),
   _setLastSyncAt: jest.fn(() => Promise.resolve()),
   recordSyncFailure: jest.fn(() => Promise.resolve()),
+  _purgeLocalTournament: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock('../syncQueue', () => ({
   syncQueue: {
     drop: jest.fn(() => Promise.resolve()),
+    dropForTournament: jest.fn(() => Promise.resolve()),
     all: jest.fn(() => Promise.resolve([])),
     incrementAttempts: jest.fn(() => Promise.resolve(1)),
   },
@@ -90,6 +93,28 @@ describe('drainTournament', () => {
     expect(readLocal).toHaveBeenCalledTimes(2);
     expect(executeMutation).toHaveBeenNthCalledWith(1, e1, localBlob);
     expect(executeMutation).toHaveBeenNthCalledWith(2, e2, blobAfterE1);
+  });
+
+  test('a purged tournament (readLocal null) drops every queued entry instead of retrying forever', async () => {
+    // Fix A: a server tombstone purges the local blob (_purgeLocalTournament)
+    // but its queue entries used to survive — readLocal returning null made
+    // executeMutation throw a codeless TypeError, which isTransportError
+    // treats as retryable, wedging the entry (and the sync dot) forever.
+    readLocal.mockResolvedValue(null);
+    const captureSpy = jest.spyOn(errorReporting, 'captureMessage');
+    const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } };
+    const e2 = { id: 'e2', tournamentId: 't1', mutation: { type: 'shot.set' } };
+
+    await expect(drainTournament('t1', [e1, e2])).resolves.toBeUndefined();
+
+    expect(executeMutation).not.toHaveBeenCalled();
+    expect(syncQueue.drop).not.toHaveBeenCalled();
+    expect(syncQueue.dropForTournament).toHaveBeenCalledWith('t1');
+    expect(fetchTournament).not.toHaveBeenCalled(); // reconcile skipped too
+    // Logged via the reporting helper, not a bare console call.
+    expect(captureSpy).toHaveBeenCalled();
+
+    captureSpy.mockRestore();
   });
 
   test('a transient error (no error.code) keeps the entry queued and stops draining this tournament', async () => {
@@ -268,9 +293,46 @@ describe('drainTournament', () => {
     expect(fetchTournament).toHaveBeenCalledTimes(1);
     expect(fetchTournament).toHaveBeenCalledWith('t1');
     expect(applyPendingMutations).toHaveBeenCalledWith(fresh, [leftover]);
-    expect(saveLocal).toHaveBeenCalledWith(reconciled);
+    // makeActive: false — a background drain must never promote whatever
+    // tournament happened to have queued mutations to ACTIVE (Fix C).
+    expect(saveLocal).toHaveBeenCalledWith(reconciled, { makeActive: false });
     // Stable queue (same entries on the post-save re-check) → exactly one save.
     expect(saveLocal).toHaveBeenCalledTimes(1);
+  });
+
+  test('a tombstoned fresh result purges the tournament instead of saving it (Fix C)', async () => {
+    // Same tombstone rule every other read path applies (tournamentStore's
+    // _overlayAndSave): the reconcile fetch can land after some other device
+    // deleted this game, and the missing guard here used to save it right
+    // back into local cache anyway.
+    fetchTournament.mockResolvedValue({ id: 't1', deletedAt: '2026-09-01T00:00:00Z', rounds: [] });
+    const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } };
+
+    await drainTournament('t1', [e1]);
+
+    expect(_purgeLocalTournament).toHaveBeenCalledWith('t1');
+    expect(applyPendingMutations).not.toHaveBeenCalled();
+    expect(saveLocal).not.toHaveBeenCalled();
+  });
+
+  test('the rounds partial-write guard keeps local rounds when fresh comes back round-less (Fix C)', async () => {
+    // createTournament upserts the tournament row before its game_rounds
+    // rows (no transaction), so a reconcile fetch landing in that window
+    // returns a round-less snapshot. Wholesale-replacing rounds with it
+    // would erase a just-created game's rounds locally — same guard as
+    // _overlayAndSave (tournamentStore.js).
+    const localWithRounds = { id: 't1', rounds: [{ id: 'r1', scores: {} }] };
+    readLocal.mockResolvedValue(localWithRounds);
+    fetchTournament.mockResolvedValue({ id: 't1', rounds: [] });
+    applyPendingMutations.mockImplementation((t) => t);
+
+    const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } };
+    await drainTournament('t1', [e1]);
+
+    expect(applyPendingMutations).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 't1', rounds: localWithRounds.rounds }),
+      [],
+    );
   });
 
   test('a mutation enqueued between the reconcile snapshot and its saveLocal is overlaid by a follow-up save', async () => {
@@ -281,6 +343,10 @@ describe('drainTournament', () => {
     // erases the just-entered value. The drain must detect the queue change
     // after saving and re-save with the late entry overlaid.
     const fresh = { id: 't1', rounds: [] };
+    // Local also has no rounds here — otherwise the partial-write guard
+    // (Fix C) would carry local's rounds over onto `fresh`, which isn't
+    // what this test is about.
+    readLocal.mockResolvedValue({ id: 't1', rounds: [] });
     fetchTournament.mockResolvedValue(fresh);
     applyPendingMutations.mockImplementation((t, queued) => ({
       ...t, _applied: queued.map((e) => e.id),
@@ -369,7 +435,12 @@ describe('drainTournament', () => {
     executeMutation.mockResolvedValue({ conflict: null });
     syncQueue.all.mockResolvedValue([]);
     fetchTournament.mockResolvedValue({ id: 't1', rounds: [] });
-    readLocal.mockResolvedValue(null);
+    // First read (before entry e1) must be non-null or the purged-tournament
+    // guard (Fix A) would drop the entry and skip the reconcile entirely —
+    // this test is specifically about the RECONCILE's own local read (for
+    // meId) coming back null, e.g. a race where local was cleared between
+    // the entry landing and the reconcile's read.
+    readLocal.mockResolvedValueOnce({ id: 't1', rounds: [] }).mockResolvedValueOnce(null);
     await drainTournament('t1', [{ id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } }]);
     expect('meId' in saveLocal.mock.calls[0][0]).toBe(false);
   });

@@ -1,8 +1,13 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import { ShotDetailPanel } from '../ShotDetailPanel';
 import { ShotDetailSection } from '../ShotDetailSection';
 import { updateAppSettings, __resetAppSettingsForTests } from '../../../store/settingsStore';
+
+// ShotDetailExplainer reads its dismissed state from AsyncStorage in a
+// useEffect; flush that pending promise (inside act) after every render so
+// its follow-up setState doesn't land outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
 jest.mock('../../../store/profileStore', () => ({
   loadProfile: jest.fn(),
@@ -34,44 +39,51 @@ const par4 = { number: 1, par: 4, strokeIndex: 5 };
 const par3 = { number: 2, par: 3, strokeIndex: 9 };
 
 describe('ShotDetailPanel drive + approach lie inputs', () => {
-  test('drive distance row renders on par 4/5, not on par 3', () => {
+  test('drive distance row renders on par 4/5, not on par 3', async () => {
     const p4 = render(<ShotDetailPanel hole={par4} detail={{}} onChange={jest.fn()} strokes={null} />);
+    await flush();
     expect(p4.getByText('Drive distance')).toBeTruthy();
     const p3 = render(<ShotDetailPanel hole={par3} detail={{}} onChange={jest.fn()} strokes={null} />);
+    await flush();
     expect(p3.queryByText('Drive distance')).toBeNull();
   });
-  test('miss-lie chips appear only after a miss direction', () => {
+  test('miss-lie chips appear only after a miss direction', async () => {
     const fairway = render(
       <ShotDetailPanel hole={par4} detail={{ drive: 'fairway' }} onChange={jest.fn()} strokes={null} />,
     );
+    await flush();
     expect(fairway.queryByText('Drive finished in')).toBeNull();
     const miss = render(
       <ShotDetailPanel hole={par4} detail={{ drive: 'left' }} onChange={jest.fn()} strokes={null} />,
     );
+    await flush();
     expect(miss.getByText('Drive finished in')).toBeTruthy();
   });
-  test('selecting a drive lie patches driveLie; changing direction clears it', () => {
+  test('selecting a drive lie patches driveLie; changing direction clears it', async () => {
     const onChange = jest.fn();
     const miss = render(
       <ShotDetailPanel hole={par4} detail={{ drive: 'left' }} onChange={onChange} strokes={null} />,
     );
+    await flush();
     fireEvent.press(miss.getByLabelText('Drive lie Sand'));
     expect(onChange).toHaveBeenCalledWith({ driveLie: 'sand' });
     fireEvent.press(miss.getByLabelText('Driver Fairway'));
     expect(onChange).toHaveBeenCalledWith({ drive: 'fairway', driveLie: null });
   });
-  test('a missed drive can still be marked as finishing on a fairway', () => {
+  test('a missed drive can still be marked as finishing on a fairway', async () => {
     const onChange = jest.fn();
     const miss = render(
       <ShotDetailPanel hole={par4} detail={{ drive: 'right' }} onChange={onChange} strokes={null} />,
     );
+    await flush();
     fireEvent.press(miss.getByLabelText('Drive lie Fairway'));
     expect(onChange).toHaveBeenCalledWith({ driveLie: 'fairway' });
   });
-  test('approach lie chips show once a bucket is picked; default reads fairway', () => {
+  test('approach lie chips show once a bucket is picked; default reads fairway', async () => {
     const noBucket = render(
       <ShotDetailPanel hole={par4} detail={{}} onChange={jest.fn()} strokes={null} />,
     );
+    await flush();
     expect(noBucket.queryByText('Approach lie')).toBeNull();
     const onChange = jest.fn();
     const withBucket = render(
@@ -82,12 +94,13 @@ describe('ShotDetailPanel drive + approach lie inputs', () => {
         strokes={null}
       />,
     );
+    await flush();
     expect(withBucket.getByText('Approach lie')).toBeTruthy();
     expect(withBucket.getByLabelText('Approach lie Fairway').props.accessibilityState.selected).toBe(true);
     fireEvent.press(withBucket.getByLabelText('Approach lie Rough'));
     expect(onChange).toHaveBeenCalledWith({ approachLie: 'rough' });
   });
-  test('par-4 approach lie defaults to the drive terrain; tapping stores explicitly', () => {
+  test('par-4 approach lie defaults to the drive terrain; tapping stores explicitly', async () => {
     const onChange = jest.fn();
     const missedDrive = render(
       <ShotDetailPanel
@@ -97,6 +110,7 @@ describe('ShotDetailPanel drive + approach lie inputs', () => {
         strokes={null}
       />,
     );
+    await flush();
     expect(missedDrive.getByLabelText('Approach lie Rough').props.accessibilityState.selected).toBe(true);
     fireEvent.press(missedDrive.getByLabelText('Approach lie Fairway'));
     expect(onChange).toHaveBeenCalledWith({ approachLie: 'fairway' });
@@ -109,9 +123,10 @@ describe('ShotDetailPanel drive + approach lie inputs', () => {
         strokes={null}
       />,
     );
+    await flush();
     expect(sandDrive.getByLabelText('Approach lie Sand').props.accessibilityState.selected).toBe(true);
   });
-  test('par-5 approach lie keeps the fairway default after a missed drive', () => {
+  test('par-5 approach lie keeps the fairway default after a missed drive', async () => {
     const par5 = { number: 3, par: 5, strokeIndex: 1 };
     const r = render(
       <ShotDetailPanel
@@ -121,15 +136,17 @@ describe('ShotDetailPanel drive + approach lie inputs', () => {
         strokes={null}
       />,
     );
+    await flush();
     expect(r.getByLabelText('Approach lie Fairway').props.accessibilityState.selected).toBe(true);
   });
-  test('approach lie hidden on par 3s', () => {
+  test('approach lie hidden on par 3s', async () => {
     const p3 = render(
       <ShotDetailPanel hole={par3} detail={{ approachBucket: '100-150' }} onChange={jest.fn()} strokes={null} />,
     );
+    await flush();
     expect(p3.queryByText('Approach lie')).toBeNull();
   });
-  test('clearing the approach bucket clears approachLie too', () => {
+  test('clearing the approach bucket clears approachLie too', async () => {
     const onChange = jest.fn();
     const r = render(
       <ShotDetailPanel
@@ -139,6 +156,7 @@ describe('ShotDetailPanel drive + approach lie inputs', () => {
         strokes={null}
       />,
     );
+    await flush();
     fireEvent.press(r.getByLabelText('Approach 100-150'));
     expect(onChange).toHaveBeenCalledWith({
       approachBucket: null, approachResult: null, approachMiss: null, approachBunker: false, approachLie: null,
@@ -150,27 +168,29 @@ describe('ShotDetailPanel approach finish grid', () => {
   const par4 = { number: 1, par: 4 };
   const withBucket = (extra = {}) => ({ approachBucket: '100-150', ...extra });
 
-  test('on-green tap records a green result and clears any miss', () => {
+  test('on-green tap records a green result and clears any miss', async () => {
     const onChange = jest.fn();
     const r = render(
       <ShotDetailPanel hole={par4} detail={withBucket()} onChange={onChange} strokes={null} />,
     );
+    await flush();
     fireEvent.press(r.getByLabelText('Approach finish On green'));
     expect(onChange).toHaveBeenCalledWith({
       approachResult: 'green', approachMiss: null, approachBunker: false,
     });
   });
 
-  test('a direction records a miss with that direction', () => {
+  test('a direction records a miss with that direction', async () => {
     const onChange = jest.fn();
     const r = render(
       <ShotDetailPanel hole={par4} detail={withBucket()} onChange={onChange} strokes={null} />,
     );
+    await flush();
     fireEvent.press(r.getByLabelText('Approach finish Left'));
     expect(onChange).toHaveBeenCalledWith({ approachMiss: 'left', approachResult: 'miss' });
   });
 
-  test('bunker combines with an existing direction, staying a miss', () => {
+  test('bunker combines with an existing direction, staying a miss', async () => {
     const onChange = jest.fn();
     const r = render(
       <ShotDetailPanel
@@ -180,11 +200,12 @@ describe('ShotDetailPanel approach finish grid', () => {
         strokes={null}
       />,
     );
+    await flush();
     fireEvent.press(r.getByLabelText('Approach finish Bunker'));
     expect(onChange).toHaveBeenCalledWith({ approachBunker: true, approachResult: 'miss' });
   });
 
-  test('picking a direction while on green flips the result to a miss', () => {
+  test('picking a direction while on green flips the result to a miss', async () => {
     const onChange = jest.fn();
     const r = render(
       <ShotDetailPanel
@@ -194,14 +215,16 @@ describe('ShotDetailPanel approach finish grid', () => {
         strokes={null}
       />,
     );
+    await flush();
     fireEvent.press(r.getByLabelText('Approach finish Right'));
     expect(onChange).toHaveBeenCalledWith({ approachMiss: 'right', approachResult: 'miss' });
   });
 
-  test('finish grid hidden on par 3s', () => {
+  test('finish grid hidden on par 3s', async () => {
     const r = render(
       <ShotDetailPanel hole={{ number: 2, par: 3 }} detail={withBucket()} onChange={jest.fn()} strokes={null} />,
     );
+    await flush();
     expect(r.queryByText('Where did it finish?')).toBeNull();
   });
 });
@@ -209,31 +232,35 @@ describe('ShotDetailPanel approach finish grid', () => {
 describe('stat group toggles', () => {
   const hole = { number: 1, par: 4 };
 
-  it('hides putting rows when putting is off', () => {
+  it('hides putting rows when putting is off', async () => {
     const r = render(<ShotDetailPanel hole={hole} detail={{ putts: 2 }} onChange={jest.fn()} strokes={5}
       statGroups={{ putting: false }} />);
+    await flush();
     expect(r.queryByText('Putts')).toBeNull();
     expect(r.queryByText('First putt')).toBeNull();
     expect(r.getByText('Tee penalties')).toBeTruthy(); // others untouched
   });
 
-  it('hides tee-shot rows when teeShot is off', () => {
+  it('hides tee-shot rows when teeShot is off', async () => {
     const r = render(<ShotDetailPanel hole={hole} detail={{}} onChange={jest.fn()} strokes={5}
       statGroups={{ teeShot: false }} />);
+    await flush();
     expect(r.queryByText('Tee club')).toBeNull();
     expect(r.queryByText('Drive distance')).toBeNull();
   });
 
-  it('hides approach rows when approach is off', () => {
+  it('hides approach rows when approach is off', async () => {
     const r = render(<ShotDetailPanel hole={hole} detail={{ approachBucket: '50-100' }} onChange={jest.fn()} strokes={5}
       statGroups={{ approach: false }} />);
+    await flush();
     expect(r.queryByText('Approach')).toBeNull();
     expect(r.queryByText('Where did it finish?')).toBeNull();
   });
 
-  it('hides short-game and penalties rows per group', () => {
+  it('hides short-game and penalties rows per group', async () => {
     const r = render(<ShotDetailPanel hole={hole} detail={{}} onChange={jest.fn()} strokes={5}
       statGroups={{ shortGame: false, penalties: false }} />);
+    await flush();
     expect(r.queryByText('Sand shots')).toBeNull();
     expect(r.queryByText('Tee penalties')).toBeNull();
     expect(r.queryByText('Other penalties')).toBeNull();
@@ -248,6 +275,7 @@ describe('yards mode', () => {
   test('drive distance hint and bucket labels switch to yards', async () => {
     await updateAppSettings({ units: 'yards' });
     const r = render(<ShotDetailPanel hole={par4} detail={{}} onChange={jest.fn()} strokes={null} />);
+    await flush();
     expect(r.getAllByText('yards').length).toBeGreaterThan(0);
     expect(r.getByText('165-195')).toBeTruthy();
     expect(r.queryByText('150-180')).toBeNull();

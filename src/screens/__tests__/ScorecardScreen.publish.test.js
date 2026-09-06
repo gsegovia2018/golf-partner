@@ -3,7 +3,13 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import ScorecardScreen from '../ScorecardScreen';
-import { reconnect } from '../../engine/store/replicator';
+import { getLastError, reconnect } from '../../engine/store/replicator';
+
+// publishHole resolves async, and its rejection opens the ConflictWizardSheet
+// (which itself mounts a BottomSheet and resets several bits of state in a
+// useEffect keyed on `visible`); flush those chained promises (inside act)
+// so the follow-up setState calls don't land outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
 // The screen uses useFocusEffect for its cross-device live pull; run the effect
 // on mount (and its cleanup on unmount) without needing a NavigationContainer.
@@ -106,6 +112,13 @@ jest.mock('../../components/scorecard/HoleView', () => {
           onPress={() => onSetScore('p1', 1, '4')}
         >
           <Text>Score plus</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Score plus p2"
+          onPress={() => onSetScore('p2', 1, '4')}
+        >
+          <Text>Score plus p2</Text>
         </TouchableOpacity>
         <TouchableOpacity
           accessibilityRole="button"
@@ -247,20 +260,52 @@ const DISAGREEING_CARDS = {
   },
 };
 
+// Hole 1: my card marks p1 as 4 — a resolve that lost the server race — but
+// a valid resolution (basis anchored to both cards' current versions) names
+// 5 as the agreed value. Re-opening the hole must seed 5, the value the cell
+// actually SHOWS, never the raw losing entry (audit fix).
+const RESOLVED_AGAINST_ME_CARDS = {
+  ...EMPTY_CARDS,
+  cardsByAuthor: {
+    'dev-me': {
+      scorer: { playerId: 'p1', userId: null },
+      holes: { 1: { v: 1, ts: 1000, entries: { p1: 4 } } },
+    },
+    'dev-peer': {
+      scorer: { playerId: 'p2', userId: null },
+      holes: { 1: { v: 1, ts: 2000, entries: { p1: 5 } } },
+    },
+  },
+  resolutions: {
+    p1: {
+      1: {
+        playerId: 'p1', hole: '1', value: 5, by: 'dev-peer', ts: 3000,
+        basis: { 'dev-me': 1, 'dev-peer': 1 },
+      },
+    },
+  },
+};
+
 describe('ScorecardScreen publication on leaving the hole', () => {
   const originalWindow = global.window;
   const originalPlatformOS = Platform.OS;
+  let beforeRemoveListener;
   const navigation = {
     canGoBack: jest.fn(() => true),
     goBack: jest.fn(),
     navigate: jest.fn(),
     dispatch: jest.fn(),
+    addListener: jest.fn((event, cb) => {
+      if (event === 'beforeRemove') beforeRemoveListener = cb;
+      return jest.fn();
+    }),
   };
   const route = { params: { roundIndex: 0 } };
   const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    beforeRemoveListener = null;
     mockCardState = EMPTY_CARDS;
     mockOfficialRoundState = {
       loading: false,
@@ -300,6 +345,17 @@ describe('ScorecardScreen publication on leaving the hole', () => {
       expect(mockCardActions.setDraftEntry).toHaveBeenCalledWith(1, 'p1', 4);
     });
     expect(mockCardActions.publishHole).not.toHaveBeenCalled();
+  });
+
+  test("the sync sheet's lastError is scoped to this game's tid, not global", async () => {
+    render(wrap(
+      <ScorecardScreen navigation={navigation} route={route} />
+    ));
+
+    await waitFor(() => expect(getLastError).toHaveBeenCalled());
+    // A stuck OTHER game's error must never surface on this scorecard —
+    // getLastError(tid) scopes the lookup to this tournament.
+    expect(getLastError).toHaveBeenCalledWith('t1');
   });
 
   test('tapping Next publishes the hole being left, then advances (R7)', async () => {
@@ -358,6 +414,24 @@ describe('ScorecardScreen publication on leaving the hole', () => {
     expect(getByLabelText('Current hole').props.children).toBe('1');
   });
 
+  test('seeding a hole uses the agreed value, not a raw card entry that lost a resolution', async () => {
+    mockCardState = RESOLVED_AGAINST_ME_CARDS;
+    const { findByLabelText } = render(wrap(
+      <ScorecardScreen navigation={navigation} route={route} />
+    ));
+
+    // Tap p2's cell — untouched by this tap, p1's own draft entry is written
+    // only by the seed, so its value is unambiguous: the resolution's 5, not
+    // my card's raw (losing) 4.
+    fireEvent.press(await findByLabelText('Score plus p2'));
+
+    await waitFor(() => {
+      expect(mockCardActions.setDraftEntry).toHaveBeenCalledWith(1, 'p1', 5);
+    });
+    expect(mockCardActions.setDraftEntry).not.toHaveBeenCalledWith(1, 'p1', 4);
+    expect(mockCardActions.setDraftEntry).toHaveBeenCalledWith(1, 'p2', 4);
+  });
+
   test('Finish publishes the hole in hand and reconnects once (R9)', async () => {
     const { findByLabelText } = render(wrap(
       <ScorecardScreen navigation={navigation} route={route} />
@@ -380,6 +454,7 @@ describe('ScorecardScreen publication on leaving the hole', () => {
     fireEvent.press(await findByLabelText('Finish round'));
 
     await waitFor(() => expect(getByText(/^Hole 1 ·/)).toBeTruthy());
+    await flush();
     expect(navigation.dispatch).not.toHaveBeenCalled();
   });
 
@@ -394,5 +469,67 @@ describe('ScorecardScreen publication on leaving the hole', () => {
     act(() => { unmount(); });
 
     expect(mockCardActions.publishHole).not.toHaveBeenCalled();
+  });
+
+  test('hardware back / swipe-back publishes the hole in hand before leaving', async () => {
+    const { findByLabelText } = render(wrap(
+      <ScorecardScreen navigation={navigation} route={route} />
+    ));
+
+    fireEvent.press(await findByLabelText('Score plus'));
+    await waitFor(() => expect(mockCardActions.setDraftEntry).toHaveBeenCalled());
+
+    expect(navigation.addListener).toHaveBeenCalledWith('beforeRemove', expect.any(Function));
+    expect(beforeRemoveListener).toBeInstanceOf(Function);
+
+    const preventDefault = jest.fn();
+    const action = { type: 'GO_BACK' };
+    await act(async () => {
+      beforeRemoveListener({ preventDefault, data: { action } });
+      // Let the queued publish (and the finally that re-dispatches) settle.
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(preventDefault).toHaveBeenCalled();
+    expect(mockCardActions.publishHole).toHaveBeenCalledWith(1);
+    expect(navigation.dispatch).toHaveBeenCalledWith(action);
+  });
+
+  test('a re-dispatched removal after back-publish is not intercepted again', async () => {
+    const { findByLabelText } = render(wrap(
+      <ScorecardScreen navigation={navigation} route={route} />
+    ));
+    await findByLabelText('Score plus');
+
+    const action = { type: 'GO_BACK' };
+    const firstPreventDefault = jest.fn();
+    await act(async () => {
+      beforeRemoveListener({ preventDefault: firstPreventDefault, data: { action } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(navigation.dispatch).toHaveBeenCalledWith(action);
+
+    // navigation.dispatch(action) above stands in for react-navigation
+    // replaying the same removal — the listener must let it through.
+    const secondPreventDefault = jest.fn();
+    beforeRemoveListener({ preventDefault: secondPreventDefault, data: { action } });
+    expect(secondPreventDefault).not.toHaveBeenCalled();
+  });
+
+  test('Finish is not double-intercepted by the back listener', async () => {
+    const { findByLabelText } = render(wrap(
+      <ScorecardScreen navigation={navigation} route={route} />
+    ));
+
+    fireEvent.press(await findByLabelText('Finish round'));
+
+    await waitFor(() => {
+      expect(mockCardActions.publishHole).toHaveBeenCalledWith(1);
+    });
+    // A single publish for the finish flow — the beforeRemove listener must
+    // not have fired a second, competing publish/dispatch.
+    expect(mockCardActions.publishHole).toHaveBeenCalledTimes(1);
   });
 });

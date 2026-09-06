@@ -1,13 +1,19 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import { ShotDetailPanel } from '../../components/scorecard/ShotDetailPanel';
+
+// ThemeProvider reads its persisted preference from AsyncStorage in a
+// useEffect, and ShotDetailPanel's ShotDetailExplainer rows do the same for
+// their dismissed state; flush those pending promises (inside act) after
+// every render so their follow-up setState doesn't land outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
 describe('ShotDetailPanel — outcome chips', () => {
   const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
   const par4 = { number: 1, par: 4, strokeIndex: 1 };
 
-  test('GIR hit → outcome chips hidden', () => {
+  test('GIR hit → outcome chips hidden', async () => {
     const { queryByText } = render(wrap(
       <ShotDetailPanel
         hole={par4}
@@ -16,11 +22,12 @@ describe('ShotDetailPanel — outcome chips', () => {
         onChange={() => {}}
       />
     ));
+    await flush();
     expect(queryByText('Up & Down')).toBeNull();
     expect(queryByText('Sand Save')).toBeNull();
   });
 
-  test('Missed GIR + 1-putt par save + no sand → Up & Down auto-selected', () => {
+  test('Missed GIR + 1-putt par save + no sand → Up & Down auto-selected', async () => {
     const { getByText } = render(wrap(
       <ShotDetailPanel
         hole={par4}
@@ -29,11 +36,12 @@ describe('ShotDetailPanel — outcome chips', () => {
         onChange={() => {}}
       />
     ));
+    await flush();
     const chip = getByText('Up & Down').parent;
     expect(chip.props.accessibilityState?.selected).toBe(true);
   });
 
-  test('1-putt bogey → no chip auto-selected (save requires par or better)', () => {
+  test('1-putt bogey → no chip auto-selected (save requires par or better)', async () => {
     const { getByText } = render(wrap(
       <ShotDetailPanel
         hole={par4}
@@ -42,11 +50,12 @@ describe('ShotDetailPanel — outcome chips', () => {
         onChange={() => {}}
       />
     ));
+    await flush();
     const chip = getByText('Up & Down').parent;
     expect(chip.props.accessibilityState?.selected).toBe(false);
   });
 
-  test('Tapping an auto-selected chip writes recoveryOutcome="none"', () => {
+  test('Tapping an auto-selected chip writes recoveryOutcome="none"', async () => {
     const onChange = jest.fn();
     const { getByText } = render(wrap(
       <ShotDetailPanel
@@ -56,6 +65,7 @@ describe('ShotDetailPanel — outcome chips', () => {
         onChange={onChange}
       />
     ));
+    await flush();
     fireEvent.press(getByText('Sand Save'));
     expect(onChange).toHaveBeenCalledWith({ recoveryOutcome: 'none' });
   });
@@ -67,7 +77,7 @@ describe('ShotDetailPanel — approach capture', () => {
   const par4 = { number: 1, par: 4, strokeIndex: 1 };
   const par5 = { number: 1, par: 5, strokeIndex: 1 };
 
-  test('does not ask for tee residual distance', () => {
+  test('does not ask for tee residual distance', async () => {
     const { queryByText, queryByLabelText } = render(wrap(
       <ShotDetailPanel
         hole={par5}
@@ -76,12 +86,13 @@ describe('ShotDetailPanel — approach capture', () => {
         onChange={() => {}}
       />
     ));
+    await flush();
 
     expect(queryByText('After tee')).toBeNull();
     expect(queryByLabelText('After tee 200+')).toBeNull();
   });
 
-  test('labels approach distance as Approach and only shows the metres hint', () => {
+  test('labels approach distance as Approach and only shows the metres hint', async () => {
     const { getByLabelText, getByText, getAllByText, queryByText, unmount } = render(wrap(
       <ShotDetailPanel
         hole={par4}
@@ -90,6 +101,7 @@ describe('ShotDetailPanel — approach capture', () => {
         onChange={() => {}}
       />
     ));
+    await flush();
     expect(queryByText('How many were:')).toBeNull();
     expect(getByText('Approach')).toBeTruthy();
     expect(queryByText('Approach shot distance')).toBeNull();
@@ -109,13 +121,14 @@ describe('ShotDetailPanel — approach capture', () => {
         onChange={() => {}}
       />
     ));
+    await flush();
     expect(par5Render.getByText('Approach')).toBeTruthy();
     expect(par5Render.queryByText('Approach shot distance')).toBeNull();
     expect(par5Render.getAllByText('metres').length).toBeGreaterThan(0);
     expect(par5Render.queryByText('3rd shot · metres')).toBeNull();
   });
 
-  test('approach info explains to log the shot aimed at the green', () => {
+  test('approach info explains to log the shot aimed at the green', async () => {
     const { getByLabelText, getByText } = render(wrap(
       <ShotDetailPanel
         hole={par4}
@@ -124,6 +137,7 @@ describe('ShotDetailPanel — approach capture', () => {
         onChange={() => {}}
       />
     ));
+    await flush();
 
     fireEvent.press(getByLabelText('Open Approach info'));
 
@@ -131,7 +145,7 @@ describe('ShotDetailPanel — approach capture', () => {
     expect(getByText(/after a punch-out, lay-up, or penalty/i)).toBeTruthy();
   });
 
-  test('labels par-3 approach bucket as hole distance and stores it in approachBucket', () => {
+  test('labels par-3 approach bucket as hole distance and stores it in approachBucket', async () => {
     const onChange = jest.fn();
     const { getByText, queryByText, getByLabelText } = render(wrap(
       <ShotDetailPanel
@@ -141,6 +155,7 @@ describe('ShotDetailPanel — approach capture', () => {
         onChange={onChange}
       />
     ));
+    await flush();
 
     expect(getByText('Hole distance')).toBeTruthy();
     expect(queryByText('Approach shot distance')).toBeNull();
@@ -149,7 +164,7 @@ describe('ShotDetailPanel — approach capture', () => {
     expect(onChange).toHaveBeenCalledWith({ approachBucket: '100-150' });
   });
 
-  test('captures where the logged approach finished via the icon grid', () => {
+  test('captures where the logged approach finished via the icon grid', async () => {
     const onChange = jest.fn();
     const { getByLabelText } = render(wrap(
       <ShotDetailPanel
@@ -159,6 +174,7 @@ describe('ShotDetailPanel — approach capture', () => {
         onChange={onChange}
       />
     ));
+    await flush();
 
     fireEvent.press(getByLabelText('Approach finish On green'));
     expect(onChange).toHaveBeenCalledWith({ approachResult: 'green', approachMiss: null, approachBunker: false });
@@ -167,7 +183,7 @@ describe('ShotDetailPanel — approach capture', () => {
     expect(onChange).toHaveBeenCalledWith({ approachMiss: 'right', approachResult: 'miss' });
   });
 
-  test('clearing approach distance also clears approach result', () => {
+  test('clearing approach distance also clears approach result', async () => {
     const onChange = jest.fn();
     const { getByLabelText } = render(wrap(
       <ShotDetailPanel
@@ -177,6 +193,7 @@ describe('ShotDetailPanel — approach capture', () => {
         onChange={onChange}
       />
     ));
+    await flush();
 
     fireEvent.press(getByLabelText('Approach 100-150'));
     expect(onChange).toHaveBeenCalledWith({
@@ -189,7 +206,7 @@ describe('ShotDetailPanel — stroke budget', () => {
   const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
   const par4 = { number: 1, par: 4, strokeIndex: 1 };
 
-  test('under budget → "+" works and caption shows strokes left', () => {
+  test('under budget → "+" works and caption shows strokes left', async () => {
     const onChange = jest.fn();
     const { getByLabelText, getByText } = render(wrap(
       <ShotDetailPanel
@@ -199,12 +216,13 @@ describe('ShotDetailPanel — stroke budget', () => {
         onChange={onChange}
       />
     ));
+    await flush();
     expect(getByText('2 strokes left to assign')).toBeTruthy();
     fireEvent.press(getByLabelText('Increase Putts'));
     expect(onChange).toHaveBeenCalledWith({ putts: 3 });
   });
 
-  test('at budget → "+" blocked and caption shows all assigned', () => {
+  test('at budget → "+" blocked and caption shows all assigned', async () => {
     const onChange = jest.fn();
     const { getByLabelText, getByText } = render(wrap(
       <ShotDetailPanel
@@ -214,12 +232,13 @@ describe('ShotDetailPanel — stroke budget', () => {
         onChange={onChange}
       />
     ));
+    await flush();
     expect(getByText('All 4 strokes assigned')).toBeTruthy();
     fireEvent.press(getByLabelText('Increase Putts'));
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  test('strokes not entered → no caption and "+" works', () => {
+  test('strokes not entered → no caption and "+" works', async () => {
     const onChange = jest.fn();
     const { queryByText, getByLabelText } = render(wrap(
       <ShotDetailPanel
@@ -229,13 +248,14 @@ describe('ShotDetailPanel — stroke budget', () => {
         onChange={onChange}
       />
     ));
+    await flush();
     expect(queryByText(/to assign/)).toBeNull();
     expect(queryByText(/assigned/)).toBeNull();
     fireEvent.press(getByLabelText('Increase Putts'));
     expect(onChange).toHaveBeenCalledWith({ putts: 3 });
   });
 
-  test('singular caption — exactly 1 stroke left', () => {
+  test('singular caption — exactly 1 stroke left', async () => {
     const { getByText } = render(wrap(
       <ShotDetailPanel
         hole={par4}
@@ -244,10 +264,11 @@ describe('ShotDetailPanel — stroke budget', () => {
         onChange={() => {}}
       />
     ));
+    await flush();
     expect(getByText('1 stroke left to assign')).toBeTruthy();
   });
 
-  test('singular caption — all 1 stroke assigned', () => {
+  test('singular caption — all 1 stroke assigned', async () => {
     const { getByText } = render(wrap(
       <ShotDetailPanel
         hole={par4}
@@ -256,6 +277,7 @@ describe('ShotDetailPanel — stroke budget', () => {
         onChange={() => {}}
       />
     ));
+    await flush();
     expect(getByText('All 1 stroke assigned')).toBeTruthy();
   });
 });

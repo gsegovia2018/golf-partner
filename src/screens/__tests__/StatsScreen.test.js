@@ -1,7 +1,12 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import { ScrollView, StyleSheet, Switch } from 'react-native';
 import StatsScreen from '../StatsScreen';
+
+// loadTournament() resolves in a microtask after the initial render, and its
+// .then() sets several bits of state — flush it (inside act) before
+// returning so that update doesn't land outside any test's act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
 jest.mock('@expo/vector-icons', () => ({
   Feather: 'Feather',
@@ -173,19 +178,21 @@ jest.mock('../../store/statsEngine', () => ({
   scramblingStats: jest.fn(() => []),
 }));
 
-function renderStats(rounds, { players = [player], scoringMode = 'stableford' } = {}) {
+async function renderStats(rounds, { players = [player], scoringMode = 'stableford' } = {}) {
   mockActiveTournament = {
     id: 't1',
     players,
     settings: { scoringMode },
     rounds,
   };
-  return render(<StatsScreen navigation={{ goBack: jest.fn() }} />);
+  const utils = render(<StatsScreen navigation={{ goBack: jest.fn() }} />);
+  await flush();
+  return utils;
 }
 
 describe('StatsScreen chrome', () => {
-  test('keeps horizontal tab and round scope scrollers compact', () => {
-    const { UNSAFE_getAllByType } = renderStats([makeRound('r1'), makeRound('r2', 5)]);
+  test('keeps horizontal tab and round scope scrollers compact', async () => {
+    const { UNSAFE_getAllByType } = await renderStats([makeRound('r1'), makeRound('r2', 5)]);
 
     const horizontalScrollViews = UNSAFE_getAllByType(ScrollView)
       .filter((node) => node.props.horizontal);
@@ -202,8 +209,8 @@ describe('StatsScreen chrome', () => {
     ]);
   });
 
-  test('hides Total and R1 round scope chips when there is only one round', () => {
-    const { queryByText } = renderStats([makeRound('r1')]);
+  test('hides Total and R1 round scope chips when there is only one round', async () => {
+    const { queryByText } = await renderStats([makeRound('r1')]);
 
     expect(queryByText('Total')).toBeNull();
     expect(queryByText('R1')).toBeNull();
@@ -211,8 +218,8 @@ describe('StatsScreen chrome', () => {
 });
 
 describe('StatsScreen Players tab — Difficulty Split', () => {
-  test('renders the DIFFICULTY SPLIT card with per-band averages and opens the hole breakdown on tap', () => {
-    const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')]);
+  test('renders the DIFFICULTY SPLIT card with per-band averages and opens the hole breakdown on tap', async () => {
+    const { getByText, getAllByText, UNSAFE_getByType } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('Players'));
 
     // Labels are shape-agnostic ("Hardest/Middle/Easiest third") rather than
@@ -234,7 +241,7 @@ describe('StatsScreen Players tab — Difficulty Split', () => {
     expect(sheet.props.rows).toHaveLength(6);
   });
 
-  test('labels a 9-hole round\'s bands as thirds too, not the 18-hole SI ranges', () => {
+  test('labels a 9-hole round\'s bands as thirds too, not the 18-hole SI ranges', async () => {
     const nineHoles = Array.from({ length: 9 }, (_, index) => ({
       number: index + 1,
       par: 4,
@@ -248,7 +255,7 @@ describe('StatsScreen Players tab — Difficulty Split', () => {
         p1: Object.fromEntries(nineHoles.map((hole) => [hole.number, 4])),
       },
     };
-    const { getByText, getAllByText, queryByText } = renderStats([nineHoleRound]);
+    const { getByText, getAllByText, queryByText } = await renderStats([nineHoleRound]);
     fireEvent.press(getByText('Players'));
 
     // hard=SI 1-3, mid=SI 4-6, easy=SI 7-9 for a 9-hole round — the old
@@ -278,12 +285,12 @@ describe('StatsScreen Players tab — Task 20 honesty items', () => {
     ]);
   });
 
-  test('player chips disambiguate duplicate first names by falling back to the full name', () => {
+  test('player chips disambiguate duplicate first names by falling back to the full name', async () => {
     const duplicateFirstNamePlayers = [
       { id: 'p1', name: 'Bob Diaz', user_id: 'u1', handicap: 0 },
       { id: 'p2', name: 'Bob Smith', user_id: null, handicap: 0 },
     ];
-    const { getByText, queryByText } = renderStats([makeRound('r1')], { players: duplicateFirstNamePlayers });
+    const { getByText, queryByText } = await renderStats([makeRound('r1')], { players: duplicateFirstNamePlayers });
     fireEvent.press(getByText('Players'));
 
     expect(getByText('Bob Diaz')).toBeTruthy();
@@ -293,8 +300,8 @@ describe('StatsScreen Players tab — Task 20 honesty items', () => {
     expect(queryByText('Bob')).toBeNull();
   });
 
-  test('a roster with no duplicate first names keeps the short chip labels', () => {
-    const { getByText, queryByText } = renderStats([makeRound('r1')], {
+  test('a roster with no duplicate first names keeps the short chip labels', async () => {
+    const { getByText, queryByText } = await renderStats([makeRound('r1')], {
       players: [player, { id: 'p2', name: 'Bob Diaz', user_id: null, handicap: 0 }],
     });
     fireEvent.press(getByText('Players'));
@@ -304,14 +311,14 @@ describe('StatsScreen Players tab — Task 20 honesty items', () => {
     expect(queryByText('Bob Diaz')).toBeNull();
   });
 
-  test("Round History row shows the round's scoring-mode badge, holes played, and avg per hole", () => {
+  test("Round History row shows the round's scoring-mode badge, holes played, and avg per hole", async () => {
     jest.clearAllMocks();
     const statsEngine = require('../../store/statsEngine');
     statsEngine.playerRoundHistory.mockReturnValue([
       { roundIndex: 0, courseName: 'La Moraleja', points: 30, strokes: 76, holesPlayed: 15, avgPerHole: 2 },
     ]);
     const round = { ...makeRound('r1'), scoringMode: 'matchplay' };
-    const { getByText } = renderStats([round]);
+    const { getByText } = await renderStats([round]);
     fireEvent.press(getByText('Players'));
 
     expect(getByText('ROUND HISTORY')).toBeTruthy();
@@ -319,21 +326,21 @@ describe('StatsScreen Players tab — Task 20 honesty items', () => {
     expect(getByText('15 holes · 2 pts/hole')).toBeTruthy();
   });
 
-  test('Average per Round card shows an "n rounds · m holes" subtitle', () => {
+  test('Average per Round card shows an "n rounds · m holes" subtitle', async () => {
     jest.clearAllMocks();
     const statsEngine = require('../../store/statsEngine');
     statsEngine.playerRoundHistory.mockReturnValue([
       { roundIndex: 0, courseName: 'La Moraleja', points: 36, strokes: 72, holesPlayed: 18, avgPerHole: 2 },
       { roundIndex: 1, courseName: 'Sotogrande', points: 34, strokes: 74, holesPlayed: 18, avgPerHole: 1.89 },
     ]);
-    const { getByText } = renderStats([makeRound('r1'), makeRound('r2', 5)]);
+    const { getByText } = await renderStats([makeRound('r1'), makeRound('r2', 5)]);
     fireEvent.press(getByText('Players'));
 
     expect(getByText('2 rounds · 36 holes')).toBeTruthy();
   });
 
-  test('renders the sticky section index with a chip for each rendered section', () => {
-    const { getByText } = renderStats([makeRound('r1')]);
+  test('renders the sticky section index with a chip for each rendered section', async () => {
+    const { getByText } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('Players'));
 
     expect(getByText('Distribution')).toBeTruthy();
@@ -341,10 +348,10 @@ describe('StatsScreen Players tab — Task 20 honesty items', () => {
     expect(getByText('History')).toBeTruthy();
   });
 
-  test('round-scope chips are enabled on the Players tab and pass roundIndex through to distribution + streaks', () => {
+  test('round-scope chips are enabled on the Players tab and pass roundIndex through to distribution + streaks', async () => {
     jest.clearAllMocks();
     const statsEngine = require('../../store/statsEngine');
-    const { getByText, getAllByText } = renderStats([makeRound('r1'), makeRound('r2', 5)]);
+    const { getByText, getAllByText } = await renderStats([makeRound('r1'), makeRound('r2', 5)]);
     fireEvent.press(getByText('Players'));
 
     // Chip set is now visible on this tab (was hidden before Task 20).
@@ -372,19 +379,19 @@ const fourPlayers = [
 
 describe('StatsScreen head-to-head gating', () => {
 
-  test('shows the Head-to-Head section for a multi-player non-team mode', () => {
-    const { queryByText } = renderStats([makeRound('r1')], {
+  test('shows the Head-to-Head section for a multi-player non-team mode', async () => {
+    const { queryByText } = await renderStats([makeRound('r1')], {
       players: fourPlayers, scoringMode: 'individual',
     });
 
     expect(queryByText('HEAD-TO-HEAD')).toBeTruthy();
   });
 
-  test('hides the Head-to-Head section for scramble modes', () => {
+  test('hides the Head-to-Head section for scramble modes', async () => {
     // Scramble scores exist only under the team captain — there are no
     // per-player scores for headToHead() to compare — so the section must
     // stay hidden even though scramble's usesTeams pair-stats flag is false.
-    const { queryByText } = renderStats([makeRound('r1')], {
+    const { queryByText } = await renderStats([makeRound('r1')], {
       players: fourPlayers, scoringMode: 'scramblepairs',
     });
 
@@ -400,10 +407,10 @@ describe('StatsScreen scramble gating', () => {
   // placeholder for scramble tournaments.
   test.each(['scramblepairs', 'scramble3v1', 'scramble4'])(
     'renders the placeholder instead of stats content for %s',
-    (scoringMode) => {
+    async (scoringMode) => {
       jest.clearAllMocks();
       const statsEngine = require('../../store/statsEngine');
-      const { queryByText } = renderStats([makeRound('r1')], {
+      const { queryByText } = await renderStats([makeRound('r1')], {
         players: fourPlayers, scoringMode,
       });
 
@@ -422,8 +429,8 @@ describe('StatsScreen scramble gating', () => {
     },
   );
 
-  test('keeps the normal tabs for non-scramble modes', () => {
-    const { queryByText } = renderStats([makeRound('r1')], {
+  test('keeps the normal tabs for non-scramble modes', async () => {
+    const { queryByText } = await renderStats([makeRound('r1')], {
       players: fourPlayers, scoringMode: 'individual',
     });
 
@@ -438,29 +445,29 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
   // tournament default (roundScoringMode) — a tournament is "mixed" when
   // its rounds don't all resolve to the same effective mode.
 
-  test('a mixed tournament (one normal round, one scramble round) is not the whole-screen placeholder', () => {
+  test('a mixed tournament (one normal round, one scramble round) is not the whole-screen placeholder', async () => {
     const rounds = [
       makeRound('r1'),
       { ...makeRound('r2', 5), scoringMode: 'scramblepairs' },
     ];
-    const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+    const { queryByText } = await renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
 
     expect(queryByText('Team scramble tournament')).toBeNull();
     expect(queryByText('Overview')).toBeTruthy();
   });
 
-  test('every round overridden to scramble still shows the placeholder even though the tournament default is not scramble', () => {
+  test('every round overridden to scramble still shows the placeholder even though the tournament default is not scramble', async () => {
     const rounds = [
       { ...makeRound('r1'), scoringMode: 'scramble4' },
       { ...makeRound('r2', 5), scoringMode: 'scramble4' },
     ];
-    const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+    const { queryByText } = await renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
 
     expect(queryByText('Team scramble tournament')).toBeTruthy();
     expect(queryByText('Overview')).toBeNull();
   });
 
-  test('Head-to-Head still shows for a mixed tournament with no team rounds (scramble + solo only)', () => {
+  test('Head-to-Head still shows for a mixed tournament with no team rounds (scramble + solo only)', async () => {
     // allScramble is false (round 1 is solo) and anyTeams is false (neither
     // round is a real team mode) — H2H is meaningful for the solo round;
     // the scramble round is blanked out of its input (next test).
@@ -468,12 +475,12 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
       makeRound('r1'),
       { ...makeRound('r2', 5), scoringMode: 'scramblepairs' },
     ];
-    const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+    const { queryByText } = await renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
 
     expect(queryByText('HEAD-TO-HEAD')).toBeTruthy();
   });
 
-  test('feeds headToHead a tournament with scramble rounds blanked, so captain team balls never count as a personal duel', () => {
+  test('feeds headToHead a tournament with scramble rounds blanked, so captain team balls never count as a personal duel', async () => {
     // A scramble round leaves REAL scores under both team captains (each
     // team's single ball, scored off the team handicap). headToHead can't
     // tell those apart from personal scores — if two captains are compared,
@@ -493,7 +500,7 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
       id: 'r2', courseName: 'La Moraleja', holes, scoringMode: 'scramblepairs',
       scores: { p1: perHole(4), p2: perHole(4) },
     };
-    const { queryByText } = renderStats([individual, scramble], {
+    const { queryByText } = await renderStats([individual, scramble], {
       players: fourPlayers, scoringMode: 'individual',
     });
 
@@ -528,27 +535,27 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
       scoringModes.scoringModeUsesTeams.mockImplementation(() => false);
     });
 
-    test('Pairs tab appears when any round has real team data, even if another round is scramble', () => {
+    test('Pairs tab appears when any round has real team data, even if another round is scramble', async () => {
       const rounds = [
         { ...makeRound('r1'), scoringMode: 'stableford' },
         { ...makeRound('r2', 5), scoringMode: 'scramblepairs' },
       ];
-      const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+      const { queryByText } = await renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
 
       expect(queryByText('Pairs')).toBeTruthy();
     });
 
-    test('Head-to-Head stays hidden for a mixed tournament that has any real team round', () => {
+    test('Head-to-Head stays hidden for a mixed tournament that has any real team round', async () => {
       const rounds = [
         { ...makeRound('r1'), scoringMode: 'stableford' },
         { ...makeRound('r2', 5), scoringMode: 'scramblepairs' },
       ];
-      const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+      const { queryByText } = await renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
 
       expect(queryByText('HEAD-TO-HEAD')).toBeNull();
     });
 
-    test('feeds the Pairs-tab H2H heatmap a tournament with scramble rounds blanked too', () => {
+    test('feeds the Pairs-tab H2H heatmap a tournament with scramble rounds blanked too', async () => {
       // Sibling of the Overview regression above, but through PairsTab:
       // anyTeams is true here (round 1 is a genuine stableford team round),
       // so the H2H surface is the Pairs tab — its "H2H HEATMAP" H2HMatrix
@@ -567,7 +574,7 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
         id: 'r2', courseName: 'La Moraleja', holes, scoringMode: 'scramblepairs',
         scores: { p1: perHole(4), p2: perHole(4) },
       };
-      const { getByText, queryByText } = renderStats([teamRound, scramble], {
+      const { getByText, queryByText } = await renderStats([teamRound, scramble], {
         players: fourPlayers, scoringMode: 'individual',
       });
 
@@ -586,7 +593,7 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
       });
     });
 
-    test('Total round scope passes roundIndex: null (not the first completed round) to hole-wins and the H2H duel', () => {
+    test('Total round scope passes roundIndex: null (not the first completed round) to hole-wins and the H2H duel', async () => {
       // Regression for the old effectiveRound substitution: with "Total"
       // selected, Pairs-tab sections that support a tournament-wide
       // aggregate must actually get one instead of silently narrowing to
@@ -597,7 +604,7 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
         { ...makeRound('r1'), scoringMode: 'stableford' },
         { ...makeRound('r2', 5), scoringMode: 'stableford' },
       ];
-      const { getByText, getAllByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+      const { getByText, getAllByText } = await renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
 
       fireEvent.press(getByText('Pairs'));
 
@@ -616,14 +623,14 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
       expect(getAllByText('All rounds').length).toBeGreaterThanOrEqual(2);
     });
 
-    test('selecting a round chip scopes hole-wins and the H2H duel to that round, and labels it', () => {
+    test('selecting a round chip scopes hole-wins and the H2H duel to that round, and labels it', async () => {
       jest.clearAllMocks();
       const statsEngine = require('../../store/statsEngine');
       const rounds = [
         { ...makeRound('r1'), scoringMode: 'stableford' },
         { ...makeRound('r2', 5), scoringMode: 'stableford' },
       ];
-      const { getByText, getAllByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+      const { getByText, getAllByText } = await renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
 
       fireEvent.press(getByText('Pairs'));
       fireEvent.press(getByText('R1'));
@@ -657,7 +664,7 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
       scoringModes.scoringModeUsesTeams.mockImplementation(() => false);
     });
 
-    test('Pair Cards renders one card per pairing with a synergy badge and a carry bar that always sums to 100%; old three section titles are gone', () => {
+    test('Pair Cards renders one card per pairing with a synergy badge and a carry bar that always sums to 100%; old three section titles are gone', async () => {
       const statsEngine = require('../../store/statsEngine');
       const pairKey = [fourPlayers[0].id, fourPlayers[1].id].sort().join('|');
       statsEngine.pairPerformance.mockReturnValue([
@@ -697,7 +704,7 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
         },
       ]);
 
-      const { getByText, queryByText, getByTestId } = renderStats(teamRounds(), {
+      const { getByText, queryByText, getByTestId } = await renderStats(teamRounds(), {
         players: fourPlayers, scoringMode: 'individual',
       });
 
@@ -721,7 +728,7 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
       expect(widthA + widthB).toBe(100);
     });
 
-    test('renders a drama strip under the Pair Difference chart from crossovers/maxLead/maxDeficit/finalDelta', () => {
+    test('renders a drama strip under the Pair Difference chart from crossovers/maxLead/maxDeficit/finalDelta', async () => {
       const statsEngine = require('../../store/statsEngine');
       statsEngine.pairDifferenceByHole.mockReturnValue({
         pair1: [fourPlayers[0], fourPlayers[1]],
@@ -736,7 +743,7 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
         maxAbs: 5,
       });
 
-      const { getByText } = renderStats(teamRounds(), {
+      const { getByText } = await renderStats(teamRounds(), {
         players: fourPlayers, scoringMode: 'individual',
       });
 
@@ -745,7 +752,7 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
       expect(getByText('Lead changes: 3 · Biggest lead: Marcos & Bob +5 pts · Final: +2 pts')).toBeTruthy();
     });
 
-    test('Pair Cards render a coverage line matched to the card by sorted member ids', () => {
+    test('Pair Cards render a coverage line matched to the card by sorted member ids', async () => {
       const statsEngine = require('../../store/statsEngine');
       const pairKey = [fourPlayers[0].id, fourPlayers[1].id].sort().join('|');
       statsEngine.pairPerformance.mockReturnValue([
@@ -761,7 +768,7 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
         { pair: [fourPlayers[1], fourPlayers[0]], holes: 20, coveragePct: 65, bothBlanked: 3 },
       ]);
 
-      const { getByText, getByTestId } = renderStats(teamRounds(), {
+      const { getByText, getByTestId } = await renderStats(teamRounds(), {
         players: fourPlayers, scoringMode: 'individual',
       });
 
@@ -790,7 +797,7 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
     statsEngine.hotStretch.mockReturnValue([]);
   });
 
-  test('two tied skins leaders both render rank #1, styled gold', () => {
+  test('two tied skins leaders both render rank #1, styled gold', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.skinsLeaderboard.mockReturnValue({
       leaderboard: [
@@ -802,7 +809,7 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
       totalSkins: 7,
     });
 
-    const { getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getAllByText } = await renderStats([makeRound('r1')], { players: fourPlayers });
 
     const rankOnes = getAllByText('#1');
     expect(rankOnes).toHaveLength(2);
@@ -812,14 +819,14 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
     });
   });
 
-  test('consistency list hides players under 18 counted holes behind a muted note', () => {
+  test('consistency list hides players under 18 counted holes behind a muted note', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.playerConsistency.mockReturnValue([
       { player: fourPlayers[0], stdev: 0.5, mean: 2, holesPlayed: 18, breakdown: [] },
       { player: fourPlayers[1], stdev: 0.3, mean: 2.5, holesPlayed: 9, breakdown: [] },
     ]);
 
-    const { getByText, queryByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getByText, queryByText } = await renderStats([makeRound('r1')], { players: fourPlayers });
 
     // Qualified player (18 holes) shows a real ranked row.
     expect(getByText(/σ 0\.5/)).toBeTruthy();
@@ -829,8 +836,8 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
     expect(getByText('Needs a full round of data.')).toBeTruthy();
   });
 
-  test('strokes-mode Best Round empty state explains the 18-hole requirement', () => {
-    const { getByText, queryByText, UNSAFE_getByType } = renderStats([makeRound('r1')], {
+  test('strokes-mode Best Round empty state explains the 18-hole requirement', async () => {
+    const { getByText, queryByText, UNSAFE_getByType } = await renderStats([makeRound('r1')], {
       players: fourPlayers,
     });
 
@@ -844,7 +851,7 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
     expect(getByText('No completed rounds yet — strokes mode needs all 18 holes.')).toBeTruthy();
   });
 
-  test('a skins row with zero skins but a tied hole is tappable and lists the ties', () => {
+  test('a skins row with zero skins but a tied hole is tappable and lists the ties', async () => {
     const statsEngine = require('../../store/statsEngine');
     const [p1, p2] = fourPlayers;
     const tiedHoleEntry = {
@@ -861,7 +868,7 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
       totalSkins: 2,
     });
 
-    const { getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getAllByText, UNSAFE_getByType } = await renderStats([makeRound('r1')], { players: fourPlayers });
 
     // The Head-to-Head matrix also renders every player's first name as a
     // row/column header below the Skins section, so match the leaderboard
@@ -874,7 +881,7 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
     expect(sheet.props.rows[0].primary).toContain('Hole 5');
   });
 
-  test('momentum bar tone accounts for holes played, not just the raw points total', () => {
+  test('momentum bar tone accounts for holes played, not just the raw points total', async () => {
     const statsEngine = require('../../store/statsEngine');
     // 16 pts over only 9 holes is a strong pace (16/9 === 32/18, the
     // "excellent" cutoff) even though 16 alone would read as "poor" against
@@ -885,19 +892,19 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
       ], minPts: 16, maxPts: 16 },
     ]);
 
-    renderStats([makeRound('r1')], { players: fourPlayers });
+    await renderStats([makeRound('r1')], { players: fourPlayers });
 
     expect(mockTheme.scoreColor).toHaveBeenCalledWith('excellent');
     expect(mockTheme.scoreColor).not.toHaveBeenCalledWith('poor');
   });
 
-  test('shows a pts badge beside points-only section titles when the Strokes toggle is active', () => {
+  test('shows a pts badge beside points-only section titles when the Strokes toggle is active', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.clutchOnHardest.mockReturnValue([
       { player: fourPlayers[0], points: 6, strokes: 12, holesPlayed: 3, breakdown: [], avgPoints: 2, avgStrokes: 4 },
     ]);
 
-    const { getByText, queryByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getByText, queryByText, UNSAFE_getByType } = await renderStats([makeRound('r1')], { players: fourPlayers });
 
     expect(queryByText('pts')).toBeNull();
 
@@ -908,7 +915,7 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
     expect(getByText('pts')).toBeTruthy();
   });
 
-  test('playing to handicap renders ranked rows with signed deltas and opens a per-round sheet', () => {
+  test('playing to handicap renders ranked rows with signed deltas and opens a per-round sheet', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.playingToHandicap.mockReturnValue([
       {
@@ -921,7 +928,7 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
       },
     ]);
 
-    const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getByText, getAllByText, UNSAFE_getByType } = await renderStats([makeRound('r1')], { players: fourPlayers });
 
     expect(getByText('PLAYING TO HANDICAP')).toBeTruthy();
     expect(getByText('+4')).toBeTruthy();
@@ -938,7 +945,7 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
     expect(sheet.props.rows[0].rightPrimary).toBe('+4');
   });
 
-  test('hot stretch renders the top 3 cards only and opens a hole-by-hole sheet', () => {
+  test('hot stretch renders the top 3 cards only and opens a hole-by-hole sheet', async () => {
     const statsEngine = require('../../store/statsEngine');
     const breakdown = [
       { roundIndex: 0, courseName: 'La Moraleja', holeNumber: 7, par: 4, strokes: 3, points: 3 },
@@ -952,7 +959,7 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
       { player: fourPlayers[3], points: 7, roundIndex: 0, startHole: 2, endHole: 7, breakdown },
     ]);
 
-    const { getByText, getAllByText, queryByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getByText, getAllByText, queryByText, UNSAFE_getByType } = await renderStats([makeRound('r1')], { players: fourPlayers });
 
     expect(getByText('HOT STRETCH')).toBeTruthy();
     // HighlightCard renders the value twice — once visible, once in the
@@ -997,9 +1004,9 @@ describe('StatsScreen Overview tab — aggregate memoization (Task 4.1)', () => 
     ]);
   });
 
-  test('opening the Hot Stretch detail sheet does not re-invoke any of the nine Overview aggregates', () => {
+  test('opening the Hot Stretch detail sheet does not re-invoke any of the nine Overview aggregates', async () => {
     const statsEngine = require('../../store/statsEngine');
-    const { getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getAllByText } = await renderStats([makeRound('r1')], { players: fourPlayers });
 
     const aggregateMocks = [
       statsEngine.tournamentHighlights,
@@ -1024,9 +1031,9 @@ describe('StatsScreen Overview tab — aggregate memoization (Task 4.1)', () => 
     expect(callsAfter).toEqual(callsBefore);
   });
 
-  test('toggling the points/strokes metric DOES recompute the metric-dependent aggregates', () => {
+  test('toggling the points/strokes metric DOES recompute the metric-dependent aggregates', async () => {
     const statsEngine = require('../../store/statsEngine');
-    const { UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { UNSAFE_getByType } = await renderStats([makeRound('r1')], { players: fourPlayers });
 
     const highlightsCallsBefore = statsEngine.tournamentHighlights.mock.calls.length;
     const skinsCallsBefore = statsEngine.skinsLeaderboard.mock.calls.length;
@@ -1044,13 +1051,13 @@ describe('StatsScreen Overview tab — aggregate memoization (Task 4.1)', () => 
 });
 
 describe('StatsScreen Holes tab — heatmap honesty', () => {
-  test('avg cell renders "-" (not 0) for a hole nobody scored', () => {
+  test('avg cell renders "-" (not 0) for a hole nobody scored', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.holeDifficultyMap.mockReturnValue([
       { holeNumber: 1, par: 4, si: 1, playerScores: [], avgPoints: null, avgStrokes: null },
     ]);
 
-    const { getByText, getAllByText } = renderStats([makeRound('r1')]);
+    const { getByText, getAllByText } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('Holes'));
 
     // One dash for the lone player's empty cell, one for the Avg column —
@@ -1089,7 +1096,7 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
   const emptyBucket = { holes: 0, avgPoints: 0, avgVsPar: 0, penaltyRate: 0, breakdown: [] };
   const emptyApproachBucket = { holes: 0, avgPoints: 0, avgVsPar: 0, girRate: null, girEligible: 0, breakdown: [] };
 
-  test('a 2-sample drive bucket renders grey "need more data" instead of a colored verdict', () => {
+  test('a 2-sample drive bucket renders grey "need more data" instead of a colored verdict', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.driveScoreImpact.mockReturnValue({
       hasData: true,
@@ -1103,7 +1110,7 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
       },
     });
 
-    const { getByText } = renderStats([makeRound('r1')]);
+    const { getByText } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('My Shots'));
 
     expect(getByText('2 holes — need more data')).toBeTruthy();
@@ -1113,7 +1120,7 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
     expect(vsParStyle.color).toBe(mockTheme.text.muted);
   });
 
-  test('a 6+ sample drive bucket still renders a colored verdict', () => {
+  test('a 6+ sample drive bucket still renders a colored verdict', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.driveScoreImpact.mockReturnValue({
       hasData: true,
@@ -1127,7 +1134,7 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
       },
     });
 
-    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    const { getByText, queryByText } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('My Shots'));
 
     expect(getByText('6 holes')).toBeTruthy();
@@ -1137,7 +1144,7 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
     expect(vsParStyle.color).not.toBe(mockTheme.text.muted);
   });
 
-  test('a low-sample approach bucket renders grey "need more data"', () => {
+  test('a low-sample approach bucket renders grey "need more data"', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.approachScoreImpact.mockReturnValue({
       hasData: true,
@@ -1151,7 +1158,7 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
       },
     });
 
-    const { getByText } = renderStats([makeRound('r1')]);
+    const { getByText } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('My Shots'));
 
     expect(getByText('3 holes — need more data')).toBeTruthy();
@@ -1162,7 +1169,7 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
     expect(girStyle.color).toBe(mockTheme.text.muted);
   });
 
-  test('a low-sample putt deep-dive par bucket renders grey "need more data"', () => {
+  test('a low-sample putt deep-dive par bucket renders grey "need more data"', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.puttDeepDive.mockReturnValue({
       hasData: true,
@@ -1180,13 +1187,13 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
       onePuttSave: { attempts: 1, saves: 1, pct: 100 },
     });
 
-    const { getByText } = renderStats([makeRound('r1')]);
+    const { getByText } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('My Shots'));
 
     expect(getByText('2 holes — need more data')).toBeTruthy();
   });
 
-  test('a 6+ sample putt deep-dive par bucket renders the plain hole count', () => {
+  test('a 6+ sample putt deep-dive par bucket renders the plain hole count', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.puttDeepDive.mockReturnValue({
       hasData: true,
@@ -1204,21 +1211,21 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
       onePuttSave: { attempts: 3, saves: 2, pct: 67 },
     });
 
-    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    const { getByText, queryByText } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('My Shots'));
 
     expect(getByText('6 holes')).toBeTruthy();
     expect(queryByText(/need more data/)).toBeNull();
   });
 
-  test('GIR-after-drive-result greys a side under the 6-sample floor and colors the other side plainly', () => {
+  test('GIR-after-drive-result greys a side under the 6-sample floor and colors the other side plainly', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.girByDriveResult.mockReturnValue({
       fairway: { holes: 8, girPct: 44, breakdown: [] },
       miss: { holes: 3, girPct: 18, breakdown: [] },
     });
 
-    const { getByText } = renderStats([makeRound('r1')]);
+    const { getByText } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('My Shots'));
 
     expect(getByText('GIR after fairway ')).toBeTruthy();
@@ -1231,27 +1238,27 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
     expect(missStyle.color).toBe(mockTheme.text.muted);
   });
 
-  test('GIR-after-drive-result is omitted when neither side has a sample', () => {
+  test('GIR-after-drive-result is omitted when neither side has a sample', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.girByDriveResult.mockReturnValue({
       fairway: { holes: 0, girPct: 0, breakdown: [] },
       miss: { holes: 0, girPct: 0, breakdown: [] },
     });
 
-    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    const { getByText, queryByText } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('My Shots'));
 
     expect(queryByText(/GIR after fairway/)).toBeNull();
   });
 
-  test('a zero-sample miss side is hidden entirely, never rendered as a full-color 0%', () => {
+  test('a zero-sample miss side is hidden entirely, never rendered as a full-color 0%', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.girByDriveResult.mockReturnValue({
       fairway: { holes: 8, girPct: 44, breakdown: [] },
       miss: { holes: 0, girPct: 0, breakdown: [] },
     });
 
-    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    const { getByText, queryByText } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('My Shots'));
 
     // The populated side still renders...
@@ -1264,14 +1271,14 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
     expect(queryByText('0%')).toBeNull();
   });
 
-  test('a zero-sample fairway side is hidden while the miss side renders with its own lead-in label', () => {
+  test('a zero-sample fairway side is hidden while the miss side renders with its own lead-in label', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.girByDriveResult.mockReturnValue({
       fairway: { holes: 0, girPct: 0, breakdown: [] },
       miss: { holes: 7, girPct: 18, breakdown: [] },
     });
 
-    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    const { getByText, queryByText } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('My Shots'));
 
     expect(getByText('GIR after a miss ')).toBeTruthy();
@@ -1286,7 +1293,7 @@ describe('StatsScreen Shame tab — fairness fixes', () => {
     jest.clearAllMocks();
   });
 
-  test('Zero Hero leads with the worst offender: "{FirstName} — {n} pointless holes in R{k}"', () => {
+  test('Zero Hero leads with the worst offender: "{FirstName} — {n} pointless holes in R{k}"', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.zeroHero.mockReturnValue({
       value: 5,
@@ -1296,20 +1303,20 @@ describe('StatsScreen Shame tab — fairness fixes', () => {
       ],
     });
 
-    const { getByText, getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getByText, getAllByText } = await renderStats([makeRound('r1')], { players: fourPlayers });
     fireEvent.press(getByText('Shame'));
 
     expect(getAllByText('Marcos — 5 pointless holes in R1').length).toBeGreaterThan(0);
   });
 
-  test('Nemesis Encore leads with the worst repeat offender: "Hole 7 owns {FirstName} ({n} rounds)"', () => {
+  test('Nemesis Encore leads with the worst repeat offender: "Hole 7 owns {FirstName} ({n} rounds)"', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.nemesisEncore.mockReturnValue([
       { player: fourPlayers[0], holeNumber: 7, courseName: 'La Moraleja', rounds: [0, 1, 2] },
       { player: fourPlayers[1], holeNumber: 3, courseName: 'La Moraleja', rounds: [0, 1] },
     ]);
 
-    const { getByText, getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getByText, getAllByText } = await renderStats([makeRound('r1')], { players: fourPlayers });
     fireEvent.press(getByText('Shame'));
 
     expect(getAllByText('Hole 7 owns Marcos (3 rounds)').length).toBeGreaterThan(0);
@@ -1318,13 +1325,13 @@ describe('StatsScreen Shame tab — fairness fixes', () => {
     expect(getAllByText('2 nemesis holes across the group').length).toBeGreaterThan(0);
   });
 
-  test('tapping Nemesis Encore opens a detail sheet with a row per repeat round', () => {
+  test('tapping Nemesis Encore opens a detail sheet with a row per repeat round', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.nemesisEncore.mockReturnValue([
       { player: fourPlayers[0], holeNumber: 7, courseName: 'La Moraleja', rounds: [0, 1] },
     ]);
 
-    const { getByText, getAllByText, UNSAFE_getByType } = renderStats(
+    const { getByText, getAllByText, UNSAFE_getByType } = await renderStats(
       [makeRound('r1'), makeRound('r2', 5)],
       { players: fourPlayers },
     );
@@ -1341,14 +1348,14 @@ describe('StatsScreen Shame tab — fairness fixes', () => {
     expect(sheet.props.rows[2].rightPrimary).toBe('0 pts');
   });
 
-  test('Nemesis Encore sheet names every offender when entries span multiple players', () => {
+  test('Nemesis Encore sheet names every offender when entries span multiple players', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.nemesisEncore.mockReturnValue([
       { player: fourPlayers[0], holeNumber: 7, courseName: 'La Moraleja', rounds: [0, 1, 2] },
       { player: fourPlayers[1], holeNumber: 3, courseName: 'Northwood', rounds: [0, 1] },
     ]);
 
-    const { getByText, getAllByText, UNSAFE_getByType } = renderStats(
+    const { getByText, getAllByText, UNSAFE_getByType } = await renderStats(
       [makeRound('r1'), makeRound('r2', 5)],
       { players: fourPlayers },
     );
@@ -1363,7 +1370,7 @@ describe('StatsScreen Shame tab — fairness fixes', () => {
     expect(sheet.props.rows).toHaveLength(7);
   });
 
-  test('Par-3 Heartbreak renders every tied leader, not just one player', () => {
+  test('Par-3 Heartbreak renders every tied leader, not just one player', async () => {
     const statsEngine = require('../../store/statsEngine');
     statsEngine.par3Heartbreak.mockReturnValue({
       value: 5,
@@ -1374,7 +1381,7 @@ describe('StatsScreen Shame tab — fairness fixes', () => {
       all: [],
     });
 
-    const { getByText, getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getByText, getAllByText } = await renderStats([makeRound('r1')], { players: fourPlayers });
     fireEvent.press(getByText('Shame'));
 
     expect(getAllByText(/Marcos & Bob/).length).toBeGreaterThan(0);
@@ -1392,11 +1399,11 @@ describe('StatsScreen Shame tab — fairness fixes', () => {
       },
     };
 
-    test('explainer says "net over par" in points mode', () => {
+    test('explainer says "net over par" in points mode', async () => {
       const statsEngine = require('../../store/statsEngine');
       statsEngine.hallOfShame.mockReturnValue(tripleBogeyShame);
 
-      const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+      const { getByText, getAllByText, UNSAFE_getByType } = await renderStats([makeRound('r1')], { players: fourPlayers });
       fireEvent.press(getByText('Shame'));
       fireEvent.press(getAllByText(/Triple Bogey Club/)[0]);
 
@@ -1404,11 +1411,11 @@ describe('StatsScreen Shame tab — fairness fixes', () => {
       expect(sheet.props.explainer).toMatch(/net over par/);
     });
 
-    test('explainer says "gross over par" in strokes mode', () => {
+    test('explainer says "gross over par" in strokes mode', async () => {
       const statsEngine = require('../../store/statsEngine');
       statsEngine.hallOfShame.mockReturnValue(tripleBogeyShame);
 
-      const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+      const { getByText, getAllByText, UNSAFE_getByType } = await renderStats([makeRound('r1')], { players: fourPlayers });
       fireEvent.press(getByText('Shame'));
       const switchEl = UNSAFE_getByType(Switch);
       fireEvent(switchEl, 'valueChange', false); // toggle to Strokes
@@ -1451,9 +1458,9 @@ describe('StatsScreen Players tab — aggregate memoization (Task 4.2)', () => {
     statsEngine.frontBackSplit,
   ];
 
-  test('opening the Par-Type detail sheet does not re-invoke any Players-tab aggregate', () => {
+  test('opening the Par-Type detail sheet does not re-invoke any Players-tab aggregate', async () => {
     const statsEngine = require('../../store/statsEngine');
-    const { getByText } = renderStats([makeRound('r1')]);
+    const { getByText } = await renderStats([makeRound('r1')]);
     fireEvent.press(getByText('Players'));
 
     const aggregateMocks = playersTabAggregateMocks(statsEngine);
@@ -1469,9 +1476,9 @@ describe('StatsScreen Players tab — aggregate memoization (Task 4.2)', () => {
     expect(callsAfter).toEqual(callsBefore);
   });
 
-  test('changing round scope DOES recompute distribution/streaks but not the tournament-wide aggregates', () => {
+  test('changing round scope DOES recompute distribution/streaks but not the tournament-wide aggregates', async () => {
     const statsEngine = require('../../store/statsEngine');
-    const { getByText } = renderStats([makeRound('r1'), makeRound('r2', 5)]);
+    const { getByText } = await renderStats([makeRound('r1'), makeRound('r2', 5)]);
     fireEvent.press(getByText('Players'));
 
     const distBefore = statsEngine.playerScoreDistribution.mock.calls.length;
@@ -1515,9 +1522,9 @@ describe('StatsScreen Holes tab — aggregate memoization (Task 4.2)', () => {
     statsEngine.collectiveExtremes,
   ];
 
-  test('opening the Easiest Hole detail sheet does not re-invoke any Holes-tab aggregate', () => {
+  test('opening the Easiest Hole detail sheet does not re-invoke any Holes-tab aggregate', async () => {
     const statsEngine = require('../../store/statsEngine');
-    const { getByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getByText } = await renderStats([makeRound('r1')], { players: fourPlayers });
     fireEvent.press(getByText('Holes'));
 
     const aggregateMocks = holesTabAggregateMocks(statsEngine);
@@ -1533,9 +1540,9 @@ describe('StatsScreen Holes tab — aggregate memoization (Task 4.2)', () => {
     expect(callsAfter).toEqual(callsBefore);
   });
 
-  test('changing round scope DOES recompute bestWorstHoles but not the round-agnostic aggregates', () => {
+  test('changing round scope DOES recompute bestWorstHoles but not the round-agnostic aggregates', async () => {
     const statsEngine = require('../../store/statsEngine');
-    const { getByText } = renderStats([makeRound('r1'), makeRound('r2', 5)], { players: fourPlayers });
+    const { getByText } = await renderStats([makeRound('r1'), makeRound('r2', 5)], { players: fourPlayers });
     fireEvent.press(getByText('Holes'));
 
     const bwBefore = statsEngine.bestWorstHoles.mock.calls.length;
@@ -1579,9 +1586,9 @@ describe('StatsScreen Shame tab — aggregate memoization (Task 4.2)', () => {
     statsEngine.nemesisEncore,
   ];
 
-  test('opening the Zero Hero detail sheet does not re-invoke any Shame-tab aggregate', () => {
+  test('opening the Zero Hero detail sheet does not re-invoke any Shame-tab aggregate', async () => {
     const statsEngine = require('../../store/statsEngine');
-    const { getByText, getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getByText, getAllByText } = await renderStats([makeRound('r1')], { players: fourPlayers });
     fireEvent.press(getByText('Shame'));
 
     const aggregateMocks = shameTabAggregateMocks(statsEngine);
@@ -1597,9 +1604,9 @@ describe('StatsScreen Shame tab — aggregate memoization (Task 4.2)', () => {
     expect(callsAfter).toEqual(callsBefore);
   });
 
-  test('toggling the points/strokes metric DOES recompute hallOfShame but not the metric-agnostic aggregates', () => {
+  test('toggling the points/strokes metric DOES recompute hallOfShame but not the metric-agnostic aggregates', async () => {
     const statsEngine = require('../../store/statsEngine');
-    const { getByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+    const { getByText, UNSAFE_getByType } = await renderStats([makeRound('r1')], { players: fourPlayers });
     fireEvent.press(getByText('Shame'));
 
     const shameCallsBefore = statsEngine.hallOfShame.mock.calls.length;
