@@ -88,6 +88,12 @@ export default function SetupScreen({ navigation, route }) {
     prefilledName || (isGame ? buildGameName('') : ''),
   );
   const [nameTouched, setNameTouched] = useState(false);
+  // The focus effect below only runs on actual focus events (deps stay
+  // limited to values that never change for this screen instance), so it
+  // reads nameTouched through a ref rather than closing over a stale value
+  // from mount.
+  const nameTouchedRef = useRef(nameTouched);
+  useEffect(() => { nameTouchedRef.current = nameTouched; }, [nameTouched]);
   const [players, setPlayers] = useState(() => prefilledPlayers);
   const [rounds, setRounds] = useState(() => prefilledRounds ?? [
     { id: newRoundId(), courseName: '', holes: defaultHoles(), tees: [], playerHandicaps: null, playerTees: null },
@@ -227,13 +233,16 @@ export default function SetupScreen({ navigation, route }) {
       // Name a single game after its course — only a resolved 'course' pick
       // has a name now; a 'club' pick names the game when its layout is set.
       const first = picks[0];
-      if (isGame && !nameTouched && startRoundIndex === 0 && first?.kind === 'course') {
+      if (isGame && !nameTouchedRef.current && startRoundIndex === 0 && first?.kind === 'course') {
         setTournamentName(buildGameName(first.course.name));
       }
     }
 
     return () => { cancelled = true; };
-  }, []));
+    // `isGame` and `kind` are derived once from route params and never
+    // change for the life of this screen instance; `nameTouched` is read
+    // live via nameTouchedRef above instead of being a dependency.
+  }, [isGame, kind]));
 
   const handleHolesSaved = useCallback((roundIndex, patch) => {
     setRounds((prev) => {

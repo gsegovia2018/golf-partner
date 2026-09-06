@@ -58,9 +58,9 @@ import {
   clampScoreInput, resolvePlayerHandicap, holeCountOf,
 } from '../store/scoring';
 import {
-  discrepancies, roundCells, scorerKeyOf, shownScores, unverifiedCells,
+  cellView, discrepancies, roundCells, scorerKeyOf, shownScores, unverifiedCells,
 } from '../engine/cards';
-import { getRoundState } from '../engine/store/roundState';
+import { getRoundState, loadRound } from '../engine/store/roundState';
 import {
   closeLive, getLastError, onSynced, openLive, pull, reconnect, schedulePush,
 } from '../engine/store/replicator';
@@ -271,6 +271,12 @@ export default function ScorecardScreen({ navigation, route }) {
   // setScore/stepScore — declared earlier — must schedule against it. A ref
   // sidesteps the ordering conflict instead of hoisting goToNextHole up.
   const goToNextHoleRef = useRef(() => {});
+  // handleFinish does its own publish-then-navigate; the beforeRemove listener
+  // below must step aside for that navigation rather than re-intercepting it.
+  const finishingRef = useRef(false);
+  // Re-entrancy guard: the listener re-dispatches the very action it just
+  // blocked, which would otherwise be intercepted a second time.
+  const leavingViaBackRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [saveError, setSaveError] = useState(false);
   // 'loading' until the first loadTournament resolves; 'error' if it returned
@@ -762,6 +768,13 @@ export default function ScorecardScreen({ navigation, route }) {
     }
     return out;
   }, [official, cardState.cardsByAuthor, cardState.myAuthorId, cardState.draft]);
+  // shotDetails is a fresh object on every draft write; setShot/reconcileMeShot
+  // read it through this ref instead of closing over it, so those callbacks
+  // (and everything memoized on their identity, incl. HolePage) stay stable
+  // across taps rather than being rebuilt — and re-rendering all 18 pages —
+  // on every keystroke.
+  const shotDetailsRef = useRef(shotDetails);
+  useEffect(() => { shotDetailsRef.current = shotDetails; }, [shotDetails]);
 
   // Flag finder header icon: shown only when the round's course has mapped
   // geometry (holes/pins) and the device has a compass worth trying. Geometry
@@ -1094,12 +1107,23 @@ export default function ScorecardScreen({ navigation, route }) {
   const seedDraftFromCard = useCallback(async (holeNumber) => {
     if (!tid || !round?.id) return;
     const h = String(holeNumber);
-    const st = getRoundState(tid, round.id);
+    // getRoundState is synchronous and safe to call before hydration, but
+    // seeding off it while unloaded would seed from an empty/partial card —
+    // e.g. a one-player hole — and publish that on leave. Hydrate first.
+    let st = getRoundState(tid, round.id);
+    if (!st.loaded) st = await loadRound(tid, round.id);
     if (st.draft?.[h]) return;
     const mineHole = st.cardsByAuthor[st.myAuthorId]?.holes?.[h];
     if (!mineHole) return;
-    for (const [playerId, value] of Object.entries(mineHole.entries ?? {})) {
-      await actions.setDraftEntry(holeNumber, playerId, value);
+    for (const playerId of Object.keys(mineHole.entries ?? {})) {
+      // The engine now writes the agreed value onto my card on resolve, and
+      // a resolution can be won by another device's agreement — so my raw
+      // entry can still hold the losing number while the standing
+      // resolution names another. Seed what the cell actually SHOWS (the
+      // resolution, else my published entry) so re-opening an agreed hole
+      // never re-surfaces — and republishes — a number that lost.
+      const { shown } = cellView(st, playerId, holeNumber);
+      await actions.setDraftEntry(holeNumber, playerId, shown ?? mineHole.entries[playerId]);
     }
     for (const [playerId, detail] of Object.entries(mineHole.shots ?? {})) {
       await actions.setDraftShot(holeNumber, playerId, detail);
@@ -1108,13 +1132,13 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const setShot = useCallback((playerId, holeNumber, patch) => {
     if (viewOnly || official) return;
-    const current = shotDetails[playerId]?.[holeNumber] ?? DEFAULT_SHOT;
+    const current = shotDetailsRef.current[playerId]?.[holeNumber] ?? DEFAULT_SHOT;
     const detail = { ...DEFAULT_SHOT, ...current, ...patch };
     queueDraft(async () => {
       await seedDraftFromCard(holeNumber);
       await actions.setDraftShot(holeNumber, playerId, detail);
     }).catch(() => {});
-  }, [viewOnly, official, shotDetails, queueDraft, seedDraftFromCard, actions]);
+  }, [viewOnly, official, queueDraft, seedDraftFromCard, actions]);
 
   // When the me-player's strokes change, trim that hole's shot detail so the
   // logged putts/penalties/sand shots never exceed the new stroke total. A
@@ -1125,12 +1149,12 @@ export default function ScorecardScreen({ navigation, route }) {
   // the trimmed detail.
   const reconcileMeShot = useCallback((playerId, holeNumber, newStrokes) => {
     if (official || playerId !== meId) return undefined;
-    const current = shotDetails[playerId]?.[holeNumber];
+    const current = shotDetailsRef.current[playerId]?.[holeNumber];
     if (!current) return undefined;
     if (newStrokes == null) return null;
     const reconciled = reconcileShotDetail(current, newStrokes);
     return reconciled === current ? undefined : reconciled;
-  }, [official, meId, shotDetails]);
+  }, [official, meId]);
 
   // Schedule after each score write; a follow-up tap on the same hole resets
   // the timer so quick +/- adjustments land before the page flips. A write
@@ -1180,6 +1204,12 @@ export default function ScorecardScreen({ navigation, route }) {
   // already agreed. Entry has to start from that: stepping "+" on a ghosted
   // cell must open at par like any other blank, not at the peer's number.
   const visibleScores = official ? scores : (myScores ?? scores);
+  // visibleScores is a fresh object on every draft write; setScore/stepScore
+  // (and currentEntry, which they call) read it through this ref instead of
+  // closing over it, so those callbacks stay referentially stable across
+  // taps — see shotDetailsRef above for why that matters.
+  const visibleScoresRef = useRef(visibleScores);
+  useEffect(() => { visibleScoresRef.current = visibleScores; }, [visibleScores]);
 
   // What this screen last wrote for a cell, held only until the store echoes
   // it back. Entry is synchronous; the draft write is not, so two quick taps
@@ -1198,8 +1228,8 @@ export default function ScorecardScreen({ navigation, route }) {
   const currentEntry = useCallback((playerId, holeNumber) => {
     const key = `${playerId}:${holeNumber}`;
     if (lastWriteRef.current.has(key)) return lastWriteRef.current.get(key);
-    return visibleScores[playerId]?.[holeNumber];
-  }, [visibleScores]);
+    return visibleScoresRef.current[playerId]?.[holeNumber];
+  }, []);
 
   const setScore = useCallback((playerId, holeNumber, value) => {
     if (!official && viewOnly) return;
@@ -1224,11 +1254,11 @@ export default function ScorecardScreen({ navigation, route }) {
       if (label) triggerCelebration(playerId, holeNumber, label, parsed - holePar);
     }
     maybeAutoAdvance({
-      ...visibleScores,
-      [playerId]: { ...visibleScores[playerId], [holeNumber]: parsed },
+      ...visibleScoresRef.current,
+      [playerId]: { ...visibleScoresRef.current[playerId], [holeNumber]: parsed },
     }, holeNumber);
   }, [round, players, triggerCelebration, official, officialWrite, writeEntry,
-    reconcileMeShot, viewOnly, maybeAutoAdvance, visibleScores, currentEntry]);
+    reconcileMeShot, viewOnly, maybeAutoAdvance, currentEntry]);
 
   const stepScore = useCallback((playerId, holeNumber, delta) => {
     if (!official && viewOnly) return;
@@ -1256,11 +1286,11 @@ export default function ScorecardScreen({ navigation, route }) {
       if (label) triggerCelebration(playerId, holeNumber, label, newStrokes - holePar);
     }
     maybeAutoAdvance({
-      ...visibleScores,
-      [playerId]: { ...visibleScores[playerId], [holeNumber]: newStrokes },
+      ...visibleScoresRef.current,
+      [playerId]: { ...visibleScoresRef.current[playerId], [holeNumber]: newStrokes },
     }, holeNumber);
   }, [round, players, triggerCelebration, getScoreAnim, official, officialWrite, writeEntry,
-    reconcileMeShot, viewOnly, maybeAutoAdvance, visibleScores, currentEntry]);
+    reconcileMeShot, viewOnly, maybeAutoAdvance, currentEntry]);
 
   const appSettings = useAppSettings();
   const showRunning = appSettings.showRunningScore && !appSettings.noSpoilers;
@@ -1453,6 +1483,36 @@ export default function ScorecardScreen({ navigation, route }) {
     navigation.navigate('Tournament');
   }, [navigation, official, viewOnly, requestedBackTarget]);
 
+  // Any way off this screen that isn't Next/Go-to-hole/Finish — hardware
+  // back, the header back button, iOS swipe-back — must still publish the
+  // hole in hand (R1, R2, R7); otherwise those taps stay in the private
+  // draft forever. Intercept the removal, publish, then replay it. No
+  // conflict prompt here — a conflict on the way out stays visible in the
+  // hole picker / Home instead of blocking the exit.
+  useEffect(() => {
+    if (official || viewOnly || !round || !tid) return undefined;
+    if (typeof navigation.addListener !== 'function') return undefined;
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      // handleFinish already published and is navigating itself; and a
+      // replayed action must be let through, not intercepted again.
+      if (finishingRef.current || leavingViaBackRef.current) return;
+      e.preventDefault();
+      leavingViaBackRef.current = true;
+      (async () => {
+        try {
+          await queueDraft(() => actions.publishHole(currentHoleRef.current));
+        } catch (err) {
+          // The draft persists on disk either way — leaving must not stall
+          // on a failed publish.
+          console.warn('ScorecardScreen: publish on leave failed', err);
+        } finally {
+          navigation.dispatch(e.data.action);
+        }
+      })();
+    });
+    return unsubscribe;
+  }, [official, viewOnly, round, tid, navigation, queueDraft, actions]);
+
   // Finish flow: invoked from the last-hole "Finish" button or the game-level
   // header flag. Shows a brief celebration, then routes to the round report.
   // Single-round games are explicitly archived so partial rounds count as done.
@@ -1461,6 +1521,11 @@ export default function ScorecardScreen({ navigation, route }) {
     const t = tournamentRef.current;
     const r = t?.rounds?.[roundIndex];
     if (!t || !r) { goBack(); return; }
+
+    // Mark the finish as owning whatever navigation follows, so the
+    // beforeRemove listener (hardware back / swipe-back) steps aside instead
+    // of re-publishing and fighting this flow's own navigation.
+    finishingRef.current = true;
 
     // Finish publishes the hole the scorer is standing on (R9), then pushes
     // and pulls once so the gate below sees every other phone's card.
@@ -1473,6 +1538,7 @@ export default function ScorecardScreen({ navigation, route }) {
     } catch (err) {
       // A failed local write must not abort the finish silently — surface it
       // exactly like the finalize step's catch below.
+      finishingRef.current = false;
       const message = err?.message ?? 'Could not finish this game.';
       if (Platform.OS === 'web') window.alert(message);
       else Alert.alert('Finish failed', message);
@@ -1488,6 +1554,8 @@ export default function ScorecardScreen({ navigation, route }) {
     if (!official && tid) {
       const st = getRoundState(tid, r.id);
       if (discrepancies({ ...st, names }, playerIds, holeNumbers).length > 0) {
+        // Staying on the screen — the back listener needs to be armed again.
+        finishingRef.current = false;
         setFinishConflictsOpen(true);
         return;
       }
@@ -1610,6 +1678,8 @@ export default function ScorecardScreen({ navigation, route }) {
         }
       }, roundDone ? 1400 : 400);
     } catch (err) {
+      // Staying on the screen — the back listener needs to be armed again.
+      finishingRef.current = false;
       setFinishBusy(false);
       const message = err?.message ?? 'Could not finish this game.';
       if (Platform.OS === 'web') window.alert(message);
@@ -1970,7 +2040,7 @@ export default function ScorecardScreen({ navigation, route }) {
         visible={syncSheetOpen}
         onClose={() => setSyncSheetOpen(false)}
         status={official ? undefined : syncStatus}
-        lastError={official ? null : getLastError()}
+        lastError={official ? null : getLastError(tid)}
         cardsPending={!official && cardState.pending.cards}
         unsentHole={!official && cardState.draft?.[String(currentHole)] ? currentHole : null}
       />

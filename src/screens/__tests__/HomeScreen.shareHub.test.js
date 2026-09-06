@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { Share } from 'react-native';
+import { Platform, Share } from 'react-native';
 import HomeScreen from '../HomeScreen';
 import { useAuth } from '../../context/AuthContext';
 import { fetchMyPlayers, loadQuickStartCourses } from '../../store/libraryStore';
@@ -295,4 +295,48 @@ test('owner switch-to-viewer with no token calls enableBoardSharing', async () =
   });
 
   await waitFor(() => expect(enableBoardSharing).toHaveBeenCalledWith('t1'));
+});
+
+describe('handleInvite failure on web', () => {
+  const originalPlatformOS = Platform.OS;
+  const originalWindow = global.window;
+
+  beforeEach(() => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      get: () => 'web',
+    });
+    global.window = {
+      ...(originalWindow ?? {}),
+      alert: jest.fn(),
+      location: { href: 'https://example.test/', origin: 'https://example.test' },
+    };
+  });
+
+  afterEach(() => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      get: () => originalPlatformOS,
+    });
+    global.window = originalWindow;
+  });
+
+  test('a failed invite-code generation shows window.alert, not a no-op Alert.alert', async () => {
+    const tournament = makeTournament({ _role: 'owner', shareToken: null });
+    getTournamentSnapshot.mockReturnValue(tournament);
+    getTournament.mockResolvedValue(tournament);
+    loadTournament.mockResolvedValue(tournament);
+    generateInviteCode.mockRejectedValue(new Error('Could not reach the server'));
+
+    const view = renderTournamentHome();
+    await waitFor(() => expect(view.getByTestId('share-hub-button')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(view.getByTestId('share-hub-button'));
+    });
+
+    await waitFor(() => {
+      expect(global.window.alert).toHaveBeenCalledWith('Could not reach the server');
+    });
+  });
 });

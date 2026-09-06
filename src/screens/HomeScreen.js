@@ -929,7 +929,7 @@ export default function HomeScreen({ navigation, route }) {
       setInviteCodes({ editor: editorCode, viewer: viewerCode });
     } catch (err) {
       setShowInvite(false);
-      Alert.alert('Error', err.message);
+      showError(err.message);
     } finally {
       setInviteLoading(false);
     }
