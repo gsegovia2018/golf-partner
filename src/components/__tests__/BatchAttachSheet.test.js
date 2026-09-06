@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import BatchAttachSheet from '../BatchAttachSheet';
 
@@ -11,6 +11,11 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
+// ThemeProvider reads its persisted preference from AsyncStorage in a
+// useEffect; flush that pending promise (inside act) after every render so
+// its follow-up setState doesn't land outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
+
 const ROUNDS = [
   { id: 'r1', courseName: 'Poniente', holes: Array.from({ length: 18 }, () => ({ par: 4 })) },
   { id: 'r2', courseName: 'Levante', holes: Array.from({ length: 9 }, () => ({ par: 3 })) },
@@ -21,7 +26,7 @@ const ASSETS = [
 ];
 
 describe('BatchAttachSheet', () => {
-  test('renders wheels and English copy', () => {
+  test('renders wheels and English copy', async () => {
     const { getByTestId, getByText } = render(wrap(
       <BatchAttachSheet
         visible
@@ -32,6 +37,7 @@ describe('BatchAttachSheet', () => {
         onConfirm={jest.fn()}
       />
     ));
+    await flush();
     expect(getByText('Attach 2 memories')).toBeTruthy();
     expect(getByTestId('batch-round-wheel')).toBeTruthy();
     expect(getByTestId('batch-hole-wheel')).toBeTruthy();

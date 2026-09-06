@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { render, waitFor, act } from '@testing-library/react-native';
 import TourOverlay from '../TourOverlay';
 
 const mockCoach = jest.fn(() => null);
@@ -47,7 +47,7 @@ it.each([
 
 it('stamps the chapter flag on done and on skip, and unmounts', async () => {
   const { rerender } = render(<TourOverlay chapter="scorecard" steps={steps} />);
-  mockCoach.mock.calls[0][0].onDone();
+  act(() => { mockCoach.mock.calls[0][0].onDone(); });
   await waitFor(() => expect(completeTour).toHaveBeenCalledWith('scorecard'));
   mockCoach.mockClear();
   rerender(<TourOverlay chapter="scorecard" steps={steps} />);

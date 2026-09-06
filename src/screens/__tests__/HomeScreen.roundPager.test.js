@@ -51,6 +51,31 @@ jest.mock('@expo/vector-icons', () => ({
   Feather: 'Feather',
 }));
 
+// The round-tabs list only ever holds a handful of rounds, so the real
+// FlatList's virtualization buys nothing here — but it does schedule a real
+// (non-fake) internal setTimeout on mount (VirtualizedList's cell-batching
+// timer) that these tests have no reason to wait on and that otherwise fires
+// outside any act() once the test has moved on. A plain, unvirtualized list
+// renders the same rows without that timer.
+jest.mock('react-native/Libraries/Lists/FlatList', () => {
+  const RN = require('react-native');
+  const ReactModule = require('react');
+  function MockFlatList({
+    data, renderItem, keyExtractor, testID, style, horizontal, showsHorizontalScrollIndicator, ...rest
+  }) {
+    return ReactModule.createElement(
+      RN.View,
+      { testID, style, ...rest },
+      (data || []).map((item, index) => ReactModule.createElement(
+        RN.View,
+        { key: keyExtractor ? keyExtractor(item, index) : String(index) },
+        renderItem({ item, index }),
+      )),
+    );
+  }
+  return { __esModule: true, default: MockFlatList };
+});
+
 jest.mock('@react-navigation/native', () => ({
   CommonActions: {
     reset: jest.fn((payload) => ({ type: 'RESET', payload })),

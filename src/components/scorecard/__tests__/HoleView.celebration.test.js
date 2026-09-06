@@ -31,7 +31,13 @@ const ROUND = {
 const CONFLICT_HOLES = new Set();
 const noop = () => {};
 
-function renderWithCelebration(celebration) {
+// ThemeProvider and every ShotDetailExplainer row icon read their persisted
+// state from AsyncStorage in a useEffect; flush that pending promise (inside
+// act) after every render so those follow-up setStates don't land outside
+// act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
+
+async function renderWithCelebration(celebration) {
   const props = {
     round: ROUND, roundIndex: 0, players: PLAYERS, scores: ROUND.scores,
     shotDetails: ROUND.shotDetails, meId: 'a',
@@ -47,44 +53,48 @@ function renderWithCelebration(celebration) {
     conflictHoles: CONFLICT_HOLES,
   };
   const r = render(<ThemeProvider><HoleView {...props} /></ThemeProvider>);
+  await flush();
   const wrap = r.UNSAFE_root.findAll((n) => typeof n.props?.onLayout === 'function')[0];
   act(() => {
     wrap.props.onLayout({ nativeEvent: { layout: { width: 390, height: 700 } } });
   });
+  // Newly-mounted content brings its own ShotDetailExplainer rows, each
+  // reading AsyncStorage in a useEffect — flush those too.
+  await flush();
   return r;
 }
 
 describe('HoleView celebration presentation', () => {
-  it('a birdie shows the toast, with its delta, and no takeover scrim', () => {
-    const r = renderWithCelebration({ playerId: 'a', holeNumber: 1, label: 'BIRDIE', delta: -1 });
+  it('a birdie shows the toast, with its delta, and no takeover scrim', async () => {
+    const r = await renderWithCelebration({ playerId: 'a', holeNumber: 1, label: 'BIRDIE', delta: -1 });
     expect(r.queryByText('BIRDIE')).toBeTruthy();
     expect(r.queryByText('−1')).toBeTruthy();
     // The takeover renders the tier eyebrow; the toast does not.
     expect(r.queryByText('A BIRDIE')).toBeNull();
   });
 
-  it('a noelada shows the toast', () => {
-    const r = renderWithCelebration({ playerId: 'a', holeNumber: 1, label: 'NOELADA', delta: 3 });
+  it('a noelada shows the toast', async () => {
+    const r = await renderWithCelebration({ playerId: 'a', holeNumber: 1, label: 'NOELADA', delta: 3 });
     expect(r.queryByText('NOELADA')).toBeTruthy();
     expect(r.queryByText('+3')).toBeTruthy();
     // The takeover would render the eyebrow; the toast never does.
     expect(r.queryByText('WHAT A NOELADA!')).toBeNull();
   });
 
-  it('an eagle still takes over the screen', () => {
-    const r = renderWithCelebration({ playerId: 'a', holeNumber: 1, label: 'EAGLE', delta: -2 });
+  it('an eagle still takes over the screen', async () => {
+    const r = await renderWithCelebration({ playerId: 'a', holeNumber: 1, label: 'EAGLE', delta: -2 });
     // The takeover's eyebrow proves it is the overlay, not the toast.
     expect(r.queryByText('AN EAGLE')).toBeTruthy();
     expect(r.queryByText('EAGLE')).toBeTruthy();
   });
 
-  it('a hole in one still takes over the screen', () => {
-    const r = renderWithCelebration({ playerId: 'a', holeNumber: 1, label: 'HOLE IN ONE', delta: -3 });
+  it('a hole in one still takes over the screen', async () => {
+    const r = await renderWithCelebration({ playerId: 'a', holeNumber: 1, label: 'HOLE IN ONE', delta: -3 });
     expect(r.queryByText('A HOLE IN ONE')).toBeTruthy();
   });
 
-  it('renders neither when there is no celebration', () => {
-    const r = renderWithCelebration({ playerId: null, holeNumber: null, label: null });
+  it('renders neither when there is no celebration', async () => {
+    const r = await renderWithCelebration({ playerId: null, holeNumber: null, label: null });
     expect(r.queryByText('BIRDIE')).toBeNull();
     expect(r.queryByText('AN EAGLE')).toBeNull();
   });

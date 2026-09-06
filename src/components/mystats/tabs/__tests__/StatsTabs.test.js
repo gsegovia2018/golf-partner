@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, within, act } from '@testing-library/react-native';
 import { Text as SvgText } from 'react-native-svg';
 import { ThemeProvider } from '../../../../theme/ThemeContext';
 import BreakdownTab from '../BreakdownTab';
@@ -7,7 +7,24 @@ import CoachTab from '../CoachTab';
 import FormTab from '../FormTab';
 import ShotsTab from '../ShotsTab';
 
+// Several cards below (Career Milestones, Score Mix, …) count up via
+// CountUpText on real setTimeout/requestAnimationFrame timers that outlive
+// these tests' assertions, causing act() warnings unrelated to what's under
+// test here. Reduced motion is CountUpText's own first-class "skip the
+// animation" path, so force it on.
+jest.mock('react-native-reanimated', () => ({
+  ...jest.requireActual('../../../../../__mocks__/react-native-reanimated'),
+  useReducedMotion: () => true,
+}));
+
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
+
+// ThemeProvider reads its persisted preference from AsyncStorage in a
+// useEffect; flush that pending promise (inside act) right after every
+// render below so its follow-up setState can't race outside act() — the
+// race is timing-dependent (it doesn't reproduce on every run), so every
+// render site flushes rather than just the ones seen failing.
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
 function baseStats() {
   return {
@@ -292,6 +309,7 @@ describe('My Stats tabs', () => {
     const { findByText, getByTestId, getAllByTestId, queryByTestId, queryByText, getByText } = render(wrap(
       <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={() => {}} />
     ));
+    await flush();
 
     // Hero: kicker + verdict from stats.form + gold differential number +
     // chart. (Two trend canvases render on the tab: the hero's and the
@@ -334,6 +352,7 @@ describe('My Stats tabs', () => {
     const view = render(wrap(
       <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={() => {}} />
     ));
+    await flush();
 
     fireEvent.press(await view.findByTestId('scoremix-col-press-0'));
     expect(view.getByText('R1 — 1 double · 1 worse · damage 5')).toBeTruthy();
@@ -346,6 +365,7 @@ describe('My Stats tabs', () => {
     const { findByText, getByText } = render(wrap(
       <FormTab stats={formStats()} n={5} onChangeN={onChangeN} onInfo={() => {}} />
     ));
+    await flush();
 
     expect(await findByText('Last 3')).toBeTruthy();
     expect(getByText('Last 10')).toBeTruthy();
@@ -359,6 +379,7 @@ describe('My Stats tabs', () => {
     const { findByTestId, queryByTestId, getByText } = render(wrap(
       <FormTab stats={stats} n={5} onChangeN={() => {}} onInfo={() => {}} />
     ));
+    await flush();
 
     expect(await findByTestId('sparkline-row-avgVsPar')).toBeTruthy();
     ['fairwayPct', 'girPct', 'puttsPerRound', 'threePuttsPerRound'].forEach((key) => {
@@ -373,6 +394,7 @@ describe('My Stats tabs', () => {
     const { findByText } = render(wrap(
       <FormTab stats={stats} n={10} onChangeN={() => {}} onInfo={() => {}} />
     ));
+    await flush();
 
     expect(await findByText('Not enough history yet — select more than 10 rounds to compare.')).toBeTruthy();
   });
@@ -382,6 +404,7 @@ describe('My Stats tabs', () => {
     const { findByLabelText, getByLabelText } = render(wrap(
       <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={onInfo} />
     ));
+    await flush();
 
     fireEvent.press(await findByLabelText('What is Score differential'));
     expect(onInfo).toHaveBeenCalledWith('scoreDifferential');
@@ -403,6 +426,7 @@ describe('My Stats tabs', () => {
     const view = render(wrap(
       <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={() => {}} />
     ));
+    await flush();
 
     // Expand GIR: the full chart mounts under the row with the metric's own
     // formatter — every selected round's value, oldest → newest.
@@ -437,6 +461,7 @@ describe('My Stats tabs', () => {
     const view = render(wrap(
       <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={onInfo} />
     ));
+    await flush();
 
     fireEvent.press(await view.findByTestId('sparkline-press-girPct'));
     expect(view.getByTestId('sparkline-expanded-girPct')).toBeTruthy();
@@ -450,6 +475,7 @@ describe('My Stats tabs', () => {
     const { findByText, findAllByText, queryByText } = render(wrap(
       <CoachTab stats={baseStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
     ));
+    await flush();
 
     expect(await findByText('Current form')).toBeTruthy();
     expect(await findByText('Improving lately')).toBeTruthy();
@@ -470,6 +496,7 @@ describe('My Stats tabs', () => {
     const { findByText, getByLabelText } = render(wrap(
       <CoachTab stats={baseStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={onChangeTarget} />
     ));
+    await flush();
 
     expect(await findByText(/vs 14-handicap target/)).toBeTruthy();
     fireEvent.press(getByLabelText('Change target handicap'));
@@ -480,6 +507,7 @@ describe('My Stats tabs', () => {
     const { findByText } = render(wrap(
       <CoachTab stats={baseStats()} onInfo={() => {}} targetHandicap={null} onChangeTarget={() => {}} />
     ));
+    await flush();
 
     expect(await findByText(/vs scratch/)).toBeTruthy();
   });
@@ -488,6 +516,7 @@ describe('My Stats tabs', () => {
     const { findByText, findAllByText, queryByText, getByLabelText } = render(wrap(
       <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
     ));
+    await flush();
 
     expect(await findByText('Strokes gained · vs 14-hcp target')).toBeTruthy();
     // Category board replaced the What-is-working / What-is-costing lists.
@@ -515,6 +544,7 @@ describe('My Stats tabs', () => {
     const { findAllByText, findByText } = render(wrap(
       <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
     ));
+    await flush();
 
     expect(await findByText('3-putts / round')).toBeTruthy();
     // Putting rows are normalized to an 18-hole rate off logged holes —
@@ -538,6 +568,7 @@ describe('My Stats tabs', () => {
     const { findAllByText, findByText } = render(wrap(
       <ShotsTab stats={stats} onInfo={() => {}} targetHandicap={15} onChangeTarget={() => {}} />
     ));
+    await flush();
 
     expect(await findByText('Par 3 avg score')).toBeTruthy();
     expect((await findAllByText('vs target hcp · 4 holes · target 3.9 · low sample')).length).toBeGreaterThan(0);
@@ -547,6 +578,7 @@ describe('My Stats tabs', () => {
     const { findByText, getByText, getAllByText, getByTestId, getByLabelText } = render(wrap(
       <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
     ));
+    await flush();
 
     // Overline heading + one meter row per summary item, each with a fill
     // (your value) and a gold tick (the benchmark target) on the track.
@@ -575,6 +607,7 @@ describe('My Stats tabs', () => {
     const { findByText, getByTestId, queryByTestId } = render(wrap(
       <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
     ));
+    await flush();
 
     // The Scoring card's mix is the horizontal ScoreMixBar fed by the GROSS
     // distribution, under a small overline heading.
@@ -603,6 +636,7 @@ describe('My Stats tabs', () => {
     const { findByTestId, getByTestId, queryByTestId } = render(wrap(
       <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
     ));
+    await flush();
 
     // Benchmark rows carry a gold target tick.
     expect(await findByTestId('shots-bar-fairways-tick')).toBeTruthy();
@@ -619,6 +653,7 @@ describe('My Stats tabs', () => {
     const { queryByText } = render(wrap(
       <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
     ));
+    await flush();
 
     expect(queryByText('Score by tee result')).toBeNull();
     expect(queryByText('Drive bucket impact')).toBeNull();
@@ -629,6 +664,7 @@ describe('My Stats tabs', () => {
     const { findByText, findAllByText, queryByText } = render(wrap(
       <BreakdownTab stats={shotStats()} onInfo={() => {}} />
     ));
+    await flush();
 
     expect(await findByText('Course Mastery')).toBeTruthy();
     expect(await findByText('Career Milestones')).toBeTruthy();
@@ -665,6 +701,7 @@ describe('My Stats tabs', () => {
     const { findAllByText, queryByText } = render(wrap(
       <BreakdownTab stats={stats} onInfo={() => {}} />
     ));
+    await flush();
 
     expect((await findAllByText('vs your avg · 18 holes · avg 1.67 pts/hole · +0')).length).toBeGreaterThan(0);
     expect(queryByText(/-1.5 vs your avg/)).toBeNull();
@@ -688,6 +725,7 @@ describe('My Stats tabs', () => {
     const { findAllByText, queryByText } = render(wrap(
       <BreakdownTab stats={stats} onInfo={() => {}} />
     ));
+    await flush();
 
     const scramblingLabels = await findAllByText(/scrambling/i);
     expect(scramblingLabels.length).toBeGreaterThanOrEqual(2); // the existing row + the renamed one
@@ -699,6 +737,7 @@ describe('My Stats tabs', () => {
     const { findByText, getAllByText, queryByLabelText } = render(wrap(
       <BreakdownTab stats={baseStats()} onInfo={() => {}} />
     ));
+    await flush();
 
     // Course Mastery: each course card leads on the big scoring average with
     // its AVG SCORE label, plus the rounds/best meta. The old trend pill is
@@ -735,6 +774,7 @@ describe('My Stats tabs', () => {
     const view = render(wrap(
       <BreakdownTab stats={shotStats()} onInfo={() => {}} />
     ));
+    await flush();
     expect(await view.findByText('Course Mastery')).toBeTruthy();
 
     const titles = [
@@ -763,6 +803,7 @@ describe('My Stats tabs', () => {
     const { queryByText } = render(wrap(
       <BreakdownTab stats={stats} onInfo={() => {}} />
     ));
+    await flush();
 
     expect(queryByText('Course Mastery')).toBeNull();
   });

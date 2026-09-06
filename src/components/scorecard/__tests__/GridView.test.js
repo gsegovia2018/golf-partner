@@ -1,8 +1,13 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import { GridView, ScorecardTable } from '../GridView';
 import { calcBestWorstBall } from '../../../store/tournamentStore';
+
+// ThemeProvider reads its persisted preference from AsyncStorage in a
+// useEffect; flush that pending promise (inside act) after every render so
+// its follow-up setState doesn't land outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
 // Regression test for a bug where NineBlock never received `round`, so its
 // holePoints() call omitted round — for pairsmatchplay (which needs
@@ -56,7 +61,7 @@ describe('GridView pairsmatchplay per-hole points', () => {
 });
 
 describe('GridView match play stroke dots', () => {
-  test('dots follow the relative handicap: only the gap holes stroke, off-gap and better player get none', () => {
+  test('dots follow the relative handicap: only the gap holes stroke, off-gap and better player get none', async () => {
     // a hcp 12, b hcp 5 → relative 7 / 0. Hole 1 (SI 1) is inside the gap:
     // a gets a dot. Hole 2 (SI 8) is outside: nobody strokes. b never
     // strokes — under full handicaps b (hcp 5) would dot SI 1.
@@ -90,6 +95,7 @@ describe('GridView match play stroke dots', () => {
         />
       </ThemeProvider>
     );
+    await flush();
 
     expect(getAllByTestId('hcp-dot-a-h1').length).toBe(1);
     expect(queryAllByTestId('hcp-dot-a-h2').length).toBe(0);
@@ -114,7 +120,7 @@ describe('ScorecardTable showTotalsCard', () => {
     p2: Object.fromEntries(Array.from({ length: 9 }, (_, i) => [i + 1, 5])),
   };
 
-  test('defaults to showing the gray multi totals card', () => {
+  test('defaults to showing the gray multi totals card', async () => {
     const { getByText } = render(
       <ThemeProvider>
         <ScorecardTable
@@ -128,10 +134,11 @@ describe('ScorecardTable showTotalsCard', () => {
         />
       </ThemeProvider>,
     );
+    await flush();
     expect(getByText('STABLEFORD')).toBeTruthy();
   });
 
-  test('showTotalsCard={false} hides the gray multi totals card', () => {
+  test('showTotalsCard={false} hides the gray multi totals card', async () => {
     const { queryByText } = render(
       <ThemeProvider>
         <ScorecardTable
@@ -146,6 +153,7 @@ describe('ScorecardTable showTotalsCard', () => {
         />
       </ThemeProvider>,
     );
+    await flush();
     expect(queryByText('STABLEFORD')).toBeNull();
   });
 });
@@ -154,7 +162,7 @@ describe('ScorecardTable showTotalsCard', () => {
 // round.pairs persists ids only (store/scoring.js thinPairs), so the match
 // strip's `p.name.split(' ')` threw "Cannot read properties of undefined".
 describe('GridView best-ball match strip with thin pairs', () => {
-  test('names the pairs from the roster instead of crashing', () => {
+  test('names the pairs from the roster instead of crashing', async () => {
     const players = [
       { id: 'p1', name: 'Ann Lee', handicap: 0 },
       { id: 'p2', name: 'Bob Ray', handicap: 0 },
@@ -187,6 +195,7 @@ describe('GridView best-ball match strip with thin pairs', () => {
         />
       </ThemeProvider>,
     );
+    await flush();
 
     expect(getByText('Ann & Bob')).toBeTruthy();
     expect(getByText('Cam & Dan')).toBeTruthy();
@@ -205,7 +214,7 @@ describe('ScorecardTable highlightCurrentHole', () => {
     p2: Object.fromEntries(Array.from({ length: 9 }, (_, i) => [i + 1, 5])),
   };
 
-  test('renders normally when off by default', () => {
+  test('renders normally when off by default', async () => {
     const { getByText } = render(
       <ThemeProvider>
         <ScorecardTable
@@ -219,10 +228,11 @@ describe('ScorecardTable highlightCurrentHole', () => {
         />
       </ThemeProvider>,
     );
+    await flush();
     expect(getByText('FRONT NINE')).toBeTruthy();
   });
 
-  test('renders without crashing when on, glowing each player\'s next unscored hole', () => {
+  test('renders without crashing when on, glowing each player\'s next unscored hole', async () => {
     const { getByText } = render(
       <ThemeProvider>
         <ScorecardTable
@@ -237,6 +247,7 @@ describe('ScorecardTable highlightCurrentHole', () => {
         />
       </ThemeProvider>,
     );
+    await flush();
     expect(getByText('FRONT NINE')).toBeTruthy();
     expect(getByText('BACK NINE')).toBeTruthy();
   });

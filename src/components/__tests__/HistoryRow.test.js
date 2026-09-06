@@ -1,11 +1,21 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import HistoryRow from '../HistoryRow';
 
 jest.mock('@expo/vector-icons', () => ({ Feather: 'Feather' }));
 
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
+
+// ThemeProvider reads its persisted preference from AsyncStorage in a
+// useEffect; flush that pending promise (inside act) after every render so
+// its follow-up setState doesn't land outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
+async function renderRow(ui) {
+  const utils = render(wrap(ui));
+  await flush();
+  return utils;
+}
 
 const wonModel = {
   id: 't1',
@@ -98,8 +108,8 @@ const neutralPillModel = {
 };
 
 describe('HistoryRow', () => {
-  test('won tournament renders WON badge, champion-as-You footer, and gold pill', () => {
-    const { getByText } = render(wrap(<HistoryRow model={wonModel} onPress={() => {}} />));
+  test('won tournament renders WON badge, champion-as-You footer, and gold pill', async () => {
+    const { getByText } = await renderRow(<HistoryRow model={wonModel} onPress={() => {}} />);
     getByText('WON');
     getByText(/Champion ·/);
     getByText('You');
@@ -107,20 +117,20 @@ describe('HistoryRow', () => {
     getByText('+3'); // avatar overflow
   });
 
-  test('game renders points and no champion footer', () => {
-    const { getByText, queryByText } = render(wrap(<HistoryRow model={gameModel} onPress={() => {}} />));
+  test('game renders points and no champion footer', async () => {
+    const { getByText, queryByText } = await renderRow(<HistoryRow model={gameModel} onPress={() => {}} />);
     getByText('29');
     getByText('CCVM Negro');
     expect(queryByText(/Champion/)).toBeNull();
     expect(queryByText(/of \d/)).toBeNull();
   });
 
-  test('press and long-press fire the callbacks', () => {
+  test('press and long-press fire the callbacks', async () => {
     const onPress = jest.fn();
     const onLongPress = jest.fn();
-    const { getByLabelText } = render(wrap(
+    const { getByLabelText } = await renderRow(
       <HistoryRow model={gameModel} onPress={onPress} onLongPress={onLongPress} />,
-    ));
+    );
     const row = getByLabelText('Casual 18');
     fireEvent.press(row);
     fireEvent(row, 'longPress');
@@ -128,8 +138,8 @@ describe('HistoryRow', () => {
     expect(onLongPress).toHaveBeenCalledTimes(1);
   });
 
-  test('placement result renders label and points, with podium pill and named-opponent footer', () => {
-    const { getByText } = render(wrap(<HistoryRow model={placementModel} onPress={() => {}} />));
+  test('placement result renders label and points, with podium pill and named-opponent footer', async () => {
+    const { getByText } = await renderRow(<HistoryRow model={placementModel} onPress={() => {}} />);
     getByText('2nd');
     getByText('84 pts');
     getByText(/Champion ·/);
@@ -137,26 +147,26 @@ describe('HistoryRow', () => {
     getByText('2nd of 4');
   });
 
-  test('team result renders dash and team label', () => {
-    const { getByText } = render(wrap(<HistoryRow model={teamModel} onPress={() => {}} />));
+  test('team result renders dash and team label', async () => {
+    const { getByText } = await renderRow(<HistoryRow model={teamModel} onPress={() => {}} />);
     getByText('—');
     getByText('team');
   });
 
-  test('none result renders dash and pts label', () => {
-    const { getByText } = render(wrap(<HistoryRow model={noneModel} onPress={() => {}} />));
+  test('none result renders dash and pts label', async () => {
+    const { getByText } = await renderRow(<HistoryRow model={noneModel} onPress={() => {}} />);
     getByText('—');
     expect(getByText('pts')).toBeDefined();
   });
 
-  test('neutral pill state (not won, not podium) renders with secondary styling', () => {
-    const { getByText, queryByText } = render(wrap(<HistoryRow model={neutralPillModel} onPress={() => {}} />));
+  test('neutral pill state (not won, not podium) renders with secondary styling', async () => {
+    const { getByText, queryByText } = await renderRow(<HistoryRow model={neutralPillModel} onPress={() => {}} />);
     getByText('5th of 8');
     getByText('Nicolas');
     expect(queryByText('You')).toBeNull();
   });
 
-  test('avatar circles render a photo when avatarUrl is set, initials otherwise', () => {
+  test('avatar circles render a photo when avatarUrl is set, initials otherwise', async () => {
     const model = {
       ...gameModel,
       avatars: [
@@ -164,9 +174,9 @@ describe('HistoryRow', () => {
         { initials: 'NO', isMe: false, avatarUrl: null },
       ],
     };
-    const { getAllByTestId, getByText, queryByText } = render(wrap(
+    const { getAllByTestId, getByText, queryByText } = await renderRow(
       <HistoryRow model={model} onPress={() => {}} />,
-    ));
+    );
     expect(getAllByTestId('history-avatar-image')).toHaveLength(1);
     expect(queryByText('MA')).toBeNull(); // photo replaces the initials
     getByText('NO'); // no photo → initials fallback

@@ -64,21 +64,31 @@ const props = (currentHole) => ({
   conflictHoles: CONFLICT_HOLES,
 });
 
-function mount(currentHole) {
+// ThemeProvider and every ShotDetailExplainer row icon read their persisted
+// state from AsyncStorage in a useEffect; flush that pending promise (inside
+// act) after every render/update so those follow-up setStates don't land
+// outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
+
+async function mount(currentHole) {
   const r = render(<ThemeProvider><HoleView {...props(currentHole)} /></ThemeProvider>);
+  await flush();
   // The pager only renders its pages once it has measured a non-zero size.
   const wrap = r.UNSAFE_root.findAll((n) => typeof n.props?.onLayout === 'function')[0];
   act(() => {
     wrap.props.onLayout({ nativeEvent: { layout: { width: 390, height: 700 } } });
   });
+  // Newly-mounted hole pages bring their own ShotDetailExplainer rows, each
+  // reading AsyncStorage in a useEffect — flush those too.
+  await flush();
   return r;
 }
 
 const pagerOf = (r) => r.UNSAFE_root.findAll((n) => n.props?.horizontal === true)[0];
 
 describe('HoleView pager windowing', () => {
-  test('mounts only the current hole and its neighbours', () => {
-    const r = mount(1);
+  test('mounts only the current hole and its neighbours', async () => {
+    const r = await mount(1);
     expect(r.queryByText(holeBar(1))).toBeTruthy();
     expect(r.queryByText(holeBar(2))).toBeTruthy();
     expect(r.queryByText(holeBar(3))).toBeNull();
@@ -86,28 +96,29 @@ describe('HoleView pager windowing', () => {
     expect(r.queryByText(holeBar(18))).toBeNull();
   });
 
-  test('keeps both neighbours mounted mid-round so a swipe never lands on a blank page', () => {
-    const r = mount(10);
+  test('keeps both neighbours mounted mid-round so a swipe never lands on a blank page', async () => {
+    const r = await mount(10);
     for (const n of [9, 10, 11]) expect(r.queryByText(holeBar(n))).toBeTruthy();
     for (const n of [1, 8, 12, 18]) expect(r.queryByText(holeBar(n))).toBeNull();
   });
 
-  test('every hole keeps its slot, so scroll offsets are unchanged', () => {
-    const r = mount(1);
+  test('every hole keeps its slot, so scroll offsets are unchanged', async () => {
+    const r = await mount(1);
     // 18 children at index × width is what the scrollTo/contentOffset maths in
     // HoleView assumes; dropping the off-window pages entirely would shift
     // every subsequent hole's position.
     expect(React.Children.count(pagerOf(r).props.children)).toBe(18);
   });
 
-  test('the window follows the current hole', () => {
-    const r = mount(1);
+  test('the window follows the current hole', async () => {
+    const r = await mount(1);
     expect(r.queryByText(holeBar(1))).toBeTruthy();
     expect(r.queryByText(holeBar(6))).toBeNull();
 
     act(() => {
       r.update(<ThemeProvider><HoleView {...props(6)} /></ThemeProvider>);
     });
+    await flush();
 
     expect(r.queryByText(holeBar(6))).toBeTruthy();
     expect(r.queryByText(holeBar(5))).toBeTruthy();
@@ -116,8 +127,8 @@ describe('HoleView pager windowing', () => {
     expect(React.Children.count(pagerOf(r).props.children)).toBe(18);
   });
 
-  test('the last hole still renders with only one neighbour', () => {
-    const r = mount(18);
+  test('the last hole still renders with only one neighbour', async () => {
+    const r = await mount(18);
     expect(r.queryByText(holeBar(18))).toBeTruthy();
     expect(r.queryByText(holeBar(17))).toBeTruthy();
     expect(r.queryByText(holeBar(16))).toBeNull();

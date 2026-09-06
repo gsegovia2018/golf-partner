@@ -1,6 +1,6 @@
 import React from 'react';
 import { Image } from 'react-native';
-import { render, waitFor, fireEvent } from '@testing-library/react-native';
+import { render, waitFor, fireEvent, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import FeedRoundCard from '../FeedRoundCard';
 
@@ -9,6 +9,11 @@ jest.mock('@expo/vector-icons', () => ({
 }));
 
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
+
+// ThemeProvider reads its persisted preference from AsyncStorage in a
+// useEffect; flush that pending promise (inside act) after every render so
+// its follow-up setState doesn't land outside act().
+const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
 function makeRoundItem(media) {
   return {
@@ -60,7 +65,7 @@ describe('FeedRoundCard', () => {
     await waitFor(() => expect(mediaImage.props.resizeMode).toBe('contain'));
   });
 
-  test('renders every player tile for a four-player round without an overflow note', () => {
+  test('renders every player tile for a four-player round without an overflow note', async () => {
     const item = {
       type: 'round',
       key: 'round:t1:r2',
@@ -78,6 +83,7 @@ describe('FeedRoundCard', () => {
     const { getByText, queryByText } = render(wrap(
       <FeedRoundCard item={item} timestamp="Today" onPress={() => {}} />
     ));
+    await flush();
 
     expect(getByText('Marcos')).toBeTruthy();
     expect(getByText('Pablo')).toBeTruthy();
@@ -86,7 +92,7 @@ describe('FeedRoundCard', () => {
     expect(queryByText(/more player/)).toBeNull();
   });
 
-  test('opens a friend or yourself from the score tile, never an unlinked guest', () => {
+  test('opens a friend or yourself from the score tile, never an unlinked guest', async () => {
     const photo = { id: 'photo-1', kind: 'photo', url: 'https://example.com/a.jpg', thumbUrl: 'https://example.com/a.jpg' };
     const item = makeRoundItem(photo);
     item.results = [
@@ -98,6 +104,7 @@ describe('FeedRoundCard', () => {
     const { getByLabelText, getAllByLabelText, queryByLabelText } = render(wrap(
       <FeedRoundCard item={item} timestamp="Today" onPress={() => {}} onPressPlayer={onPressPlayer} />
     ));
+    await flush();
 
     fireEvent.press(getByLabelText("Open Noé's stats"));
     expect(onPressPlayer).toHaveBeenLastCalledWith(expect.objectContaining({ userId: 'friend-1' }));
