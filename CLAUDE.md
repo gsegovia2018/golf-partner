@@ -43,8 +43,15 @@ Core features:
 
 ### Shipping to Android
 
-- `npx eas-cli update --branch preview -m "…"` — push JS/asset changes over
-  the air to installed preview builds. No rebuild, no reinstall.
+- `GOLF_ANDROID_BUILD_ARCHS=arm64-v8a npx eas-cli update --branch preview -m "…"`
+  — push JS/asset changes over the air to installed preview builds. No
+  rebuild, no reinstall. The env var is NOT optional: the installed APK comes
+  from the `preview-arm64` profile, whose env makes `app.config.js` add the
+  `expo-build-properties` plugin, and that plugin is part of the runtime
+  fingerprint. Without it the update publishes under a different runtime and
+  is never offered to anyone. Check before publishing:
+  `GOLF_ANDROID_BUILD_ARCHS=arm64-v8a npx eas-cli fingerprint:compare <apk fingerprint hash>`
+  (hash from `eas build:view <id> --json` → `fingerprint.hash`).
 - `npx eas-cli build -p android --profile preview-arm64` — a new internal
   APK. Needed only when the **native** side changes: a new Expo plugin, a
   permission, an SDK or native dependency bump.
