@@ -30,6 +30,9 @@ import CommentThread from '../components/CommentThread';
 import { ScorecardTable, resolveScorecardRows } from '../components/scorecard/GridView';
 import { useRoundRoster } from '../hooks/useRoundRoster';
 import { buildRoundRecap } from './roundSummaryModel';
+import { useRoundDuration } from '../hooks/useRoundDuration';
+import { roundEndedAt } from '../store/finishStamp';
+import { formatRoundDuration } from '../store/roundDuration';
 import { normalizeRoundNotes } from '../store/roundNotes';
 import { buildRoundAchievements } from '../store/roundAchievements';
 import { collectMyRounds } from '../store/personalStats';
@@ -148,6 +151,13 @@ export default function RoundSummaryScreen({ navigation, route }) {
 
   const liveRef = useRef(false);
   liveRef.current = live;
+
+  // "3h 52m" from the cards' hole timestamps to the finish stamp. Mid-round
+  // there is no end yet, so the recap stays silent until the round settles.
+  const durationMs = useRoundDuration({
+    tournamentId, roundId, endAt: roundEndedAt(tournament, round),
+  });
+  const durationLabel = live ? null : formatRoundDuration(durationMs);
 
   useFocusEffect(useCallback(() => {
     load();
@@ -273,6 +283,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
                 tournamentName={tournament?.name}
                 live={live}
                 totalHoles={totalHoles}
+                durationLabel={durationLabel}
               />
               <AchievementStrip items={achievements} />
               <RoundLeaderboard entries={ranked} unit={unit} round={round} live={live} />
