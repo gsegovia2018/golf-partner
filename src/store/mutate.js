@@ -242,7 +242,11 @@ export function applyToTournament(t, m) {
       break;
     }
     case 'tournament.setFinished': {
-      t.finishedAt = m.finishedAt ?? null;
+      // Null reopens. Otherwise first write wins: the feed and history sort
+      // on this stamp, so re-finishing (a stale copy that never saw the
+      // stamp, or a replayed queued mutation) must not move the entry.
+      if (m.finishedAt == null) t.finishedAt = null;
+      else if (!t.finishedAt) t.finishedAt = m.finishedAt;
       break;
     }
     case 'tournament.setMe': {

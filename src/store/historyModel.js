@@ -1,6 +1,7 @@
 import { tournamentLeaderboardResolved } from './tournamentStore';
 import { roundTotals, roundScoringMode, isScrambleMode } from './scoring';
 import { assignPlacements, comparatorForBoardMode } from './leaderboardPlacement';
+import { tournamentFinalizedAt } from './finishStamp';
 
 // Pure presentation models for the History tab. Everything the screen
 // renders per row is computed here so it stays unit-testable without UI.
@@ -45,9 +46,12 @@ export function placeLabel(place) {
   return `${place}th`;
 }
 
-// finishedAt > createdAt > the numeric id (ids are Date.now() strings).
+// Finalization instant (shared with the feed, see finishStamp.js) >
+// createdAt > the numeric id (ids are Date.now() strings).
 function entryTimestamp(t) {
-  const parsed = Date.parse(t.finishedAt ?? t.createdAt ?? '');
+  const finalized = tournamentFinalizedAt(t);
+  if (finalized != null) return finalized;
+  const parsed = Date.parse(t.createdAt ?? '');
   if (!Number.isNaN(parsed)) return parsed;
   const numericId = Number(t.id);
   return Number.isNaN(numericId) ? 0 : numericId;

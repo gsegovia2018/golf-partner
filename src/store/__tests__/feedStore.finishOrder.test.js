@@ -125,7 +125,8 @@ describe('feed ordering by round finish time', () => {
   test('an unfinished round still orders by live activity', async () => {
     mockSupabaseState.myTournaments = [
       tournament('T-done', { rounds: [{ id: 'r1', finishedAt: '2026-01-01T10:00:00.000Z' }] }),
-      tournament('T-live', { rounds: [{ id: 'r1' }] }),
+      // Mid-round: one of two holes scored, no stamp anywhere.
+      tournament('T-live', { rounds: [{ id: 'r1', scores: { p1: { 1: 4 } } }] }),
     ];
     mockSupabaseState.roundActivityRows = [
       { tournament_id: 'T-live', round_id: 'r1', activity_ts: '2026-01-02T10:00:00.000Z' },
@@ -133,5 +134,28 @@ describe('feed ordering by round finish time', () => {
 
     const items = await buildItems();
     expect(items.map((i) => i.tournamentId)).toEqual(['T-live', 'T-done']);
+    expect(items[0].live).toBe(true);
+  });
+
+  test('a complete round with no stamp freezes on its creation instant, not activity', async () => {
+    // Every hole scored, nobody ever tapped Finish (pre-stamp history). The
+    // cards engine re-projects game_scores on every card write — and the
+    // cutover backfill touched every round at once — so activity here is
+    // noise that must not reorder the feed.
+    const old = tournament('T-old', { rounds: [{ id: 'r1' }] });
+    old.createdAt = '2025-12-01T10:00:00.000Z';
+    mockSupabaseState.myTournaments = [
+      old,
+      tournament('T-new', { rounds: [{ id: 'r1', finishedAt: '2026-01-01T10:00:00.000Z' }] }),
+    ];
+    mockSupabaseState.roundActivityRows = [
+      { tournament_id: 'T-old', round_id: 'r1', activity_ts: '2026-09-04T23:25:00.000Z' },
+      { tournament_id: 'T-new', round_id: 'r1', activity_ts: '2026-01-01T10:00:00.000Z' },
+    ];
+
+    const items = await buildItems();
+    expect(items.map((i) => i.tournamentId)).toEqual(['T-new', 'T-old']);
+    expect(items[1].ts).toBe(ts('2025-12-01T10:00:00.000Z'));
+    expect(items[1].finished).toBe(true);
   });
 });

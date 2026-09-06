@@ -17,6 +17,7 @@ import {
   holeCountOf,
 } from './scoring';
 import { loadMediaForTournaments } from './mediaStore';
+import { roundFinalizedAt } from './finishStamp';
 import { buildRoundHighlights, selectAchievements } from './roundAchievements';
 import { listFriends, getCachedFriends } from './friendStore';
 
@@ -104,14 +105,6 @@ function roundActivityTs(t, roundId, roundIndex, activityTsByKey) {
   return (Date.parse(t.createdAt) || Number(t.id) || 0) + roundIndex;
 }
 
-// `finishedAt` is written as an ISO string, but the legacy tournament-level
-// stamp also exists as an ms epoch number in older rows (see FinishedScreen).
-function parseFinishedAt(value) {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  const ms = Date.parse(value ?? '');
-  return Number.isFinite(ms) ? ms : null;
-}
-
 // The timestamp the feed SORTS on: when the round was finished, frozen at
 // that instant. A later edit by anyone (a score fix, a note, a handicap
 // change) bumps the round's activity timestamp but must NOT move the card —
@@ -119,19 +112,21 @@ function parseFinishedAt(value) {
 // were last touched.
 //
 // Order of preference:
-//   1. round.finishedAt — stamped once by the Scorecard's finish action
-//      (mutation `round.setFinished`, first-write-wins).
-//   2. tournament.finishedAt + roundIndex — the pre-existing archive stamp,
-//      covering rounds finished before (1) existed. Every round of an
-//      archived tournament shares it, so roundIndex keeps them in play order.
-//   3. roundActivityTs — a round still in progress (no finish stamp yet, and
-//      correctly recency-ordered while it's live), or one whose tournament
-//      was never archived.
-function roundFeedTs(t, round, roundIndex, activityTsByKey) {
-  const roundFinished = parseFinishedAt(round?.finishedAt);
-  if (roundFinished != null) return roundFinished;
-  const tournamentFinished = parseFinishedAt(t?.finishedAt);
-  if (tournamentFinished != null) return tournamentFinished + roundIndex;
+//   1. roundFinalizedAt — round.finishedAt, else the tournament archive stamp
+//      offset by round index (see finishStamp.js).
+//   2. A finished tournament with no stamp at all (every round complete, but
+//      nobody ever tapped Finish — pre-stamp history): the tournament's
+//      creation instant folded with the round's position. Not a recency
+//      signal, but FROZEN. Activity would be wrong here: the cards engine
+//      re-projects game_scores (bumping updated_at) on every card write, and
+//      the 2026-09-04 cutover backfill re-projected every round at once, so
+//      sorting a played round on activity reshuffles the feed each time.
+//   3. roundActivityTs — a round still in progress, correctly recency-ordered
+//      while it's live.
+function roundFeedTs(t, round, roundIndex, finished, activityTsByKey) {
+  const finalized = roundFinalizedAt(t, round, roundIndex);
+  if (finalized != null) return finalized;
+  if (finished) return (Date.parse(t.createdAt) || Number(t.id) || 0) + roundIndex;
   return roundActivityTs(t, round.id, roundIndex, activityTsByKey);
 }
 
@@ -558,7 +553,7 @@ export async function buildFeed(options = {}) {
 
     (t.rounds ?? []).forEach((round, roundIndex) => {
       if (!round || round._deleted || !round.scores) return;
-      const ts = roundFeedTs(t, round, roundIndex, activityTsByKey);
+      const ts = roundFeedTs(t, round, roundIndex, finished, activityTsByKey);
       const mode = roundScoringMode(t, round);
 
       const results = [];
