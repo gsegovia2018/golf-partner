@@ -659,17 +659,19 @@ export async function buildFeed(options = {}) {
       }
       if (results.length === 0) return;
 
-      // A round is "live" when the tournament is still open, the leading
-      // player has scored at least one hole but not the whole round, AND a
+      // A round is "live" when nobody has tapped Finish on it, the leading
+      // player has scored at least one hole but not the whole card, AND a
       // hole was published recently (see liveRound.js) — an abandoned round
-      // is unfinished, not live. Drives the feed card's LIVE pill and
+      // is unfinished, not live. The round's own stamp counts as finished:
+      // nine holes played on an 18-hole card never complete the tournament,
+      // yet Finish was tapped. Drives the feed card's LIVE pill and
       // per-player glowing "on hole N" badge.
       const totalHoles = round.holes?.length ?? 18;
       const maxHoles = Math.max(0, ...results.map((r) => r.holes ?? 0));
       const roundKey = `${t.id}:${round.id}`;
       const holeSpan = holeSpanByKey?.get(roundKey) ?? null;
       const live = isRoundLive({
-        finished,
+        finished: finished || roundEndedAt(t, round) != null,
         holesPlayed: maxHoles,
         totalHoles,
         lastActivityAt: holeSpan?.lastAt ?? activityTsByKey?.get(roundKey) ?? null,

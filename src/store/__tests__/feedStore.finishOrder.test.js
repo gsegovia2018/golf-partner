@@ -195,6 +195,28 @@ describe('feed ordering by round finish time', () => {
     expect(items[0].durationMs).toBeNull();
   });
 
+  test('a round finished after nine holes of an 18-hole card is not live', async () => {
+    // Front nine only, Finish tapped minutes ago: the tournament never
+    // completes (9 of 18 holes scored), but the round carries its stamp.
+    const now = Date.now();
+    const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+    const scores = { p1: Object.fromEntries(Array.from({ length: 9 }, (_, i) => [i + 1, 4])) };
+    mockSupabaseState.myTournaments = [
+      tournament('T-nine', { rounds: [{
+        id: 'r1', holes, scores, finishedAt: new Date(now - 2 * 60 * 1000).toISOString(),
+      }] }),
+    ];
+    mockSupabaseState.roundActivityRows = [
+      { tournament_id: 'T-nine', round_id: 'r1', activity_ts: new Date(now - 3 * 60 * 1000).toISOString(),
+        first_hole_ts: now - 20 * 60 * 1000, last_hole_ts: now - 3 * 60 * 1000 },
+    ];
+
+    const items = await buildItems();
+    expect(items[0].live).toBe(false);
+    expect(items[0].holes).toBe(9);
+    expect(items[0].durationMs).not.toBeNull();
+  });
+
   test('a finished round carries its duration from the hole span to the stamp; a live one does not', async () => {
     mockSupabaseState.myTournaments = [
       tournament('T-done', { rounds: [{ id: 'r1', finishedAt: '2026-08-20T14:05:00.000Z' }] }),
