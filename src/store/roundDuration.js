@@ -8,8 +8,11 @@
 // round's own record, so the figure is the same on every phone.
 //
 // The start is the round's own stamp when it has one: `round.startedAt`,
-// written on the first score tap (finishStamp.js). Rounds played before the
-// stamp existed fall back to the cards. A hole's ts is when it was LEFT, so
+// written on the first score tap (finishStamp.js). The tap comes after the
+// first hole was played, though, so when the game was created within
+// CREATION_LEAD_MS before it — set up on the first tee — creation is the
+// start instead; a game set up in the car or the night before keeps the
+// tap. Rounds played before the stamp existed fall back to the cards. A hole's ts is when it was LEFT, so
 // the first hole would be missing from the span — and a scorer who enters
 // several holes in one go (Lomas 7 Sep: holes 1–7 left within two minutes,
 // 86 min after creation) leaves nothing near the tee time at all. A game is
@@ -23,6 +26,7 @@
 const MIN_ROUND_MS = 10 * 60 * 1000;
 const MAX_ROUND_MS = 10 * 60 * 60 * 1000;
 const START_WINDOW_MS = 2 * 60 * 60 * 1000;
+const CREATION_LEAD_MS = 30 * 60 * 1000;
 // A hole (re)published this soon after Finish is a fix to the card just
 // closed — the round still ended at Finish. Later than this, the other
 // phone was still out on the course and the stamp was premature.
@@ -48,9 +52,10 @@ export function roundSpan(cardsByAuthor) {
 // Anything outside 10 min – 10 h is noise, not a round.
 //
 // Start: the round's own stamp (`startedAt`, ms or ISO) when it has one and
-// it precedes the last hole; else creation (`createdAt`, ISO or ms) when it
-// falls within START_WINDOW_MS before the first published hole; else that
-// hole.
+// it precedes the last hole — or creation (`createdAt`, ISO or ms) when that
+// sits within CREATION_LEAD_MS before the stamp. Without a stamp: creation
+// when it falls within START_WINDOW_MS before the first published hole;
+// else that hole.
 // End: the finish stamp, unless holes were still being published more than
 // POST_FINISH_GRACE_MS after it — then a phone that tapped Finish while
 // another was still scoring must not cut the round short, and the last hole
@@ -83,8 +88,11 @@ export function roundDurationMs({
 
 function roundStartAt(span, createdAt, startedAt) {
   const started = typeof startedAt === 'number' ? startedAt : Date.parse(startedAt ?? '');
-  if (Number.isFinite(started) && started <= span.lastAt) return started;
   const created = typeof createdAt === 'number' ? createdAt : Date.parse(createdAt ?? '');
+  if (Number.isFinite(started) && started <= span.lastAt) {
+    const lead = started - created;
+    return Number.isFinite(created) && lead >= 0 && lead <= CREATION_LEAD_MS ? created : started;
+  }
   if (!Number.isFinite(created)) return span.firstAt;
   const lead = span.firstAt - created;
   return lead >= 0 && lead <= START_WINDOW_MS ? created : span.firstAt;

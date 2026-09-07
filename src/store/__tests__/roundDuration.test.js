@@ -86,10 +86,24 @@ describe('roundDurationMs start', () => {
     const started = Date.parse('2026-09-07T16:40:00.000Z');
     const span = { firstAt: Date.parse('2026-09-07T17:59:30.000Z'), lastAt: Date.parse('2026-09-07T18:14:46.000Z') };
     const endAt = Date.parse('2026-09-07T18:14:54.000Z');
-    expect(roundDurationMs({ span, endAt, createdAt: created, startedAt: started })).toBe(endAt - started);
+    // Created 6½ min before the first tap — set up on the first tee, so the
+    // round starts at creation and the first hole is not lost.
+    expect(roundDurationMs({ span, endAt, createdAt: created, startedAt: started })).toBe(endAt - created);
     // ISO in works too; a stamp after the last hole (clock skew) is ignored.
-    expect(roundDurationMs({ span, endAt, createdAt: created, startedAt: new Date(started).toISOString() })).toBe(endAt - started);
+    expect(roundDurationMs({ span, endAt, createdAt: created, startedAt: new Date(started).toISOString() })).toBe(endAt - created);
     expect(roundDurationMs({ span, endAt, createdAt: created, startedAt: endAt + H })).toBe(endAt - created);
+  });
+
+  test('with a stamp, creation counts only within 30 min before the first tap', () => {
+    const started = Date.parse('2026-09-07T16:40:00.000Z');
+    const span = { firstAt: started + 15 * M, lastAt: started + 90 * M };
+    const endAt = started + 95 * M;
+    // Set up the night before, or in the car an hour earlier: the tap stands.
+    expect(roundDurationMs({ span, endAt, createdAt: started - 14 * H, startedAt: started })).toBe(95 * M);
+    expect(roundDurationMs({ span, endAt, createdAt: started - 61 * M, startedAt: started })).toBe(95 * M);
+    // Right at the edge counts; no creation known keeps the tap.
+    expect(roundDurationMs({ span, endAt, createdAt: started - 30 * M, startedAt: started })).toBe(125 * M);
+    expect(roundDurationMs({ span, endAt, createdAt: null, startedAt: started })).toBe(95 * M);
   });
 
   test('without a stamp, creation 86 min before the first hole still counts (holes entered in one go)', () => {
