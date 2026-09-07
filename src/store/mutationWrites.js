@@ -236,7 +236,13 @@ export async function executeMutation(entry, localTournament) {
     }
 
     case 'tournament.setFinished': {
-      await repo.patchTournament(id, { finishedAt: localTournament.finishedAt ?? null });
+      // The mutation's own stamp, not the local blob's: a reconcile save that
+      // races this mutation (fresh server state overlaid before the entry hit
+      // the queue) can leave local WITHOUT the stamp for a tick, and sending
+      // that null archived nothing — a game finished on nine holes stayed
+      // active (2026-09-07). Same rule as round.setFinished below; the server
+      // keeps the first non-null stamp either way, and null still reopens.
+      await repo.patchTournament(id, { finishedAt: m.finishedAt ?? null });
       return NO_CONFLICT;
     }
 

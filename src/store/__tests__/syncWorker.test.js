@@ -713,6 +713,29 @@ describe('syncNow', () => {
     expect(p2).toBe(p1);
     await p1;
   });
+
+  it('an entry enqueued while a drain is in flight is drained by a follow-up pass', async () => {
+    // The Finish flow: round.setFinished kicks a drain; tournament.setFinished
+    // is enqueued (and kicks again) while that drain runs. The first pass
+    // snapshotted only e1 — e2 must not sit queued until the next reload.
+    readLocal.mockResolvedValue(localBlob);
+    executeMutation.mockResolvedValue({ conflict: null });
+    fetchTournament.mockResolvedValue(null);
+    const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'round.setFinished' } };
+    const e2 = { id: 'e2', tournamentId: 't1', mutation: { type: 'tournament.setFinished' } };
+    syncQueue.all
+      .mockResolvedValueOnce([e1]) // pass 1 snapshot
+      .mockResolvedValueOnce([e2]) // pass 1 remaining → 'pending'
+      .mockResolvedValueOnce([e2]) // pass 2 snapshot
+      .mockResolvedValueOnce([]); // pass 2 remaining → 'idle'
+
+    const p1 = syncNow();
+    syncNow(); // mutate()'s kick for e2, landing mid-drain
+    await p1;
+
+    expect(executeMutation.mock.calls.map((c) => c[0].id)).toEqual(['e1', 'e2']);
+    expect(_setSyncStatus).toHaveBeenLastCalledWith('idle');
+  });
 });
 
 describe('syncSettled', () => {
