@@ -426,16 +426,27 @@ async function _markPendingOrIdle() {
 }
 
 let _currentDrain = null;
+// A kick that arrived while a drain was in flight. drainOnce snapshots the
+// queue when it starts, so an entry enqueued mid-drain is not in that pass —
+// and nothing else re-kicks the worker until the next mutation, reload or
+// connectivity change. The Finish flow enqueues round.setFinished and
+// tournament.setFinished back to back: the first kick started a drain, the
+// second landed mid-drain, and the archive stamp sat queued for hours while
+// the game stayed active (2026-09-07). Remembered here and honoured with one
+// follow-up pass once the in-flight drain settles.
+let _kickedMidDrain = false;
 
 // Awaitable drain. Resolves when the current pass finishes (or immediately
 // when offline). A call while a drain is in flight returns that drain's
-// promise rather than starting a second pass.
+// promise rather than starting a second pass — but marks the drain so a
+// follow-up pass runs when it settles, covering entries the snapshot missed.
 export function syncNow() {
   if (!isOnline()) { _markPendingOrIdle(); return Promise.resolve(); }
-  if (_running) return _currentDrain ?? Promise.resolve();
+  if (_running) { _kickedMidDrain = true; return _currentDrain ?? Promise.resolve(); }
   if (_timer) { clearTimeout(_timer); _timer = null; }
 
   _running = true;
+  _kickedMidDrain = false;
   _currentDrain = drainOnce()
     .then(() => { _attempt = 0; })
     .catch(() => {
@@ -443,8 +454,11 @@ export function syncNow() {
       const delay = BACKOFF_MS[Math.min(_attempt, BACKOFF_MS.length - 1)];
       _attempt++;
       _timer = setTimeout(() => { _timer = null; scheduleSync(); }, delay);
+      // The backoff pass picks up whatever arrived mid-drain.
+      _kickedMidDrain = false;
     })
-    .finally(() => { _running = false; _currentDrain = null; });
+    .finally(() => { _running = false; _currentDrain = null; })
+    .then(() => (_kickedMidDrain ? syncNow() : undefined));
   return _currentDrain;
 }
 

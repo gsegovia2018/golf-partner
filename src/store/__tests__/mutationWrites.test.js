@@ -315,9 +315,10 @@ describe('tournament.removePlayer', () => {
 });
 
 describe('tournament.setFinished', () => {
-  test('patches finishedAt from local state', async () => {
+  test('patches finishedAt from the mutation, not from local state', async () => {
     const mutation = { type: 'tournament.setFinished', finishedAt: '2026-07-11T00:00:00.000Z' };
-    const local = baseTournament({ finishedAt: '2026-07-11T00:00:00.000Z' });
+    // A reconcile save raced the enqueue: local lost the stamp for a tick.
+    const local = baseTournament({ finishedAt: null });
     await executeMutation(entry(mutation), local);
     expect(repo.patchTournament).toHaveBeenCalledWith(TID, { finishedAt: '2026-07-11T00:00:00.000Z' });
   });
