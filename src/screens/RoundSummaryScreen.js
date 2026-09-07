@@ -32,7 +32,7 @@ import { useRoundRoster } from '../hooks/useRoundRoster';
 import { buildRoundRecap } from './roundSummaryModel';
 import { useRoundSpan } from '../hooks/useRoundDuration';
 import { isRoundLive } from '../store/liveRound';
-import { roundEndedAt } from '../store/finishStamp';
+import { roundEndedAt, roundStartedAt } from '../store/finishStamp';
 import { formatRoundDuration, roundDurationMs } from '../store/roundDuration';
 import { normalizeRoundNotes } from '../store/roundNotes';
 import { buildRoundAchievements } from '../store/roundAchievements';
@@ -158,10 +158,14 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const liveRef = useRef(false);
   liveRef.current = live;
 
-  // "3h 52m" from creation (or the first hole) to the finish stamp. Mid-round
-  // there is no end yet, so the recap stays silent until the round settles.
+  // "3h 52m" from the first score tap (or creation / the first hole) to the
+  // finish stamp. Mid-round there is no end yet, so the recap stays silent
+  // until the round settles.
   const durationMs = roundDurationMs({
-    span: holeSpan, endAt: roundEndedAt(tournament, round), createdAt: tournament?.createdAt,
+    span: holeSpan,
+    endAt: roundEndedAt(tournament, round),
+    createdAt: tournament?.createdAt,
+    startedAt: roundStartedAt(round),
   });
   const durationLabel = live ? null : formatRoundDuration(durationMs);
 

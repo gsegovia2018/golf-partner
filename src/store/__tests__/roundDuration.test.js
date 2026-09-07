@@ -78,6 +78,27 @@ describe('roundDurationMs start', () => {
     expect(roundDurationMs({ cardsByAuthor: cards, endAt: END, createdAt: T0 + 5 * M })).toBe(3 * H + 55 * M);
   });
 
+  test('the round\'s own start stamp beats creation and the first hole', () => {
+    // Lomas 7 Sep: created 18:33, first tap 18:40, holes 1–7 all left at
+    // 19:59–20:01 (entered in one go), finish 20:14. Neither creation nor the
+    // first hole is the tee time; the tap is.
+    const created = Date.parse('2026-09-07T16:33:30.000Z');
+    const started = Date.parse('2026-09-07T16:40:00.000Z');
+    const span = { firstAt: Date.parse('2026-09-07T17:59:30.000Z'), lastAt: Date.parse('2026-09-07T18:14:46.000Z') };
+    const endAt = Date.parse('2026-09-07T18:14:54.000Z');
+    expect(roundDurationMs({ span, endAt, createdAt: created, startedAt: started })).toBe(endAt - started);
+    // ISO in works too; a stamp after the last hole (clock skew) is ignored.
+    expect(roundDurationMs({ span, endAt, createdAt: created, startedAt: new Date(started).toISOString() })).toBe(endAt - started);
+    expect(roundDurationMs({ span, endAt, createdAt: created, startedAt: endAt + H })).toBe(endAt - created);
+  });
+
+  test('without a stamp, creation 86 min before the first hole still counts (holes entered in one go)', () => {
+    const created = Date.parse('2026-09-07T16:33:30.000Z');
+    const span = { firstAt: Date.parse('2026-09-07T17:59:30.000Z'), lastAt: Date.parse('2026-09-07T18:14:46.000Z') };
+    const endAt = Date.parse('2026-09-07T18:14:54.000Z');
+    expect(roundDurationMs({ span, endAt, createdAt: created })).toBe(endAt - created);
+  });
+
   test('accepts a precomputed span (the feed RPC) in place of cards', () => {
     const span = { firstAt: T0, lastAt: T0 + 3 * H };
     expect(roundDurationMs({ span, endAt: null, createdAt: T0 - 20 * M })).toBe(3 * H + 20 * M);

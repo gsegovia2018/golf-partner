@@ -284,6 +284,11 @@ export async function executeMutation(entry, localTournament) {
       return NO_CONFLICT;
     }
 
+    case 'round.setStarted': {
+      await repo.patchRound(id, m.roundId, { startedAt: m.startedAt });
+      return NO_CONFLICT;
+    }
+
     case 'tournament.updateProfile': {
       await repo.patchTournament(id, m.patch);
       return NO_CONFLICT;

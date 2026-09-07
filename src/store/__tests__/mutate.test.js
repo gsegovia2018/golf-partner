@@ -42,6 +42,22 @@ describe('tournament.setFinished mutation', () => {
   });
 });
 
+describe('round.setStarted mutation', () => {
+  test('stamps the round once; a later tap on another phone does not move it', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1' }] };
+    applyToTournament(t, { type: 'round.setStarted', roundId: 'r1', startedAt: '2026-09-07T16:40:00.000Z' });
+    expect(t.rounds[0].startedAt).toBe('2026-09-07T16:40:00.000Z');
+    applyToTournament(t, { type: 'round.setStarted', roundId: 'r1', startedAt: '2026-09-07T16:41:00.000Z' });
+    expect(t.rounds[0].startedAt).toBe('2026-09-07T16:40:00.000Z');
+  });
+
+  test('ignores a round that no longer exists', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1' }] };
+    applyToTournament(t, { type: 'round.setStarted', roundId: 'rX', startedAt: '2026-09-07T16:40:00.000Z' });
+    expect(t.rounds[0].startedAt).toBeUndefined();
+  });
+});
+
 describe('round.reveal mutation', () => {
   function tournamentWithRound() {
     return {

@@ -511,6 +511,7 @@ export default function MyStatsScreen({ navigation, route }) {
     roundId: reportRound?.round?.id,
     endAt: reportRound?.endedAt ?? null,
     createdAt: reportRound?.tournamentDate ?? null,
+    startedAt: reportRound?.startedAt ?? null,
   });
   const reportDurationLabel = formatRoundDuration(reportDurationMs);
 

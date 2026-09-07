@@ -25,12 +25,12 @@ export function useRoundSpan(tournamentId, roundId) {
 }
 
 export function useRoundDuration({
-  tournamentId, roundId, endAt = null, createdAt = null,
+  tournamentId, roundId, endAt = null, createdAt = null, startedAt = null,
 } = {}) {
   const span = useRoundSpan(tournamentId, roundId);
   return useMemo(
-    () => roundDurationMs({ span, endAt, createdAt }),
-    [span, endAt, createdAt],
+    () => roundDurationMs({ span, endAt, createdAt, startedAt }),
+    [span, endAt, createdAt, startedAt],
   );
 }
 

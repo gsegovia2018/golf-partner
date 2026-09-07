@@ -35,6 +35,15 @@ export function tournamentFinalizedAt(tournament) {
   return parseFinishedAt(tournament.finishedAt);
 }
 
+// When this round STARTED, for durations: stamped once by the Scorecard on
+// the first score tap (mutation `round.setStarted`, first-write-wins) — the
+// closest thing to a tee time the data has. Null on rounds played before
+// the stamp existed; roundDuration.js falls back to creation / the first
+// hole left for those.
+export function roundStartedAt(round) {
+  return parseFinishedAt(round?.startedAt);
+}
+
 // When this round ENDED, for durations: the round's own stamp, else — for a
 // game, which IS its one round — the archive stamp. A tournament's archive
 // stamp says nothing about when round 2 of 4 ended, so it is not used there.

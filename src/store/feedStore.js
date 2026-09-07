@@ -17,7 +17,7 @@ import {
   holeCountOf,
 } from './scoring';
 import { loadMediaForTournaments } from './mediaStore';
-import { roundFinalizedAt, roundEndedAt } from './finishStamp';
+import { roundFinalizedAt, roundEndedAt, roundStartedAt } from './finishStamp';
 import { roundDurationMs } from './roundDuration';
 import { isRoundLive } from './liveRound';
 import { buildRoundHighlights, selectAchievements } from './roundAchievements';
@@ -719,7 +719,12 @@ export async function buildFeed(options = {}) {
         // the cards can't say.
         durationMs: live
           ? null
-          : roundDurationMs({ span: holeSpan, endAt: roundEndedAt(t, round), createdAt: t.createdAt }),
+          : roundDurationMs({
+            span: holeSpan,
+            endAt: roundEndedAt(t, round),
+            createdAt: t.createdAt,
+            startedAt: roundStartedAt(round),
+          }),
         // Live-round + mode metadata for the feed card.
         live,
         totalHoles,
