@@ -1187,9 +1187,33 @@ export default function ScorecardScreen({ navigation, route }) {
     }, 1200);
   }, [round, players, settings, meId]);
 
+  // The round's tee time is its first score tap on any phone — stamped once
+  // (round.setStarted, first-write-wins locally and on the server) and never
+  // moved. The cards cannot say: a hole's ts is when it was LEFT, and a
+  // scorer who enters seven holes in one go leaves nothing near tee-off.
+  // Official rounds are not stamped from here (they have their own flow).
+  const startStampedRef = useRef(false);
+  const stampRoundStarted = useCallback(() => {
+    if (official || startStampedRef.current) return;
+    const t = tournamentRef.current;
+    const r = t?.rounds?.[roundIndex];
+    if (!t || !r || r.startedAt) return;
+    startStampedRef.current = true;
+    const startedAt = new Date().toISOString();
+    enqueueSave(async () => {
+      const base = tournamentRef.current;
+      if (!base) return null;
+      const updated = await mutate(base, { type: 'round.setStarted', roundId: r.id, startedAt });
+      tournamentRef.current = updated;
+      setTournament(updated);
+      return updated;
+    }).catch(() => { startStampedRef.current = false; });
+  }, [official, roundIndex, enqueueSave]);
+
   // One entry, written to the private draft for the hole. It reaches nobody
   // until the scorer leaves the hole (R1, R2).
   const writeEntry = useCallback((playerId, holeNumber, value, shotDetail) => {
+    if (value != null) stampRoundStarted();
     lastWriteRef.current.set(`${playerId}:${holeNumber}`, value ?? null);
     queueDraft(async () => {
       await seedDraftFromCard(holeNumber);
@@ -1198,7 +1222,7 @@ export default function ScorecardScreen({ navigation, route }) {
         await actions.setDraftShot(holeNumber, playerId, shotDetail);
       }
     }).catch(() => {});
-  }, [queueDraft, seedDraftFromCard, actions]);
+  }, [queueDraft, seedDraftFromCard, actions, stampRoundStarted]);
 
   // The card the scorer can SEE for a cell — my entries, plus anything
   // already agreed. Entry has to start from that: stepping "+" on a ghosted

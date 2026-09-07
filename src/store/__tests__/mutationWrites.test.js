@@ -330,6 +330,14 @@ describe('tournament.setFinished', () => {
   });
 });
 
+describe('round.setStarted', () => {
+  test('patches startedAt from the mutation', async () => {
+    const mutation = { type: 'round.setStarted', roundId: 'r1', startedAt: '2026-09-07T16:40:00.000Z' };
+    await executeMutation(entry(mutation), baseTournament());
+    expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', { startedAt: '2026-09-07T16:40:00.000Z' });
+  });
+});
+
 describe('tournament.claimPlayer', () => {
   test('upserts the local player object (carrying user_id) at its current index', async () => {
     const mutation = { type: 'tournament.claimPlayer', playerId: 'p2', userId: 'user-2' };

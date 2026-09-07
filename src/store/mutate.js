@@ -99,6 +99,8 @@ export function metaPathFor(m) {
     // When the round was finished. Stamped once, on the finish action, and
     // never re-stamped by a later edit — the feed orders on it.
     case 'round.setFinished': return `rounds.${m.roundId}.finishedAt`;
+    // When the round was started — the first score tap. Stamped once.
+    case 'round.setStarted': return `rounds.${m.roundId}.startedAt`;
     // Tournament profile edit (name/kind/settings/etc.) — mirrors
     // patch_game_tournament's one-level-deep merge. Single LWW path: the
     // whole patch lands together.
@@ -296,6 +298,13 @@ export function applyToTournament(t, m) {
       // First write wins: re-finishing a round (or replaying a queued
       // mutation) must not move the timestamp the feed sorts on.
       if (!round.finishedAt) round.finishedAt = m.finishedAt;
+      break;
+    }
+    case 'round.setStarted': {
+      const round = t.rounds?.find((r) => r.id === m.roundId);
+      if (!round) return;
+      // First write wins: the tee time is the FIRST tap on any phone.
+      if (!round.startedAt) round.startedAt = m.startedAt;
       break;
     }
     case 'tournament.updateProfile': {

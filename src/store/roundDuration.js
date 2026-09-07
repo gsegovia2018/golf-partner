@@ -7,18 +7,22 @@
 // at the last hole published when nothing stamped it. Both ends are the
 // round's own record, so the figure is the same on every phone.
 //
-// A hole's ts is when it was LEFT, so the first hole would be missing from
-// the span. A game is normally created on the first tee, though: across the
-// hosted data, creation runs 10–28 min before hole 1 is left — tee-off plus
-// one hole. So creation is the start whenever it sits within START_WINDOW_MS
-// before the first hole; a game set up the night before, or a tournament
-// planned days ahead, falls outside it and the first hole stands in.
-// A hole re-published later (a score fix) moves only that hole's ts, which
-// the min/max over 18 holes absorbs.
+// The start is the round's own stamp when it has one: `round.startedAt`,
+// written on the first score tap (finishStamp.js). Rounds played before the
+// stamp existed fall back to the cards. A hole's ts is when it was LEFT, so
+// the first hole would be missing from the span — and a scorer who enters
+// several holes in one go (Lomas 7 Sep: holes 1–7 left within two minutes,
+// 86 min after creation) leaves nothing near the tee time at all. A game is
+// normally created on the first tee, though: across the hosted data,
+// creation runs 10–28 min before hole 1 is left. So creation is the start
+// whenever it sits within START_WINDOW_MS before the first hole; a game set
+// up the night before, or a tournament planned days ahead, falls outside it
+// and the first hole stands in. A hole re-published later (a score fix)
+// moves only that hole's ts, which the min/max over 18 holes absorbs.
 
 const MIN_ROUND_MS = 10 * 60 * 1000;
 const MAX_ROUND_MS = 10 * 60 * 60 * 1000;
-const START_WINDOW_MS = 45 * 60 * 1000;
+const START_WINDOW_MS = 2 * 60 * 60 * 1000;
 // A hole (re)published this soon after Finish is a fix to the card just
 // closed — the round still ended at Finish. Later than this, the other
 // phone was still out on the course and the stamp was premature.
@@ -43,8 +47,10 @@ export function roundSpan(cardsByAuthor) {
 // Duration in ms, or null when it cannot be known or is implausible.
 // Anything outside 10 min – 10 h is noise, not a round.
 //
-// Start: creation (`createdAt`, ISO or ms) when it falls within
-// START_WINDOW_MS before the first published hole, else that hole.
+// Start: the round's own stamp (`startedAt`, ms or ISO) when it has one and
+// it precedes the last hole; else creation (`createdAt`, ISO or ms) when it
+// falls within START_WINDOW_MS before the first published hole; else that
+// hole.
 // End: the finish stamp, unless holes were still being published more than
 // POST_FINISH_GRACE_MS after it — then a phone that tapped Finish while
 // another was still scoring must not cut the round short, and the last hole
@@ -58,11 +64,11 @@ export function roundSpan(cardsByAuthor) {
 // RPC) or `cardsByAuthor` (the card store's snapshot) — the feed has the
 // former without pulling every card, the screens have the latter.
 export function roundDurationMs({
-  span = null, cardsByAuthor = null, endAt = null, createdAt = null,
+  span = null, cardsByAuthor = null, endAt = null, createdAt = null, startedAt = null,
 } = {}) {
   const s = span ?? roundSpan(cardsByAuthor);
   if (!s || !Number.isFinite(s.firstAt) || !Number.isFinite(s.lastAt)) return null;
-  const start = roundStartAt(s, createdAt);
+  const start = roundStartAt(s, createdAt, startedAt);
   const ends = [];
   if (endAt != null) {
     ends.push(s.lastAt - endAt <= POST_FINISH_GRACE_MS ? endAt : s.lastAt, endAt);
@@ -75,7 +81,9 @@ export function roundDurationMs({
   return null;
 }
 
-function roundStartAt(span, createdAt) {
+function roundStartAt(span, createdAt, startedAt) {
+  const started = typeof startedAt === 'number' ? startedAt : Date.parse(startedAt ?? '');
+  if (Number.isFinite(started) && started <= span.lastAt) return started;
   const created = typeof createdAt === 'number' ? createdAt : Date.parse(createdAt ?? '');
   if (!Number.isFinite(created)) return span.firstAt;
   const lead = span.firstAt - created;
