@@ -46,6 +46,17 @@ const WEB_PROBE_OPTIONS = { enableHighAccuracy: true, maximumAge: 5000, timeout:
 // pageshow); collapse them so they can't restart the watch twice, the second
 // killing the acquisition the first just started.
 const WAKE_COALESCE_MS = 1000;
+// A fix has to earn the screen. The one-shot requests below (fast first fix,
+// quiet poll, wake probe) are answered with whatever the platform has to hand:
+// before GPS locks the fused provider hands back a network/cell guess hundreds
+// of metres out, and the header and map followed it until the watch's real fix
+// landed seconds later — every unlock, since the wake probe is one more such
+// request. A fix reported wider than COARSE_FIX_METERS is such a guess; it is
+// shown only when nothing better has arrived for COARSE_FIX_GRACE_MS after the
+// later of the run start and the last shown fix, so a device that only ever
+// gets coarse fixes (a desktop browser) still shows one.
+const COARSE_FIX_METERS = 50;
+const COARSE_FIX_GRACE_MS = 15000;
 
 export function useGpsDistances(courseName, holeNumber) {
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
@@ -80,6 +91,10 @@ export function useGpsDistances(courseName, holeNumber) {
   // fixSeq as it stood when the current watch run started. Equal means this
   // run has never delivered a fix — it is still acquiring, not suspended.
   const watchBaseSeq = useRef(0);
+  // { ts, at } of the fix on screen: the provider's timestamp (null when it
+  // didn't send one) and when we accepted it. The quality gate in apply()
+  // compares candidates against this, not against delivery counters.
+  const shown = useRef(null);
   // Only whether the course HAS geometry gates the location watch — not the
   // geometry object's identity. Hydration (e.g. saving the geometry editor)
   // bumps geomVersion and returns a fresh object; keying the effect on that
@@ -159,10 +174,29 @@ export function useGpsDistances(courseName, holeNumber) {
     let sub = null;
     let webWatchId = null;
     let poll = null;
+    let runStartedAt = 0;
+    // Whether this fix may replace the one on screen. Delivery alone is still
+    // counted by apply() — for the probe and the quiet poll the only question
+    // is whether the provider answers — but a fix older than the shown one
+    // (the probe accepts 5 s of cache; a slow one-shot can resolve after the
+    // watch has moved on) or a coarse one inside the grace window would only
+    // move the marker away from where the player is.
+    const worthShowing = (loc) => {
+      const now = Date.now();
+      const ts = loc.timestamp ?? null;
+      const prev = shown.current;
+      if (prev && ts != null && prev.ts != null && ts < prev.ts) return false;
+      const accuracy = loc.coords.accuracy ?? null;
+      if (accuracy != null && accuracy > COARSE_FIX_METERS
+        && now - Math.max(runStartedAt, prev?.at ?? 0) < COARSE_FIX_GRACE_MS) return false;
+      shown.current = { ts, at: now };
+      return true;
+    };
     const apply = (loc) => {
       if (cancelled || !loc) return;
       lastFixAt.current = Date.now();
       fixSeq.current += 1;
+      if (!worthShowing(loc)) return;
       setFix({
         pos: [loc.coords.latitude, loc.coords.longitude],
         accuracy: loc.coords.accuracy ?? null,
@@ -192,6 +226,7 @@ export function useGpsDistances(courseName, holeNumber) {
         // a pocket, and stack a redundant high-accuracy request on top of the
         // acquisition this run has already started.
         lastFixAt.current = Date.now();
+        runStartedAt = lastFixAt.current;
         watchBaseSeq.current = fixSeq.current;
         if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
           // See WEB_GEO_OPTIONS — the expo-location web path only ever yields
