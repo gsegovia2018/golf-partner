@@ -25,6 +25,13 @@ jest.mock('../../lib/flyoverModel', () => ({
     ? { distances: { center: 120 }, source: 'gps' }
     : { distances: { center: 340 }, source: 'tee' })),
 }));
+jest.mock('../../lib/roundTracking', () => ({
+  getLiveFix: jest.fn(() => mockLive.fix),
+  subscribeLiveFix: jest.fn((fn) => { mockLive.listeners.push(fn); return () => {}; }),
+}));
+// Stands in for the round tracker's feed; `mock` prefix so the hoisted
+// factory above may close over it.
+const mockLive = { fix: null, listeners: [] };
 jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn().mockResolvedValue(null),
   upsertProfile: jest.fn().mockResolvedValue(),
@@ -37,7 +44,7 @@ function Probe() {
 
 // Two tests share the expo-location mock; only the call counts need resetting
 // between them (clearAllMocks leaves the factory's implementations in place).
-beforeEach(() => { jest.clearAllMocks(); });
+beforeEach(() => { jest.clearAllMocks(); mockLive.fix = null; mockLive.listeners = []; });
 
 // The hook's WAKE_PROBE_MS — a wake gives the provider this long to answer
 // before the watch is restarted.
@@ -158,5 +165,26 @@ test('native leaves a watch still acquiring its first fix alone', async () => {
   } finally {
     appState.restore();
     jest.useRealTimers();
+  }
+});
+
+// The round tracker's foreground service keeps delivering while the screen is
+// off. Its latest fix is what makes the header right the instant the scorecard
+// is back, before this hook's own watch has re-locked.
+test("native seeds from the round tracker's live fix and follows its later fixes", async () => {
+  mockLive.fix = { coords: { latitude: 40.5, longitude: -3.5, accuracy: 4 }, timestamp: 10 };
+  const appState = captureAppState();
+  try {
+    const view = render(<Probe />);
+    await flush();
+    expect(JSON.parse(view.getByTestId('out').props.children)).toEqual([40.5, -3.5]);
+    expect(mockLive.listeners).toHaveLength(1);
+
+    await act(async () => {
+      mockLive.listeners.forEach((fn) => fn({ coords: { latitude: 40.6, longitude: -3.6, accuracy: 4 }, timestamp: 20 }));
+    });
+    expect(JSON.parse(view.getByTestId('out').props.children)).toEqual([40.6, -3.6]);
+  } finally {
+    appState.restore();
   }
 });
