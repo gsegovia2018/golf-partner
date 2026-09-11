@@ -187,3 +187,62 @@ test('offTee flips true once a live fix is >50 m from the mapped tee', async () 
     Location.getCurrentPositionAsync.mockResolvedValue(null);
   }
 });
+
+// The one-shot requests (fast first fix, quiet poll, wake probe) are answered
+// with whatever the fused provider has: before GPS locks that is a network or
+// cell guess hundreds of metres out. Without a gate the header and the map
+// followed it — the marker started somewhere the player had never been and
+// walked to the real spot once the watch's fix landed — on every unlock.
+describe('fix quality gate', () => {
+  const GOOD = { coords: { latitude: 38.5, longitude: -0.15, accuracy: 6 }, timestamp: 5000 };
+  const COARSE = { coords: { latitude: 38.502, longitude: -0.152, accuracy: 480 }, timestamp: 6000 };
+  let watchCb;
+  const out = () => JSON.parse(screen.getByTestId('out').props.children);
+
+  beforeEach(() => {
+    watchCb = null;
+    Location.watchPositionAsync.mockImplementation(async (opts, cb) => {
+      watchCb = cb;
+      return { remove: jest.fn() };
+    });
+  });
+  afterEach(() => {
+    Location.watchPositionAsync.mockResolvedValue({ remove: jest.fn() });
+  });
+
+  test('a coarse fix does not replace a good one', async () => {
+    render(<Probe />);
+    await waitFor(() => expect(watchCb).toBeTruthy());
+    act(() => watchCb(GOOD));
+    expect(out().p).toEqual([38.5, -0.15]);
+    act(() => watchCb(COARSE));
+    expect(out().p).toEqual([38.5, -0.15]);
+  });
+
+  test('a coarse first fix is held back while a GPS lock is still likely', async () => {
+    render(<Probe />);
+    await waitFor(() => expect(watchCb).toBeTruthy());
+    act(() => watchCb(COARSE));
+    expect(out().f).toBe('acquiring'); // the guess is not painted
+    // Nothing better for the whole grace window — a coarse fix is now the best
+    // this device does, and it is shown rather than spinning forever.
+    const base = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockImplementation(() => base + 15000 + 1);
+    try {
+      act(() => watchCb({ ...COARSE, timestamp: 7000 }));
+      expect(out().p).toEqual([38.502, -0.152]);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  test('a fix older than the shown one is ignored', async () => {
+    render(<Probe />);
+    await waitFor(() => expect(watchCb).toBeTruthy());
+    act(() => watchCb(GOOD));
+    // The wake probe accepts 5 s of cache and a slow one-shot can resolve
+    // after the watch has moved on — either would step the marker backwards.
+    act(() => watchCb({ coords: { latitude: 38.49, longitude: -0.16, accuracy: 5 }, timestamp: 4000 }));
+    expect(out().p).toEqual([38.5, -0.15]);
+  });
+});
