@@ -104,6 +104,11 @@ than a day-old bundle.
   scorecard's single source of truth. Agreements are anchored to card
   versions, so an edit re-opens exactly the disputes it should. The plan is
   `docs/superpowers/plans/2026-09-04-scorecard-cards-engine.md`.
+- Background GPS: `src/lib/roundTracking.js` runs an Android foreground
+  location service (`expo-task-manager`) while a live scorecard is open,
+  with a persistent notification driven by `hooks/useRoundTracking.js`;
+  `useGpsDistances` seeds from its feed. Native change — needs an APK
+  build. Spec: `docs/superpowers/specs/2026-09-11-background-gps-tracking-design.md`.
 - Some screens are large monoliths (`ScorecardScreen`, `StatsScreen`) —
   prefer extracting components/hooks over growing them further.
 - Plans and design specs are tracked under `docs/superpowers/`.

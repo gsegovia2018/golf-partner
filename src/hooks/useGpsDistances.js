@@ -7,6 +7,7 @@ import {
 } from '../lib/geo';
 import { resolveScorecardDistances } from '../lib/flyoverModel';
 import { subscribeAppSettings, getAppSettings } from '../store/settingsStore';
+import { getLiveFix, subscribeLiveFix } from '../lib/roundTracking';
 
 // Live GPS distances to the current hole's green, falling back to distances
 // measured from the tee whenever a usable fix isn't in play. Resolution
@@ -66,6 +67,10 @@ export function useGpsDistances(courseName, holeNumber) {
   const appSettings = useSyncExternalStore(subscribeAppSettings, getAppSettings, getAppSettings);
   const gpsEnabled = appSettings.gpsEnabled !== false;
   const [denied, setDenied] = useState(false);
+  // True once the when-in-use permission has been observed granted. The
+  // round tracker's foreground service can only be started with it, and
+  // `!denied` is also true before the request has resolved.
+  const [granted, setGranted] = useState(false);
   // Bumped when a previously denied permission is observed granted (system or
   // browser settings changed mid-round) — re-runs the watch effect so the
   // header recovers without a remount or a settings toggle.
@@ -172,6 +177,7 @@ export function useGpsDistances(courseName, holeNumber) {
     if (!hasGeometry || !gpsEnabled) return undefined;
     let cancelled = false;
     let sub = null;
+    let liveSub = null;
     let webWatchId = null;
     let poll = null;
     let runStartedAt = 0;
@@ -208,6 +214,7 @@ export function useGpsDistances(courseName, holeNumber) {
         if (cancelled) return;
         if (status !== 'granted') {
           setDenied(true);
+          setGranted(false);
           // Permission can be granted later from system/browser settings.
           // Poll the non-prompting status check and re-run this effect (via
           // permRetry) the moment it flips — `denied` is otherwise sticky
@@ -221,6 +228,7 @@ export function useGpsDistances(courseName, holeNumber) {
           return;
         }
         setDenied(false);
+        setGranted(true);
         // The quiet-watch polls below measure their 6s from here. A restart
         // would otherwise inherit a timestamp from before the phone went into
         // a pocket, and stack a redundant high-accuracy request on top of the
@@ -245,6 +253,13 @@ export function useGpsDistances(courseName, holeNumber) {
           }, 5000);
           return;
         }
+        // The round tracker's foreground service (lib/roundTracking) keeps
+        // fixes flowing while the screen is off. Its latest fix seeds this run
+        // so the header is right the moment the scorecard is back, and every
+        // later one goes through apply() like the watch's own.
+        const seed = getLiveFix();
+        if (seed) apply(seed);
+        liveSub = subscribeLiveFix(apply);
         // Fast first fix — the watch below can take several seconds to emit.
         Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
           .then(apply).catch(() => {});
@@ -279,6 +294,7 @@ export function useGpsDistances(courseName, holeNumber) {
       // react-native-web — it throws and takes down the tree via the error
       // boundary. Swallow it; the watch is being discarded anyway.
       try { sub?.remove?.(); } catch { /* web removeSubscription missing */ }
+      liveSub?.();
       if (webWatchId != null) navigator.geolocation.clearWatch(webWatchId);
       if (poll) clearInterval(poll);
     };
@@ -330,6 +346,7 @@ export function useGpsDistances(courseName, holeNumber) {
     distances: resolved.distances,
     source: resolved.source, // 'gps' | 'tee' — the header renders FROM TEE for 'tee'
     fixState, // 'ok' | 'acquiring' | 'denied' | 'disabled' — GPS health for the status line
+    permissionGranted: gpsEnabled && granted, // when-in-use permission held — the round tracker waits for it
     accuracy: gpsEnabled ? (fix?.accuracy ?? null) : null,
     position: gpsEnabled ? (fix?.pos ?? null) : null, // [lat, lng] — shared with the hole map
     offTee, // past this hole's tee → club recommendations exclude the driver

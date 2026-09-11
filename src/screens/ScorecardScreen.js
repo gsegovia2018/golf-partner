@@ -20,6 +20,8 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { autoAdvanceAction } from '../lib/autoAdvance';
 import { getAppSettings } from '../store/settingsStore';
 import { useAppSettings } from '../hooks/useAppSettings';
+import { useGpsDistances } from '../hooks/useGpsDistances';
+import { useRoundTracking } from '../hooks/useRoundTracking';
 import {
   loadTournament, subscribeTournamentChanges,
   calcBestWorstBall, DEFAULT_SETTINGS,
@@ -789,6 +791,24 @@ export default function ScorecardScreen({ navigation, route }) {
   );
   const showFlagFinder = hasCourseGeometry && compassLikelyAvailable();
 
+  // Keep GPS alive while this live round is open, screen off or not — see
+  // lib/roundTracking. Owned here rather than in HoleView because the hole
+  // view unmounts when the user flips to the card overview, and a service
+  // that stops and cold-starts on every flip is worse than none. Never runs
+  // for a finished round, a course without geometry, a denied permission or
+  // the GPS setting off.
+  const appSettings = useAppSettings();
+  const trackingGps = useGpsDistances(round?.courseName, currentHole);
+  useRoundTracking({
+    active: !viewOnly && !tournament?.finishedAt && trackingGps.hasMap
+      && trackingGps.permissionGranted && trackingGps.fixState !== 'disabled',
+    courseName: round?.courseName,
+    holeNumber: currentHole,
+    distances: trackingGps.distances,
+    source: trackingGps.source,
+    units: appSettings.units,
+  });
+
   // Lock a freshly opened finished round to view-only. "Finished" means
   // either this specific round has every player scored on every hole, OR the
   // parent tournament/game was explicitly archived (`finishedAt` set) — a
@@ -1316,7 +1336,6 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [round, players, triggerCelebration, getScoreAnim, official, officialWrite, writeEntry,
     reconcileMeShot, viewOnly, maybeAutoAdvance, currentEntry]);
 
-  const appSettings = useAppSettings();
   const showRunning = appSettings.showRunningScore && !appSettings.noSpoilers;
 
   useEffect(() => {

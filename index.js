@@ -6,6 +6,9 @@ import 'react-native-get-random-values';
 // Polyfill `Alert` on web — react-native-web ships it as a no-op, so without
 // this every Alert.alert(...) (errors, confirmations) silently does nothing.
 import './src/lib/webAlert';
+// Defines the round tracker's background location task. expo-task-manager
+// needs it defined before the app renders; a no-op off Android.
+import './src/lib/roundTracking';
 import { registerRootComponent } from 'expo';
 
 import App from './App';
