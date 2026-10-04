@@ -283,7 +283,9 @@ describe('App gating: invite links', () => {
     await renderAtUrl('https://golf-partner.vercel.app/league/MULL-7Q4', { session: SESSION });
 
     expect(mockNavigationProps.current.linking.config.screens.JoinLeague).toBe('league/:code');
-    expect(mockRegisteredScreens).toEqual(expect.arrayContaining(['JoinLeague', 'LeagueCreate']));
+    expect(mockRegisteredScreens).toEqual(expect.arrayContaining([
+      'JoinLeague', 'LeagueCreate', 'LeagueBoard', 'LeagueMembers', 'LeagueSettings',
+    ]));
   });
 
   test('/leagues/<x> is not a league invite', async () => {

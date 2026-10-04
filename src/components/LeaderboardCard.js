@@ -1,0 +1,95 @@
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
+
+// The deep-green leaderboard card: the tournament leaderboard on Play and the
+// season standings on the league board.
+//
+// Props:
+//   title        small uppercase heading
+//   headerRight  optional node at the right of the title row (the tournament's
+//                points/strokes switch)
+//   subheader    optional node between the title row and the rows (the scope chips)
+//   rows         [{ key?, place (null = unplaced, shown as a dash), isTie, name, points, sub?, isMe?, mark? }]
+//                points and sub are display strings; sub null renders nothing;
+//                mark shows the winner icon beside the name
+//   footer       optional string under the rows
+export default function LeaderboardCard({ title, headerRight, subheader, rows, footer }) {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
+  const rankColors = [semantic.winner.dark, '#c0c8d4', '#daa06d'];
+
+  return (
+    <View style={s.mastersCard}>
+      <View style={[s.cardTitleRow, { marginBottom: 8 }]}>
+        <Text style={[s.mastersCardTitle, { flexShrink: 1 }]} numberOfLines={1}>{title}</Text>
+        {headerRight}
+      </View>
+      {subheader}
+      {rows.map((row, i) => {
+        const placeIdx = row.place - 1;
+        const isFirstPlace = row.place === 1;
+        const rankColor = rankColors[placeIdx] || 'rgba(255,255,255,0.4)';
+        const rankBg = placeIdx === 0 ? 'rgba(255,215,0,0.2)' : placeIdx === 1 ? 'rgba(192,200,212,0.15)' : placeIdx === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
+        const rankLabel = row.place == null ? '–' : row.isTie ? `T${row.place}` : row.place;
+        return (
+          <View
+            key={row.key ?? `${row.place}-${row.name}-${i}`}
+            style={[s.mastersRow, isFirstPlace && s.mastersRowFirst, row.isMe && s.mastersRowMe, i === rows.length - 1 && { borderBottomWidth: 0 }]}
+          >
+            <View style={[s.mastersRankBadge, { backgroundColor: rankBg }]}>
+              <Text style={[s.mastersRankText, { color: rankColor }]}>{rankLabel}</Text>
+            </View>
+            <View style={s.mastersNameCol}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[s.mastersName, (isFirstPlace || row.isMe) && { fontFamily: 'PlusJakartaSans-Bold' }]} numberOfLines={1}>
+                  {row.name}
+                </Text>
+                {row.mark && <Feather name="award" size={14} color={semantic.winner.dark} />}
+              </View>
+            </View>
+            <Text style={[s.mastersPoints, isFirstPlace && { fontSize: 18 }]}>{row.points}</Text>
+            {row.sub != null && <Text style={s.mastersSub}>{row.sub}</Text>}
+          </View>
+        );
+      })}
+      {!!footer && <Text style={s.mastersMatchStatus}>{footer}</Text>}
+    </View>
+  );
+}
+
+function makeStyles(t) {
+  return StyleSheet.create({
+    // Same title-row layout HomeScreen's `cardTitleRow` has.
+    cardTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 8 },
+    mastersCard: {
+      backgroundColor: t.bg.deep,
+      borderRadius: 20, padding: 16, marginBottom: 16,
+      ...(t.isDark ? {} : { shadowColor: '#004030', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, elevation: 6 }),
+    },
+    mastersCardTitle: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      fontSize: 10, color: 'rgba(255,255,255,0.6)',
+      letterSpacing: 2, textTransform: 'uppercase',
+    },
+    mastersRow: {
+      flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
+      borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.12)',
+    },
+    mastersRowFirst: { borderLeftWidth: 3, borderLeftColor: semantic.winner.dark, paddingLeft: 8, marginLeft: -8 },
+    // The signed-in member's own row (league board); the tournament view never sets it.
+    mastersRowMe: { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 10, paddingHorizontal: 8, marginHorizontal: -8 },
+    mastersRankBadge: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+    mastersRankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
+    mastersNameCol: { flex: 1, minWidth: 0, marginRight: 8 },
+    mastersName: { fontFamily: 'PlusJakartaSans-Medium', color: '#ffffff', fontSize: 14 },
+    mastersPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 16, marginRight: 8 },
+    mastersSub: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.45)', fontSize: 11, width: 60, textAlign: 'right' },
+    mastersMatchStatus: {
+      fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.85)',
+      fontSize: 12, textAlign: 'center', marginTop: 10,
+    },
+  });
+}

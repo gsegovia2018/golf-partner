@@ -9,7 +9,9 @@ import {
   getTournamentSnapshot,
   loadAllTournamentsWithFallback,
   loadTournament,
+  roundLeaderboard,
   subscribeTournamentChanges,
+  tournamentLeaderboardResolved,
 } from '../../store/tournamentStore';
 import { shouldHandleStoreChange } from '../../lib/navigationFocus';
 
@@ -459,4 +461,30 @@ describe('chooseInitialRound', () => {
   test('nothing scored yet → falls back to currentRound', () => {
     expect(chooseInitialRound(mk([{}, {}, {}], 0))).toBe(0);
   });
+});
+
+test('leaderboard card renders ranks, ties, points and strokes from the board entries', async () => {
+  const board = {
+    mode: 'stableford',
+    unit: 'pts',
+    entries: [
+      { player: { id: 'p1', name: 'Ana' }, points: 12, strokes: 30 },
+      { player: { id: 'p2', name: 'Ben' }, points: 12, strokes: 30 },
+      { player: { id: 'p3', name: 'Cy' }, points: 9, strokes: 0 },
+    ],
+  };
+  tournamentLeaderboardResolved.mockReturnValue(board);
+  roundLeaderboard.mockReturnValue(board);
+
+  const view = renderTournamentHome();
+  await waitFor(() => expect(view.getByText('Ana')).toBeTruthy());
+
+  expect(view.getAllByText('T1')).toHaveLength(2);
+  expect(view.getByText('3')).toBeTruthy();
+  expect(view.getAllByText('12 pts')).toHaveLength(2);
+  expect(view.getAllByText('30 str')).toHaveLength(2);
+  expect(view.getByText('9 pts')).toBeTruthy();
+  expect(view.getByText('- str')).toBeTruthy();
+  // The scope chips still sit inside the card, above the rows.
+  expect(view.getByTestId('leaderboard-scope-chips')).toBeTruthy();
 });
