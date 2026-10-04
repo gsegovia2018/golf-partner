@@ -123,3 +123,78 @@ describe('normalizeDeepLink', () => {
     expect(normalizeDeepLink(undefined)).toEqual({});
   });
 });
+
+describe('league notifications', () => {
+  const base = { league_id: 'L1', league_name: 'Tour', actor_name: 'Pablo' };
+
+  test('tee off names the actor and course', () => {
+    const r = renderNotification('league_tee_off', { ...base, course_name: 'Golf La Herrer\u00eda' });
+    expect(r.title).toBe('Teed off');
+    expect(r.body).toBe('Pablo teed off for their league card \u00b7 Golf La Herrer\u00eda');
+  });
+
+  test('card announced names the month and course', () => {
+    const r = renderNotification('league_card_announced', { ...base, month: '2026-10-01', course_name: 'Sotogrande' });
+    expect(r.body).toBe('Pablo will play their October card at Sotogrande');
+  });
+
+  test('card announced survives missing month and course', () => {
+    expect(renderNotification('league_card_announced', base).body).toBe('Pablo will play their card');
+  });
+
+  test('card confirmed shows points', () => {
+    const r = renderNotification('league_card_confirmed', { ...base, month: '2026-10-01', points: 36 });
+    expect(r.body).toBe("Pablo's October card is confirmed, 36 pts");
+  });
+
+  test('marker issue includes the note', () => {
+    const r = renderNotification('league_marker_issue', { ...base, marker_name: 'Ana', note: 'hole 4' });
+    expect(r.body).toBe('Ana flagged your card: hole 4');
+  });
+
+  test('vote opened shows the change', () => {
+    const r = renderNotification('league_vote_opened', { ...base, subject_name: 'Ana', old: 12.4, proposed: 10.8 });
+    expect(r.body).toBe("Vote on Ana's handicap, 12.4 to 10.8");
+  });
+
+  test('ranking updated and reminder', () => {
+    expect(renderNotification('league_ranking_updated', { ...base, month: '2026-09-01' }).body)
+      .toBe('Tour September ranking is in');
+    expect(renderNotification('league_month_reminder', base).body)
+      .toBe('You have no card yet in Tour this month');
+  });
+
+  test('invite names the league', () => {
+    expect(renderNotification('league_invite', { ...base, inviter_name: 'Pablo' }).body)
+      .toBe('Pablo invited you to Tour');
+  });
+
+  test('every league type has its own icon, not the fallback', () => {
+    ['league_invite', 'league_card_announced', 'league_tee_off', 'league_card_confirmed',
+      'league_marker_issue', 'league_ranking_updated', 'league_month_reminder', 'league_vote_opened']
+      .forEach((type) => expect(renderNotification(type, base).icon).not.toBe('bell'));
+  });
+
+  test('event types link to the board', () => {
+    ['league_card_announced', 'league_tee_off', 'league_card_confirmed',
+      'league_ranking_updated', 'league_month_reminder', 'league_vote_opened']
+      .forEach((type) => expect(notificationLink(type, base))
+        .toEqual({ screen: 'LeagueBoard', params: { leagueId: 'L1' } }));
+  });
+
+  test('invite links to JoinLeague with the code', () => {
+    expect(notificationLink('league_invite', { invite_code: 'ABC' }))
+      .toEqual({ screen: 'JoinLeague', params: { code: 'ABC' } });
+  });
+
+  test('marker issue links to validate only with all ids, else the board', () => {
+    expect(notificationLink('league_marker_issue', { league_id: 'L1', card_id: 'C1' }))
+      .toEqual({ screen: 'LeagueBoard', params: { leagueId: 'L1' } });
+    expect(notificationLink('league_marker_issue', {
+      league_id: 'L1', card_id: 'C1', tournament_id: 'T1', round_id: 'R1',
+    })).toEqual({
+      screen: 'LeagueValidate',
+      params: { leagueId: 'L1', cardId: 'C1', tournamentId: 'T1', roundId: 'R1' },
+    });
+  });
+});

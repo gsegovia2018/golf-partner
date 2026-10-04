@@ -70,17 +70,119 @@ const RENDERERS: Record<string, (d: Record<string, unknown>) => Rendered> = {
   }),
 };
 
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+  'August', 'September', 'October', 'November', 'December'];
+
+// 'YYYY-MM-DD' (league month, first day) -> 'October'. '' when unparseable.
+function monthName(month: unknown): string {
+  const m = /^\d{4}-(\d{2})/.exec(String(month ?? ''));
+  return (m && MONTHS[Number(m[1]) - 1]) || '';
+}
+
+const leagueBoard = (d: Record<string, unknown>): DeepLink => ({
+  screen: 'LeagueBoard',
+  params: { leagueId: d.league_id },
+});
+
+// League types (plan 3.4). Copy and links mirror notificationContent.js.
+Object.assign(RENDERERS, {
+  league_invite: (d: Record<string, unknown>) => ({
+    title: 'League invite',
+    body: `${d.inviter_name ?? d.actor_name ?? 'A friend'} invited you to ${d.league_name ?? 'a league'}`,
+    deepLink: { screen: 'JoinLeague', params: { code: d.invite_code } },
+  }),
+  league_card_announced: (d: Record<string, unknown>) => {
+    const month = monthName(d.month);
+    return {
+      title: 'Card announced',
+      body: `${d.actor_name ?? 'A friend'} will play their ${month ? `${month} ` : ''}card`
+        + `${d.course_name ? ` at ${d.course_name}` : ''}`,
+      deepLink: leagueBoard(d),
+    };
+  },
+  league_tee_off: (d: Record<string, unknown>) => ({
+    title: 'Teed off',
+    body: `${d.actor_name ?? 'A friend'} teed off for their league card`
+      + `${d.course_name ? ` \u00b7 ${d.course_name}` : ''}`,
+    deepLink: leagueBoard(d),
+  }),
+  league_card_confirmed: (d: Record<string, unknown>) => {
+    const month = monthName(d.month);
+    const pts = d.points != null ? `, ${d.points} pts` : '';
+    return {
+      title: 'Card confirmed',
+      body: `${d.actor_name ?? 'A friend'}'s ${month ? `${month} ` : ''}card is confirmed${pts}`,
+      deepLink: leagueBoard(d),
+    };
+  },
+  league_marker_issue: (d: Record<string, unknown>) => ({
+    title: 'Marker sent your card back',
+    body: `${d.marker_name ?? d.actor_name ?? 'Your marker'} flagged your card`
+      + `${d.note ? `: ${d.note}` : ''}`,
+    deepLink: d.league_id && d.card_id && d.tournament_id && d.round_id
+      ? {
+        screen: 'LeagueValidate',
+        params: {
+          leagueId: d.league_id,
+          cardId: d.card_id,
+          tournamentId: d.tournament_id,
+          roundId: d.round_id,
+        },
+      }
+      : leagueBoard(d),
+  }),
+  league_ranking_updated: (d: Record<string, unknown>) => {
+    const month = monthName(d.month);
+    return {
+      title: 'Ranking updated',
+      body: `${d.league_name ?? 'The league'} ${month ? `${month} ` : ''}ranking is in`,
+      deepLink: leagueBoard(d),
+    };
+  },
+  league_month_reminder: (d: Record<string, unknown>) => ({
+    title: '3 days left',
+    body: `You have no card yet in ${d.league_name ?? 'your league'} this month`,
+    deepLink: leagueBoard(d),
+  }),
+  league_vote_opened: (d: Record<string, unknown>) => ({
+    title: 'Handicap vote',
+    body: `Vote on ${d.subject_name ?? 'a member'}'s handicap`
+      + `${d.old != null && d.proposed != null ? `, ${d.old} to ${d.proposed}` : ''}`,
+    deepLink: leagueBoard(d),
+  }),
+});
+
 // Notification category per type — matches the three Settings toggles
 // (profiles.settings.notifications.{scores,invites,media}). Absent key or
 // absent settings = deliver (defaults are ON client-side too).
-const CATEGORY_BY_TYPE: Record<string, 'scores' | 'invites' | 'media'> = {
+// League types all share the `league` category; their per-type push switch
+// is read separately (see isLeaguePushMuted).
+const CATEGORY_BY_TYPE: Record<string, 'scores' | 'invites' | 'media' | 'league'> = {
   friend_request: 'invites',
   friend_accepted: 'invites',
   added_to_game: 'invites',
   round_finished: 'scores',
   feed_reaction: 'media',
   feed_comment: 'media',
+  league_invite: 'league',
+  league_card_announced: 'league',
+  league_tee_off: 'league',
+  league_card_confirmed: 'league',
+  league_marker_issue: 'league',
+  league_ranking_updated: 'league',
+  league_month_reminder: 'league',
+  league_vote_opened: 'league',
 };
+
+type Settings = Record<string, Record<string, unknown>> | null | undefined;
+
+// League push prefs: settings.notifications.league.push[<type>]. Same shape
+// leagueNotificationPrefs.js writes. Only an explicit `false` mutes; unset is ON.
+function isLeaguePushMuted(settings: Settings, type: string): boolean {
+  const league = settings?.notifications?.league as
+    { push?: Record<string, unknown> } | undefined;
+  return league?.push?.[type] === false;
+}
 
 Deno.serve(async (req) => {
   try {
@@ -115,8 +217,10 @@ Deno.serve(async (req) => {
         .select('settings')
         .eq('user_id', note.user_id)
         .maybeSingle();
-      const muted = (prof?.settings as Record<string, Record<string, boolean>> | null)
-        ?.notifications?.[category] === false;
+      const settings = prof?.settings as Settings;
+      const muted = category === 'league'
+        ? isLeaguePushMuted(settings, note.type)
+        : settings?.notifications?.[category] === false;
       if (muted) return new Response('muted', { status: 200 });
     }
 
