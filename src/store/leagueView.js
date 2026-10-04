@@ -120,6 +120,36 @@ export function memberLabel(member, meId) {
   return member.userId === meId ? 'You' : (member.displayName || member.username || 'Golfer');
 }
 
+// Votes needed to pass: ceil(2/3 of active members), decision D2. Display
+// only; the server decides.
+export function voteThreshold(activeMemberCount) {
+  return Math.ceil((activeMemberCount * 2) / 3);
+}
+
+export function memberName(members, userId, meId) {
+  const m = (members ?? []).find((x) => x.userId === userId);
+  return m ? memberLabel(m, meId) : 'Former member';
+}
+
+const REASON_TEXT = { set: 'set by the admin', proposed: 'proposed on joining', vote: 'by vote' };
+
+// One handicap history line: "Nacho 24.0 -> 21.0 · by vote · 12 Jun".
+export function handicapEventLine(event, members, meId) {
+  const when = new Date(event.at);
+  const day = Number.isNaN(when.getTime()) ? '' : ` · ${when.getDate()} ${MONTHS[when.getMonth()].slice(0, 3)}`;
+  const move = event.old == null ? `set to ${event.new.toFixed(1)}` : `${event.old.toFixed(1)} → ${event.new.toFixed(1)}`;
+  return `${memberName(members, event.userId, meId)} ${move} · ${REASON_TEXT[event.reason] ?? event.reason}${day}`;
+}
+
+// The "Your <Month> card" block: what state my card is in and what it shows.
+// kind: 'none' | 'announced' | 'playing' | 'submitted' | 'confirmed'
+export function yourCardState(card) {
+  if (!card || card.status === 'void') return { kind: 'none' };
+  const course = card.course?.name ?? null;
+  const pts = card.points != null ? `${formatPoints(card.points)} pts` : null;
+  return { kind: card.status, course, pts, offApp: card.source === 'offapp', card };
+}
+
 // Season table + "2nd of 7 · 2,340 pts" for one league snapshot (the shape
 // leagueStore.getLeague returns and caches).
 export function leagueSummary(snapshot, meId) {

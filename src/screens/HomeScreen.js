@@ -15,6 +15,7 @@ import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableC
 import QuickStartCourses from '../components/QuickStartCourses';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
 import LeagueListSection from '../components/LeagueListSection';
+import LeaderboardCard from '../components/LeaderboardCard';
 import TourOverlay from '../components/tour/TourOverlay';
 import { HOME_TOUR_STEPS } from '../components/tour/tourSteps';
 import { scoringModeUsesTeams, leaderboardToggleLabels, getScoringMode, isScrambleMode } from '../components/scoringModes';
@@ -1629,25 +1630,21 @@ export default function HomeScreen({ navigation, route }) {
       >
 
       {tournament.players.length >= 2 && (
-      <View style={s.mastersCard}>
-        <View style={[s.cardTitleRow, { marginBottom: 8 }]}>
-          <Text style={[s.mastersCardTitle, { flexShrink: 1 }]} numberOfLines={1}>
-            {leaderboardOverall && !isGame ? 'OVERALL' : `R${selectedRound + 1} · ${roundModeLabel(displayedBoard.mode)}`}
-          </Text>
-          {resolvedBoard.entries.length > 0 && (
-            <View style={s.inlineToggle}>
-              <Text style={[s.mastersToggleLabel, !leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.left}</Text>
-              <Switch
-                value={leaderboardAlt}
-                onValueChange={setLeaderboardAlt}
-                trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
-                thumbColor="#fff"
-              />
-              <Text style={[s.mastersToggleLabel, leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.right}</Text>
-            </View>
-          )}
-        </View>
-        {!isGame && (
+      <LeaderboardCard
+        title={leaderboardOverall && !isGame ? 'OVERALL' : `R${selectedRound + 1} · ${roundModeLabel(displayedBoard.mode)}`}
+        headerRight={resolvedBoard.entries.length > 0 && (
+          <View style={s.inlineToggle}>
+            <Text style={[s.mastersToggleLabel, !leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.left}</Text>
+            <Switch
+              value={leaderboardAlt}
+              onValueChange={setLeaderboardAlt}
+              trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
+              thumbColor="#fff"
+            />
+            <Text style={[s.mastersToggleLabel, leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.right}</Text>
+          </View>
+        )}
+        subheader={!isGame && (
           <ScrollView
             testID="leaderboard-scope-chips"
             horizontal
@@ -1680,41 +1677,18 @@ export default function HomeScreen({ navigation, route }) {
             ))}
           </ScrollView>
         )}
-        {rankedLeaderboardEntries.map((entry, i) => {
-          const rankColors = [semantic.winner.dark, '#c0c8d4', '#daa06d'];
-          const placeIdx = entry.place - 1;
-          const isFirstPlace = entry.place === 1;
-          const rankColor = rankColors[placeIdx] || 'rgba(255,255,255,0.4)';
-          const rankBg = placeIdx === 0 ? 'rgba(255,215,0,0.2)' : placeIdx === 1 ? 'rgba(192,200,212,0.15)' : placeIdx === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
-          const rankLabel = entry.isTie ? `T${entry.place}` : entry.place;
-          return (
-            <View key={entry.player.id} style={[s.mastersRow, isFirstPlace && s.mastersRowFirst, i === rankedLeaderboardEntries.length - 1 && { borderBottomWidth: 0 }]}>
-              <View style={[s.mastersRankBadge, { backgroundColor: rankBg }]}>
-                <Text style={[s.mastersRankText, { color: rankColor }]}>{rankLabel}</Text>
-              </View>
-              <View style={s.mastersNameCol}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={[s.mastersName, isFirstPlace && { fontFamily: 'PlusJakartaSans-Bold' }]} numberOfLines={1}>
-                    {entry.player.name}
-                  </Text>
-                  {showRunning && entry.player.id === tournamentClinchedId && (
-                    <Feather name="award" size={14} color={semantic.winner.dark} />
-                  )}
-                </View>
-              </View>
-              <Text style={[s.mastersPoints, isFirstPlace && { fontSize: 18 }]}>{
-                !showRunning ? '—' : `${entry.points} ${displayedBoard.unit}`
-              }</Text>
-              {entry.strokes != null && (
-                <Text style={s.mastersSub}>{!showRunning ? '' : `${entry.strokes || '-'} str`}</Text>
-              )}
-            </View>
-          );
-        })}
-        {settings.scoringMode === 'matchplay' && matchPlayStandings && showRunning && !tournamentHasMixedModes(tournament) && (
-          <Text style={s.mastersMatchStatus}>{matchPlayStandings.status}</Text>
-        )}
-      </View>
+        rows={rankedLeaderboardEntries.map((entry) => ({
+          key: entry.player.id,
+          place: entry.place,
+          isTie: entry.isTie,
+          name: entry.player.name,
+          mark: showRunning && entry.player.id === tournamentClinchedId,
+          points: !showRunning ? '—' : `${entry.points} ${displayedBoard.unit}`,
+          sub: entry.strokes != null ? (!showRunning ? '' : `${entry.strokes || '-'} str`) : null,
+        }))}
+        footer={settings.scoringMode === 'matchplay' && matchPlayStandings && showRunning && !tournamentHasMixedModes(tournament)
+          ? matchPlayStandings.status : null}
+      />
       )}
 
       {/* A finished casual game has one round, and its ROUND SCORES card only
@@ -2727,16 +2701,6 @@ const makeStyles = (t) => StyleSheet.create({
   },
 
   // Masters leaderboard
-  mastersCard: {
-    backgroundColor: t.bg.deep,
-    borderRadius: 20, padding: 16, marginBottom: 16,
-    ...(t.isDark ? {} : { shadowColor: '#004030', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, elevation: 6 }),
-  },
-  mastersCardTitle: {
-    fontFamily: 'PlusJakartaSans-SemiBold',
-    fontSize: 10, color: 'rgba(255,255,255,0.6)',
-    letterSpacing: 2, textTransform: 'uppercase',
-  },
   mastersToggleLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.4)', fontSize: 11 },
   mastersToggleLabelActive: { color: 'rgba(255,255,255,0.9)' },
   // Overall/R1/R2/… scope chip strip in the leaderboard card header.
@@ -2748,27 +2712,12 @@ const makeStyles = (t) => StyleSheet.create({
   mastersChipActive: { backgroundColor: 'rgba(255,255,255,0.9)' },
   mastersChipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.6)', fontSize: 12 },
   mastersChipTextActive: { color: t.bg.deep },
-  mastersRow: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.12)',
-  },
-  mastersRowFirst: { borderLeftWidth: 3, borderLeftColor: semantic.winner.dark, paddingLeft: 8, marginLeft: -8 },
-  mastersRankBadge: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  mastersRankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
-  mastersNameCol: { flex: 1, minWidth: 0, marginRight: 8 },
-  mastersName: { fontFamily: 'PlusJakartaSans-Medium', color: '#ffffff', fontSize: 14 },
   mastersRoundSub: {
     fontFamily: 'PlusJakartaSans-Medium',
     color: 'rgba(255,255,255,0.5)',
     fontSize: 10,
     letterSpacing: 0.5,
     marginTop: 2,
-  },
-  mastersPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 16, marginRight: 8 },
-  mastersSub: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.45)', fontSize: 11, width: 60, textAlign: 'right' },
-  mastersMatchStatus: {
-    fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.85)',
-    fontSize: 12, textAlign: 'center', marginTop: 10,
   },
 
   // Pair blocks

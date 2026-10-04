@@ -34,6 +34,9 @@ import JoinTournamentLinkScreen from './src/screens/JoinTournamentLinkScreen';
 import SharedBoardScreen from './src/screens/SharedBoardScreen';
 import JoinLeagueScreen from './src/screens/JoinLeagueScreen';
 import LeagueCreateScreen from './src/screens/LeagueCreateScreen';
+import LeagueBoardScreen from './src/screens/LeagueBoardScreen';
+import LeagueMembersScreen from './src/screens/LeagueMembersScreen';
+import LeagueSettingsScreen from './src/screens/LeagueSettingsScreen';
 
 import FloatingTabBar from './src/navigation/FloatingTabBar';
 import { TAB_ROUTE_NAMES } from './src/navigation/tabBarModel';
@@ -326,6 +329,9 @@ function AppNavigator() {
         <Stack.Screen name="JoinOfficial" component={JoinOfficialScreen} />
         <Stack.Screen name="LeagueCreate" component={LeagueCreateScreen} />{/* stepped wizard — creates a league, then offers the invite code, link and QR */}
         <Stack.Screen name="JoinLeague" component={JoinLeagueScreen} />{/* /league/:code */}
+        <Stack.Screen name="LeagueBoard" component={LeagueBoardScreen} />{/* reached with { leagueId } */}
+        <Stack.Screen name="LeagueMembers" component={LeagueMembersScreen} />
+        <Stack.Screen name="LeagueSettings" component={LeagueSettingsScreen} />
         <Stack.Screen name="PlayersLibrary" component={PlayersLibraryScreen} />
         <Stack.Screen name="CoursesLibrary" component={CoursesLibraryScreen} />
         <Stack.Screen name="CourseLibraryDetail" component={CourseLibraryDetailScreen} />

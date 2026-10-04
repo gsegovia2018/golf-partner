@@ -1,0 +1,358 @@
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Switch, Alert,
+} from 'react-native';
+import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
+import PullToRefresh from '../components/PullToRefresh';
+import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { useLeague } from '../hooks/useLeague';
+import { useAppSettings } from '../hooks/useAppSettings';
+import { updateAppSettings } from '../store/settingsStore';
+import {
+  updateLeagueRules, setLeagueFeePaid, setLeagueRole, archiveLeague, leaveLeague,
+} from '../store/leagueStore';
+import {
+  parseIsoDate, parsePointsTable, formatPointsTable, parseFeeCents,
+} from '../store/leagueDraft';
+import { formatEuros, memberLabel, voteThreshold } from '../store/leagueView';
+import {
+  LEAGUE_NOTIFICATION_ROWS, resolveLeaguePrefs, leaguePrefsPatch,
+} from '../store/leagueNotificationPrefs';
+
+function fail(e) {
+  Alert.alert('Error', e?.message || 'Something went wrong');
+}
+
+// Rules (admin edits), fees and roles (admin), notification switches and
+// leave / archive. Everyone sees the rules; only an admin can change them.
+export default function LeagueSettingsScreen({ navigation, route }) {
+  const { theme } = useTheme();
+  const { user } = useAuth();
+  const s = makeStyles(theme);
+  const meId = user?.id ?? null;
+  const leagueId = route?.params?.leagueId;
+  const { data, loading, refreshing, error, reload, refresh } = useLeague(navigation, leagueId);
+  const appSettings = useAppSettings();
+
+  const [name, setName] = useState('');
+  const [seasonStart, setSeasonStart] = useState('');
+  const [seasonEnd, setSeasonEnd] = useState('');
+  const [pointsText, setPointsText] = useState('');
+  const [capText, setCapText] = useState('');
+  const [feeText, setFeeText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const seededRef = useRef(false);
+
+  // Seed the form once, from the first snapshot (cache or live). Later
+  // refreshes must not overwrite what the admin is typing.
+  useEffect(() => {
+    if (!data || seededRef.current) return;
+    seededRef.current = true;
+    const l = data.league;
+    setName(l.name);
+    setSeasonStart(String(l.seasonStart).slice(0, 10));
+    setSeasonEnd(String(l.seasonEnd).slice(0, 10));
+    setPointsText(formatPointsTable(l.pointsTable));
+    setCapText(String(l.handicapCap));
+    setFeeText(l.entryFeeCents ? String(l.entryFeeCents / 100) : '');
+  }, [data]);
+
+  const header = (
+    <View style={s.header}>
+      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel="Back" />
+      <Text style={s.headerTitle}>League settings</Text>
+    </View>
+  );
+
+  if (!data) {
+    return (
+      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+        {header}
+        <View style={s.center}>
+          {loading ? <ActivityIndicator color={theme.accent.primary} /> : (
+            <>
+              <Text style={s.emptyTitle}>Couldn't load the league</Text>
+              <Text style={s.emptyText}>{error}</Text>
+              <TouchableOpacity style={s.secondaryBtn} onPress={reload}><Text style={s.secondaryText}>Try again</Text></TouchableOpacity>
+            </>
+          )}
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  const { league, members } = data;
+  const active = members.filter((m) => !m.leftAt);
+  const me = active.find((m) => m.userId === meId);
+  const isAdmin = me?.role === 'admin';
+  const archived = !!league.archivedAt;
+  const prefs = resolveLeaguePrefs(appSettings);
+
+  const startIso = parseIsoDate(seasonStart);
+  const endIso = parseIsoDate(seasonEnd);
+  const pointsTable = parsePointsTable(pointsText);
+  const cap = Number(capText.replace(',', '.'));
+  const feeCents = parseFeeCents(feeText);
+  const formValid = name.trim().length > 0 && !!startIso && !!endIso && startIso <= endIso
+    && !!pointsTable && Number.isFinite(cap) && cap >= 0 && cap <= 54 && feeCents != null;
+
+  async function act(action) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await action();
+      return true;
+    } catch (e) {
+      fail(e);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveRules() {
+    const ok = await act(async () => {
+      await updateLeagueRules(leagueId, {
+        name: name.trim(), seasonStart: startIso, seasonEnd: endIso, pointsTable, cap, feeCents,
+      });
+      await reload();
+    });
+    if (ok) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+  }
+
+  function toggleFee(member, paid) {
+    return act(async () => { await setLeagueFeePaid(leagueId, member.userId, paid); await reload(); });
+  }
+
+  function toggleAdmin(member, makeAdmin) {
+    return act(async () => { await setLeagueRole(leagueId, member.userId, makeAdmin ? 'admin' : 'member'); await reload(); });
+  }
+
+  function confirmArchive() {
+    Alert.alert(
+      'Archive the league?',
+      'The board stays visible but becomes read-only for everyone. Announcing cards, joining and handicap changes stop.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Archive',
+          style: 'destructive',
+          onPress: () => act(async () => { await archiveLeague(leagueId); await reload(); }),
+        },
+      ],
+    );
+  }
+
+  function confirmLeave() {
+    Alert.alert(
+      'Leave this league?',
+      'Your past cards stay in the standings, marked as left. You can rejoin with the invite link.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            const ok = await act(async () => { await leaveLeague(leagueId); });
+            if (ok) navigation.navigate('Main');
+          },
+        },
+      ],
+    );
+  }
+
+  const field = (label, props) => (
+    <>
+      <Text style={s.fieldLabel}>{label}</Text>
+      <TextInput
+        style={s.input}
+        accessibilityLabel={label}
+        placeholderTextColor={theme.text.muted}
+        keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+        selectionColor={theme.accent.primary}
+        {...props}
+      />
+    </>
+  );
+
+  const readRow = (label, value, last) => (
+    <View style={[s.readRow, !last && s.rowDivider]}>
+      <Text style={s.readLabel}>{label}</Text>
+      <Text style={s.readValue}>{value}</Text>
+    </View>
+  );
+
+  return (
+    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      {header}
+      <PullToRefresh style={{ flex: 1 }} contentContainerStyle={s.content} refreshing={refreshing} onRefresh={refresh}>
+        <Text style={s.sectionLabel}>RULES</Text>
+        {isAdmin && !archived ? (
+          <View style={s.card}>
+            {field('League name', { value: name, onChangeText: setName })}
+            {field('Season starts', { value: seasonStart, onChangeText: setSeasonStart, placeholder: 'YYYY-MM-DD', autoCapitalize: 'none' })}
+            {field('Season ends', { value: seasonEnd, onChangeText: setSeasonEnd, placeholder: 'YYYY-MM-DD', autoCapitalize: 'none' })}
+            {field('Points table (1st, 2nd, 3rd…)', { value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none' })}
+            {field('Handicap cap', { value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}
+            {field('Entry fee (€)', { value: feeText, onChangeText: setFeeText, keyboardType: 'decimal-pad', placeholder: '0' })}
+            <Text style={s.hint}>One card a month and net Stableford are fixed for every league.</Text>
+            <TouchableOpacity
+              style={[s.primaryBtn, (!formValid || busy) && { opacity: 0.5 }]}
+              onPress={saveRules}
+              disabled={!formValid || busy}
+              activeOpacity={0.8}
+            >
+              <Text style={s.primaryText}>{saved ? 'Saved' : 'Save rules'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={[s.card, { paddingVertical: 4 }]}>
+            {readRow('Format', 'One card a month · net Stableford')}
+            {readRow('Points table', `${formatPointsTable(league.pointsTable)} · ties share`)}
+            {readRow('Handicaps', `Max ${league.handicapCap} · changes need ${voteThreshold(active.length)} of ${active.length} votes`)}
+            {readRow('Entry fee', league.entryFeeCents > 0 ? formatEuros(league.entryFeeCents) : 'None', true)}
+          </View>
+        )}
+
+        {isAdmin && !archived && (
+          <>
+            <Text style={s.sectionLabel}>MEMBERS</Text>
+            <View style={s.card}>
+              <View style={[s.adminHead, s.rowDivider]}>
+                <Text style={[s.colHead, { flex: 1 }]}>Member</Text>
+                {league.entryFeeCents > 0 && <Text style={s.colHead}>Paid</Text>}
+                <Text style={s.colHead}>Admin</Text>
+              </View>
+              {active.map((m, i) => (
+                <View key={m.userId} style={[s.adminRow, i < active.length - 1 && s.rowDivider]}>
+                  <Text style={s.memberName} numberOfLines={1}>{memberLabel(m, meId)}</Text>
+                  {league.entryFeeCents > 0 && (
+                    <Switch
+                      value={m.feePaid}
+                      onValueChange={(v) => toggleFee(m, v)}
+                      disabled={busy}
+                      accessibilityLabel={`${memberLabel(m, meId)} paid`}
+                      trackColor={{ true: theme.accent.primary }}
+                    />
+                  )}
+                  <Switch
+                    value={m.role === 'admin'}
+                    onValueChange={(v) => toggleAdmin(m, v)}
+                    disabled={busy}
+                    accessibilityLabel={`${memberLabel(m, meId)} admin`}
+                    trackColor={{ true: theme.accent.primary }}
+                  />
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
+        {/* Notification preferences. The switches save to profiles.settings
+            (notifications.league) through settingsStore; send-push (P9) and
+            send-email (P10) do not read them yet, so nothing changes until
+            those land. */}
+        <Text style={s.sectionLabel}>NOTIFICATIONS</Text>
+        <View style={s.card}>
+          <View style={[s.adminHead, s.rowDivider]}>
+            <Text style={[s.colHead, { flex: 1 }]} />
+            <Text style={s.colHead}>Push</Text>
+            <Text style={s.colHead}>Email</Text>
+          </View>
+          {LEAGUE_NOTIFICATION_ROWS.map((row, i) => (
+            <View key={row.type} style={[s.adminRow, i < LEAGUE_NOTIFICATION_ROWS.length - 1 && s.rowDivider]}>
+              <Text style={s.memberName}>{row.label}</Text>
+              {['push', 'email'].map((channel) => (
+                <Switch
+                  key={channel}
+                  value={prefs[channel][row.type]}
+                  onValueChange={(v) => updateAppSettings(leaguePrefsPatch(appSettings, channel, row.type, v))}
+                  accessibilityLabel={`${row.label} (${channel})`}
+                  trackColor={{ true: theme.accent.primary }}
+                />
+              ))}
+            </View>
+          ))}
+        </View>
+        <Text style={s.hint}>Push and email delivery for leagues is switched on in a coming update. Your choices are saved now.</Text>
+
+        <Text style={s.sectionLabel}>SEASON</Text>
+        {isAdmin && !archived && (
+          <TouchableOpacity style={s.dangerRow} onPress={confirmArchive} disabled={busy} activeOpacity={0.7}>
+            <Text style={s.dangerTitle}>Archive the league</Text>
+            <Text style={s.dangerSub}>Keeps the board read-only for everyone</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity style={s.dangerRow} onPress={confirmLeave} disabled={busy} activeOpacity={0.7}>
+          <Text style={s.dangerTitle}>Leave league</Text>
+          <Text style={s.dangerSub}>Your past cards stay in the standings</Text>
+        </TouchableOpacity>
+      </PullToRefresh>
+    </ScreenContainer>
+  );
+}
+
+function makeStyles(theme) {
+  const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
+  return StyleSheet.create({
+    container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6, gap: 4 },
+    headerTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 17, letterSpacing: -0.3 },
+    content: { padding: 16, paddingBottom: 40 },
+    emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 22, textAlign: 'center' },
+    emptyText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, marginTop: 6, marginBottom: 18, textAlign: 'center' },
+
+    sectionLabel: {
+      fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 10, letterSpacing: 1.5,
+      marginBottom: 10, marginTop: 12,
+    },
+    card: {
+      backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1, borderColor: cardBorder,
+      paddingHorizontal: 16, paddingVertical: 12, marginBottom: 10, ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    rowDivider: { borderBottomWidth: 1, borderBottomColor: theme.border.subtle },
+    fieldLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 12, marginBottom: 6, marginTop: 8 },
+    input: {
+      backgroundColor: theme.bg.secondary, color: theme.text.primary, borderRadius: 10, borderWidth: 1,
+      borderColor: theme.border.default, padding: 12, marginBottom: 4, fontSize: 15, fontFamily: 'PlusJakartaSans-Medium',
+    },
+    hint: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, lineHeight: 17, marginVertical: 8 },
+
+    readRow: { paddingVertical: 12 },
+    readLabel: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14 },
+    readValue: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
+
+    adminHead: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8, gap: 12 },
+    colHead: {
+      fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 10, letterSpacing: 1,
+      textTransform: 'uppercase', width: 52, textAlign: 'center',
+    },
+    adminRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 12 },
+    memberName: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
+
+    primaryBtn: {
+      alignItems: 'center', justifyContent: 'center', backgroundColor: theme.accent.primary,
+      borderRadius: 14, paddingVertical: 14, marginTop: 8,
+    },
+    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
+    secondaryBtn: {
+      alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1,
+      borderColor: theme.border.default, paddingVertical: 12, paddingHorizontal: 28,
+    },
+    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
+
+    dangerRow: {
+      backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1, borderColor: cardBorder,
+      padding: 16, marginBottom: 10,
+    },
+    dangerTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.destructive, fontSize: 14 },
+    dangerSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
+  });
+}
