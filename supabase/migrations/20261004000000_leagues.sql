@@ -165,11 +165,44 @@ CREATE TABLE IF NOT EXISTS public.league_finals (
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 
+-- 1b) scorer_cards.writer_uid --------------------------------------------------
+-- card->scorer->userId is client JSON and any editor of a game may write any
+-- author's row, so it proves nothing on its own. writer_uid is the auth uid
+-- that last wrote the row, stamped here by the server. The league partner
+-- check (confirm_league_card_by_partner) trusts a partner card only when the
+-- two agree. Nullable: existing rows stay NULL and simply never count as
+-- partner evidence. The client never sends this column; on its upsert
+-- (INSERT … ON CONFLICT (tournament_id, round_id, author_id) DO UPDATE) the
+-- BEFORE UPDATE branch stamps it again, so it is never reset to NULL. With
+-- no auth uid (service role / SQL editor) the existing value is kept.
+ALTER TABLE public.scorer_cards ADD COLUMN IF NOT EXISTS writer_uid uuid;
+
+CREATE OR REPLACE FUNCTION public.scorer_cards_stamp_writer()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL THEN
+    NEW.writer_uid := auth.uid();
+  ELSIF TG_OP = 'UPDATE' THEN
+    NEW.writer_uid := OLD.writer_uid;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS scorer_cards_stamp_writer ON public.scorer_cards;
+CREATE TRIGGER scorer_cards_stamp_writer
+  BEFORE INSERT OR UPDATE ON public.scorer_cards
+  FOR EACH ROW EXECUTE FUNCTION public.scorer_cards_stamp_writer();
+
 -- 2) Helpers ------------------------------------------------------------------
 -- SECURITY DEFINER STABLE, like is_tournament_member: the bodies bypass RLS so
 -- the policies below never re-enter each other.
+--
+-- The helpers granted to `authenticated` answer ONLY about the caller
+-- (auth.uid()), so they cannot be used as an oracle on who is in which league.
+-- The (league, uid) forms are internal: the RPCs call them inside SECURITY
+-- DEFINER bodies, and nobody else can execute them.
 
-CREATE OR REPLACE FUNCTION public.is_league_member(lid uuid, uid uuid)
+CREATE OR REPLACE FUNCTION public.league_is_member(lid uuid, uid uuid)
 RETURNS boolean
 LANGUAGE sql
 SECURITY DEFINER
@@ -183,7 +216,7 @@ AS $$
   );
 $$;
 
-CREATE OR REPLACE FUNCTION public.is_league_admin(lid uuid, uid uuid)
+CREATE OR REPLACE FUNCTION public.league_is_admin(lid uuid, uid uuid)
 RETURNS boolean
 LANGUAGE sql
 SECURITY DEFINER
@@ -197,10 +230,30 @@ AS $$
   );
 $$;
 
+CREATE OR REPLACE FUNCTION public.is_league_member(lid uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT public.league_is_member(lid, auth.uid());
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_league_admin(lid uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT public.league_is_admin(lid, auth.uid());
+$$;
+
 -- Storage helpers take the object NAME (text) so a malformed path can never
 -- raise inside a policy on a failed ::uuid cast — it simply matches nothing.
 -- Object key: `<league_id>/<card_id>.<ext>`.
-CREATE OR REPLACE FUNCTION public.can_read_league_proof(p_name text, uid uuid)
+CREATE OR REPLACE FUNCTION public.can_read_league_proof(p_name text)
 RETURNS boolean
 LANGUAGE sql
 SECURITY DEFINER
@@ -210,12 +263,12 @@ AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.league_members m
      WHERE m.league_id::text = split_part(p_name, '/', 1)
-       AND m.user_id = uid
+       AND m.user_id = auth.uid()
        AND m.joined_at IS NOT NULL AND m.left_at IS NULL
   );
 $$;
 
-CREATE OR REPLACE FUNCTION public.can_write_league_proof(p_name text, uid uuid)
+CREATE OR REPLACE FUNCTION public.can_write_league_proof(p_name text)
 RETURNS boolean
 LANGUAGE sql
 SECURITY DEFINER
@@ -227,20 +280,40 @@ AS $$
      WHERE c.league_id::text = split_part(p_name, '/', 1)
        AND c.id::text = split_part(split_part(p_name, '/', 2), '.', 1)
        AND split_part(p_name, '/', 3) = ''
-       AND c.user_id = uid
+       AND c.user_id = auth.uid()
        AND c.status IN ('announced','playing','submitted')
-       AND public.is_league_member(c.league_id, uid)
+       AND public.league_is_member(c.league_id, auth.uid())
   );
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.is_league_member(uuid, uuid)        FROM PUBLIC, anon;
-REVOKE EXECUTE ON FUNCTION public.is_league_admin(uuid, uuid)         FROM PUBLIC, anon;
-REVOKE EXECUTE ON FUNCTION public.can_read_league_proof(text, uuid)   FROM PUBLIC, anon;
-REVOKE EXECUTE ON FUNCTION public.can_write_league_proof(text, uuid)  FROM PUBLIC, anon;
-GRANT  EXECUTE ON FUNCTION public.is_league_member(uuid, uuid)        TO authenticated;
-GRANT  EXECUTE ON FUNCTION public.is_league_admin(uuid, uuid)         TO authenticated;
-GRANT  EXECUTE ON FUNCTION public.can_read_league_proof(text, uuid)   TO authenticated;
-GRANT  EXECUTE ON FUNCTION public.can_write_league_proof(text, uuid)  TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.league_is_member(uuid, uuid)  FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.league_is_admin(uuid, uuid)   FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.is_league_member(uuid)        FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.is_league_admin(uuid)         FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.can_read_league_proof(text)   FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.can_write_league_proof(text)  FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION public.is_league_member(uuid)        TO authenticated;
+GRANT  EXECUTE ON FUNCTION public.is_league_admin(uuid)         TO authenticated;
+GRANT  EXECUTE ON FUNCTION public.can_read_league_proof(text)   TO authenticated;
+GRANT  EXECUTE ON FUNCTION public.can_write_league_proof(text)  TO authenticated;
+
+-- Snapshot a marker confirms: everything the marker sees that decides the
+-- standings. A change to any of it after the QR was shown reads 'changed'.
+CREATE OR REPLACE FUNCTION public.league_card_hash(c public.league_cards)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = public
+AS $$
+  SELECT md5(jsonb_build_object(
+    'holes',            c.holes,
+    'gross',            c.gross,
+    'points',           c.points,
+    'playing_handicap', c.playing_handicap,
+    'played_on',        c.played_on,
+    'course',           c.course)::text);
+$$;
+REVOKE EXECUTE ON FUNCTION public.league_card_hash(public.league_cards) FROM PUBLIC, anon, authenticated;
 
 -- Internal helpers (called only from the RPCs below; nobody may call them).
 
@@ -309,7 +382,7 @@ END;
 $$;
 
 -- Validate a strokes snapshot and return it in canonical form
--- ({"1":n,…,"18":n}, integers 1..30, nothing else) so md5(holes::text) is stable.
+-- ({"1":n,…,"18":n}, integers 1..30, nothing else) so the snapshot hash is stable.
 CREATE OR REPLACE FUNCTION public.league_canonical_holes(p_holes jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -383,22 +456,22 @@ ALTER TABLE public.league_finals           ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS leagues_select ON public.leagues;
 CREATE POLICY leagues_select ON public.leagues
   FOR SELECT TO authenticated
-  USING (public.is_league_member(id, auth.uid()));
+  USING (public.is_league_member(id));
 
 DROP POLICY IF EXISTS league_members_select ON public.league_members;
 CREATE POLICY league_members_select ON public.league_members
   FOR SELECT TO authenticated
-  USING (public.is_league_member(league_id, auth.uid()));
+  USING (public.is_league_member(league_id));
 
 DROP POLICY IF EXISTS league_handicap_events_select ON public.league_handicap_events;
 CREATE POLICY league_handicap_events_select ON public.league_handicap_events
   FOR SELECT TO authenticated
-  USING (public.is_league_member(league_id, auth.uid()));
+  USING (public.is_league_member(league_id));
 
 DROP POLICY IF EXISTS league_handicap_votes_select ON public.league_handicap_votes;
 CREATE POLICY league_handicap_votes_select ON public.league_handicap_votes
   FOR SELECT TO authenticated
-  USING (public.is_league_member(league_id, auth.uid()));
+  USING (public.is_league_member(league_id));
 
 DROP POLICY IF EXISTS league_handicap_ballots_select ON public.league_handicap_ballots;
 CREATE POLICY league_handicap_ballots_select ON public.league_handicap_ballots
@@ -406,17 +479,17 @@ CREATE POLICY league_handicap_ballots_select ON public.league_handicap_ballots
   USING (EXISTS (
     SELECT 1 FROM public.league_handicap_votes v
      WHERE v.id = league_handicap_ballots.vote_id
-       AND public.is_league_member(v.league_id, auth.uid())));
+       AND public.is_league_member(v.league_id)));
 
 DROP POLICY IF EXISTS league_cards_select ON public.league_cards;
 CREATE POLICY league_cards_select ON public.league_cards
   FOR SELECT TO authenticated
-  USING (public.is_league_member(league_id, auth.uid()));
+  USING (public.is_league_member(league_id));
 
 DROP POLICY IF EXISTS league_finals_select ON public.league_finals;
 CREATE POLICY league_finals_select ON public.league_finals
   FOR SELECT TO authenticated
-  USING (public.is_league_member(league_id, auth.uid()));
+  USING (public.is_league_member(league_id));
 
 -- Belt and braces on top of "no policy": anon gets nothing, authenticated
 -- can only read.
@@ -448,17 +521,17 @@ DROP POLICY IF EXISTS "league-proofs owner update" ON storage.objects;
 
 CREATE POLICY "league-proofs member read"
 ON storage.objects FOR SELECT TO authenticated
-USING (bucket_id = 'league-proofs' AND public.can_read_league_proof(name, auth.uid()));
+USING (bucket_id = 'league-proofs' AND public.can_read_league_proof(name));
 
 CREATE POLICY "league-proofs owner insert"
 ON storage.objects FOR INSERT TO authenticated
-WITH CHECK (bucket_id = 'league-proofs' AND public.can_write_league_proof(name, auth.uid()));
+WITH CHECK (bucket_id = 'league-proofs' AND public.can_write_league_proof(name));
 
 -- Re-taking the photo overwrites the same key (upsert).
 CREATE POLICY "league-proofs owner update"
 ON storage.objects FOR UPDATE TO authenticated
-USING (bucket_id = 'league-proofs' AND public.can_write_league_proof(name, auth.uid()))
-WITH CHECK (bucket_id = 'league-proofs' AND public.can_write_league_proof(name, auth.uid()));
+USING (bucket_id = 'league-proofs' AND public.can_write_league_proof(name))
+WITH CHECK (bucket_id = 'league-proofs' AND public.can_write_league_proof(name));
 
 -- 5) RPCs: leagues and membership ----------------------------------------------
 
@@ -581,6 +654,36 @@ BEGIN
 END;
 $$;
 
+-- The roster with names and avatars. League mates are often not friends, so
+-- profiles RLS would hide them; this is the member-only way to show them.
+-- Name source is the same as the app's profile: display_name, then username.
+CREATE OR REPLACE FUNCTION public.get_league_members(p_league uuid)
+RETURNS TABLE (
+  user_id uuid, display_name text, username text, avatar_url text, role text,
+  league_handicap numeric, fee_paid boolean, joined_at timestamptz, left_at timestamptz
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+#variable_conflict use_column
+BEGIN
+  IF NOT public.league_is_member(p_league, auth.uid()) THEN
+    RAISE EXCEPTION 'You are not in this league.' USING ERRCODE = '42501';
+  END IF;
+  RETURN QUERY
+  SELECT m.user_id,
+         COALESCE(NULLIF(btrim(p.display_name), ''), p.username),
+         p.username, p.avatar_url, m.role, m.league_handicap::numeric,
+         m.fee_paid, m.joined_at, m.left_at
+    FROM public.league_members m
+    LEFT JOIN public.profiles p ON p.user_id = m.user_id
+   WHERE m.league_id = p_league
+   ORDER BY m.joined_at NULLS LAST, m.user_id;
+END;
+$$;
+
 -- Adds or re-activates the membership. A handicap different from the admin's
 -- is recorded as a 'proposed' event (the admin decides); with no admin value
 -- yet, the member's own figure is used until the admin sets one.
@@ -647,9 +750,10 @@ DECLARE
   v_old numeric(4,1);
   v_new numeric(4,1);
 BEGIN
-  IF NOT public.is_league_admin(p_league, v_uid) THEN
+  IF NOT public.league_is_admin(p_league, v_uid) THEN
     RAISE EXCEPTION 'Only the league admin can do that.' USING ERRCODE = '42501';
   END IF;
+  PERFORM public.league_assert_open(p_league);
   IF p_value IS NULL THEN
     RAISE EXCEPTION 'A handicap is required.' USING ERRCODE = 'P0001';
   END IF;
@@ -674,9 +778,10 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF NOT public.is_league_admin(p_league, auth.uid()) THEN
+  IF NOT public.league_is_admin(p_league, auth.uid()) THEN
     RAISE EXCEPTION 'Only the league admin can do that.' USING ERRCODE = '42501';
   END IF;
+  PERFORM public.league_assert_open(p_league);
   UPDATE public.league_members SET fee_paid = COALESCE(p_paid, false)
    WHERE league_id = p_league AND user_id = p_user;
   IF NOT FOUND THEN
@@ -699,9 +804,10 @@ DECLARE
   v_uid uuid := auth.uid();
   v_cap numeric(4,1);
 BEGIN
-  IF NOT public.is_league_admin(p_league, v_uid) THEN
+  IF NOT public.league_is_admin(p_league, v_uid) THEN
     RAISE EXCEPTION 'Only the league admin can do that.' USING ERRCODE = '42501';
   END IF;
+  PERFORM public.league_assert_open(p_league);
   UPDATE public.leagues
      SET name            = COALESCE(NULLIF(btrim(p_name), ''), name),
          season_start    = COALESCE(p_season_start, season_start),
@@ -737,10 +843,13 @@ AS $$
 DECLARE
   v_uid uuid := auth.uid();
 BEGIN
-  IF NOT public.is_league_member(p_league, v_uid) THEN
+  -- Serialise admin changes per league: two admins leaving / demoting each
+  -- other at once must not both pass the "another admin exists" check.
+  PERFORM 1 FROM public.leagues WHERE id = p_league FOR UPDATE;
+  IF NOT public.league_is_member(p_league, v_uid) THEN
     RAISE EXCEPTION 'You are not in this league.' USING ERRCODE = 'P0001';
   END IF;
-  IF public.is_league_admin(p_league, v_uid)
+  IF public.league_is_admin(p_league, v_uid)
      AND NOT EXISTS (SELECT 1 FROM public.league_members
                       WHERE league_id = p_league AND user_id <> v_uid AND role = 'admin'
                         AND joined_at IS NOT NULL AND left_at IS NULL)
@@ -766,9 +875,11 @@ AS $$
 DECLARE
   v_cur text;
 BEGIN
-  IF NOT public.is_league_admin(p_league, auth.uid()) THEN
+  PERFORM 1 FROM public.leagues WHERE id = p_league FOR UPDATE;   -- see leave_league
+  IF NOT public.league_is_admin(p_league, auth.uid()) THEN
     RAISE EXCEPTION 'Only the league admin can do that.' USING ERRCODE = '42501';
   END IF;
+  PERFORM public.league_assert_open(p_league);
   IF COALESCE(p_role, '') NOT IN ('admin','member') THEN
     RAISE EXCEPTION 'A role is admin or member.' USING ERRCODE = 'P0001';
   END IF;
@@ -799,7 +910,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF NOT public.is_league_admin(p_league, auth.uid()) THEN
+  IF NOT public.league_is_admin(p_league, auth.uid()) THEN
     RAISE EXCEPTION 'Only the league admin can do that.' USING ERRCODE = '42501';
   END IF;
   UPDATE public.leagues SET archived_at = COALESCE(archived_at, now()) WHERE id = p_league;
@@ -838,7 +949,7 @@ BEGIN
   SELECT count(*) FILTER (WHERE b.yes), count(*) FILTER (WHERE NOT b.yes)
     INTO v_yes, v_no
     FROM public.league_handicap_ballots b
-   WHERE b.vote_id = p_vote AND public.is_league_member(v_vote.league_id, b.voter);
+   WHERE b.vote_id = p_vote AND public.league_is_member(v_vote.league_id, b.voter);
 
   IF v_yes >= v_threshold THEN
     SELECT league_handicap INTO v_old FROM public.league_members
@@ -875,10 +986,10 @@ DECLARE
   v_old  numeric(4,1);
   v_new  numeric(4,1);
 BEGIN
-  IF NOT public.is_league_member(p_league, v_uid) THEN
+  IF NOT public.league_is_member(p_league, v_uid) THEN
     RAISE EXCEPTION 'You are not in this league.' USING ERRCODE = '42501';
   END IF;
-  IF NOT public.is_league_member(p_league, p_subject) THEN
+  IF NOT public.league_is_member(p_league, p_subject) THEN
     RAISE EXCEPTION 'That player is not in this league.' USING ERRCODE = 'P0001';
   END IF;
   IF p_proposed IS NULL THEN
@@ -938,7 +1049,7 @@ DECLARE
   v_vote      public.league_handicap_votes%ROWTYPE;
 BEGIN
   SELECT * INTO v_vote FROM public.league_handicap_votes WHERE id = p_vote FOR UPDATE;
-  IF NOT FOUND OR NOT public.is_league_member(v_vote.league_id, v_uid) THEN
+  IF NOT FOUND OR NOT public.league_is_member(v_vote.league_id, v_uid) THEN
     RAISE EXCEPTION 'Vote not found.' USING ERRCODE = 'P0001';
   END IF;
   PERFORM public.league_assert_open(v_vote.league_id);
@@ -980,8 +1091,10 @@ DECLARE
   v_month date;
   v_hcp   numeric(4,1);
   v_id    uuid;
+  v_s0    date;
+  v_s1    date;
 BEGIN
-  IF NOT public.is_league_member(p_league, v_uid) THEN
+  IF NOT public.league_is_member(p_league, v_uid) THEN
     RAISE EXCEPTION 'You are not in this league.' USING ERRCODE = '42501';
   END IF;
   PERFORM public.league_assert_open(p_league);
@@ -997,6 +1110,15 @@ BEGIN
   END IF;
 
   v_month := public.league_month_of(v_tee);
+  IF v_month < public.league_month_of(now()) THEN
+    RAISE EXCEPTION 'That month is over. Announce a card for this month or later.'
+      USING ERRCODE = 'P0001', HINT = 'past_month';
+  END IF;
+  SELECT season_start, season_end INTO v_s0, v_s1 FROM public.leagues WHERE id = p_league;
+  IF (v_tee AT TIME ZONE 'Europe/Madrid')::date NOT BETWEEN v_s0 AND v_s1 THEN
+    RAISE EXCEPTION 'That date is outside the season (% to %).', v_s0, v_s1
+      USING ERRCODE = 'P0001', HINT = 'outside_season';
+  END IF;
   IF EXISTS (SELECT 1 FROM public.league_cards
               WHERE league_id = p_league AND user_id = v_uid
                 AND month = v_month AND status <> 'void') THEN
@@ -1039,7 +1161,9 @@ BEGIN
 END;
 $$;
 
--- The scorecard's first score tap on a league round. Idempotent.
+-- The scorecard's first score tap on a league round. Stamps first_shot_at
+-- with the SERVER clock (first call wins) — submit_league_card trusts this
+-- stamp over the client's round.startedAt. Idempotent.
 CREATE OR REPLACE FUNCTION public.notify_league_tee_off(p_card uuid)
 RETURNS void
 LANGUAGE plpgsql
@@ -1052,12 +1176,15 @@ DECLARE
 BEGIN
   SELECT * INTO v_c FROM public.league_cards WHERE id = p_card;
   IF NOT FOUND OR v_c.user_id IS DISTINCT FROM v_uid
-     OR NOT public.is_league_member(v_c.league_id, v_uid) THEN
+     OR NOT public.league_is_member(v_c.league_id, v_uid) THEN
     RAISE EXCEPTION 'Card not found.' USING ERRCODE = 'P0001';
   END IF;
+  PERFORM public.league_assert_open(v_c.league_id);
   IF v_c.status NOT IN ('announced','playing') THEN
     RETURN;
   END IF;
+  UPDATE public.league_cards SET first_shot_at = now(), updated_at = now()
+   WHERE id = p_card AND first_shot_at IS NULL;
   IF EXISTS (SELECT 1 FROM public.notifications
               WHERE actor_id = v_uid AND type = 'league_tee_off' AND entity_id = p_card) THEN
     RETURN;
@@ -1075,7 +1202,12 @@ $$;
 -- Freezes the snapshot. Allowed while the card is announced/playing, and
 -- again while 'submitted' (e.g. after a marker reported a problem) — never
 -- once confirmed or void (fixing those is void + a new card, plan §5).
--- App cards copy first_shot_at from the round's body.startedAt.
+-- Not-announced: an app card uses the server stamp from notify_league_tee_off
+-- (falling back to the round's body.startedAt only when there is no stamp)
+-- and is flagged when there is no first shot at all or it precedes the
+-- announcement; an off-app card is flagged when its tee time precedes it.
+-- Every unused marker token for the card is expired: a new snapshot needs a
+-- new QR.
 CREATE OR REPLACE FUNCTION public.submit_league_card(
   p_card uuid, p_holes jsonb, p_gross int, p_points int, p_playing_handicap int,
   p_played_on date
@@ -1094,7 +1226,7 @@ DECLARE
 BEGIN
   SELECT * INTO v_c FROM public.league_cards WHERE id = p_card FOR UPDATE;
   IF NOT FOUND OR v_c.user_id IS DISTINCT FROM v_uid
-     OR NOT public.is_league_member(v_c.league_id, v_uid) THEN
+     OR NOT public.league_is_member(v_c.league_id, v_uid) THEN
     RAISE EXCEPTION 'Card not found.' USING ERRCODE = 'P0001';
   END IF;
   IF v_c.status NOT IN ('announced','playing','submitted') THEN
@@ -1117,14 +1249,21 @@ BEGIN
 
   v_first := v_c.first_shot_at;
   IF v_c.source = 'app' THEN
-    SELECT body -> 'startedAt' INTO v_raw FROM public.game_rounds
-     WHERE tournament_id = v_c.tournament_id AND id = v_c.round_id;
-    v_first := CASE jsonb_typeof(v_raw)
-                 WHEN 'string' THEN (v_raw #>> '{}')::timestamptz
-                 WHEN 'number' THEN to_timestamp((v_raw #>> '{}')::double precision / 1000)
-                 ELSE NULL END;
+    IF v_first IS NULL THEN
+      SELECT body -> 'startedAt' INTO v_raw FROM public.game_rounds
+       WHERE tournament_id = v_c.tournament_id AND id = v_c.round_id;
+      v_first := CASE jsonb_typeof(v_raw)
+                   WHEN 'string' THEN (v_raw #>> '{}')::timestamptz
+                   WHEN 'number' THEN to_timestamp((v_raw #>> '{}')::double precision / 1000)
+                   ELSE NULL END;
+    END IF;
+    v_not := v_c.announced_at IS NULL OR v_first IS NULL OR v_first < v_c.announced_at;
+  ELSE
+    v_not := v_c.announced_at IS NULL OR v_c.tee_time IS NULL OR v_c.tee_time < v_c.announced_at;
   END IF;
-  v_not := v_c.announced_at IS NULL OR COALESCE(v_first < v_c.announced_at, false);
+
+  UPDATE public.league_marker_tokens SET expires_at = LEAST(expires_at, now())
+   WHERE card_id = p_card AND used_at IS NULL;
 
   UPDATE public.league_cards
      SET holes = v_holes, gross = p_gross, points = p_points,
@@ -1155,8 +1294,10 @@ DECLARE
   v_holes jsonb;
   v_hcp   numeric(4,1);
   v_id    uuid;
+  v_s0    date;
+  v_s1    date;
 BEGIN
-  IF NOT public.is_league_member(p_league, v_uid) THEN
+  IF NOT public.league_is_member(p_league, v_uid) THEN
     RAISE EXCEPTION 'You are not in this league.' USING ERRCODE = '42501';
   END IF;
   PERFORM public.league_assert_open(p_league);
@@ -1173,6 +1314,12 @@ BEGIN
     RAISE EXCEPTION 'The tee time is in % but the date is in %. Check the date.',
       to_char(v_month, 'FMMonth'), to_char(p_played_on, 'FMMonth')
       USING ERRCODE = 'P0001', HINT = 'month_mismatch';
+  END IF;
+
+  SELECT season_start, season_end INTO v_s0, v_s1 FROM public.leagues WHERE id = p_league;
+  IF COALESCE(p_played_on, (p_tee_time AT TIME ZONE 'Europe/Madrid')::date) NOT BETWEEN v_s0 AND v_s1 THEN
+    RAISE EXCEPTION 'That date is outside the season (% to %).', v_s0, v_s1
+      USING ERRCODE = 'P0001', HINT = 'outside_season';
   END IF;
 
   v_holes := public.league_canonical_holes(p_holes);
@@ -1254,8 +1401,11 @@ REVOKE EXECUTE ON FUNCTION public.league_confirm_card(uuid, text, uuid, text, te
 --   * the card's player belongs to the owner (game_players.user_id),
 --   * every hole 1..18 of that player is settled non-null in game_scores and
 --     equals the submitted snapshot,
---   * one scorer_cards row whose scorer.userId is a signed-in user OTHER than
---     the owner marks that player on all 18 holes.
+--   * one scorer_cards row written by ANOTHER signed-in user proves it: its
+--     server-stamped writer_uid equals its scorer.userId, is not the owner,
+--     is a (non-deleted) player of this game, and its entries for the owner's
+--     player equal the snapshot on all 18 holes. score_resolutions are not
+--     evidence.
 -- A check that fails is not an error: it returns confirmed=false with the
 -- counts, so Validate can fall back to the QR.
 CREATE OR REPLACE FUNCTION public.confirm_league_card_by_partner(p_card uuid)
@@ -1269,16 +1419,16 @@ DECLARE
   v_c        public.league_cards%ROWTYPE;
   v_settled  int;
   v_match    int;
-  v_partner  text;
   v_marked   int := 0;
   v_puid     uuid;
   v_pname    text;
 BEGIN
   SELECT * INTO v_c FROM public.league_cards WHERE id = p_card FOR UPDATE;
   IF NOT FOUND OR v_c.user_id IS DISTINCT FROM v_uid
-     OR NOT public.is_league_member(v_c.league_id, v_uid) THEN
+     OR NOT public.league_is_member(v_c.league_id, v_uid) THEN
     RAISE EXCEPTION 'Card not found.' USING ERRCODE = 'P0001';
   END IF;
+  PERFORM public.league_assert_open(v_c.league_id);
   IF v_c.source <> 'app' THEN
     RAISE EXCEPTION 'Only cards played in the app can be confirmed by a partner.' USING ERRCODE = 'P0001';
   END IF;
@@ -1301,14 +1451,25 @@ BEGIN
    WHERE s.tournament_id = v_c.tournament_id AND s.round_id = v_c.round_id
      AND s.player_id = v_c.player_id AND s.hole BETWEEN 1 AND 18;
 
-  SELECT sc.card -> 'scorer' ->> 'userId',
+  SELECT sc.writer_uid,
          (SELECT count(*) FROM generate_series(1, 18) h
-           WHERE jsonb_typeof(sc.card -> 'holes' -> h::text -> 'entries' -> v_c.player_id) = 'number')
-    INTO v_partner, v_marked
+           WHERE CASE WHEN jsonb_typeof(sc.card -> 'holes' -> h::text -> 'entries' -> v_c.player_id) = 'number'
+                      THEN (sc.card -> 'holes' -> h::text -> 'entries' ->> v_c.player_id)::numeric
+                           = (v_c.holes ->> h::text)::numeric
+                      ELSE false END)
+    INTO v_puid, v_marked
     FROM public.scorer_cards sc
    WHERE sc.tournament_id = v_c.tournament_id AND sc.round_id = v_c.round_id
-     AND NULLIF(sc.card -> 'scorer' ->> 'userId', '') IS NOT NULL
-     AND sc.card -> 'scorer' ->> 'userId' <> v_uid::text
+     AND sc.writer_uid IS NOT NULL
+     AND sc.writer_uid <> v_uid
+     -- Guarded cast: a non-uuid userId never matches (and never raises).
+     AND CASE WHEN (sc.card -> 'scorer' ->> 'userId')
+                   ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              THEN (sc.card -> 'scorer' ->> 'userId')::uuid = sc.writer_uid
+              ELSE false END
+     AND EXISTS (SELECT 1 FROM public.game_players gp
+                  WHERE gp.tournament_id = v_c.tournament_id
+                    AND gp.user_id = sc.writer_uid AND gp.deleted_at IS NULL)
    ORDER BY 2 DESC
    LIMIT 1;
   v_marked := COALESCE(v_marked, 0);
@@ -1322,11 +1483,6 @@ BEGIN
       'settled', v_settled, 'matches', v_match, 'marked', v_marked);
   END IF;
 
-  BEGIN
-    v_puid := v_partner::uuid;
-  EXCEPTION WHEN invalid_text_representation THEN
-    v_puid := NULL;
-  END;
   v_pname := CASE WHEN v_puid IS NOT NULL THEN public.league_user_name(v_puid) END;
 
   PERFORM public.league_confirm_card(p_card, 'partner', v_puid, v_pname, NULL);
@@ -1350,9 +1506,10 @@ DECLARE
 BEGIN
   SELECT * INTO v_c FROM public.league_cards WHERE id = p_card FOR UPDATE;
   IF NOT FOUND OR v_c.user_id IS DISTINCT FROM v_uid
-     OR NOT public.is_league_member(v_c.league_id, v_uid) THEN
+     OR NOT public.league_is_member(v_c.league_id, v_uid) THEN
     RAISE EXCEPTION 'Card not found.' USING ERRCODE = 'P0001';
   END IF;
+  PERFORM public.league_assert_open(v_c.league_id);
   IF COALESCE(p_kind, '') NOT IN ('photo','official') THEN
     RAISE EXCEPTION 'Unknown proof kind %', p_kind USING ERRCODE = 'P0001';
   END IF;
@@ -1390,9 +1547,10 @@ DECLARE
 BEGIN
   SELECT * INTO v_c FROM public.league_cards WHERE id = p_card FOR UPDATE;
   IF NOT FOUND OR v_c.user_id IS DISTINCT FROM v_uid
-     OR NOT public.is_league_member(v_c.league_id, v_uid) THEN
+     OR NOT public.league_is_member(v_c.league_id, v_uid) THEN
     RAISE EXCEPTION 'Card not found.' USING ERRCODE = 'P0001';
   END IF;
+  PERFORM public.league_assert_open(v_c.league_id);
   IF v_c.status <> 'submitted' OR v_c.holes IS NULL THEN
     RAISE EXCEPTION 'Submit the card first.' USING ERRCODE = 'P0001';
   END IF;
@@ -1404,7 +1562,7 @@ BEGIN
   -- 32 random bytes, url-safe base64 without padding (43 chars).
   v_token := translate(encode(extensions.gen_random_bytes(32), 'base64'), E'+/=\n', '-_');
   INSERT INTO public.league_marker_tokens (token, card_id, snapshot_hash, expires_at)
-  VALUES (v_token, p_card, md5(v_c.holes::text), v_exp);
+  VALUES (v_token, p_card, public.league_card_hash(v_c), v_exp);
 
   RETURN jsonb_build_object('token', v_token, 'expires_at', v_exp);
 END;
@@ -1439,7 +1597,7 @@ BEGIN
   IF v_c.status <> 'submitted' OR v_c.holes IS NULL THEN
     RAISE EXCEPTION 'invalid' USING ERRCODE = 'P0001';
   END IF;
-  IF md5(v_c.holes::text) <> v_t.snapshot_hash THEN
+  IF public.league_card_hash(v_c) <> v_t.snapshot_hash THEN
     RAISE EXCEPTION 'changed' USING ERRCODE = 'P0001';
   END IF;
 
@@ -1498,10 +1656,11 @@ BEGIN
     RAISE EXCEPTION 'expired' USING ERRCODE = 'P0001';
   END IF;
   SELECT * INTO v_c FROM public.league_cards WHERE id = v_t.card_id FOR UPDATE;
+  PERFORM public.league_assert_open(v_c.league_id);
   IF v_c.status <> 'submitted' OR v_c.holes IS NULL THEN
     RAISE EXCEPTION 'invalid' USING ERRCODE = 'P0001';
   END IF;
-  IF md5(v_c.holes::text) <> v_t.snapshot_hash THEN
+  IF public.league_card_hash(v_c) <> v_t.snapshot_hash THEN
     RAISE EXCEPTION 'changed' USING ERRCODE = 'P0001';
   END IF;
   IF p_ok IS NULL THEN
@@ -1546,7 +1705,7 @@ DECLARE
   v_league uuid;
 BEGIN
   SELECT league_id INTO v_league FROM public.league_cards WHERE id = p_card FOR UPDATE;
-  IF NOT FOUND OR NOT public.is_league_admin(v_league, auth.uid()) THEN
+  IF NOT FOUND OR NOT public.league_is_admin(v_league, auth.uid()) THEN
     RAISE EXCEPTION 'Only the league admin can do that.' USING ERRCODE = '42501';
   END IF;
   UPDATE public.league_cards
@@ -1566,7 +1725,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF NOT public.is_league_admin(p_league, auth.uid()) THEN
+  IF NOT public.league_is_admin(p_league, auth.uid()) THEN
     RAISE EXCEPTION 'Only the league admin can do that.' USING ERRCODE = '42501';
   END IF;
   IF p_strokes IS NOT NULL AND jsonb_typeof(p_strokes) <> 'object' THEN
@@ -1591,6 +1750,7 @@ BEGIN
   FOREACH v_sig IN ARRAY ARRAY[
     'public.create_league(text, date, date, int[], numeric, int, jsonb)',
     'public.get_league_by_code(text)',
+    'public.get_league_members(uuid)',
     'public.join_league(text, numeric)',
     'public.set_league_handicap(uuid, uuid, numeric)',
     'public.set_league_fee_paid(uuid, uuid, boolean)',

@@ -242,23 +242,31 @@ SELECT 'announce notifies the 3 other members, not the actor, with push data',
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'tee-off notifies 3 members once (idempotent)', count(*) = 3, count(*)::text
   FROM public.notifications WHERE type = 'league_tee_off';
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'tee-off stamps first_shot_at with the server clock', first_shot_at = now(), first_shot_at::text
+  FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardA');
 
--- Game fixture for A's card: A plays pA, Javi (B) scores A on all 18 holes,
--- A's own device agrees. startedAt is AFTER the announcement.
+-- Game fixture for A's card: A plays pA. A's own device scores A, and A ALSO
+-- writes a forged card under another author_id that claims to be Javi's
+-- (scorer.userId = B). Javi's real card is written later, as B.
+-- startedAt is AFTER the announcement.
 INSERT INTO public.tournaments (id, name) VALUES ('t_lg_a', 'League smoke A');
 INSERT INTO public.game_rounds (id, tournament_id, round_index, body)
 VALUES ('r0', 't_lg_a', 0, jsonb_build_object('startedAt', to_char((now() + interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')));
 INSERT INTO public.game_players (tournament_id, player_id, user_id, body)
 VALUES ('t_lg_a', 'pA', 'a0000000-0000-4000-8000-00000000000a', '{}'::jsonb),
        ('t_lg_a', 'pB', 'a0000000-0000-4000-8000-00000000000b', '{}'::jsonb);
+CREATE TEMP TABLE smoke_card_a ON COMMIT DROP AS
+SELECT (SELECT jsonb_object_agg(h::text, jsonb_build_object(
+          'v', 1, 'entries', jsonb_build_object('pA', 4, 'pB', 5), 'ts', 1757000000000::bigint))
+          FROM generate_series(1, 18) h) AS holes;
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
 INSERT INTO public.scorer_cards (tournament_id, round_id, author_id, card)
 SELECT 't_lg_a', 'r0', dev, jsonb_build_object(
          'scorer', jsonb_build_object('playerId', pid, 'userId', uid),
-         'holes', (SELECT jsonb_object_agg(h::text, jsonb_build_object(
-                     'v', 1, 'entries', jsonb_build_object('pA', 4, 'pB', 5), 'ts', 1757000000000::bigint))
-                     FROM generate_series(1, 18) h))
-  FROM (VALUES ('devA', 'pA', 'a0000000-0000-4000-8000-00000000000a'),
-               ('devB', 'pB', 'a0000000-0000-4000-8000-00000000000b')) d(dev, pid, uid);
+         'holes', (SELECT holes FROM smoke_card_a))
+  FROM (VALUES ('devA',    'pA', 'a0000000-0000-4000-8000-00000000000a'),
+               ('devFake', 'pB', 'a0000000-0000-4000-8000-00000000000b')) d(dev, pid, uid);
 
 -- 6) Submit + partner confirmation (as A) ------------------------------------------
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
@@ -293,7 +301,42 @@ BEGIN
     r->>'status' = 'submitted' AND (r->>'not_announced')::boolean = false AND r->>'first_shot_at' IS NOT NULL, r::text);
 
   r := public.confirm_league_card_by_partner(cid);
-  INSERT INTO league_smoke (name, ok, detail) VALUES ('partner check passes: Javi marked 18/18',
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('a "Javi" card forged by the owner does NOT confirm',
+    (r->>'confirmed')::boolean = false AND r->>'reason' = 'no_partner', r::text);
+END $$;
+
+-- Javi's real card, written by B (writer_uid = B).
+RESET ROLE;
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+INSERT INTO public.scorer_cards (tournament_id, round_id, author_id, card)
+SELECT 't_lg_a', 'r0', 'devB', jsonb_build_object(
+         'scorer', jsonb_build_object('playerId', 'pB', 'userId', 'a0000000-0000-4000-8000-00000000000b'),
+         'holes', (SELECT holes FROM smoke_card_a));
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'writer_uid is stamped by the server from auth.uid()',
+       string_agg(author_id || '=' || right(writer_uid::text, 1), ',' ORDER BY author_id) = 'devA=a,devB=b,devFake=a',
+       string_agg(author_id || '=' || COALESCE(right(writer_uid::text, 1), 'NULL'), ',' ORDER BY author_id)
+  FROM public.scorer_cards WHERE tournament_id = 't_lg_a';
+-- The client's upsert (INSERT … ON CONFLICT DO UPDATE without writer_uid)
+-- keeps the stamp; a no-auth (service role) update keeps it too.
+INSERT INTO public.scorer_cards (tournament_id, round_id, author_id, card)
+SELECT 't_lg_a', 'r0', 'devB', card FROM public.scorer_cards
+ WHERE tournament_id = 't_lg_a' AND author_id = 'devB'
+ON CONFLICT (tournament_id, round_id, author_id) DO UPDATE SET card = EXCLUDED.card;
+SELECT set_config('request.jwt.claims', '', true);
+UPDATE public.scorer_cards SET card = card WHERE tournament_id = 't_lg_a' AND author_id = 'devB';
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'upsert and no-auth update keep writer_uid',
+       writer_uid = 'a0000000-0000-4000-8000-00000000000b', COALESCE(writer_uid::text, 'NULL')
+  FROM public.scorer_cards WHERE tournament_id = 't_lg_a' AND author_id = 'devB';
+
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := public.confirm_league_card_by_partner((SELECT v::uuid FROM league_ctx WHERE k='cardA'));
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('partner check passes on Javi''s real card (18/18)',
     (r->>'confirmed')::boolean AND r->>'partner_user_id' = 'a0000000-0000-4000-8000-00000000000b'
       AND r->>'partner_name' = 'Javi Test', r::text);
 END $$;
@@ -343,15 +386,18 @@ INSERT INTO public.tournaments (id, name) VALUES ('t_lg_c', 'League smoke C');
 INSERT INTO public.game_rounds (id, tournament_id, round_index, body)
 VALUES ('r0', 't_lg_c', 0, jsonb_build_object('startedAt', to_char((now() - interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')));
 INSERT INTO public.game_players (tournament_id, player_id, user_id, body)
-VALUES ('t_lg_c', 'pC', 'a0000000-0000-4000-8000-00000000000c', '{}'::jsonb);
+VALUES ('t_lg_c', 'pC', 'a0000000-0000-4000-8000-00000000000c', '{}'::jsonb),
+       ('t_lg_c', 'pB', 'a0000000-0000-4000-8000-00000000000b', '{}'::jsonb);
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000c","role":"authenticated"}', true);
 INSERT INTO public.scorer_cards (tournament_id, round_id, author_id, card)
-VALUES
-  ('t_lg_c', 'r0', 'devC', jsonb_build_object(
+VALUES ('t_lg_c', 'r0', 'devC', jsonb_build_object(
      'scorer', jsonb_build_object('playerId', 'pC', 'userId', 'a0000000-0000-4000-8000-00000000000c'),
      'holes', (SELECT jsonb_object_agg(h::text, jsonb_build_object('v', 1, 'entries', jsonb_build_object('pC', 5)))
-                 FROM generate_series(1, 18) h))),
-  ('t_lg_c', 'r0', 'devB', jsonb_build_object(
-     'scorer', jsonb_build_object('playerId', NULL, 'userId', 'a0000000-0000-4000-8000-00000000000b'),
+                 FROM generate_series(1, 18) h)));
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+INSERT INTO public.scorer_cards (tournament_id, round_id, author_id, card)
+VALUES ('t_lg_c', 'r0', 'devB', jsonb_build_object(
+     'scorer', jsonb_build_object('playerId', 'pB', 'userId', 'a0000000-0000-4000-8000-00000000000b'),
      'holes', (SELECT jsonb_object_agg(h::text, jsonb_build_object('v', 1, 'entries', jsonb_build_object('pC', 5)))
                  FROM generate_series(1, 17) h)));
 
@@ -489,6 +535,35 @@ SELECT 'returned card stays submitted with the note; owner alone notified',
 
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000c","role":"authenticated"}', true);
 SET LOCAL ROLE authenticated;
+INSERT INTO league_ctx SELECT 'tokP', public.create_marker_token((SELECT v::uuid FROM league_ctx WHERE k='cardC'))->>'token';
+RESET ROLE;
+-- Only the points change (holes untouched): the QR must read 'changed'.
+UPDATE public.league_cards SET points = points + 5 WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardC');
+DO $$
+BEGIN
+  PERFORM public.get_marker_card((SELECT v FROM league_ctx WHERE k='tokP'));
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('snapshot hash covers points', false, 'no error');
+EXCEPTION WHEN others THEN
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('snapshot hash covers points', SQLERRM = 'changed', SQLERRM);
+END $$;
+UPDATE public.league_cards SET points = points - 5 WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardC');
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000c","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+-- An identical re-submit still kills every outstanding QR.
+SELECT public.submit_league_card((SELECT v::uuid FROM league_ctx WHERE k='cardC'),
+         (SELECT jsonb_object_agg(h::text, CASE WHEN h = 1 THEN 6 ELSE 5 END) FROM generate_series(1, 18) h),
+         91, 29, 22, NULL);
+SELECT set_config('request.jwt.claims', '{"role":"anon"}', true);
+SET LOCAL ROLE anon;
+DO $$
+BEGIN
+  PERFORM public.get_marker_card((SELECT v FROM league_ctx WHERE k='tokP'));
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('submit expires every unused token', false, 'no error');
+EXCEPTION WHEN others THEN
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('submit expires every unused token', SQLERRM = 'expired', SQLERRM);
+END $$;
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000c","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
 INSERT INTO league_ctx SELECT 'tok4', public.create_marker_token((SELECT v::uuid FROM league_ctx WHERE k='cardC'))->>'token';
 SELECT set_config('request.jwt.claims', '{"role":"anon"}', true);
 SET LOCAL ROLE anon;
@@ -539,15 +614,25 @@ BEGIN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('proof must exist in storage',
       SQLERRM = 'The proof photo has not finished uploading.', SQLERRM);
   END;
-  INSERT INTO league_smoke (name, ok, detail) VALUES ('storage write policy: owner yes, other member no, bad path no',
-    public.can_write_league_proof(lid::text || '/' || cid::text || '.jpg', 'a0000000-0000-4000-8000-00000000000d')
-    AND NOT public.can_write_league_proof(lid::text || '/' || cid::text || '.jpg', 'a0000000-0000-4000-8000-00000000000b')
-    AND NOT public.can_write_league_proof('not-a-uuid/x.jpg', 'a0000000-0000-4000-8000-00000000000d')
-    AND public.can_read_league_proof(lid::text || '/' || cid::text || '.jpg', 'a0000000-0000-4000-8000-00000000000b')
-    AND NOT public.can_read_league_proof(lid::text || '/' || cid::text || '.jpg', 'a0000000-0000-4000-8000-00000000000e'),
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('storage policy as owner D: write + read yes, bad path no',
+    public.can_write_league_proof(lid::text || '/' || cid::text || '.jpg')
+    AND public.can_read_league_proof(lid::text || '/' || cid::text || '.jpg')
+    AND NOT public.can_write_league_proof('not-a-uuid/x.jpg'),
     NULL);
 END $$;
-
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'storage policy as member B: read yes, write no',
+       public.can_read_league_proof(l.v || '/' || c.v || '.jpg') AND NOT public.can_write_league_proof(l.v || '/' || c.v || '.jpg'),
+       NULL
+  FROM league_ctx l, league_ctx c WHERE l.k = 'league' AND c.k = 'cardD';
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000e","role":"authenticated"}', true);
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'storage policy + is_league_member as outsider E: no',
+       NOT public.can_read_league_proof(l.v || '/' || c.v || '.jpg') AND NOT public.is_league_member(l.v::uuid),
+       NULL
+  FROM league_ctx l, league_ctx c WHERE l.k = 'league' AND c.k = 'cardD';
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000d","role":"authenticated"}', true);
 RESET ROLE;
 INSERT INTO storage.objects (bucket_id, name, owner)
 SELECT 'league-proofs', (SELECT v FROM league_ctx WHERE k='league') || '/' || (SELECT v FROM league_ctx WHERE k='cardD') || '.jpg',
@@ -622,6 +707,53 @@ BEGIN
   INSERT INTO league_smoke (name, ok, detail) VALUES ('submit accepts a played_on in the card month',
     r->>'status' = 'submitted', r::text);
 END $$;
+
+DO $$
+DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league'); r jsonb;
+BEGIN
+  BEGIN
+    PERFORM public.announce_league_card(lid, 'offapp', '{"name":"x"}'::jsonb, '2026-09-15 10:00+02');
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses a past month', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses a past month',
+      SQLERRM = 'That month is over. Announce a card for this month or later.', SQLERRM);
+  END;
+  BEGIN
+    PERFORM public.announce_league_card(lid, 'offapp', '{"name":"x"}'::jsonb, '2027-01-10 10:00+01');
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses a date outside the season', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses a date outside the season',
+      SQLERRM = 'That date is outside the season (2026-01-01 to 2026-12-31).', SQLERRM);
+  END;
+  BEGIN
+    PERFORM public.add_unannounced_league_card(lid, '{"name":"x"}'::jsonb, NULL, '2027-02-01',
+              (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses a date outside the season', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses a date outside the season',
+      SQLERRM = 'That date is outside the season (2026-01-01 to 2026-12-31).', SQLERRM);
+  END;
+  -- Off-app card announced AFTER its tee time -> not announced.
+  r := public.announce_league_card(lid, 'offapp', '{"name":"Late"}'::jsonb, now() - interval '1 hour');
+  INSERT INTO league_ctx VALUES ('cardBO', r->>'id');
+  r := public.submit_league_card((r->>'id')::uuid, (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20, NULL);
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('off-app tee time before the announcement -> not_announced',
+    (r->>'not_announced')::boolean, r::text);
+END $$;
+
+-- App card with no tee-off stamp and no round startedAt -> not announced.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'app',
+         '{"name":"Nowhere"}'::jsonb, '2026-11-05 09:00+01', 't_lg_n', 'r0', 'pA');
+  INSERT INTO league_ctx VALUES ('cardAN', r->>'id');
+  r := public.submit_league_card((r->>'id')::uuid, (SELECT jsonb_object_agg(h::text, 4) FROM generate_series(1, 18) h), 72, 36, 20, NULL);
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('app card with no first-shot stamp -> not_announced',
+    (r->>'not_announced')::boolean AND r->>'first_shot_at' IS NULL, r::text);
+END $$;
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
 
 -- 10) Handicap votes ---------------------------------------------------------------------
 -- 4 active members -> threshold ceil(8/3) = 3.
@@ -722,6 +854,27 @@ SELECT public.leave_league((SELECT v::uuid FROM league_ctx WHERE k='league'));
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'a member who left no longer reads the league', (SELECT count(*) FROM public.leagues) = 0, NULL;
 
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'get_league_members: names, avatars, roles, left members kept',
+       count(*) = 4
+       AND bool_or(display_name = 'Pablo Test' AND left_at IS NOT NULL)
+       AND bool_or(display_name = 'Marcos Test' AND role = 'admin')
+       AND bool_and(display_name IS NOT NULL),
+       string_agg(display_name || ':' || role, ',')
+  FROM public.get_league_members((SELECT v::uuid FROM league_ctx WHERE k='league'));
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'is_league_member answers for the caller only (B: yes)',
+       public.is_league_member((SELECT v::uuid FROM league_ctx WHERE k='league')), NULL;
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000e","role":"authenticated"}', true);
+DO $$
+BEGIN
+  PERFORM * FROM public.get_league_members((SELECT v::uuid FROM league_ctx WHERE k='league'));
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('outsider cannot list league members', false, 'no error');
+EXCEPTION WHEN others THEN
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('outsider cannot list league members', SQLSTATE = '42501', SQLERRM);
+END $$;
+
 -- 13) Roles and archive ---------------------------------------------------------------------
 -- Active now: A (admin), B, D. C left in section 11.
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
@@ -741,6 +894,8 @@ BEGIN
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('member cannot archive_league', SQLSTATE = '42501', SQLERRM);
   END;
+  -- A QR issued before the archive, used after it.
+  INSERT INTO league_ctx SELECT 'tokB', public.create_marker_token((SELECT v::uuid FROM league_ctx WHERE k='cardB2'))->>'token';
   -- An open vote that will be caught by the archive (B's yes is 1 of 2 needed).
   INSERT INTO league_ctx VALUES ('vote3',
     public.open_handicap_vote(lid, 'a0000000-0000-4000-8000-00000000000d', 20)::text);
@@ -807,6 +962,71 @@ BEGIN
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: open vote refused', SQLERRM = msg, SQLERRM);
   END;
+  BEGIN
+    PERFORM public.confirm_league_card_by_partner((SELECT v::uuid FROM league_ctx WHERE k='cardB2'));
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: partner confirm refused', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: partner confirm refused', SQLERRM = msg, SQLERRM);
+  END;
+  BEGIN
+    PERFORM public.attach_league_proof((SELECT v::uuid FROM league_ctx WHERE k='cardB2'),
+              lid::text || '/' || (SELECT v FROM league_ctx WHERE k='cardB2') || '.jpg', 'photo', 'x');
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: proof confirm refused', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: proof confirm refused', SQLERRM = msg, SQLERRM);
+  END;
+  BEGIN
+    PERFORM public.create_marker_token((SELECT v::uuid FROM league_ctx WHERE k='cardB2'));
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: new marker token refused', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: new marker token refused', SQLERRM = msg, SQLERRM);
+  END;
+END $$;
+
+SELECT set_config('request.jwt.claims', '{"role":"anon"}', true);
+SET LOCAL ROLE anon;
+DO $$
+BEGIN
+  PERFORM public.confirm_marker_card((SELECT v FROM league_ctx WHERE k='tokB'), 'Lucía', true, NULL);
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: marker confirm refused', false, 'no error');
+EXCEPTION WHEN others THEN
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: marker confirm refused',
+    SQLERRM = 'This league has been archived. You can still look at it, but not change it.', SQLERRM);
+END $$;
+
+-- Admin after archive: void + final allowed, every other admin write refused.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000d","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league');
+        msg constant text := 'This league has been archived. You can still look at it, but not change it.';
+        n_ok int := 0;
+BEGIN
+  BEGIN PERFORM public.set_league_handicap(lid, 'a0000000-0000-4000-8000-00000000000b', 10);
+  EXCEPTION WHEN others THEN IF SQLERRM = msg THEN n_ok := n_ok + 1; END IF; END;
+  BEGIN PERFORM public.set_league_fee_paid(lid, 'a0000000-0000-4000-8000-00000000000b', false);
+  EXCEPTION WHEN others THEN IF SQLERRM = msg THEN n_ok := n_ok + 1; END IF; END;
+  BEGIN PERFORM public.update_league_rules(lid, 'Renamed', NULL, NULL, NULL, NULL, NULL);
+  EXCEPTION WHEN others THEN IF SQLERRM = msg THEN n_ok := n_ok + 1; END IF; END;
+  BEGIN PERFORM public.set_league_role(lid, 'a0000000-0000-4000-8000-00000000000b', 'admin');
+  EXCEPTION WHEN others THEN IF SQLERRM = msg THEN n_ok := n_ok + 1; END IF; END;
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: handicap/fee/rules/role refused', n_ok = 4, n_ok::text);
+
+  PERFORM public.void_league_card((SELECT v::uuid FROM league_ctx WHERE k='cardBO'), 'cleanup');
+  PERFORM public.record_league_final(lid, 't_lg_a', '{}'::jsonb);
+  INSERT INTO league_smoke (name, ok, detail)
+  SELECT 'archived: void and record_league_final still allowed',
+         (SELECT status FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardBO')) = 'void',
+         NULL;
+END $$;
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+DO $$
+BEGIN
+  PERFORM public.notify_league_tee_off((SELECT v::uuid FROM league_ctx WHERE k='cardAN'));
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: tee-off refused', false, 'no error');
+EXCEPTION WHEN others THEN
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: tee-off refused',
+    SQLERRM = 'This league has been archived. You can still look at it, but not change it.', SQLERRM);
 END $$;
 
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
@@ -834,6 +1054,7 @@ SELECT 'anon executes exactly get_marker_card + confirm_marker_card',
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
  WHERE n.nspname = 'public'
    AND p.proname IN ('is_league_member','is_league_admin','can_read_league_proof','can_write_league_proof',
+                     'league_is_member','league_is_admin','league_card_hash','get_league_members',
                      'league_new_invite_code','league_user_name','notify_league_members','league_canonical_holes',
                      'league_month_of','league_confirm_card','league_assert_open','league_settle_vote',
                      'set_league_role','archive_league','create_league','get_league_by_code','join_league',
@@ -851,7 +1072,8 @@ SELECT 'authenticated cannot execute internal helpers',
  WHERE n.nspname = 'public'
    AND p.proname IN ('league_new_invite_code','league_user_name','notify_league_members',
                      'league_canonical_holes','league_month_of','league_confirm_card',
-                     'league_assert_open','league_settle_vote');
+                     'league_assert_open','league_settle_vote','league_is_member','league_is_admin',
+                     'league_card_hash');
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'anon has no privilege on league tables; authenticated has SELECT only',
        NOT bool_or(has_table_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE,DELETE'))
@@ -861,6 +1083,12 @@ SELECT 'anon has no privilege on league tables; authenticated has SELECT only',
  WHERE n.nspname = 'public' AND c.relkind = 'r'
    AND c.relname IN ('leagues','league_members','league_handicap_events','league_handicap_votes',
                      'league_handicap_ballots','league_cards','league_marker_tokens','league_finals');
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'leave_league and set_league_role lock the league row first',
+       bool_and(pg_get_functiondef(p.oid) LIKE '%FROM public.leagues WHERE id = p_league FOR UPDATE%'),
+       string_agg(p.proname, ',')
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+ WHERE n.nspname = 'public' AND p.proname IN ('leave_league','set_league_role');
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'league-proofs bucket is private', NOT public, public::text FROM storage.buckets WHERE id = 'league-proofs';
 
