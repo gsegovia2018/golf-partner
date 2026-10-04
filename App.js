@@ -40,6 +40,9 @@ import LeagueBoardScreen from './src/screens/LeagueBoardScreen';
 import LeagueMembersScreen from './src/screens/LeagueMembersScreen';
 import LeagueSettingsScreen from './src/screens/LeagueSettingsScreen';
 import LeagueValidateScreen from './src/screens/LeagueValidateScreen';
+import LeagueAnnounceScreen from './src/screens/LeagueAnnounceScreen';
+import LeagueAddScoreScreen from './src/screens/LeagueAddScoreScreen';
+import LeagueAddProofScreen from './src/screens/LeagueAddProofScreen';
 
 import FloatingTabBar from './src/navigation/FloatingTabBar';
 import { TAB_ROUTE_NAMES } from './src/navigation/tabBarModel';
@@ -370,6 +373,9 @@ function AppNavigator() {
         <Stack.Screen name="LeagueValidate" component={LeagueValidateScreen} />{/* after Finish of a league round: { leagueId, cardId, tournamentId, roundId } */}
         <Stack.Screen name="LeagueMarkerQR" component={LeagueMarkerQRScreen} />{/* reached with { cardId } */}
         <Stack.Screen name="MarkerCard" component={MarkerCardScreen} />{/* /m/:token opened by a signed-in visitor */}
+        <Stack.Screen name="LeagueAnnounce" component={LeagueAnnounceScreen} />{/* off-app card: announce before playing */}
+        <Stack.Screen name="LeagueAddScore" component={LeagueAddScoreScreen} />{/* type the 18 holes after the round */}
+        <Stack.Screen name="LeagueAddProof" component={LeagueAddProofScreen} />{/* signed card photo or official result */}
         <Stack.Screen name="PlayersLibrary" component={PlayersLibraryScreen} />
         <Stack.Screen name="CoursesLibrary" component={CoursesLibraryScreen} />
         <Stack.Screen name="CourseLibraryDetail" component={CourseLibraryDetailScreen} />
