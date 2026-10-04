@@ -70,7 +70,7 @@ describe('LeagueBoardScreen', () => {
     expect(getByText(/No cards yet\. .* is open: the board fills in as each card is confirmed\./)).toBeTruthy();
 
     fireEvent.press(getByText('Play with the app'));
-    expect(navigation.navigate).toHaveBeenCalledWith('Setup', { kind: 'game' });
+    expect(navigation.navigate).toHaveBeenCalledWith('Setup', { kind: 'game', leagueId: 'L1' });
   });
 
   test('"Playing without the app?" stays hidden until the LeagueAnnounce route exists', async () => {

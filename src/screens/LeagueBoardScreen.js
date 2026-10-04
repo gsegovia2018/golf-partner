@@ -164,8 +164,8 @@ export default function LeagueBoardScreen({ navigation, route }) {
           </Text>
           <TouchableOpacity
             style={s.primaryBtn}
-            // The league switch on the Setup review step arrives in P6.
-            onPress={() => navigation.navigate('Setup', { kind: 'game' })}
+            // Setup preselects this league's "Counts for" switch, on.
+            onPress={() => navigation.navigate('Setup', { kind: 'game', leagueId })}
             activeOpacity={0.8}
           >
             <Feather name="play" size={16} color={theme.text.inverse} style={{ marginRight: 8 }} />
