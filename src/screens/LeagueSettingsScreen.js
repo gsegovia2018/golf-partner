@@ -255,9 +255,8 @@ export default function LeagueSettingsScreen({ navigation, route }) {
         )}
 
         {/* Notification preferences. The switches save to profiles.settings
-            (notifications.league) through settingsStore; send-push (P9) and
-            send-email (P10) do not read them yet, so nothing changes until
-            those land. */}
+            (notifications.league) through settingsStore; send-push reads the push
+            column. send-email (P10) does not read the email column yet. */}
         <Text style={s.sectionLabel}>NOTIFICATIONS</Text>
         <View style={s.card}>
           <View style={[s.adminHead, s.rowDivider]}>
@@ -280,7 +279,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
             </View>
           ))}
         </View>
-        <Text style={s.hint}>Push and email delivery for leagues is switched on in a coming update. Your choices are saved now.</Text>
+        <Text style={s.hint}>Email delivery for leagues is coming. Your email choices are saved now.</Text>
 
         <Text style={s.sectionLabel}>SEASON</Text>
         {isAdmin && !archived && (

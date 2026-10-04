@@ -2,8 +2,8 @@
 // `notifications.league = { push: { <type>: bool }, email: { <type>: bool } }`
 // (plan section 3.4). A missing key means its default, like every other setting.
 //
-// P9 (push) and P10 (email) make send-push / send-email read these keys; until
-// then the switches only save the choice.
+// send-push reads the push keys (P9); send-email will read the email keys
+// (P10), until then those switches only save the choice.
 
 // Order and wording follow the League settings design. `type` is the
 // notifications.type value the server inserts.
