@@ -149,6 +149,24 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const mine = yourCardState(myCard);
   const toneColor = { done: theme.accent.primary, live: theme.text.primary, muted: theme.text.muted };
 
+  // My app card stuck before confirmation (left Validate, or no partner yet):
+  // reopen Validate on its round. A submitted card goes straight to the check.
+  const finishValidating = !mine.offApp && (mine.kind === 'playing' || mine.kind === 'submitted') ? (
+    <TouchableOpacity
+      style={s.primaryBtn}
+      onPress={() => navigation.navigate('LeagueValidate', {
+        leagueId,
+        cardId: mine.card.id,
+        tournamentId: mine.card.tournamentId,
+        roundId: mine.card.roundId,
+        submitted: mine.kind === 'submitted',
+      })}
+      activeOpacity={0.8}
+    >
+      <Text style={s.primaryText}>Finish validating your card</Text>
+    </TouchableOpacity>
+  ) : null;
+
   const renderYourCard = () => {
     let body;
     let badge = null;
@@ -205,6 +223,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
               <Text style={s.primaryText}>Add your score</Text>
             </TouchableOpacity>
           )}
+          {finishValidating}
         </>
       );
     } else {
@@ -228,6 +247,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
               <Text style={s.primaryText}>Add proof</Text>
             </TouchableOpacity>
           )}
+          {finishValidating}
         </>
       );
     }

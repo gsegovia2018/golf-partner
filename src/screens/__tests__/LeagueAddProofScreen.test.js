@@ -3,7 +3,8 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import LeagueAddProofScreen from '../LeagueAddProofScreen';
 
-jest.mock('../../hooks/useLeague', () => ({ useLeague: () => ({ data: null }) }));
+const mockUseLeague = jest.fn(() => ({ data: null }));
+jest.mock('../../hooks/useLeague', () => ({ useLeague: (...args) => mockUseLeague(...args) }));
 jest.mock('../../lib/mediaCapture', () => ({ pickMedia: jest.fn() }));
 jest.mock('../../store/leagueStore', () => ({
   submitLeagueCard: jest.fn(),
@@ -78,6 +79,52 @@ describe('LeagueAddProofScreen', () => {
     fireEvent.press(await utils.findByText('Retry'));
     await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('LeagueBoard', { leagueId: 'L1' }));
     expect(store.addUnannouncedLeagueCard).toHaveBeenCalledTimes(1);
+  });
+
+  test('off-app mode does not read the league', async () => {
+    const utils = render(wrap(<LeagueAddProofScreen navigation={nav()} route={params()} />));
+    await choosePhoto(utils);
+    expect(mockUseLeague).toHaveBeenCalledWith(expect.anything(), null);
+  });
+
+  describe('app-card mode (from LeagueValidate)', () => {
+    const appCard = {
+      id: 'c9', source: 'app', status: 'submitted', course: { name: 'Centro Nacional' },
+      playedOn: '2025-10-04', points: 36, gross: 88,
+    };
+    const appRoute = (kind) => ({ params: { leagueId: 'L1', cardId: 'c9', source: 'app', kind } });
+
+    beforeEach(() => {
+      mockUseLeague.mockReturnValue({ data: { cardsByMonth: { '2025-10': [appCard] } } });
+      store.uploadLeagueProof.mockResolvedValue('L1/c9.jpg');
+    });
+    afterEach(() => { mockUseLeague.mockReturnValue({ data: null }); });
+
+    test('signed card: summary from the card, then upload + attach only, never submit', async () => {
+      const navigation = nav();
+      const utils = render(wrap(<LeagueAddProofScreen navigation={navigation} route={appRoute('photo')} />));
+      expect(mockUseLeague).toHaveBeenCalledWith(navigation, 'L1');
+      expect(utils.getByText('Centro Nacional · Sat 4 Oct · 36 pts · gross 88')).toBeTruthy();
+      await choosePhoto(utils);
+      fireEvent.changeText(utils.getByLabelText("Marker's name"), 'Lucía');
+      fireEvent.press(utils.getByText('Submit card'));
+
+      await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('LeagueBoard', { leagueId: 'L1' }));
+      expect(store.submitLeagueCard).not.toHaveBeenCalled();
+      expect(store.addUnannouncedLeagueCard).not.toHaveBeenCalled();
+      expect(store.uploadLeagueProof).toHaveBeenCalledWith('L1', 'c9', 'file:///card.jpg');
+      expect(store.attachLeagueProof).toHaveBeenCalledWith('c9', 'L1/c9.jpg', 'photo', 'Lucía');
+    });
+
+    test('official result: the toggle starts on and attaches as "official"', async () => {
+      const utils = render(wrap(<LeagueAddProofScreen navigation={nav()} route={appRoute('official')} />));
+      expect(utils.getByLabelText('It was an official tournament').props.value).toBe(true);
+      expect(utils.queryByLabelText("Marker's name")).toBeNull();
+      await choosePhoto(utils);
+      fireEvent.press(utils.getByText('Submit card'));
+      await waitFor(() => expect(store.attachLeagueProof).toHaveBeenCalledWith('c9', 'L1/c9.jpg', 'official', null));
+      expect(store.submitLeagueCard).not.toHaveBeenCalled();
+    });
   });
 
   test('announced card with the official toggle: submit then attach as "official"', async () => {

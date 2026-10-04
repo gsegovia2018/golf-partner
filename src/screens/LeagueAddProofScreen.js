@@ -28,26 +28,31 @@ function findCard(data, cardId) {
 // a failed step is retried from where it stopped, so the card is never created
 // twice. With `resume` (a submitted card that never got its proof) only the
 // upload and attach run.
+// With `source: 'app'` (from LeagueValidate) the card was played in the app and
+// is already submitted: like `resume`, only the upload and attach run, the
+// summary comes from the card, and `kind` ('photo' | 'official') presets the
+// official toggle.
 export default function LeagueAddProofScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeOffAppStyles(theme);
   const {
     leagueId, cardId = null, snapshot = null, playedOn = null, strokes = null,
-    leagueHandicap = 0, resume = false,
+    leagueHandicap = 0, resume = false, source = 'offapp', kind = 'photo',
   } = route?.params ?? {};
-  const { data } = useLeague(navigation, resume ? leagueId : null);
+  const fromCard = resume || source === 'app';
+  const { data } = useLeague(navigation, fromCard ? leagueId : null);
 
   const [photoUri, setPhotoUri] = useState(null);
   const [markerName, setMarkerName] = useState('');
-  const [official, setOfficial] = useState(false);
+  const [official, setOfficial] = useState(kind === 'official');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const progress = useRef(resume ? { cardId, submitted: true } : {});
+  const progress = useRef(fromCard ? { cardId, submitted: true } : {});
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
   const summary = useMemo(() => {
-    if (resume) {
+    if (fromCard) {
       const c = findCard(data, cardId);
       if (!c) return null;
       return {
@@ -56,7 +61,7 @@ export default function LeagueAddProofScreen({ navigation, route }) {
       };
     }
     return proofSummary({ snapshot, playedOn, strokes, leagueHandicap });
-  }, [resume, data, cardId, snapshot, playedOn, strokes, leagueHandicap]);
+  }, [fromCard, data, cardId, snapshot, playedOn, strokes, leagueHandicap]);
 
   async function capture(source) {
     setError(null);

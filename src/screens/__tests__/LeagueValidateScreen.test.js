@@ -48,9 +48,7 @@ function tournament(scores = fives) {
 }
 
 const route = { params: { leagueId: 'L1', cardId: 'card-1', tournamentId: 't1', roundId: 't1-r0' } };
-const makeNav = (routeNames = ['LeagueBoard']) => ({
-  replace: jest.fn(), navigate: jest.fn(), getState: () => ({ routeNames }),
-});
+const makeNav = () => ({ replace: jest.fn(), navigate: jest.fn() });
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
 describe('LeagueValidateScreen', () => {
@@ -96,24 +94,77 @@ describe('LeagueValidateScreen', () => {
     expect(getByText('38')).toBeTruthy();
   });
 
-  test('no partner: the reason in plain words and the fallbacks', async () => {
+  test('no partner: the reason in plain words and the three fallbacks, each wired', async () => {
     store.confirmLeagueCardByPartner.mockResolvedValue({ confirmed: false, reason: 'no_partner', settled: 18, marked: 0 });
-    const navigation = makeNav(['LeagueBoard', 'LeagueMarkerQR']);
-    const { findByText, getByText } = render(wrap(
+    const navigation = makeNav();
+    const { findByText, getByText, queryByText } = render(wrap(
       <LeagueValidateScreen navigation={navigation} route={route} />,
     ));
     fireEvent.press(await findByText('Submit card'));
 
     expect(await findByText(PARTNER_REASONS.no_partner)).toBeTruthy();
-    expect(getByText('Upload signed paper card')).toBeTruthy();
-    expect(getByText('Official tournament result')).toBeTruthy();
+    expect(queryByText(/coming soon/)).toBeNull();
 
+    // LeagueMarkerQRScreen reads { cardId, leagueId }.
     fireEvent.press(getByText('Show QR to your marker'));
-    expect(navigation.navigate).toHaveBeenCalledWith('LeagueMarkerQR', { leagueId: 'L1', cardId: 'card-1' });
+    expect(navigation.navigate).toHaveBeenLastCalledWith('LeagueMarkerQR', { leagueId: 'L1', cardId: 'card-1' });
 
-    // P8's proof route is not registered yet: the row is there but inert.
+    // LeagueAddProofScreen's app-card mode: upload + attach only.
     fireEvent.press(getByText('Upload signed paper card'));
-    expect(navigation.navigate).toHaveBeenCalledTimes(1);
+    expect(navigation.navigate).toHaveBeenLastCalledWith('LeagueAddProof', {
+      leagueId: 'L1', cardId: 'card-1', source: 'app', kind: 'photo',
+    });
+    fireEvent.press(getByText('Official tournament result'));
+    expect(navigation.navigate).toHaveBeenLastCalledWith('LeagueAddProof', {
+      leagueId: 'L1', cardId: 'card-1', source: 'app', kind: 'official',
+    });
+  });
+
+  test('reopened for a submitted card: no resubmit, straight to the partner check and fallbacks', async () => {
+    store.confirmLeagueCardByPartner.mockResolvedValue({ confirmed: false, reason: 'no_partner', settled: 18 });
+    const navigation = makeNav();
+    const { findByText, getByText, queryByText } = render(wrap(
+      <LeagueValidateScreen navigation={navigation} route={{ params: { ...route.params, submitted: true } }} />,
+    ));
+    expect(await findByText(PARTNER_REASONS.no_partner)).toBeTruthy();
+    expect(store.confirmLeagueCardByPartner).toHaveBeenCalledWith('card-1');
+    expect(store.submitLeagueCard).not.toHaveBeenCalled();
+    expect(queryByText('Submit card')).toBeNull();
+    expect(getByText('Show QR to your marker')).toBeTruthy();
+    expect(getByText('Back to the league')).toBeTruthy();
+  });
+
+  test('reopened for a submitted card that the partner has since marked: confirmed', async () => {
+    store.confirmLeagueCardByPartner.mockResolvedValue({ confirmed: true, settled: 18, partnerName: 'Javi' });
+    const { findByText } = render(wrap(
+      <LeagueValidateScreen navigation={makeNav()} route={{ params: { ...route.params, submitted: true } }} />,
+    ));
+    expect(await findByText('Javi confirmed 18 of 18 holes in the app')).toBeTruthy();
+    expect(store.submitLeagueCard).not.toHaveBeenCalled();
+  });
+
+  test('reopened offline: the check error shows and "Check with my partner" retries it', async () => {
+    store.confirmLeagueCardByPartner
+      .mockRejectedValueOnce(new Error('You need a connection to do this.'))
+      .mockResolvedValueOnce({ confirmed: false, reason: 'no_partner', settled: 18 });
+    const { findByText, getByText } = render(wrap(
+      <LeagueValidateScreen navigation={makeNav()} route={{ params: { ...route.params, submitted: true } }} />,
+    ));
+    expect(await findByText('You need a connection to do this.')).toBeTruthy();
+    fireEvent.press(getByText('Check with my partner'));
+    expect(await findByText(PARTNER_REASONS.no_partner)).toBeTruthy();
+    expect(store.confirmLeagueCardByPartner).toHaveBeenCalledTimes(2);
+    expect(store.submitLeagueCard).not.toHaveBeenCalled();
+  });
+
+  test('reopened, then "Check again" after a changed snapshot goes back to Submit', async () => {
+    store.confirmLeagueCardByPartner.mockResolvedValue({ confirmed: false, reason: 'snapshot_mismatch', settled: 18 });
+    const { findByText } = render(wrap(
+      <LeagueValidateScreen navigation={makeNav()} route={{ params: { ...route.params, submitted: true } }} />,
+    ));
+    fireEvent.press(await findByText('Check again'));
+    fireEvent.press(await findByText('Submit card'));
+    await waitFor(() => expect(store.submitLeagueCard).toHaveBeenCalledTimes(1));
   });
 
   test('a hole without a score blocks Submit', async () => {

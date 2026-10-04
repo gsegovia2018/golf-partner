@@ -371,7 +371,7 @@ function AppNavigator() {
         <Stack.Screen name="LeagueMembers" component={LeagueMembersScreen} />
         <Stack.Screen name="LeagueSettings" component={LeagueSettingsScreen} />
         <Stack.Screen name="LeagueValidate" component={LeagueValidateScreen} />{/* after Finish of a league round: { leagueId, cardId, tournamentId, roundId } */}
-        <Stack.Screen name="LeagueMarkerQR" component={LeagueMarkerQRScreen} />{/* reached with { cardId } */}
+        <Stack.Screen name="LeagueMarkerQR" component={LeagueMarkerQRScreen} />{/* from LeagueValidate: { cardId, leagueId } */}
         <Stack.Screen name="MarkerCard" component={MarkerCardScreen} />{/* /m/:token opened by a signed-in visitor */}
         <Stack.Screen name="LeagueAnnounce" component={LeagueAnnounceScreen} />{/* off-app card: announce before playing */}
         <Stack.Screen name="LeagueAddScore" component={LeagueAddScoreScreen} />{/* type the 18 holes after the round */}

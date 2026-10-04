@@ -22,11 +22,6 @@ export const PARTNER_REASONS = {
   not_your_player: 'Your player in this game is not linked to your account.',
 };
 
-// A route another build item adds later (P7 marker QR, P8 proof upload).
-function hasRoute(navigation, name) {
-  return !!navigation.getState?.()?.routeNames?.includes(name);
-}
-
 // Server first (game_scores are what the partner check reads), local copy
 // when offline so the card can still be looked at.
 async function loadTournament(id) {
@@ -39,11 +34,15 @@ async function loadTournament(id) {
 
 // After Finish on a league round: my card in the existing grid, read-only,
 // then Submit → partner confirmation, or the fallbacks when it can't be.
+// Reopened from the board with `submitted: true` (the card was submitted but
+// never confirmed), it skips Submit and runs the partner check straight away.
 export default function LeagueValidateScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const { user } = useAuth();
-  const { leagueId, cardId, tournamentId, roundId } = route?.params ?? {};
+  const {
+    leagueId, cardId, tournamentId, roundId, submitted = false,
+  } = route?.params ?? {};
 
   const [tournament, setTournament] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -51,6 +50,9 @@ export default function LeagueValidateScreen({ navigation, route }) {
   const [error, setError] = useState(null);
   // null (not submitted yet) | { confirmed, reason, partnerName, settled }
   const [result, setResult] = useState(null);
+  // True while the server already holds this card as 'submitted': the
+  // partner check runs without submitting it again.
+  const [alreadySubmitted, setAlreadySubmitted] = useState(!!submitted);
 
   const load = useCallback(async () => {
     const t = await loadTournament(tournamentId);
@@ -91,6 +93,23 @@ export default function LeagueValidateScreen({ navigation, route }) {
     return { round, roundNumber, player, strokes, gross, points, playingHandicap, snapshot, missing };
   }, [tournament, roundId, user?.id]);
 
+  const checkPartner = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setResult(await confirmLeagueCardByPartner(cardId));
+    } catch (e) {
+      setError(e?.message ?? 'Could not check the card.');
+    } finally {
+      setBusy(false);
+    }
+  }, [cardId]);
+
+  // Reopened for a submitted card: straight to the partner check.
+  useEffect(() => {
+    if (submitted) checkPartner();
+  }, [submitted, checkPartner]);
+
   async function submitAndConfirm() {
     if (!card || busy) return;
     setBusy(true);
@@ -117,6 +136,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
   // while the card is 'submitted') and re-run the partner check.
   async function checkAgain() {
     setResult(null);
+    setAlreadySubmitted(false);
     await load();
   }
 
@@ -151,28 +171,21 @@ export default function LeagueValidateScreen({ navigation, route }) {
   const { round, roundNumber, player, strokes, playingHandicap, missing } = card;
   const confirmed = !!result?.confirmed;
 
-  const fallback = (icon, title, sub, routeName, params, todo) => {
-    const ready = hasRoute(navigation, routeName);
-    return (
-      <TouchableOpacity
-        key={routeName + title}
-        style={[s.fallbackRow, !ready && s.disabled]}
-        // TODO(P7/P8): routeName is registered by a later build item; until
-        // then the row is shown but does nothing.
-        onPress={ready ? () => navigation.navigate(routeName, params) : undefined}
-        disabled={!ready}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: !ready }}
-      >
-        <Feather name={icon} size={18} color={theme.accent.primary} style={{ marginRight: 12 }} />
-        <View style={{ flex: 1 }}>
-          <Text style={s.fallbackTitle}>{title}</Text>
-          <Text style={s.fallbackSub}>{ready ? sub : `${sub} · coming soon (${todo})`}</Text>
-        </View>
-        {ready && <Feather name="chevron-right" size={18} color={theme.text.muted} />}
-      </TouchableOpacity>
-    );
-  };
+  const fallback = (icon, title, sub, routeName, params) => (
+    <TouchableOpacity
+      key={routeName + title}
+      style={s.fallbackRow}
+      onPress={() => navigation.navigate(routeName, params)}
+      accessibilityRole="button"
+    >
+      <Feather name={icon} size={18} color={theme.accent.primary} style={{ marginRight: 12 }} />
+      <View style={{ flex: 1 }}>
+        <Text style={s.fallbackTitle}>{title}</Text>
+        <Text style={s.fallbackSub}>{sub}</Text>
+      </View>
+      <Feather name="chevron-right" size={18} color={theme.text.muted} />
+    </TouchableOpacity>
+  );
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -211,7 +224,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
           handicapsOverride={{ [player.id]: playingHandicap }}
         />
 
-        {missing.length > 0 && !result && (
+        {missing.length > 0 && !result && !alreadySubmitted && (
           <Text style={s.errorText}>
             {`Every hole needs a score before the card can be submitted. Missing: ${missing.join(', ')}.`}
           </Text>
@@ -228,11 +241,12 @@ export default function LeagueValidateScreen({ navigation, route }) {
             <Text style={s.overline}>MARKER NOT IN THE APP?</Text>
             <View style={s.fallbackList}>
               {fallback('maximize', 'Show QR to your marker', 'They confirm in their phone browser',
-                'LeagueMarkerQR', { leagueId, cardId }, 'P7')}
+                'LeagueMarkerQR', { leagueId, cardId })}
+              {/* The card is already submitted: AddProof only uploads and attaches. */}
               {fallback('camera', 'Upload signed paper card', 'A photo of the card your marker signed',
-                'LeagueAddProof', { leagueId, cardId, kind: 'photo' }, 'P8')}
+                'LeagueAddProof', { leagueId, cardId, source: 'app', kind: 'photo' })}
               {fallback('award', 'Official tournament result', 'A screenshot or photo of the official result',
-                'LeagueAddProof', { leagueId, cardId, kind: 'official' }, 'P8')}
+                'LeagueAddProof', { leagueId, cardId, source: 'app', kind: 'official' })}
             </View>
           </>
         )}
@@ -242,6 +256,17 @@ export default function LeagueValidateScreen({ navigation, route }) {
         {confirmed || (result && !confirmed && result.reason !== 'not_settled' && result.reason !== 'snapshot_mismatch') ? (
           <TouchableOpacity style={s.primaryBtn} onPress={goBoard} activeOpacity={0.8}>
             <Text style={s.primaryText}>{confirmed ? 'Done' : 'Back to the league'}</Text>
+          </TouchableOpacity>
+        ) : alreadySubmitted && !result ? (
+          <TouchableOpacity
+            style={[s.primaryBtn, busy && s.disabled]}
+            onPress={checkPartner}
+            disabled={busy}
+            activeOpacity={0.8}
+          >
+            {busy
+              ? <ActivityIndicator color={theme.text.inverse} />
+              : <Text style={s.primaryText}>Check with my partner</Text>}
           </TouchableOpacity>
         ) : (
           <>

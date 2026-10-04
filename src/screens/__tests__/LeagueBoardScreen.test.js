@@ -127,6 +127,56 @@ describe('LeagueBoardScreen', () => {
     expect(nav.navigate).toHaveBeenCalledWith('LeagueAddProof', { leagueId: 'L1', cardId: 'c9', resume: true });
   });
 
+  test('a playing app card offers "Finish validating your card" → LeagueValidate on its round', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'playing', null, {
+          id: 'c5', course: { name: 'Centro Nacional' }, tournamentId: 't1', roundId: 't1-r0',
+        })],
+      },
+    }));
+    const nav = makeNav();
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText('Finish validating your card'));
+    fireEvent.press(getByText('Finish validating your card'));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueValidate', {
+      leagueId: 'L1', cardId: 'c5', tournamentId: 't1', roundId: 't1-r0', submitted: false,
+    });
+  });
+
+  test('a submitted app card reopens Validate straight at the partner check', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'submitted', 36, { id: 'c5', tournamentId: 't1', roundId: 't1-r0' })],
+      },
+    }));
+    const nav = makeNav();
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText('Finish validating your card'));
+    expect(queryByText('Add proof')).toBeNull();
+    fireEvent.press(getByText('Finish validating your card'));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueValidate', {
+      leagueId: 'L1', cardId: 'c5', tournamentId: 't1', roundId: 't1-r0', submitted: true,
+    });
+  });
+
+  test('"Finish validating" is only for unconfirmed app cards', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: { [THIS_MONTH]: [card('me', 'confirmed', 36, { tournamentId: 't1', roundId: 't1-r0' })] },
+    }));
+    const confirmed = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => confirmed.getByText('Confirmed'));
+    expect(confirmed.queryByText('Finish validating your card')).toBeNull();
+    confirmed.unmount();
+
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: { [THIS_MONTH]: [card('me', 'submitted', 36, { source: 'offapp' })] },
+    }));
+    const offApp = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => offApp.getByText('Add proof'));
+    expect(offApp.queryByText('Finish validating your card')).toBeNull();
+  });
+
   test('season standings with the last-month delta, my row, pot footer and this month statuses', async () => {
     store.getLeague.mockResolvedValue(snapshot({
       cardsByMonth: {

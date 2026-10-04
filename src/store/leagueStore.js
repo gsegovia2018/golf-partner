@@ -248,6 +248,15 @@ export async function getMyCardsForMonth(monthKey) {
   return (rows ?? []).map(rowToCard);
 }
 
+// One card, live. The marker QR screen polls it to notice the confirmation.
+export async function getLeagueCard(cardId) {
+  if (!cardId) return null;
+  const row = await selectRows(
+    supabase.from('league_cards').select('*').eq('id', cardId).maybeSingle(),
+  );
+  return row ? rowToCard(row) : null;
+}
+
 // Everything the League screens need, read live and written to the cache.
 // `cardsByMonth` ({ 'YYYY-MM': cards[] }, void excluded) feeds seasonTable.
 export async function getLeague(leagueId) {

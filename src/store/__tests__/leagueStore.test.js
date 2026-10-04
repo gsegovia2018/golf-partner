@@ -4,7 +4,7 @@ import {
   updateLeagueRules, leaveLeague, openHandicapVote, castHandicapBallot, announceLeagueCard,
   notifyLeagueTeeOff, submitLeagueCard, addUnannouncedLeagueCard, confirmLeagueCardByPartner,
   attachLeagueProof, createMarkerToken, voidLeagueCard, recordLeagueFinal, getMyLeagues, getMyCardsForMonth,
-  setLeagueRole, archiveLeague, getLeague, getLeagueCached, setLeagueCache, uploadLeagueProof, rowToCard,
+  getLeagueCard, setLeagueRole, archiveLeague, getLeague, getLeagueCached, setLeagueCache, uploadLeagueProof, rowToCard,
 } from '../leagueStore';
 
 // mockState is read inside the jest.mock factories; the `mock` prefix is what
@@ -332,6 +332,24 @@ describe('reads and cache', () => {
     expect(ops).toContainEqual(['eq', 'user_id', 'me']);
     expect(ops).toContainEqual(['eq', 'month', '2026-10-01']);
     expect(ops).toContainEqual(['neq', 'status', 'void']);
+  });
+
+  test('getLeagueCard reads one card by id', async () => {
+    mockState.tables.league_cards = {
+      data: { id: 'c1', league_id: 'L1', user_id: 'me', month: '2026-10-01', status: 'confirmed' },
+      error: null,
+    };
+    const res = await getLeagueCard('c1');
+    expect(res).toMatchObject({ id: 'c1', status: 'confirmed', monthKey: '2026-10' });
+    const ops = mockState.queries[0].ops;
+    expect(ops).toContainEqual(['eq', 'id', 'c1']);
+    expect(ops).toContainEqual(['maybeSingle']);
+  });
+
+  test('getLeagueCard returns null for a card the select does not return', async () => {
+    mockState.tables.league_cards = { data: null, error: null };
+    expect(await getLeagueCard('gone')).toBeNull();
+    expect(await getLeagueCard(null)).toBeNull();
   });
 
   test('rowToCard matches the fields leagueRules/leagueStandings read', () => {
