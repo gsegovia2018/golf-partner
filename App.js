@@ -39,6 +39,7 @@ import LeagueCreateScreen from './src/screens/LeagueCreateScreen';
 import LeagueBoardScreen from './src/screens/LeagueBoardScreen';
 import LeagueMembersScreen from './src/screens/LeagueMembersScreen';
 import LeagueSettingsScreen from './src/screens/LeagueSettingsScreen';
+import LeagueFinalScreen from './src/screens/LeagueFinalScreen';
 import LeagueValidateScreen from './src/screens/LeagueValidateScreen';
 import LeagueAnnounceScreen from './src/screens/LeagueAnnounceScreen';
 import LeagueAddScoreScreen from './src/screens/LeagueAddScoreScreen';
@@ -91,6 +92,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Notifications from 'expo-notifications';
 import { registerPushToken, configureNotificationHandler } from './src/lib/pushNotifications';
 import { normalizeDeepLink } from './src/lib/notificationContent';
+import { startLeagueFinalPending } from './src/lib/leagueFinalPending';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -370,6 +372,7 @@ function AppNavigator() {
         <Stack.Screen name="LeagueBoard" component={LeagueBoardScreen} />{/* reached with { leagueId } */}
         <Stack.Screen name="LeagueMembers" component={LeagueMembersScreen} />
         <Stack.Screen name="LeagueSettings" component={LeagueSettingsScreen} />
+        <Stack.Screen name="LeagueFinal" component={LeagueFinalScreen} />{/* admin: extra strokes per place, then Setup — { leagueId } */}
         <Stack.Screen name="LeagueValidate" component={LeagueValidateScreen} />{/* after Finish of a league round: { leagueId, cardId, tournamentId, roundId } */}
         <Stack.Screen name="LeagueMarkerQR" component={LeagueMarkerQRScreen} />{/* from LeagueValidate: { cardId, leagueId } */}
         <Stack.Screen name="MarkerCard" component={MarkerCardScreen} />{/* /m/:token opened by a signed-in visitor */}
@@ -491,6 +494,8 @@ export default function App() {
     // Card replication for every live game: pushes whatever is pending and
     // reconnects whenever connectivity comes back. Idempotent.
     startReplication();
+    // Retries linking a started League Final to its league.
+    startLeagueFinalPending();
     // Non-blocking: GPS geometry starts from the bundled seed and upgrades to
     // live table data whenever this resolves. Not part of the render gate.
     hydrateCourseGeometry();

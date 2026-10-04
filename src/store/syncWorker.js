@@ -426,6 +426,14 @@ async function _markPendingOrIdle() {
 }
 
 let _currentDrain = null;
+const _drainedListeners = new Set();
+// Called after every drain pass that completed without error, so work that
+// depends on queued writes having reached the server (the League Final link)
+// can run.
+export function onSyncDrained(fn) {
+  _drainedListeners.add(fn);
+  return () => _drainedListeners.delete(fn);
+}
 // A kick that arrived while a drain was in flight. drainOnce snapshots the
 // queue when it starts, so an entry enqueued mid-drain is not in that pass —
 // and nothing else re-kicks the worker until the next mutation, reload or
@@ -448,7 +456,10 @@ export function syncNow() {
   _running = true;
   _kickedMidDrain = false;
   _currentDrain = drainOnce()
-    .then(() => { _attempt = 0; })
+    .then(() => {
+      _attempt = 0;
+      _drainedListeners.forEach((fn) => { try { fn(); } catch { /* never breaks the worker */ } });
+    })
     .catch(() => {
       _setSyncStatus('error');
       const delay = BACKOFF_MS[Math.min(_attempt, BACKOFF_MS.length - 1)];
