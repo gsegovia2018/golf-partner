@@ -252,3 +252,51 @@ describe('ScorecardTable highlightCurrentHole', () => {
     expect(getByText('BACK NINE')).toBeTruthy();
   });
 });
+
+// rowLabel — the marker page shows someone else's single-row card, so the
+// row must not read "You". Default stays "You"; 2+ rows keep their initials.
+describe('ScorecardTable rowLabel', () => {
+  const holes = Array.from({ length: 9 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+  const round = { holes };
+  const renderTable = (players, extra = {}) => render(
+    <ThemeProvider>
+      <ScorecardTable
+        round={round}
+        players={players}
+        scores={{}}
+        onSetScore={() => {}}
+        editable={() => false}
+        mode="stableford"
+        meId="p1"
+        {...extra}
+      />
+    </ThemeProvider>,
+  );
+
+  test('a single row is labelled "You" by default', async () => {
+    const { getByText } = renderTable([{ id: 'p1', name: 'Marcos Pecker', handicap: 0 }]);
+    await flush();
+    expect(getByText('You')).toBeTruthy();
+  });
+
+  test('rowLabel replaces "You" on a single row', async () => {
+    const { getByText, queryByText } = renderTable(
+      [{ id: 'p1', name: 'Marcos Pecker', handicap: 0 }],
+      { rowLabel: 'MAR' },
+    );
+    await flush();
+    expect(getByText('MAR')).toBeTruthy();
+    expect(queryByText('You')).toBeNull();
+  });
+
+  test('rowLabel is ignored with two or more rows', async () => {
+    const { getByText, queryByText } = renderTable(
+      [{ id: 'p1', name: 'Ann Lee', handicap: 0 }, { id: 'p2', name: 'Bob Ray', handicap: 0 }],
+      { rowLabel: 'XYZ' },
+    );
+    await flush();
+    expect(getByText('ANN')).toBeTruthy();
+    expect(getByText('BOB')).toBeTruthy();
+    expect(queryByText('XYZ')).toBeNull();
+  });
+});

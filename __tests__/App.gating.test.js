@@ -8,6 +8,7 @@
 //   /join/<token>            → official invite, guest/login choice
 //   /join-tournament/<code>  → casual invite, guest/login choice
 //   /league/<code>           → league invite, guest/login choice
+//   /m/<token>               → public marker confirmation page, no auth UI
 //
 // App.js imports ~40 screens at module scope and several of them pull in
 // native-only modules Jest can't parse, so every screen is stubbed. Each stub
@@ -212,6 +213,79 @@ describe('App gating: public board links', () => {
     expect(mockRegisteredScreens).toContain('SharedBoard');
     expect(mockNavigationProps.current.linking.config.screens.SharedBoard).toBe('board/:token');
     expect(mockNavigationProps.current.linking.config.initialRouteName).toBe('Main');
+  });
+});
+
+describe('App gating: marker links', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    Linking.addEventListener.mockReturnValue({ remove: jest.fn() });
+    mockRegisteredScreens.length = 0;
+  });
+
+  test('signed-out /m/<token> renders the marker page with the token and no auth UI', async () => {
+    const { getByTestId, queryByTestId } = await renderAtUrl(
+      'https://golf-partner.vercel.app/m/Ab-_9xYz',
+    );
+
+    expect(getByTestId('screen-MarkerCardScreen').props.children).toBe('Ab-_9xYz');
+    expect(queryByTestId('screen-AuthScreen')).toBeNull();
+    expect(queryByTestId('screen-SharedBoardScreen')).toBeNull();
+    expect(queryByTestId('screen-JoinTournamentLinkScreen')).toBeNull();
+  });
+
+  test('signed-out golf://m/<token> deep link resolves the same way', async () => {
+    const { getByTestId, queryByTestId } = await renderAtUrl('golf://m/tok-native');
+
+    expect(getByTestId('screen-MarkerCardScreen').props.children).toBe('tok-native');
+    expect(queryByTestId('screen-AuthScreen')).toBeNull();
+  });
+
+  test('web reads the marker token synchronously from window.location', async () => {
+    const original = window.location;
+    window.location = { pathname: '/m/tok-web', origin: 'https://golf-partner.vercel.app' };
+    try {
+      Linking.getInitialURL.mockResolvedValue(null);
+      Object.assign(mockAuth, { session: null, loading: false, passwordRecovery: false });
+      const { getByTestId, queryByTestId } = render(React.createElement(App));
+      await waitFor(() => expect(queryByTestId('loading-splash')).toBeNull());
+
+      expect(getByTestId('screen-MarkerCardScreen').props.children).toBe('tok-web');
+      expect(queryByTestId('screen-AuthScreen')).toBeNull();
+    } finally {
+      window.location = original;
+    }
+  });
+
+  test('/m with no token, or a longer prefix, is not a marker link', async () => {
+    let r = await renderAtUrl('https://golf-partner.vercel.app/m/');
+    expect(r.getByTestId('screen-AuthScreen')).toBeTruthy();
+    expect(r.queryByTestId('screen-MarkerCardScreen')).toBeNull();
+
+    r = await renderAtUrl('https://golf-partner.vercel.app/me/tok');
+    expect(r.getByTestId('screen-AuthScreen')).toBeTruthy();
+    expect(r.queryByTestId('screen-MarkerCardScreen')).toBeNull();
+  });
+
+  test('password recovery still wins over a marker link', async () => {
+    const { getByTestId, queryByTestId } = await renderAtUrl(
+      'https://golf-partner.vercel.app/m/tok-123',
+      { passwordRecovery: true },
+    );
+
+    expect(getByTestId('screen-SetNewPasswordScreen')).toBeTruthy();
+    expect(queryByTestId('screen-MarkerCardScreen')).toBeNull();
+  });
+
+  test('a signed-in visitor gets the routed MarkerCard screen; the QR route is registered', async () => {
+    const { queryByTestId } = await renderAtUrl(
+      'https://golf-partner.vercel.app/m/tok-123',
+      { session: SESSION },
+    );
+
+    expect(queryByTestId('screen-MarkerCardScreen')).toBeNull();
+    expect(mockRegisteredScreens).toEqual(expect.arrayContaining(['MarkerCard', 'LeagueMarkerQR']));
+    expect(mockNavigationProps.current.linking.config.screens.MarkerCard).toBe('m/:token');
   });
 });
 

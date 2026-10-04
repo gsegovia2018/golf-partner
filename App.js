@@ -32,6 +32,8 @@ import { isBootRevealed, subscribeBootReveal, markBootReady } from './src/store/
 import SetNewPasswordScreen from './src/screens/SetNewPasswordScreen';
 import JoinTournamentLinkScreen from './src/screens/JoinTournamentLinkScreen';
 import SharedBoardScreen from './src/screens/SharedBoardScreen';
+import MarkerCardScreen from './src/screens/MarkerCardScreen';
+import LeagueMarkerQRScreen from './src/screens/LeagueMarkerQRScreen';
 import JoinLeagueScreen from './src/screens/JoinLeagueScreen';
 import LeagueCreateScreen from './src/screens/LeagueCreateScreen';
 import LeagueBoardScreen from './src/screens/LeagueBoardScreen';
@@ -173,6 +175,25 @@ function boardTokenFromUrl(url) {
   }
 }
 
+// Public marker link (/m/TOKEN): an outside marker confirms one league card.
+// Same shape as the board helpers — bare render, token as a prop.
+function markerTokenFromPath(pathname) {
+  const m = /^\/m\/([^/]+)/.exec(pathname || '');
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch { return m[1]; }
+}
+
+function markerTokenFromUrl(url) {
+  if (!url) return null;
+  const scheme = /^golf:\/\/m\/([^/?#]+)/i.exec(url);
+  if (scheme) return markerTokenFromPath(`/m/${scheme[1]}`);
+  try {
+    return markerTokenFromPath(new URL(url).pathname);
+  } catch {
+    return null;
+  }
+}
+
 function AppNavigator() {
   const { theme, mode } = useTheme();
   const { session, loading, passwordRecovery } = useAuth();
@@ -193,27 +214,38 @@ function AppNavigator() {
     }
     return undefined;
   });
+  // The marker link, same three-state sentinel as the board token.
+  const [markerToken, setMarkerToken] = useState(() => {
+    if (typeof window !== 'undefined' && window.location) {
+      return markerTokenFromPath(window.location.pathname);
+    }
+    return undefined;
+  });
 
   useEffect(() => {
-    if (isJoinLink !== null && boardToken !== undefined) return undefined;
+    if (isJoinLink !== null && boardToken !== undefined && markerToken !== undefined) return undefined;
     let cancelled = false;
     Linking.getInitialURL().then((url) => {
       if (cancelled) return;
       setIsJoinLink(matchesJoinLink(url));
       setBoardToken(boardTokenFromUrl(url));
+      setMarkerToken(markerTokenFromUrl(url));
     }).catch(() => {
       if (cancelled) return;
       setIsJoinLink(false);
       setBoardToken(null);
+      setMarkerToken(null);
     });
     return () => { cancelled = true; };
-  }, [isJoinLink, boardToken]);
+  }, [isJoinLink, boardToken, markerToken]);
 
   useEffect(() => {
     const sub = Linking.addEventListener('url', ({ url }) => {
       if (matchesJoinLink(url)) setIsJoinLink(true);
       const token = boardTokenFromUrl(url);
       if (token) setBoardToken(token);
+      const mToken = markerTokenFromUrl(url);
+      if (mToken) setMarkerToken(mToken);
     });
     return () => sub.remove();
   }, []);
@@ -262,7 +294,7 @@ function AppNavigator() {
     return () => sub.remove();
   }, []);
 
-  if (loading || isJoinLink === null || boardToken === undefined) {
+  if (loading || isJoinLink === null || boardToken === undefined || markerToken === undefined) {
     return <LoadingSplash />;
   }
 
@@ -284,6 +316,8 @@ function AppNavigator() {
     // Signed-in visitors get the routed SharedBoard screen instead (below),
     // so they keep a back button into the app.
     if (boardToken) return <SharedBoardScreen token={boardToken} />;
+    // The marker page likewise: anon RPCs only, no account, no navigator.
+    if (markerToken) return <MarkerCardScreen token={markerToken} />;
     return <AuthScreen />;
   }
 
@@ -332,6 +366,8 @@ function AppNavigator() {
         <Stack.Screen name="LeagueBoard" component={LeagueBoardScreen} />{/* reached with { leagueId } */}
         <Stack.Screen name="LeagueMembers" component={LeagueMembersScreen} />
         <Stack.Screen name="LeagueSettings" component={LeagueSettingsScreen} />
+        <Stack.Screen name="LeagueMarkerQR" component={LeagueMarkerQRScreen} />{/* reached with { cardId } */}
+        <Stack.Screen name="MarkerCard" component={MarkerCardScreen} />{/* /m/:token opened by a signed-in visitor */}
         <Stack.Screen name="PlayersLibrary" component={PlayersLibraryScreen} />
         <Stack.Screen name="CoursesLibrary" component={CoursesLibraryScreen} />
         <Stack.Screen name="CourseLibraryDetail" component={CourseLibraryDetailScreen} />
@@ -403,6 +439,7 @@ function BootSplashOverlay() {
 // `league/:code` → league invite summary + join;
 // `board/:token` → the public read-only leaderboard (signed-out visitors are
 // short-circuited to it above, outside the navigator);
+// `m/:token` → the public marker confirmation page (same short-circuit);
 // `reset-password` → the set-new-password screen (also short-circuited in
 // AppNavigator via the passwordRecovery flag, which is the primary path —
 // this mapping just makes the deep link literally resolvable).
@@ -427,6 +464,7 @@ const linking = {
       JoinTournament: 'join-tournament/:code',
       JoinLeague: 'league/:code',
       SharedBoard: 'board/:token',
+      MarkerCard: 'm/:token',
       ResetPassword: 'reset-password',
     },
   },
