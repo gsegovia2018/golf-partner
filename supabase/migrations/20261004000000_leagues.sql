@@ -345,6 +345,23 @@ AS $$
   SELECT date_trunc('month', p_ts AT TIME ZONE 'Europe/Madrid')::date;
 $$;
 
+-- An archived league stays readable but refuses every write that would
+-- change the season (announce, submit, add-unannounced, votes).
+CREATE OR REPLACE FUNCTION public.league_assert_open(p_league uuid)
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SET search_path = public
+AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.leagues WHERE id = p_league AND archived_at IS NOT NULL) THEN
+    RAISE EXCEPTION 'This league has been archived. You can still look at it, but not change it.'
+      USING ERRCODE = 'P0001', HINT = 'league_archived';
+  END IF;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.league_assert_open(uuid)                          FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.league_new_invite_code()                          FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.league_user_name(uuid)                            FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.notify_league_members(uuid, uuid, text, uuid, jsonb) FROM PUBLIC, anon, authenticated;
@@ -502,6 +519,17 @@ BEGIN
       INSERT INTO public.league_members (league_id, user_id, role, league_handicap)
       VALUES (v_id, v_mu, 'member', v_hcp)
       ON CONFLICT (league_id, user_id) DO NOTHING;
+      -- Each invited friend hears about it once (a duplicate entry in
+      -- p_members is skipped by the ON CONFLICT above, leaving FOUND false).
+      IF FOUND THEN
+        PERFORM public.create_notification(v_mu, 'league_invite', v_uid, v_id,
+          jsonb_build_object(
+            'league_id',    v_id,
+            'league_name',  btrim(p_name),
+            'invite_code',  v_code,
+            'inviter_name', public.league_user_name(v_uid),
+            'actor_name',   public.league_user_name(v_uid)));
+      END IF;
     END IF;
     IF v_hcp IS NOT NULL THEN
       INSERT INTO public.league_handicap_events (league_id, user_id, old, new, reason, by_user)
@@ -719,11 +747,62 @@ BEGIN
      AND EXISTS (SELECT 1 FROM public.league_members
                   WHERE league_id = p_league AND user_id <> v_uid
                     AND joined_at IS NOT NULL AND left_at IS NULL) THEN
-    RAISE EXCEPTION 'You are the only admin. Make someone else admin before leaving.'
+    RAISE EXCEPTION 'You are the only admin. Make someone else admin first, then leave.'
       USING ERRCODE = 'P0001';
   END IF;
   UPDATE public.league_members SET left_at = now()
    WHERE league_id = p_league AND user_id = v_uid;
+END;
+$$;
+
+-- Promote or demote an active member. The last active admin can never be
+-- demoted (by themselves or anyone), so a league always has an admin.
+CREATE OR REPLACE FUNCTION public.set_league_role(p_league uuid, p_user uuid, p_role text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_cur text;
+BEGIN
+  IF NOT public.is_league_admin(p_league, auth.uid()) THEN
+    RAISE EXCEPTION 'Only the league admin can do that.' USING ERRCODE = '42501';
+  END IF;
+  IF COALESCE(p_role, '') NOT IN ('admin','member') THEN
+    RAISE EXCEPTION 'A role is admin or member.' USING ERRCODE = 'P0001';
+  END IF;
+  SELECT role INTO v_cur FROM public.league_members
+   WHERE league_id = p_league AND user_id = p_user
+     AND joined_at IS NOT NULL AND left_at IS NULL
+     FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'That player is not in this league.' USING ERRCODE = 'P0001';
+  END IF;
+  IF v_cur = 'admin' AND p_role = 'member'
+     AND NOT EXISTS (SELECT 1 FROM public.league_members
+                      WHERE league_id = p_league AND user_id <> p_user AND role = 'admin'
+                        AND joined_at IS NOT NULL AND left_at IS NULL) THEN
+    RAISE EXCEPTION 'A league needs at least one admin. Make someone else admin first.'
+      USING ERRCODE = 'P0001';
+  END IF;
+  UPDATE public.league_members SET role = p_role
+   WHERE league_id = p_league AND user_id = p_user;
+END;
+$$;
+
+-- Ends the league for writes; everything stays readable. Idempotent.
+CREATE OR REPLACE FUNCTION public.archive_league(p_league uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT public.is_league_admin(p_league, auth.uid()) THEN
+    RAISE EXCEPTION 'Only the league admin can do that.' USING ERRCODE = '42501';
+  END IF;
+  UPDATE public.leagues SET archived_at = COALESCE(archived_at, now()) WHERE id = p_league;
 END;
 $$;
 
@@ -732,7 +811,56 @@ $$;
 -- (plan D2). Passing applies the change at once, clamped to the cap. A vote
 -- that can no longer reach the threshold fails at once. Expiry of untouched
 -- votes is the league-cron's job (P11); until then, a stale open vote is
--- failed lazily by the next open_/cast_ on it.
+-- failed lazily by the next open_/cast_ on it. Opening a vote casts the
+-- opener's yes ballot.
+
+-- Count the ballots of a locked, open vote and pass/fail it. Internal.
+CREATE OR REPLACE FUNCTION public.league_settle_vote(p_vote uuid, p_actor uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_vote      public.league_handicap_votes%ROWTYPE;
+  v_active    int;
+  v_threshold int;
+  v_yes       int;
+  v_no        int;
+  v_old       numeric(4,1);
+  v_new       numeric(4,1);
+BEGIN
+  SELECT * INTO v_vote FROM public.league_handicap_votes WHERE id = p_vote;
+  SELECT count(*) INTO v_active FROM public.league_members
+   WHERE league_id = v_vote.league_id AND joined_at IS NOT NULL AND left_at IS NULL;
+  v_threshold := ceil(v_active * 2 / 3.0)::int;
+  -- Only ballots of members who are still active count.
+  SELECT count(*) FILTER (WHERE b.yes), count(*) FILTER (WHERE NOT b.yes)
+    INTO v_yes, v_no
+    FROM public.league_handicap_ballots b
+   WHERE b.vote_id = p_vote AND public.is_league_member(v_vote.league_id, b.voter);
+
+  IF v_yes >= v_threshold THEN
+    SELECT league_handicap INTO v_old FROM public.league_members
+     WHERE league_id = v_vote.league_id AND user_id = v_vote.subject_user FOR UPDATE;
+    SELECT LEAST(v_vote.proposed, handicap_cap) INTO v_new
+      FROM public.leagues WHERE id = v_vote.league_id;
+    UPDATE public.league_members SET league_handicap = v_new
+     WHERE league_id = v_vote.league_id AND user_id = v_vote.subject_user;
+    INSERT INTO public.league_handicap_events (league_id, user_id, old, new, reason, by_user)
+    VALUES (v_vote.league_id, v_vote.subject_user, v_old, v_new, 'vote', p_actor);
+    UPDATE public.league_handicap_votes SET status = 'passed' WHERE id = p_vote;
+    v_vote.status := 'passed';
+  ELSIF v_active - v_no < v_threshold THEN
+    UPDATE public.league_handicap_votes SET status = 'failed' WHERE id = p_vote;
+    v_vote.status := 'failed';
+  END IF;
+
+  RETURN jsonb_build_object('status', v_vote.status, 'yes', v_yes, 'no', v_no,
+                            'threshold', v_threshold);
+END;
+$$;
+REVOKE EXECUTE ON FUNCTION public.league_settle_vote(uuid, uuid) FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.open_handicap_vote(p_league uuid, p_subject uuid, p_proposed numeric)
 RETURNS uuid
@@ -756,6 +884,7 @@ BEGIN
   IF p_proposed IS NULL THEN
     RAISE EXCEPTION 'A handicap is required.' USING ERRCODE = 'P0001';
   END IF;
+  PERFORM public.league_assert_open(p_league);
 
   UPDATE public.league_handicap_votes SET status = 'failed'
    WHERE league_id = p_league AND subject_user = p_subject
@@ -780,6 +909,10 @@ BEGIN
     RAISE EXCEPTION 'There is already an open vote on this player''s handicap.' USING ERRCODE = 'P0001';
   END;
 
+  -- The opener is for it.
+  INSERT INTO public.league_handicap_ballots (vote_id, voter, yes, at)
+  VALUES (v_id, v_uid, true, now());
+
   PERFORM public.notify_league_members(p_league, v_uid, 'league_vote_opened', v_id,
     jsonb_build_object(
       'vote_id',      v_id,
@@ -788,6 +921,8 @@ BEGIN
       'old',          v_old,
       'proposed',     v_new,
       'closes_at',    now() + interval '7 days'));
+  -- In a tiny league the opener's yes alone can reach the threshold.
+  PERFORM public.league_settle_vote(v_id, v_uid);
   RETURN v_id;
 END;
 $$;
@@ -801,17 +936,12 @@ AS $$
 DECLARE
   v_uid       uuid := auth.uid();
   v_vote      public.league_handicap_votes%ROWTYPE;
-  v_active    int;
-  v_threshold int;
-  v_yes       int;
-  v_no        int;
-  v_old       numeric(4,1);
-  v_new       numeric(4,1);
 BEGIN
   SELECT * INTO v_vote FROM public.league_handicap_votes WHERE id = p_vote FOR UPDATE;
   IF NOT FOUND OR NOT public.is_league_member(v_vote.league_id, v_uid) THEN
     RAISE EXCEPTION 'Vote not found.' USING ERRCODE = 'P0001';
   END IF;
+  PERFORM public.league_assert_open(v_vote.league_id);
   IF v_vote.status = 'open' AND v_vote.closes_at < now() THEN
     UPDATE public.league_handicap_votes SET status = 'failed' WHERE id = p_vote;
     v_vote.status := 'failed';
@@ -827,33 +957,7 @@ BEGIN
   VALUES (p_vote, v_uid, p_yes, now())
   ON CONFLICT (vote_id, voter) DO UPDATE SET yes = EXCLUDED.yes, at = EXCLUDED.at;
 
-  SELECT count(*) INTO v_active FROM public.league_members
-   WHERE league_id = v_vote.league_id AND joined_at IS NOT NULL AND left_at IS NULL;
-  v_threshold := ceil(v_active * 2 / 3.0)::int;
-  -- Only ballots of members who are still active count.
-  SELECT count(*) FILTER (WHERE b.yes), count(*) FILTER (WHERE NOT b.yes)
-    INTO v_yes, v_no
-    FROM public.league_handicap_ballots b
-   WHERE b.vote_id = p_vote AND public.is_league_member(v_vote.league_id, b.voter);
-
-  IF v_yes >= v_threshold THEN
-    SELECT league_handicap INTO v_old FROM public.league_members
-     WHERE league_id = v_vote.league_id AND user_id = v_vote.subject_user FOR UPDATE;
-    SELECT LEAST(v_vote.proposed, handicap_cap) INTO v_new
-      FROM public.leagues WHERE id = v_vote.league_id;
-    UPDATE public.league_members SET league_handicap = v_new
-     WHERE league_id = v_vote.league_id AND user_id = v_vote.subject_user;
-    INSERT INTO public.league_handicap_events (league_id, user_id, old, new, reason, by_user)
-    VALUES (v_vote.league_id, v_vote.subject_user, v_old, v_new, 'vote', v_uid);
-    UPDATE public.league_handicap_votes SET status = 'passed' WHERE id = p_vote;
-    v_vote.status := 'passed';
-  ELSIF v_active - v_no < v_threshold THEN
-    UPDATE public.league_handicap_votes SET status = 'failed' WHERE id = p_vote;
-    v_vote.status := 'failed';
-  END IF;
-
-  RETURN jsonb_build_object('status', v_vote.status, 'yes', v_yes, 'no', v_no,
-                            'threshold', v_threshold);
+  RETURN public.league_settle_vote(p_vote, v_uid);
 END;
 $$;
 
@@ -880,9 +984,7 @@ BEGIN
   IF NOT public.is_league_member(p_league, v_uid) THEN
     RAISE EXCEPTION 'You are not in this league.' USING ERRCODE = '42501';
   END IF;
-  IF EXISTS (SELECT 1 FROM public.leagues WHERE id = p_league AND archived_at IS NOT NULL) THEN
-    RAISE EXCEPTION 'This league has been archived.' USING ERRCODE = 'P0001';
-  END IF;
+  PERFORM public.league_assert_open(p_league);
   IF COALESCE(p_source, '') NOT IN ('app','offapp') THEN
     RAISE EXCEPTION 'Unknown card source %', p_source USING ERRCODE = 'P0001';
   END IF;
@@ -998,6 +1100,12 @@ BEGIN
   IF v_c.status NOT IN ('announced','playing','submitted') THEN
     RAISE EXCEPTION 'This card can no longer be changed.' USING ERRCODE = 'P0001';
   END IF;
+  PERFORM public.league_assert_open(v_c.league_id);
+  IF p_played_on IS NOT NULL AND date_trunc('month', p_played_on)::date <> v_c.month THEN
+    RAISE EXCEPTION 'This is your % card, but the date is in %. Check the date.',
+      to_char(v_c.month, 'FMMonth'), to_char(p_played_on, 'FMMonth')
+      USING ERRCODE = 'P0001', HINT = 'month_mismatch';
+  END IF;
 
   v_holes := public.league_canonical_holes(p_holes);
   IF p_gross IS DISTINCT FROM (SELECT sum(value::int) FROM jsonb_each_text(v_holes)) THEN
@@ -1051,6 +1159,7 @@ BEGIN
   IF NOT public.is_league_member(p_league, v_uid) THEN
     RAISE EXCEPTION 'You are not in this league.' USING ERRCODE = '42501';
   END IF;
+  PERFORM public.league_assert_open(p_league);
   IF p_course IS NULL OR jsonb_typeof(p_course) <> 'object'
      OR NULLIF(btrim(COALESCE(p_course ->> 'name', '')), '') IS NULL THEN
     RAISE EXCEPTION 'Pick the course you played.' USING ERRCODE = 'P0001';
@@ -1060,6 +1169,11 @@ BEGIN
   END IF;
   v_month := CASE WHEN p_tee_time IS NOT NULL THEN public.league_month_of(p_tee_time)
                   ELSE date_trunc('month', p_played_on)::date END;
+  IF p_played_on IS NOT NULL AND date_trunc('month', p_played_on)::date <> v_month THEN
+    RAISE EXCEPTION 'The tee time is in % but the date is in %. Check the date.',
+      to_char(v_month, 'FMMonth'), to_char(p_played_on, 'FMMonth')
+      USING ERRCODE = 'P0001', HINT = 'month_mismatch';
+  END IF;
 
   v_holes := public.league_canonical_holes(p_holes);
   IF p_gross IS DISTINCT FROM (SELECT sum(value::int) FROM jsonb_each_text(v_holes)) THEN
@@ -1482,6 +1596,8 @@ BEGIN
     'public.set_league_fee_paid(uuid, uuid, boolean)',
     'public.update_league_rules(uuid, text, date, date, int[], numeric, int)',
     'public.leave_league(uuid)',
+    'public.set_league_role(uuid, uuid, text)',
+    'public.archive_league(uuid)',
     'public.open_handicap_vote(uuid, uuid, numeric)',
     'public.cast_handicap_ballot(uuid, boolean)',
     'public.announce_league_card(uuid, text, jsonb, timestamptz, text, text, text)',

@@ -124,6 +124,18 @@ SELECT 'handicaps: A 18, B 18, C stays 20 (22 proposed), D clamped to cap 30',
        string_agg(right(user_id::text, 1) || '=' || league_handicap, ',' ORDER BY user_id)
   FROM public.league_members;
 INSERT INTO league_smoke (name, ok, detail)
+SELECT 'create_league notifies each invited friend once with league_invite',
+       count(*) = 3
+         AND bool_and(user_id IN ('a0000000-0000-4000-8000-00000000000b',
+                                  'a0000000-0000-4000-8000-00000000000c',
+                                  'a0000000-0000-4000-8000-00000000000d'))
+         AND bool_and(data->>'invite_code' = (SELECT v FROM league_ctx WHERE k='code')
+                      AND data->>'league_id' = (SELECT v FROM league_ctx WHERE k='league')
+                      AND data->>'league_name' = 'Club del Mulligan'
+                      AND data->>'inviter_name' = 'Marcos Test'),
+       count(*)::text
+  FROM public.notifications WHERE type = 'league_invite';
+INSERT INTO league_smoke (name, ok, detail)
 SELECT 'join with a different handicap records one proposed event (C 20 -> 22)',
        count(*) = 1 AND min(old) = 20 AND min(new) = 22, count(*)::text
   FROM public.league_handicap_events WHERE reason = 'proposed';
@@ -586,6 +598,29 @@ BEGIN
          '{"name":"x"}'::jsonb, '2026-10-31 23:30+00');
   INSERT INTO league_smoke (name, ok, detail) VALUES ('after a void the member can announce that month again',
     r->>'month' = '2026-11-01', r::text);
+  INSERT INTO league_ctx VALUES ('cardB2', r->>'id');
+  BEGIN
+    PERFORM public.submit_league_card((r->>'id')::uuid,
+              (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20, '2026-12-01');
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('submit refuses a played_on outside the card month', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('submit refuses a played_on outside the card month',
+      SQLERRM = 'This is your November card, but the date is in December. Check the date.', SQLERRM);
+  END;
+  BEGIN
+    PERFORM public.add_unannounced_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'),
+              '{"name":"RACE"}'::jsonb, '2026-12-05 10:00+01', '2026-11-30',
+              (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses tee time and date in different months', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses tee time and date in different months',
+      SQLERRM = 'The tee time is in December but the date is in November. Check the date.', SQLERRM);
+  END;
+  -- The same date in the right month is still accepted by submit.
+  r := public.submit_league_card((r->>'id')::uuid,
+         (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20, '2026-11-01');
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('submit accepts a played_on in the card month',
+    r->>'status' = 'submitted', r::text);
 END $$;
 
 -- 10) Handicap votes ---------------------------------------------------------------------
@@ -601,6 +636,11 @@ BEGIN
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('one open vote per subject', SQLSTATE = 'P0001', SQLERRM);
   END;
+  INSERT INTO league_smoke (name, ok, detail)
+  SELECT 'opening a vote casts the opener''s yes ballot',
+         count(*) = 1 AND bool_and(yes) AND bool_and(voter = 'a0000000-0000-4000-8000-00000000000b'),
+         count(*)::text
+    FROM public.league_handicap_ballots WHERE vote_id = vid;
   r := public.cast_handicap_ballot(vid, true);
   INSERT INTO league_smoke (name, ok, detail) VALUES ('1 yes of 3 needed -> still open',
     r->>'status' = 'open' AND (r->>'threshold')::int = 3, r::text);
@@ -668,7 +708,8 @@ BEGIN
     PERFORM public.leave_league(lid);
     INSERT INTO league_smoke (name, ok, detail) VALUES ('the only admin cannot leave', false, 'no error');
   EXCEPTION WHEN others THEN
-    INSERT INTO league_smoke (name, ok, detail) VALUES ('the only admin cannot leave', SQLSTATE = 'P0001', SQLERRM);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('the only admin cannot leave',
+      SQLERRM = 'You are the only admin. Make someone else admin first, then leave.', SQLERRM);
   END;
 END $$;
 
@@ -681,6 +722,109 @@ SELECT public.leave_league((SELECT v::uuid FROM league_ctx WHERE k='league'));
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'a member who left no longer reads the league', (SELECT count(*) FROM public.leagues) = 0, NULL;
 
+-- 13) Roles and archive ---------------------------------------------------------------------
+-- Active now: A (admin), B, D. C left in section 11.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league');
+BEGIN
+  BEGIN
+    PERFORM public.set_league_role(lid, 'a0000000-0000-4000-8000-00000000000b', 'admin');
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('member cannot set_league_role', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('member cannot set_league_role', SQLSTATE = '42501', SQLERRM);
+  END;
+  BEGIN
+    PERFORM public.archive_league(lid);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('member cannot archive_league', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('member cannot archive_league', SQLSTATE = '42501', SQLERRM);
+  END;
+  -- An open vote that will be caught by the archive (B's yes is 1 of 2 needed).
+  INSERT INTO league_ctx VALUES ('vote3',
+    public.open_handicap_vote(lid, 'a0000000-0000-4000-8000-00000000000d', 20)::text);
+END $$;
+
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+DO $$
+DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league');
+BEGIN
+  BEGIN
+    PERFORM public.set_league_role(lid, 'a0000000-0000-4000-8000-00000000000a', 'member');
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('the last admin cannot be demoted', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('the last admin cannot be demoted',
+      SQLERRM = 'A league needs at least one admin. Make someone else admin first.', SQLERRM);
+  END;
+  PERFORM public.set_league_role(lid, 'a0000000-0000-4000-8000-00000000000d', 'admin');
+  INSERT INTO league_smoke (name, ok, detail)
+  SELECT 'set_league_role promotes D to admin', role = 'admin', role
+    FROM public.league_members WHERE league_id = lid AND user_id = 'a0000000-0000-4000-8000-00000000000d';
+  -- With a second admin, demoting is allowed again.
+  PERFORM public.set_league_role(lid, 'a0000000-0000-4000-8000-00000000000d', 'member');
+  PERFORM public.set_league_role(lid, 'a0000000-0000-4000-8000-00000000000d', 'admin');
+  PERFORM public.set_league_role(lid, 'a0000000-0000-4000-8000-00000000000a', 'member');
+  INSERT INTO league_smoke (name, ok, detail)
+  SELECT 'an admin can step down once another admin exists',
+         (SELECT role FROM public.league_members WHERE league_id = lid AND user_id = 'a0000000-0000-4000-8000-00000000000a') = 'member',
+         NULL;
+END $$;
+
+-- D (now the admin) archives the league.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000d","role":"authenticated"}', true);
+SELECT public.archive_league((SELECT v::uuid FROM league_ctx WHERE k='league'));
+SELECT public.archive_league((SELECT v::uuid FROM league_ctx WHERE k='league'));   -- idempotent
+
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+DO $$
+DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league');
+        msg constant text := 'This league has been archived. You can still look at it, but not change it.';
+BEGIN
+  BEGIN
+    PERFORM public.announce_league_card(lid, 'offapp', '{"name":"x"}'::jsonb, '2026-12-10 10:00+01');
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: announce refused', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: announce refused', SQLERRM = msg, SQLERRM);
+  END;
+  BEGIN
+    PERFORM public.submit_league_card((SELECT v::uuid FROM league_ctx WHERE k='cardB2'),
+              (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20, NULL);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: submit refused', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: submit refused', SQLERRM = msg, SQLERRM);
+  END;
+  BEGIN
+    PERFORM public.add_unannounced_league_card(lid, '{"name":"RACE"}'::jsonb, NULL, '2026-12-02',
+              (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: add-unannounced refused', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: add-unannounced refused', SQLERRM = msg, SQLERRM);
+  END;
+  BEGIN
+    PERFORM public.open_handicap_vote(lid, 'a0000000-0000-4000-8000-00000000000a', 10);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: open vote refused', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: open vote refused', SQLERRM = msg, SQLERRM);
+  END;
+END $$;
+
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+DO $$
+BEGIN
+  PERFORM public.cast_handicap_ballot((SELECT v::uuid FROM league_ctx WHERE k='vote3'), true);
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: ballot refused', false, 'no error');
+EXCEPTION WHEN others THEN
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: ballot refused',
+    SQLERRM = 'This league has been archived. You can still look at it, but not change it.', SQLERRM);
+END $$;
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'archived: members still read the league, cards and votes',
+       (SELECT count(*) FROM public.leagues WHERE archived_at IS NOT NULL) = 1
+       AND (SELECT count(*) FROM public.league_cards) > 0
+       AND (SELECT count(*) FROM public.league_handicap_votes) = 3,
+       NULL;
+
 -- 12) Grants -------------------------------------------------------------------------------
 RESET ROLE;
 INSERT INTO league_smoke (name, ok, detail)
@@ -691,7 +835,8 @@ SELECT 'anon executes exactly get_marker_card + confirm_marker_card',
  WHERE n.nspname = 'public'
    AND p.proname IN ('is_league_member','is_league_admin','can_read_league_proof','can_write_league_proof',
                      'league_new_invite_code','league_user_name','notify_league_members','league_canonical_holes',
-                     'league_month_of','league_confirm_card','create_league','get_league_by_code','join_league',
+                     'league_month_of','league_confirm_card','league_assert_open','league_settle_vote',
+                     'set_league_role','archive_league','create_league','get_league_by_code','join_league',
                      'set_league_handicap','set_league_fee_paid','update_league_rules','leave_league',
                      'open_handicap_vote','cast_handicap_ballot','announce_league_card','notify_league_tee_off',
                      'submit_league_card','add_unannounced_league_card','confirm_league_card_by_partner',
@@ -705,7 +850,8 @@ SELECT 'authenticated cannot execute internal helpers',
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
  WHERE n.nspname = 'public'
    AND p.proname IN ('league_new_invite_code','league_user_name','notify_league_members',
-                     'league_canonical_holes','league_month_of','league_confirm_card');
+                     'league_canonical_holes','league_month_of','league_confirm_card',
+                     'league_assert_open','league_settle_vote');
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'anon has no privilege on league tables; authenticated has SELECT only',
        NOT bool_or(has_table_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE,DELETE'))
