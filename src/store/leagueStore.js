@@ -234,6 +234,20 @@ export async function getMyLeagues() {
     }));
 }
 
+// My live (non-void) cards for one month across every league, for the Setup
+// switch. monthKey: 'YYYY-MM'.
+export async function getMyCardsForMonth(monthKey) {
+  const me = await currentUserId();
+  if (!me || !monthKey) return [];
+  const rows = await selectRows(
+    supabase.from('league_cards').select('*')
+      .eq('user_id', me)
+      .eq('month', `${monthKey}-01`)
+      .neq('status', 'void'),
+  );
+  return (rows ?? []).map(rowToCard);
+}
+
 // Everything the League screens need, read live and written to the cache.
 // `cardsByMonth` ({ 'YYYY-MM': cards[] }, void excluded) feeds seasonTable.
 export async function getLeague(leagueId) {

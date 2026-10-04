@@ -37,6 +37,7 @@ import LeagueCreateScreen from './src/screens/LeagueCreateScreen';
 import LeagueBoardScreen from './src/screens/LeagueBoardScreen';
 import LeagueMembersScreen from './src/screens/LeagueMembersScreen';
 import LeagueSettingsScreen from './src/screens/LeagueSettingsScreen';
+import LeagueValidateScreen from './src/screens/LeagueValidateScreen';
 
 import FloatingTabBar from './src/navigation/FloatingTabBar';
 import { TAB_ROUTE_NAMES } from './src/navigation/tabBarModel';
@@ -332,6 +333,7 @@ function AppNavigator() {
         <Stack.Screen name="LeagueBoard" component={LeagueBoardScreen} />{/* reached with { leagueId } */}
         <Stack.Screen name="LeagueMembers" component={LeagueMembersScreen} />
         <Stack.Screen name="LeagueSettings" component={LeagueSettingsScreen} />
+        <Stack.Screen name="LeagueValidate" component={LeagueValidateScreen} />{/* after Finish of a league round: { leagueId, cardId, tournamentId, roundId } */}
         <Stack.Screen name="PlayersLibrary" component={PlayersLibraryScreen} />
         <Stack.Screen name="CoursesLibrary" component={CoursesLibraryScreen} />
         <Stack.Screen name="CourseLibraryDetail" component={CourseLibraryDetailScreen} />

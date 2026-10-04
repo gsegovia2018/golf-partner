@@ -49,6 +49,8 @@ import { cardDiscrepancyHoles, officialHolesFromCourse } from '../store/official
 import { buildLeaderboard } from '../store/officialLeaderboard';
 import { attestCard } from '../store/officialStore';
 import { notifyRoundFinished } from '../store/notificationStore';
+import { leagueCardOf } from '../store/leagueSetup';
+import { requestLeagueTeeOff, retryLeagueTeeOff } from '../lib/leagueTeeOff';
 import { normalizeRoundNotes } from '../store/roundNotes';
 import {
   DEFAULT_SHOT,
@@ -975,6 +977,11 @@ export default function ScorecardScreen({ navigation, route }) {
     }).catch(() => {});
   }, [reload, paramRoundIndex]));
   useEffect(() => () => { closeLive(); }, []);
+  // A league tee-off tap that never reached the server is resent on focus.
+  const leagueCardId = leagueCardOf(tournament, meId)?.cardId ?? null;
+  useFocusEffect(useCallback(() => {
+    if (leagueCardId) retryLeagueTeeOff(leagueCardId);
+  }, [leagueCardId]));
 
   // Hold time and haptic come from the tier, not from a chain here. The old
   // chain ended in `else 1800 // HOLE IN ONE`, which silently gave NOELADA the
@@ -1214,8 +1221,14 @@ export default function ScorecardScreen({ navigation, route }) {
   // Official rounds are not stamped from here (they have their own flow).
   const startStampedRef = useRef(false);
   const stampRoundStarted = useCallback(() => {
-    if (official || startStampedRef.current) return;
+    if (official) return;
     const t = tournamentRef.current;
+    // A league round (Setup's switch) tells the league it teed off on my
+    // first tap — even when a partner's phone already stamped startedAt.
+    // Fire-and-forget; requestLeagueTeeOff is once-only and retries offline.
+    const league = leagueCardOf(t, lastMeIdRef.current);
+    if (league) requestLeagueTeeOff(league.cardId);
+    if (startStampedRef.current) return;
     const r = t?.rounds?.[roundIndex];
     if (!t || !r || r.startedAt) return;
     startStampedRef.current = true;
@@ -1710,7 +1723,16 @@ export default function ScorecardScreen({ navigation, route }) {
           // Card for the round just played. collectMyRounds keys rounds as
           // `${tournamentId}:${roundIndex}` — match that here. The tournament-
           // complete / archive branch above keeps using goToSummary unchanged.
-          if (!official && freshT.kind !== 'official') {
+          const league = !official && leagueCardOf(freshT, lastMeIdRef.current);
+          if (league) {
+            // A league round goes on to submit and confirm the card.
+            goAfterFinish('LeagueValidate', {
+              leagueId: league.leagueId,
+              cardId: league.cardId,
+              tournamentId: freshT.id,
+              roundId: liveRound.id,
+            });
+          } else if (!official && freshT.kind !== 'official') {
             goAfterFinish('MyStats', {
               tab: 'reportCard',
               roundKey: `${freshT.id}:${roundIndex}`,

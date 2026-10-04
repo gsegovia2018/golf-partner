@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Image,
-  StyleSheet, ScrollView, Alert, Platform, Share,
+  StyleSheet, ScrollView, Alert, Platform, Share, Switch,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 
@@ -34,6 +34,13 @@ import {
   setupPrefillState,
 } from './setupWizard';
 import { mutate } from '../store/mutate';
+import { announceLeagueCard } from '../store/leagueStore';
+import { cardMonth } from '../store/leagueRules';
+import { monthName } from '../store/leagueView';
+import {
+  applyLeagueHandicap, isLeagueLength, leagueCourse, leagueStrokes,
+} from '../store/leagueSetup';
+import { useSetupLeagues } from '../hooks/useSetupLeagues';
 
 // Deep green used for the Review hero band — fixed in both themes so white
 // hero text always has strong contrast.
@@ -42,6 +49,18 @@ const HERO_GREEN = '#024d36';
 // Stable id for a round so React keys / removal survive reordering.
 let _roundIdSeq = 0;
 function newRoundId() { return `setup-r${Date.now()}-${_roundIdSeq++}`; }
+
+// The league announce failed: start a normal game instead, or stay here.
+async function askStartWithoutLeague(leagueName, reason) {
+  const title = "Couldn't announce your card";
+  const message = `${reason}\n\nStart it as a normal game? It won't count for ${leagueName}.`;
+  if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
+  return new Promise((resolve) => Alert.alert(
+    title, message,
+    [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+     { text: 'Start normal game', onPress: () => resolve(true) }],
+  ));
+}
 
 async function confirmDialog(title, message, confirmLabel = 'Remove') {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
@@ -112,6 +131,19 @@ export default function SetupScreen({ navigation, route }) {
   });
   // Which round's course name is being edited inline (null = none).
   const [renamingIndex, setRenamingIndex] = useState(null);
+
+  // League switch (games only, before Start): leagues where I have no card
+  // this month. The board's "Play with the app" passes leagueId to preselect
+  // that league with the switch on.
+  const setupLeagues = useSetupLeagues(isGame, user?.id ?? null);
+  const [leaguePick, setLeaguePick] = useState(() => route?.params?.leagueId ?? null);
+  const [leagueOn, setLeagueOn] = useState(() => !!route?.params?.leagueId);
+  const league = setupLeagues.find((l) => l.id === leaguePick) ?? setupLeagues[0] ?? null;
+  const myPlayer = players.find((p) => p.user_id && p.user_id === user?.id) ?? null;
+  const leagueOffered = isGame && !!league && !!myPlayer;
+  const leagueEligibleRound = isLeagueLength(rounds[0]);
+  const leagueActive = leagueOffered && leagueOn && leagueEligibleRound;
+  const startBusyRef = useRef(false);
 
   // A dedicated 'teams' step only earns its keep for multi-round tournaments
   // whose (default) scoring mode is played in teams — for a single round
@@ -386,7 +418,49 @@ export default function SetupScreen({ navigation, route }) {
     }
   }
 
+  // One Start at a time: a league Start waits on the network, and a second
+  // tap must not announce (or create) twice.
   async function handleStart() {
+    if (startBusyRef.current) return;
+    startBusyRef.current = true;
+    try {
+      await startGame();
+    } finally {
+      startBusyRef.current = false;
+    }
+  }
+
+  // Announces my league card for the game about to be created (the ids come
+  // from createTournament, nothing is saved or queued yet) and returns the
+  // tournament with the league link and my league handicap on round 0. If the
+  // announce fails, returns the plain tournament only when the user chooses a
+  // normal game, else null.
+  async function withLeagueCard(tournament, meId) {
+    const r0 = tournament.rounds[0];
+    try {
+      const card = await announceLeagueCard({
+        leagueId: league.id,
+        source: 'app',
+        course: leagueCourse(r0, meId),
+        teeTime: new Date().toISOString(),
+        tournamentId: tournament.id,
+        roundId: r0.id,
+        playerId: meId,
+      });
+      const hcp = card.leagueHandicap ?? league.leagueHandicap;
+      return {
+        ...tournament,
+        league: { leagueId: league.id, cardId: card.id, playerId: meId },
+        rounds: tournament.rounds.map((r, i) => (
+          i === 0 && hcp != null ? applyLeagueHandicap(r, meId, hcp) : r)),
+      };
+    } catch (err) {
+      const ok = await askStartWithoutLeague(league.name, err?.message ?? 'The league could not be reached.');
+      return ok ? tournament : null;
+    }
+  }
+
+  async function startGame() {
     if (players.length < 1) {
       Alert.alert('Missing info', 'Select at least 1 player.');
       return;
@@ -478,7 +552,7 @@ export default function SetupScreen({ navigation, route }) {
     // never has to fall back to the "which player are you?" picker.
     const meId = players.find((p) => p.user_id && p.user_id === user?.id)?.id ?? null;
 
-    const tournament = createTournament({
+    let tournament = createTournament({
       kind,
       name: tournamentName.trim() || (isGame ? 'Game' : 'Weekend Golf'),
       players,
@@ -492,6 +566,13 @@ export default function SetupScreen({ navigation, route }) {
             worstBallValue: parseInt(settings.worstBallValue, 10) || 1,
           },
     });
+
+    // League card: announced on the server BEFORE the game is saved or
+    // queued, so announced_at always precedes the first score.
+    if (leagueActive && meId) {
+      tournament = await withLeagueCard(tournament, meId);
+      if (!tournament) return;
+    }
 
     try {
       await mutate(tournament, { type: 'tournament.create', tournament });
@@ -857,6 +938,54 @@ export default function SetupScreen({ navigation, route }) {
     </>
   );
 
+  const renderLeagueSwitch = () => {
+    const hcp = league.leagueHandicap;
+    const month = monthName(cardMonth(new Date()));
+    let sub;
+    if (!leagueEligibleRound) sub = 'League cards are 18 holes. Pick an 18-hole course to count this round.';
+    else if (!leagueOn) sub = null;
+    else if (hcp == null) sub = `Your ${month} card · no league handicap set yet, your own index is used · counts whatever you score`;
+    else {
+      const strokes = leagueStrokes(rounds[0], myPlayer.id, hcp);
+      sub = `Your ${month} card · ${strokes} strokes from your league handicap ${Number(hcp).toFixed(1)} · counts whatever you score`;
+    }
+    return (
+      <View style={s.leagueCard}>
+        <View style={s.leagueRow}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.leagueTitle}>{`Counts for ${league.name}`}</Text>
+            {!!sub && <Text style={s.leagueSub}>{sub}</Text>}
+          </View>
+          <Switch
+            value={leagueActive}
+            onValueChange={setLeagueOn}
+            disabled={!leagueEligibleRound}
+            accessibilityLabel={`Counts for ${league.name}`}
+            trackColor={{ true: theme.accent.primary }}
+          />
+        </View>
+        {setupLeagues.length > 1 && (
+          <View style={s.leaguePicker}>
+            {setupLeagues.map((l) => {
+              const on = l.id === league.id;
+              return (
+                <TouchableOpacity
+                  key={l.id}
+                  style={[s.leagueChip, on && s.leagueChipOn]}
+                  onPress={() => setLeaguePick(l.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text style={[s.leagueChipText, on && s.leagueChipTextOn]} numberOfLines={1}>{l.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const renderReviewStep = () => {
     const hasScoringStep = steps.includes('scoring');
     // For a solo game there is no scoring choice — show a neutral label
@@ -953,6 +1082,8 @@ export default function SetupScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
         </View>
+
+        {leagueOffered && renderLeagueSwitch()}
 
         {!canStart && (
           <Text style={s.errorText}>
@@ -1420,6 +1551,29 @@ function makeStyles(theme) {
       fontSize: 12,
       marginTop: 2,
     },
+
+    /* League switch (review step) */
+    leagueCard: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingHorizontal: 14,
+      marginTop: 16,
+    },
+    leagueRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13 },
+    leagueTitle: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
+    leagueSub: {
+      fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 4,
+    },
+    leaguePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingBottom: 13 },
+    leagueChip: {
+      paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+      borderWidth: 1, borderColor: theme.border.default, maxWidth: '100%',
+    },
+    leagueChipOn: { backgroundColor: theme.accent.light, borderColor: theme.accent.primary },
+    leagueChipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 12 },
+    leagueChipTextOn: { color: theme.accent.primary },
 
   });
 }
