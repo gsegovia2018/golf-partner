@@ -7,6 +7,7 @@
 //   /board/<token>           → public read-only board, no auth UI at all
 //   /join/<token>            → official invite, guest/login choice
 //   /join-tournament/<code>  → casual invite, guest/login choice
+//   /league/<code>           → league invite, guest/login choice
 //
 // App.js imports ~40 screens at module scope and several of them pull in
 // native-only modules Jest can't parse, so every screen is stubbed. Each stub
@@ -261,6 +262,37 @@ describe('App gating: invite links', () => {
     expect(mockRegisteredScreens).toEqual(
       expect.arrayContaining(['JoinOfficial', 'JoinTournament']),
     );
+  });
+
+  test('signed-out league invite /league/<code> reaches the pre-session join screen', async () => {
+    const { getByTestId, queryByTestId } = await renderAtUrl(
+      'https://golf-partner.vercel.app/league/MULL-7Q4',
+    );
+
+    expect(getByTestId('screen-JoinTournamentLinkScreen')).toBeTruthy();
+    expect(queryByTestId('screen-AuthScreen')).toBeNull();
+    expect(queryByTestId('screen-SharedBoardScreen')).toBeNull();
+  });
+
+  test('golf://league/<code> matches too', async () => {
+    const r = await renderAtUrl('golf://league/MULL-7Q4');
+    expect(r.getByTestId('screen-JoinTournamentLinkScreen')).toBeTruthy();
+  });
+
+  test('once a session exists /league/<code> resolves to the JoinLeague route', async () => {
+    await renderAtUrl('https://golf-partner.vercel.app/league/MULL-7Q4', { session: SESSION });
+
+    expect(mockNavigationProps.current.linking.config.screens.JoinLeague).toBe('league/:code');
+    expect(mockRegisteredScreens).toEqual(expect.arrayContaining(['JoinLeague', 'LeagueCreate']));
+  });
+
+  test('/leagues/<x> is not a league invite', async () => {
+    const { getByTestId, queryByTestId } = await renderAtUrl(
+      'https://golf-partner.vercel.app/leagues/nope',
+    );
+
+    expect(getByTestId('screen-AuthScreen')).toBeTruthy();
+    expect(queryByTestId('screen-JoinTournamentLinkScreen')).toBeNull();
   });
 
   test('no link at all still shows the sign-up wall', async () => {

@@ -32,6 +32,8 @@ import { isBootRevealed, subscribeBootReveal, markBootReady } from './src/store/
 import SetNewPasswordScreen from './src/screens/SetNewPasswordScreen';
 import JoinTournamentLinkScreen from './src/screens/JoinTournamentLinkScreen';
 import SharedBoardScreen from './src/screens/SharedBoardScreen';
+import JoinLeagueScreen from './src/screens/JoinLeagueScreen';
+import LeagueCreateScreen from './src/screens/LeagueCreateScreen';
 
 import FloatingTabBar from './src/navigation/FloatingTabBar';
 import { TAB_ROUTE_NAMES } from './src/navigation/tabBarModel';
@@ -123,14 +125,14 @@ function MainTabs() {
   );
 }
 
-// The two invite shapes that must be catchable while signed OUT: the casual
-// shared invite (/join-tournament/CODE) and the official magic-token invite
-// (/join/TOKEN) — both as App Link URLs (https://golf-partner.vercel.app/…)
+// The invite shapes that must be catchable while signed OUT: the casual
+// shared invite (/join-tournament/CODE), the official magic-token invite
+// (/join/TOKEN) and the league invite (/league/CODE) — all as App Link URLs (https://golf-partner.vercel.app/…)
 // and as custom-scheme deep links (golf://…) when the app catches them.
 // The alternatives are disjoint: `/join-tournament/x` can never satisfy the
 // `join/` branch, because the character after `join` must be a slash.
-const JOIN_PATH_RE = /^\/(?:join-tournament|join)\/[^/]+/;
-const JOIN_SCHEME_RE = /^golf:\/\/(?:join-tournament|join)\/[^/?#]+/i;
+const JOIN_PATH_RE = /^\/(?:join-tournament|join|league)\/[^/]+/;
+const JOIN_SCHEME_RE = /^golf:\/\/(?:join-tournament|join|league)\/[^/?#]+/i;
 
 // Web reads it sync from window.location; native reads it async from
 // Linking.getInitialURL so the auth gate can route logged-out scanners to the
@@ -322,6 +324,8 @@ function AppNavigator() {
         <Stack.Screen name="PartyBoard" component={PartyBoardScreen} />
         <Stack.Screen name="OfficialAdmin" component={OfficialAdminScreen} />
         <Stack.Screen name="JoinOfficial" component={JoinOfficialScreen} />
+        <Stack.Screen name="LeagueCreate" component={LeagueCreateScreen} />{/* stepped wizard — creates a league, then offers the invite code, link and QR */}
+        <Stack.Screen name="JoinLeague" component={JoinLeagueScreen} />{/* /league/:code */}
         <Stack.Screen name="PlayersLibrary" component={PlayersLibraryScreen} />
         <Stack.Screen name="CoursesLibrary" component={CoursesLibraryScreen} />
         <Stack.Screen name="CourseLibraryDetail" component={CourseLibraryDetailScreen} />
@@ -390,6 +394,7 @@ function BootSplashOverlay() {
 // Deep-link config: maps web URL paths to routes so invite links open the
 // right flow directly. `join/:token` → official magic-token redeem;
 // `join-tournament/:code` → casual shared-invite redeem + claim;
+// `league/:code` → league invite summary + join;
 // `board/:token` → the public read-only leaderboard (signed-out visitors are
 // short-circuited to it above, outside the navigator);
 // `reset-password` → the set-new-password screen (also short-circuited in
@@ -414,6 +419,7 @@ const linking = {
     screens: {
       JoinOfficial: 'join/:token',
       JoinTournament: 'join-tournament/:code',
+      JoinLeague: 'league/:code',
       SharedBoard: 'board/:token',
       ResetPassword: 'reset-password',
     },

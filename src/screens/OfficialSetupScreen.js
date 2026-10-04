@@ -10,20 +10,12 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
+import { shareOrigin } from '../lib/shareOrigin';
 import { parseHandicapIndex } from '../lib/handicap';
 import {
   addRosterPlayer, listRoster,
   regenerateToken, withdrawPlayer, createRound, saveTournamentData,
 } from '../store/officialAdmin';
-
-// Origin used when building share links. On web we read the live origin;
-// off-web (or if window is unavailable) we fall back to a placeholder host.
-function shareOrigin() {
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin;
-  }
-  return 'https://golf-partner.vercel.app';
-}
 
 function joinLink(token) {
   return `${shareOrigin()}/join/${token}`;

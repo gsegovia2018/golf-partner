@@ -138,6 +138,37 @@ describe('isStepValid', () => {
   });
 });
 
+describe('league kind', () => {
+  const draft = {
+    name: 'El Club', seasonStart: '2026-10-04', seasonEnd: '2026-12-31', pointsTable: [500, 300], cap: 30,
+  };
+
+  test('league steps are name, rules, members, review whatever the player count', () => {
+    expect(wizardSteps('league', 0)).toEqual(['name', 'rules', 'members', 'review']);
+    expect(wizardSteps('league', 7)).toEqual(['name', 'rules', 'members', 'review']);
+  });
+
+  test('name step needs a name and a season that does not end before it starts', () => {
+    expect(isStepValid('name', { league: draft })).toBe(true);
+    expect(isStepValid('name', { league: { ...draft, name: '  ' } })).toBe(false);
+    expect(isStepValid('name', { league: { ...draft, seasonEnd: '2026-10-03' } })).toBe(false);
+    expect(isStepValid('name', { league: { ...draft, seasonStart: '' } })).toBe(false);
+    expect(isStepValid('name', {})).toBe(false);
+  });
+
+  test('rules step needs a points table and a cap within 0-54', () => {
+    expect(isStepValid('rules', { league: draft })).toBe(true);
+    expect(isStepValid('rules', { league: { ...draft, pointsTable: null } })).toBe(false);
+    expect(isStepValid('rules', { league: { ...draft, pointsTable: [] } })).toBe(false);
+    expect(isStepValid('rules', { league: { ...draft, cap: NaN } })).toBe(false);
+    expect(isStepValid('rules', { league: { ...draft, cap: 60 } })).toBe(false);
+  });
+
+  test('members step is always valid (a league can start with just its admin)', () => {
+    expect(isStepValid('members', {})).toBe(true);
+  });
+});
+
 describe('official kind', () => {
   test('official steps are roster, rounds, format, review', () => {
     expect(wizardSteps('official', 0)).toEqual(['roster', 'rounds', 'format', 'review']);
