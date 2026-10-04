@@ -15,11 +15,7 @@ import {
   monthName, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel, monthRows,
   daysLeftInMonth, currentMonthKey, memberName, yourCardState,
 } from '../store/leagueView';
-
-// A route another build item adds later: the button only shows once it exists.
-function hasRoute(navigation, name) {
-  return !!navigation.getState?.()?.routeNames?.includes(name);
-}
+import { dayLabel, timeLabel } from '../store/leagueOffApp';
 
 // The league's home: season standings, this month's cards and my own card.
 // Cache first, then live; pull to refresh.
@@ -153,6 +149,24 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const mine = yourCardState(myCard);
   const toneColor = { done: theme.accent.primary, live: theme.text.primary, muted: theme.text.muted };
 
+  // My app card stuck before confirmation (left Validate, or no partner yet):
+  // reopen Validate on its round. A submitted card goes straight to the check.
+  const finishValidating = !mine.offApp && (mine.kind === 'playing' || mine.kind === 'submitted') ? (
+    <TouchableOpacity
+      style={s.primaryBtn}
+      onPress={() => navigation.navigate('LeagueValidate', {
+        leagueId,
+        cardId: mine.card.id,
+        tournamentId: mine.card.tournamentId,
+        roundId: mine.card.roundId,
+        submitted: mine.kind === 'submitted',
+      })}
+      activeOpacity={0.8}
+    >
+      <Text style={s.primaryText}>Finish validating your card</Text>
+    </TouchableOpacity>
+  ) : null;
+
   const renderYourCard = () => {
     let body;
     let badge = null;
@@ -164,28 +178,29 @@ export default function LeagueBoardScreen({ navigation, route }) {
           </Text>
           <TouchableOpacity
             style={s.primaryBtn}
-            // The league switch on the Setup review step arrives in P6.
-            onPress={() => navigation.navigate('Setup', { kind: 'game' })}
+            // Setup preselects this league's "Counts for" switch, on.
+            onPress={() => navigation.navigate('Setup', { kind: 'game', leagueId })}
             activeOpacity={0.8}
           >
             <Feather name="play" size={16} color={theme.text.inverse} style={{ marginRight: 8 }} />
             <Text style={s.primaryText}>Play with the app</Text>
           </TouchableOpacity>
-          {/* TODO(P8): "Playing without the app?" opens the announce sheet. Hidden until LeagueAnnounce is registered. */}
-          {hasRoute(navigation, 'LeagueAnnounce') && (
-            <>
-              <TouchableOpacity
-                style={s.linkBtn}
-                onPress={() => navigation.navigate('LeagueAnnounce', { leagueId })}
-                activeOpacity={0.7}
-              >
-                <Text style={s.linkText}>Playing without the app?</Text>
-              </TouchableOpacity>
-              <Text style={s.hint}>
-                Already played and announced it somewhere else? Add the card. It shows as “Not announced in the app”.
-              </Text>
-            </>
-          )}
+          <TouchableOpacity
+            style={s.linkBtn}
+            onPress={() => navigation.navigate('LeagueAnnounce', { leagueId })}
+            activeOpacity={0.7}
+          >
+            <Text style={s.linkText}>Playing without the app?</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('LeagueAddScore', { leagueId })}
+            activeOpacity={0.7}
+            accessibilityRole="link"
+          >
+            <Text style={[s.hint, s.hintLink]}>
+              Already played and announced it somewhere else? Add the card. It shows as “Not announced in the app”.
+            </Text>
+          </TouchableOpacity>
         </>
       );
     } else if (mine.kind === 'announced' || mine.kind === 'playing') {
@@ -193,11 +208,13 @@ export default function LeagueBoardScreen({ navigation, route }) {
       body = (
         <>
           <Text style={s.cardText}>
-            {mine.offApp ? 'Playing without the app' : 'Playing with the app'}
-            {mine.course ? ` · ${mine.course}` : ''}
+            {mine.offApp && mine.kind === 'announced'
+              ? [`Announced ${timeLabel(mine.card.announcedAt)}`, mine.course,
+                [dayLabel(mine.card.teeTime), timeLabel(mine.card.teeTime)].filter(Boolean).join(' ')]
+                .filter(Boolean).join(' · ') + ' — playing without the app'
+              : `${mine.offApp ? 'Playing without the app' : 'Playing with the app'}${mine.course ? ` · ${mine.course}` : ''}`}
           </Text>
-          {/* TODO(P8): "Add your score" for an announced off-app card. Hidden until LeagueAddScore is registered. */}
-          {mine.kind === 'announced' && mine.offApp && hasRoute(navigation, 'LeagueAddScore') && (
+          {mine.kind === 'announced' && mine.offApp && (
             <TouchableOpacity
               style={s.primaryBtn}
               onPress={() => navigation.navigate('LeagueAddScore', { leagueId, cardId: mine.card.id })}
@@ -206,16 +223,32 @@ export default function LeagueBoardScreen({ navigation, route }) {
               <Text style={s.primaryText}>Add your score</Text>
             </TouchableOpacity>
           )}
+          {finishValidating}
         </>
       );
     } else {
       badge = mine.kind === 'confirmed' ? 'Confirmed' : 'Submitted';
+      const proofText = mine.card.proofPath
+        ? (mine.card.confirmation === 'official' ? 'official result attached' : 'photo attached')
+        : null;
       body = (
-        <Text style={s.cardText}>
-          {[mine.pts, mine.course, mine.offApp ? 'added after the round' : null,
-            mine.card.confirmedByName ? `confirmed by ${mine.card.confirmedByName}` : null]
-            .filter(Boolean).join(' · ')}
-        </Text>
+        <>
+          <Text style={s.cardText}>
+            {[mine.pts, mine.course, mine.offApp ? 'added after the round' : null, proofText,
+              mine.card.confirmedByName ? `confirmed by ${mine.card.confirmedByName}` : null]
+              .filter(Boolean).join(' · ')}
+          </Text>
+          {mine.kind === 'submitted' && mine.offApp && (
+            <TouchableOpacity
+              style={s.primaryBtn}
+              onPress={() => navigation.navigate('LeagueAddProof', { leagueId, cardId: mine.card.id, resume: true })}
+              activeOpacity={0.8}
+            >
+              <Text style={s.primaryText}>Add proof</Text>
+            </TouchableOpacity>
+          )}
+          {finishValidating}
+        </>
       );
     }
     return (
@@ -337,6 +370,7 @@ function makeStyles(theme) {
     badge: { backgroundColor: theme.accent.light, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 },
     badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 11 },
     hint: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, lineHeight: 17, textAlign: 'center' },
+    hintLink: { color: theme.accent.primary },
 
     memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
     rowDivider: { borderBottomWidth: 1, borderBottomColor: theme.border.subtle },

@@ -10,7 +10,23 @@
 // Scoring mode is deliberately NOT part of the signature — the screen already
 // shows its own notice for that (fallbackNoticeText).
 
-const stable = (v) => JSON.stringify(v ?? null);
+// The local copy Setup saves and the server's copy of the same game differ in
+// shape only: jsonb hands object keys back in its own order (a tee snapshot
+// written {label, rating, slope} returns as {label, slope, rating}), and pairs
+// are stored as ids only (scoring.js thinPairs) while Setup builds them from
+// whole player objects. Both are compared in a canonical form, so the server
+// copy replacing the local one is not mistaken for a peer's edit.
+const sortKeys = (v) => {
+  if (Array.isArray(v)) return v.map(sortKeys);
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])]));
+  }
+  return v;
+};
+const stable = (v) => JSON.stringify(sortKeys(v ?? null));
+const pairIds = (pairs) => (Array.isArray(pairs)
+  ? pairs.map((team) => (Array.isArray(team) ? team.map((m) => (m && typeof m === 'object' ? m.id ?? null : m)) : team))
+  : pairs ?? null);
 
 /**
  * A compact, comparable picture of the parts of setup a scorer would notice
@@ -23,7 +39,7 @@ export function setupSignature(tournament, roundIndex = 0) {
   const round = rounds[roundIndex] ?? null;
   return {
     players: stable((tournament.players ?? []).map((p) => [p?.id ?? null, p?.name ?? null])),
-    teams: stable(rounds.map((r) => [r?.id ?? null, r?.pairs ?? null])),
+    teams: stable(rounds.map((r) => [r?.id ?? null, pairIds(r?.pairs)])),
     course: stable(round ? [round.courseId ?? null, round.courseName ?? null, (round.holes ?? []).length] : null),
     handicaps: stable(round ? [round.playerHandicaps ?? null, round.playerTees ?? null] : null),
   };

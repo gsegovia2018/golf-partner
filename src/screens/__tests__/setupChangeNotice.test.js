@@ -41,6 +41,27 @@ describe('setupChangeNotice', () => {
     expect(describeSetupChange(setupSignature(base(), 0), setupSignature(next, 0))).toBeNull();
   });
 
+  it('treats the server copy of the same setup as unchanged (thin pairs, jsonb key order)', () => {
+    const local = base();
+    local.rounds[0].pairs = [[{ id: 'a', name: 'Alex', handicap: 3 }, { id: 'b', name: 'Bea' }]];
+    local.rounds[0].playerTees = { a: { label: 'Yellow', rating: 72, slope: 125 } };
+    const server = base();
+    server.rounds[0].pairs = [[{ id: 'a' }, { id: 'b' }]];
+    server.rounds[0].playerTees = { a: { label: 'Yellow', slope: 125, rating: 72 } };
+    expect(describeSetupChange(setupSignature(local, 0), setupSignature(server, 0))).toBeNull();
+  });
+
+  it('still names a real team or tee change across those shapes', () => {
+    const local = base();
+    local.rounds[0].pairs = [[{ id: 'a', name: 'Alex' }, { id: 'b', name: 'Bea' }]];
+    local.rounds[0].playerTees = { a: { label: 'Yellow', rating: 72, slope: 125 } };
+    const server = base();
+    server.rounds[0].pairs = [[{ id: 'b' }, { id: 'a' }]];
+    server.rounds[0].playerTees = { a: { label: 'White', slope: 131, rating: 73.4 } };
+    expect(describeSetupChange(setupSignature(local, 0), setupSignature(server, 0)))
+      .toBe('Teams and handicaps changed on another phone');
+  });
+
   it('tolerates a missing tournament or round', () => {
     expect(setupSignature(null)).toBeNull();
     expect(describeSetupChange(null, setupSignature(base(), 0))).toBeNull();

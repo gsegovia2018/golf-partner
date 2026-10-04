@@ -70,21 +70,111 @@ describe('LeagueBoardScreen', () => {
     expect(getByText(/No cards yet\. .* is open: the board fills in as each card is confirmed\./)).toBeTruthy();
 
     fireEvent.press(getByText('Play with the app'));
-    expect(navigation.navigate).toHaveBeenCalledWith('Setup', { kind: 'game' });
+    expect(navigation.navigate).toHaveBeenCalledWith('Setup', { kind: 'game', leagueId: 'L1' });
   });
 
-  test('"Playing without the app?" stays hidden until the LeagueAnnounce route exists', async () => {
+  test('no card: "Playing without the app?" opens LeagueAnnounce and the link adds an unannounced card', async () => {
     store.getLeague.mockResolvedValue(snapshot());
-    const hidden = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
-    await waitFor(() => hidden.getByText('Play with the app'));
-    expect(hidden.queryByText('Playing without the app?')).toBeNull();
-    hidden.unmount();
-
-    const nav = makeNav(['LeagueAnnounce']);
-    const shown = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
-    await waitFor(() => shown.getByText('Playing without the app?'));
-    fireEvent.press(shown.getByText('Playing without the app?'));
+    const nav = makeNav();
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText('Playing without the app?'));
+    fireEvent.press(getByText('Playing without the app?'));
     expect(nav.navigate).toHaveBeenCalledWith('LeagueAnnounce', { leagueId: 'L1' });
+    fireEvent.press(getByText(/Already played and announced it somewhere else\? Add the card/));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueAddScore', { leagueId: 'L1' });
+  });
+
+  test('announced off-app: shows the announcement and "Add your score" opens LeagueAddScore', async () => {
+    const teeTime = new Date(2025, 9, 4, 9, 30).toISOString();
+    const announcedAt = new Date(2025, 9, 4, 9, 12).toISOString();
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'announced', null, {
+          id: 'c1', source: 'offapp', course: { name: 'Golf Olivar' }, announcedAt, teeTime,
+        })],
+      },
+    }));
+    const nav = makeNav();
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText('Add your score'));
+    expect(getByText('Announced 09:12 · Golf Olivar · Sat 4 Oct 09:30 — playing without the app')).toBeTruthy();
+    fireEvent.press(getByText('Add your score'));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueAddScore', { leagueId: 'L1', cardId: 'c1' });
+  });
+
+  test('off-app card with its proof attached reads "added after the round · photo attached"', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'confirmed', 36, {
+          source: 'offapp', course: { name: 'Golf Olivar' }, proofPath: 'L1/c-me.jpg', confirmation: 'photo',
+        })],
+      },
+    }));
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('36 pts · Golf Olivar · added after the round · photo attached'));
+  });
+
+  test('a submitted off-app card without proof offers "Add proof" (resume)', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'submitted', 36, { id: 'c9', source: 'offapp', course: { name: 'Golf Olivar' } })],
+      },
+    }));
+    const nav = makeNav();
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText('Add proof'));
+    fireEvent.press(getByText('Add proof'));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueAddProof', { leagueId: 'L1', cardId: 'c9', resume: true });
+  });
+
+  test('a playing app card offers "Finish validating your card" → LeagueValidate on its round', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'playing', null, {
+          id: 'c5', course: { name: 'Centro Nacional' }, tournamentId: 't1', roundId: 't1-r0',
+        })],
+      },
+    }));
+    const nav = makeNav();
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText('Finish validating your card'));
+    fireEvent.press(getByText('Finish validating your card'));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueValidate', {
+      leagueId: 'L1', cardId: 'c5', tournamentId: 't1', roundId: 't1-r0', submitted: false,
+    });
+  });
+
+  test('a submitted app card reopens Validate straight at the partner check', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'submitted', 36, { id: 'c5', tournamentId: 't1', roundId: 't1-r0' })],
+      },
+    }));
+    const nav = makeNav();
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText('Finish validating your card'));
+    expect(queryByText('Add proof')).toBeNull();
+    fireEvent.press(getByText('Finish validating your card'));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueValidate', {
+      leagueId: 'L1', cardId: 'c5', tournamentId: 't1', roundId: 't1-r0', submitted: true,
+    });
+  });
+
+  test('"Finish validating" is only for unconfirmed app cards', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: { [THIS_MONTH]: [card('me', 'confirmed', 36, { tournamentId: 't1', roundId: 't1-r0' })] },
+    }));
+    const confirmed = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => confirmed.getByText('Confirmed'));
+    expect(confirmed.queryByText('Finish validating your card')).toBeNull();
+    confirmed.unmount();
+
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: { [THIS_MONTH]: [card('me', 'submitted', 36, { source: 'offapp' })] },
+    }));
+    const offApp = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => offApp.getByText('Add proof'));
+    expect(offApp.queryByText('Finish validating your card')).toBeNull();
   });
 
   test('season standings with the last-month delta, my row, pot footer and this month statuses', async () => {

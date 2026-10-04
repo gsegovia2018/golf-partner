@@ -111,7 +111,7 @@ function shortPlayerLabel(player, isSolo) {
 function NineBlock({
   holes, label, aggLabel, players, scores, onSetScore, editable,
   playerHandicaps, mode, round, theme, s, columns, meId, displayMode,
-  currentHoleByPlayer,
+  currentHoleByPlayer, soloRowLabel,
 }) {
   const { labelW, aggW, holeW, labelFontSize } = columns;
   // The block renders one nine, but strokes are allocated over the ROUND's
@@ -165,7 +165,7 @@ function NineBlock({
       return v ? acc + v : acc;
     }, 0);
     const sumPts = holes.reduce((acc, h) => acc + (ptsFor(h, player) ?? 0), 0);
-    const rowLabel = shortPlayerLabel(player, isSolo);
+    const rowLabel = (isSolo && soloRowLabel) || shortPlayerLabel(player, isSolo);
     // Highlight only the viewer's own row — tinting every player row turns
     // the "you" cue into background noise on a 4-player card.
     const isMe = isSolo || player.id === meId;
@@ -334,7 +334,9 @@ export function resolveScorecardRows({ round, settings, players, meId, isBestBal
   return { mode, rowPlayers, rowHandicaps, effectiveMeId };
 }
 
-export function ScorecardTable({ round, players, scores, onSetScore, editable, mode, meId, handicapsOverride, showTotalsCard = true, highlightCurrentHole = false }) {
+// `rowLabel` replaces the "You" label of a single-row card — for a card that
+// isn't the viewer's own (the marker page). Ignored with 2+ rows.
+export function ScorecardTable({ round, players, scores, onSetScore, editable, mode, meId, handicapsOverride, showTotalsCard = true, highlightCurrentHole = false, rowLabel = null }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const { width } = useWindowDimensions();
@@ -438,6 +440,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
             meId={meId}
             displayMode={displayMode}
             currentHoleByPlayer={currentHoleByPlayer}
+            soloRowLabel={rowLabel}
           />
         </View>
 
@@ -460,6 +463,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
               meId={meId}
               displayMode={displayMode}
               currentHoleByPlayer={currentHoleByPlayer}
+              soloRowLabel={rowLabel}
             />
           </View>
         )}
