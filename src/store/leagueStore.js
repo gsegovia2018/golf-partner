@@ -301,7 +301,7 @@ export async function getLeague(leagueId) {
     votes: (voteRows ?? []).map((v) => rowToVote(v, (ballotRows ?? []).filter((b) => b.vote_id === v.id))),
     handicapEvents: (eventRows ?? []).map(rowToHandicapEvent),
     final: finalRow
-      ? { tournamentId: finalRow.tournament_id, strokes: finalRow.strokes ?? {} }
+      ? { tournamentId: finalRow.tournament_id, strokes: finalRow.strokes ?? {}, createdAt: finalRow.created_at ?? null }
       : null,
   };
   await setLeagueCache(leagueId, result);

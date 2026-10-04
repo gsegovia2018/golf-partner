@@ -34,13 +34,14 @@ import {
   setupPrefillState,
 } from './setupWizard';
 import { mutate } from '../store/mutate';
-import { announceLeagueCard } from '../store/leagueStore';
+import { announceLeagueCard, recordLeagueFinal } from '../store/leagueStore';
 import { cardMonth } from '../store/leagueRules';
 import { monthName } from '../store/leagueView';
 import {
   applyLeagueHandicap, isLeagueLength, leagueCourse, leagueStrokes,
 } from '../store/leagueSetup';
 import { useSetupLeagues } from '../hooks/useSetupLeagues';
+import { applyFinalStrokes, finalStrokeList, finalStrokesRecord } from '../store/leagueFinal';
 
 // Deep green used for the Review hero band — fixed in both themes so white
 // hero text always has strong contrast.
@@ -144,6 +145,11 @@ export default function SetupScreen({ navigation, route }) {
   const leagueEligibleRound = isLeagueLength(rounds[0]);
   const leagueActive = leagueOffered && leagueOn && leagueEligibleRound;
   const startBusyRef = useRef(false);
+
+  // The league Final (LeagueFinalScreen): { leagueId, strokes by user id }.
+  // Start raises round 0's playing handicaps by those strokes.
+  const leagueFinal = route?.params?.leagueFinal ?? null;
+  const finalStrokes = leagueFinal ? finalStrokeList(players, leagueFinal.strokes) : [];
 
   // A dedicated 'teams' step only earns its keep for multi-round tournaments
   // whose (default) scoring mode is played in teams — for a single round
@@ -530,7 +536,7 @@ export default function SetupScreen({ navigation, route }) {
         ?? Object.fromEntries(players.map((p) => [
           p.id, deriveRoundPlayingHandicap(p.handicap, roundWithTees, p.id),
         ]));
-      return {
+      const built = {
         id: `r${i}`,
         courseId: r.courseId ?? null,
         courseName: r.courseName.trim(),
@@ -544,6 +550,7 @@ export default function SetupScreen({ navigation, route }) {
         pairs: pairsFor(roundMode),
         scores: {},
       };
+      return i === 0 && leagueFinal ? applyFinalStrokes(built, players, leagueFinal.strokes) : built;
     });
 
     // The creator is "me": match the signed-in account to its player slot so
@@ -567,6 +574,8 @@ export default function SetupScreen({ navigation, route }) {
           },
     });
 
+    if (leagueFinal) tournament = { ...tournament, leagueFinal: { leagueId: leagueFinal.leagueId } };
+
     // League card: announced on the server BEFORE the game is saved or
     // queued, so announced_at always precedes the first score.
     if (leagueActive && meId) {
@@ -576,6 +585,18 @@ export default function SetupScreen({ navigation, route }) {
 
     try {
       await mutate(tournament, { type: 'tournament.create', tournament });
+
+      if (leagueFinal) {
+        try {
+          await recordLeagueFinal(
+            leagueFinal.leagueId, tournament.id, finalStrokesRecord(players, leagueFinal.strokes),
+          );
+        } catch (finalErr) {
+          const msg = `The Final was created, but the league could not be told: ${finalErr?.message ?? 'try again from the league board.'}`;
+          if (Platform.OS === 'web') window.alert(msg);
+          else Alert.alert('League Final', msg);
+        }
+      }
 
       if (shouldOfferPostCreateEditorInvite(kind, players, user?.id)) {
         setPostCreateInvite({
@@ -1084,6 +1105,15 @@ export default function SetupScreen({ navigation, route }) {
         </View>
 
         {leagueOffered && renderLeagueSwitch()}
+
+        {finalStrokes.length > 0 && (
+          <View style={[s.leagueCard, { paddingVertical: 12 }]}>
+            <Text style={s.leagueTitle}>League Final · extra strokes applied</Text>
+            {finalStrokes.map(({ player, extra }) => (
+              <Text key={player.id} style={s.leagueSub}>{`${player.name} +${extra}`}</Text>
+            ))}
+          </View>
+        )}
 
         {!canStart && (
           <Text style={s.errorText}>

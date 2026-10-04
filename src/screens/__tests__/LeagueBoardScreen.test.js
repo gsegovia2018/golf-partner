@@ -237,6 +237,34 @@ describe('LeagueBoardScreen', () => {
     await waitFor(() => getByText('SEASON'));
   });
 
+  test('the admin sees "Set up the Final"; once recorded it is an "open" link to the tournament', async () => {
+    store.getLeague.mockResolvedValueOnce(snapshot());
+    const nav = makeNav();
+    const first = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => first.getByText('Set up the Final'));
+    fireEvent.press(first.getByText('Set up the Final'));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueFinal', { leagueId: 'L1' });
+    first.unmount();
+
+    store.getLeague.mockResolvedValueOnce({
+      ...snapshot(), final: { tournamentId: 't9', strokes: {}, createdAt: '2025-12-13T10:00:00Z' },
+    });
+    const second = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => second.getByText(/^Final · .* · open$/));
+    expect(second.queryByText('Set up the Final')).toBeNull();
+    fireEvent.press(second.getByText(/^Final · .* · open$/));
+    expect(nav.navigate).toHaveBeenCalledWith('Tournament', { tournamentId: 't9', viewMode: 'tournament' });
+  });
+
+  test('a plain member has no "Set up the Final"', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      members: [member('me', 'Marcos'), member('javi', 'Javi', { role: 'admin' })],
+    }));
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('SEASON'));
+    expect(queryByText('Set up the Final')).toBeNull();
+  });
+
   test('header buttons open Members and Settings', async () => {
     store.getLeague.mockResolvedValue(snapshot());
     const navigation = makeNav();
