@@ -333,10 +333,6 @@ describe('reads and cache', () => {
   test('getLeague maps everything, groups cards by month, drops void, attaches ballots', async () => {
     mockState.tables = {
       leagues: { data: leagueRow, error: null },
-      league_members: {
-        data: [{ league_id: 'L1', user_id: 'me', role: 'admin', league_handicap: '18.0', fee_paid: true, joined_at: 'x', left_at: null }],
-        error: null,
-      },
       league_cards: {
         data: [cardRow(), cardRow({ id: 'C0', user_id: 'u2', status: 'void', month: '2026-09-01' })],
         error: null,
@@ -351,12 +347,17 @@ describe('reads and cache', () => {
         error: null,
       },
       league_finals: { data: null, error: null },
-      profiles: { data: [{ user_id: 'me', display_name: 'Marcos', avatar_url: null, avatar_color: '#fff' }], error: null },
     };
+    ok([{
+      user_id: 'me', display_name: 'Marcos', username: 'marcos', avatar_url: null, role: 'admin',
+      league_handicap: '18.0', fee_paid: true, joined_at: 'x', left_at: null,
+    }]);
     const res = await getLeague('L1');
+    expect(mockState.rpcCalls).toContainEqual(['get_league_members', { p_league: 'L1' }]);
     expect(res.league).toMatchObject({ id: 'L1', inviteCode: 'ABC', entryFeeCents: 1000 });
     expect(res.members[0]).toMatchObject({
-      userId: 'me', role: 'admin', leagueHandicap: 18, feePaid: true, displayName: 'Marcos',
+      leagueId: 'L1', userId: 'me', role: 'admin', leagueHandicap: 18, feePaid: true,
+      displayName: 'Marcos', username: 'marcos',
     });
     expect(res.cards).toHaveLength(2);
     expect(Object.keys(res.cardsByMonth)).toEqual(['2026-10']);

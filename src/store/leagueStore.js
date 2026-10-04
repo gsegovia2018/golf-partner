@@ -93,18 +93,19 @@ export function rowToLeague(r) {
   };
 }
 
-export function rowToMember(r, profile) {
+// Row from the get_league_members RPC (names come from profiles, server side).
+export function rowToMember(r, leagueId = null) {
   return {
-    leagueId: r.league_id,
+    leagueId,
     userId: r.user_id,
     role: r.role,
     leagueHandicap: num(r.league_handicap),
     feePaid: !!r.fee_paid,
     joinedAt: r.joined_at ?? null,
     leftAt: r.left_at ?? null,
-    displayName: profile?.display_name ?? profile?.username ?? null,
-    avatarUrl: profile?.avatar_url ?? null,
-    avatarColor: profile?.avatar_color ?? null,
+    username: r.username ?? null,
+    displayName: r.display_name ?? r.username ?? null,
+    avatarUrl: r.avatar_url ?? null,
   };
 }
 
@@ -233,22 +234,6 @@ export async function getMyLeagues() {
     }));
 }
 
-async function fetchProfiles(userIds) {
-  if (userIds.length === 0) return new Map();
-  try {
-    const rows = await selectRows(
-      supabase.from('profiles')
-        .select('user_id, username, display_name, avatar_url, avatar_color')
-        .in('user_id', userIds),
-    );
-    return new Map((rows ?? []).map((p) => [p.user_id, p]));
-  } catch {
-    // profiles RLS only exposes friends and shared-tournament players, so
-    // names are best-effort; members render without one.
-    return new Map();
-  }
-}
-
 // Everything the League screens need, read live and written to the cache.
 // `cardsByMonth` ({ 'YYYY-MM': cards[] }, void excluded) feeds seasonTable.
 export async function getLeague(leagueId) {
@@ -258,7 +243,7 @@ export async function getLeague(leagueId) {
   const league = rowToLeague(leagueRow);
 
   const [memberRows, cardRows, voteRows, eventRows, finalRow] = await Promise.all([
-    selectRows(supabase.from('league_members').select('*').eq('league_id', leagueId)),
+    rpc('get_league_members', { p_league: leagueId }),
     selectRows(
       supabase.from('league_cards').select('*')
         .eq('league_id', leagueId)
@@ -277,7 +262,6 @@ export async function getLeague(leagueId) {
   const ballotRows = voteIds.length
     ? await selectRows(supabase.from('league_handicap_ballots').select('*').in('vote_id', voteIds))
     : [];
-  const profiles = await fetchProfiles([...new Set((memberRows ?? []).map((m) => m.user_id))]);
 
   const cards = (cardRows ?? []).map(rowToCard);
   const cardsByMonth = {};
@@ -288,7 +272,7 @@ export async function getLeague(leagueId) {
 
   const result = {
     league,
-    members: (memberRows ?? []).map((m) => rowToMember(m, profiles.get(m.user_id))),
+    members: (memberRows ?? []).map((m) => rowToMember(m, leagueId)),
     cards,
     cardsByMonth,
     votes: (voteRows ?? []).map((v) => rowToVote(v, (ballotRows ?? []).filter((b) => b.vote_id === v.id))),
