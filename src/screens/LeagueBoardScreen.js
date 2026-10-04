@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native';
@@ -16,6 +16,9 @@ import {
   daysLeftInMonth, currentMonthKey, memberName, yourCardState,
 } from '../store/leagueView';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
+import {
+  getPendingLeagueFinals, subscribePendingLeagueFinals, flushPendingLeagueFinals,
+} from '../lib/leagueFinalPending';
 
 // The league's home: season standings, this month's cards and my own card.
 // Cache first, then live; pull to refresh.
@@ -27,6 +30,29 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const leagueId = route?.params?.leagueId;
   const { data, stale, loading, refreshing, error, reload, refresh } = useLeague(navigation, leagueId);
   const [scope, setScope] = useState('season');
+
+  // A Final started on this device whose link to the league is still being
+  // retried (see lib/leagueFinalPending). Flush on focus; reload once it lands.
+  const [pendingFinal, setPendingFinal] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    let had = false;
+    const apply = (list) => {
+      if (!alive) return;
+      const mine = list.find((x) => x.leagueId === leagueId) ?? null;
+      setPendingFinal(mine);
+      if (had && !mine) reload(); // the link landed: pick up the server's Final
+      had = !!mine;
+    };
+    const unsub = subscribePendingLeagueFinals(apply);
+    const onFocus = async () => {
+      apply(await getPendingLeagueFinals());
+      await flushPendingLeagueFinals();
+    };
+    onFocus();
+    const off = navigation?.addListener?.('focus', onFocus);
+    return () => { alive = false; unsub(); if (typeof off === 'function') off(); };
+  }, [navigation, leagueId, reload]);
 
   const view = useMemo(() => {
     if (!data) return null;
@@ -269,15 +295,17 @@ export default function LeagueBoardScreen({ navigation, route }) {
     ? new Date(data.final.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
     : null;
   let finalRow = null;
-  if (data.final) {
+  const finalId = data.final?.tournamentId ?? pendingFinal?.tournamentId ?? null;
+  if (finalId) {
     finalRow = (
       <TouchableOpacity
         style={s.linkRow}
-        onPress={() => navigation.navigate('Tournament', { tournamentId: data.final.tournamentId, viewMode: 'tournament' })}
+        onPress={() => navigation.navigate('Tournament', { tournamentId: finalId, viewMode: 'tournament' })}
         activeOpacity={0.7}
       >
         <Feather name="flag" size={16} color={theme.text.primary} style={{ marginRight: 10 }} />
         <Text style={s.linkRowText}>{['Final', finalDate, 'open'].filter(Boolean).join(' · ')}</Text>
+        {!data.final && <Text style={{ color: theme.text.muted, fontSize: 12, marginRight: 6 }}>Linking the Final to the league…</Text>}
         <Feather name="chevron-right" size={18} color={theme.text.muted} />
       </TouchableOpacity>
     );

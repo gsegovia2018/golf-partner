@@ -92,6 +92,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Notifications from 'expo-notifications';
 import { registerPushToken, configureNotificationHandler } from './src/lib/pushNotifications';
 import { normalizeDeepLink } from './src/lib/notificationContent';
+import { startLeagueFinalPending } from './src/lib/leagueFinalPending';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -493,6 +494,8 @@ export default function App() {
     // Card replication for every live game: pushes whatever is pending and
     // reconnects whenever connectivity comes back. Idempotent.
     startReplication();
+    // Retries linking a started League Final to its league.
+    startLeagueFinalPending();
     // Non-blocking: GPS geometry starts from the bundled seed and upgrades to
     // live table data whenever this resolves. Not part of the render gate.
     hydrateCourseGeometry();

@@ -26,9 +26,14 @@ jest.mock('../../store/leagueStore', () => ({
   announceLeagueCard: jest.fn(),
   recordLeagueFinal: jest.fn(),
 }));
+jest.mock('../../lib/leagueFinalPending', () => ({
+  enqueueLeagueFinal: jest.fn(() => Promise.resolve()),
+  isRetryableFinalError: (e) => e?.code === '23503' || !!e?.offline,
+}));
 
 const store = require('../../store/leagueStore');
 const { mutate } = require('../../store/mutate');
+const { enqueueLeagueFinal } = require('../../lib/leagueFinalPending');
 
 const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
 const yellow = { label: 'Yellow', slope: 125, rating: 72 };
@@ -81,6 +86,28 @@ describe('SetupScreen league Final', () => {
     expect(t.rounds[0].manualHandicaps.p2).toBe(true);
     expect(t.rounds[0].manualHandicaps.p1).toBeUndefined();
     expect(store.recordLeagueFinal).toHaveBeenCalledWith('L1', t.id, { u1: 0, u2: 3 });
+  });
+
+  test('an unsynced tournament (FK) queues the link quietly, with no alert', async () => {
+    store.recordLeagueFinal.mockRejectedValue(Object.assign(new Error('fkey'), { code: '23503' }));
+    const { getByText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: finalParams() }} />,
+    ));
+    fireEvent.press(getByText('Start Tournament'));
+    await waitFor(() => expect(enqueueLeagueFinal).toHaveBeenCalled());
+    const t = mutate.mock.calls.find(([, m]) => m.type === 'tournament.create')[1].tournament;
+    expect(enqueueLeagueFinal).toHaveBeenCalledWith({ leagueId: 'L1', tournamentId: t.id, strokes: { u1: 0, u2: 3 } });
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  test('a real refusal is not queued and is reported', async () => {
+    store.recordLeagueFinal.mockRejectedValue(Object.assign(new Error('Only an admin'), { code: '42501' }));
+    const { getByText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: finalParams() }} />,
+    ));
+    fireEvent.press(getByText('Start Tournament'));
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
+    expect(enqueueLeagueFinal).not.toHaveBeenCalled();
   });
 
   test('without leagueFinal there is no note', () => {

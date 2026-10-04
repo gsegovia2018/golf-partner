@@ -35,6 +35,7 @@ import {
 } from './setupWizard';
 import { mutate } from '../store/mutate';
 import { announceLeagueCard, recordLeagueFinal } from '../store/leagueStore';
+import { enqueueLeagueFinal, isRetryableFinalError } from '../lib/leagueFinalPending';
 import { cardMonth } from '../store/leagueRules';
 import { monthName } from '../store/leagueView';
 import {
@@ -587,14 +588,19 @@ export default function SetupScreen({ navigation, route }) {
       await mutate(tournament, { type: 'tournament.create', tournament });
 
       if (leagueFinal) {
+        // The create is only queued for sync, so the tournaments row may not
+        // be on the server yet: that case is retried quietly in the background.
+        const strokes = finalStrokesRecord(players, leagueFinal.strokes);
         try {
-          await recordLeagueFinal(
-            leagueFinal.leagueId, tournament.id, finalStrokesRecord(players, leagueFinal.strokes),
-          );
+          await recordLeagueFinal(leagueFinal.leagueId, tournament.id, strokes);
         } catch (finalErr) {
-          const msg = `The Final was created, but the league could not be told: ${finalErr?.message ?? 'try again from the league board.'}`;
-          if (Platform.OS === 'web') window.alert(msg);
-          else Alert.alert('League Final', msg);
+          if (isRetryableFinalError(finalErr)) {
+            await enqueueLeagueFinal({ leagueId: leagueFinal.leagueId, tournamentId: tournament.id, strokes });
+          } else {
+            const msg = `The Final was created, but the league could not be told: ${finalErr?.message ?? 'try again from the league board.'}`;
+            if (Platform.OS === 'web') window.alert(msg);
+            else Alert.alert('League Final', msg);
+          }
         }
       }
 
