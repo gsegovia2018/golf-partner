@@ -17,7 +17,7 @@
 
 /**
  * Ordered list of step keys for the current setup.
- * @param {'game'|'tournament'|'official'} kind
+ * @param {'game'|'tournament'|'official'|'league'} kind
  * @param {number} playerCount
  * @param {{ showTeamsStep?: boolean }} [options] showTeamsStep inserts a
  *   dedicated 'teams' step (same-teams-every-round + random/choose-myself)
@@ -28,6 +28,9 @@
 export function wizardSteps(kind, playerCount, options = {}) {
   if (kind === 'official') {
     return ['roster', 'rounds', 'format', 'review'];
+  }
+  if (kind === 'league') {
+    return ['name', 'rules', 'members', 'review'];
   }
   const courseStep = kind === 'tournament' ? 'rounds' : 'course';
   const steps = [courseStep, 'players', 'tees'];
@@ -119,11 +122,22 @@ export function shouldOfferPostCreateEditorInvite(kind, players, currentUserId) 
 /**
  * Whether the given step's requirements are satisfied. Gates the Next button.
  * @param {string} stepKey
- * @param {{ players: any[], rounds: { courseName?: string }[], roster?: { displayName?: string }[] }} state
+ * @param {{ players: any[], rounds: { courseName?: string }[], roster?: { displayName?: string }[],
+ *   league?: { name?: string, seasonStart?: string, seasonEnd?: string, pointsTable?: number[] | null, cap?: number | null } }} state
+ *   `league` carries the league wizard's draft ('name' and 'rules' steps).
  * @returns {boolean}
  */
-export function isStepValid(stepKey, { players, rounds, roster }) {
+export function isStepValid(stepKey, { players, rounds, roster, league }) {
   switch (stepKey) {
+    case 'name':
+      return (league?.name || '').trim().length > 0
+        && !!league?.seasonStart && !!league?.seasonEnd
+        && league.seasonStart <= league.seasonEnd;
+    case 'rules':
+      return Array.isArray(league?.pointsTable) && league.pointsTable.length > 0
+        && Number.isFinite(league?.cap) && league.cap >= 0 && league.cap <= 54;
+    case 'members':
+      return true;
     case 'players':
       return players.length >= 1;
     case 'course':

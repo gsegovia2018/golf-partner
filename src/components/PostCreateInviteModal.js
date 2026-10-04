@@ -15,6 +15,8 @@ export default function PostCreateInviteModal({
   error,
   onRequestClose,
   onShare,
+  title = 'Invite players',
+  subtitle = 'Share this QR with players who do not have the app yet. App users will see this game in Golf Partner.',
 }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -22,10 +24,8 @@ export default function PostCreateInviteModal({
   return (
     <BottomSheet visible={visible} onClose={onRequestClose} sheetStyle={s.sheet}>
       <View style={s.handle} />
-      <Text style={s.title}>Invite players</Text>
-      <Text style={s.subtitle}>
-        Share this QR with players who do not have the app yet. App users will see this game in Golf Partner.
-      </Text>
+      <Text style={s.title}>{title}</Text>
+      <Text style={s.subtitle}>{subtitle}</Text>
 
       {loading ? (
         <View style={s.loading}>

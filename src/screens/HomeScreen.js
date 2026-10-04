@@ -14,6 +14,7 @@ import { loadProfile } from '../store/profileStore';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import QuickStartCourses from '../components/QuickStartCourses';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
+import LeagueListSection from '../components/LeagueListSection';
 import TourOverlay from '../components/tour/TourOverlay';
 import { HOME_TOUR_STEPS } from '../components/tour/tourSteps';
 import { scoringModeUsesTeams, leaderboardToggleLabels, getScoringMode, isScrambleMode } from '../components/scoringModes';
@@ -1409,6 +1410,7 @@ export default function HomeScreen({ navigation, route }) {
             </>
           );
         })()}
+        <LeagueListSection navigation={navigation} meId={currentUserId} theme={theme} s={s} />
         </PullToRefresh>
 
         <BottomSheet visible={showListMenu} onClose={() => setShowListMenu(false)} sheetStyle={s.modalSheet}>
@@ -1454,7 +1456,7 @@ export default function HomeScreen({ navigation, route }) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[s.menuItem, { borderBottomWidth: 0 }]}
+            style={s.menuItem}
             onPress={() => { setShowTournamentKindChoice(false); navigation.navigate('OfficialCreate'); }}
             activeOpacity={0.7}
           >
@@ -1462,6 +1464,19 @@ export default function HomeScreen({ navigation, route }) {
             <View style={{ flex: 1 }}>
               <Text style={s.menuItemText}>Official tournament</Text>
               <Text style={s.modalSubtle}>Invite players by link; double-entered, verified scoring</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.menuItem, { borderBottomWidth: 0 }]}
+            onPress={() => { setShowTournamentKindChoice(false); navigation.navigate('LeagueCreate'); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="users" size={14} color={theme.text.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.menuItemText}>League</Text>
+              <Text style={s.modalSubtle}>One card a month, all season</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -1536,7 +1551,7 @@ export default function HomeScreen({ navigation, route }) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[s.menuItem, { borderBottomWidth: 0 }]}
+            style={s.menuItem}
             onPress={() => { setShowTournamentKindChoice(false); navigation.navigate('OfficialCreate'); }}
             activeOpacity={0.7}
           >
@@ -1544,6 +1559,19 @@ export default function HomeScreen({ navigation, route }) {
             <View style={{ flex: 1 }}>
               <Text style={s.menuItemText}>Official tournament</Text>
               <Text style={s.modalSubtle}>Invite players by link; double-entered, verified scoring</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.menuItem, { borderBottomWidth: 0 }]}
+            onPress={() => { setShowTournamentKindChoice(false); navigation.navigate('LeagueCreate'); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="users" size={14} color={theme.text.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.menuItemText}>League</Text>
+              <Text style={s.modalSubtle}>One card a month, all season</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
