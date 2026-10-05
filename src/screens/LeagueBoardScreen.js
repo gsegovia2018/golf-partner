@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native';
@@ -8,19 +8,17 @@ import IconButton from '../components/ui/IconButton';
 import PullToRefresh from '../components/PullToRefresh';
 import LeaderboardCard from '../components/LeaderboardCard';
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { seasonTable, monthResults } from '../store/leagueStandings';
 import {
-  monthName, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel, monthRows,
-  daysLeftInMonth, currentMonthKey, memberName, yourCardState, viewableCards,
+  monthName, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard,
+  daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, viewableCards,
 } from '../store/leagueView';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
-import {
-  getPendingLeagueFinals, subscribePendingLeagueFinals, flushPendingLeagueFinals,
-} from '../lib/leagueFinalPending';
 
-// The league's home: season standings, this month's cards and my own card.
+// The league's home: my own card, then this month's board (or the season / a past month).
 // Cache first, then live; pull to refresh.
 export default function LeagueBoardScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -29,30 +27,8 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const meId = user?.id ?? null;
   const leagueId = route?.params?.leagueId;
   const { data, stale, loading, refreshing, error, reload, refresh } = useLeague(navigation, leagueId);
-  const [scope, setScope] = useState('season');
-
-  // A Final started on this device whose link to the league is still being
-  // retried (see lib/leagueFinalPending). Flush on focus; reload once it lands.
-  const [pendingFinal, setPendingFinal] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    let had = false;
-    const apply = (list) => {
-      if (!alive) return;
-      const mine = list.find((x) => x.leagueId === leagueId) ?? null;
-      setPendingFinal(mine);
-      if (had && !mine) reload(); // the link landed: pick up the server's Final
-      had = !!mine;
-    };
-    const unsub = subscribePendingLeagueFinals(apply);
-    const onFocus = async () => {
-      apply(await getPendingLeagueFinals());
-      await flushPendingLeagueFinals();
-    };
-    onFocus();
-    const off = navigation?.addListener?.('focus', onFocus);
-    return () => { alive = false; unsub(); if (typeof off === 'function') off(); };
-  }, [navigation, leagueId, reload]);
+  const [scope, setScope] = useState(null); // null = this month (the season when archived)
+  const [showAllSeason, setShowAllSeason] = useState(false);
 
   const view = useMemo(() => {
     if (!data) return null;
@@ -76,9 +52,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
       </View>
       <View style={s.headerRight}>
         <IconButton
-          icon="users"
-          onPress={() => navigation.navigate('LeagueMembers', { leagueId })}
-          accessibilityLabel="Members and handicaps"
+          icon="bar-chart-2"
+          onPress={() => navigation.navigate('LeagueStats', { leagueId })}
+          accessibilityLabel="Stats"
         />
         <IconButton
           icon="settings"
@@ -118,15 +94,100 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const curKey = currentMonthKey(now);
   const curMonth = monthName(curKey);
   const archived = !!league.archivedAt;
+  const activeScope = scope ?? (archived ? 'season' : curKey);
+  const monthScope = activeScope === curKey && !archived;
+  const pastScopes = scoredMonths.filter((m) => m !== curKey);
 
   // ---- Standings card ------------------------------------------------------
 
   let boardTitle;
   let boardRows;
+  let boardSections;
   let boardFooter = null;
-  if (scope === 'season' || !scoredMonths.includes(scope)) {
+  let boardMore = null;
+  if (monthScope) {
+    const left = daysLeftInMonth(now);
+    boardTitle = `${curMonth.toUpperCase()} SO FAR · ${left === 0 ? 'LAST DAY' : `${left} ${left === 1 ? 'DAY' : 'DAYS'} LEFT`}`;
+    const board = monthBoard(members, cardsByMonth, curKey, league.pointsTable);
+    const canOpen = viewable(curKey);
+    const rowOf = (member) => ({
+      key: member.userId,
+      name: nameOf(member.userId),
+      isMe: member.userId === meId,
+      onPress: canOpen.has(member.userId) ? () => openCard(curKey, member.userId) : undefined,
+    });
+    const detailOf = (card, ...parts) => {
+      const text = [...parts, card.notAnnounced ? 'not announced in the app' : null].filter(Boolean).join(' · ');
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    };
+    const noCard = [...board.noCard].sort((a, b) => (b.userId === meId) - (a.userId === meId));
+    boardSections = [
+      board.confirmed.length > 0 && {
+        key: 'confirmed',
+        label: `Confirmed · ${board.confirmed.length}`,
+        icon: 'check',
+        gold: true,
+        rows: board.confirmed.map((r) => ({
+          ...rowOf(r.member),
+          place: r.place,
+          isTie: r.isTie,
+          points: String(r.cardPoints),
+          sub: r.seasonPoints > 0 ? `+${formatPoints(r.seasonPoints)}` : null,
+          subGold: true,
+          detail: detailOf(r.card, r.card.course?.name, r.how),
+        })),
+      },
+      board.waiting.length > 0 && {
+        key: 'waiting',
+        label: `Waiting for confirmation · ${board.waiting.length}`,
+        icon: 'clock',
+        rows: board.waiting.map((r) => ({
+          ...rowOf(r.member),
+          place: null,
+          unranked: true,
+          muted: true,
+          points: r.card.points != null ? String(r.card.points) : '—',
+          sub: 'pending',
+          detail: detailOf(r.card, r.card.course?.name, r.reason),
+        })),
+      },
+      board.onCourse.length > 0 && {
+        key: 'oncourse',
+        label: `Playing or announced · ${board.onCourse.length}`,
+        icon: 'flag',
+        rows: board.onCourse.map((r) => ({
+          ...rowOf(r.member),
+          place: null,
+          unranked: true,
+          muted: true,
+          points: '—',
+          detail: detailOf(
+            r.card,
+            ...(r.card.status === 'playing'
+              ? ['Playing now', r.card.course?.name]
+              : ['Announced', [dayLabel(r.card.teeTime), timeLabel(r.card.teeTime)].filter(Boolean).join(' '), r.card.course?.name]),
+          ),
+        })),
+      },
+      noCard.length > 0 && {
+        key: 'nocard',
+        label: `No card yet · ${noCard.length}`,
+        icon: 'user-x',
+        body: (
+          <Text style={s.noCardText}>
+            {noCard.map((m, i) => (
+              <Text key={m.userId} style={m.userId === meId ? s.noCardMe : null}>
+                {`${i > 0 ? ', ' : ''}${nameOf(m.userId)}`}
+              </Text>
+            ))}
+          </Text>
+        ),
+      },
+    ].filter(Boolean);
+    boardFooter = 'Gold = table points if the month ended today. The season table is one tap away on Season.';
+  } else if (activeScope === 'season' || !pastScopes.includes(activeScope)) {
     boardTitle = last ? `SEASON · AFTER ${monthName(last).toUpperCase()}` : 'SEASON';
-    boardRows = table.map((r) => ({
+    const seasonRows = table.map((r) => ({
       key: r.userId,
       place: noCardsYet ? null : r.place,
       isTie: r.isTie,
@@ -135,12 +196,16 @@ export default function LeagueBoardScreen({ navigation, route }) {
       sub: noCardsYet ? null : deltaLabel(r.lastMonthDelta, last),
       isMe: r.userId === meId,
     }));
+    const collapsed = collapseSeasonRows(seasonRows, { expanded: showAllSeason });
+    boardRows = collapsed.rows;
+    if (collapsed.hidden > 0) boardMore = { label: `Show all ${seasonRows.length}`, onPress: () => setShowAllSeason(true) };
+    else if (collapseSeasonRows(seasonRows).hidden > 0) boardMore = { label: 'Show top 8', onPress: () => setShowAllSeason(false) };
     const pot = potCents(members, league.entryFeeCents);
     boardFooter = `Final in ${monthName(league.seasonEnd)} — extra strokes from these standings, set on the day.${pot > 0 ? ` Pot ${formatEuros(pot)}` : ''}`;
   } else {
-    boardTitle = `${monthName(scope).toUpperCase()} · RESULTS`;
-    const canOpen = viewable(scope);
-    boardRows = monthResults(cardsByMonth[scope], active, league.pointsTable).map((r) => ({
+    boardTitle = `${monthName(activeScope).toUpperCase()} · RESULTS`;
+    const canOpen = viewable(activeScope);
+    boardRows = monthResults(cardsByMonth[activeScope], active, league.pointsTable).map((r) => ({
       key: r.userId,
       place: r.place,
       isTie: r.isTie,
@@ -148,23 +213,26 @@ export default function LeagueBoardScreen({ navigation, route }) {
       points: r.place == null ? '—' : `${r.cardPoints} pts`,
       sub: r.place == null ? null : `+${formatPoints(r.seasonPoints)}`,
       isMe: r.userId === meId,
-      onPress: canOpen.has(r.userId) ? () => openCard(scope, r.userId) : undefined,
+      onPress: canOpen.has(r.userId) ? () => openCard(activeScope, r.userId) : undefined,
     }));
   }
 
-  const chips = scoredMonths.length > 0 ? (
+  const chipKeys = [...(archived ? [] : [curKey]), 'season', ...pastScopes];
+  const chips = chipKeys.length > 1 ? (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipRow} contentContainerStyle={{ gap: 6 }}>
-      {['season', ...scoredMonths].map((key) => {
-        const on = scope === key || (key === 'season' && !scoredMonths.includes(scope));
+      {chipKeys.map((key) => {
+        const on = key === 'season' ? !monthScope && !pastScopes.includes(activeScope) : activeScope === key;
         return (
           <TouchableOpacity
             key={key}
             style={[s.chip, on && s.chipOn]}
             onPress={() => setScope(key)}
+            hitSlop={{ top: 8, bottom: 8 }}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityState={{ selected: on }}
           >
+            {key === curKey && <View style={[s.chipDot, on && s.chipDotOn]} />}
             <Text style={[s.chipText, on && s.chipTextOn]}>{key === 'season' ? 'Season' : monthName(key, true)}</Text>
           </TouchableOpacity>
         );
@@ -172,13 +240,10 @@ export default function LeagueBoardScreen({ navigation, route }) {
     </ScrollView>
   ) : null;
 
-  // ---- This month ----------------------------------------------------------
+  // ---- My card -------------------------------------------------------------
 
-  const rows = monthRows(members, cardsByMonth, curKey, now);
-  const curViewable = viewable(curKey);
   const myCard = (cardsByMonth[curKey] ?? []).find((c) => c.userId === meId) ?? null;
   const mine = yourCardState(myCard);
-  const toneColor = { done: theme.accent.primary, live: theme.text.primary, muted: theme.text.muted };
 
   // My app card stuck before confirmation (left Validate, or no partner yet):
   // reopen Validate on its round. A submitted card goes straight to the check.
@@ -216,22 +281,22 @@ export default function LeagueBoardScreen({ navigation, route }) {
             <Feather name="play" size={16} color={theme.text.inverse} style={{ marginRight: 8 }} />
             <Text style={s.primaryText}>Play with the app</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={s.linkBtn}
-            onPress={() => navigation.navigate('LeagueAnnounce', { leagueId })}
-            activeOpacity={0.7}
-          >
-            <Text style={s.linkText}>Playing without the app?</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('LeagueAddScore', { leagueId })}
-            activeOpacity={0.7}
-            accessibilityRole="link"
-          >
-            <Text style={[s.hint, s.hintLink]}>
-              Already played and announced it somewhere else? Add the card. It shows as “Not announced in the app”.
-            </Text>
-          </TouchableOpacity>
+          <View style={s.btnRow}>
+            <TouchableOpacity
+              style={s.splitBtn}
+              onPress={() => navigation.navigate('LeagueAnnounce', { leagueId })}
+              activeOpacity={0.7}
+            >
+              <Text style={s.secondaryText}>Playing without the app</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.splitBtn}
+              onPress={() => navigation.navigate('LeagueAddScore', { leagueId })}
+              activeOpacity={0.7}
+            >
+              <Text style={s.secondaryText}>Add a card I played</Text>
+            </TouchableOpacity>
+          </View>
         </>
       );
     } else if (mine.kind === 'announced' || mine.kind === 'playing') {
@@ -293,41 +358,6 @@ export default function LeagueBoardScreen({ navigation, route }) {
     );
   };
 
-  // The December Final: the admin sets it up once; afterwards it is a link to
-  // the tournament for everyone.
-  const iAmAdmin = members.some((m) => m.userId === meId && m.role === 'admin' && !m.leftAt);
-  const finalDate = data.final?.createdAt
-    ? new Date(data.final.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-    : null;
-  let finalRow = null;
-  const finalId = data.final?.tournamentId ?? pendingFinal?.tournamentId ?? null;
-  if (finalId) {
-    finalRow = (
-      <TouchableOpacity
-        style={s.linkRow}
-        onPress={() => navigation.navigate('Tournament', { tournamentId: finalId, viewMode: 'tournament' })}
-        activeOpacity={0.7}
-      >
-        <Feather name="flag" size={16} color={theme.text.primary} style={{ marginRight: 10 }} />
-        <Text style={s.linkRowText}>{['Final', finalDate, 'open'].filter(Boolean).join(' · ')}</Text>
-        {!data.final && <Text style={{ color: theme.text.muted, fontSize: 12, marginRight: 6 }}>Linking the Final to the league…</Text>}
-        <Feather name="chevron-right" size={18} color={theme.text.muted} />
-      </TouchableOpacity>
-    );
-  } else if (iAmAdmin && !archived) {
-    finalRow = (
-      <TouchableOpacity
-        style={s.linkRow}
-        onPress={() => navigation.navigate('LeagueFinal', { leagueId })}
-        activeOpacity={0.7}
-      >
-        <Feather name="flag" size={16} color={theme.text.primary} style={{ marginRight: 10 }} />
-        <Text style={s.linkRowText}>Set up the Final</Text>
-        <Feather name="chevron-right" size={18} color={theme.text.muted} />
-      </TouchableOpacity>
-    );
-  }
-
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {header}
@@ -350,57 +380,22 @@ export default function LeagueBoardScreen({ navigation, route }) {
           </View>
         )}
 
-        <LeaderboardCard title={boardTitle} subheader={chips} rows={boardRows} footer={boardFooter} />
+        {!archived && renderYourCard()}
 
-        {noCardsYet && (
+        <LeaderboardCard
+          title={boardTitle}
+          subheader={chips}
+          rows={boardRows}
+          sections={boardSections}
+          footer={boardFooter}
+          more={boardMore}
+        />
+
+        {noCardsYet && !monthScope && (
           <Text style={s.emptyNote}>
             {`No cards yet. ${curMonth} is open: the board fills in as each card is confirmed.`}
           </Text>
         )}
-
-        {!archived && renderYourCard()}
-
-        <View style={s.card}>
-          <View style={s.cardHeadRow}>
-            <Text style={s.cardTitle}>{curMonth}</Text>
-            <Text style={s.cardMeta}>{`${daysLeftInMonth(now)} days left · 1 card each`}</Text>
-          </View>
-          {rows.map((r, i) => {
-            const open = curViewable.has(r.member.userId);
-            const Row = open ? TouchableOpacity : View;
-            return (
-              <Row
-                key={r.member.userId}
-                style={[s.memberRow, i < rows.length - 1 && s.rowDivider]}
-                {...(open ? {
-                  onPress: () => openCard(curKey, r.member.userId),
-                  activeOpacity: 0.7,
-                  accessibilityRole: 'button',
-                  accessibilityLabel: r.member.userId === meId ? 'Your card' : `${nameOf(r.member.userId)}'s card`,
-                } : {})}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={s.memberName} numberOfLines={1}>{nameOf(r.member.userId)}</Text>
-                  {!!r.flag && <Text style={s.flag}>{r.flag}</Text>}
-                </View>
-                <Text style={[s.memberStatus, { color: toneColor[r.tone] }]}>{r.text}</Text>
-                {open && <Feather name="chevron-right" size={16} color={theme.text.muted} style={{ marginLeft: 4 }} />}
-              </Row>
-            );
-          })}
-        </View>
-
-        {finalRow}
-
-        <TouchableOpacity
-          style={[s.linkRow, { marginTop: finalRow ? 14 : 0 }]}
-          onPress={() => navigation.navigate('LeagueMembers', { leagueId })}
-          activeOpacity={0.7}
-        >
-          <Feather name="users" size={16} color={theme.text.primary} style={{ marginRight: 10 }} />
-          <Text style={s.linkRowText}>Members and handicaps</Text>
-          <Feather name="chevron-right" size={18} color={theme.text.muted} />
-        </TouchableOpacity>
       </PullToRefresh>
     </ScreenContainer>
   );
@@ -430,7 +425,12 @@ function makeStyles(theme) {
     },
 
     chipRow: { flexGrow: 0, marginBottom: 12 },
-    chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)' },
+    chip: {
+      flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6,
+      borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)',
+    },
+    chipDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: semantic.winner.dark },
+    chipDotOn: { backgroundColor: theme.bg.deep },
     chipOn: { backgroundColor: 'rgba(255,255,255,0.9)' },
     chipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.72)', fontSize: 12 },
     chipTextOn: { color: theme.bg.deep },
@@ -447,18 +447,9 @@ function makeStyles(theme) {
     },
     cardHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
     cardTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15 },
-    cardMeta: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12 },
     cardText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 12 },
     badge: { backgroundColor: theme.accent.light, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 },
     badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 11 },
-    hint: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, lineHeight: 17, textAlign: 'center' },
-    hintLink: { color: theme.accent.primary },
-
-    memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-    rowDivider: { borderBottomWidth: 1, borderBottomColor: theme.border.subtle },
-    memberName: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
-    flag: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 11, marginTop: 2 },
-    memberStatus: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, marginLeft: 8, textAlign: 'right', flexShrink: 1 },
 
     primaryBtn: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
@@ -470,13 +461,13 @@ function makeStyles(theme) {
       borderColor: theme.border.default, paddingVertical: 12, paddingHorizontal: 28,
     },
     secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
-    linkBtn: { alignItems: 'center', paddingVertical: 12 },
-    linkText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
-
-    linkRow: {
-      flexDirection: 'row', alignItems: 'center', backgroundColor: theme.bg.card, borderRadius: 16,
-      borderWidth: 1, borderColor: cardBorder, padding: 16,
+    btnRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+    splitBtn: {
+      flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1,
+      borderColor: theme.border.default, paddingVertical: 10, paddingHorizontal: 8,
     },
-    linkRowText: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
+
+    noCardText: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 20, paddingVertical: 6 },
+    noCardMe: { fontFamily: 'PlusJakartaSans-Bold', color: '#ffffff' },
   });
 }
