@@ -61,7 +61,7 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
           Announce before your first shot. Your group is notified now; you'll add the score after the round.
         </Text>
 
-        <CourseTeePicker navigation={navigation} value={pick} onChange={setPick} />
+        <CourseTeePicker navigation={navigation} value={pick} onChange={(p) => { setPick(p); setError(null); }} />
 
         <Text style={s.fieldLabel}>Date and tee time</Text>
         <DateField

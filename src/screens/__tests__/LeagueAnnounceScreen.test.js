@@ -123,5 +123,7 @@ describe('LeagueAnnounceScreen', () => {
     // Way out 2: use the rated tee.
     fireEvent.press(getByText('Use Yellow'));
     expect(queryByText("Red tees aren't rated yet")).toBeNull();
+    // ...and the refusal goes with it.
+    expect(queryByText(/can't count for the league/)).toBeNull();
   });
 });
