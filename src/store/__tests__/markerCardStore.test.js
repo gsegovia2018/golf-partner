@@ -23,7 +23,8 @@ describe('getMarkerCard', () => {
     mockState.result = {
       data: {
         player_first_name: 'Marcos', course: 'El Saler', tee: 'Yellow', date: '2026-10-04',
-        playing_handicap: 20, gross: 80, points: 36, expires_at: '2026-10-04T12:00:00Z',
+        playing_handicap: 20, gross: 80, points: 36, differential: '11.8', net_differential: '-2.4',
+        expires_at: '2026-10-04T12:00:00Z',
         holes: [{ n: 1, par: 4, si: 7, strokes: 5 }, { n: 2, par: 3, si: 15 }],
       },
       error: null,
@@ -32,7 +33,8 @@ describe('getMarkerCard', () => {
     expect(mockState.calls).toEqual([['get_marker_card', { p_token: 'tok' }]]);
     expect(card).toEqual({
       playerFirstName: 'Marcos', course: 'El Saler', tee: 'Yellow', date: '2026-10-04',
-      playingHandicap: 20, gross: 80, points: 36, expiresAt: '2026-10-04T12:00:00Z',
+      playingHandicap: 20, gross: 80, points: 36, differential: 11.8, netDifferential: -2.4,
+      expiresAt: '2026-10-04T12:00:00Z',
       holes: [{ n: 1, par: 4, si: 7, strokes: 5 }, { n: 2, par: 3, si: 15, strokes: null }],
     });
   });

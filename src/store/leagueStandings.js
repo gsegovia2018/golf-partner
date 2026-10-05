@@ -4,10 +4,17 @@ import { assignPlacements } from './leaderboardPlacement';
 
 export const DEFAULT_POINTS_TABLE = [500, 300, 190, 135, 110, 90, 75, 60, 45, 35, 25, 15];
 
-const byCardPointsDesc = (a, b) => b.cardPoints - a.cardPoints;
+// Lower net differential is better; equal to one decimal is a tie.
+const byNetDiffAsc = (a, b) => a.netDifferential - b.netDifferential;
 const byTotalDesc = (a, b) => b.total - a.total;
 
 const memberId = (m) => (typeof m === 'string' ? m : m?.userId);
+
+const netDiffOf = (card) => {
+  if (card?.netDifferential == null || card.netDifferential === '') return null;
+  const n = Number(card.netDifferential);
+  return Number.isFinite(n) ? Math.round(n * 10) / 10 : null;
+};
 
 // Table points for a tie group: the group occupies positions place..place+size-1
 // and shares the sum of those table entries equally. Beyond the table = 0.
@@ -17,21 +24,33 @@ function sharedPoints(table, place, size) {
   return sum / size;
 }
 
-// One month's results. `members` are user ids or `{userId}`. Only confirmed
-// cards count; members without one get place null and 0 points, after the
-// ranked rows. A confirmed card from someone no longer in `members` (a member
-// who left keeps past cards) still ranks.
+// One month's results, ranked by net differential (lowest first). `members`
+// are user ids or `{userId}`. Only confirmed cards count; a member's best card
+// is the lowest net differential. A confirmed card with no net differential
+// (its tee has no slope/rating) is not ranked: { place: null, unrated: true,
+// seasonPoints: 0 }. Members without a confirmed card get place null and 0
+// points. Unranked rows follow the ranked ones. A confirmed card from someone
+// no longer in `members` (a member who left keeps past cards) still ranks.
+// Rows carry `netDifferential` and the card's Stableford `cardPoints`
+// (secondary information).
 export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE) {
   const best = new Map();
+  const unrated = new Map();
   for (const c of cards ?? []) {
     if (c?.status !== 'confirmed') continue;
-    const pts = Number(c.points) || 0;
-    if (!best.has(c.userId) || pts > best.get(c.userId)) best.set(c.userId, pts);
+    const nd = netDiffOf(c);
+    const cardPoints = Number(c.points) || 0;
+    if (nd == null) {
+      if (!unrated.has(c.userId) || cardPoints > unrated.get(c.userId)) unrated.set(c.userId, cardPoints);
+      continue;
+    }
+    if (!best.has(c.userId) || nd < best.get(c.userId).netDifferential) {
+      best.set(c.userId, { netDifferential: nd, cardPoints });
+    }
   }
 
-  const ranked = [...best].map(([userId, cardPoints]) => ({ userId, cardPoints }))
-    .sort(byCardPointsDesc);
-  const placed = assignPlacements(ranked, byCardPointsDesc);
+  const ranked = [...best].map(([userId, b]) => ({ userId, ...b })).sort(byNetDiffAsc);
+  const placed = assignPlacements(ranked, byNetDiffAsc);
   const sizes = {};
   placed.forEach((r) => { sizes[r.place] = (sizes[r.place] ?? 0) + 1; });
 
@@ -39,16 +58,26 @@ export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE)
     userId: r.userId,
     place: r.place,
     isTie: r.isTie,
+    netDifferential: r.netDifferential,
     cardPoints: r.cardPoints,
     seasonPoints: sharedPoints(pointsTable, r.place, sizes[r.place]),
   }));
 
   const seen = new Set(best.keys());
+  for (const [userId, cardPoints] of unrated) {
+    if (seen.has(userId)) continue;
+    seen.add(userId);
+    rows.push({
+      userId, place: null, isTie: false, unrated: true, netDifferential: null, cardPoints, seasonPoints: 0,
+    });
+  }
   for (const m of members ?? []) {
     const userId = memberId(m);
     if (seen.has(userId)) continue;
     seen.add(userId);
-    rows.push({ userId, place: null, isTie: false, cardPoints: 0, seasonPoints: 0 });
+    rows.push({
+      userId, place: null, isTie: false, netDifferential: null, cardPoints: 0, seasonPoints: 0,
+    });
   }
   return rows;
 }

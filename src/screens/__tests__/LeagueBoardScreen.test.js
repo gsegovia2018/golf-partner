@@ -44,8 +44,17 @@ function snapshot({ cardsByMonth = {}, members } = {}) {
   };
 }
 
+// The board ranks by net differential (lower is better); fixtures derive one
+// from the points so more points still means a better card.
 const card = (userId, status, points, extra = {}) => ({
-  id: `c-${userId}`, userId, status, points, source: 'app', notAnnounced: false, ...extra,
+  id: `c-${userId}`,
+  userId,
+  status,
+  points,
+  netDifferential: points == null ? null : 40 - points,
+  source: 'app',
+  notAnnounced: false,
+  ...extra,
 });
 
 const makeNav = (routeNames = []) => ({

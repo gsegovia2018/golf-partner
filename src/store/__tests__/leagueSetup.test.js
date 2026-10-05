@@ -1,5 +1,6 @@
 import {
   eligibleLeagues, leagueStrokes, applyLeagueHandicap, leagueCourse, leagueCardOf, isLeagueLength, madridDate,
+  isLeagueRated,
 } from '../leagueSetup';
 import { getPlayingHandicap } from '../scoring';
 
@@ -64,9 +65,25 @@ describe('league handicap on the round', () => {
 
   test('leagueCourse is the announce snapshot', () => {
     const out = leagueCourse({ ...round, playerTees: { p1: yellow } }, 'p1');
-    expect(out).toMatchObject({ name: 'Centro', tee: 'Yellow', par: 72 });
+    expect(out).toMatchObject({ name: 'Centro', tee: 'Yellow', slope: 125, rating: 72, par: 72 });
     expect(out.holes[0]).toEqual({ n: 1, par: 4, si: 1 });
     expect(out.holes).toHaveLength(18);
+  });
+
+  test('leagueCourse snapshots the default tee, else the legacy round slope/rating, else nulls', () => {
+    expect(leagueCourse(round, 'p1')).toMatchObject({ tee: 'Yellow', slope: 125, rating: 72 });
+    expect(leagueCourse({ ...round, tees: [], slope: 130, courseRating: 71.4 }, 'p1'))
+      .toMatchObject({ tee: null, slope: 130, rating: 71.4 });
+    expect(leagueCourse({ ...round, tees: [] }, 'p1')).toMatchObject({ tee: null, slope: null, rating: null });
+  });
+
+  test('isLeagueRated: my tee needs both a slope and a course rating', () => {
+    expect(isLeagueRated(round, 'p1')).toBe(true);
+    expect(isLeagueRated({ ...round, playerTees: { p1: { label: 'Red', slope: 120, rating: null } } }, 'p1')).toBe(false);
+    expect(isLeagueRated({ ...round, playerTees: { p1: { label: 'Red', slope: null, rating: 70 } } }, 'p1')).toBe(false);
+    expect(isLeagueRated({ ...round, tees: [] }, 'p1')).toBe(false);
+    expect(isLeagueRated({ ...round, tees: [], slope: 130, courseRating: 71.4 }, 'p1')).toBe(true);
+    expect(isLeagueRated(null, 'p1')).toBe(false);
   });
 
   test('isLeagueLength: only 18 holes', () => {

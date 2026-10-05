@@ -2,7 +2,10 @@
 // §4.3 Setup/Scorecard, build item P6). Pure helpers, no I/O: which leagues
 // the Setup switch offers, the strokes the round will give me, and the round
 // and course shapes Start writes.
-import { deriveRoundPlayingHandicap, holeCountOf, totalParFromHoles } from './scoring';
+import {
+  deriveRoundPlayingHandicap, holeCountOf, resolveRoundTee, totalParFromHoles,
+} from './scoring';
+import { isRatedTee } from './handicapIndex';
 import { middleTee } from './tees';
 import { canAnnounce, cardMonth } from './leagueRules';
 
@@ -58,6 +61,18 @@ export function isLeagueLength(round) {
   return Array.isArray(round?.holes) && round.holes.length === 18 && holeCountOf(round) === 18;
 }
 
+// The tee my league card would be played off: the setup tee (picked or the
+// default middle one), else the round-level slope/rating of a legacy round.
+function leagueTee(round, playerId) {
+  return setupPlayerTee(round, playerId) ?? resolveRoundTee(round, playerId);
+}
+
+// League cards rank by net differential, so my tee needs a slope and a course
+// rating (the server refuses the card otherwise).
+export function isLeagueRated(round, playerId) {
+  return isRatedTee(leagueTee(round, playerId));
+}
+
 // A built round (handleStart's shape, playerTees resolved) with my league
 // handicap as the per-round index override and my playing handicap re-derived
 // from it. Never manual: the league maths is the point.
@@ -74,12 +89,17 @@ export function applyLeagueHandicap(round, playerId, leagueHandicap) {
   };
 }
 
-// The course snapshot announce_league_card stores: {name, tee, holes:[{n,par,si}]}.
+// The course snapshot announce_league_card stores:
+// {name, tee, slope, rating, par, holes:[{n,par,si}]}. slope/rating are what
+// the server's net differential is computed from.
 export function leagueCourse(round, playerId) {
   const tee = round?.playerTees?.[playerId] ?? setupPlayerTee(round, playerId);
+  const { slope, rating } = tee ?? resolveRoundTee(round, playerId);
   return {
     name: String(round?.courseName ?? '').trim(),
     tee: tee?.label ?? null,
+    slope: slope ?? null,
+    rating: rating ?? null,
     par: totalParFromHoles(round?.holes),
     holes: (round?.holes ?? []).map((h) => ({ n: h.number, par: h.par, si: h.strokeIndex })),
   };

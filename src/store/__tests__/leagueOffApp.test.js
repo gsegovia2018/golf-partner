@@ -69,6 +69,21 @@ describe('helpers', () => {
     expect(courseProblem(course)).toBeNull();
   });
 
+  test('courseProblem rejects an unrated tee (passed, or on a snapshot course)', () => {
+    const unrated = /no slope and course rating, so it can't count for the league/;
+    expect(courseProblem(course, { label: 'Red', slope: null, rating: null })).toMatch(unrated);
+    expect(courseProblem(course, { label: 'Red', slope: 120 })).toMatch(unrated);
+    expect(courseProblem(course, null)).toMatch(unrated);
+    expect(courseProblem(course, { label: 'Yellow', slope: 125, rating: 72 })).toBeNull();
+    // courseFromSnapshot shape: tee null when the snapshot has no slope/rating.
+    const bare = { ...courseSnapshot(course, null), slope: null, rating: null };
+    expect(courseProblem(courseFromSnapshot(bare))).toMatch(unrated);
+    expect(courseProblem(courseFromSnapshot(courseSnapshot(course, { label: 'Y', slope: 125, rating: 72 }))))
+      .toBeNull();
+    // Hole-count problems still come first.
+    expect(courseProblem({ holes: holes18.slice(0, 9) }, null)).toMatch(/18-hole/);
+  });
+
   test('proofSummary reads "<course> · <date> · <points> pts · gross <g>"', () => {
     const snapshot = courseSnapshot(course, null);
     const { line, gross, points } = proofSummary({
@@ -76,6 +91,15 @@ describe('helpers', () => {
     });
     expect(gross).toBe(90);
     expect(line).toBe(`Golf Olivar · Sat 4 Oct · ${points} pts · gross 90`);
+  });
+
+  test('proofSummary also returns the net differential (course-level slope/rating here)', () => {
+    // 18.0 x 120/113 + (71.5 - 72) = 19.1 - 0.5 = 18.6 -> 19; all bogeys, nothing capped.
+    // (113/120) x (90 - 71.5) = 17.4; 17.4 - 18 = -0.6.
+    const { netDifferential } = proofSummary({
+      snapshot: courseSnapshot(course, null), playedOn: '2025-10-04', strokes: full(5), leagueHandicap: 18,
+    });
+    expect(netDifferential).toBe(-0.6);
   });
 });
 

@@ -1,6 +1,7 @@
 import {
   monthName, ordinal, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel,
   positionText, cardStatus, monthRows, leagueSummary, viewableCards, monthBoard, collapseSeasonRows,
+  formatNetDiff,
 } from '../leagueView';
 
 const NOW = new Date(2026, 9, 4, 12, 0);
@@ -58,16 +59,41 @@ describe('card status', () => {
   });
 });
 
-test('monthRows sorts confirmed by points, then in-progress, then nobody; skips void and left', () => {
-  const members = [{ userId: 'a' }, { userId: 'b' }, { userId: 'c' }, { userId: 'd' }, { userId: 'e', leftAt: 'x' }];
+test('monthRows sorts confirmed by net differential (unrated last), then in-progress, then nobody; skips void and left', () => {
+  const members = [{ userId: 'a' }, { userId: 'b' }, { userId: 'c' }, { userId: 'd' }, { userId: 'e', leftAt: 'x' },
+    { userId: 'f' }];
   const cardsByMonth = {
     '2026-10': [
-      { userId: 'a', status: 'confirmed', points: 30 },
-      { userId: 'b', status: 'confirmed', points: 38 },
+      { userId: 'a', status: 'confirmed', points: 38, netDifferential: 3.2 },
+      { userId: 'f', status: 'confirmed', points: 44, netDifferential: null },
+      { userId: 'b', status: 'confirmed', points: 30, netDifferential: -1.4 },
       { userId: 'c', status: 'playing' },
     ],
   };
-  expect(monthRows(members, cardsByMonth, '2026-10', NOW).map((r) => r.member.userId)).toEqual(['b', 'a', 'c', 'd']);
+  expect(monthRows(members, cardsByMonth, '2026-10', NOW).map((r) => r.member.userId))
+    .toEqual(['b', 'a', 'f', 'c', 'd']);
+});
+
+describe('formatNetDiff', () => {
+  test('below the handicap reads "better", above reads "worse"', () => {
+    expect(formatNetDiff(-2.4)).toBe('2.4 better');
+    expect(formatNetDiff(3.1)).toBe('3.1 worse');
+    expect(formatNetDiff(5)).toBe('5.0 worse');
+  });
+  test('zero (and anything that rounds to it) is level', () => {
+    expect(formatNetDiff(0)).toBe('level');
+    expect(formatNetDiff(-0.04)).toBe('level');
+  });
+  test('null / missing / garbage is a dash', () => {
+    expect(formatNetDiff(null)).toBe('—');
+    expect(formatNetDiff(undefined)).toBe('—');
+    expect(formatNetDiff('')).toBe('—');
+    expect(formatNetDiff('x')).toBe('—');
+  });
+  test('rounds to one decimal and accepts numeric strings', () => {
+    expect(formatNetDiff(11.8 - 14.2)).toBe('2.4 better');
+    expect(formatNetDiff('-2.4')).toBe('2.4 better');
+  });
 });
 
 test('leagueSummary ranks members from the cached snapshot', () => {
@@ -75,8 +101,8 @@ test('leagueSummary ranks members from the cached snapshot', () => {
     league: { pointsTable: [500, 300] },
     members: [{ userId: 'a' }, { userId: 'b' }, { userId: 'c', leftAt: 'x' }],
     cardsByMonth: { '2026-09': [
-      { userId: 'a', status: 'confirmed', points: 30 },
-      { userId: 'b', status: 'confirmed', points: 36 },
+      { userId: 'a', status: 'confirmed', points: 30, netDifferential: 4.1 },
+      { userId: 'b', status: 'confirmed', points: 36, netDifferential: -0.5 },
     ] },
   };
   expect(leagueSummary(snapshot, 'a').position).toBe('2nd of 2 · 300 pts');

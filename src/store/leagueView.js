@@ -29,6 +29,16 @@ export function formatPoints(n) {
   return text.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
+// A net differential in words (lower is better): -2.4 -> '2.4 better',
+// 3.1 -> '3.1 worse', 0 -> 'level', null -> '—'.
+export function formatNetDiff(n) {
+  if (n == null || n === '') return '—';
+  const v = Math.round(Number(n) * 10) / 10;
+  if (!Number.isFinite(v)) return '—';
+  if (v === 0) return 'level';
+  return `${Math.abs(v).toFixed(1)} ${v < 0 ? 'better' : 'worse'}`;
+}
+
 // 3000 -> '30 €', 3050 -> '30,50 €'.
 export function formatEuros(cents) {
   const c = Number(cents) || 0;
@@ -94,8 +104,8 @@ export function cardStatus(card, now = new Date()) {
   }
 }
 
-// Members with this month's card, best first: confirmed by points, then
-// submitted, playing, announced, then nobody.
+// Members with this month's card, best first: confirmed by net differential
+// (lowest first, unrated after), then submitted, playing, announced, then nobody.
 export function monthRows(members, cardsByMonth, month, now = new Date()) {
   const cards = cardsByMonth?.[month] ?? [];
   const rows = (members ?? []).filter((m) => !m.leftAt).map((m) => {
@@ -103,7 +113,8 @@ export function monthRows(members, cardsByMonth, month, now = new Date()) {
     return { member: m, card, ...cardStatus(card, now) };
   });
   const rank = (r) => (r.card ? STATUS_RANK[r.card.status] ?? 4 : 5);
-  return rows.sort((a, b) => rank(a) - rank(b) || (b.card?.points ?? 0) - (a.card?.points ?? 0));
+  const nd = (r) => (r.card?.netDifferential == null ? Infinity : Number(r.card.netDifferential));
+  return rows.sort((a, b) => rank(a) - rank(b) || (nd(a) === nd(b) ? 0 : nd(a) - nd(b)));
 }
 
 // The month's cards that can be opened read-only: scored (submitted or

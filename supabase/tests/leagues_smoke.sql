@@ -1,5 +1,6 @@
 -- ============================================================================
--- Smoke test for 20261004000000_leagues.sql — the league RPCs under a
+-- Smoke test for 20261004000000_leagues.sql (+ 20261005000000_league_net_differential.sql)
+-- — the league RPCs under a
 -- simulated auth uid, their refusals, RLS, and the anon surface.
 --
 -- Plain SQL, no pgTAP. Each check writes one row into the temp table
@@ -220,7 +221,7 @@ SELECT 'app card starts as playing with announced_at = now()',
 DO $$
 DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league');
 BEGIN
-  PERFORM public.announce_league_card(lid, 'offapp', '{"name":"Somewhere"}'::jsonb, '2026-10-25 09:00+02');
+  PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"Somewhere"}'::jsonb, '2026-10-25 09:00+02');
   INSERT INTO league_smoke (name, ok, detail) VALUES ('second October card refused', false, 'no error');
 EXCEPTION WHEN others THEN
   INSERT INTO league_smoke (name, ok, detail) VALUES ('second October card refused',
@@ -252,7 +253,9 @@ SELECT 'tee-off stamps first_shot_at with the server clock', first_shot_at = now
 -- startedAt is AFTER the announcement.
 INSERT INTO public.tournaments (id, name) VALUES ('t_lg_a', 'League smoke A');
 INSERT INTO public.game_rounds (id, tournament_id, round_index, body)
-VALUES ('r0', 't_lg_a', 0, jsonb_build_object('startedAt', to_char((now() + interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')));
+VALUES ('r0', 't_lg_a', 0, jsonb_build_object('startedAt', to_char((now() + interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+        -- A's tee: card A's snapshot (older-build shape) has no slope/rating.
+        'playerTees', '{"pA":{"label":"Yellow","slope":125,"rating":72}}'::jsonb));
 INSERT INTO public.game_players (tournament_id, player_id, user_id, body)
 VALUES ('t_lg_a', 'pA', 'a0000000-0000-4000-8000-00000000000a', '{}'::jsonb),
        ('t_lg_a', 'pB', 'a0000000-0000-4000-8000-00000000000b', '{}'::jsonb);
@@ -374,7 +377,7 @@ DO $$
 DECLARE r jsonb;
 BEGIN
   r := public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'app',
-         '{"name":"El Encín","tee":"White","holes":[{"n":1,"par":5,"si":3}]}'::jsonb,
+         '{"slope":130,"rating":71.4,"name":"El Encín","tee":"White","holes":[{"n":1,"par":5,"si":3}]}'::jsonb,
          '2026-10-11 09:00+02', 't_lg_c', 'r0', 'pC');
   INSERT INTO league_ctx VALUES ('cardC', r->>'id');
 END $$;
@@ -443,9 +446,11 @@ BEGIN
   INSERT INTO league_smoke (name, ok, detail) VALUES ('anon get_marker_card returns only the whitelist',
     -- Compared as sets (<@ both ways) so collation order cannot matter.
     (SELECT array_agg(k) FROM jsonb_object_keys(r) k)
-      <@ ARRAY['course','date','expires_at','gross','holes','player_first_name','playing_handicap','points','tee']
+      <@ ARRAY['course','date','differential','expires_at','gross','holes','net_differential','player_first_name',
+             'playing_handicap','points','tee']
     AND (SELECT array_agg(k) FROM jsonb_object_keys(r) k)
-      @> ARRAY['course','date','expires_at','gross','holes','player_first_name','playing_handicap','points','tee']
+      @> ARRAY['course','date','differential','expires_at','gross','holes','net_differential','player_first_name',
+             'playing_handicap','points','tee']
     AND r->>'player_first_name' = 'Pablo' AND jsonb_array_length(r->'holes') = 18
     AND r->'holes'->0 = '{"n":1,"par":5,"si":3,"strokes":5}'::jsonb
     AND (SELECT array_agg(k) FROM jsonb_object_keys(r->'holes'->1) k) <@ ARRAY['n','par','si','strokes']
@@ -465,7 +470,7 @@ BEGIN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('unknown token -> invalid', SQLERRM = 'invalid', SQLERRM);
   END;
   BEGIN
-    PERFORM public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'offapp', '{"name":"x"}'::jsonb, now());
+    PERFORM public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'offapp', '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, now());
     INSERT INTO league_smoke (name, ok, detail) VALUES ('anon cannot call announce_league_card', false, 'no error');
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('anon cannot call announce_league_card', SQLSTATE = '42501', SQLERRM);
@@ -593,7 +598,7 @@ SET LOCAL ROLE authenticated;
 DO $$
 DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league'); r jsonb; cid uuid;
 BEGIN
-  r := public.announce_league_card(lid, 'offapp', '{"name":"Golf Olivar","tee":"Yellow"}'::jsonb, '2026-10-20 10:00+02');
+  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"Golf Olivar","tee":"Yellow"}'::jsonb, '2026-10-20 10:00+02');
   cid := (r->>'id')::uuid;
   INSERT INTO league_ctx VALUES ('cardD', cid::text);
   INSERT INTO league_smoke (name, ok, detail)
@@ -652,14 +657,14 @@ SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-0000000
 DO $$
 DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league'); r jsonb;
 BEGIN
-  r := public.add_unannounced_league_card(lid, '{"name":"RACE"}'::jsonb, NULL, '2026-11-02',
+  r := public.add_unannounced_league_card(lid, '{"slope":130,"rating":71.4,"name":"RACE"}'::jsonb, NULL, '2026-11-02',
          (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20);
   INSERT INTO league_ctx VALUES ('cardB', r->>'id');
   INSERT INTO league_smoke (name, ok, detail) VALUES ('unannounced card: November, not_announced, submitted',
     r->>'month' = '2026-11-01' AND (r->>'not_announced')::boolean AND r->>'status' = 'submitted', r::text);
   BEGIN
     -- 23:30 UTC on 31 Oct is 00:30 on 1 Nov in Madrid: a November card.
-    PERFORM public.announce_league_card(lid, 'offapp', '{"name":"x"}'::jsonb, '2026-10-31 23:30+00');
+    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, '2026-10-31 23:30+00');
     INSERT INTO league_smoke (name, ok, detail) VALUES ('month boundary is Europe/Madrid', false, 'no error');
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('month boundary is Europe/Madrid',
@@ -680,7 +685,7 @@ DO $$
 DECLARE r jsonb;
 BEGIN
   r := public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'offapp',
-         '{"name":"x"}'::jsonb, '2026-10-31 23:30+00');
+         '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, '2026-10-31 23:30+00');
   INSERT INTO league_smoke (name, ok, detail) VALUES ('after a void the member can announce that month again',
     r->>'month' = '2026-11-01', r::text);
   INSERT INTO league_ctx VALUES ('cardB2', r->>'id');
@@ -694,7 +699,7 @@ BEGIN
   END;
   BEGIN
     PERFORM public.add_unannounced_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'),
-              '{"name":"RACE"}'::jsonb, '2026-12-05 10:00+01', '2026-11-30',
+              '{"slope":130,"rating":71.4,"name":"RACE"}'::jsonb, '2026-12-05 10:00+01', '2026-11-30',
               (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20);
     INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses tee time and date in different months', false, 'no error');
   EXCEPTION WHEN others THEN
@@ -712,21 +717,21 @@ DO $$
 DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league'); r jsonb;
 BEGIN
   BEGIN
-    PERFORM public.announce_league_card(lid, 'offapp', '{"name":"x"}'::jsonb, '2026-09-15 10:00+02');
+    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, '2026-09-15 10:00+02');
     INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses a past month', false, 'no error');
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses a past month',
       SQLERRM = 'That month is over. Announce a card for this month or later.', SQLERRM);
   END;
   BEGIN
-    PERFORM public.announce_league_card(lid, 'offapp', '{"name":"x"}'::jsonb, '2027-01-10 10:00+01');
+    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, '2027-01-10 10:00+01');
     INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses a date outside the season', false, 'no error');
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses a date outside the season',
       SQLERRM = 'That date is outside the season (2026-01-01 to 2026-12-31).', SQLERRM);
   END;
   BEGIN
-    PERFORM public.add_unannounced_league_card(lid, '{"name":"x"}'::jsonb, NULL, '2027-02-01',
+    PERFORM public.add_unannounced_league_card(lid, '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, NULL, '2027-02-01',
               (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20);
     INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses a date outside the season', false, 'no error');
   EXCEPTION WHEN others THEN
@@ -734,7 +739,7 @@ BEGIN
       SQLERRM = 'That date is outside the season (2026-01-01 to 2026-12-31).', SQLERRM);
   END;
   -- Off-app card announced AFTER its tee time -> not announced.
-  r := public.announce_league_card(lid, 'offapp', '{"name":"Late"}'::jsonb, now() - interval '1 hour');
+  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"Late"}'::jsonb, now() - interval '1 hour');
   INSERT INTO league_ctx VALUES ('cardBO', r->>'id');
   r := public.submit_league_card((r->>'id')::uuid, (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20, NULL);
   INSERT INTO league_smoke (name, ok, detail) VALUES ('off-app tee time before the announcement -> not_announced',
@@ -747,13 +752,210 @@ DO $$
 DECLARE r jsonb;
 BEGIN
   r := public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'app',
-         '{"name":"Nowhere"}'::jsonb, '2026-11-05 09:00+01', 't_lg_n', 'r0', 'pA');
+         '{"slope":130,"rating":71.4,"name":"Nowhere"}'::jsonb, '2026-11-05 09:00+01', 't_lg_n', 'r0', 'pA');
   INSERT INTO league_ctx VALUES ('cardAN', r->>'id');
   r := public.submit_league_card((r->>'id')::uuid, (SELECT jsonb_object_agg(h::text, 4) FROM generate_series(1, 18) h), 72, 36, 20, NULL);
   INSERT INTO league_smoke (name, ok, detail) VALUES ('app card with no first-shot stamp -> not_announced',
     (r->>'not_announced')::boolean AND r->>'first_shot_at' IS NULL, r::text);
 END $$;
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+
+-- 9b) Net differential (20261005000000_league_net_differential.sql) ------------------
+-- Worked example: CNG Amarillas, slope 130 / CR 71.4 / par 72, gross 86 with
+-- hole 4 (par 5, SI 1) a 9 capped to 8 at playing handicap 16 -> adjusted 85
+-- -> differential 11.8; league handicap 14.2 -> net -2.4.
+INSERT INTO league_ctx VALUES
+  ('cng',  '{"slope":130,"rating":71.4,"name":"Centro Nacional de Golf","tee":"Amarillas","holes":[{"n":1,"par":4,"si":3},{"n":2,"par":4,"si":5},{"n":3,"par":3,"si":7},{"n":4,"par":5,"si":1},{"n":5,"par":4,"si":9},{"n":6,"par":4,"si":11},{"n":7,"par":3,"si":13},{"n":8,"par":4,"si":15},{"n":9,"par":5,"si":17},{"n":10,"par":4,"si":4},{"n":11,"par":3,"si":6},{"n":12,"par":5,"si":2},{"n":13,"par":4,"si":8},{"n":14,"par":4,"si":10},{"n":15,"par":4,"si":12},{"n":16,"par":3,"si":14},{"n":17,"par":5,"si":16},{"n":18,"par":4,"si":18}]}'),
+  ('unr',  '{"name":"Pitch and Putt","tee":"Red","holes":[{"n":1,"par":4,"si":3},{"n":2,"par":4,"si":5},{"n":3,"par":3,"si":7},{"n":4,"par":5,"si":1},{"n":5,"par":4,"si":9},{"n":6,"par":4,"si":11},{"n":7,"par":3,"si":13},{"n":8,"par":4,"si":15},{"n":9,"par":5,"si":17},{"n":10,"par":4,"si":4},{"n":11,"par":3,"si":6},{"n":12,"par":5,"si":2},{"n":13,"par":4,"si":8},{"n":14,"par":4,"si":10},{"n":15,"par":4,"si":12},{"n":16,"par":3,"si":14},{"n":17,"par":5,"si":16},{"n":18,"par":4,"si":18}]}'),
+  ('hcng', '{"1":5,"2":5,"3":3,"4":9,"5":5,"6":5,"7":3,"8":5,"9":6,"10":5,"11":3,"12":6,"13":5,"14":4,"15":5,"16":3,"17":5,"18":4}'),
+  ('hwild','{"1":9,"2":2,"3":7,"4":12,"5":3,"6":8,"7":6,"8":4,"9":11,"10":5,"11":9,"12":3,"13":10,"14":4,"15":7,"16":6,"17":8,"18":5}');
+
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000c","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league'); r jsonb;
+        cng jsonb := (SELECT v::jsonb FROM league_ctx WHERE k='cng');
+        unr jsonb := (SELECT v::jsonb FROM league_ctx WHERE k='unr');
+        h   jsonb := (SELECT v::jsonb FROM league_ctx WHERE k='hcng');
+        msg constant text := 'This tee has no slope and course rating, so it can''t count for the league.';
+BEGIN
+  BEGIN
+    PERFORM public.add_unannounced_league_card(lid, unr, NULL, '2026-12-03', h, 86, 33, 16);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses an unrated tee', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses an unrated tee',
+      SQLSTATE = 'P0001' AND SQLERRM = msg, SQLSTATE || ' ' || SQLERRM);
+  END;
+  BEGIN
+    PERFORM public.add_unannounced_league_card(lid, cng || '{"slope":null}'::jsonb, NULL, '2026-12-03', h, 86, 33, 16);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses a rating without a slope', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses a rating without a slope',
+      SQLSTATE = 'P0001' AND SQLERRM = msg, SQLSTATE || ' ' || SQLERRM);
+  END;
+
+  r := public.add_unannounced_league_card(lid, cng, NULL, '2026-12-02', h, 86, 33, 16);
+  INSERT INTO league_ctx VALUES ('cardCN', r->>'id');
+
+  -- Unrated announced card: announce is allowed, submit is refused and leaves it announced.
+  r := public.announce_league_card(lid, 'offapp', unr, '2026-11-20 10:00+01');
+  INSERT INTO league_ctx VALUES ('cardCU', r->>'id');
+  BEGIN
+    PERFORM public.submit_league_card((r->>'id')::uuid, h, 86, 33, 16, NULL);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('submit refuses an unrated tee', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('submit refuses an unrated tee',
+      SQLSTATE = 'P0001' AND SQLERRM = msg, SQLSTATE || ' ' || SQLERRM);
+  END;
+END $$;
+RESET ROLE;
+
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'worked example: differential 11.8, net -2.4 at league handicap 14.2',
+       public.league_card_differential(h.v::jsonb, c.v::jsonb, 16) = 11.8
+       AND public.league_net_differential(11.8, 14.2) = -2.4,
+       public.league_card_differential(h.v::jsonb, c.v::jsonb, 16)::text
+  FROM league_ctx h, league_ctx c WHERE h.k = 'hcng' AND c.k = 'cng';
+
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'add-unannounced stores differential 11.8 and net = round1(11.8 - league handicap)',
+       differential = 11.8 AND net_differential = public.league_net_differential(11.8, league_handicap)
+       AND net_differential IS NOT NULL AND points = 33,
+       differential || ' / ' || net_differential || ' / hcp ' || league_handicap
+  FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardCN');
+
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'unrated submit left the card announced with no score', status = 'announced' AND holes IS NULL
+       AND net_differential IS NULL, status
+  FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardCU');
+
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'app card from an older build: slope/rating filled from the game round tee at submit',
+       course->>'slope' = '125' AND course->>'rating' = '72' AND course->>'name' = 'La Moraleja',
+       course::text
+  FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardA');
+
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'net differential edge cases: no handicap = 0, NULL in -> NULL, half rounds up like JS',
+       public.league_net_differential(11.8, NULL) = 11.8
+       AND public.league_net_differential(NULL, 14.2) IS NULL
+       AND public.league_net_differential(0.0, 0.05) = 0.0      -- Math.round(-0.5) = -0
+       AND public.league_net_differential(0.1, 0.05) = 0.1,     -- Math.round(0.5) = 1
+       NULL;
+
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'differential is NULL for an unrated snapshot, a missing stroke or no playing handicap',
+       public.league_card_differential(h.v::jsonb, u.v::jsonb, 16) IS NULL
+       AND public.league_card_differential(h.v::jsonb - '7', c.v::jsonb, 16) IS NULL
+       AND public.league_card_differential(h.v::jsonb, c.v::jsonb, NULL) IS NULL
+       AND public.league_card_differential(h.v::jsonb, c.v::jsonb || '{"slope":"130","rating":"71.4"}'::jsonb, 16) = 11.8,
+       NULL
+  FROM league_ctx h, league_ctx c, league_ctx u WHERE h.k = 'hcng' AND c.k = 'cng' AND u.k = 'unr';
+
+-- JS parity: the values below come from src/store/handicapIndex.js
+-- (netDoubleBogeyCap + scoreDifferential) for two cards, four tees and
+-- playing handicaps covering plus handicaps and more than 18 strokes.
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'SQL differential matches the JS maths on every case (plus and >18 handicaps)',
+       count(*) FILTER (WHERE got IS DISTINCT FROM want) = 0 AND count(*) = 72,
+       string_agg(card || ' ' || slope || '/' || rating || ' ph ' || ph || ': ' || COALESCE(got::text, 'null') || ' <> ' || want,
+                  '; ') FILTER (WHERE got IS DISTINCT FROM want)
+  FROM (
+    SELECT t.card, t.slope, t.rating, t.ph, t.want,
+           public.league_card_differential(
+             (SELECT v::jsonb FROM league_ctx WHERE k = CASE t.card WHEN 'cng' THEN 'hcng' ELSE 'hwild' END),
+             (SELECT v::jsonb FROM league_ctx WHERE k = 'cng')
+               || jsonb_build_object('slope', t.slope, 'rating', t.rating),
+             t.ph) AS got
+      FROM (VALUES
+    ('cng', 130, 71.4, -7, 11),
+    ('cng', 130, 71.4, -4, 11),
+    ('cng', 130, 71.4, 0, 11),
+    ('cng', 130, 71.4, 16, 11.8),
+    ('cng', 130, 71.4, 18, 11.8),
+    ('cng', 130, 71.4, 20, 12.7),
+    ('cng', 130, 71.4, 36, 12.7),
+    ('cng', 130, 71.4, 40, 12.7),
+    ('cng', 130, 71.4, 54, 12.7),
+    ('cng', 113, 72, -7, 12),
+    ('cng', 113, 72, -4, 12),
+    ('cng', 113, 72, 0, 12),
+    ('cng', 113, 72, 16, 13),
+    ('cng', 113, 72, 18, 13),
+    ('cng', 113, 72, 20, 14),
+    ('cng', 113, 72, 36, 14),
+    ('cng', 113, 72, 40, 14),
+    ('cng', 113, 72, 54, 14),
+    ('cng', 55, 60.3, -7, 48.7),
+    ('cng', 55, 60.3, -4, 48.7),
+    ('cng', 55, 60.3, 0, 48.7),
+    ('cng', 55, 60.3, 16, 50.7),
+    ('cng', 55, 60.3, 18, 50.7),
+    ('cng', 55, 60.3, 20, 52.8),
+    ('cng', 55, 60.3, 36, 52.8),
+    ('cng', 55, 60.3, 40, 52.8),
+    ('cng', 55, 60.3, 54, 52.8),
+    ('cng', 155, 77.7, -7, 4.6),
+    ('cng', 155, 77.7, -4, 4.6),
+    ('cng', 155, 77.7, 0, 4.6),
+    ('cng', 155, 77.7, 16, 5.3),
+    ('cng', 155, 77.7, 18, 5.3),
+    ('cng', 155, 77.7, 20, 6.1),
+    ('cng', 155, 77.7, 36, 6.1),
+    ('cng', 155, 77.7, 40, 6.1),
+    ('cng', 155, 77.7, 54, 6.1),
+    ('wild', 130, 71.4, -7, 12.7),
+    ('wild', 130, 71.4, -4, 15.3),
+    ('wild', 130, 71.4, 0, 17),
+    ('wild', 130, 71.4, 16, 25.7),
+    ('wild', 130, 71.4, 18, 26.6),
+    ('wild', 130, 71.4, 20, 27.5),
+    ('wild', 130, 71.4, 36, 32.7),
+    ('wild', 130, 71.4, 40, 34.4),
+    ('wild', 130, 71.4, 54, 37),
+    ('wild', 113, 72, -7, 14),
+    ('wild', 113, 72, -4, 17),
+    ('wild', 113, 72, 0, 19),
+    ('wild', 113, 72, 16, 29),
+    ('wild', 113, 72, 18, 30),
+    ('wild', 113, 72, 20, 31),
+    ('wild', 113, 72, 36, 37),
+    ('wild', 113, 72, 40, 39),
+    ('wild', 113, 72, 54, 42),
+    ('wild', 55, 60.3, -7, 52.8),
+    ('wild', 55, 60.3, -4, 59),
+    ('wild', 55, 60.3, 0, 63.1),
+    ('wild', 55, 60.3, 16, 83.6),
+    ('wild', 55, 60.3, 18, 85.7),
+    ('wild', 55, 60.3, 20, 87.7),
+    ('wild', 55, 60.3, 36, 100.1),
+    ('wild', 55, 60.3, 40, 104.2),
+    ('wild', 55, 60.3, 54, 110.3),
+    ('wild', 155, 77.7, -7, 6.1),
+    ('wild', 155, 77.7, -4, 8.2),
+    ('wild', 155, 77.7, 0, 9.7),
+    ('wild', 155, 77.7, 16, 17),
+    ('wild', 155, 77.7, 18, 17.7),
+    ('wild', 155, 77.7, 20, 18.4),
+    ('wild', 155, 77.7, 36, 22.8),
+    ('wild', 155, 77.7, 40, 24.3),
+    ('wild', 155, 77.7, 54, 26.5)
+      ) AS t(card, slope, rating, ph, want)
+  ) z;
+
+-- Backfill / write invariant: every card with a score carries exactly the
+-- net differential its frozen data gives (on a hosted dry-run this covers the
+-- real cards the migration backfilled).
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'every scored card stores the net differential its frozen data gives (backfill)',
+       count(*) = 0, string_agg(id::text, ',')
+  FROM public.league_cards
+ WHERE holes IS NOT NULL
+   AND net_differential IS DISTINCT FROM public.league_net_differential(
+         public.league_card_differential(holes, course, playing_handicap), league_handicap);
+
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
 
 -- 10) Handicap votes ---------------------------------------------------------------------
 -- 4 active members -> threshold ceil(8/3) = 3.
@@ -937,7 +1139,7 @@ DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league');
         msg constant text := 'This league has been archived. You can still look at it, but not change it.';
 BEGIN
   BEGIN
-    PERFORM public.announce_league_card(lid, 'offapp', '{"name":"x"}'::jsonb, '2026-12-10 10:00+01');
+    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, '2026-12-10 10:00+01');
     INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: announce refused', false, 'no error');
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: announce refused', SQLERRM = msg, SQLERRM);
@@ -950,7 +1152,7 @@ BEGIN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: submit refused', SQLERRM = msg, SQLERRM);
   END;
   BEGIN
-    PERFORM public.add_unannounced_league_card(lid, '{"name":"RACE"}'::jsonb, NULL, '2026-12-02',
+    PERFORM public.add_unannounced_league_card(lid, '{"slope":130,"rating":71.4,"name":"RACE"}'::jsonb, NULL, '2026-12-02',
               (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20);
     INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: add-unannounced refused', false, 'no error');
   EXCEPTION WHEN others THEN
@@ -1062,7 +1264,9 @@ SELECT 'anon executes exactly get_marker_card + confirm_marker_card',
                      'open_handicap_vote','cast_handicap_ballot','announce_league_card','notify_league_tee_off',
                      'submit_league_card','add_unannounced_league_card','confirm_league_card_by_partner',
                      'attach_league_proof','create_marker_token','get_marker_card','confirm_marker_card',
-                     'void_league_card','record_league_final')
+                     'void_league_card','record_league_final',
+                     'league_num','league_course_rated','league_card_differential',
+                     'league_net_differential','league_rated_course')
    AND has_function_privilege('anon', p.oid, 'EXECUTE');
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'authenticated cannot execute internal helpers',
@@ -1073,7 +1277,8 @@ SELECT 'authenticated cannot execute internal helpers',
    AND p.proname IN ('league_new_invite_code','league_user_name','notify_league_members',
                      'league_canonical_holes','league_month_of','league_confirm_card',
                      'league_assert_open','league_settle_vote','league_is_member','league_is_admin',
-                     'league_card_hash');
+                     'league_card_hash','league_num','league_course_rated','league_card_differential',
+                     'league_net_differential','league_rated_course');
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'anon has no privilege on league tables; authenticated has SELECT only',
        NOT bool_or(has_table_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE,DELETE'))

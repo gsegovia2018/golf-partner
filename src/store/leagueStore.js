@@ -110,7 +110,7 @@ export function rowToMember(r, leagueId = null) {
 }
 
 // Shape consumed by leagueStandings.js / leagueRules.js: `userId`, `status`,
-// `points`, `month` ('YYYY-MM-01'), `announcedAt`, `firstShotAt`. `monthKey`
+// `points`, `netDifferential`, `month` ('YYYY-MM-01'), `announcedAt`, `firstShotAt`. `monthKey`
 // ('YYYY-MM') is the key for seasonTable's cardsByMonth.
 export function rowToCard(r) {
   const month = r.month ?? null;
@@ -136,6 +136,10 @@ export function rowToCard(r) {
     holes: r.holes ?? null,
     gross: r.gross ?? null,
     points: r.points ?? null,
+    // Ranking value (lower is better), computed by the server. null = the
+    // card's tee has no slope/rating, so it isn't ranked.
+    differential: num(r.differential),
+    netDifferential: num(r.net_differential),
     confirmation: r.confirmation ?? null,
     confirmedByUser: r.confirmed_by_user ?? null,
     confirmedByName: r.confirmed_by_name ?? null,

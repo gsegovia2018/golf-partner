@@ -24,7 +24,7 @@ const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 
 const announced = {
   id: 'c1', userId: 'me', status: 'announced', source: 'offapp', month: `${MONTH}-01`,
   announcedAt: new Date(2025, 9, 4, 9, 12).toISOString(), teeTime: new Date(2025, 9, 4, 9, 30).toISOString(),
-  playedOn: '2025-10-04', leagueHandicap: 18, course: { name: 'Golf Olivar', tee: null, holes },
+  playedOn: '2025-10-04', leagueHandicap: 18, course: { name: 'Golf Olivar', tee: null, slope: 125, rating: 72, holes },
 };
 
 function snapshot(cards = [announced]) {
