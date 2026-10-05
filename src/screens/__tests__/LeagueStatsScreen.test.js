@@ -102,6 +102,8 @@ describe('LeagueStatsScreen', () => {
     expect(getByText('37')).toBeTruthy();
     expect(getByText('36')).toBeTruthy();
     expect(getAllByText('–').length).toBe(1); // Nacho's September card is not confirmed
+    fireEvent.press(getByText('37'));
+    expect(navigation.navigate).toHaveBeenCalledWith('LeagueCard', expect.objectContaining({ leagueId: route.params.leagueId }));
   });
 
   test('rivals: record against each player, tap expands the month list', async () => {

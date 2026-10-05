@@ -210,11 +210,18 @@ export default function LeagueStatsScreen({ navigation, route }) {
                 <View key={row.userId} style={s.gridRow}>
                   <Text style={[s.leaderName, s.gridName, row.userId === meId && s.bold]} numberOfLines={1}>{nameOf(row.userId)}</Text>
                   {row.cells.map((c) => (
-                    <View key={c.month} style={cellStyle(c)}>
+                    <TouchableOpacity
+                      key={c.month}
+                      style={cellStyle(c)}
+                      disabled={c.points == null}
+                      onPress={() => navigation.navigate('LeagueCard', { leagueId, month: c.month, userId: row.userId })}
+                      activeOpacity={0.7}
+                      accessibilityLabel={c.points == null ? undefined : `${nameOf(row.userId)}, ${monthName(c.month)}: ${c.points} points`}
+                    >
                       <Text style={[s.cellText, c.points != null && c.points >= 36 && s.cellTextHigh, c.points == null && s.muted]}>
                         {c.points ?? '–'}
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </View>
               ))}
