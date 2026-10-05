@@ -79,6 +79,7 @@ export default function DateSheet({ visible, title, value, onChange, onClose, mi
             key={label}
             style={[s.chip, sel === iso && s.chipOn]}
             onPress={() => pick(iso)}
+            hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
             accessibilityRole="button"
             accessibilityLabel={`${label}, ${formatLabel(iso)}`}
           >
@@ -183,7 +184,7 @@ const makeStyles = (theme) => StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 },
   title: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 22 },
   selected: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
-  chips: { flexDirection: 'row', gap: 8, marginBottom: 8, minHeight: 34 },
+  chips: { flexDirection: 'row', gap: 8, marginBottom: 8, minHeight: 34, paddingVertical: 5 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: theme.border.default,
   },

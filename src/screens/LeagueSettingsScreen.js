@@ -202,7 +202,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
             <Text style={s.fieldLabel}>Season ends</Text>
             <DateField label="Season ends" value={seasonEnd} onChange={setSeasonEnd} quickDates={false} min={startIso || undefined} />
             {startIso && endIso && startIso > endIso && (
-              <Text style={s.hint}>The season must end on or after it starts.</Text>
+              <Text style={s.errorText}>The season must end on or after it starts.</Text>
             )}
             {field('Points table (1st, 2nd, 3rd…)', { value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none' })}
             {field('Handicap cap', { value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}
@@ -328,6 +328,7 @@ function makeStyles(theme) {
       backgroundColor: theme.bg.secondary, color: theme.text.primary, borderRadius: 10, borderWidth: 1,
       borderColor: theme.border.default, padding: 12, marginBottom: 4, fontSize: 15, fontFamily: 'PlusJakartaSans-Medium',
     },
+    errorText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 13, lineHeight: 18, marginBottom: 8 },
     hint: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, lineHeight: 17, marginVertical: 8 },
 
     readRow: { paddingVertical: 12 },
