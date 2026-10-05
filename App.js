@@ -31,6 +31,9 @@ import { loadProfile } from './src/store/profileStore';
 import { isBootRevealed, subscribeBootReveal, markBootReady } from './src/store/bootReveal';
 import SetNewPasswordScreen from './src/screens/SetNewPasswordScreen';
 import JoinTournamentLinkScreen from './src/screens/JoinTournamentLinkScreen';
+import JoinLeagueLinkScreen from './src/screens/JoinLeagueLinkScreen';
+import { leagueCodeFromPath, leagueCodeFromUrl } from './src/lib/leagueInviteLink';
+import { useLeagueJoinHeld } from './src/lib/leagueJoinHandoff';
 import SharedBoardScreen from './src/screens/SharedBoardScreen';
 import MarkerCardScreen from './src/screens/MarkerCardScreen';
 import LeagueMarkerQRScreen from './src/screens/LeagueMarkerQRScreen';
@@ -227,27 +230,46 @@ function AppNavigator() {
     }
     return undefined;
   });
+  // The league invite code (/league/CODE), same three-state sentinel. A league
+  // link also counts as a join link; this picks the league screen over the
+  // generic tournament guest/login choice.
+  const [leagueCode, setLeagueCode] = useState(() => {
+    if (typeof window !== 'undefined' && window.location) {
+      return leagueCodeFromPath(window.location.pathname);
+    }
+    return undefined;
+  });
+  // The league invite screen's "I'm new" path holds this while it signs in a
+  // guest, attaches the email and joins, so the new session does not unmount
+  // it mid-flow (see leagueJoinHandoff).
+  const leagueJoinHeld = useLeagueJoinHeld();
 
   useEffect(() => {
-    if (isJoinLink !== null && boardToken !== undefined && markerToken !== undefined) return undefined;
+    if (isJoinLink !== null && boardToken !== undefined && markerToken !== undefined
+      && leagueCode !== undefined) return undefined;
     let cancelled = false;
     Linking.getInitialURL().then((url) => {
       if (cancelled) return;
       setIsJoinLink(matchesJoinLink(url));
       setBoardToken(boardTokenFromUrl(url));
       setMarkerToken(markerTokenFromUrl(url));
+      setLeagueCode(leagueCodeFromUrl(url));
     }).catch(() => {
       if (cancelled) return;
       setIsJoinLink(false);
       setBoardToken(null);
       setMarkerToken(null);
+      setLeagueCode(null);
     });
     return () => { cancelled = true; };
-  }, [isJoinLink, boardToken, markerToken]);
+  }, [isJoinLink, boardToken, markerToken, leagueCode]);
 
   useEffect(() => {
     const sub = Linking.addEventListener('url', ({ url }) => {
-      if (matchesJoinLink(url)) setIsJoinLink(true);
+      if (matchesJoinLink(url)) {
+        setIsJoinLink(true);
+        setLeagueCode(leagueCodeFromUrl(url));
+      }
       const token = boardTokenFromUrl(url);
       if (token) setBoardToken(token);
       const mToken = markerTokenFromUrl(url);
@@ -300,7 +322,8 @@ function AppNavigator() {
     return () => sub.remove();
   }, []);
 
-  if (loading || isJoinLink === null || boardToken === undefined || markerToken === undefined) {
+  if (loading || isJoinLink === null || boardToken === undefined || markerToken === undefined
+    || leagueCode === undefined) {
     return <LoadingSplash />;
   }
 
@@ -310,6 +333,11 @@ function AppNavigator() {
   // cold start. See AuthContext's PASSWORD_RECOVERY / deep-link handling.
   if (passwordRecovery) return <SetNewPasswordScreen />;
 
+  // Mid-join on the league invite screen: keep it mounted although a guest
+  // session now exists. Same element as the signed-out branch below, so React
+  // keeps its state across the session change.
+  if (leagueJoinHeld && leagueCode) return <JoinLeagueLinkScreen code={leagueCode} />;
+
   if (!session) {
     // A logged-out scanner of a /join-tournament/<code> or /join/<token> link
     // gets the guest/login choice instead of the bare sign-up wall. Once a
@@ -317,6 +345,9 @@ function AppNavigator() {
     // the linking config routes the same URL to JoinTournament / JoinOfficial.
     // Checked before the board so a freshly-arrived invite always wins over a
     // board link the device happened to open earlier.
+    // A league invite gets its own screen (hero + "I'm new" | "I have an
+    // account"): a league member needs a name and an email, not a bare guest.
+    if (isJoinLink && leagueCode) return <JoinLeagueLinkScreen code={leagueCode} />;
     if (isJoinLink) return <JoinTournamentLinkScreen />;
     // The public board is readable with no account at all — no auth UI here.
     // Signed-in visitors get the routed SharedBoard screen instead (below),

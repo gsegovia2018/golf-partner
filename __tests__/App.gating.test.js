@@ -7,7 +7,7 @@
 //   /board/<token>           → public read-only board, no auth UI at all
 //   /join/<token>            → official invite, guest/login choice
 //   /join-tournament/<code>  → casual invite, guest/login choice
-//   /league/<code>           → league invite, guest/login choice
+//   /league/<code>           → league invite: JoinLeagueLinkScreen (new | account)
 //   /m/<token>               → public marker confirmation page, no auth UI
 //
 // App.js imports ~40 screens at module scope and several of them pull in
@@ -32,7 +32,7 @@ fs.readdirSync(screensDir)
         return React.createElement(
           Text,
           { testID: `screen-${screenName}` },
-          String(props.token ?? ''),
+          String(props.token ?? props.code ?? ''),
         );
       };
     });
@@ -129,7 +129,7 @@ jest.mock('../src/context/AuthContext', () => ({
 }));
 
 const React = require('react');
-const { render, waitFor } = require('@testing-library/react-native');
+const { render, waitFor, act } = require('@testing-library/react-native');
 const Linking = require('expo-linking');
 const App = require('../App').default;
 
@@ -338,19 +338,36 @@ describe('App gating: invite links', () => {
     );
   });
 
-  test('signed-out league invite /league/<code> reaches the pre-session join screen', async () => {
+  test('signed-out league invite /league/<code> reaches the league invite screen with the code', async () => {
     const { getByTestId, queryByTestId } = await renderAtUrl(
       'https://golf-partner.vercel.app/league/MULL-7Q4',
     );
 
-    expect(getByTestId('screen-JoinTournamentLinkScreen')).toBeTruthy();
+    expect(getByTestId('screen-JoinLeagueLinkScreen').props.children).toBe('MULL-7Q4');
+    expect(queryByTestId('screen-JoinTournamentLinkScreen')).toBeNull();
     expect(queryByTestId('screen-AuthScreen')).toBeNull();
     expect(queryByTestId('screen-SharedBoardScreen')).toBeNull();
   });
 
   test('golf://league/<code> matches too', async () => {
     const r = await renderAtUrl('golf://league/MULL-7Q4');
-    expect(r.getByTestId('screen-JoinTournamentLinkScreen')).toBeTruthy();
+    expect(r.getByTestId('screen-JoinLeagueLinkScreen').props.children).toBe('MULL-7Q4');
+  });
+
+  test('a held league join keeps the invite screen mounted after the guest session appears', async () => {
+    const handoff = require('../src/lib/leagueJoinHandoff');
+    handoff.holdLeagueJoin();
+    try {
+      Linking.getInitialURL.mockResolvedValue('golf://league/MULL-7Q4');
+      Object.assign(mockAuth, {
+        session: { user: { id: 'g1', is_anonymous: true } }, loading: false, passwordRecovery: false,
+      });
+      const { getByTestId } = render(React.createElement(App));
+      await waitFor(() => expect(getByTestId('screen-JoinLeagueLinkScreen')).toBeTruthy());
+      expect(mockRegisteredScreens).not.toContain('Main');
+    } finally {
+      act(() => handoff.releaseLeagueJoin());
+    }
   });
 
   test('once a session exists /league/<code> resolves to the JoinLeague route', async () => {
