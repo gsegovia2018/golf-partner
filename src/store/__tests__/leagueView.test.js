@@ -1,6 +1,6 @@
 import {
   monthName, ordinal, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel,
-  positionText, cardStatus, monthRows, leagueSummary,
+  positionText, cardStatus, monthRows, leagueSummary, viewableCards,
 } from '../leagueView';
 
 const NOW = new Date(2026, 9, 4, 12, 0);
@@ -81,4 +81,20 @@ test('leagueSummary ranks members from the cached snapshot', () => {
   };
   expect(leagueSummary(snapshot, 'a').position).toBe('2nd of 2 · 300 pts');
   expect(leagueSummary({ ...snapshot, cardsByMonth: {} }, 'a').position).toBeNull();
+});
+
+test('viewableCards: scored cards only, in monthRows order, no void or left members', () => {
+  const members = [{ userId: 'a' }, { userId: 'b' }, { userId: 'c' }, { userId: 'd' }, { userId: 'e', leftAt: 'x' }];
+  const holes = { 1: 4 };
+  const cardsByMonth = {
+    '2026-10': [
+      { userId: 'a', status: 'submitted', points: 40, holes },
+      { userId: 'b', status: 'confirmed', points: 30, holes },
+      { userId: 'c', status: 'playing' },
+      { userId: 'd', status: 'void', points: 50, holes },
+      { userId: 'e', status: 'confirmed', points: 50, holes },
+    ],
+  };
+  expect(viewableCards(members, cardsByMonth, '2026-10').map((c) => c.userId)).toEqual(['b', 'a']);
+  expect(viewableCards(members, cardsByMonth, '2026-09')).toEqual([]);
 });

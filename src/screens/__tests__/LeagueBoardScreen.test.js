@@ -275,4 +275,36 @@ describe('LeagueBoardScreen', () => {
     fireEvent.press(getByLabelText('League settings'));
     expect(navigation.navigate).toHaveBeenCalledWith('LeagueSettings', { leagueId: 'L1' });
   });
+
+  test('a scored row in this month opens its card; a playing row is not tappable', async () => {
+    const holes = { 1: 4 };
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [
+          card('javi', 'confirmed', 36, { holes }),
+          card('nacho', 'playing', null),
+        ],
+      },
+    }));
+    const nav = makeNav();
+    const { getAllByText, getByLabelText, queryByLabelText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByLabelText("Javi's card"));
+    expect(queryByLabelText("Nacho's card")).toBeNull();
+    fireEvent.press(getByLabelText("Javi's card"));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueCard', { leagueId: 'L1', month: THIS_MONTH, userId: 'javi' });
+    getAllByText('Nacho').forEach((n) => fireEvent.press(n));
+    expect(nav.navigate).toHaveBeenCalledTimes(1);
+  });
+
+  test("a past month's results rows open that month's card", async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: { [PAST_MONTH]: [card('javi', 'confirmed', 36, { holes: { 1: 4 } })] },
+    }));
+    const nav = makeNav();
+    const { getByText, getByLabelText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText('Sep'));
+    fireEvent.press(getByText('Sep'));
+    fireEvent.press(getByLabelText("Javi's card"));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueCard', { leagueId: 'L1', month: PAST_MONTH, userId: 'javi' });
+  });
 });

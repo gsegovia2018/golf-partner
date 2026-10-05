@@ -13,7 +13,7 @@ import { useLeague } from '../hooks/useLeague';
 import { seasonTable, monthResults } from '../store/leagueStandings';
 import {
   monthName, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel, monthRows,
-  daysLeftInMonth, currentMonthKey, memberName, yourCardState,
+  daysLeftInMonth, currentMonthKey, memberName, yourCardState, viewableCards,
 } from '../store/leagueView';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
 import {
@@ -111,6 +111,8 @@ export default function LeagueBoardScreen({ navigation, route }) {
 
   const { league, members, active, cardsByMonth, table, last, scoredMonths } = view;
   const nameOf = (userId) => memberName(members, userId, meId);
+  const openCard = (month, userId) => navigation.navigate('LeagueCard', { leagueId, month, userId });
+  const viewable = (month) => new Set(viewableCards(members, cardsByMonth, month).map((c) => c.userId));
   const noCardsYet = !last;
   const now = new Date();
   const curKey = currentMonthKey(now);
@@ -137,6 +139,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
     boardFooter = `Final in ${monthName(league.seasonEnd)} — extra strokes from these standings, set on the day.${pot > 0 ? ` Pot ${formatEuros(pot)}` : ''}`;
   } else {
     boardTitle = `${monthName(scope).toUpperCase()} · RESULTS`;
+    const canOpen = viewable(scope);
     boardRows = monthResults(cardsByMonth[scope], active, league.pointsTable).map((r) => ({
       key: r.userId,
       place: r.place,
@@ -145,6 +148,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
       points: r.place == null ? '—' : `${r.cardPoints} pts`,
       sub: r.place == null ? null : `+${formatPoints(r.seasonPoints)}`,
       isMe: r.userId === meId,
+      onPress: canOpen.has(r.userId) ? () => openCard(scope, r.userId) : undefined,
     }));
   }
 
@@ -171,6 +175,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
   // ---- This month ----------------------------------------------------------
 
   const rows = monthRows(members, cardsByMonth, curKey, now);
+  const curViewable = viewable(curKey);
   const myCard = (cardsByMonth[curKey] ?? []).find((c) => c.userId === meId) ?? null;
   const mine = yourCardState(myCard);
   const toneColor = { done: theme.accent.primary, live: theme.text.primary, muted: theme.text.muted };
@@ -360,15 +365,29 @@ export default function LeagueBoardScreen({ navigation, route }) {
             <Text style={s.cardTitle}>{curMonth}</Text>
             <Text style={s.cardMeta}>{`${daysLeftInMonth(now)} days left · 1 card each`}</Text>
           </View>
-          {rows.map((r, i) => (
-            <View key={r.member.userId} style={[s.memberRow, i < rows.length - 1 && s.rowDivider]}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.memberName} numberOfLines={1}>{nameOf(r.member.userId)}</Text>
-                {!!r.flag && <Text style={s.flag}>{r.flag}</Text>}
-              </View>
-              <Text style={[s.memberStatus, { color: toneColor[r.tone] }]}>{r.text}</Text>
-            </View>
-          ))}
+          {rows.map((r, i) => {
+            const open = curViewable.has(r.member.userId);
+            const Row = open ? TouchableOpacity : View;
+            return (
+              <Row
+                key={r.member.userId}
+                style={[s.memberRow, i < rows.length - 1 && s.rowDivider]}
+                {...(open ? {
+                  onPress: () => openCard(curKey, r.member.userId),
+                  activeOpacity: 0.7,
+                  accessibilityRole: 'button',
+                  accessibilityLabel: r.member.userId === meId ? 'Your card' : `${nameOf(r.member.userId)}'s card`,
+                } : {})}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={s.memberName} numberOfLines={1}>{nameOf(r.member.userId)}</Text>
+                  {!!r.flag && <Text style={s.flag}>{r.flag}</Text>}
+                </View>
+                <Text style={[s.memberStatus, { color: toneColor[r.tone] }]}>{r.text}</Text>
+                {open && <Feather name="chevron-right" size={16} color={theme.text.muted} style={{ marginLeft: 4 }} />}
+              </Row>
+            );
+          })}
         </View>
 
         {finalRow}

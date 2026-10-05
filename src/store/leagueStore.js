@@ -523,3 +523,12 @@ export async function uploadLeagueProof(leagueId, cardId, localUri) {
   }
   return path;
 }
+
+// A short-lived URL for a card's proof photo (private bucket; any league member
+// can read it, see `league-proofs member read`).
+export async function getLeagueProofUrl(path) {
+  if (isOfflineNow()) throw new LeagueError(OFFLINE_MESSAGE, { offline: true });
+  const { data, error } = await supabase.storage.from(PROOF_BUCKET).createSignedUrl(path, 3600);
+  if (error || !data?.signedUrl) throw toLeagueError(error ?? { message: 'Could not load the photo.' });
+  return data.signedUrl;
+}
