@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
+import DateField from '../components/DateField';
 import CourseTeePicker from '../components/league/CourseTeePicker';
 import { makeOffAppStyles } from '../components/league/offAppStyles';
 import { useTheme } from '../theme/ThemeContext';
@@ -31,7 +32,7 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
     const problem = courseProblem(pick.course);
     if (problem) { setError(problem); return; }
     const teeTime = buildTeeTime(dateText, timeText);
-    if (!teeTime) { setError('Enter the date as YYYY-MM-DD and the tee time as HH:MM.'); return; }
+    if (!teeTime) { setError('Pick a date and a tee time.'); return; }
     setError(null);
     setBusy(true);
     try {
@@ -62,32 +63,15 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
 
         <CourseTeePicker navigation={navigation} value={pick} onChange={setPick} />
 
-        <View style={s.row}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.fieldLabel}>Date</Text>
-            <TextInput
-              style={s.input}
-              value={dateText}
-              onChangeText={setDateText}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={theme.text.muted}
-              autoCapitalize="none"
-              accessibilityLabel="Date"
-            />
-          </View>
-          <View style={{ width: 110 }}>
-            <Text style={s.fieldLabel}>Tee time</Text>
-            <TextInput
-              style={s.input}
-              value={timeText}
-              onChangeText={setTimeText}
-              placeholder="HH:MM"
-              placeholderTextColor={theme.text.muted}
-              autoCapitalize="none"
-              accessibilityLabel="Tee time"
-            />
-          </View>
-        </View>
+        <Text style={s.fieldLabel}>Date and tee time</Text>
+        <DateField
+          label="Date and tee time"
+          value={dateText}
+          onChange={setDateText}
+          time={timeText}
+          onTimeChange={setTimeText}
+          min={localDateText()}
+        />
 
         {!!error && <Text style={s.errorText} accessibilityRole="alert">{error}</Text>}
 
