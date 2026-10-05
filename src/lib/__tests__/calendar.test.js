@@ -1,6 +1,6 @@
 import {
   parseIso, todayIso, addDays, nearestSaturday, inBounds, clampIso, addMonths,
-  monthGrid, stepTime, formatLabel, monthTitle,
+  monthGrid, lastDayOfMonth, stepTime, formatLabel, monthTitle,
 } from '../calendar';
 
 describe('calendar helpers', () => {
@@ -49,6 +49,13 @@ describe('calendar helpers', () => {
     expect(monthGrid({ y: 2026, m: 6 })[0]).toBe('2026-06-01'); // a Monday
     expect(monthGrid({ y: 2026, m: 3 }).slice(0, 7))
       .toEqual([null, null, null, null, null, null, '2026-03-01']); // a Sunday
+  });
+
+  test('lastDayOfMonth', () => {
+    expect(lastDayOfMonth('2026-02-10')).toBe('2026-02-28');
+    expect(lastDayOfMonth('2028-02-01')).toBe('2028-02-29');
+    expect(lastDayOfMonth('2025-10-04')).toBe('2025-10-31');
+    expect(lastDayOfMonth('x')).toBeNull();
   });
 
   test('stepTime moves by minutes and wraps', () => {

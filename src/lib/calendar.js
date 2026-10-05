@@ -29,6 +29,12 @@ export function addDays(iso, n) {
   return toIso(d.getFullYear(), d.getMonth() + 1, d.getDate());
 }
 
+export function lastDayOfMonth(iso) {
+  const p = parseIso(iso);
+  if (!p) return null;
+  return toIso(p.y, p.m, new Date(p.y, p.m, 0).getDate());
+}
+
 // Next Saturday on or after `iso`.
 export function nearestSaturday(iso) {
   const p = parseIso(iso);

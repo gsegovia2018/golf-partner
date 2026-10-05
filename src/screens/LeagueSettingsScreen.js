@@ -198,9 +198,9 @@ export default function LeagueSettingsScreen({ navigation, route }) {
           <View style={s.card}>
             {field('League name', { value: name, onChangeText: setName })}
             <Text style={s.fieldLabel}>Season starts</Text>
-            <DateField label="Season starts" value={seasonStart} onChange={setSeasonStart} />
+            <DateField label="Season starts" value={seasonStart} onChange={setSeasonStart} quickDates={false} />
             <Text style={s.fieldLabel}>Season ends</Text>
-            <DateField label="Season ends" value={seasonEnd} onChange={setSeasonEnd} min={startIso || undefined} />
+            <DateField label="Season ends" value={seasonEnd} onChange={setSeasonEnd} quickDates={false} min={startIso || undefined} />
             {startIso && endIso && startIso > endIso && (
               <Text style={s.hint}>The season must end on or after it starts.</Text>
             )}

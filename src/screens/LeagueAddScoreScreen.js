@@ -12,12 +12,14 @@ import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { scoreCard } from '../store/leagueRules';
 import { parseIsoDate } from '../store/leagueDraft';
+import { lastDayOfMonth } from '../lib/calendar';
 import {
   courseSnapshot, courseFromSnapshot, courseProblem, scoresComplete, applyStrokeText,
   loadDraft, saveDraft, localDateText, timeLabel,
 } from '../store/leagueOffApp';
 
 const ME = 'me';
+const minIso = (a, b) => (a < b ? a : b);
 
 function findCard(data, cardId) {
   if (!data || !cardId) return null;
@@ -86,6 +88,8 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
   const playingHandicap = course
     ? scoreCard({ holes: strokes, course, leagueHandicap, tee: course.tee }).playingHandicap
     : 0;
+  // A card counts for the month it was played: the card's month, or this one.
+  const playMonthStart = `${(card?.month ? String(card.month) : localDateText()).slice(0, 7)}-01`;
   const playedOn = parseIsoDate(dateText);
   const ready = !!course && !courseProblem(course) && scoresComplete(strokes) && !!playedOn;
 
@@ -137,8 +141,8 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
           label="Date played"
           value={dateText}
           onChange={setDateText}
-          min={`${(card?.month ? String(card.month).slice(0, 7) : localDateText().slice(0, 7))}-01`}
-          max={localDateText()}
+          min={playMonthStart}
+          max={minIso(localDateText(), lastDayOfMonth(playMonthStart))}
         />
 
         {course && (

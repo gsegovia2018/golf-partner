@@ -20,9 +20,10 @@ const monthKey = ({ y, m }) => y * 12 + m;
 // Pure-JS calendar sheet (no native picker, so it ships over the air and looks
 // the same on web and Android). Dates are 'YYYY-MM-DD', time is 'HH:MM'.
 //   min / max   - inclusive selectable range (either may be omitted)
+//   quickDates  - false hides the Today / Saturday chips
 //   time        - when set, a tee-time stepper is shown and passed back
 //   onChange    - (iso, time) on Done
-export default function DateSheet({ visible, title, value, onChange, onClose, min, max, time }) {
+export default function DateSheet({ visible, title, value, onChange, onClose, min, max, time, quickDates = true }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const today = todayIso();
@@ -72,7 +73,7 @@ export default function DateSheet({ visible, title, value, onChange, onClose, mi
         {!!sel && <Text style={s.selected}>{formatLabel(sel)}</Text>}
       </View>
 
-      <View style={s.chips}>
+      {quickDates && <View style={s.chips}>
         {chips.map(([label, iso]) => (
           <TouchableOpacity
             key={label}
@@ -84,7 +85,7 @@ export default function DateSheet({ visible, title, value, onChange, onClose, mi
             <Text style={[s.chipText, sel === iso && s.chipTextOn]}>{label}</Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </View>}
 
       <View style={s.monthRow}>
         <TouchableOpacity

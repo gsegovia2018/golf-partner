@@ -196,9 +196,9 @@ export default function LeagueCreateScreen({ navigation }) {
       <Text style={s.fieldLabel}>League name</Text>
       {input({ placeholder: 'El Club del Mulligan', value: name, onChangeText: setName, autoFocus: false })}
       <Text style={s.fieldLabel}>Season starts</Text>
-      <DateField label="Season starts" value={seasonStart} onChange={setSeasonStart} />
+      <DateField label="Season starts" value={seasonStart} onChange={setSeasonStart} quickDates={false} />
       <Text style={s.fieldLabel}>Season ends</Text>
-      <DateField label="Season ends" value={seasonEnd} onChange={setSeasonEnd} min={startIso || undefined} />
+      <DateField label="Season ends" value={seasonEnd} onChange={setSeasonEnd} quickDates={false} min={startIso || undefined} />
       {startIso && endIso && startIso > endIso && (
         <Text style={s.errorText}>The season must end after it starts.</Text>
       )}

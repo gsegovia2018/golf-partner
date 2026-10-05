@@ -11,7 +11,7 @@ import { formatLabel } from '../lib/calendar';
 //   value        - 'YYYY-MM-DD' or ''
 //   time/onTime  - optional 'HH:MM' tee time edited in the same sheet
 export default function DateField({
-  label, title, value, onChange, min, max, placeholder = 'Select a date', time, onTimeChange, style,
+  label, title, value, onChange, min, max, placeholder = 'Select a date', time, onTimeChange, quickDates, style,
 }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -38,6 +38,7 @@ export default function DateField({
         min={min}
         max={max}
         time={time}
+        quickDates={quickDates}
         onChange={(iso, clock) => { onChange(iso); if (onTimeChange && clock != null) onTimeChange(clock); }}
         onClose={() => setOpen(false)}
       />
