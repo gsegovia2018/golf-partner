@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import JoinLeagueScreen from '../JoinLeagueScreen';
 
@@ -10,8 +11,21 @@ jest.mock('../../store/leagueStore', () => ({
 jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn(() => Promise.resolve({ handicap: 21.8 })),
 }));
+const mockAuth = { user: null };
+jest.mock('../../context/AuthContext', () => ({ useAuth: () => mockAuth }));
+jest.mock('../../lib/guestAccount', () => {
+  const actual = jest.requireActual('../../lib/guestAccount');
+  return { ...actual, attachEmailToGuest: jest.fn() };
+});
+jest.mock('../../lib/supabase', () => ({
+  supabase: { auth: { signOut: jest.fn(() => Promise.resolve({ error: null })) } },
+}));
 
 const store = require('../../store/leagueStore');
+const { loadProfile } = require('../../store/profileStore');
+const { attachEmailToGuest } = require('../../lib/guestAccount');
+const { supabase } = require('../../lib/supabase');
+const handoff = require('../../lib/leagueJoinHandoff');
 
 const SUMMARY = {
   id: 'L1', name: 'El Club del Mulligan', handicapCap: 30, entryFeeCents: 3000, archived: false,
@@ -25,8 +39,11 @@ const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 describe('JoinLeagueScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuth.user = null;
     store.getLeagueByCode.mockResolvedValue(SUMMARY);
     store.joinLeague.mockResolvedValue({ leagueId: 'L1' });
+    attachEmailToGuest.mockResolvedValue('sent');
+    handoff.consumeLoginTab();
   });
 
   test('shows the league, the rules and the proposed handicap, then joins and opens the board', async () => {
@@ -86,5 +103,110 @@ describe('JoinLeagueScreen', () => {
     store.getLeagueByCode.mockResolvedValue(null);
     const { getByText } = render(wrap(<JoinLeagueScreen navigation={navigation} route={route} />));
     await waitFor(() => getByText("This invite code isn't valid"));
+  });
+
+  test('a real account is not asked for name or email', async () => {
+    mockAuth.user = { id: 'u1', is_anonymous: false, email: 'marcos@example.com' };
+    const { getByText, queryByLabelText, queryByText } = render(wrap(<JoinLeagueScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByText('Join El Club del Mulligan'));
+    expect(queryByLabelText('Name')).toBeNull();
+    expect(queryByLabelText('Email')).toBeNull();
+    expect(queryByText('I have an account — log in')).toBeNull();
+  });
+
+  describe('a guest (anonymous session)', () => {
+    beforeEach(() => {
+      mockAuth.user = { id: 'g1', is_anonymous: true, email: null };
+      loadProfile.mockResolvedValue({ handicap: null, displayName: '' });
+    });
+
+    test('must give a name and an email before joining', async () => {
+      const { getByText, getByLabelText } = render(wrap(<JoinLeagueScreen navigation={navigation} route={route} />));
+      await waitFor(() => getByLabelText('Name'));
+      fireEvent.press(getByText('Join El Club del Mulligan'));
+      await waitFor(() => getByText('Enter your name'));
+      expect(getByText('Enter a valid email address')).toBeTruthy();
+      expect(store.joinLeague).not.toHaveBeenCalled();
+      expect(attachEmailToGuest).not.toHaveBeenCalled();
+    });
+
+    test('attaches the email, then joins with the handicap and the name', async () => {
+      const { getByText, getByLabelText } = render(wrap(<JoinLeagueScreen navigation={navigation} route={route} />));
+      await waitFor(() => getByLabelText('Name'));
+      fireEvent.changeText(getByLabelText('Name'), '  Lucía Pérez ');
+      fireEvent.changeText(getByLabelText('Email'), 'lucia@example.com');
+      fireEvent.press(getByText('Join El Club del Mulligan'));
+      await waitFor(() => expect(store.joinLeague).toHaveBeenCalledWith('MULL-7Q4', 22.5, 'Lucía Pérez'));
+      expect(attachEmailToGuest).toHaveBeenCalledWith({ email: 'lucia@example.com', name: '  Lucía Pérez ' });
+      expect(navigation.replace).toHaveBeenCalledWith('LeagueBoard', { leagueId: 'L1' });
+    });
+
+    test('an email already pending confirmation is not sent again', async () => {
+      mockAuth.user = { id: 'g1', is_anonymous: true, email: null, new_email: 'lucia@example.com' };
+      loadProfile.mockResolvedValue({ handicap: null, displayName: 'Lucía' });
+      const { getByText, getByLabelText } = render(wrap(<JoinLeagueScreen navigation={navigation} route={route} />));
+      await waitFor(() => expect(getByLabelText('Name').props.value).toBe('Lucía'));
+      expect(getByLabelText('Email').props.value).toBe('lucia@example.com');
+      fireEvent.press(getByText('Join El Club del Mulligan'));
+      await waitFor(() => expect(store.joinLeague).toHaveBeenCalledWith('MULL-7Q4', 22.5, 'Lucía'));
+      expect(attachEmailToGuest).not.toHaveBeenCalled();
+    });
+
+    test('email already registered: shows the log-in error; the link signs the guest out to the account tab', async () => {
+      attachEmailToGuest.mockRejectedValue(Object.assign(new Error('already registered'), { code: 'email_exists' }));
+      const { getByText, getByLabelText } = render(wrap(<JoinLeagueScreen navigation={navigation} route={route} />));
+      await waitFor(() => getByLabelText('Name'));
+      fireEvent.changeText(getByLabelText('Name'), 'Lucía');
+      fireEvent.changeText(getByLabelText('Email'), 'taken@example.com');
+      fireEvent.press(getByText('Join El Club del Mulligan'));
+      await waitFor(() => getByText('Log in instead'));
+      expect(store.joinLeague).not.toHaveBeenCalled();
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      fireEvent.press(getByText('Log in instead'));
+      // Confirm first: nothing signed out until "Log in" is chosen.
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Log in to your account?',
+        "You're playing as a guest on this phone. Logging in leaves the guest session, and anything you did as a guest stays behind.",
+        expect.any(Array),
+      );
+      expect(supabase.auth.signOut).not.toHaveBeenCalled();
+      const buttons = alertSpy.mock.calls[0][2];
+      buttons.find((b) => b.text === 'Log in').onPress();
+      expect(supabase.auth.signOut).toHaveBeenCalled();
+      expect(handoff.consumeLoginTab()).toBe(true);
+      alertSpy.mockRestore();
+    });
+
+    test('"I have an account" asks first; "Stay as guest" keeps the guest signed in', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const { getByText, getByLabelText } = render(wrap(<JoinLeagueScreen navigation={navigation} route={route} />));
+      await waitFor(() => getByLabelText('Name'));
+      fireEvent.press(getByText('I have an account — log in'));
+      expect(alertSpy).toHaveBeenCalledTimes(1);
+      const [title, , buttons] = alertSpy.mock.calls[0];
+      expect(title).toBe('Log in to your account?');
+      expect(buttons.map((b) => b.text)).toEqual(['Stay as guest', 'Log in']);
+      buttons.find((b) => b.text === 'Stay as guest').onPress?.();
+      expect(supabase.auth.signOut).not.toHaveBeenCalled();
+      expect(handoff.consumeLoginTab()).toBe(false);
+      alertSpy.mockRestore();
+    });
+
+    test('a throttled confirmation email still joins', async () => {
+      attachEmailToGuest.mockResolvedValue('throttled');
+      const { getByText, getByLabelText } = render(wrap(<JoinLeagueScreen navigation={navigation} route={route} />));
+      await waitFor(() => getByLabelText('Name'));
+      fireEvent.changeText(getByLabelText('Name'), 'Lucía');
+      fireEvent.changeText(getByLabelText('Email'), 'lucia@example.com');
+      fireEvent.press(getByText('Join El Club del Mulligan'));
+      await waitFor(() => expect(store.joinLeague).toHaveBeenCalledWith('MULL-7Q4', 22.5, 'Lucía'));
+    });
+  });
+
+  test('right after joining from the invite screen it goes straight to the board', async () => {
+    store.getLeagueByCode.mockResolvedValue({ ...SUMMARY, isMember: true });
+    handoff.markJustJoined('mull-7q4');
+    render(wrap(<JoinLeagueScreen navigation={navigation} route={route} />));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('LeagueBoard', { leagueId: 'L1' }));
   });
 });
