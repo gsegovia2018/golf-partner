@@ -76,6 +76,11 @@ export default function LeagueBoardScreen({ navigation, route }) {
       </View>
       <View style={s.headerRight}>
         <IconButton
+          icon="bar-chart-2"
+          onPress={() => navigation.navigate('LeagueStats', { leagueId })}
+          accessibilityLabel="Stats"
+        />
+        <IconButton
           icon="users"
           onPress={() => navigation.navigate('LeagueMembers', { leagueId })}
           accessibilityLabel="Members and handicaps"

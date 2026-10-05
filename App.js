@@ -37,6 +37,7 @@ import LeagueMarkerQRScreen from './src/screens/LeagueMarkerQRScreen';
 import JoinLeagueScreen from './src/screens/JoinLeagueScreen';
 import LeagueCreateScreen from './src/screens/LeagueCreateScreen';
 import LeagueBoardScreen from './src/screens/LeagueBoardScreen';
+import LeagueStatsScreen from './src/screens/LeagueStatsScreen';
 import LeagueMembersScreen from './src/screens/LeagueMembersScreen';
 import LeagueSettingsScreen from './src/screens/LeagueSettingsScreen';
 import LeagueFinalScreen from './src/screens/LeagueFinalScreen';
@@ -370,6 +371,7 @@ function AppNavigator() {
         <Stack.Screen name="LeagueCreate" component={LeagueCreateScreen} />{/* stepped wizard — creates a league, then offers the invite code, link and QR */}
         <Stack.Screen name="JoinLeague" component={JoinLeagueScreen} />{/* /league/:code */}
         <Stack.Screen name="LeagueBoard" component={LeagueBoardScreen} />{/* reached with { leagueId } */}
+        <Stack.Screen name="LeagueStats" component={LeagueStatsScreen} />{/* honours, leaders, season grid, rivals — { leagueId } */}
         <Stack.Screen name="LeagueMembers" component={LeagueMembersScreen} />
         <Stack.Screen name="LeagueSettings" component={LeagueSettingsScreen} />
         <Stack.Screen name="LeagueFinal" component={LeagueFinalScreen} />{/* admin: extra strokes per place, then Setup — { leagueId } */}
