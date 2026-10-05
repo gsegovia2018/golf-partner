@@ -8,6 +8,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import WizardProgress from '../components/setup/WizardProgress';
 import WizardNav from '../components/setup/WizardNav';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
+import DateField from '../components/DateField';
 import { wizardSteps, isStepValid } from './setupWizard';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -195,12 +196,9 @@ export default function LeagueCreateScreen({ navigation }) {
       <Text style={s.fieldLabel}>League name</Text>
       {input({ placeholder: 'El Club del Mulligan', value: name, onChangeText: setName, autoFocus: false })}
       <Text style={s.fieldLabel}>Season starts</Text>
-      {input({ placeholder: 'YYYY-MM-DD', value: seasonStart, onChangeText: setSeasonStart, autoCapitalize: 'none' })}
+      <DateField label="Season starts" value={seasonStart} onChange={setSeasonStart} />
       <Text style={s.fieldLabel}>Season ends</Text>
-      {input({ placeholder: 'YYYY-MM-DD', value: seasonEnd, onChangeText: setSeasonEnd, autoCapitalize: 'none' })}
-      {(!startIso || !endIso) && (
-        <Text style={s.errorText}>Use the format YYYY-MM-DD, for example 2026-12-31.</Text>
-      )}
+      <DateField label="Season ends" value={seasonEnd} onChange={setSeasonEnd} min={startIso || undefined} />
       {startIso && endIso && startIso > endIso && (
         <Text style={s.errorText}>The season must end after it starts.</Text>
       )}

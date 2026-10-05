@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
+import DateField from '../components/DateField';
 import CourseTeePicker from '../components/league/CourseTeePicker';
 import { makeOffAppStyles } from '../components/league/offAppStyles';
 import { ScorecardTable } from '../components/scorecard/GridView';
@@ -90,7 +91,7 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
 
   function next() {
     setProblem(null);
-    if (!playedOn) { setProblem('Enter the date as YYYY-MM-DD.'); return; }
+    if (!playedOn) { setProblem('Pick the date you played.'); return; }
     navigation.navigate('LeagueAddProof', {
       leagueId, cardId, snapshot, playedOn, strokes, leagueHandicap,
     });
@@ -132,14 +133,12 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
         {!cardId && <CourseTeePicker navigation={navigation} value={pick} onChange={setPick} />}
 
         <Text style={s.fieldLabel}>Date played</Text>
-        <TextInput
-          style={s.input}
+        <DateField
+          label="Date played"
           value={dateText}
-          onChangeText={setDateText}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={theme.text.muted}
-          autoCapitalize="none"
-          accessibilityLabel="Date played"
+          onChange={setDateText}
+          min={`${(card?.month ? String(card.month).slice(0, 7) : localDateText().slice(0, 7))}-01`}
+          max={localDateText()}
         />
 
         {course && (

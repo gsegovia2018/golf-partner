@@ -5,6 +5,7 @@ import {
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import PullToRefresh from '../components/PullToRefresh';
+import DateField from '../components/DateField';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
@@ -196,8 +197,13 @@ export default function LeagueSettingsScreen({ navigation, route }) {
         {isAdmin && !archived ? (
           <View style={s.card}>
             {field('League name', { value: name, onChangeText: setName })}
-            {field('Season starts', { value: seasonStart, onChangeText: setSeasonStart, placeholder: 'YYYY-MM-DD', autoCapitalize: 'none' })}
-            {field('Season ends', { value: seasonEnd, onChangeText: setSeasonEnd, placeholder: 'YYYY-MM-DD', autoCapitalize: 'none' })}
+            <Text style={s.fieldLabel}>Season starts</Text>
+            <DateField label="Season starts" value={seasonStart} onChange={setSeasonStart} />
+            <Text style={s.fieldLabel}>Season ends</Text>
+            <DateField label="Season ends" value={seasonEnd} onChange={setSeasonEnd} min={startIso || undefined} />
+            {startIso && endIso && startIso > endIso && (
+              <Text style={s.hint}>The season must end on or after it starts.</Text>
+            )}
             {field('Points table (1st, 2nd, 3rd…)', { value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none' })}
             {field('Handicap cap', { value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}
             {field('Entry fee (€)', { value: feeText, onChangeText: setFeeText, keyboardType: 'decimal-pad', placeholder: '0' })}
