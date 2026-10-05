@@ -96,6 +96,7 @@ describe('monthHonours', () => {
       card('b'), card('c'),
     ];
     const hole = monthHonours(cards, members).find((h) => h.key === 'hole');
+    expect(monthHonours(cards, members, hole.userId).find((h) => h.key === 'hole').text).toMatch(/^You, /);
     expect(hole.text).toBe('Ana, a 2 on the par-4 1st at Los Arqueros with a stroke · 5 pts');
   });
 
@@ -135,6 +136,7 @@ describe('monthHonours', () => {
     const keys = monthHonours(cards, members).map((h) => h.key);
     expect(keys).toContain('card');
     const hole = monthHonours(cards, members).find((h) => h.key === 'hole');
+    expect(monthHonours(cards, members, hole.userId).find((h) => h.key === 'hole').text).toMatch(/^You, /);
     expect(hole.userId).toBe('c');
   });
 });

@@ -114,7 +114,7 @@ export default function LeagueStatsScreen({ navigation, route }) {
     const live = picked === curKey;
     const cards = cardsByMonth[picked] ?? [];
     const sum = monthSummary(cards);
-    const honours = monthHonours(cards, members);
+    const honours = monthHonours(cards, members, meId);
     const lastDay = new Date(Number(picked.slice(0, 4)), Number(picked.slice(5, 7)), 0).getDate();
     const meta = live
       ? `${sum.cards} of ${active.length} cards · settles ${lastDay} ${monthName(picked, true)}`

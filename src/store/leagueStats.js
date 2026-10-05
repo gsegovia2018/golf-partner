@@ -81,10 +81,10 @@ function maxBy(list, key) {
 // The month's honours, in display order: [{ key, title, text, userId }].
 // [] with fewer than MIN_HONOUR_CARDS confirmed cards. An honour whose data is
 // missing (no tee times, nobody over par by 3) is left out.
-export function monthHonours(cards, members) {
+export function monthHonours(cards, members, meId = null) {
   const done = confirmed(cards);
   if (done.length < MIN_HONOUR_CARDS) return [];
-  const name = (userId) => memberName(members, userId, null);
+  const name = (userId) => memberName(members, userId, meId);
   const withHoles = readable(done);
   const honours = [];
   const add = (key, title, text, userId) => honours.push({ key, title, text, userId });
