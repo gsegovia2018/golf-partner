@@ -49,4 +49,17 @@ describe('LeaderboardCard', () => {
     const { queryByText } = render(wrap(<LeaderboardCard title="T" rows={ROWS} footer={null} />));
     expect(queryByText('Final in December')).toBeNull();
   });
+
+  test('sections render a heading over their rows or body, with the row detail and gold sub', () => {
+    const { getByText } = render(wrap(
+      <LeaderboardCard
+        title="T"
+        sections={[
+          { key: 'a', label: 'Confirmed · 1', icon: 'check', gold: true, rows: [{ key: 'x', place: 1, name: 'Ann', points: '38 pts', sub: '+500', subGold: true, detail: 'Olivar · marker by QR' }] },
+          { key: 'b', label: 'No card yet · 1', icon: 'user-x', body: <Text>Bob</Text> },
+        ]}
+      />,
+    ));
+    ['Confirmed · 1', 'Ann', 'Olivar · marker by QR', '+500', 'No card yet · 1', 'Bob'].forEach((x) => expect(getByText(x)).toBeTruthy());
+  });
 });

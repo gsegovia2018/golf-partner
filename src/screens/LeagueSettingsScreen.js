@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Switch, Alert,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import PullToRefresh from '../components/PullToRefresh';
@@ -17,7 +18,12 @@ import {
 import {
   parseIsoDate, parsePointsTable, formatPointsTable, parseFeeCents,
 } from '../store/leagueDraft';
-import { formatEuros, memberLabel, voteThreshold } from '../store/leagueView';
+import {
+  formatEuros, memberLabel, voteThreshold, monthName,
+} from '../store/leagueView';
+import {
+  getPendingLeagueFinals, subscribePendingLeagueFinals, flushPendingLeagueFinals,
+} from '../lib/leagueFinalPending';
 import {
   LEAGUE_NOTIFICATION_ROWS, resolveLeaguePrefs, leaguePrefsPatch,
 } from '../store/leagueNotificationPrefs';
@@ -26,8 +32,8 @@ function fail(e) {
   Alert.alert('Error', e?.message || 'Something went wrong');
 }
 
-// Rules (admin edits), fees and roles (admin), notification switches and
-// leave / archive. Everyone sees the rules; only an admin can change them.
+// Links to Members and the Final, rules (admin edits), fees and roles (admin),
+// notification switches and leave / archive. Everyone sees the rules; only an admin can change them.
 export default function LeagueSettingsScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -60,6 +66,29 @@ export default function LeagueSettingsScreen({ navigation, route }) {
     setCapText(String(l.handicapCap));
     setFeeText(l.entryFeeCents ? String(l.entryFeeCents / 100) : '');
   }, [data]);
+
+  // A Final started on this device whose link to the league is still being
+  // retried (see lib/leagueFinalPending). Flush on focus; reload once it lands.
+  const [pendingFinal, setPendingFinal] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    let had = false;
+    const apply = (list) => {
+      if (!alive) return;
+      const mine = list.find((x) => x.leagueId === leagueId) ?? null;
+      setPendingFinal(mine);
+      if (had && !mine) reload(); // the link landed: pick up the server's Final
+      had = !!mine;
+    };
+    const unsub = subscribePendingLeagueFinals(apply);
+    const onFocus = async () => {
+      apply(await getPendingLeagueFinals());
+      await flushPendingLeagueFinals();
+    };
+    onFocus();
+    const off = navigation?.addListener?.('focus', onFocus);
+    return () => { alive = false; unsub(); if (typeof off === 'function') off(); };
+  }, [navigation, leagueId, reload]);
 
   const header = (
     <View style={s.header}>
@@ -182,6 +211,38 @@ export default function LeagueSettingsScreen({ navigation, route }) {
     </>
   );
 
+  // The December Final: the admin sets it up once; afterwards it is a link to
+  // the tournament for everyone.
+  const finalId = data.final?.tournamentId ?? pendingFinal?.tournamentId ?? null;
+  const finalDate = data.final?.createdAt
+    ? new Date(data.final.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    : null;
+  let finalRow = null;
+  if (finalId) {
+    finalRow = {
+      title: ['The Final', finalDate].filter(Boolean).join(' · '),
+      sub: data.final ? 'Open' : 'Linking the Final to the league…',
+      onPress: () => navigation.navigate('Tournament', { tournamentId: finalId, viewMode: 'tournament' }),
+    };
+  } else if (isAdmin && !archived) {
+    finalRow = {
+      title: 'Set up the Final',
+      sub: `${monthName(league.seasonEnd)} · extra strokes from the standings`,
+      onPress: () => navigation.navigate('LeagueFinal', { leagueId }),
+    };
+  }
+  const openVotes = (data.votes ?? []).length;
+  const membersSub = isAdmin
+    ? `${active.length} members · cap ${league.handicapCap}`
+    : (me?.leagueHandicap != null ? `Your league handicap ${Number(me.leagueHandicap).toFixed(1)}` : 'Handicaps and votes');
+  const linkRows = [
+    {
+      key: 'members', icon: 'users', title: 'Members and handicaps', sub: membersSub, pill: openVotes > 0 ? `${openVotes} ${openVotes === 1 ? 'vote' : 'votes'} open` : null,
+      onPress: () => navigation.navigate('LeagueMembers', { leagueId }),
+    },
+    finalRow && { key: 'final', icon: 'flag', ...finalRow },
+  ].filter(Boolean);
+
   const readRow = (label, value, last) => (
     <View style={[s.readRow, !last && s.rowDivider]}>
       <Text style={s.readLabel}>{label}</Text>
@@ -193,6 +254,27 @@ export default function LeagueSettingsScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {header}
       <PullToRefresh style={{ flex: 1 }} contentContainerStyle={s.content} refreshing={refreshing} onRefresh={refresh}>
+        <Text style={s.sectionLabel}>LEAGUE</Text>
+        <View style={[s.card, { paddingVertical: 4 }]}>
+          {linkRows.map((r, i) => (
+            <TouchableOpacity
+              key={r.key}
+              style={[s.linkRow, i < linkRows.length - 1 && s.rowDivider]}
+              onPress={r.onPress}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+            >
+              <Feather name={r.icon} size={16} color={theme.text.primary} style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.readLabel}>{r.title}</Text>
+                <Text style={s.readValue}>{r.sub}</Text>
+              </View>
+              {!!r.pill && <View style={s.pill}><Text style={s.pillText}>{r.pill}</Text></View>}
+              <Feather name="chevron-right" size={18} color={theme.text.muted} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <Text style={s.sectionLabel}>RULES</Text>
         {isAdmin && !archived ? (
           <View style={s.card}>
@@ -331,6 +413,9 @@ function makeStyles(theme) {
     errorText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 13, lineHeight: 18, marginBottom: 8 },
     hint: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, lineHeight: 17, marginVertical: 8 },
 
+    linkRow: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingVertical: 12 },
+    pill: { backgroundColor: theme.accent.light, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, marginRight: 6 },
+    pillText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 11 },
     readRow: { paddingVertical: 12 },
     readLabel: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14 },
     readValue: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },

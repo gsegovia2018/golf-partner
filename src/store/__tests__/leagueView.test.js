@@ -1,6 +1,6 @@
 import {
   monthName, ordinal, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel,
-  positionText, cardStatus, monthRows, leagueSummary, viewableCards,
+  positionText, cardStatus, monthRows, leagueSummary, viewableCards, monthBoard, collapseSeasonRows,
 } from '../leagueView';
 
 const NOW = new Date(2026, 9, 4, 12, 0);
@@ -97,4 +97,89 @@ test('viewableCards: scored cards only, in monthRows order, no void or left memb
   };
   expect(viewableCards(members, cardsByMonth, '2026-10').map((c) => c.userId)).toEqual(['b', 'a']);
   expect(viewableCards(members, cardsByMonth, '2026-09')).toEqual([]);
+});
+
+describe('monthBoard', () => {
+  const m = (userId, extra = {}) => ({ userId, leftAt: null, ...extra });
+  const members = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => m(id));
+  const table = [500, 300, 190];
+  const card = (userId, status, points, extra = {}) => ({ userId, status, points, source: 'app', ...extra });
+  const cards = {
+    '2026-10': [
+      card('a', 'confirmed', 36, { confirmation: 'qr' }),
+      card('b', 'confirmed', 38, { confirmation: 'partner' }),
+      card('c', 'confirmed', 36, { confirmation: 'photo' }),
+      card('d', 'submitted', 40),
+      card('e', 'submitted', 30, { source: 'offapp' }),
+      card('f', 'announced', null),
+      card('g', 'void', 20),
+    ],
+  };
+
+  test('groups the month and ranks only the confirmed, ties sharing table points', () => {
+    const board = monthBoard(members, cards, '2026-10', table);
+    expect(board.confirmed.map((r) => [r.member.userId, r.place, r.isTie, r.seasonPoints, r.how])).toEqual([
+      ['b', 1, false, 500, 'app partner'],
+      ['a', 2, true, 245, 'marker by QR'],
+      ['c', 2, true, 245, 'signed card photo'],
+    ]);
+    expect(board.waiting.map((r) => [r.member.userId, r.reason])).toEqual([
+      ['d', "marker hasn't scanned the QR yet"],
+      ['e', 'needs the card photo'],
+    ]);
+    expect(board.onCourse.map((r) => r.member.userId)).toEqual(['f']);
+    expect(board.noCard.map((x) => x.userId)).toEqual(['g']);
+  });
+
+  test('playing sorts before announced; an off-app card with proof is waiting for the check', () => {
+    const board = monthBoard(members, {
+      '2026-10': [card('a', 'announced', null), card('b', 'playing', null),
+        card('c', 'submitted', 31, { source: 'offapp', proofPath: 'p.jpg' })],
+    }, '2026-10', table);
+    expect(board.onCourse.map((r) => r.member.userId)).toEqual(['b', 'a']);
+    expect(board.waiting[0].reason).toBe('waiting for the check');
+    expect(board.confirmed).toEqual([]);
+  });
+
+  test('a member who left only appears with a confirmed card; an empty month is all noCard', () => {
+    const withLeft = [m('a'), m('x', { leftAt: '2026-09-01' })];
+    expect(monthBoard(withLeft, { '2026-10': [card('x', 'confirmed', 33)] }, '2026-10', table).confirmed.map((r) => r.member.userId))
+      .toEqual(['x']);
+    expect(monthBoard(withLeft, {}, '2026-10', table).noCard.map((x) => x.userId)).toEqual(['a']);
+  });
+});
+
+describe('collapseSeasonRows', () => {
+  const rows = (n, me) => Array.from({ length: n }, (_, i) => ({ key: `p${i + 1}`, place: i + 1, isMe: i + 1 === me }));
+  const keys = (r) => r.rows.map((x) => (x.gap ? '…' : x.key));
+
+  test('short tables come back whole', () => {
+    expect(collapseSeasonRows(rows(11, 3)).hidden).toBe(0);
+    expect(collapseSeasonRows(rows(11, 3)).rows).toHaveLength(11);
+  });
+
+  test('top 8 only when I am in it', () => {
+    const r = collapseSeasonRows(rows(18, 3));
+    expect(keys(r)).toEqual(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8']);
+    expect(r.hidden).toBe(10);
+  });
+
+  test('a gap, then my row with its neighbours, compact', () => {
+    const r = collapseSeasonRows(rows(18, 14));
+    expect(keys(r)).toEqual(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', '…', 'p13', 'p14', 'p15']);
+    expect(r.rows.find((x) => x.key === 'p14').compact).toBe(true);
+    expect(r.rows.find((x) => x.key === 'p8').compact).toBeUndefined();
+  });
+
+  test('last place: gap only before my rows; 9th joins the top without a gap', () => {
+    expect(keys(collapseSeasonRows(rows(18, 18))).slice(-4)).toEqual(['p8', '…', 'p17', 'p18']);
+    expect(keys(collapseSeasonRows(rows(18, 9)))).toEqual(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10']);
+  });
+
+  test('expanded shows everyone, compact past 8th', () => {
+    const r = collapseSeasonRows(rows(18, 14), { expanded: true });
+    expect(r.rows).toHaveLength(18);
+    expect(r.hidden).toBe(0);
+    expect(r.rows[8].compact).toBe(true);
+  });
 });

@@ -1,7 +1,7 @@
 // League screens: presentational helpers (no I/O). Wording and number
 // formats live here so the Play tab, board and members screens agree.
 import { cardMonth } from './leagueRules';
-import { seasonTable } from './leagueStandings';
+import { seasonTable, monthResults } from './leagueStandings';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -114,6 +114,51 @@ export function viewableCards(members, cardsByMonth, month) {
     .filter((c) => c && (c.status === 'confirmed' || c.status === 'submitted') && c.holes);
 }
 
+const HOW_CONFIRMED = {
+  partner: 'app partner', qr: 'marker by QR', photo: 'signed card photo', official: 'official result',
+};
+
+// Why a submitted card is not counting yet.
+function waitingReason(card) {
+  if (card.source === 'offapp') return card.proofPath ? 'waiting for the check' : 'needs the card photo';
+  return "marker hasn't scanned the QR yet";
+}
+
+// The month board, grouped for the board's month view. Only the confirmed
+// group ranks; `seasonPoints` is the table points the place earns if the
+// month ended now. waiting = submitted, onCourse = playing or announced
+// (playing first), noCard = active members with nothing this month.
+export function monthBoard(members, cardsByMonth, month, pointsTable) {
+  const active = (members ?? []).filter((m) => !m.leftAt);
+  const cards = (cardsByMonth?.[month] ?? []).filter((c) => c.status !== 'void');
+  const bestCard = (userId, ok) => cards.filter((c) => c.userId === userId && ok(c))
+    .sort((a, b) => (b.points ?? 0) - (a.points ?? 0))[0] ?? null;
+  const confirmed = [];
+  for (const r of monthResults(cards, active, pointsTable)) {
+    const member = (members ?? []).find((m) => m.userId === r.userId);
+    if (r.place == null || !member) continue;
+    const card = bestCard(r.userId, (c) => c.status === 'confirmed');
+    confirmed.push({
+      member, card, place: r.place, isTie: r.isTie, cardPoints: r.cardPoints, seasonPoints: r.seasonPoints,
+      how: HOW_CONFIRMED[card.confirmation] ?? null,
+    });
+  }
+  const placed = new Set(confirmed.map((r) => r.member.userId));
+  const waiting = [];
+  const onCourse = [];
+  const noCard = [];
+  for (const member of active) {
+    if (placed.has(member.userId)) continue;
+    const card = bestCard(member.userId, () => true);
+    if (card?.status === 'submitted') waiting.push({ member, card, reason: waitingReason(card) });
+    else if (card?.status === 'playing' || card?.status === 'announced') onCourse.push({ member, card });
+    else noCard.push(member);
+  }
+  waiting.sort((a, b) => (b.card.points ?? 0) - (a.card.points ?? 0));
+  onCourse.sort((a, b) => (a.card.status === 'playing' ? 0 : 1) - (b.card.status === 'playing' ? 0 : 1));
+  return { confirmed, waiting, onCourse, noCard };
+}
+
 // Days left in the calendar month, for the "27 days left" caption.
 export function daysLeftInMonth(now = new Date()) {
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -164,4 +209,21 @@ export function leagueSummary(snapshot, meId) {
   const { league, members, cardsByMonth } = snapshot;
   const table = seasonTable((members ?? []).filter((m) => !m.leftAt), cardsByMonth, league.pointsTable);
   return { table, position: positionText(table, meId, cardsByMonth) };
+}
+
+// Season table on a long league: the top `top` rows, then a gap and my row
+// with its neighbours when I'm further down. Rows past `top` are marked
+// compact either way. Short tables (up to top + 3) come back whole.
+export function collapseSeasonRows(rows, { top = 8, expanded = false } = {}) {
+  const list = (rows ?? []).map((r, i) => (i >= top ? { ...r, compact: true } : r));
+  if (expanded || list.length <= top + 3) return { rows: list, hidden: 0 };
+  const me = list.findIndex((r) => r.isMe);
+  const keep = new Set(list.map((_, i) => i).filter((i) => i < top || (me >= top && Math.abs(i - me) <= 1)));
+  const out = [];
+  list.forEach((r, i) => {
+    if (!keep.has(i)) return;
+    if (i > 0 && !keep.has(i - 1)) out.push({ key: `gap-${i}`, gap: true });
+    out.push(r);
+  });
+  return { rows: out, hidden: list.length - keep.size };
 }
