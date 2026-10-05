@@ -106,6 +106,14 @@ export function monthRows(members, cardsByMonth, month, now = new Date()) {
   return rows.sort((a, b) => rank(a) - rank(b) || (b.card?.points ?? 0) - (a.card?.points ?? 0));
 }
 
+// The month's cards that can be opened read-only: scored (submitted or
+// confirmed, so `holes` is set), never void. Same order as monthRows.
+export function viewableCards(members, cardsByMonth, month) {
+  return monthRows(members, cardsByMonth, month)
+    .map((r) => r.card)
+    .filter((c) => c && (c.status === 'confirmed' || c.status === 'submitted') && c.holes);
+}
+
 // Days left in the calendar month, for the "27 days left" caption.
 export function daysLeftInMonth(now = new Date()) {
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
