@@ -376,7 +376,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
                   onPress: () => openCard(curKey, r.member.userId),
                   activeOpacity: 0.7,
                   accessibilityRole: 'button',
-                  accessibilityLabel: `${nameOf(r.member.userId)}'s card`,
+                  accessibilityLabel: r.member.userId === meId ? 'Your card' : `${nameOf(r.member.userId)}'s card`,
                 } : {})}
               >
                 <View style={{ flex: 1 }}>

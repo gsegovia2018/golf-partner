@@ -9,7 +9,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { getLeagueProofUrl } from '../store/leagueStore';
-import { dayLabel } from '../store/leagueOffApp';
+import { dayLabel, courseFromSnapshot } from '../store/leagueOffApp';
 import { monthName, formatPoints, memberName, viewableCards } from '../store/leagueView';
 
 // A member's card, read-only, with ‹ › to flick through that month's cards
@@ -109,7 +109,7 @@ export default function LeagueCardScreen({ navigation, route }) {
         {!!course?.holes && (
           <ScorecardTable
             round={{
-              holes: course.holes,
+              holes: courseFromSnapshot(course).holes,
               courseName: course.name,
               scoringMode: 'stableford',
               playerHandicaps: { [card.userId]: card.playingHandicap },
@@ -119,6 +119,7 @@ export default function LeagueCardScreen({ navigation, route }) {
             editable={() => false}
             mode="stableford"
             meId={card.userId}
+            rowLabel={who}
           />
         )}
 

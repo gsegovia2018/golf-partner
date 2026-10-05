@@ -39,7 +39,7 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows, f
         return (
           <Row
             key={row.key ?? `${row.place}-${row.name}-${i}`}
-            {...(row.onPress ? { onPress: row.onPress, activeOpacity: 0.7, accessibilityRole: 'button', accessibilityLabel: `${row.name}'s card` } : {})}
+            {...(row.onPress ? { onPress: row.onPress, activeOpacity: 0.7, accessibilityRole: 'button', accessibilityLabel: row.isMe ? 'Your card' : `${row.name}'s card` } : {})}
             style={[s.mastersRow, isFirstPlace && s.mastersRowFirst, row.isMe && s.mastersRowMe, i === rows.length - 1 && { borderBottomWidth: 0 }]}
           >
             <View style={[s.mastersRankBadge, { backgroundColor: rankBg }]}>

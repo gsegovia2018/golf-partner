@@ -13,6 +13,7 @@ jest.mock('../../store/leagueStore', () => ({
 const store = require('../../store/leagueStore');
 
 const MONTH = '2025-10';
+// The DB snapshot shape ({ n, par, si }), not the scorecard's.
 const holes = Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1 }));
 const strokes = Object.fromEntries(holes.map((h) => [String(h.n), 5]));
 const member = (userId, displayName) => ({ userId, displayName, role: 'member', leftAt: null, leagueHandicap: 18 });
@@ -44,13 +45,18 @@ describe('LeagueCardScreen', () => {
       card('javi', 'confirmed', 38, { confirmedByName: 'Nacho' }),
       card('nacho', 'submitted', 30),
     ]));
-    const { getByText, getByLabelText, queryByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
+    const { getByText, getAllByText, getByLabelText, queryByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
     await waitFor(() => getByText('Javi · October card'));
     expect(getByText('1 of 2 October cards')).toBeTruthy();
     expect(getByText('Confirmed')).toBeTruthy();
     expect(getByText('Golf Olivar · Yellow')).toBeTruthy();
     expect(getByText('Playing handicap 18 · Gross 90')).toBeTruthy();
     expect(getByText('Confirmed by Nacho')).toBeTruthy();
+    // The grid reads the real DB hole shape: numbers, SI and strokes render, labelled with the member.
+    expect(getAllByText('18').length).toBeGreaterThan(0);
+    expect(getAllByText('5').length).toBeGreaterThan(0);
+    expect(getAllByText('Javi').length).toBeGreaterThan(0);
+    expect(queryByText('You')).toBeNull();
     expect(getByLabelText('Previous card').props.accessibilityState.disabled).toBe(true);
 
     fireEvent.press(getByLabelText('Next card'));
@@ -66,8 +72,9 @@ describe('LeagueCardScreen', () => {
 
   test('my own card is titled "You"', async () => {
     store.getLeague.mockResolvedValue(snapshot([card('me', 'confirmed', 36)]));
-    const { getByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('me')} />));
+    const { getByText, getAllByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('me')} />));
     await waitFor(() => getByText('You · October card'));
+    expect(getAllByText('You').length).toBeGreaterThan(0);
   });
 
   test('off-app card: added-after-the-round badge, not announced, and the signed photo', async () => {
