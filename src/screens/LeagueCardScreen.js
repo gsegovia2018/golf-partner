@@ -4,13 +4,16 @@ import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import { makeOffAppStyles } from '../components/league/offAppStyles';
-import { ScorecardTable } from '../components/scorecard/GridView';
+import DifferentialBreakdown from '../components/league/DifferentialBreakdown';
+import CardHoleGrid from '../components/league/CardHoleGrid';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { getLeagueProofUrl } from '../store/leagueStore';
-import { dayLabel, courseFromSnapshot } from '../store/leagueOffApp';
-import { monthName, formatPoints, memberName, viewableCards } from '../store/leagueView';
+import { dayLabel } from '../store/leagueOffApp';
+import {
+  monthName, formatNetDiff, netDiffTone, memberName, viewableCards, cardBreakdown,
+} from '../store/leagueView';
 
 // A member's card, read-only, with ‹ › to flick through that month's cards
 // (same order as the board). Params: { leagueId, month ('YYYY-MM'), userId }.
@@ -61,7 +64,16 @@ export default function LeagueCardScreen({ navigation, route }) {
   const badge = card.status === 'confirmed' ? 'Confirmed' : offApp ? 'Added after the round' : 'Submitted';
   const course = card.course;
   const played = card.playedOn ? dayLabel(card.playedOn) : null;
-  const subline = [course?.name, course?.tee, played].filter(Boolean).join(' · ');
+  const breakdown = cardBreakdown(card);
+  const teeText = course?.tee
+    ? (breakdown.rated ? `${course.tee} tees, slope ${breakdown.slope} · CR ${breakdown.rating}` : course.tee)
+    : null;
+  const subline = [course?.name, teeText, played].filter(Boolean).join(' · ');
+  const tone = netDiffTone(card.netDifferential);
+  const valueColor = tone === 'better' ? theme.scoreColor('excellent') : tone === 'worse' ? theme.destructive : theme.text.primary;
+  const valueText = card.netDifferential != null ? formatNetDiff(card.netDifferential) : 'Unrated';
+  const valueKey = card.netDifferential == null ? 'not ranked'
+    : `${card.netDifferential === 0 ? 'with' : 'than'} league handicap${card.leagueHandicap != null ? ` ${Number(card.leagueHandicap).toFixed(1)}` : ''}`;
   const atStart = idx === 0;
   const atEnd = idx === cards.length - 1;
   const go = (step) => setShownUser(cards[idx + step].userId);
@@ -91,36 +103,27 @@ export default function LeagueCardScreen({ navigation, route }) {
       <ScrollView contentContainerStyle={s.content}>
         <View style={s.card}>
           <View style={l.headRow}>
-            <View>
-              <Text style={l.points}>{card.points != null ? formatPoints(card.points) : '—'}</Text>
-              <Text style={l.pointsLabel}>points</Text>
+            <View style={l.valueRow}>
+              <Text style={[l.value, { color: valueColor }]}>{valueText}</Text>
+              <Text style={l.valueKey}>{valueKey}</Text>
             </View>
             <View style={l.badge}><Text style={l.badgeText}>{badge}</Text></View>
           </View>
           {!!subline && <Text style={s.text}>{subline}</Text>}
           <Text style={s.text}>
             {[card.playingHandicap != null ? `Playing handicap ${card.playingHandicap}` : null,
-              card.gross != null ? `Gross ${card.gross}` : null].filter(Boolean).join(' · ')}
+              card.gross != null ? `Gross ${card.gross}` : null,
+              card.points != null ? `${card.points} pts` : null].filter(Boolean).join(' · ')}
           </Text>
           {!!card.confirmedByName && <Text style={s.text}>{`Confirmed by ${card.confirmedByName}`}</Text>}
           {card.notAnnounced && <Text style={s.text}>Not announced in the app</Text>}
         </View>
 
         {!!course?.holes && (
-          <ScorecardTable
-            round={{
-              holes: courseFromSnapshot(course).holes,
-              courseName: course.name,
-              scoringMode: 'stableford',
-              playerHandicaps: { [card.userId]: card.playingHandicap },
-            }}
-            players={[{ id: card.userId, name: who, handicap: card.playingHandicap }]}
-            scores={{ [card.userId]: card.holes }}
-            editable={() => false}
-            mode="stableford"
-            meId={card.userId}
-            rowLabel={who}
-          />
+          <>
+            <DifferentialBreakdown breakdown={breakdown} />
+            <CardHoleGrid perHole={breakdown.perHole} />
+          </>
         )}
 
         {offApp && !!card.proofPath && (
@@ -182,8 +185,9 @@ function makeStyles(theme) {
     arrowOff: { opacity: 0.3 },
     flickText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 12 },
     headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
-    points: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.primary, fontSize: 34, letterSpacing: -1 },
-    pointsLabel: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12 },
+    valueRow: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 8 },
+    value: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 28 },
+    valueKey: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 13 },
     badge: { backgroundColor: theme.bg.secondary, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
     badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 11 },
     photo: { width: '100%', height: 360, borderRadius: 10 },

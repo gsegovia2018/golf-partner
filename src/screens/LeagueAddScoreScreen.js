@@ -14,7 +14,7 @@ import { scoreCard } from '../store/leagueRules';
 import { parseIsoDate } from '../store/leagueDraft';
 import { lastDayOfMonth } from '../lib/calendar';
 import {
-  courseSnapshot, courseFromSnapshot, courseProblem, scoresComplete, applyStrokeText,
+  courseSnapshot, courseFromSnapshot, courseProblem, UNRATED_TEE_PROBLEM, scoresComplete, applyStrokeText,
   loadDraft, saveDraft, localDateText, timeLabel,
 } from '../store/leagueOffApp';
 
@@ -147,7 +147,9 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
 
         {course && (
           <>
-            {!!courseProblem(course) && <Text style={s.errorText}>{courseProblem(course)}</Text>}
+            {/* With the picker on screen, the unrated tee already has its own note. */}
+            {!!courseProblem(course) && (cardId || courseProblem(course) !== UNRATED_TEE_PROBLEM)
+              && <Text style={s.errorText}>{courseProblem(course)}</Text>}
             <ScorecardTable
               round={{
                 holes: course.holes,

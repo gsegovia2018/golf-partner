@@ -299,7 +299,7 @@ export default function MarkerCardScreen(props) {
           )}
 
           <Text style={s.footnote}>
-            {"You're confirming the strokes shown. No account needed. This code works once."}
+            {`You're confirming the strokes shown; ${card.playerFirstName ? `${card.playerFirstName}'s` : 'the'} league result is worked out from them once you do. No account needed. This code works once.`}
           </Text>
         </View>
       </ScrollView>

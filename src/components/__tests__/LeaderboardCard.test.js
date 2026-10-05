@@ -62,4 +62,15 @@ describe('LeaderboardCard', () => {
     ));
     ['Confirmed · 1', 'Ann', 'Olivar · marker by QR', '+500', 'No card yet · 1', 'Bob'].forEach((x) => expect(getByText(x)).toBeTruthy());
   });
+
+  test('a muted row still renders its value and sub', () => {
+    const { getByText } = render(wrap(
+      <LeaderboardCard
+        title="T"
+        rows={[{ key: 'x', place: null, isTie: false, name: 'Dani', points: 'unrated', sub: 'not ranked', muted: true }]}
+      />,
+    ));
+    expect(getByText('unrated')).toBeTruthy();
+    expect(getByText('not ranked')).toBeTruthy();
+  });
 });

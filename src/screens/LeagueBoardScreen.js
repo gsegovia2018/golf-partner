@@ -13,7 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { seasonTable, monthResults } from '../store/leagueStandings';
 import {
-  monthName, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard,
+  monthName, formatPoints, formatNetDiff, formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard,
   daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, viewableCards,
 } from '../store/leagueView';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
@@ -105,6 +105,8 @@ export default function LeagueBoardScreen({ navigation, route }) {
   let boardSections;
   let boardFooter = null;
   let boardMore = null;
+  // Confirmed cards on a tee with no slope/rating are listed, not ranked.
+  const unratedNote = (userIds) => `${userIds.length === 1 ? `${userIds[0] === meId ? 'Your' : `${nameOf(userIds[0])}'s`} card has` : `${userIds.length} cards have`} no slope or rating · shown, not ranked`;
   if (monthScope) {
     const left = daysLeftInMonth(now);
     boardTitle = `${curMonth.toUpperCase()} SO FAR · ${left === 0 ? 'LAST DAY' : `${left} ${left === 1 ? 'DAY' : 'DAYS'} LEFT`}`;
@@ -131,9 +133,11 @@ export default function LeagueBoardScreen({ navigation, route }) {
           ...rowOf(r.member),
           place: r.place,
           isTie: r.isTie,
-          points: String(r.cardPoints),
-          sub: r.seasonPoints > 0 ? `+${formatPoints(r.seasonPoints)}` : null,
-          subGold: true,
+          unranked: r.unrated,
+          muted: r.unrated,
+          points: r.unrated ? 'unrated' : formatNetDiff(r.netDifferential),
+          sub: r.unrated ? 'not ranked' : r.seasonPoints > 0 ? `+${formatPoints(r.seasonPoints)}` : null,
+          subGold: !r.unrated,
           detail: detailOf(r.card, r.card.course?.name, r.how),
         })),
       },
@@ -146,7 +150,8 @@ export default function LeagueBoardScreen({ navigation, route }) {
           place: null,
           unranked: true,
           muted: true,
-          points: r.card.points != null ? String(r.card.points) : '—',
+          points: r.card.netDifferential != null ? formatNetDiff(r.card.netDifferential)
+            : r.card.points != null ? String(r.card.points) : '—',
           sub: 'pending',
           detail: detailOf(r.card, r.card.course?.name, r.reason),
         })),
@@ -184,7 +189,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
         ),
       },
     ].filter(Boolean);
-    boardFooter = 'Gold = table points if the month ended today. The season table is one tap away on Season.';
+    const unratedNow = board.confirmed.filter((r) => r.unrated).map((r) => r.member.userId);
+    boardFooter = 'Gold = table points if the month ended today. The season table is one tap away on Season.'
+      + (unratedNow.length > 0 ? ` ${unratedNote(unratedNow)}` : '');
   } else if (activeScope === 'season' || !pastScopes.includes(activeScope)) {
     boardTitle = last ? `SEASON · AFTER ${monthName(last).toUpperCase()}` : 'SEASON';
     const seasonRows = table.map((r) => ({
@@ -205,16 +212,22 @@ export default function LeagueBoardScreen({ navigation, route }) {
   } else {
     boardTitle = `${monthName(activeScope).toUpperCase()} · RESULTS`;
     const canOpen = viewable(activeScope);
-    boardRows = monthResults(cardsByMonth[activeScope], active, league.pointsTable).map((r) => ({
+    const results = monthResults(cardsByMonth[activeScope], active, league.pointsTable);
+    boardRows = results.map((r) => ({
       key: r.userId,
       place: r.place,
       isTie: r.isTie,
       name: nameOf(r.userId),
-      points: r.place == null ? '—' : `${r.cardPoints} pts`,
-      sub: r.place == null ? null : `+${formatPoints(r.seasonPoints)}`,
+      points: r.unrated ? 'unrated' : r.place == null ? '—' : formatNetDiff(r.netDifferential),
+      sub: r.unrated ? 'not ranked' : r.place == null ? null : `+${formatPoints(r.seasonPoints)}`,
+      muted: !!r.unrated,
       isMe: r.userId === meId,
       onPress: canOpen.has(r.userId) ? () => openCard(activeScope, r.userId) : undefined,
     }));
+    const unrated = results.filter((r) => r.unrated).map((r) => r.userId);
+    boardFooter = unrated.length === 0
+      ? "Better or worse than each member's league handicap · ties share points"
+      : unratedNote(unrated);
   }
 
   const chipKeys = [...(archived ? [] : [curKey]), 'season', ...pastScopes];
@@ -244,6 +257,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
 
   const myCard = (cardsByMonth[curKey] ?? []).find((c) => c.userId === meId) ?? null;
   const mine = yourCardState(myCard);
+  // Better = the success green, worse = the danger red, level = plain text.
+  const netColor = (tone) => (tone === 'better' ? theme.scoreColor('excellent')
+    : tone === 'worse' ? theme.destructive : theme.text.primary);
 
   // My app card stuck before confirmation (left Validate, or no partner yet):
   // reopen Validate on its round. A submitted card goes straight to the check.
@@ -330,6 +346,11 @@ export default function LeagueBoardScreen({ navigation, route }) {
       body = (
         <>
           <Text style={s.cardText}>
+            {mine.net != null && (
+              <Text style={[s.netLead, { color: netColor(mine.netTone) }]}>{mine.net}</Text>
+            )}
+            {mine.net != null && `${mine.net === 'level' ? ' with' : ' than'} your handicap · `}
+            {mine.unrated && 'Unrated tee, not ranked · '}
             {[mine.pts, mine.course, mine.offApp ? 'added after the round' : null, proofText,
               mine.card.confirmedByName ? `confirmed by ${mine.card.confirmedByName}` : null]
               .filter(Boolean).join(' · ')}
@@ -449,6 +470,7 @@ function makeStyles(theme) {
     cardTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15 },
     cardText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 12 },
     badge: { backgroundColor: theme.accent.light, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 },
+    netLead: { fontFamily: 'PlusJakartaSans-Bold' },
     badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 11 },
 
     primaryBtn: {

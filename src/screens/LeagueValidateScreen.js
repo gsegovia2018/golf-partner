@@ -12,7 +12,8 @@ import { fetchTournament } from '../store/tournamentRepo';
 import { readLocal } from '../store/tournamentStore';
 import { submitLeagueCard, confirmLeagueCardByPartner } from '../store/leagueStore';
 import { scoreCard, cardMonth } from '../store/leagueRules';
-import { monthName } from '../store/leagueView';
+import { monthName, formatNetDiff, formatNetDiffSigned, netDiffTone } from '../store/leagueView';
+import { UNRATED_TEE_PROBLEM } from '../store/leagueOffApp';
 
 // Plain words for confirm_league_card_by_partner's refusals.
 export const PARTNER_REASONS = {
@@ -76,7 +77,9 @@ export default function LeagueValidateScreen({ navigation, route }) {
     const holes = [...(round.holes ?? [])].sort((a, b) => a.number - b.number);
     const override = round.playerIndexes?.[player.id];
     const leagueHandicap = override != null && override !== '' ? Number(override) : player.handicap;
-    const { gross, points, playingHandicap } = scoreCard({
+    const {
+      gross, points, playingHandicap, rated, adjustedGross, differential, netDifferential,
+    } = scoreCard({
       holes: strokes,
       course: { holes },
       leagueHandicap,
@@ -90,7 +93,10 @@ export default function LeagueValidateScreen({ navigation, route }) {
       else snapshot[String(h.number)] = Number(v);
     }
     const roundNumber = tournament.rounds.indexOf(round) + 1;
-    return { round, roundNumber, player, strokes, gross, points, playingHandicap, snapshot, missing };
+    return {
+      round, roundNumber, player, strokes, gross, points, playingHandicap, snapshot, missing,
+      rated, adjustedGross, differential, netDifferential, leagueHandicap: Number(leagueHandicap) || 0,
+    };
   }, [tournament, roundId, user?.id]);
 
   const checkPartner = useCallback(async () => {
@@ -168,8 +174,14 @@ export default function LeagueValidateScreen({ navigation, route }) {
     );
   }
 
-  const { round, roundNumber, player, strokes, playingHandicap, missing } = card;
+  const {
+    round, roundNumber, player, strokes, playingHandicap, missing, rated, netDifferential,
+  } = card;
   const confirmed = !!result?.confirmed;
+  // The server refuses to submit an unrated tee (P0001); say so up front.
+  const unrated = !rated && !alreadySubmitted && !result;
+  const netTone = netDiffTone(netDifferential);
+  const netColor = netTone === 'better' ? theme.scoreColor('excellent') : netTone === 'worse' ? theme.destructive : theme.text.primary;
 
   const fallback = (icon, title, sub, routeName, params) => (
     <TouchableOpacity
@@ -209,6 +221,35 @@ export default function LeagueValidateScreen({ navigation, route }) {
             <View style={{ flex: 1 }}>
               <Text style={s.statusTitle}>Submitted · not confirmed yet</Text>
               <Text style={s.statusSub}>{PARTNER_REASONS[result.reason] ?? 'The card could not be confirmed in the app.'}</Text>
+            </View>
+          </View>
+        )}
+
+        {confirmed && rated && netDifferential != null && (
+          <View style={s.resultCard}>
+            <View style={s.resultHead}>
+              <Text style={[s.resultValue, { color: netColor }]}>{formatNetDiff(netDifferential)}</Text>
+              <Text style={s.resultKey}>{`${netDifferential === 0 ? 'with' : 'than'} your league handicap ${card.leagueHandicap.toFixed(1)}`}</Text>
+            </View>
+            <Text style={s.resultSub}>
+              {`Net ${formatNetDiffSigned(netDifferential)} · differential ${card.differential.toFixed(1)} · ${card.points} pts · gross ${card.gross} (adjusted ${card.adjustedGross})`}
+            </Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('LeagueCard', { leagueId, month: cardMonth(new Date()), userId: user?.id })}
+              activeOpacity={0.7}
+              accessibilityRole="link"
+            >
+              <Text style={s.resultLink}>{'How it\'s worked out ›'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {unrated && (
+          <View style={[s.statusCard, s.statusWarn]}>
+            <Feather name="alert-circle" size={18} color={theme.text.secondary} style={{ marginRight: 12 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.statusTitle}>This tee isn't rated</Text>
+              <Text style={s.statusSub}>{UNRATED_TEE_PROBLEM}</Text>
             </View>
           </View>
         )}
@@ -272,9 +313,9 @@ export default function LeagueValidateScreen({ navigation, route }) {
           <>
             {!result && <Text style={s.footnote}>Once you submit, the card counts straight away.</Text>}
             <TouchableOpacity
-              style={[s.primaryBtn, (busy || missing.length > 0) && s.disabled]}
+              style={[s.primaryBtn, (busy || missing.length > 0 || unrated) && s.disabled]}
               onPress={submitAndConfirm}
-              disabled={busy || missing.length > 0}
+              disabled={busy || missing.length > 0 || unrated}
               activeOpacity={0.8}
             >
               {busy
@@ -305,6 +346,16 @@ function makeStyles(theme) {
     statusWarn: { backgroundColor: theme.bg.secondary },
     statusTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14, lineHeight: 19 },
     statusSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 16, marginTop: 2 },
+
+    resultCard: {
+      backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1, borderColor: cardBorder,
+      padding: 14, marginBottom: 16,
+    },
+    resultHead: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 8 },
+    resultValue: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 24 },
+    resultKey: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 13 },
+    resultSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 4 },
+    resultLink: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13, marginTop: 8 },
 
     courseTitle: {
       fontFamily: 'PlayfairDisplay-Bold', color: theme.accent.primary, fontSize: 16, letterSpacing: -0.3, marginBottom: 12,

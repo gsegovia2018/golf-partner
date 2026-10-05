@@ -29,7 +29,7 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
   useEffect(() => () => { mountedRef.current = false; }, []);
 
   async function announce() {
-    const problem = courseProblem(pick.course);
+    const problem = courseProblem(pick.course, pick.tee ?? pick.course);
     if (problem) { setError(problem); return; }
     const teeTime = buildTeeTime(dateText, timeText);
     if (!teeTime) { setError('Pick a date and a tee time.'); return; }

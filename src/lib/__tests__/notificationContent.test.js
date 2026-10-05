@@ -142,9 +142,18 @@ describe('league notifications', () => {
     expect(renderNotification('league_card_announced', base).body).toBe('Pablo will play their card');
   });
 
-  test('card confirmed shows points', () => {
+  test('card confirmed falls back to points when the payload has no net differential', () => {
     const r = renderNotification('league_card_confirmed', { ...base, month: '2026-10-01', points: 36 });
     expect(r.body).toBe("Pablo's October card is confirmed, 36 pts");
+  });
+
+  test('card confirmed speaks the net differential, with no pronouns', () => {
+    const at = (net) => renderNotification('league_card_confirmed', { ...base, month: '2026-10-01', points: 36, net_differential: net }).body;
+    expect(at(-2.4)).toBe("Pablo's October card is confirmed \u00b7 2.4 better than handicap");
+    expect(at('3.14')).toBe("Pablo's October card is confirmed \u00b7 3.1 worse than handicap");
+    expect(at(0)).toBe("Pablo's October card is confirmed \u00b7 level with handicap");
+    expect(at(null)).toBe("Pablo's October card is confirmed \u00b7 unrated tee, not ranked");
+    [at(-2.4), at(3.1), at(null)].forEach((b) => expect(b).not.toMatch(/\b(his|her|their)\b/));
   });
 
   test('marker issue includes the note', () => {

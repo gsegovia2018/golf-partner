@@ -1,7 +1,7 @@
 import {
   monthName, ordinal, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel,
   positionText, cardStatus, monthRows, leagueSummary, viewableCards, monthBoard, collapseSeasonRows,
-  formatNetDiff,
+  formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, cardBreakdown,
 } from '../leagueView';
 
 const NOW = new Date(2026, 9, 4, 12, 0);
@@ -46,12 +46,22 @@ describe('standings text', () => {
 describe('card status', () => {
   test('each state', () => {
     expect(cardStatus(null, NOW).text).toBe('No card yet');
-    expect(cardStatus({ status: 'confirmed', points: 38 }, NOW)).toMatchObject({ text: '38 pts · confirmed', tone: 'done' });
+    expect(cardStatus({ status: 'confirmed', points: 38, netDifferential: -2.4 }, NOW))
+      .toMatchObject({ text: '2.4 better · confirmed', tone: 'done', lead: '2.4 better', leadTone: 'better' });
+    expect(cardStatus({ status: 'confirmed', points: 31, netDifferential: 4.3 }, NOW))
+      .toMatchObject({ text: '4.3 worse · confirmed', leadTone: 'worse' });
     expect(cardStatus({ status: 'playing' }, NOW)).toMatchObject({ text: 'Playing now', tone: 'live' });
-    expect(cardStatus({ status: 'submitted', points: 36, source: 'offapp' }, NOW).text).toBe('36 pts · added after the round');
+    expect(cardStatus({ status: 'submitted', points: 36, netDifferential: 0.04, source: 'offapp' }, NOW).text)
+      .toBe('level · added after the round');
+  });
+  test('an unrated confirmed card is listed, not ranked; a submitted one without a value falls back to points', () => {
+    expect(cardStatus({ status: 'confirmed', points: 30, netDifferential: null }, NOW))
+      .toMatchObject({ text: 'unrated · not ranked', tone: 'muted', leadTone: null });
+    expect(cardStatus({ status: 'submitted', points: 36, netDifferential: null, source: 'offapp' }, NOW).text)
+      .toBe('36 pts · added after the round');
   });
   test('flags a card that was not announced', () => {
-    expect(cardStatus({ status: 'submitted', points: 30, notAnnounced: true }, NOW).flag).toBe('Not announced in the app');
+    expect(cardStatus({ status: 'submitted', points: 30, netDifferential: 1, notAnnounced: true }, NOW).flag).toBe('Not announced in the app');
   });
   test('announced shows the time', () => {
     const iso = new Date(2026, 9, 4, 10, 10).toISOString();
@@ -132,9 +142,9 @@ describe('monthBoard', () => {
   const card = (userId, status, points, extra = {}) => ({ userId, status, points, source: 'app', ...extra });
   const cards = {
     '2026-10': [
-      card('a', 'confirmed', 36, { confirmation: 'qr' }),
-      card('b', 'confirmed', 38, { confirmation: 'partner' }),
-      card('c', 'confirmed', 36, { confirmation: 'photo' }),
+      card('a', 'confirmed', 36, { confirmation: 'qr', netDifferential: 1.2 }),
+      card('b', 'confirmed', 33, { confirmation: 'partner', netDifferential: -2.4 }),
+      card('c', 'confirmed', 38, { confirmation: 'photo', netDifferential: 1.2 }),
       card('d', 'submitted', 40),
       card('e', 'submitted', 30, { source: 'offapp' }),
       card('f', 'announced', null),
@@ -155,6 +165,24 @@ describe('monthBoard', () => {
     ]);
     expect(board.onCourse.map((r) => r.member.userId)).toEqual(['f']);
     expect(board.noCard.map((x) => x.userId)).toEqual(['g']);
+  });
+
+  test('confirmed ranks by net differential; an unrated confirmed card is listed after, not ranked', () => {
+    const board = monthBoard(members, {
+      '2026-10': [
+        card('a', 'confirmed', 40, { netDifferential: null }),
+        card('b', 'confirmed', 30, { netDifferential: 3.1 }),
+        card('c', 'confirmed', 33, { netDifferential: -0.5 }),
+        card('c', 'confirmed', 36, { netDifferential: 0.8 }),
+      ],
+    }, '2026-10', table);
+    expect(board.confirmed.map((r) => [r.member.userId, r.place, r.unrated, r.netDifferential, r.seasonPoints])).toEqual([
+      ['c', 1, false, -0.5, 500],
+      ['b', 2, false, 3.1, 300],
+      ['a', null, true, null, 0],
+    ]);
+    expect(board.confirmed[0].card.netDifferential).toBe(-0.5);
+    expect(board.noCard.map((x) => x.userId)).not.toContain('a');
   });
 
   test('playing sorts before announced; an off-app card with proof is waiting for the check', () => {
@@ -207,5 +235,49 @@ describe('collapseSeasonRows', () => {
     expect(r.rows).toHaveLength(18);
     expect(r.hidden).toBe(0);
     expect(r.rows[8].compact).toBe(true);
+  });
+});
+
+describe('net differential words', () => {
+  test('signed number and tone', () => {
+    expect(formatNetDiffSigned(-2.4)).toBe('−2.4');
+    expect(formatNetDiffSigned(3.1)).toBe('+3.1');
+    expect(formatNetDiffSigned(0.02)).toBe('0.0');
+    expect(netDiffTone(-0.1)).toBe('better');
+    expect(netDiffTone(12.5)).toBe('worse');
+    expect(netDiffTone(0)).toBeNull();
+    expect(netDiffTone(null)).toBeNull();
+  });
+  test('your card state carries the spoken value, or flags an unrated confirmed card', () => {
+    expect(yourCardState({ status: 'confirmed', points: 36, netDifferential: -0.6 }))
+      .toMatchObject({ net: '0.6 better', netTone: 'better', unrated: false });
+    expect(yourCardState({ status: 'confirmed', points: 30, netDifferential: null }))
+      .toMatchObject({ net: null, unrated: true });
+  });
+});
+
+describe('card breakdown', () => {
+  // 18 par-4 holes (SI 1..18); playing handicap 0 so the cap is 6 everywhere.
+  const course = {
+    name: 'Amarillas', tee: 'Amarillas', slope: 130, rating: 71.4,
+    holes: Array.from({ length: 18 }, (_, i) => ({ n: i + 1, par: 4, si: i + 1 })),
+  };
+  const strokes = Object.fromEntries(Array.from({ length: 18 }, (_, i) => [String(i + 1), i === 11 ? 9 : 5]));
+
+  test('gross, adjusted gross with the capped hole named, and the stored values', () => {
+    const b = cardBreakdown({
+      course, holes: strokes, playingHandicap: 0, differential: 11.8, netDifferential: -2.4, leagueHandicap: 14.2,
+    });
+    expect(b.gross).toBe(94);
+    expect(b.adjustedGross).toBe(91); // hole 12: 9 counts as 6
+    expect(b.capped).toEqual([expect.objectContaining({ n: 12, strokes: 9, counted: 6, capped: true })]);
+    expect(b).toMatchObject({ rated: true, slope: 130, rating: 71.4, differential: 11.8, leagueHandicap: 14.2 });
+  });
+
+  test('a card whose tee has no rating is not rated', () => {
+    const b = cardBreakdown({
+      course: { ...course, slope: null, rating: null }, holes: strokes, playingHandicap: 0, netDifferential: null,
+    });
+    expect(b.rated).toBe(false);
   });
 });

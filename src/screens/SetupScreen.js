@@ -39,7 +39,7 @@ import { enqueueLeagueFinal, isRetryableFinalError } from '../lib/leagueFinalPen
 import { cardMonth } from '../store/leagueRules';
 import { monthName } from '../store/leagueView';
 import {
-  applyLeagueHandicap, isLeagueLength, leagueCourse, leagueStrokes,
+  applyLeagueHandicap, isLeagueLength, isLeagueRated, leagueCourse, leagueStrokes, setupPlayerTee,
 } from '../store/leagueSetup';
 import { useSetupLeagues } from '../hooks/useSetupLeagues';
 import { applyFinalStrokes, finalStrokeList, finalStrokesRecord } from '../store/leagueFinal';
@@ -144,7 +144,9 @@ export default function SetupScreen({ navigation, route }) {
   const myPlayer = players.find((p) => p.user_id && p.user_id === user?.id) ?? null;
   const leagueOffered = isGame && !!league && !!myPlayer;
   const leagueEligibleRound = isLeagueLength(rounds[0]);
-  const leagueActive = leagueOffered && leagueOn && leagueEligibleRound;
+  // The league ranks by net differential: my tee needs a slope and a rating.
+  const leagueRated = !leagueOffered || !leagueEligibleRound || isLeagueRated(rounds[0], myPlayer.id);
+  const leagueActive = leagueOffered && leagueOn && leagueEligibleRound && leagueRated;
   const startBusyRef = useRef(false);
 
   // The league Final (LeagueFinalScreen): { leagueId, strokes by user id }.
@@ -969,8 +971,11 @@ export default function SetupScreen({ navigation, route }) {
     const hcp = league.leagueHandicap;
     const month = monthName(cardMonth(new Date()));
     let sub;
+    const unratedTee = !leagueRated ? setupPlayerTee(rounds[0], myPlayer.id)?.label ?? null : null;
     if (!leagueEligibleRound) sub = 'League cards are 18 holes. Pick an 18-hole course to count this round.';
-    else if (!leagueOn) sub = null;
+    else if (!leagueRated) {
+      sub = `Your ${unratedTee ? `${unratedTee} tees aren't` : "tee isn't"} rated, so this round can't be your ${month} card yet. Pick a rated tee for yourself, or add the rating.`;
+    } else if (!leagueOn) sub = null;
     else if (hcp == null) sub = `Your ${month} card · no league handicap set yet, your own index is used · counts whatever you score`;
     else {
       const strokes = leagueStrokes(rounds[0], myPlayer.id, hcp);
@@ -982,11 +987,30 @@ export default function SetupScreen({ navigation, route }) {
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.leagueTitle}>{`Counts for ${league.name}`}</Text>
             {!!sub && <Text style={s.leagueSub}>{sub}</Text>}
+            {leagueEligibleRound && !leagueRated && (
+              <TouchableOpacity
+                onPress={() => navigation.navigate('CourseEditor', {
+                  roundIndex: 0,
+                  courseName: rounds[0].courseName || 'Round 1',
+                  initialHoles: rounds[0].holes,
+                  initialTees: rounds[0].tees ?? [],
+                  onSave: handleHolesSaved,
+                  courseId: rounds[0].courseId ?? null,
+                })}
+                activeOpacity={0.7}
+                accessibilityRole="link"
+                style={{ paddingVertical: 6 }}
+              >
+                <Text style={[s.leagueSub, { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' }]}>
+                  {`Add slope and rating${unratedTee ? ` to ${unratedTee} tees` : ''} ›`}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
           <Switch
             value={leagueActive}
             onValueChange={setLeagueOn}
-            disabled={!leagueEligibleRound}
+            disabled={!leagueEligibleRound || !leagueRated}
             accessibilityLabel={`Counts for ${league.name}`}
             trackColor={{ true: theme.accent.primary }}
           />
