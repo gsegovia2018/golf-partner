@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
@@ -76,6 +76,23 @@ export default function JoinLeagueScreen({ navigation, route }) {
     })();
     return () => { cancelled = true; };
   }, [code, navigation]);
+
+  // Logging in from a guest session signs the guest out, and whatever they
+  // did as a guest stays with that session, so ask first. (Alert is the
+  // app's confirm; src/lib/webAlert.js makes it a real confirm on web.)
+  function confirmLogIn() {
+    Alert.alert(
+      'Log in to your account?',
+      "You're playing as a guest on this phone. Logging in leaves the guest session, and anything you did as a guest stays behind.",
+      [
+        { text: 'Stay as guest', style: 'cancel' },
+        {
+          text: 'Log in',
+          onPress: () => { requestLoginTab(); supabase.auth.signOut().catch(() => {}); },
+        },
+      ],
+    );
+  }
 
   const { nameError, emailError } = guestIdentityErrors({ name: guestName, email: guestEmail });
 
@@ -235,6 +252,9 @@ export default function JoinLeagueScreen({ navigation, route }) {
                   />
                 </View>
                 <Text style={s.hcpSub}>We email you a link to keep the account and sign in on other devices.</Text>
+                <TouchableOpacity onPress={confirmLogIn} activeOpacity={0.7}>
+                  <Text style={s.proposeLink}>I have an account — log in</Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -244,7 +264,7 @@ export default function JoinLeagueScreen({ navigation, route }) {
                 <Text
                   style={s.errorLink}
                   accessibilityRole="link"
-                  onPress={() => { requestLoginTab(); supabase.auth.signOut().catch(() => {}); }}
+                  onPress={confirmLogIn}
                 >
                   Log in instead
                 </Text>

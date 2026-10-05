@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import JoinLeagueLinkScreen from '../JoinLeagueLinkScreen';
 
@@ -138,8 +139,12 @@ describe('JoinLeagueLinkScreen', () => {
     expect(store.joinLeague).not.toHaveBeenCalled();
     expect(handoff.isLeagueJoinHeld()).toBe(false);
 
+    const alertSpy = jest.spyOn(Alert, 'alert');
     fireEvent.press(utils.getByText('Log in instead'));
     await waitFor(() => utils.getByText('AuthForm:signin'));
+    // Signed out again, no guest to leave behind: no confirmation.
+    expect(alertSpy).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
   });
 
   test('a throttled confirmation email does not block joining', async () => {
