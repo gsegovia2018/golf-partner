@@ -42,6 +42,7 @@ import LeagueSettingsScreen from './src/screens/LeagueSettingsScreen';
 import LeagueFinalScreen from './src/screens/LeagueFinalScreen';
 import LeagueValidateScreen from './src/screens/LeagueValidateScreen';
 import LeagueAnnounceScreen from './src/screens/LeagueAnnounceScreen';
+import LeagueCardScreen from './src/screens/LeagueCardScreen';
 import LeagueAddScoreScreen from './src/screens/LeagueAddScoreScreen';
 import LeagueAddProofScreen from './src/screens/LeagueAddProofScreen';
 
@@ -377,6 +378,7 @@ function AppNavigator() {
         <Stack.Screen name="LeagueMarkerQR" component={LeagueMarkerQRScreen} />{/* from LeagueValidate: { cardId, leagueId } */}
         <Stack.Screen name="MarkerCard" component={MarkerCardScreen} />{/* /m/:token opened by a signed-in visitor */}
         <Stack.Screen name="LeagueAnnounce" component={LeagueAnnounceScreen} />{/* off-app card: announce before playing */}
+        <Stack.Screen name="LeagueCard" component={LeagueCardScreen} />{/* read-only member card, flick through the month: { leagueId, month, userId } */}
         <Stack.Screen name="LeagueAddScore" component={LeagueAddScoreScreen} />{/* type the 18 holes after the round */}
         <Stack.Screen name="LeagueAddProof" component={LeagueAddProofScreen} />{/* signed card photo or official result */}
         <Stack.Screen name="PlayersLibrary" component={PlayersLibraryScreen} />

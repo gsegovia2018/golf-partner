@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
@@ -14,7 +14,8 @@ import { semantic } from '../theme/tokens';
 //   subheader    optional node between the title row and the rows (the scope chips)
 //   rows         [{ key?, place (null = unplaced, shown as a dash), isTie, name, points, sub?, isMe?, mark? }]
 //                points and sub are display strings; sub null renders nothing;
-//                mark shows the winner icon beside the name
+//                mark shows the winner icon beside the name;
+//                onPress (optional) makes the row tappable, with a chevron
 //   footer       optional string under the rows
 export default function LeaderboardCard({ title, headerRight, subheader, rows, footer }) {
   const { theme } = useTheme();
@@ -34,9 +35,11 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows, f
         const rankColor = rankColors[placeIdx] || 'rgba(255,255,255,0.4)';
         const rankBg = placeIdx === 0 ? 'rgba(255,215,0,0.2)' : placeIdx === 1 ? 'rgba(192,200,212,0.15)' : placeIdx === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
         const rankLabel = row.place == null ? '–' : row.isTie ? `T${row.place}` : row.place;
+        const Row = row.onPress ? TouchableOpacity : View;
         return (
-          <View
+          <Row
             key={row.key ?? `${row.place}-${row.name}-${i}`}
+            {...(row.onPress ? { onPress: row.onPress, activeOpacity: 0.7, accessibilityRole: 'button', accessibilityLabel: `${row.name}'s card` } : {})}
             style={[s.mastersRow, isFirstPlace && s.mastersRowFirst, row.isMe && s.mastersRowMe, i === rows.length - 1 && { borderBottomWidth: 0 }]}
           >
             <View style={[s.mastersRankBadge, { backgroundColor: rankBg }]}>
@@ -52,7 +55,8 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows, f
             </View>
             <Text style={[s.mastersPoints, isFirstPlace && { fontSize: 18 }]}>{row.points}</Text>
             {row.sub != null && <Text style={s.mastersSub}>{row.sub}</Text>}
-          </View>
+            {!!row.onPress && <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.45)" style={{ marginLeft: 4 }} />}
+          </Row>
         );
       })}
       {!!footer && <Text style={s.mastersMatchStatus}>{footer}</Text>}
