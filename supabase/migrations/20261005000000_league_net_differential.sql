@@ -428,6 +428,8 @@ BEGIN
     'player_first_name', split_part(public.league_user_name(v_c.user_id), ' ', 1),
     'course',            v_c.course ->> 'name',
     'tee',               v_c.course ->> 'tee',
+    'slope',             public.league_num(v_c.course -> 'slope'),
+    'rating',            public.league_num(v_c.course -> 'rating'),
     'date',              v_c.played_on,
     'playing_handicap',  v_c.playing_handicap,
     'gross',             v_c.gross,

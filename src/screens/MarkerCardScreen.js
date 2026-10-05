@@ -60,6 +60,7 @@ function metaLine(card) {
     card.course,
     formatPlayedOn(card.date),
     card.tee ? `${card.tee} tees` : null,
+    card.slope != null && card.rating != null ? `slope ${card.slope} · CR ${card.rating}` : null,
     card.playingHandicap != null ? `Playing handicap ${card.playingHandicap}` : null,
   ].filter(Boolean).join(' · ');
 }

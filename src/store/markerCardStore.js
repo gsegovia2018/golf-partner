@@ -35,7 +35,8 @@ async function rpc(fn, args) {
 
 /**
  * Whitelisted view of one card. Throws MarkerCardError with `reason`.
- * @returns {Promise<{playerFirstName:string, course:string, tee:string|null, date:string|null,
+ * @returns {Promise<{playerFirstName:string, course:string, tee:string|null,
+ *   slope:number|null, rating:number|null, date:string|null,
  *   playingHandicap:number|null, gross:number|null, points:number|null,
  *   differential:number|null, netDifferential:number|null, expiresAt:string,
  *   holes:Array<{n:number, par:number, si:number, strokes:number|null}>}>}
@@ -46,6 +47,8 @@ export async function getMarkerCard(token) {
     playerFirstName: d.player_first_name,
     course: d.course,
     tee: d.tee ?? null,
+    slope: d.slope == null ? null : Number(d.slope),
+    rating: d.rating == null ? null : Number(d.rating),
     date: d.date ?? null,
     playingHandicap: d.playing_handicap ?? null,
     gross: d.gross ?? null,
