@@ -106,7 +106,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
   let boardFooter = null;
   let boardMore = null;
   // Confirmed cards on a tee with no slope/rating are listed, not ranked.
-  const unratedNote = (userIds) => `${userIds.length === 1 ? `${userIds[0] === meId ? 'Your' : `${nameOf(userIds[0])}'s`} card has` : `${userIds.length} cards have`} no slope or rating · shown, not ranked`;
+  const unratedNote = (userIds) => `${userIds.length === 1 ? `${userIds[0] === meId ? 'Your' : `${nameOf(userIds[0])}'s`} card has` : `${userIds.length} cards have`} no slope or rating. Shown, not ranked.`;
   if (monthScope) {
     const left = daysLeftInMonth(now);
     boardTitle = `${curMonth.toUpperCase()} SO FAR · ${left === 0 ? 'LAST DAY' : `${left} ${left === 1 ? 'DAY' : 'DAYS'} LEFT`}`;
@@ -226,7 +226,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
     }));
     const unrated = results.filter((r) => r.unrated).map((r) => r.userId);
     boardFooter = unrated.length === 0
-      ? "Better or worse than each member's league handicap · ties share points"
+      ? "Better or worse than each member's league handicap. Ties share points."
       : unratedNote(unrated);
   }
 

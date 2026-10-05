@@ -298,7 +298,7 @@ describe('LeagueBoardScreen', () => {
     expect(getByText('2.4 better')).toBeTruthy();
     expect(getByText('unrated')).toBeTruthy();
     expect(getByText('not ranked')).toBeTruthy();
-    expect(getByText(/Nacho's card has no slope or rating · shown, not ranked$/)).toBeTruthy();
+    expect(getByText(/Nacho's card has no slope or rating\. Shown, not ranked\.$/)).toBeTruthy();
   });
 
   test('"Your <Month> card" sits above the leaderboard', async () => {
@@ -391,6 +391,6 @@ describe('LeagueBoardScreen', () => {
     expect(getByText('3.1 worse')).toBeTruthy();
     expect(getByText('unrated')).toBeTruthy();
     expect(getByText('not ranked')).toBeTruthy();
-    expect(getByText('Your card has no slope or rating · shown, not ranked')).toBeTruthy();
+    expect(getByText('Your card has no slope or rating. Shown, not ranked.')).toBeTruthy();
   });
 });
