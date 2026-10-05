@@ -85,6 +85,16 @@ describe('LeagueAddScoreScreen', () => {
     await waitFor(() => expect(nextDisabled(utils)).toBe(true));
   });
 
+  test('the date is limited to the card\'s month, even when that month is past', async () => {
+    const utils = render(wrap(<LeagueAddScoreScreen navigation={nav()} route={cardRoute} />));
+    await waitFor(() => utils.getByLabelText('Strokes for You on hole 1'));
+    fireEvent.press(utils.getByLabelText('Date played'));
+    expect(utils.getByLabelText('Fri 3 Oct 2025').props.accessibilityState.disabled).toBe(false);
+    expect(utils.getByLabelText('Fri 31 Oct 2025').props.accessibilityState.disabled).toBe(false);
+    expect(utils.getByLabelText('Next month').props.accessibilityState.disabled).toBe(true);
+    expect(utils.getByLabelText('Previous month').props.accessibilityState.disabled).toBe(true);
+  });
+
   test('unannounced mode shows "Not announced in the app" and asks for a course', async () => {
     const utils = render(wrap(<LeagueAddScoreScreen navigation={nav()} route={{ params: { leagueId: 'L1' } }} />));
     await waitFor(() => utils.getByText('Not announced in the app'));

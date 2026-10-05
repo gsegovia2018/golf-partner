@@ -28,7 +28,11 @@ const route = { params: { leagueId: 'L1' } };
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
 describe('LeagueAnnounceScreen', () => {
+  afterEach(() => jest.useRealTimers());
+
   beforeEach(() => {
+    // Friday 3 Oct 2025, 08:00 local; timers stay real so waitFor works.
+    jest.useFakeTimers({ now: new Date(2025, 9, 3, 8, 0), doNotFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'nextTick', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame'] });
     jest.clearAllMocks();
     bridge.consumePendingCourses.mockReturnValue({ startRoundIndex: 0, picks: [{ kind: 'course', course: pickedCourse }] });
   });
@@ -39,8 +43,10 @@ describe('LeagueAnnounceScreen', () => {
     const { getByText, getByLabelText } = render(wrap(<LeagueAnnounceScreen navigation={navigation} route={route} />));
     expect(getByText(/Announce before your first shot\. Your group is notified now; you'll add the score after the round\./)).toBeTruthy();
     await waitFor(() => getByText('Golf Olivar'));
-    fireEvent.changeText(getByLabelText('Date'), '2025-10-04');
-    fireEvent.changeText(getByLabelText('Tee time'), '09:30');
+    fireEvent.press(getByLabelText('Date and tee time'));
+    fireEvent.press(getByLabelText('Sat 4 Oct 2025'));
+    for (let i = 0; i < 9; i += 1) fireEvent.press(getByLabelText('Later tee time')); // 08:00 -> 09:30
+    fireEvent.press(getByLabelText('Done'));
     fireEvent.press(getByText('Announce card'));
 
     await waitFor(() => expect(navigation.goBack).toHaveBeenCalled());
@@ -83,12 +89,12 @@ describe('LeagueAnnounceScreen', () => {
     expect(store.announceLeagueCard).not.toHaveBeenCalled();
   });
 
-  test('a bad date shows a format hint', async () => {
-    const { getByText, getByLabelText, findByText } = render(wrap(<LeagueAnnounceScreen navigation={nav()} route={route} />));
+  test('the date field starts on today and the sheet greys out past days', async () => {
+    const { getByText, getByLabelText } = render(wrap(<LeagueAnnounceScreen navigation={nav()} route={route} />));
     await waitFor(() => getByText('Golf Olivar'));
-    fireEvent.changeText(getByLabelText('Date'), 'tomorrow');
-    fireEvent.press(getByText('Announce card'));
-    expect(await findByText(/YYYY-MM-DD/)).toBeTruthy();
-    expect(store.announceLeagueCard).not.toHaveBeenCalled();
+    expect(getByText('Fri 3 Oct 2025 · 08:00')).toBeTruthy();
+    fireEvent.press(getByLabelText('Date and tee time'));
+    expect(getByLabelText('Thu 2 Oct 2025').props.accessibilityState.disabled).toBe(true);
+    expect(getByLabelText('Sat 4 Oct 2025').props.accessibilityState.disabled).toBe(false);
   });
 });

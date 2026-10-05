@@ -77,6 +77,26 @@ describe('LeagueSettingsScreen', () => {
     }));
   });
 
+  test('season dates are picked in the calendar sheet and the end cannot precede the start', async () => {
+    store.getLeague.mockResolvedValue(snapshot());
+    const { getByText, getByDisplayValue, getByLabelText, queryAllByLabelText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByDisplayValue('El Club'));
+    fireEvent.press(getByLabelText('Season starts'));
+    fireEvent.press(getByLabelText('Thu 15 Jan 2026'));
+    fireEvent.press(getByLabelText('Done'));
+    await waitFor(() => expect(queryAllByLabelText('Previous month')).toHaveLength(0)); // sheet closed
+    fireEvent.press(getByLabelText('Season ends'));
+    for (let i = 0; i < 11; i += 1) fireEvent.press(getByLabelText('Previous month')); // Dec -> Jan
+    expect(getByLabelText('Wed 14 Jan 2026').props.accessibilityState.disabled).toBe(true);
+    expect(getByLabelText('Thu 15 Jan 2026').props.accessibilityState.disabled).toBe(false);
+    expect(getByLabelText('Previous month').props.accessibilityState.disabled).toBe(true);
+    fireEvent.press(getByLabelText('Done'));
+    fireEvent.press(getByText('Save rules'));
+    await waitFor(() => expect(store.updateLeagueRules).toHaveBeenCalledWith('L1', expect.objectContaining({
+      seasonStart: '2026-01-15', seasonEnd: '2026-12-31',
+    })));
+  });
+
   test('a plain member sees the rules read-only and no admin controls', async () => {
     store.getLeague.mockResolvedValue(snapshot({ admin: false }));
     const { getByText, queryByText, queryByDisplayValue } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
