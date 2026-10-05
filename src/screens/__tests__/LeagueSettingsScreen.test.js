@@ -77,6 +77,26 @@ describe('LeagueSettingsScreen', () => {
     }));
   });
 
+  test('season dates are picked in the calendar sheet and the end cannot precede the start', async () => {
+    store.getLeague.mockResolvedValue(snapshot());
+    const { getByText, getByDisplayValue, getByLabelText, queryAllByLabelText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByDisplayValue('El Club'));
+    fireEvent.press(getByLabelText('Season starts'));
+    fireEvent.press(getByLabelText('Thu 15 Jan 2026'));
+    fireEvent.press(getByLabelText('Done'));
+    await waitFor(() => expect(queryAllByLabelText('Previous month')).toHaveLength(0)); // sheet closed
+    fireEvent.press(getByLabelText('Season ends'));
+    for (let i = 0; i < 11; i += 1) fireEvent.press(getByLabelText('Previous month')); // Dec -> Jan
+    expect(getByLabelText('Wed 14 Jan 2026').props.accessibilityState.disabled).toBe(true);
+    expect(getByLabelText('Thu 15 Jan 2026').props.accessibilityState.disabled).toBe(false);
+    expect(getByLabelText('Previous month').props.accessibilityState.disabled).toBe(true);
+    fireEvent.press(getByLabelText('Done'));
+    fireEvent.press(getByText('Save rules'));
+    await waitFor(() => expect(store.updateLeagueRules).toHaveBeenCalledWith('L1', expect.objectContaining({
+      seasonStart: '2026-01-15', seasonEnd: '2026-12-31',
+    })));
+  });
+
   test('a plain member sees the rules read-only and no admin controls', async () => {
     store.getLeague.mockResolvedValue(snapshot({ admin: false }));
     const { getByText, queryByText, queryByDisplayValue } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
@@ -85,6 +105,37 @@ describe('LeagueSettingsScreen', () => {
     expect(queryByText('Save rules')).toBeNull();
     expect(queryByText('Archive the league')).toBeNull();
     expect(getByText('Leave league')).toBeTruthy();
+  });
+
+  test('LEAGUE section: the admin gets Members and "Set up the Final"; once recorded the Final is an open link', async () => {
+    store.getLeague.mockResolvedValueOnce({ ...snapshot(), votes: [{ id: 'v1' }] });
+    const first = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => first.getByText('Members and handicaps'));
+    expect(first.getByText('2 members · cap 30')).toBeTruthy();
+    expect(first.getByText('1 vote open')).toBeTruthy();
+    fireEvent.press(first.getByText('Members and handicaps'));
+    expect(navigation.navigate).toHaveBeenCalledWith('LeagueMembers', { leagueId: 'L1' });
+    expect(first.getByText('December · extra strokes from the standings')).toBeTruthy();
+    fireEvent.press(first.getByText('Set up the Final'));
+    expect(navigation.navigate).toHaveBeenCalledWith('LeagueFinal', { leagueId: 'L1' });
+    first.unmount();
+
+    store.getLeague.mockResolvedValueOnce({
+      ...snapshot(), final: { tournamentId: 't9', strokes: {}, createdAt: '2026-12-13T10:00:00Z' },
+    });
+    const second = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => second.getByText(/^The Final · /));
+    expect(second.queryByText('Set up the Final')).toBeNull();
+    expect(second.queryByText('1 vote open')).toBeNull();
+    fireEvent.press(second.getByText(/^The Final · /));
+    expect(navigation.navigate).toHaveBeenCalledWith('Tournament', { tournamentId: 't9', viewMode: 'tournament' });
+  });
+
+  test('LEAGUE section: a member sees their handicap and no "Set up the Final"', async () => {
+    store.getLeague.mockResolvedValue(snapshot({ admin: false }));
+    const { getByText, queryByText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByText('Your league handicap 20.0'));
+    expect(queryByText('Set up the Final')).toBeNull();
   });
 
   test('fee and admin switches call the store', async () => {

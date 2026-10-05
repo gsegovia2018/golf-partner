@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
@@ -9,13 +9,25 @@ import { loadProfile } from '../store/profileStore';
 import { getLeagueByCode, joinLeague } from '../store/leagueStore';
 import { defaultMemberHandicap, parseMemberHandicap } from '../store/leagueDraft';
 import { formatEuros, monthName, currentMonthKey } from '../store/leagueView';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
+import { attachEmailToGuest, isEmailTakenError } from '../lib/guestAccount';
+import { consumeJustJoined, requestLoginTab } from '../lib/leagueJoinHandoff';
+import GuestIdentityFields, { guestIdentityErrors } from '../components/league/GuestIdentityFields';
 
 // /league/:code. Shows the league, the rules in brief and the league handicap
-// the admin proposed (the member can propose another), then Join.
+// the admin proposed (the member can propose another), then Join. A guest
+// (anonymous session, e.g. from a tournament guest link) must also give a
+// name and an email: the server refuses a nameless guest, and the email sends
+// the link that keeps the account.
 export default function JoinLeagueScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const code = route?.params?.code ?? '';
+  const authUser = useAuth()?.user ?? null;
+  const isGuest = !!authUser?.is_anonymous;
+  // An email already attached (awaiting confirmation) is not sent again.
+  const pendingEmail = authUser?.new_email ?? '';
 
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -28,6 +40,10 @@ export default function JoinLeagueScreen({ navigation, route }) {
   const [hcpText, setHcpText] = useState('');
   const [busy, setBusy] = useState(false);
   const [joinError, setJoinError] = useState('');
+  const [emailTaken, setEmailTaken] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState(pendingEmail);
+  const [submitted, setSubmitted] = useState(false);
   const joiningRef = useRef(false);
 
   useEffect(() => {
@@ -40,6 +56,12 @@ export default function JoinLeagueScreen({ navigation, route }) {
         ]);
         if (cancelled) return;
         if (!summary) { setState('notfound'); return; }
+        // Just joined from the signed-out invite screen: straight to the board.
+        if (summary.isMember && consumeJustJoined(code)) {
+          navigation.replace('LeagueBoard', { leagueId: summary.id });
+          return;
+        }
+        setGuestName((n) => n || profile?.displayName || '');
         const cap = summary.handicapCap;
         setProfileHcp(profile?.handicap ?? null);
         const start = summary.proposedHandicap ?? defaultMemberHandicap(profile?.handicap, cap);
@@ -53,16 +75,50 @@ export default function JoinLeagueScreen({ navigation, route }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [code]);
+  }, [code, navigation]);
+
+  // Logging in from a guest session signs the guest out, and whatever they
+  // did as a guest stays with that session, so ask first. (Alert is the
+  // app's confirm; src/lib/webAlert.js makes it a real confirm on web.)
+  function confirmLogIn() {
+    Alert.alert(
+      'Log in to your account?',
+      "You're playing as a guest on this phone. Logging in leaves the guest session, and anything you did as a guest stays behind.",
+      [
+        { text: 'Stay as guest', style: 'cancel' },
+        {
+          text: 'Log in',
+          onPress: () => { requestLoginTab(); supabase.auth.signOut().catch(() => {}); },
+        },
+      ],
+    );
+  }
+
+  const { nameError, emailError } = guestIdentityErrors({ name: guestName, email: guestEmail });
 
   async function handleJoin() {
     if (joiningRef.current || !league) return;
+    setSubmitted(true);
+    if (isGuest && (nameError || emailError)) return;
     joiningRef.current = true;
     setBusy(true);
     setJoinError('');
+    setEmailTaken(false);
     try {
       const proposed = parseMemberHandicap(hcpText, league.handicapCap);
-      const { leagueId } = await joinLeague(code, proposed);
+      if (isGuest && guestEmail.trim().toLowerCase() !== pendingEmail.toLowerCase()) {
+        try {
+          await attachEmailToGuest({ email: guestEmail, name: guestName });
+        } catch (e) {
+          if (!isEmailTakenError(e)) throw e;
+          joiningRef.current = false;
+          setEmailTaken(true);
+          return;
+        }
+      }
+      const { leagueId } = isGuest
+        ? await joinLeague(code, proposed, guestName.trim())
+        : await joinLeague(code, proposed);
       navigation.replace('LeagueBoard', { leagueId });
     } catch (e) {
       joiningRef.current = false;
@@ -182,6 +238,38 @@ export default function JoinLeagueScreen({ navigation, route }) {
               )}
             </View>
 
+            {isGuest && (
+              <View style={s.hcpCard}>
+                <Text style={s.overline}>{"WHO'S JOINING"}</Text>
+                <View style={{ alignSelf: 'stretch' }}>
+                  <GuestIdentityFields
+                    name={guestName}
+                    onChangeName={setGuestName}
+                    email={guestEmail}
+                    onChangeEmail={setGuestEmail}
+                    nameError={submitted ? nameError : null}
+                    emailError={submitted ? emailError : null}
+                  />
+                </View>
+                <Text style={s.hcpSub}>We email you a link to keep the account and sign in on other devices.</Text>
+                <TouchableOpacity onPress={confirmLogIn} activeOpacity={0.7}>
+                  <Text style={s.proposeLink}>I have an account — log in</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {emailTaken && (
+              <Text style={s.errorText}>
+                That email already has a Golf Partner account.{' '}
+                <Text
+                  style={s.errorLink}
+                  accessibilityRole="link"
+                  onPress={confirmLogIn}
+                >
+                  Log in instead
+                </Text>
+              </Text>
+            )}
             {!!joinError && <Text style={s.errorText}>{joinError}</Text>}
             {league.archived && <Text style={s.errorText}>This league is archived and can't be joined.</Text>}
 
@@ -247,6 +335,7 @@ function makeStyles(theme) {
     proposeLink: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13, marginTop: 10 },
 
     errorText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 12, marginBottom: 10 },
+    errorLink: { color: theme.accent.primary, textDecorationLine: 'underline' },
     primaryBtn: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
       backgroundColor: theme.accent.primary, borderRadius: 14, paddingVertical: 15,

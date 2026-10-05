@@ -331,9 +331,27 @@ export async function getLeagueByCode(code) {
   return summaryToCamel(await rpc('get_league_by_code', { p_code: code }));
 }
 
-// Returns { leagueId }.
-export async function joinLeague(code, proposedHandicap = null) {
-  const d = await rpc('join_league', { p_code: code, p_proposed_handicap: proposedHandicap });
+// Signed-out invite screen: league-level facts only (anon-callable). null for
+// an unknown code. No id, no member names — see 20261005000000.
+export async function getLeagueInvitePreview(code) {
+  const p = await rpc('get_league_invite_preview', { p_code: code });
+  if (!p) return null;
+  return {
+    name: p.name,
+    adminFirstName: p.admin_first_name || null,
+    memberCount: p.member_count ?? 0,
+    entryFeeCents: p.entry_fee_cents ?? 0,
+    handicapCap: p.handicap_cap == null ? 30 : Number(p.handicap_cap),
+    archived: !!p.archived,
+  };
+}
+
+// Returns { leagueId }. `displayName` is required by the server for a guest
+// (anonymous) session and saved to the profile; omit it for a real account.
+export async function joinLeague(code, proposedHandicap = null, displayName = null) {
+  const args = { p_code: code, p_proposed_handicap: proposedHandicap };
+  if (displayName) args.p_display_name = displayName;
+  const d = await rpc('join_league', args);
   return { leagueId: d.league_id };
 }
 
@@ -522,4 +540,13 @@ export async function uploadLeagueProof(leagueId, cardId, localUri) {
     throw e instanceof LeagueError ? e : toLeagueError({ message: e?.message });
   }
   return path;
+}
+
+// A short-lived URL for a card's proof photo (private bucket; any league member
+// can read it, see `league-proofs member read`).
+export async function getLeagueProofUrl(path) {
+  if (isOfflineNow()) throw new LeagueError(OFFLINE_MESSAGE, { offline: true });
+  const { data, error } = await supabase.storage.from(PROOF_BUCKET).createSignedUrl(path, 3600);
+  if (error || !data?.signedUrl) throw toLeagueError(error ?? { message: 'Could not load the photo.' });
+  return data.signedUrl;
 }

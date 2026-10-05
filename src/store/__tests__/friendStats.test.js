@@ -223,7 +223,11 @@ function summaryFixture(specs = SUMMARY_ROUNDS) {
 }
 
 describe('buildFriendSummary', () => {
+  // indexMove looks 90 days back from Date.now(); the fixture rounds are dated
+  // 2026-07-01, so pin the clock inside that window or the test rots in time.
+  jest.useFakeTimers({ now: new Date('2026-07-15T12:00:00.000Z') });
   const summary = buildFriendSummary(summaryFixture());
+  jest.useRealTimers();
 
   test('counts rounds and rated rounds', () => {
     expect(summary.roundCount).toBe(6);
