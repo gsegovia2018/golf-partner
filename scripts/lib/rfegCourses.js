@@ -162,7 +162,9 @@ function skipReason(r) {
 // words, leaving roman numerals and tokens like "A+A" or "P&P" alone.
 function tidyCaps(s) {
   return s.replace(/\s+/g, ' ').split(' ').map((w) => (
-    /^\p{Lu}{2,}$/u.test(w) && !/^[IVX]+$/.test(w) ? w.charAt(0) + w.slice(1).toLowerCase() : w
+    /^\p{Lu}[\p{Lu}-]+$/u.test(w) && !/^[IVX]+$/.test(w)
+      ? w.toLowerCase().replace(/(^|-)(\p{L})/gu, (m) => m.toUpperCase())
+      : w
   )).join(' ');
 }
 
@@ -179,7 +181,8 @@ function courseName(clubName, recorrido, layoutCount) {
 }
 
 const STOP = new Set(['club', 'de', 'del', 'golf', 'real', 'the', 'resort', 'y', 'and', 'la', 'el',
-  'los', 'las', 'campo', 'country', 'course', 'hotel', 'spa', 'sl', 'sa', 'cd', 'rcg', 'cg']);
+  'los', 'las', 'campo', 'country', 'course', 'hotel', 'spa', 'sl', 'sa', 'cd', 'rcg', 'cg',
+  'escuela', 'publica', 'municipal', 'deportivo', 'deportiva', 'asociacion', 'centro', 'parque']);
 
 // Distinctive words of a name, accent- and case-folded.
 function nameTokens(s) {
@@ -230,6 +233,13 @@ function findExisting(layout, clubName, existing) {
   return best;
 }
 
+// Federation layouts reviewed by hand as already being a library course
+// that the automatic match cannot see (`<slug>:<recorrido>` → course name).
+const SAME_AS = {
+  // Same club; the library row's scorecard predates the federation's.
+  'olalla-golf-club:CUENCA GOLF': 'Cuenca Golf Club Villar de Olalla',
+};
+
 // Stable uuid from a string, so re-running the generator yields the same ids.
 function stableUuid(key) {
   const h = crypto.createHash('sha1').update(`rfeg:${key}`).digest('hex');
@@ -239,5 +249,5 @@ function stableUuid(key) {
 module.exports = {
   regionForPostalCode, teeLabel, parseOptionText, parsePanel, parseClubPage,
   skipReason, layoutShortName, courseName, nameTokens, holesKey, siKey,
-  findExisting, stableUuid,
+  findExisting, sameWord, stableUuid, SAME_AS,
 };

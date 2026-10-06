@@ -11,7 +11,8 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const {
-  skipReason, courseName, layoutShortName, findExisting, holesKey, siKey, stableUuid,
+  regionForPostalCode, skipReason, courseName, layoutShortName, findExisting, holesKey, siKey,
+  nameTokens, sameWord, stableUuid, SAME_AS,
 } = require('./lib/rfegCourses');
 
 const OUT = process.argv[2];
@@ -30,12 +31,7 @@ async function query(sql) {
   return res.json();
 }
 
-// Federation layouts reviewed by hand as already being a library course
-// that the automatic match cannot see (`<slug>:<recorrido>` → course name).
-const SAME_AS = {
-  // Same club; the library row's scorecard predates the federation's.
-  'olalla-golf-club:CUENCA GOLF': 'Cuenca Golf Club Villar de Olalla',
-};
+const REGIONS = new Set(Array.from({ length: 52 }, (_, i) => regionForPostalCode(`${String(i + 1).padStart(2, '0')}000`)));
 
 const q = (v) => (v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`);
 const n = (v) => (v == null ? 'NULL' : String(v));
@@ -43,14 +39,15 @@ const n = (v) => (v == null ? 'NULL' : String(v));
 async function main() {
   const clubs = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'spain-courses.json'), 'utf8'));
   const existing = await query(`
-    SELECT c.id, c.name, c.club_id,
+    SELECT c.id, c.name, c.club_id, c.province,
       string_agg(h.par::text, '' ORDER BY h.number) AS pars,
       string_agg(h.stroke_index::text, ',' ORDER BY h.number) AS si
     FROM public.courses c JOIN public.course_holes h ON h.course_id = c.id
-    GROUP BY c.id, c.name, c.club_id`);
+    GROUP BY c.id, c.name, c.club_id, c.province`);
   const existingNames = new Set(existing.map((c) => c.name.toLowerCase()));
-  const clubIdByName = new Map((await query('SELECT id, name FROM public.clubs'))
-    .map((c) => [c.name.toLowerCase(), c.id]));
+  const libraryClubs = await query('SELECT id, name FROM public.clubs');
+  const clubIdByName = new Map(libraryClubs.map((c) => [c.name.toLowerCase(), c.id]));
+  const clubNameById = new Map(libraryClubs.map((c) => [c.id, c.name]));
 
   const report = { matched: [], skipped: [], duplicate: [], nameClash: [], added: [] };
   const seen = new Map(); // pars|si → course name, across federation clubs
@@ -75,7 +72,14 @@ async function main() {
       if (manual && !hit) throw new Error(`SAME_AS target not in the library: ${manual}`);
       if (hit) {
         report.matched.push(`${club.name} / ${r.recorrido} = ${hit.name}`);
-        siblingClubId = siblingClubId ?? hit.club_id;
+        // Join a sibling's club only when it is in this club's region and is
+        // named like this club — a stale match can have filed it elsewhere.
+        const words = [...nameTokens(club.name)];
+        const sameClub = hit.club_id
+          && [...nameTokens(clubNameById.get(hit.club_id))].some((w) => words.some((x) => sameWord(w, x)));
+        if (sameClub && (!REGIONS.has(hit.province) || hit.province === club.region)) {
+          siblingClubId = siblingClubId ?? hit.club_id;
+        }
         continue;
       }
       const key = `${holesKey(r.holes)}|${siKey(r.holes)}`;
