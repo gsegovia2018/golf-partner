@@ -1,19 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Switch, Alert,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Switch, Alert, Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import PullToRefresh from '../components/PullToRefresh';
 import DateField from '../components/DateField';
+import DeleteLeagueSheet from '../components/DeleteLeagueSheet';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings } from '../store/settingsStore';
 import {
-  updateLeagueRules, setLeagueFeePaid, setLeagueRole, archiveLeague, leaveLeague,
+  updateLeagueRules, setLeagueFeePaid, setLeagueRole, archiveLeague, leaveLeague, deleteLeague,
 } from '../store/leagueStore';
 import {
   parseIsoDate, parsePointsTable, formatPointsTable, parseFeeCents,
@@ -28,12 +29,24 @@ import {
   LEAGUE_NOTIFICATION_ROWS, resolveLeaguePrefs, leaguePrefsPatch,
 } from '../store/leagueNotificationPrefs';
 
+// Alert.alert does nothing on web (react-native-web), so both helpers fall
+// back to the browser's own dialogs there.
 function fail(e) {
-  Alert.alert('Error', e?.message || 'Something went wrong');
+  const message = e?.message || 'Something went wrong';
+  if (Platform.OS === 'web') window.alert(message);
+  else Alert.alert('Error', message);
+}
+
+function confirmDestructive(title, message, actionLabel) {
+  if (Platform.OS === 'web') return Promise.resolve(window.confirm(`${title}\n\n${message}`));
+  return new Promise((resolve) => Alert.alert(title, message, [
+    { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+    { text: actionLabel, style: 'destructive', onPress: () => resolve(true) },
+  ], { cancelable: true, onDismiss: () => resolve(false) }));
 }
 
 // Links to Members and the Final, rules (admin edits), fees and roles (admin),
-// notification switches and leave / archive. Everyone sees the rules; only an admin can change them.
+// notification switches and leave / archive / delete. Everyone sees the rules; only an admin can change them.
 export default function LeagueSettingsScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -51,6 +64,9 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   const [feeText, setFeeText] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
   const seededRef = useRef(false);
 
   // Seed the form once, from the first snapshot (cache or live). Later
@@ -164,37 +180,49 @@ export default function LeagueSettingsScreen({ navigation, route }) {
     return act(async () => { await setLeagueRole(leagueId, member.userId, makeAdmin ? 'admin' : 'member'); await reload(); });
   }
 
-  function confirmArchive() {
-    Alert.alert(
+  async function confirmArchive() {
+    const yes = await confirmDestructive(
       'Archive the league?',
       'The board stays visible but becomes read-only for everyone. Announcing cards, joining and handicap changes stop.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Archive',
-          style: 'destructive',
-          onPress: () => act(async () => { await archiveLeague(leagueId); await reload(); }),
-        },
-      ],
+      'Archive',
     );
+    if (yes) await act(async () => { await archiveLeague(leagueId); await reload(); });
   }
 
-  function confirmLeave() {
-    Alert.alert(
+  async function confirmLeave() {
+    const yes = await confirmDestructive(
       'Leave this league?',
       'Your past cards stay in the standings, marked as left. You can rejoin with the invite link.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            const ok = await act(async () => { await leaveLeague(leagueId); });
-            if (ok) navigation.navigate('Main');
-          },
-        },
-      ],
+      'Leave',
     );
+    if (!yes) return;
+    const ok = await act(async () => { await leaveLeague(leagueId); });
+    if (ok) navigation.navigate('Main');
+  }
+
+  function openDelete() {
+    setDeleteError(null);
+    setDeleteOpen(true);
+  }
+
+  async function runDelete() {
+    if (deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await deleteLeague(leagueId);
+      setDeleteOpen(false);
+      navigation.navigate('Main');
+    } catch (e) {
+      setDeleteError(e?.message || 'Something went wrong.');
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  function archiveInstead() {
+    setDeleteOpen(false);
+    confirmArchive();
   }
 
   const field = (label, props) => (
@@ -376,11 +404,32 @@ export default function LeagueSettingsScreen({ navigation, route }) {
             <Text style={s.dangerSub}>Keeps the board read-only for everyone</Text>
           </TouchableOpacity>
         )}
+        {isAdmin && (
+          <TouchableOpacity style={s.dangerRow} onPress={openDelete} disabled={busy} activeOpacity={0.7} accessibilityRole="button">
+            <Text style={s.dangerTitle}>Delete the league</Text>
+            <Text style={s.dangerSub}>{"Removes it for everyone. Can't be undone"}</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={s.dangerRow} onPress={confirmLeave} disabled={busy} activeOpacity={0.7}>
           <Text style={s.dangerTitle}>Leave league</Text>
           <Text style={s.dangerSub}>Your past cards stay in the standings</Text>
         </TouchableOpacity>
       </PullToRefresh>
+      {isAdmin && (
+        <DeleteLeagueSheet
+          visible={deleteOpen}
+          leagueName={league.name}
+          memberCount={active.length}
+          cardCount={data.cards.filter((c) => c.status !== 'void').length}
+          hasFinal={!!data.final}
+          canArchive={!archived}
+          busy={deleteBusy}
+          error={deleteError}
+          onConfirm={runDelete}
+          onArchiveInstead={archiveInstead}
+          onCancel={() => setDeleteOpen(false)}
+        />
+      )}
     </ScreenContainer>
   );
 }

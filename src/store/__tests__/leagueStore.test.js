@@ -4,7 +4,7 @@ import {
   updateLeagueRules, leaveLeague, openHandicapVote, castHandicapBallot, announceLeagueCard,
   notifyLeagueTeeOff, submitLeagueCard, addUnannouncedLeagueCard, confirmLeagueCardByPartner,
   attachLeagueProof, createMarkerToken, voidLeagueCard, recordLeagueFinal, getMyLeagues, getMyCardsForMonth,
-  getLeagueCard, setLeagueRole, archiveLeague, getLeague, getLeagueCached, setLeagueCache, uploadLeagueProof, rowToCard,
+  getLeagueCard, setLeagueRole, archiveLeague, deleteLeague, getLeague, getLeagueCached, setLeagueCache, uploadLeagueProof, rowToCard,
 } from '../leagueStore';
 
 // mockState is read inside the jest.mock factories; the `mock` prefix is what
@@ -17,6 +17,8 @@ const mockState = {
   queries: [],
   upload: { error: null },
   uploads: [],
+  proofList: { data: [], error: null },
+  removed: [],
   user: { id: 'me' },
 };
 
@@ -49,6 +51,14 @@ jest.mock('../../lib/supabase', () => {
           upload: (path, body, opts) => {
             mockState.uploads.push({ bucket, path, body, opts });
             return Promise.resolve(mockState.upload);
+          },
+          list: () => {
+            if (mockState.proofList instanceof Error) return Promise.reject(mockState.proofList);
+            return Promise.resolve(mockState.proofList);
+          },
+          remove: (paths) => {
+            mockState.removed.push({ bucket, paths });
+            return Promise.resolve({ data: [], error: null });
           },
         }),
       },
@@ -87,6 +97,8 @@ beforeEach(() => {
   mockState.queries = [];
   mockState.upload = { error: null };
   mockState.uploads = [];
+  mockState.proofList = { data: [], error: null };
+  mockState.removed = [];
   mockState.user = { id: 'me' };
   AsyncStorage.__store.clear();
   ImageManipulator.manipulateAsync.mockClear();
@@ -147,6 +159,26 @@ describe('RPC params', () => {
     expect(lastRpc()).toEqual(['set_league_role', { p_league: 'L1', p_user: 'u2', p_role: 'admin' }]);
     await archiveLeague('L1');
     expect(lastRpc()).toEqual(['archive_league', { p_league: 'L1' }]);
+  });
+
+  test('deleteLeague removes the proof photos, then the league, then the cache', async () => {
+    AsyncStorage.__store.set('@golf_league_cache:L1', '{}');
+    mockState.proofList = { data: [{ name: 'C1.jpg' }, { name: 'C2.jpg' }], error: null };
+    await deleteLeague('L1');
+    expect(mockState.removed).toEqual([{ bucket: 'league-proofs', paths: ['L1/C1.jpg', 'L1/C2.jpg'] }]);
+    expect(lastRpc()).toEqual(['delete_league', { p_league: 'L1' }]);
+    expect(AsyncStorage.__store.has('@golf_league_cache:L1')).toBe(false);
+  });
+
+  test('deleteLeague still deletes when listing the photos fails, and keeps the cache on RPC error', async () => {
+    mockState.proofList = new Error('network');
+    await deleteLeague('L1');
+    expect(lastRpc()).toEqual(['delete_league', { p_league: 'L1' }]);
+
+    AsyncStorage.__store.set('@golf_league_cache:L2', '{}');
+    mockState.rpcResult = { data: null, error: { code: '42501', message: 'Only the league admin can do that.' } };
+    await expect(deleteLeague('L2')).rejects.toMatchObject({ message: 'Only the league admin can do that.' });
+    expect(AsyncStorage.__store.has('@golf_league_cache:L2')).toBe(true);
   });
 
   test('updateLeagueRules sends null for omitted fields', async () => {
@@ -279,6 +311,13 @@ describe('errors', () => {
     const err = await announceLeagueCard({ leagueId: 'L1', source: 'offapp', course: { name: 'X' } })
       .catch((e) => e);
     expect(err.offline).toBe(true);
+  });
+
+  test('a league that no longer exists reads as league_gone', async () => {
+    mockState.tables.leagues = { data: null, error: null };
+    await expect(getLeague('L1')).rejects.toMatchObject({
+      name: 'LeagueError', code: 'league_gone', message: 'This league no longer exists.',
+    });
   });
 
   test('read errors propagate as LeagueError', async () => {

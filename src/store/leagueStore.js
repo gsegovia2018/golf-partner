@@ -31,6 +31,8 @@ export class LeagueError extends Error {
 }
 
 export const OFFLINE_MESSAGE = 'You need a connection to do this.';
+// A deleted league, or one I can no longer see (RLS hides it the same way).
+export const LEAGUE_GONE_MESSAGE = 'This league no longer exists.';
 
 function isOfflineNow() {
   return Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.onLine === false;
@@ -265,8 +267,9 @@ export async function getLeagueCard(cardId) {
 // `cardsByMonth` ({ 'YYYY-MM': cards[] }, void excluded) feeds seasonTable.
 export async function getLeague(leagueId) {
   const leagueRow = await selectRows(
-    supabase.from('leagues').select('*').eq('id', leagueId).single(),
+    supabase.from('leagues').select('*').eq('id', leagueId).maybeSingle(),
   );
+  if (!leagueRow) throw new LeagueError(LEAGUE_GONE_MESSAGE, { code: 'league_gone' });
   const league = rowToLeague(leagueRow);
 
   const [memberRows, cardRows, voteRows, eventRows, finalRow] = await Promise.all([
@@ -396,6 +399,28 @@ export async function setLeagueRole(leagueId, userId, role) {
 // Admin. An archived league refuses announces, joins and other writes.
 export async function archiveLeague(leagueId) {
   await rpc('archive_league', { p_league: leagueId });
+}
+
+// Admin. Deletes the league for everyone; every league row cascades from it.
+// Proof photos go first, through the Storage API (an admin may delete them,
+// see `league-proofs admin delete`): once the league is gone nobody can.
+// Removing them is best effort — a leftover photo is private and unreachable.
+export async function deleteLeague(leagueId) {
+  if (isOfflineNow()) throw new LeagueError(OFFLINE_MESSAGE, { offline: true });
+  try {
+    const bucket = supabase.storage.from(PROOF_BUCKET);
+    const { data } = await bucket.list(leagueId, { limit: 1000 });
+    const paths = (data ?? []).map((f) => `${leagueId}/${f.name}`);
+    if (paths.length) await bucket.remove(paths);
+  } catch {
+    // Best effort, see above.
+  }
+  await rpc('delete_league', { p_league: leagueId });
+  try {
+    await AsyncStorage.removeItem(CACHE_PREFIX + leagueId);
+  } catch {
+    // Cache is best-effort.
+  }
 }
 
 // ---- handicap votes -------------------------------------------------------
