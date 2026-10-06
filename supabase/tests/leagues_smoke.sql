@@ -1,5 +1,5 @@
 -- ============================================================================
--- Smoke test for 20261004000000_leagues.sql (+ 20261005000000_league_net_differential.sql)
+-- Smoke test for 20261004000000_leagues.sql (+ 20261005000001_league_net_differential.sql)
 -- — the league RPCs under a
 -- simulated auth uid, their refusals, RLS, and the anon surface.
 --
@@ -760,7 +760,7 @@ BEGIN
 END $$;
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
 
--- 9b) Net differential (20261005000000_league_net_differential.sql) ------------------
+-- 9b) Net differential (20261005000001_league_net_differential.sql) ------------------
 -- Worked example: CNG Amarillas, slope 130 / CR 71.4 / par 72, gross 86 with
 -- hole 4 (par 5, SI 1) a 9 capped to 8 at playing handicap 16 -> adjusted 85
 -- -> differential 11.8; league handicap 14.2 -> net -2.4.
