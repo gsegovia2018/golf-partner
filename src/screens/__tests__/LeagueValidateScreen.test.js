@@ -47,6 +47,12 @@ function tournament(scores = fives) {
   };
 }
 
+const unratedTournament = () => {
+  const t = tournament();
+  t.rounds[0].playerTees = { p1: { label: 'Red', slope: null, rating: null } };
+  return t;
+};
+
 const route = { params: { leagueId: 'L1', cardId: 'card-1', tournamentId: 't1', roundId: 't1-r0' } };
 const makeNav = () => ({ replace: jest.fn(), navigate: jest.fn() });
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
@@ -83,6 +89,31 @@ describe('LeagueValidateScreen', () => {
 
     fireEvent.press(getByText('Done'));
     expect(navigation.replace).toHaveBeenCalledWith('LeagueBoard', { leagueId: 'L1' });
+  });
+
+  test('confirmed: a result card speaks the net differential and links to how it is worked out', async () => {
+    store.confirmLeagueCardByPartner.mockResolvedValue({
+      confirmed: true, settled: 18, partnerName: 'Javi', partnerUserId: 'user-2',
+    });
+    const navigation = makeNav();
+    const { findByText, getByText } = render(wrap(<LeagueValidateScreen navigation={navigation} route={route} />));
+    fireEvent.press(await findByText('Submit card'));
+    // Yellow 125 / CR 72, league handicap 18: all 5s on par 4, playing handicap 20 -> cap 7, nothing capped.
+    // differential = 113 / 125 x (90 - 72) = 16.3; net = 16.3 - 18 = -1.7.
+    expect(await findByText('1.7 better')).toBeTruthy();
+    expect(getByText('than your league handicap 18.0')).toBeTruthy();
+    expect(getByText('Net −1.7 · differential 16.3 · 38 pts · gross 90 (adjusted 90)')).toBeTruthy();
+    fireEvent.press(getByText("How it's worked out ›"));
+    expect(navigation.navigate).toHaveBeenCalledWith('LeagueCard', expect.objectContaining({ leagueId: 'L1', userId: 'user-1' }));
+  });
+
+  test('an unrated tee says so and blocks Submit', async () => {
+    repo.fetchTournament.mockResolvedValue(unratedTournament());
+    const { findByText, getByText } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+    expect(await findByText("This tee isn't rated")).toBeTruthy();
+    expect(getByText(/can't count for the league/)).toBeTruthy();
+    fireEvent.press(getByText('Submit card'));
+    expect(store.submitLeagueCard).not.toHaveBeenCalled();
   });
 
   test('the grid totals match the submitted card', async () => {

@@ -35,8 +35,10 @@ async function rpc(fn, args) {
 
 /**
  * Whitelisted view of one card. Throws MarkerCardError with `reason`.
- * @returns {Promise<{playerFirstName:string, course:string, tee:string|null, date:string|null,
- *   playingHandicap:number|null, gross:number|null, points:number|null, expiresAt:string,
+ * @returns {Promise<{playerFirstName:string, course:string, tee:string|null,
+ *   slope:number|null, rating:number|null, date:string|null,
+ *   playingHandicap:number|null, gross:number|null, points:number|null,
+ *   differential:number|null, netDifferential:number|null, expiresAt:string,
  *   holes:Array<{n:number, par:number, si:number, strokes:number|null}>}>}
  */
 export async function getMarkerCard(token) {
@@ -45,10 +47,14 @@ export async function getMarkerCard(token) {
     playerFirstName: d.player_first_name,
     course: d.course,
     tee: d.tee ?? null,
+    slope: d.slope == null ? null : Number(d.slope),
+    rating: d.rating == null ? null : Number(d.rating),
     date: d.date ?? null,
     playingHandicap: d.playing_handicap ?? null,
     gross: d.gross ?? null,
     points: d.points ?? null,
+    differential: d.differential == null ? null : Number(d.differential),
+    netDifferential: d.net_differential == null ? null : Number(d.net_differential),
     expiresAt: d.expires_at,
     holes: (d.holes ?? []).map((h) => ({ n: h.n, par: h.par, si: h.si, strokes: h.strokes ?? null })),
   };

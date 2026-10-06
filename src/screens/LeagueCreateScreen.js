@@ -221,13 +221,13 @@ export default function LeagueCreateScreen({ navigation }) {
       <Text style={s.stepPrompt}>How does it work?</Text>
       <Text style={s.stepSubtitle}>Set up like your group's rules.</Text>
       <View style={s.card}>
-        {ruleRow('calendar', 'One card a month', '18 holes, any course. Declare before the first shot.')}
-        {ruleRow('target', 'Net Stableford', `Each member's league handicap, max ${effectiveCap}`, true)}
+        {ruleRow('calendar', 'One card a month', '18 holes, any rated course. Declare before the first shot.')}
+        {ruleRow('target', 'Better or worse than your handicap', `Each card is scored against the member's league handicap (max ${effectiveCap}) using the tee's slope and rating, so different courses compare fairly. 2.4 better beats 1.4 better.`, true)}
       </View>
 
       <Text style={s.fieldLabel}>Points table (1st, 2nd, 3rd…)</Text>
       {input({ value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none', keyboardType: 'numbers-and-punctuation' })}
-      <Text style={s.hint}>Ties share the summed points equally. No card scores 0.</Text>
+      <Text style={s.hint}>Ties (to one decimal) share the summed points equally. No card scores 0.</Text>
       {!pointsTable && <Text style={s.errorText}>Enter whole numbers separated by commas.</Text>}
 
       <Text style={s.fieldLabel}>Handicap cap</Text>
@@ -328,7 +328,7 @@ export default function LeagueCreateScreen({ navigation }) {
         />
         <View style={s.chipRow}>
           <View style={s.chip}><Text style={s.chipText}>{`${memberCount} member${memberCount === 1 ? '' : 's'}`}</Text></View>
-          <View style={s.chip}><Text style={s.chipText}>Net Stableford</Text></View>
+          <View style={s.chip}><Text style={s.chipText}>Net differential</Text></View>
         </View>
       </View>
 
@@ -378,7 +378,7 @@ export default function LeagueCreateScreen({ navigation }) {
             <View style={s.chipRow}>
               <View style={s.chip}><Text style={s.chipText}>{`${memberCount} member${memberCount === 1 ? '' : 's'}`}</Text></View>
               <View style={s.chip}><Text style={s.chipText}>{`${fmtDate(startIso)} – ${fmtDate(endIso)}`}</Text></View>
-              <View style={s.chip}><Text style={s.chipText}>Net Stableford</Text></View>
+              <View style={s.chip}><Text style={s.chipText}>Net differential</Text></View>
             </View>
           </View>
 

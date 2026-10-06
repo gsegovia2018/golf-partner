@@ -19,7 +19,7 @@ const member = (userId, displayName, extra = {}) => ({
   userId, displayName, role: 'member', leftAt: null, leagueHandicap: 20, ...extra,
 });
 const card = (userId, points) => ({
-  id: `c-${userId}`, userId, status: 'confirmed', points, month: '2026-09-01', monthKey: '2026-09',
+  id: `c-${userId}`, userId, status: 'confirmed', points, netDifferential: 40 - points, month: '2026-09-01', monthKey: '2026-09',
 });
 
 const snapshot = {

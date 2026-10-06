@@ -289,7 +289,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
             {field('Points table (1st, 2nd, 3rd…)', { value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none' })}
             {field('Handicap cap', { value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}
             {field('Entry fee (€)', { value: feeText, onChangeText: setFeeText, keyboardType: 'decimal-pad', placeholder: '0' })}
-            <Text style={s.hint}>One card a month and net Stableford are fixed for every league.</Text>
+            <Text style={s.hint}>One card a month and net differential are fixed for every league.</Text>
             <TouchableOpacity
               style={[s.primaryBtn, (!formValid || busy) && { opacity: 0.5 }]}
               onPress={saveRules}
@@ -301,7 +301,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
           </View>
         ) : (
           <View style={[s.card, { paddingVertical: 4 }]}>
-            {readRow('Format', 'One card a month · net Stableford')}
+            {readRow('Format', 'One card a month · net differential')}
             {readRow('Points table', `${formatPointsTable(league.pointsTable)} · ties share`)}
             {readRow('Handicaps', `Max ${league.handicapCap} · changes need ${voteThreshold(active.length)} of ${active.length} votes`)}
             {readRow('Entry fee', league.entryFeeCents > 0 ? formatEuros(league.entryFeeCents) : 'None', true)}

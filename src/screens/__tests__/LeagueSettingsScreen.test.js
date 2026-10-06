@@ -100,7 +100,7 @@ describe('LeagueSettingsScreen', () => {
   test('a plain member sees the rules read-only and no admin controls', async () => {
     store.getLeague.mockResolvedValue(snapshot({ admin: false }));
     const { getByText, queryByText, queryByDisplayValue } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
-    await waitFor(() => getByText('One card a month · net Stableford'));
+    await waitFor(() => getByText('One card a month · net differential'));
     expect(queryByDisplayValue('El Club')).toBeNull();
     expect(queryByText('Save rules')).toBeNull();
     expect(queryByText('Archive the league')).toBeNull();

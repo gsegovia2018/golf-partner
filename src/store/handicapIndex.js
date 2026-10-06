@@ -13,6 +13,27 @@ import {
 
 const round1 = (n) => Math.round(n * 10) / 10;
 
+// A tee can produce a differential only with a numeric slope > 0 and a
+// numeric course rating. Shared by the handicap index and the league.
+export function isRatedTee(tee) {
+  const sv = parseInt(tee?.slope, 10) || 0;
+  return sv > 0 && Number.isFinite(parseFloat(tee?.rating));
+}
+
+// Net double bogey: the most a hole can count for a differential
+// (par + 2 + strokes received on it).
+export function netDoubleBogeyCap(par, playingHandicap, strokeIndex, holeCount = 18) {
+  return par + 2 + calcExtraShots(playingHandicap, strokeIndex, holeCount);
+}
+
+// WHS score differential, (113 / slope) x (adjusted gross - course rating),
+// to one decimal. null when the tee is not rated.
+export function scoreDifferential(adjustedGross, slope, rating) {
+  if (!isRatedTee({ slope, rating })) return null;
+  const sv = parseInt(slope, 10);
+  return round1((STANDARD_SLOPE / sv) * (adjustedGross - parseFloat(rating)));
+}
+
 // Why a round doesn't qualify for a differential. Check order matters: an
 // unfinished short round reads as 'partial' (the actionable problem), only a
 // finished non-18-hole round reads as 'nine-holes'.
@@ -38,24 +59,21 @@ export function roundDifferential(myRound) {
   const holes = round?.holes ?? [];
   if (holes.length !== 18) return null;
   const { slope, rating } = resolveRoundTee(round, playerId);
-  const sv = parseInt(slope, 10) || 0;
-  const cr = parseFloat(rating);
-  if (sv <= 0 || !Number.isFinite(cr)) return null;
+  if (!isRatedTee({ slope, rating })) return null;
   const scores = round?.scores?.[playerId] ?? {};
   const playingHandicap = getPlayingHandicap(round, player);
   let ags = 0;
   for (const h of holes) {
     const gross = scores[h.number];
     if (gross == null) return null;
-    const cap = h.par + 2 + calcExtraShots(playingHandicap, h.strokeIndex);
-    ags += Math.min(gross, cap);
+    ags += Math.min(gross, netDoubleBogeyCap(h.par, playingHandicap, h.strokeIndex));
   }
   return {
     key: myRound.key,
-    differential: round1((STANDARD_SLOPE / sv) * (ags - cr)),
+    differential: scoreDifferential(ags, slope, rating),
     ags,
-    slope: sv,
-    rating: cr,
+    slope: parseInt(slope, 10),
+    rating: parseFloat(rating),
     courseName: myRound.courseName,
     date: myRound.tournamentDate ?? null,
   };

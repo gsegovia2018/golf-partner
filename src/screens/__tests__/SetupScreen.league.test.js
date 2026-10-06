@@ -141,6 +141,30 @@ describe('SetupScreen league switch', () => {
     expect(queryByLabelText('Counts for El Club del Mulligan')).toBeNull();
   });
 
+  test('unrated tee: the switch is off and disabled, with the reason and a way to add the rating', async () => {
+    const red = { label: 'Red', slope: null, rating: null };
+    const prefill = params({ leagueId: 'L1' }).prefill;
+    prefill.rounds[0].tees = [red];
+    const { findByLabelText, getByText, queryByText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: { ...params({ leagueId: 'L1' }), prefill } }} />,
+    ));
+    const sw = await findByLabelText('Counts for El Club del Mulligan');
+    expect(sw.props.value).toBe(false);
+    expect(sw.props.disabled).toBe(true);
+    expect(getByText(/Your Red tees aren't rated, so this round can't be your \w+ card yet\./)).toBeTruthy();
+    expect(queryByText(/strokes from your league handicap/)).toBeNull();
+
+    fireEvent.press(getByText('Add slope and rating to Red tees ›'));
+    expect(navigation.navigate).toHaveBeenCalledWith('CourseEditor', expect.objectContaining({
+      roundIndex: 0, initialTees: [red], courseName: 'Centro Nacional',
+    }));
+
+    // Start makes a normal game: nothing is announced to the league.
+    fireEvent.press(getByText('Start Game'));
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    expect(store.announceLeagueCard).not.toHaveBeenCalled();
+  });
+
   test('archived league: no switch', async () => {
     store.getMyLeagues.mockResolvedValue([tour({ archivedAt: '2026-01-01T00:00:00Z' })]);
     const { queryByLabelText } = render(wrap(<SetupScreen navigation={navigation} route={{ params: params() }} />));

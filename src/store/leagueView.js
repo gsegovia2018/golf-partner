@@ -2,6 +2,8 @@
 // formats live here so the Play tab, board and members screens agree.
 import { cardMonth } from './leagueRules';
 import { seasonTable, monthResults } from './leagueStandings';
+import { isRatedTee, netDoubleBogeyCap } from './handicapIndex';
+import { calcExtraShots, calcStablefordPoints } from './scoring';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -27,6 +29,33 @@ export function formatPoints(n) {
   const v = Number(n) || 0;
   const text = Number.isInteger(v) ? String(v) : v.toFixed(1);
   return text.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// A net differential in words (lower is better): -2.4 -> '2.4 better',
+// 3.1 -> '3.1 worse', 0 -> 'level', null -> '—'.
+export function formatNetDiff(n) {
+  if (n == null || n === '') return '—';
+  const v = Math.round(Number(n) * 10) / 10;
+  if (!Number.isFinite(v)) return '—';
+  if (v === 0) return 'level';
+  return `${Math.abs(v).toFixed(1)} ${v < 0 ? 'better' : 'worse'}`;
+}
+
+// Which way a net differential points: 'better' (below 0), 'worse' (above 0)
+// or null (level / unknown). Same rounding as formatNetDiff.
+export function netDiffTone(n) {
+  if (n == null || n === '') return null;
+  const v = Math.round(Number(n) * 10) / 10;
+  if (!Number.isFinite(v) || v === 0) return null;
+  return v < 0 ? 'better' : 'worse';
+}
+
+// The signed number behind the words: -2.4 -> '−2.4', 3.1 -> '+3.1', 0 -> '0.0'.
+export function formatNetDiffSigned(n) {
+  const v = Math.round(Number(n) * 10) / 10;
+  if (!Number.isFinite(v)) return '—';
+  if (v === 0) return '0.0';
+  return `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(1)}`;
 }
 
 // 3000 -> '30 €', 3050 -> '30,50 €'.
@@ -73,18 +102,26 @@ function clock(iso, now) {
   return d.toDateString() === now.toDateString() ? `today ${hm}` : `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} ${hm}`;
 }
 
-// One member's line for the current month: { text, tone, flag }.
-// tone: 'done' (counts), 'live' (in progress), 'muted' (no card).
+// One member's line for the current month: { text, tone, flag, lead, leadTone }.
+// tone: 'done' (counts), 'live' (in progress), 'muted' (no card). `lead` is the
+// spoken net differential ('2.4 better') that `text` starts with, so the screen
+// can colour it; leadTone is 'better' | 'worse' | null.
 export function cardStatus(card, now = new Date()) {
   if (!card) return { text: 'No card yet', tone: 'muted', flag: null };
   const flag = card.notAnnounced ? 'Not announced in the app' : null;
-  const pts = card.points != null ? `${formatPoints(card.points)} pts` : '';
   const offApp = card.source === 'offapp';
+  const hasNet = card.netDifferential != null;
+  const pts = card.points != null ? `${formatPoints(card.points)} pts` : '';
+  const lead = hasNet ? formatNetDiff(card.netDifferential) : null;
+  const leadTone = hasNet ? netDiffTone(card.netDifferential) : null;
   switch (card.status) {
     case 'confirmed':
-      return { text: `${pts} · confirmed`, tone: 'done', flag };
-    case 'submitted':
-      return { text: `${pts} · ${offApp ? 'added after the round' : 'submitted'}`, tone: 'done', flag };
+      if (!hasNet) return { text: 'unrated · not ranked', tone: 'muted', flag, lead: 'unrated', leadTone: null };
+      return { text: `${lead} · confirmed`, tone: 'done', flag, lead, leadTone };
+    case 'submitted': {
+      const how = offApp ? 'added after the round' : 'submitted';
+      return { text: `${lead ?? pts} · ${how}`, tone: 'done', flag, lead, leadTone };
+    }
     case 'playing':
       return { text: 'Playing now', tone: 'live', flag };
     case 'announced':
@@ -94,8 +131,8 @@ export function cardStatus(card, now = new Date()) {
   }
 }
 
-// Members with this month's card, best first: confirmed by points, then
-// submitted, playing, announced, then nobody.
+// Members with this month's card, best first: confirmed by net differential
+// (lowest first, unrated after), then submitted, playing, announced, then nobody.
 export function monthRows(members, cardsByMonth, month, now = new Date()) {
   const cards = cardsByMonth?.[month] ?? [];
   const rows = (members ?? []).filter((m) => !m.leftAt).map((m) => {
@@ -103,7 +140,8 @@ export function monthRows(members, cardsByMonth, month, now = new Date()) {
     return { member: m, card, ...cardStatus(card, now) };
   });
   const rank = (r) => (r.card ? STATUS_RANK[r.card.status] ?? 4 : 5);
-  return rows.sort((a, b) => rank(a) - rank(b) || (b.card?.points ?? 0) - (a.card?.points ?? 0));
+  const nd = (r) => (r.card?.netDifferential == null ? Infinity : Number(r.card.netDifferential));
+  return rows.sort((a, b) => rank(a) - rank(b) || (nd(a) === nd(b) ? 0 : nd(a) - nd(b)));
 }
 
 // The month's cards that can be opened read-only: scored (submitted or
@@ -125,21 +163,25 @@ function waitingReason(card) {
 }
 
 // The month board, grouped for the board's month view. Only the confirmed
-// group ranks; `seasonPoints` is the table points the place earns if the
-// month ended now. waiting = submitted, onCourse = playing or announced
+// group ranks, by net differential (lowest first); an unrated confirmed card
+// is listed after the ranked ones with place null and `unrated: true`.
+// `seasonPoints` is the table points the place earns if the month ended now. waiting = submitted, onCourse = playing or announced
 // (playing first), noCard = active members with nothing this month.
 export function monthBoard(members, cardsByMonth, month, pointsTable) {
   const active = (members ?? []).filter((m) => !m.leftAt);
   const cards = (cardsByMonth?.[month] ?? []).filter((c) => c.status !== 'void');
-  const bestCard = (userId, ok) => cards.filter((c) => c.userId === userId && ok(c))
-    .sort((a, b) => (b.points ?? 0) - (a.points ?? 0))[0] ?? null;
+  // Lowest net differential first; a card without one (unrated) after, by points.
+  const nd = (c) => (c.netDifferential == null ? Infinity : Number(c.netDifferential));
+  const byNet = (a, b) => (nd(a) === nd(b) ? (b.points ?? 0) - (a.points ?? 0) : nd(a) - nd(b));
+  const bestCard = (userId, ok) => cards.filter((c) => c.userId === userId && ok(c)).sort(byNet)[0] ?? null;
   const confirmed = [];
   for (const r of monthResults(cards, active, pointsTable)) {
     const member = (members ?? []).find((m) => m.userId === r.userId);
-    if (r.place == null || !member) continue;
+    if ((r.place == null && !r.unrated) || !member) continue;
     const card = bestCard(r.userId, (c) => c.status === 'confirmed');
     confirmed.push({
-      member, card, place: r.place, isTie: r.isTie, cardPoints: r.cardPoints, seasonPoints: r.seasonPoints,
+      member, card, place: r.place, isTie: r.isTie, unrated: !!r.unrated,
+      netDifferential: r.netDifferential, cardPoints: r.cardPoints, seasonPoints: r.seasonPoints,
       how: HOW_CONFIRMED[card.confirmation] ?? null,
     });
   }
@@ -154,7 +196,7 @@ export function monthBoard(members, cardsByMonth, month, pointsTable) {
     else if (card?.status === 'playing' || card?.status === 'announced') onCourse.push({ member, card });
     else noCard.push(member);
   }
-  waiting.sort((a, b) => (b.card.points ?? 0) - (a.card.points ?? 0));
+  waiting.sort((a, b) => byNet(a.card, b.card));
   onCourse.sort((a, b) => (a.card.status === 'playing' ? 0 : 1) - (b.card.status === 'playing' ? 0 : 1));
   return { confirmed, waiting, onCourse, noCard };
 }
@@ -200,7 +242,17 @@ export function yourCardState(card) {
   if (!card || card.status === 'void') return { kind: 'none' };
   const course = card.course?.name ?? null;
   const pts = card.points != null ? `${formatPoints(card.points)} pts` : null;
-  return { kind: card.status, course, pts, offApp: card.source === 'offapp', card };
+  const hasNet = card.netDifferential != null;
+  return {
+    kind: card.status,
+    course,
+    pts,
+    net: hasNet ? formatNetDiff(card.netDifferential) : null,
+    netTone: hasNet ? netDiffTone(card.netDifferential) : null,
+    unrated: card.status === 'confirmed' && !hasNet,
+    offApp: card.source === 'offapp',
+    card,
+  };
 }
 
 // Season table + "2nd of 7 · 2,340 pts" for one league snapshot (the shape
@@ -226,4 +278,41 @@ export function collapseSeasonRows(rows, { top = 8, expanded = false } = {}) {
     out.push(r);
   });
   return { rows: out, hidden: list.length - keep.size };
+}
+
+// Step-by-step for the card viewer's "How it's worked out": gross, adjusted
+// gross (holes capped at net double bogey), differential, league handicap, net.
+// Works off the frozen card: its course snapshot, strokes and playing handicap
+// (what the server's league_card_differential reads), and the stored
+// differential / netDifferential. perHole: { n, strokes, points, counted, capped }.
+export function cardBreakdown(card) {
+  const snap = card?.course ?? {};
+  const holes = [...(snap.holes ?? [])].sort((a, b) => a.n - b.n);
+  const ph = card?.playingHandicap ?? 0;
+  const perHole = holes.map((h) => {
+    const strokes = Number(card?.holes?.[String(h.n)]) || 0;
+    const cap = netDoubleBogeyCap(h.par, ph, h.si, holes.length);
+    return {
+      n: h.n,
+      strokes,
+      points: calcStablefordPoints(h.par, strokes, ph, h.si, holes.length),
+      extra: calcExtraShots(ph, h.si, holes.length),
+      counted: Math.min(strokes, cap),
+      capped: strokes > cap,
+    };
+  });
+  const gross = perHole.reduce((a, h) => a + h.strokes, 0);
+  const adjustedGross = perHole.reduce((a, h) => a + h.counted, 0);
+  return {
+    perHole,
+    gross,
+    adjustedGross,
+    capped: perHole.filter((h) => h.capped),
+    rated: isRatedTee({ slope: snap.slope, rating: snap.rating }) && card?.netDifferential != null,
+    slope: snap.slope ?? null,
+    rating: snap.rating ?? null,
+    differential: card?.differential ?? null,
+    netDifferential: card?.netDifferential ?? null,
+    leagueHandicap: card?.leagueHandicap ?? null,
+  };
 }

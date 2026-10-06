@@ -6,6 +6,7 @@ import {
 } from './leagueStore';
 import { middleTee } from './tees';
 import { scoreCard } from './leagueRules';
+import { isRatedTee } from './handicapIndex';
 
 export const HOLES_PER_CARD = 18;
 
@@ -35,12 +36,20 @@ export function defaultTee(course) {
   return middleTee(course?.tees);
 }
 
-// A league card is 18 holes; return an error line or null.
-export function courseProblem(course) {
+export const UNRATED_TEE_PROBLEM = "This tee has no slope and course rating, so it can't count for the league. "
+  + 'Pick a rated tee or add its slope and rating in the course library.';
+
+// A league card is 18 holes off a rated tee; return an error line or null.
+// `tee` defaults to `course.tee` (courseFromSnapshot's shape, where an
+// unrated snapshot reads tee: null). A library course passed without a tee
+// and without a `tee` key skips the rating check (callers pass the picked tee).
+export function courseProblem(course, tee = course?.tee) {
   if (!course) return 'Pick the course you are playing.';
   if ((course.holes ?? []).length !== HOLES_PER_CARD) {
     return 'League cards need an 18-hole layout. Pick another course or layout.';
   }
+  const checkTee = tee !== undefined || Object.prototype.hasOwnProperty.call(course, 'tee');
+  if (checkTee && !isRatedTee(tee)) return UNRATED_TEE_PROBLEM;
   return null;
 }
 
@@ -111,12 +120,12 @@ export function timeLabel(iso) {
 // numbers the RPCs need.
 export function proofSummary({ snapshot, playedOn, strokes, leagueHandicap }) {
   const course = courseFromSnapshot(snapshot);
-  const { gross, points, playingHandicap } = scoreCard({
+  const { gross, points, playingHandicap, netDifferential } = scoreCard({
     holes: strokes, course, leagueHandicap, tee: course.tee,
   });
   const line = [snapshot?.name, dayLabel(playedOn), `${points} pts`, `gross ${gross}`]
     .filter(Boolean).join(' · ');
-  return { line, gross, points, playingHandicap };
+  return { line, gross, points, playingHandicap, netDifferential };
 }
 
 // ---- draft (AsyncStorage, one per card) ------------------------------------

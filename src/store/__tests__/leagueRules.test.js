@@ -142,7 +142,9 @@ describe('scoreCard', () => {
     expect(r.gross).toBe(92);
     expect(r.points).toBe(36);
     expect(r.perHole).toHaveLength(18);
-    expect(r.perHole[3]).toEqual({ n: 4, strokes: 6, extra: 2, points: 3 });
+    expect(r.perHole[3]).toEqual({
+      n: 4, strokes: 6, extra: 2, points: 3, counted: 6, capped: false,
+    });
     expect(r.perHole[11].extra).toBe(2);
     expect(r.perHole[0].extra).toBe(1);
     expect(r.perHole.reduce((s, h) => s + h.points, 0)).toBe(36);
@@ -177,6 +179,75 @@ describe('scoreCard', () => {
     expect(r.gross).toBe(86);
     expect(r.perHole[17]).toMatchObject({ strokes: 0, points: 0 });
     expect(r.points).toBe(36 - 1);
+  });
+
+  test('no tee: not rated, no differential (but adjusted gross is still summed)', () => {
+    const r = scoreCard({ holes, course, leagueHandicap: 20 });
+    expect(r.rated).toBe(false);
+    expect(r.differential).toBeNull();
+    expect(r.netDifferential).toBeNull();
+    expect(r.adjustedGross).toBe(92);
+  });
+
+  test('a tee with slope but no rating (or rating but no slope) is not rated', () => {
+    expect(scoreCard({ holes, course, leagueHandicap: 18, tee: { slope: 125 } }).rated).toBe(false);
+    expect(scoreCard({ holes, course, leagueHandicap: 18, tee: { rating: 71 } }).rated).toBe(false);
+    expect(scoreCard({ holes, course, leagueHandicap: 18, tee: { slope: 0, rating: 71 } }).rated).toBe(false);
+  });
+
+  test('an incomplete card has no differential even off a rated tee', () => {
+    const partial = { ...holes };
+    delete partial[18];
+    const r = scoreCard({ holes: partial, course, leagueHandicap: 18, tee: { slope: 125, rating: 71.2 } });
+    expect(r.rated).toBe(true);
+    expect(r.differential).toBeNull();
+    expect(r.netDifferential).toBeNull();
+  });
+
+  describe('worked example: CNG Amarillas, slope 130 / CR 71.4 / par 72, league handicap 14.2', () => {
+    // Playing handicap: 14.2 x 130/113 + (71.4 - 72) = 16.34 - 0.6 = 15.7 -> 16,
+    // so SI 1-16 get one stroke. Hole 4 (par 5, SI 1) is a 9: cap 5+2+1 = 8.
+    // Ten holes at bogey, seven at par, the 9: gross 86, adjusted 85.
+    const tee = { label: 'Amarillas', slope: 130, rating: 71.4 };
+    const over = [1, 1, 0, 4, 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 0, 0, 0];
+    const card = Object.fromEntries(pars.map((par, i) => [i + 1, par + over[i]]));
+    const r = scoreCard({ holes: card, course, leagueHandicap: 14.2, tee });
+
+    test('gross 86, adjusted 85, differential 11.8, net -2.4', () => {
+      expect(r.playingHandicap).toBe(16);
+      expect(r.rated).toBe(true);
+      expect(r.gross).toBe(86);
+      expect(r.adjustedGross).toBe(85);
+      expect(r.differential).toBe(11.8);
+      expect(r.netDifferential).toBe(-2.4);
+    });
+
+    test('per hole: the 9 counts as 8 and is flagged capped, nothing else is', () => {
+      expect(r.perHole[3]).toEqual({
+        n: 4, strokes: 9, extra: 1, points: 0, counted: 8, capped: true,
+      });
+      expect(r.perHole.filter((h) => h.capped).map((h) => h.n)).toEqual([4]);
+      expect(r.perHole.reduce((sum, h) => sum + h.counted, 0)).toBe(85);
+    });
+
+    test('Stableford points are still computed', () => {
+      expect(r.points).toBe(r.perHole.reduce((sum, h) => sum + h.points, 0));
+      expect(r.points).toBeGreaterThan(0);
+    });
+
+    test('a string slope/rating (as jsonb text) gives the same answer', () => {
+      const s = scoreCard({ holes: card, course, leagueHandicap: '14.2', tee: { slope: '130', rating: '71.4' } });
+      expect(s.netDifferential).toBe(-2.4);
+    });
+
+    test('a plus handicap caps below par + 2 on the easiest holes', () => {
+      // Index -3 off this tee: -3.47 - 0.6 = -4.07 -> playing -4: SI 15-18 give one back.
+      const plus = scoreCard({ holes: card, course, leagueHandicap: -3, tee });
+      expect(plus.playingHandicap).toBe(-4);
+      const si18 = plus.perHole.find((h) => course.holes[h.n - 1].strokeIndex === 18);
+      expect(si18.extra).toBe(-1);
+      expect(si18.counted).toBeLessThanOrEqual(course.holes[si18.n - 1].par + 1);
+    });
   });
 
   test('a nine-hole card halves the index', () => {

@@ -44,8 +44,17 @@ function snapshot({ cardsByMonth = {}, members } = {}) {
   };
 }
 
+// The board ranks by net differential (lower is better); fixtures derive one
+// from the points so more points still means a better card.
 const card = (userId, status, points, extra = {}) => ({
-  id: `c-${userId}`, userId, status, points, source: 'app', notAnnounced: false, ...extra,
+  id: `c-${userId}`,
+  userId,
+  status,
+  points,
+  netDifferential: points == null ? null : 40 - points,
+  source: 'app',
+  notAnnounced: false,
+  ...extra,
 });
 
 const makeNav = (routeNames = []) => ({
@@ -116,7 +125,7 @@ describe('LeagueBoardScreen', () => {
       },
     }));
     const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
-    await waitFor(() => getByText('36 pts · Golf Olivar · added after the round · photo attached'));
+    await waitFor(() => getByText('4.0 worse than your handicap · 36 pts · Golf Olivar · added after the round · photo attached'));
   });
 
   test('a submitted off-app card without proof offers "Add proof" (resume)', async () => {
@@ -210,7 +219,7 @@ describe('LeagueBoardScreen', () => {
     }));
     const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Confirmed'));
-    expect(getByText('36 pts · Golf Olivar · confirmed by Lucía')).toBeTruthy();
+    expect(getByText('4.0 worse than your handicap · 36 pts · Golf Olivar · confirmed by Lucía')).toBeTruthy();
     expect(queryByText('Play with the app')).toBeNull();
   });
 
@@ -220,7 +229,7 @@ describe('LeagueBoardScreen', () => {
     }));
     const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Needs the card photo · not announced in the app'));
-    expect(getByText('30')).toBeTruthy();
+    expect(getByText('10.0 worse')).toBeTruthy();
   });
 
   test('shows the cached board first and an offline banner when the live read fails', async () => {
@@ -256,10 +265,11 @@ describe('LeagueBoardScreen', () => {
         ],
       },
     }));
-    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    const { getByText, getAllByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Confirmed · 1'));
     expect(getByText('Olivar · marker by QR')).toBeTruthy();
-    expect(getByText('38')).toBeTruthy();
+    expect(getByText('2.0 worse')).toBeTruthy();
+    expect(getAllByText('5.0 worse')).toHaveLength(2); // my card block + the waiting row
     expect(getByText('+500')).toBeTruthy();
     expect(getByText('Waiting for confirmation · 1')).toBeTruthy();
     expect(getByText("Olivar · marker hasn't scanned the QR yet")).toBeTruthy();
@@ -272,6 +282,23 @@ describe('LeagueBoardScreen', () => {
     // The old status list, the Final row and the members row are gone from the board.
     expect(queryByText('Members and handicaps')).toBeNull();
     expect(queryByText('Set up the Final')).toBeNull();
+  });
+
+  test('this month: an unrated confirmed card is listed with the confirmed, not ranked', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [
+          card('javi', 'confirmed', 38, { netDifferential: -2.4 }),
+          card('nacho', 'confirmed', 33, { netDifferential: null }),
+        ],
+      },
+    }));
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('Confirmed · 2'));
+    expect(getByText('2.4 better')).toBeTruthy();
+    expect(getByText('unrated')).toBeTruthy();
+    expect(getByText('not ranked')).toBeTruthy();
+    expect(getByText(/Nacho's card has no slope or rating\. Shown, not ranked\.$/)).toBeTruthy();
   });
 
   test('"Your <Month> card" sits above the leaderboard', async () => {
@@ -344,5 +371,26 @@ describe('LeagueBoardScreen', () => {
     expect(getByText('Player 18')).toBeTruthy();
     fireEvent.press(getByText('Show top 8'));
     expect(queryByText('Player 9')).toBeNull();
+  });
+
+
+  test("a month's results speak the net differential; an unrated card is listed, not ranked", async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [PAST_MONTH]: [
+          card('javi', 'confirmed', 38, { netDifferential: -2.4 }),
+          card('nacho', 'confirmed', 30, { netDifferential: 3.1 }),
+          card('me', 'confirmed', 33, { netDifferential: null }),
+        ],
+      },
+    }));
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('Sep'));
+    fireEvent.press(getByText('Sep'));
+    expect(getByText('2.4 better')).toBeTruthy();
+    expect(getByText('3.1 worse')).toBeTruthy();
+    expect(getByText('unrated')).toBeTruthy();
+    expect(getByText('not ranked')).toBeTruthy();
+    expect(getByText('Your card has no slope or rating. Shown, not ranked.')).toBeTruthy();
   });
 });

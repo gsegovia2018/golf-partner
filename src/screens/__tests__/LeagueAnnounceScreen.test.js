@@ -97,4 +97,33 @@ describe('LeagueAnnounceScreen', () => {
     expect(getByLabelText('Thu 2 Oct 2025').props.accessibilityState.disabled).toBe(true);
     expect(getByLabelText('Sat 4 Oct 2025').props.accessibilityState.disabled).toBe(false);
   });
+
+  test('tee chips show slope and rating; an unrated one is flagged with two ways out', async () => {
+    const mixed = {
+      ...pickedCourse,
+      tees: [{ id: 't1', label: 'Yellow', slope: 125, rating: 72 }, { id: 't2', label: 'Red', slope: null, rating: null }],
+    };
+    bridge.consumePendingCourses.mockReturnValue({ startRoundIndex: 0, picks: [{ kind: 'course', course: mixed }] });
+    const navigation = nav();
+    const { getByText, queryByText, findByText } = render(wrap(<LeagueAnnounceScreen navigation={navigation} route={route} />));
+    // The middle of two tees is the second: the unrated Red one, so its note is up.
+    expect(await findByText("Red tees aren't rated yet")).toBeTruthy();
+    expect(getByText('slope 125 · CR 72')).toBeTruthy();
+    expect(getByText('no rating')).toBeTruthy();
+
+    // Announcing is refused before the server.
+    fireEvent.press(getByText('Announce card'));
+    expect(await findByText(/can't count for the league/)).toBeTruthy();
+    expect(store.announceLeagueCard).not.toHaveBeenCalled();
+
+    // Way out 1: add the rating in the course library.
+    fireEvent.press(getByText('Add slope & rating'));
+    expect(navigation.navigate).toHaveBeenCalledWith('CourseLibraryDetail', { courseId: 'c1', courseName: 'Golf Olivar' });
+
+    // Way out 2: use the rated tee.
+    fireEvent.press(getByText('Use Yellow'));
+    expect(queryByText("Red tees aren't rated yet")).toBeNull();
+    // ...and the refusal goes with it.
+    expect(queryByText(/can't count for the league/)).toBeNull();
+  });
 });

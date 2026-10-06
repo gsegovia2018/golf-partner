@@ -60,7 +60,7 @@ describe('MarkerCardScreen', () => {
     expect(queryByText('You')).toBeNull();
     // Read-only: no stroke inputs.
     expect(queryByLabelText(/Strokes for/)).toBeNull();
-    expect(getByText("You're confirming the strokes shown. No account needed. This code works once.")).toBeTruthy();
+    expect(getByText("You're confirming the strokes shown; Marcos's league result is worked out from them once you do. No account needed. This code works once.")).toBeTruthy();
   });
 
   test('takes the token from route params when routed', async () => {

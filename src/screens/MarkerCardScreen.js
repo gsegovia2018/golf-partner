@@ -60,6 +60,7 @@ function metaLine(card) {
     card.course,
     formatPlayedOn(card.date),
     card.tee ? `${card.tee} tees` : null,
+    card.slope != null && card.rating != null ? `slope ${card.slope} · CR ${card.rating}` : null,
     card.playingHandicap != null ? `Playing handicap ${card.playingHandicap}` : null,
   ].filter(Boolean).join(' · ');
 }
@@ -299,7 +300,7 @@ export default function MarkerCardScreen(props) {
           )}
 
           <Text style={s.footnote}>
-            {"You're confirming the strokes shown. No account needed. This code works once."}
+            {`You're confirming the strokes shown; ${card.playerFirstName ? `${card.playerFirstName}'s` : 'the'} league result is worked out from them once you do. No account needed. This code works once.`}
           </Text>
         </View>
       </ScrollView>

@@ -19,7 +19,8 @@ const strokes = Object.fromEntries(holes.map((h) => [String(h.n), 5]));
 const member = (userId, displayName) => ({ userId, displayName, role: 'member', leftAt: null, leagueHandicap: 18 });
 const card = (userId, status, points, extra = {}) => ({
   id: `c-${userId}`, userId, status, points, source: 'app', notAnnounced: false, holes: strokes,
-  playingHandicap: 18, gross: 90, course: { name: 'Golf Olivar', tee: 'Yellow', holes }, ...extra,
+  playingHandicap: 18, gross: 90, leagueHandicap: 18.0, differential: 15.6, netDifferential: -2.4,
+  course: { name: 'Golf Olivar', tee: 'Yellow', slope: 125, rating: 72, holes }, ...extra,
 });
 
 function snapshot(cards) {
@@ -49,13 +50,15 @@ describe('LeagueCardScreen', () => {
     await waitFor(() => getByText('Javi · October card'));
     expect(getByText('1 of 2 October cards')).toBeTruthy();
     expect(getByText('Confirmed')).toBeTruthy();
-    expect(getByText('Golf Olivar · Yellow')).toBeTruthy();
-    expect(getByText('Playing handicap 18 · Gross 90')).toBeTruthy();
+    expect(getByText('Golf Olivar · Yellow tees, slope 125 · CR 72')).toBeTruthy();
+    expect(getByText('Playing handicap 18 · Gross 90 · 38 pts')).toBeTruthy();
     expect(getByText('Confirmed by Nacho')).toBeTruthy();
-    // The grid reads the real DB hole shape: numbers, SI and strokes render, labelled with the member.
+    // The value is spoken, with the handicap it is measured against.
+    expect(getByText('2.4 better')).toBeTruthy();
+    expect(getByText('than league handicap 18.0')).toBeTruthy();
+    // The grid reads the real DB hole shape: numbers and strokes render.
     expect(getAllByText('18').length).toBeGreaterThan(0);
     expect(getAllByText('5').length).toBeGreaterThan(0);
-    expect(getAllByText('Javi').length).toBeGreaterThan(0);
     expect(queryByText('You')).toBeNull();
     expect(getByLabelText('Previous card').props.accessibilityState.disabled).toBe(true);
 
@@ -72,9 +75,35 @@ describe('LeagueCardScreen', () => {
 
   test('my own card is titled "You"', async () => {
     store.getLeague.mockResolvedValue(snapshot([card('me', 'confirmed', 36)]));
-    const { getByText, getAllByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('me')} />));
+    const { getByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('me')} />));
     await waitFor(() => getByText('You · October card'));
-    expect(getAllByText('You').length).toBeGreaterThan(0);
+  });
+
+  test('"How it\'s worked out" shows the arithmetic and names the capped hole', async () => {
+    // 18 par-4 holes, playing handicap 18 (1 extra shot each): the cap is 7. Hole 12 is a 9.
+    const cappedHoles = { ...strokes, 12: 9 };
+    store.getLeague.mockResolvedValue(snapshot([
+      card('javi', 'confirmed', 36, { holes: cappedHoles, gross: 94, differential: 11.8, netDifferential: -6.2 }),
+    ]));
+    const { getByText, getAllByLabelText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
+    await waitFor(() => getByText('HOW IT’S WORKED OUT'));
+    expect(getByText('Hole 12: 9 counts as 7 (net double bogey)')).toBeTruthy();
+    expect(getByText('113 ÷ slope 125 × (92 − rating 72)')).toBeTruthy();
+    expect(getByText('11.8 − 18.0 · lower is better')).toBeTruthy();
+    expect(getByText('−6.2')).toBeTruthy();
+    expect(getAllByLabelText(/^Hole 12, 9 strokes, \d points, counts as 7$/).length).toBe(1);
+  });
+
+  test('an unrated card says so and is not ranked', async () => {
+    store.getLeague.mockResolvedValue(snapshot([
+      card('javi', 'confirmed', 30, {
+        differential: null, netDifferential: null, course: { name: 'Golf Olivar', tee: 'Red', holes },
+      }),
+    ]));
+    const { getByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
+    await waitFor(() => getByText('Unrated'));
+    expect(getByText('not ranked')).toBeTruthy();
+    expect(getByText("This tee has no slope and course rating, so there's no differential.")).toBeTruthy();
   });
 
   test('off-app card: added-after-the-round badge, not announced, and the signed photo', async () => {
@@ -85,7 +114,7 @@ describe('LeagueCardScreen', () => {
     const { getByText, getByLabelText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
     await waitFor(() => getByText('Added after the round'));
     expect(getByText('Not announced in the app')).toBeTruthy();
-    expect(getByText('Golf Olivar · Yellow · Sat 4 Oct')).toBeTruthy();
+    expect(getByText('Golf Olivar · Yellow tees, slope 125 · CR 72 · Sat 4 Oct')).toBeTruthy();
     await waitFor(() => expect(getByLabelText('Signed card photo').props.source).toEqual({ uri: 'https://example.test/proof.jpg' }));
     expect(store.getLeagueProofUrl).toHaveBeenCalledWith('L1/c-javi.jpg');
   });

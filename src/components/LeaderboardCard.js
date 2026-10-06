@@ -21,7 +21,7 @@ import { semantic } from '../theme/tokens';
 //                small uppercase heading (icon + label; gold tints it) over its rows, or over
 //                `body` (a node) when it has no rows. A row may also set
 //                  detail    a second line under the name
-//                  muted     dim points (the row does not count yet)
+//                  muted     dim points (the row does not count yet, or is listed but not ranked)
 //                  subGold   gold sub (table points)
 //                  unranked  dashed place badge
 //                A row may set compact (shorter, no sub), or be { key, gap: true }: a "⋯" spacer
@@ -135,9 +135,10 @@ function makeStyles(t) {
     mastersNameCol: { flex: 1, minWidth: 0, marginRight: 8 },
     mastersName: { fontFamily: 'PlusJakartaSans-Medium', color: '#ffffff', fontSize: 14 },
     mastersPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 16, marginRight: 8 },
-    mastersPointsMuted: { color: 'rgba(255,255,255,0.45)', fontSize: 14 },
+    mastersPointsMuted: { color: 'rgba(255,255,255,0.75)', fontSize: 14 },
     mastersSubGold: { color: semantic.winner.dark, fontFamily: 'PlusJakartaSans-Bold' },
-    mastersSub: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.45)', fontSize: 11, width: 60, textAlign: 'right' },
+    // 0.75 white on the deep green is 5.9:1 (the old 0.45 was 3.1:1, under WCAG AA).
+    mastersSub: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.75)', fontSize: 11, width: 60, textAlign: 'right' },
     mastersMatchStatus: {
       fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.85)',
       fontSize: 12, textAlign: 'center', marginTop: 10,

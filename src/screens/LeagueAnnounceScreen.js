@@ -29,7 +29,7 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
   useEffect(() => () => { mountedRef.current = false; }, []);
 
   async function announce() {
-    const problem = courseProblem(pick.course);
+    const problem = courseProblem(pick.course, pick.tee ?? pick.course);
     if (problem) { setError(problem); return; }
     const teeTime = buildTeeTime(dateText, timeText);
     if (!teeTime) { setError('Pick a date and a tee time.'); return; }
@@ -61,7 +61,7 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
           Announce before your first shot. Your group is notified now; you'll add the score after the round.
         </Text>
 
-        <CourseTeePicker navigation={navigation} value={pick} onChange={setPick} />
+        <CourseTeePicker navigation={navigation} value={pick} onChange={(p) => { setPick(p); setError(null); }} />
 
         <Text style={s.fieldLabel}>Date and tee time</Text>
         <DateField

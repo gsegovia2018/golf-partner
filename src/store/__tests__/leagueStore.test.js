@@ -361,6 +361,13 @@ describe('reads and cache', () => {
     });
   });
 
+  test('rowToCard maps the server net differential (numeric comes back as a string) and keeps null', () => {
+    expect(rowToCard({ ...cardRow(), differential: '11.8', net_differential: '-2.4' }))
+      .toMatchObject({ differential: 11.8, netDifferential: -2.4 });
+    expect(rowToCard({ ...cardRow(), net_differential: null }))
+      .toMatchObject({ differential: null, netDifferential: null });
+  });
+
   test('getLeague maps everything, groups cards by month, drops void, attaches ballots', async () => {
     mockState.tables = {
       leagues: { data: leagueRow, error: null },

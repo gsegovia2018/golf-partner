@@ -1,8 +1,10 @@
 // League stats: honours, leaders, season grid and rivals, derived from the
 // cards a league snapshot already carries (pure, no I/O). Only confirmed
-// cards count. Plan: docs/superpowers/plans/2026-10-05-league-stats-and-board.md
+// cards count. Month comparisons (card of the month, grid, rivals) use the net
+// differential, lower is better, like the board; a card without one (unrated
+// tee) is never the best. Plan: docs/superpowers/plans/2026-10-05-league-stats-and-board.md
 import { calcExtraShots, calcStablefordPoints } from './scoring';
-import { memberName, ordinal } from './leagueView';
+import { memberName, ordinal, formatNetDiff } from './leagueView';
 import { dayLabel, timeLabel } from './leagueOffApp';
 
 export const MIN_HONOUR_CARDS = 3; // fewer confirmed cards than this: no honours
@@ -11,6 +13,12 @@ export const MIN_STAT_CARDS = 3; // fewer cards than this: a player's average is
 const confirmed = (cards) => (cards ?? []).filter((c) => c?.status === 'confirmed');
 const sum = (list) => list.reduce((a, b) => a + b, 0);
 const mean = (list) => sum(list) / list.length;
+// A card's net differential to one decimal (what the board ranks), or null when unrated.
+const netDiffOf = (card) => {
+  if (card?.netDifferential == null || card.netDifferential === '') return null;
+  const n = Number(card.netDifferential);
+  return Number.isFinite(n) ? Math.round(n * 10) / 10 : null;
+};
 
 // Per-hole figures for a card: { holes: [{ n, par, si, strokes, points, extra }], out, in }.
 // null when the card can't be read hole by hole: the course isn't an 18-hole
@@ -89,8 +97,8 @@ export function monthHonours(cards, members, meId = null) {
   const honours = [];
   const add = (key, title, text, userId) => honours.push({ key, title, text, userId });
 
-  const top = maxBy(done, (c) => Number(c.points) || 0);
-  if (top) add('card', 'Card of the month', `${name(top.userId)}, ${top.points} pts${courseOf(top)}`, top.userId);
+  const top = maxBy(done.filter((c) => netDiffOf(c) != null), (c) => -netDiffOf(c));
+  if (top) add('card', 'Card of the month', `${name(top.userId)}, ${formatNetDiff(netDiffOf(top))}${courseOf(top)}`, top.userId);
 
   const holeList = withHoles.flatMap(({ card, stats }) => stats.holes.map((h) => ({ card, h })));
   const bestHole = maxBy(holeList, ({ h }) => h.points * 100 - (h.strokes - h.par));
@@ -216,50 +224,59 @@ export function statLeaders(cardsByMonth, members, statKey) {
 
 // ---- Season grid -----------------------------------------------------------
 
-// userId -> best confirmed card of one month.
+// userId -> best confirmed card of one month: the lowest net differential;
+// an unrated card only when the member has no rated one (then most points).
 function bestByUser(cards) {
+  const nd = (c) => netDiffOf(c) ?? Infinity;
+  const better = (a, b) => (nd(a) === nd(b) ? (Number(a.points) || 0) > (Number(b.points) || 0) : nd(a) < nd(b));
   const best = new Map();
   confirmed(cards).forEach((c) => {
-    const pts = Number(c.points) || 0;
-    if (!best.has(c.userId) || pts > (Number(best.get(c.userId).points) || 0)) best.set(c.userId, c);
+    if (!best.has(c.userId) || better(c, best.get(c.userId))) best.set(c.userId, c);
   });
   return best;
 }
 
-// Members x months: [{ userId, cells: [{ month, points, cardId, best }] }].
-// Rows follow `members` (pass them in season-table order). `points` is null
-// with no confirmed card; `best` marks the month's top card (ties all best).
+// Members x months: [{ userId, cells: [{ month, netDifferential, unrated, cardId, best }] }].
+// Rows follow `members` (pass them in season-table order). cardId is null with
+// no confirmed card; unrated: a confirmed card with no net differential (not
+// ranked); `best` marks the month's lowest net differential (ties all best).
 export function seasonGrid(cardsByMonth, members, monthKeys) {
   const perMonth = Object.fromEntries(monthKeys.map((month) => {
     const best = bestByUser(cardsByMonth?.[month]);
-    const top = Math.max(-1, ...[...best.values()].map((c) => Number(c.points) || 0));
+    const top = Math.min(Infinity, ...[...best.values()].map((c) => netDiffOf(c) ?? Infinity));
     return [month, { best, top }];
   }));
   return (members ?? []).map((m) => ({
     userId: m.userId,
     cells: monthKeys.map((month) => {
       const card = perMonth[month].best.get(m.userId);
-      const points = card ? Number(card.points) || 0 : null;
-      return { month, points, cardId: card?.id ?? null, best: points != null && points === perMonth[month].top };
+      const netDifferential = card ? netDiffOf(card) : null;
+      return {
+        month,
+        netDifferential,
+        unrated: !!card && netDifferential == null,
+        cardId: card?.id ?? null,
+        best: netDifferential != null && netDifferential === perMonth[month].top,
+      };
     }),
   }));
 }
 
 // ---- Rivals ----------------------------------------------------------------
 
-// Months where both players have a confirmed card, newest first:
-// [{ month, a, b }] with each side's points.
+// Months where both players have a ranked (rated, confirmed) card, newest
+// first: [{ month, a, b }] with each side's net differential (lower wins).
 export function rivalMonths(cardsByMonth, a, b) {
   return Object.keys(cardsByMonth ?? {}).sort().reverse().flatMap((month) => {
     const best = bestByUser(cardsByMonth[month]);
-    const ca = best.get(a);
-    const cb = best.get(b);
-    return ca && cb ? [{ month, a: Number(ca.points) || 0, b: Number(cb.points) || 0 }] : [];
+    const na = netDiffOf(best.get(a));
+    const nb = netDiffOf(best.get(b));
+    return na != null && nb != null ? [{ month, a: na, b: nb }] : [];
   });
 }
 
 // Me against every other member: [{ userId, won, lost, level, months }] over
-// the months both have a confirmed card, closest rivalry first (smallest gap
+// the months both have a ranked card, closest rivalry first (smallest gap
 // between won and lost, then most months); members I never shared a month
 // with go last.
 export function rivals(cardsByMonth, members, meId) {
@@ -267,8 +284,8 @@ export function rivals(cardsByMonth, members, meId) {
     const months = rivalMonths(cardsByMonth, meId, m.userId);
     return {
       userId: m.userId,
-      won: months.filter((x) => x.a > x.b).length,
-      lost: months.filter((x) => x.a < x.b).length,
+      won: months.filter((x) => x.a < x.b).length,
+      lost: months.filter((x) => x.a > x.b).length,
       level: months.filter((x) => x.a === x.b).length,
       months: months.length,
     };
