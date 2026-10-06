@@ -105,7 +105,8 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 // "Sat 4 Oct" from an ISO instant or a YYYY-MM-DD date.
 export function dayLabel(value) {
   if (!value) return '';
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value).slice(0, 10));
+  // Only a bare date is a calendar day; an instant's UTC date can be the day before.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
   const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
   if (Number.isNaN(d.getTime())) return '';
   return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;

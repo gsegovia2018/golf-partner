@@ -1,6 +1,6 @@
 import {
   scoresComplete, applyStrokeText, holesPayload, buildTeeTime, courseSnapshot, courseFromSnapshot,
-  courseProblem, proofSummary, submitOffAppCard, loadDraft, saveDraft, clearDraft,
+  courseProblem, proofSummary, dayLabel, submitOffAppCard, loadDraft, saveDraft, clearDraft,
 } from '../leagueOffApp';
 
 jest.mock('../leagueStore', () => ({
@@ -197,5 +197,22 @@ describe('submitOffAppCard', () => {
     await expect(submitOffAppCard({ ...base, cardId: 'c1' })).rejects.toThrow(/Check the date/);
     expect(store.uploadLeagueProof).not.toHaveBeenCalled();
     expect(store.attachLeagueProof).not.toHaveBeenCalled();
+  });
+});
+
+describe('dayLabel', () => {
+  test('a date-only value is that calendar day', () => {
+    expect(dayLabel('2026-10-06')).toBe('Tue 6 Oct');
+  });
+
+  test('an instant is labelled by its local day, not its UTC date', () => {
+    // 01:10 local on Tue 6 Oct is still Mon 5 Oct in UTC east of Greenwich.
+    expect(dayLabel(new Date(2026, 9, 6, 1, 10).toISOString())).toBe('Tue 6 Oct');
+    expect(dayLabel(new Date(2026, 9, 5, 23, 50).toISOString())).toBe('Mon 5 Oct');
+  });
+
+  test('empty or invalid input gives an empty label', () => {
+    expect(dayLabel(null)).toBe('');
+    expect(dayLabel('not a date')).toBe('');
   });
 });
