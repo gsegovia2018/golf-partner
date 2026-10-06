@@ -217,6 +217,13 @@ export function memberLabel(member, meId) {
 
 // Votes needed to pass: ceil(2/3 of active members), decision D2. Display
 // only; the server decides.
+// The delete sheet's guard: the typed text must be the league's name, ignoring
+// case and runs of spaces.
+export function leagueNameMatches(typed, name) {
+  const norm = (x) => String(x ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+  return norm(name).length > 0 && norm(typed) === norm(name);
+}
+
 export function voteThreshold(activeMemberCount) {
   return Math.ceil((activeMemberCount * 2) / 3);
 }

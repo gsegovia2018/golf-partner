@@ -1,7 +1,7 @@
 import {
   monthName, ordinal, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel,
   positionText, cardStatus, monthRows, leagueSummary, viewableCards, monthBoard, collapseSeasonRows,
-  formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, cardBreakdown,
+  formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, cardBreakdown, leagueNameMatches,
 } from '../leagueView';
 
 const NOW = new Date(2026, 9, 4, 12, 0);
@@ -17,6 +17,13 @@ test('formatPoints and formatEuros', () => {
   expect(formatPoints(233.333)).toBe('233.3');
   expect(formatEuros(3000)).toBe('30 €');
   expect(formatEuros(3050)).toBe('30,50 €');
+});
+
+test('leagueNameMatches ignores case and extra spaces, never matches an empty name', () => {
+  expect(leagueNameMatches('el club  del Mulligan ', 'El Club del Mulligan')).toBe(true);
+  expect(leagueNameMatches('El Club del', 'El Club del Mulligan')).toBe(false);
+  expect(leagueNameMatches('', '')).toBe(false);
+  expect(leagueNameMatches('x', null)).toBe(false);
 });
 
 test('pot counts paid, active members only', () => {

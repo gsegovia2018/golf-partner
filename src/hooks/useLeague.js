@@ -4,7 +4,7 @@ import { getLeague, getLeagueCached } from '../store/leagueStore';
 // One league's snapshot for the League screens (the shape getLeague returns).
 // Cache first, then live, on mount and on every focus. If the live read fails
 // the cached snapshot stays on screen and `stale` is true; with nothing cached
-// `error` carries the message. `refresh` is the pull-to-refresh handler.
+// `error` carries the message. A deleted league always ends in `error`. `refresh` is the pull-to-refresh handler.
 export function useLeague(navigation, leagueId) {
   const [data, setData] = useState(null);
   const [stale, setStale] = useState(false);
@@ -34,7 +34,13 @@ export function useLeague(navigation, leagueId) {
       setError(null);
     } catch (e) {
       if (!mountedRef.current) return;
-      if (dataRef.current) setStale(true);
+      if (e?.code === 'league_gone') {
+        // Deleted: the cached snapshot must not keep it alive on screen.
+        dataRef.current = null;
+        setData(null);
+        setStale(false);
+        setError(e.message);
+      } else if (dataRef.current) setStale(true);
       else setError(e?.message || 'Could not load the league.');
     } finally {
       if (mountedRef.current) setLoading(false);
