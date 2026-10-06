@@ -22,8 +22,9 @@ const strokes = (over = {}) => Object.fromEntries(PARS.map((par, i) => [i + 1, o
 const member = (userId, displayName, extra = {}) => ({
   userId, displayName, role: 'member', feePaid: false, leftAt: null, leagueHandicap: 18, ...extra,
 });
+// Net differential from the points (36 pts = level), so more points is still the better card.
 const card = (userId, points, extra = {}) => ({
-  id: `c-${userId}-${points}`, userId, status: 'confirmed', points, course: COURSE, playingHandicap: 0,
+  id: `c-${userId}-${points}`, userId, status: 'confirmed', points, netDifferential: 36 - points, course: COURSE, playingHandicap: 0,
   holes: strokes(), teeTime: null, playedOn: null, ...extra,
 });
 
@@ -78,7 +79,7 @@ describe('LeagueStatsScreen', () => {
     fireEvent.press(getByText('Aug'));
     expect(getByText('August honours')).toBeTruthy();
     expect(getByText('CARD OF THE MONTH')).toBeTruthy();
-    expect(getByText('Nacho, 37 pts at Los Arqueros')).toBeTruthy();
+    expect(getByText('Nacho, 1.0 better at Los Arqueros')).toBeTruthy();
     expect(getByText('HOLE OF THE MONTH')).toBeTruthy();
   });
 
@@ -94,15 +95,15 @@ describe('LeagueStatsScreen', () => {
     expect(() => getByText(/Averages need 3 cards/)).toThrow();
   });
 
-  test('grid: a column per scored month and the confirmed points', async () => {
+  test('grid: a column per scored month and the confirmed net differentials', async () => {
     const { getByText, getAllByText } = await open();
     fireEvent.press(getByText('Grid'));
     expect(getByText('Month winner')).toBeTruthy();
     expect(getAllByText('J').length).toBe(1); // Jul
-    expect(getByText('37')).toBeTruthy();
-    expect(getByText('36')).toBeTruthy();
+    expect(getByText('−1.0')).toBeTruthy(); // Nacho, August
+    expect(getByText('0.0')).toBeTruthy(); // Marcos, September
     expect(getAllByText('–').length).toBe(1); // Nacho's September card is not confirmed
-    fireEvent.press(getByText('37'));
+    fireEvent.press(getByText('−1.0'));
     expect(navigation.navigate).toHaveBeenCalledWith('LeagueCard', expect.objectContaining({ leagueId: route.params.leagueId }));
   });
 
@@ -113,10 +114,10 @@ describe('LeagueStatsScreen', () => {
     // vs Javi: lost Jul, won Aug, won Sep -> 2-1 over 3 months.
     expect(getByText('2–1')).toBeTruthy();
     expect(getByText('3 months')).toBeTruthy();
-    expect(queryByText('You 36')).toBeNull();
+    expect(queryByText('You 0.0')).toBeNull();
     fireEvent.press(getByText('Javi'));
-    expect(getByText('You 36')).toBeTruthy();
-    expect(getByText('Javi 30')).toBeTruthy();
+    expect(getByText('You 0.0')).toBeTruthy();
+    expect(getByText('Javi +6.0')).toBeTruthy();
   });
 
   test('no cards yet: friendly empty state', async () => {

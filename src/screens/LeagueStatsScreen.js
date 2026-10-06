@@ -10,7 +10,9 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { seasonTable } from '../store/leagueStandings';
-import { monthName, memberName, currentMonthKey } from '../store/leagueView';
+import {
+  monthName, memberName, currentMonthKey, formatNetDiff, formatNetDiffSigned,
+} from '../store/leagueView';
 import {
   MIN_HONOUR_CARDS, monthHonours, monthSummary, statLeaders, seasonGrid, rivals, rivalMonths,
 } from '../store/leagueStats';
@@ -190,11 +192,15 @@ export default function LeagueStatsScreen({ navigation, route }) {
   const renderGrid = () => {
     if (scored.length === 0) return <Text style={s.emptyNote}>No confirmed cards yet.</Text>;
     const grid = seasonGrid(cardsByMonth, table, scored);
+    // Net differential bands: level or better, up to 3 worse, 3 or more worse.
+    const high = (c) => c.netDifferential != null && c.netDifferential <= 0;
     const cellStyle = (c) => {
-      if (c.points == null) return [s.cell, s.cellNone];
-      const base = c.points >= 36 ? s.cellHigh : (c.points >= 33 ? s.cellMid : s.cellLow);
+      if (c.cardId == null) return [s.cell, s.cellNone];
+      if (c.unrated) return [s.cell, s.cellLow];
+      const base = high(c) ? s.cellHigh : (c.netDifferential < 3 ? s.cellMid : s.cellLow);
       return [s.cell, base, c.best && { borderWidth: 2, borderColor: gold }];
     };
+    const cellLabel = (c) => (c.unrated ? 'unrated, not ranked' : formatNetDiff(c.netDifferential));
     return (
       <>
         <View style={s.card}>
@@ -213,13 +219,13 @@ export default function LeagueStatsScreen({ navigation, route }) {
                     <TouchableOpacity
                       key={c.month}
                       style={cellStyle(c)}
-                      disabled={c.points == null}
+                      disabled={c.cardId == null}
                       onPress={() => navigation.navigate('LeagueCard', { leagueId, month: c.month, userId: row.userId })}
                       activeOpacity={0.7}
-                      accessibilityLabel={c.points == null ? undefined : `${nameOf(row.userId)}, ${monthName(c.month)}: ${c.points} points`}
+                      accessibilityLabel={c.cardId == null ? undefined : `${nameOf(row.userId)}, ${monthName(c.month)}: ${cellLabel(c)}`}
                     >
-                      <Text style={[s.cellText, c.points != null && c.points >= 36 && s.cellTextHigh, c.points == null && s.muted]}>
-                        {c.points ?? '–'}
+                      <Text style={[s.cellText, high(c) && s.cellTextHigh, (c.cardId == null || c.unrated) && s.muted]}>
+                        {c.cardId == null ? '–' : c.unrated ? 'NR' : formatNetDiffSigned(c.netDifferential)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -229,9 +235,10 @@ export default function LeagueStatsScreen({ navigation, route }) {
           </ScrollView>
         </View>
         <View style={s.legend}>
-          <View style={s.legendItem}><View style={[s.swatch, s.cellHigh]} /><Text style={s.legendText}>36+</Text></View>
-          <View style={s.legendItem}><View style={[s.swatch, s.cellMid]} /><Text style={s.legendText}>33-35</Text></View>
-          <View style={s.legendItem}><View style={[s.swatch, s.cellLow]} /><Text style={s.legendText}>32 or less</Text></View>
+          <View style={s.legendItem}><View style={[s.swatch, s.cellHigh]} /><Text style={s.legendText}>Level or better</Text></View>
+          <View style={s.legendItem}><View style={[s.swatch, s.cellMid]} /><Text style={s.legendText}>Up to 3 worse</Text></View>
+          <View style={s.legendItem}><View style={[s.swatch, s.cellLow]} /><Text style={s.legendText}>3+ worse</Text></View>
+          <View style={s.legendItem}><Text style={[s.legendText, s.muted]}>NR</Text><Text style={s.legendText}>unrated, not ranked</Text></View>
           <View style={s.legendItem}><View style={[s.swatch, { borderWidth: 2, borderColor: gold }]} /><Text style={s.legendText}>Month winner</Text></View>
         </View>
       </>
@@ -272,8 +279,8 @@ export default function LeagueStatsScreen({ navigation, route }) {
               {open && rivalMonths(cardsByMonth, meId, r.userId).map((m) => (
                 <View key={m.month} style={s.monthRow}>
                   <Text style={s.monthRowMonth}>{monthName(m.month, true)}</Text>
-                  <Text style={[s.monthRowText, m.a > m.b && s.winner]}>{`You ${m.a}`}</Text>
-                  <Text style={[s.monthRowText, m.b > m.a && s.winner]}>{`${nameOf(r.userId)} ${m.b}`}</Text>
+                  <Text style={[s.monthRowText, m.a < m.b && s.winner]}>{`You ${formatNetDiffSigned(m.a)}`}</Text>
+                  <Text style={[s.monthRowText, m.b < m.a && s.winner]}>{`${nameOf(r.userId)} ${formatNetDiffSigned(m.b)}`}</Text>
                 </View>
               ))}
             </View>
