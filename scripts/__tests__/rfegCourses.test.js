@@ -125,6 +125,7 @@ test('courseName appends the layout only for multi-layout clubs', () => {
   expect(courseName('Aloha Golf', 'ALOHA - P&P', 2)).toBe('Aloha Golf — P&P');
   expect(courseName('Santa Elena', 'HACIENDA ALAMO  B + B', 2)).toBe('Santa Elena — Hacienda Alamo B + B');
   expect(courseName('Santa Ponsa', 'SANTA PONSA - Santa Ponsa III', 2)).toBe('Santa Ponsa — Santa Ponsa III');
+  expect(courseName('León', 'LEON GOLF-PROSACYR', 2)).toBe('León — Leon Golf-Prosacyr');
 });
 
 describe('findExisting', () => {
@@ -156,6 +157,8 @@ describe('findExisting', () => {
   test('does not match on par alone, a layout word, or a name with different pars', () => {
     expect(findExisting(r, 'Aloha Golf', [{ name: 'Golf Club', pars, si: '1,2,3' }])).toBeNull();
     expect(findExisting(r, 'Aloha Golf', [{ name: 'Aloha', pars: '4'.repeat(18), si: '' }])).toBeNull();
+    const school = { name: 'Escuela de la Real Federación de Golf Madrid — P&P', pars, si: '1,2,3' };
+    expect(findExisting(r, 'Escuela Pública de Golf de Villanueva de la Serena', [school])).toBeNull();
     const p3 = { ...r, recorrido: 'VALDERRAMA - Pares 3' };
     expect(findExisting(p3, 'Real Club Valderrama', [{ name: 'Forus — Pares 3', pars, si: '1,2,3' }])).toBeNull();
   });
