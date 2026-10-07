@@ -1,6 +1,7 @@
 // League standings: pure functions of the league's cards (no I/O).
 // Plan: docs/superpowers/plans/2026-10-04-league.md (section 4.1).
 import { assignPlacements } from './leaderboardPlacement';
+import { needsApproval } from './leagueRules';
 
 export const DEFAULT_POINTS_TABLE = [500, 300, 190, 135, 110, 90, 75, 60, 45, 35, 25, 15];
 
@@ -25,7 +26,8 @@ function sharedPoints(table, place, size) {
 }
 
 // One month's results, ranked by net differential (lowest first). `members`
-// are user ids or `{userId}`. Only confirmed cards count; a member's best card
+// are user ids or `{userId}`. Only confirmed cards count (a not-announced one
+// only once an admin approved it); a member's best card
 // is the lowest net differential. A confirmed card with no net differential
 // (its tee has no slope/rating) is not ranked: { place: null, unrated: true,
 // seasonPoints: 0 }. Members without a confirmed card get place null and 0
@@ -37,7 +39,7 @@ export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE)
   const best = new Map();
   const unrated = new Map();
   for (const c of cards ?? []) {
-    if (c?.status !== 'confirmed') continue;
+    if (c?.status !== 'confirmed' || needsApproval(c)) continue;
     const nd = netDiffOf(c);
     const cardPoints = Number(c.points) || 0;
     if (nd == null) {

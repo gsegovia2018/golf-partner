@@ -223,13 +223,60 @@ describe('LeagueBoardScreen', () => {
     expect(queryByText('Play with the app')).toBeNull();
   });
 
-  test('flags a card that was not announced in the app', async () => {
+  test('an unapproved not-announced card waits under "Awaiting approval" and does not rank', async () => {
     store.getLeague.mockResolvedValue(snapshot({
       cardsByMonth: { [THIS_MONTH]: [card('javi', 'submitted', 30, { notAnnounced: true, source: 'offapp' })] },
     }));
-    const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
-    await waitFor(() => getByText('Needs the card photo · not announced in the app'));
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('Awaiting approval · 1'));
+    expect(getByText("Needs an admin's approval · not announced in the app")).toBeTruthy();
     expect(getByText('10.0 worse')).toBeTruthy();
+    expect(getByText('not counted')).toBeTruthy();
+    expect(queryByText(/^Confirmed ·/)).toBeNull();
+  });
+
+  test('an approved not-announced card ranks, flagged as not announced', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('javi', 'confirmed', 30, { notAnnounced: true, approvedAt: '2025-10-05T10:00:00Z', course: { name: 'Olivar' } })],
+      },
+    }));
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('Confirmed · 1'));
+    expect(getByText('Olivar · not announced in the app')).toBeTruthy();
+    expect(queryByText(/^Awaiting approval/)).toBeNull();
+  });
+
+  test('live cards show a countdown to post, amber wording under 2 hours; missed cards list under "Not posted"', async () => {
+    const inMs = (h) => new Date(Date.now() + h * 3600000 + 30000).toISOString();
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [
+          card('javi', 'announced', null, { source: 'offapp', announcedAt: new Date().toISOString(), teeTime: new Date().toISOString(), postBy: inMs(5) }),
+          card('nacho', 'playing', null, { postBy: inMs(1.5) }),
+          card('me', 'announced', null, { source: 'offapp', postBy: new Date(Date.now() - 60000).toISOString() }),
+        ],
+      },
+    }));
+    const { getByText, getAllByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('Not posted · 1'));
+    expect(getByText('5 h 0 m')).toBeTruthy();
+    expect(getByText('to post')).toBeTruthy();
+    expect(getByText('1 h 30 m')).toBeTruthy();
+    expect(getByText('left')).toBeTruthy();
+    // My own missed card says so in the "Your card" block too.
+    expect(getAllByText('Not posted').length).toBeGreaterThan(0);
+  });
+
+  test('missed and live rows open the card', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: { [THIS_MONTH]: [card('javi', 'missed', null, { source: 'offapp' })] },
+    }));
+    const nav = makeNav();
+    const { getByLabelText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByLabelText("Javi's card"));
+    fireEvent.press(getByLabelText("Javi's card"));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueCard', { leagueId: 'L1', month: THIS_MONTH, userId: 'javi' });
   });
 
   test('shows the cached board first and an offline banner when the live read fails', async () => {
@@ -321,7 +368,7 @@ describe('LeagueBoardScreen', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('LeagueSettings', { leagueId: 'L1' });
   });
 
-  test('a scored row in this month opens its card; a playing row is not tappable', async () => {
+  test('a scored row and a playing row in this month open their cards', async () => {
     const holes = { 1: 4 };
     store.getLeague.mockResolvedValue(snapshot({
       cardsByMonth: {
@@ -332,13 +379,12 @@ describe('LeagueBoardScreen', () => {
       },
     }));
     const nav = makeNav();
-    const { getAllByText, getByLabelText, queryByLabelText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    const { getByLabelText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
     await waitFor(() => getByLabelText("Javi's card"));
-    expect(queryByLabelText("Nacho's card")).toBeNull();
     fireEvent.press(getByLabelText("Javi's card"));
     expect(nav.navigate).toHaveBeenCalledWith('LeagueCard', { leagueId: 'L1', month: THIS_MONTH, userId: 'javi' });
-    getAllByText('Nacho').forEach((n) => fireEvent.press(n));
-    expect(nav.navigate).toHaveBeenCalledTimes(1);
+    fireEvent.press(getByLabelText("Nacho's card"));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueCard', { leagueId: 'L1', month: THIS_MONTH, userId: 'nacho' });
   });
 
   test("a past month's results rows open that month's card", async () => {

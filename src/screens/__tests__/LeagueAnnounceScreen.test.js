@@ -37,6 +37,16 @@ describe('LeagueAnnounceScreen', () => {
     bridge.consumePendingCourses.mockReturnValue({ startRoundIndex: 0, picks: [{ kind: 'course', course: pickedCourse }] });
   });
 
+  test('hints the post-by time as soon as the tee time is valid, and follows the pickers', async () => {
+    const { getByText, getByLabelText } = render(wrap(<LeagueAnnounceScreen navigation={nav()} route={route} />));
+    // Default tee time is now (08:00 today): 16:00 the same day.
+    expect(getByText("You'll have until 16:00 to post your score — 8 hours after tee time.")).toBeTruthy();
+    fireEvent.press(getByLabelText('Date and tee time'));
+    for (let i = 0; i < 72; i += 1) fireEvent.press(getByLabelText('Later tee time')); // 08:00 -> 20:00
+    fireEvent.press(getByLabelText('Done'));
+    expect(getByText("You'll have until 04:00 tomorrow to post your score — 8 hours after tee time.")).toBeTruthy();
+  });
+
   test('announces with source offapp, the course snapshot and the tee time, then goes back', async () => {
     store.announceLeagueCard.mockResolvedValue({ id: 'c1' });
     const navigation = nav();

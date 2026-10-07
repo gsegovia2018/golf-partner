@@ -56,6 +56,45 @@ export function isNotAnnounced(card) {
   return new Date(card.firstShotAt).getTime() < new Date(card.announcedAt).getTime();
 }
 
+// A card must be posted within 8 hours of its tee time; a reminder goes out
+// 2 hours before that. Plan: docs/superpowers/plans/2026-10-06-league-post-deadline.md
+export const POST_WINDOW_HOURS = 8;
+export const REMINDER_LEAD_HOURS = 2;
+const HOUR_MS = 3600000;
+
+const LIVE = ['announced', 'playing'];
+
+// The post deadline for a tee time (Date), or null for no/invalid tee time.
+export function postByFor(teeTime) {
+  if (teeTime == null) return null;
+  const t = new Date(teeTime).getTime();
+  return Number.isNaN(t) ? null : new Date(t + POST_WINDOW_HOURS * HOUR_MS);
+}
+
+// Not posted in time: swept to 'missed', or still live past its deadline (the
+// server sweep runs every 15 minutes, so the client doesn't wait for it).
+export function isMissed(card, now = new Date()) {
+  if (card?.status === 'missed') return true;
+  if (!LIVE.includes(card?.status) || !card.postBy) return false;
+  return new Date(now).getTime() >= new Date(card.postBy).getTime();
+}
+
+// An unannounced card scores nothing until an admin approves it.
+export function needsApproval(card) {
+  return !!card?.notAnnounced && !card.approvedAt
+    && (card.status === 'submitted' || card.status === 'confirmed');
+}
+
+// The countdown on a live card: { postBy: Date, msLeft, urgent } (urgent under
+// 2 hours); null with no deadline or once the card isn't live.
+export function deadlineInfo(card, now = new Date()) {
+  if (!card?.postBy || !LIVE.includes(card.status)) return null;
+  const postBy = new Date(card.postBy);
+  if (Number.isNaN(postBy.getTime())) return null;
+  const msLeft = postBy.getTime() - new Date(now).getTime();
+  return { postBy, msLeft, urgent: msLeft < REMINDER_LEAD_HOURS * HOUR_MS };
+}
+
 export function clampHandicap(value, cap = 30) {
   const n = parseFloat(value);
   if (!Number.isFinite(n)) return 0;

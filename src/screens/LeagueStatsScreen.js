@@ -10,6 +10,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { seasonTable } from '../store/leagueStandings';
+import { needsApproval } from '../store/leagueRules';
 import {
   monthName, memberName, currentMonthKey, formatNetDiff, formatNetDiffSigned,
 } from '../store/leagueView';
@@ -55,7 +56,7 @@ export default function LeagueStatsScreen({ navigation, route }) {
     const active = members.filter((m) => !m.leftAt);
     const table = seasonTable(active, cardsByMonth, league.pointsTable);
     const scored = Object.keys(cardsByMonth)
-      .filter((m) => cardsByMonth[m].some((c) => c.status === 'confirmed')).sort();
+      .filter((m) => cardsByMonth[m].some((c) => c.status === 'confirmed' && !needsApproval(c))).sort();
     return { league, members, active, cardsByMonth, table, scored };
   }, [data]);
 

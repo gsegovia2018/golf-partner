@@ -173,6 +173,33 @@ describe('league notifications', () => {
       .toBe('You have no card yet in Tour this month');
   });
 
+  test('post reminder formats the deadline time in local time', () => {
+    const r = renderNotification('league_post_reminder', {
+      ...base,
+      course_name: 'Sotogrande',
+      post_by: '2026-10-07T15:30:00Z',
+    });
+    expect(r.title).toBe('2 hours left to post');
+    // Time should be formatted as HH:MM, parsed from ISO. The exact time depends on the
+    // device's local timezone, so check that it is present and looks like a time.
+    expect(r.body).toMatch(/Post your Sotogrande card by \d{2}:\d{2} or it won't count for Tour/);
+  });
+
+  test('post reminder survives missing time, course, and league', () => {
+    const r = renderNotification('league_post_reminder', base);
+    expect(r.title).toBe('2 hours left to post');
+    expect(r.body).toBe("Post your card or it won't count for Tour");
+  });
+
+  test('post reminder uses course name and league name when provided', () => {
+    const r = renderNotification('league_post_reminder', {
+      ...base,
+      course_name: 'La Moraleja',
+      league_name: 'Mulligan League',
+    });
+    expect(r.body).toBe('Post your La Moraleja card or it won\'t count for Mulligan League');
+  });
+
   test('invite names the league', () => {
     expect(renderNotification('league_invite', { ...base, inviter_name: 'Pablo' }).body)
       .toBe('Pablo invited you to Tour');
@@ -180,13 +207,13 @@ describe('league notifications', () => {
 
   test('every league type has its own icon, not the fallback', () => {
     ['league_invite', 'league_card_announced', 'league_tee_off', 'league_card_confirmed',
-      'league_marker_issue', 'league_ranking_updated', 'league_month_reminder', 'league_vote_opened']
+      'league_marker_issue', 'league_ranking_updated', 'league_month_reminder', 'league_post_reminder', 'league_vote_opened']
       .forEach((type) => expect(renderNotification(type, base).icon).not.toBe('bell'));
   });
 
   test('event types link to the board', () => {
     ['league_card_announced', 'league_tee_off', 'league_card_confirmed',
-      'league_ranking_updated', 'league_month_reminder', 'league_vote_opened']
+      'league_ranking_updated', 'league_month_reminder', 'league_post_reminder', 'league_vote_opened']
       .forEach((type) => expect(notificationLink(type, base))
         .toEqual({ screen: 'LeagueBoard', params: { leagueId: 'L1' } }));
   });

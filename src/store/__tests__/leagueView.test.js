@@ -68,7 +68,7 @@ describe('card status', () => {
       .toBe('36 pts · added after the round');
   });
   test('flags a card that was not announced', () => {
-    expect(cardStatus({ status: 'submitted', points: 30, netDifferential: 1, notAnnounced: true }, NOW).flag).toBe('Not announced in the app');
+    expect(cardStatus({ status: 'submitted', points: 30, netDifferential: 1, notAnnounced: true, approvedAt: '2026-10-05T00:00:00Z' }, NOW).flag).toBe('Not announced in the app');
   });
   test('announced shows the time', () => {
     const iso = new Date(2026, 9, 4, 10, 10).toISOString();
@@ -89,6 +89,60 @@ test('monthRows sorts confirmed by net differential (unrated last), then in-prog
   };
   expect(monthRows(members, cardsByMonth, '2026-10', NOW).map((r) => r.member.userId))
     .toEqual(['b', 'a', 'f', 'c', 'd']);
+});
+
+describe('card status: post deadline', () => {
+  const postBy = '2026-10-10T18:00:00Z';
+  const before = new Date('2026-10-10T15:00:00Z');
+  const after = new Date('2026-10-10T18:00:00Z');
+
+  test('a missed card reads Not posted', () => {
+    expect(cardStatus({ status: 'missed', postBy }, before))
+      .toEqual({ text: 'Not posted', tone: 'muted', flag: null, missed: true });
+  });
+
+  test('a live card past its deadline reads Not posted without the sweep', () => {
+    expect(cardStatus({ status: 'announced', postBy, announcedAt: '2026-10-10T09:00:00Z' }, after))
+      .toMatchObject({ text: 'Not posted', missed: true });
+    expect(cardStatus({ status: 'playing', postBy }, after)).toMatchObject({ missed: true });
+  });
+
+  test('a live card carries its deadline, text unchanged', () => {
+    const s = cardStatus({ status: 'announced', postBy, announcedAt: '2026-10-10T09:00:00Z' }, before);
+    expect(s.text).toMatch(/^Declared/);
+    expect(s.deadline).toMatchObject({ msLeft: 3 * 3600000, urgent: false });
+    expect(cardStatus({ status: 'playing', postBy }, before).deadline.postBy).toEqual(new Date(postBy));
+    expect(cardStatus({ status: 'playing' }, before).deadline).toBeNull();
+  });
+
+  test('an unapproved not-announced card flags awaiting approval', () => {
+    const card = { status: 'submitted', notAnnounced: true, points: 30 };
+    expect(cardStatus(card, before).flag).toBe('Awaiting approval · not counted yet');
+    expect(cardStatus({ ...card, approvedAt: '2026-10-11T00:00:00Z' }, before).flag).toBe('Not announced in the app');
+  });
+
+  test('monthRows puts not posted after announced', () => {
+    const members = [{ userId: 'a' }, { userId: 'b' }, { userId: 'c' }];
+    const cardsByMonth = { '2026-10': [
+      { userId: 'a', status: 'missed', postBy },
+      { userId: 'b', status: 'announced', postBy: '2026-10-11T18:00:00Z' },
+    ] };
+    expect(monthRows(members, cardsByMonth, '2026-10', before).map((r) => r.member.userId)).toEqual(['b', 'a', 'c']);
+  });
+
+  test('monthBoard: awaiting and missed groups, unapproved card never ranks', () => {
+    const members = [{ userId: 'a' }, { userId: 'b' }, { userId: 'c' }];
+    const cardsByMonth = { '2026-10': [
+      { userId: 'a', status: 'confirmed', notAnnounced: true, netDifferential: -4, points: 40 },
+      { userId: 'b', status: 'announced', postBy },
+    ] };
+    const board = monthBoard(members, cardsByMonth, '2026-10', undefined, after);
+    expect(board.confirmed).toEqual([]);
+    expect(board.awaiting.map((r) => r.member.userId)).toEqual(['a']);
+    expect(board.missed.map((r) => r.member.userId)).toEqual(['b']);
+    expect(board.onCourse).toEqual([]);
+    expect(board.noCard.map((m) => m.userId)).toEqual(['c']);
+  });
 });
 
 describe('formatNetDiff', () => {
