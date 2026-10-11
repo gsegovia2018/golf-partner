@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Swing lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app" id="app">
+  <header class="hdr">
+    <div class="hdr-main">
+      <label class="clip-pick"><span class="sr">Clip</span>
+        <select id="clipSel" aria-label="Clip"></select>
+      </label>
+      <span class="badge" id="srcBadge" hidden></span>
+    </div>
+    <div class="hdr-actions">
+      <button class="theme" id="themeBtn" type="button" aria-label="Toggle light / dark">◐</button>
+      <button class="save" id="saveBtn" type="button" disabled>Save</button>
+    </div>
+  </header>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <main class="layout" id="main" hidden>
+    <section class="col-still">
+      <nav class="timeline" id="timeline" aria-label="Checkpoints"></nav>
+      <div class="cur" id="curLine"></div>
+      <section class="cue" id="cue" aria-live="polite"></section>
+      <details class="howto" id="howTo">
+        <summary>How to mark</summary>
+        <ul id="howToList"></ul>
+      </details>
+
+      <div class="still-box" id="stillBox">
+        <img id="stillImg" alt="" draggable="false">
+        <svg id="overlay" aria-label="Swing overlay"></svg>
+        <div class="live-chip" id="liveChip" hidden></div>
+      </div>
+      <div class="legend" id="legend">
+        <span><i class="lg"></i>Hands</span>
+        <span><i class="lg circ"></i>Clubhead</span>
+        <span><i class="lg est"></i>Estimated</span>
+        <span><i class="lg ring"></i>Ball</span>
+        <span><i class="lg line"></i>Shaft plane</span>
+        <span><i class="lg dline"></i>Shoulder plane</span>
+        <span><i class="lg ghost"></i>Auto (ghost)</span>
+      </div>
+
+      <div class="panel">
+        <div class="row">
+          <div class="seg" id="targetSeg" role="radiogroup" aria-label="Mark to move">
+            <button type="button" role="radio" data-t="hands">Hands</button>
+            <button type="button" role="radio" data-t="head">Clubhead</button>
+            <button type="button" role="radio" data-t="ball">Ball</button>
+          </div>
+        </div>
+        <div class="row between">
+          <div class="pad" aria-label="Nudge 1 pixel">
+            <button type="button" data-d="-1,0" aria-label="Left 1 pixel">←</button>
+            <button type="button" data-d="0,-1" aria-label="Up 1 pixel">↑</button>
+            <button type="button" data-d="0,1" aria-label="Down 1 pixel">↓</button>
+            <button type="button" data-d="1,0" aria-label="Right 1 pixel">→</button>
+          </div>
+          <div class="coords" id="coords"></div>
+        </div>
+        <div class="row between toggle-row">
+          <label for="hiddenTgl"><b>Clubhead hidden</b><small>End-on or not visible in this frame</small></label>
+          <button type="button" id="hiddenTgl" class="toggle" role="switch" aria-checked="false"><span class="sr">Clubhead hidden</span></button>
+        </div>
+        <div class="scrub" id="scrub">
+          <div class="scrub-info"><b id="scrubFrame"></b><span id="scrubTime"></span></div>
+          <div class="scrub-track" id="scrubTrack">
+            <div class="film" id="film" aria-hidden="true"></div>
+            <div class="marks" id="scrubMarks" aria-hidden="true"></div>
+            <input type="range" id="scrubRange" min="0" max="0" step="1" value="0" aria-label="Frame">
+          </div>
+          <div class="scrub-btns" id="scrubBtns">
+            <button type="button" data-step="-10" aria-label="Back 10 frames">&minus;10</button>
+            <button type="button" data-step="-1" aria-label="Back 1 frame">&minus;1</button>
+            <button type="button" data-step="1" aria-label="Forward 1 frame">+1</button>
+            <button type="button" data-step="10" aria-label="Forward 10 frames">+10</button>
+          </div>
+          <button type="button" class="btn commit" id="setFrameBtn"></button>
+          <p class="hint">Scrubbing only previews a frame. Press the button to move the selected checkpoint there. Keys: <kbd>,</kbd> / <kbd>.</kbd> step 1 frame, with Shift 10.</p>
+        </div>
+        <div class="row">
+          <button type="button" class="btn sec" id="undoBtn">Undo</button>
+          <button type="button" class="btn sec" id="resetBtn">Reset checkpoint to auto</button>
+        </div>
+        <p class="hint">Drag a mark, or tap the image to place the selected one. With the image focused, arrow keys move the mark 1 px (Shift: 5 px; Alt + arrows changes checkpoint). Otherwise &larr;/&rarr; change checkpoint. Cmd/Ctrl+Z undoes, Cmd/Ctrl+S saves.</p>
+      </div>
+    </section>
+
+    <section class="col-checks">
+      <div class="card hero" id="mainCard"></div>
+      <div class="card">
+        <div class="ov">Recomputes as you drag</div>
+        <div id="checks"></div>
+        <p class="hint" id="scaleNote"></p>
+      </div>
+    </section>
+  </main>
+
+  <div class="empty" id="empty" hidden></div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
