@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { addWatchCommandListener, setWatchState } from '../lib/watchBridge';
 import { holeFeatures } from '../lib/geo';
 import { calcExtraShots, calcStablefordPoints, getPlayingHandicap, holeCountOf } from '../store/scoring';
 import { driveLieFromDetail } from '../store/statsEngine';
-import { watchStateOf, parseWatchCommand, decideWatchCommand } from '../store/watchProtocol';
+import {
+  watchStateOf, parseWatchCommand, decideWatchCommand, WATCH_SHOT_FIELDS,
+} from '../store/watchProtocol';
+import { DEFAULT_SHOT } from '../components/scorecard/constants';
 import { NOTIFICATION_MIN_DELTA_M } from './useRoundTracking';
 
 // Mirrors the live scorecard to the Wear OS watch and applies the watch's
@@ -50,10 +53,36 @@ function greenOf(courseName, holeNumber) {
   return { front: triple(f.greenFront), center: triple(f.greenCenter), back: triple(f.greenBack) };
 }
 
+// Every hole of the round for the watch: static per round + course geometry, so
+// the hook memoizes it and it does not move with GPS fixes. `tee` is the same
+// point resolveScorecardDistances measures from.
+export function watchCourseOf({ round, player, courseName }) {
+  if (!round?.holes || !player) return null;
+  const holeCount = holeCountOf(round);
+  const handicap = getPlayingHandicap(round, player);
+  return {
+    holes: round.holes.map((h) => ({
+      number: h.number,
+      par: h.par,
+      si: h.strokeIndex ?? null,
+      extraShots: calcExtraShots(handicap, h.strokeIndex, holeCount),
+      green: greenOf(courseName, h.number),
+      tee: triple(holeFeatures(courseName, h.number)?.start),
+    })),
+  };
+}
+
+function watchShotOf(detail) {
+  if (!detail) return null;
+  const out = {};
+  for (const k of WATCH_SHOT_FIELDS) out[k] = detail[k] ?? (k === 'approachBunker' ? false : DEFAULT_SHOT[k] ?? null);
+  return out;
+}
+
 // `scores` is the card as I have marked it: { [playerId]: { [hole]: strokes } }.
 export function watchInputsOf({
   round, players, meId, scores, shotDetails, currentHole, courseName,
-  distances, source, units, statGroups, blocked,
+  distances, source, units, statGroups, blocked, course,
 }) {
   const hole = round?.holes?.find((h) => h.number === currentHole);
   const player = players?.find((p) => p.id === meId);
@@ -79,6 +108,15 @@ export function watchInputsOf({
     si: hole.strokeIndex,
     extraShots: calcExtraShots(handicap, hole.strokeIndex, holeCount),
     green: greenOf(courseName, currentHole),
+    course: course ?? watchCourseOf({ round, player, courseName }),
+    mine: Object.fromEntries(round.holes.map((h) => {
+      const s = mine[h.number] ?? null;
+      return [h.number, {
+        strokes: s,
+        points: s ? calcStablefordPoints(h.par, s, handicap, h.strokeIndex, holeCount) : null,
+        shot: watchShotOf(shotDetails?.[meId]?.[h.number]),
+      }];
+    })),
     phoneDistances: distances ? {
       front: distances.front ?? null,
       center: distances.center ?? null,
@@ -107,7 +145,7 @@ export function watchInputsOf({
 // of the last render: a command queued behind a hole move must see the move.
 // The handlers may return promises; the ack waits for them.
 export function useWatchBridge({
-  active, onStrokes, onShot, onGoToHole, getCurrentHole, ...inputs
+  active, onStrokes, onShot, onGoToHole, getCurrentHole, geomVersion, ...inputs
 }) {
   const [ackTick, setAckTick] = useState(0);
   const forceRef = useRef(false);
@@ -117,7 +155,17 @@ export function useWatchBridge({
   // the old rev: the watch's later commands still carry their older baseRev.
   const holeMark = useRef({ hole: null, rev: 0 });
   const ackRef = useRef(null); // id of the last command processed, see watchStateOf
-  const state = active ? watchInputsOf(inputs) : { round: null };
+  // geomVersion: course geometry hydrates late and swaps in, which re-derives this.
+  const meId = inputs.meId;
+  const meRow = inputs.players?.find((p) => p.id === meId);
+  const course = useMemo(
+    () => (active ? watchCourseOf({
+      round: inputs.round, player: meRow, courseName: inputs.courseName,
+    }) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [active, inputs.round, meRow, inputs.courseName, geomVersion],
+  );
+  const state = active ? watchInputsOf({ ...inputs, course }) : { round: null };
 
   // The command listener outlives renders; it reads the latest through this.
   const latest = useRef(null);

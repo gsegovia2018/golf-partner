@@ -4,7 +4,10 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { ShotDetailExplainer } from '../ShotDetailExplainer';
-import { isGIR, recoveryOutcomeFromState, shotDetailStrokeCount } from '../../store/scoring';
+import {
+  isGIR, recoveryOutcomeFromState, shotDetailStrokeCount,
+  driveDirectionPatch, teeClubPatch, approachBucketPatch, approachFinishPatch, recoveryOutcomePatch,
+} from '../../store/scoring';
 import { defaultApproachLie } from '../../store/statsEngine';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { unitWord } from '../../lib/units';
@@ -147,25 +150,7 @@ function ApproachFinishRow({ detail, onChange, theme, s, isLast = false }) {
       ? bunker
       : dir === key && !onGreen);
 
-  // A miss is anything with a direction or a bunker; otherwise the cell clears.
-  const missResult = (nextDir, nextBunker) => (nextDir || nextBunker ? 'miss' : null);
-
-  const select = (key) => {
-    if (key === 'green') {
-      onChange(onGreen
-        ? { approachResult: null, approachMiss: null, approachBunker: false }
-        : { approachResult: 'green', approachMiss: null, approachBunker: false });
-      return;
-    }
-    if (key === 'bunker') {
-      const nextBunker = !bunker;
-      onChange({ approachBunker: nextBunker, approachResult: missResult(dir, nextBunker) });
-      return;
-    }
-    // A direction: single-select, and it clears an on-green selection.
-    const nextDir = dir === key && !onGreen ? null : key;
-    onChange({ approachMiss: nextDir, approachResult: missResult(nextDir, bunker) });
-  };
+  const select = (key) => onChange(approachFinishPatch(detail, key));
 
   return (
     <View style={[s.shotRow, s.shotRowStacked, isLast && s.shotRowLast]}>
@@ -340,7 +325,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           options={TEE_CLUBS}
           labels={TEE_CLUB_LABELS}
           effectiveValue={teeClub}
-          onSelect={(key) => onChange({ teeClub: key === 'driver' ? null : key })}
+          onSelect={(key) => onChange(teeClubPatch(key))}
           theme={theme}
           s={s}
           stacked
@@ -364,7 +349,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
                 <TouchableOpacity
                   key={key}
                   style={[s.driveCircle, active && s.driveCircleActive]}
-                  onPress={() => onChange({ drive: active ? null : key, driveLie: null })}
+                  onPress={() => onChange(driveDirectionPatch(d.drive, key))}
                   activeOpacity={0.7}
                   hitSlop={5}
                   accessibilityRole="button"
@@ -428,12 +413,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           value={d.approachBucket}
           buckets={APPROACH_BUCKETS}
           labels={approachLabels}
-          onSelect={(key) => onChange({
-            approachBucket: key,
-            ...(key == null ? {
-              approachResult: null, approachMiss: null, approachBunker: false, approachLie: null,
-            } : {}),
-          })}
+          onSelect={(key) => onChange(approachBucketPatch(key))}
           theme={theme}
           s={s}
           hint={approachShotHint}
@@ -511,10 +491,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           <View style={s.driveBtns}>
             <TouchableOpacity
               style={[s.outcomeChip, effectiveOutcome === 'up-and-down' && s.outcomeChipActive]}
-              onPress={() => onChange({
-                recoveryOutcome:
-                  effectiveOutcome === 'up-and-down' ? 'none' : 'up-and-down',
-              })}
+              onPress={() => onChange(recoveryOutcomePatch(effectiveOutcome, 'up-and-down'))}
               activeOpacity={0.7}
             >
               <Text
@@ -527,10 +504,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.outcomeChip, effectiveOutcome === 'sand-save' && s.outcomeChipActive]}
-              onPress={() => onChange({
-                recoveryOutcome:
-                  effectiveOutcome === 'sand-save' ? 'none' : 'sand-save',
-              })}
+              onPress={() => onChange(recoveryOutcomePatch(effectiveOutcome, 'sand-save'))}
               activeOpacity={0.7}
             >
               <Text

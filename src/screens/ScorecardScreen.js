@@ -59,7 +59,7 @@ import {
   celebrationFor,
 } from '../components/scorecard/constants';
 import {
-  reconcileShotDetail, roundScoringMode, roundBestBallValues,
+  reconcileShotDetail, normalizeWatchShotPatch, roundScoringMode, roundBestBallValues,
   clampScoreInput, resolvePlayerHandicap, holeCountOf, isScrambleMode,
 } from '../store/scoring';
 import {
@@ -1507,13 +1507,16 @@ export default function ScorecardScreen({ navigation, route }) {
       return true;
     });
   }, [round, players, meId, watchWrite, stampRoundStarted, actions]);
-  // A lie set from the watch is explicit, so it clears the phone's direction chip.
+  // The watch sends absolute values; normalizeWatchShotPatch turns them into
+  // the field changes the ShotDetailPanel's own handlers would make (a drive
+  // direction resets the lie, an on-green finish clears the miss, ...).
   const watchShot = useCallback((h, patch) => watchWrite(h, async (strokes, shot) => {
     if (strokes == null) return false; // a detail never outlives its strokes
-    const detail = { ...DEFAULT_SHOT, ...shot, ...patch, ...('driveLie' in patch ? { drive: null } : {}) };
+    const par = round?.holes?.find((x) => x.number === h)?.par;
+    const detail = { ...DEFAULT_SHOT, ...shot, ...normalizeWatchShotPatch(shot, patch, par) };
     await actions.setDraftShot(h, meId, reconcileShotDetail(detail, strokes));
     return true;
-  }), [watchWrite, actions, meId]);
+  }), [watchWrite, actions, meId, round]);
   useWatchBridge({
     // Not before the cards are loaded and the pager has jumped to my resume hole.
     active: !!round && !!meId && !isScrambleMode(roundScoringMode(tournament, round))
@@ -1529,6 +1532,7 @@ export default function ScorecardScreen({ navigation, route }) {
     source: trackingGps.source,
     units: appSettings.units,
     statGroups: appSettings.statGroups,
+    geomVersion,
     blocked: official ? 'official' : viewOnly ? 'viewOnly'
       : (holeConflictPrompt || finishConflictsOpen) ? 'dispute' : null,
     onStrokes: watchStrokes,

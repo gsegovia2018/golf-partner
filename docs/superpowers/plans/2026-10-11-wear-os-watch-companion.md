@@ -233,3 +233,76 @@ Order: W1 → W2 ∥ W3 → W4 → W5. W3 can start right after the contract is 
 
 - Which watch model (needs Wear OS 3+; e.g. Galaxy Watch4+ / Pixel Watch)? Decides the
   round-screen size used in W4 and how we install.
+
+## v1.2 — whole-course state + full stats (device feedback 2026-10-11)
+
+Feedback: vertical hole swipe sometimes skips >1 hole and waits on the phone; many
+trackable stats missing; the watch's Fwy/Rgh/Sand/Trbl tee row doesn't match the
+phone's direction model. User picked all stat groups: tee shot (full), approach,
+putting, short game.
+
+**Contract additions (still `v: 1`, additive — older watch builds ignore them):**
+
+```js
+state.course = { holes: [ { number, par, si, extraShots, green: {front,center,back}|null, tee: [lat,lng]|null } ] } // every hole of the round
+state.mine = { "<hole>": { strokes|null, points|null, shot: ShotDetail|null } }              // what the phone SHOWS for me, every hole
+state.track = { putting, teeShot, approach, shortGame, penalties }                            // + approach
+// ShotDetail (watch-visible subset of DEFAULT_SHOT):
+{ putts, drive, teeClub, driveDistBucket, teePenalties, otherPenalties, sandShots,
+  recoveryOutcome, firstPuttBucket, approachBucket, approachResult, approachMiss, approachBunker }
+```
+
+`shot` patch keys now: `putts`, `drive` ('left'|'fairway'|'right'|'short'|'super'|null),
+`teeClub` ('wood'|'hybrid'|'iron'|null — driver is null), `driveDistBucket`
+('0-150'|'150-180'|'180-210'|'210-240'|'240+'|null), `teePenalties` / `otherPenalties` /
+`sandShots` (0..9), `recoveryOutcome` ('up-and-down'|'sand-save'|'none'|null),
+`firstPuttBucket` ('0-1'|'1-2'|'2-3'|'3-6'|'6+'|null), `approachBucket`
+('0-50'|'50-100'|'100-150'|'150-200'|'200+'|null), `approachResult` ('green'|'miss'|null),
+`approachMiss` ('long'|'short'|'left'|'right'|null), `approachBunker` (bool), and the
+legacy `driveLie`. The phone normalizes a patch exactly the way its own ShotDetailPanel
+handlers combine these fields (e.g. picking a drive direction / on-green vs a miss
+direction), then reconciles against strokes.
+
+**Watch:** switches hole instantly from `course` + `mine` (sends `hole`, phone catches up);
+exactly one hole per vertical swipe gesture; pages Distances | Score | Tee | Approach |
+Putting & short game. Groups off in Settings hide their rows/pages; par-3 rules mirror
+the phone's ShotDetailPanel (what it hides on a par 3, the watch hides).
+
+### v1.2 — phone-side decisions (implemented)
+
+- **`course`** is built by `watchCourseOf` (`useWatchBridge.js`), memoized per round / me / course
+  and the geometry version (`geomVersion` from the screen), so it does not change per GPS fix.
+  `green` is the same triple as `hole.green`; `tee` is `holeFeatures(...).start`, the point
+  `resolveScorecardDistances` measures from. A hole without course geometry has `green: null, tee: null`.
+- **`mine`** has an entry for every hole: `strokes`/`points` from `visibleScores` (what the phone
+  shows, drafts and resolutions included), `shot` = the watch-visible subset of the shown
+  shot detail (`WATCH_SHOT_FIELDS` in `watchProtocol.js`; `driveLie` and `approachLie` are not
+  sent), `null` when the hole has no detail. `track.approach` added.
+- **Distance rule for the watch** = the phone's `resolveScorecardDistances`: a fix within
+  `ANCHOR_MAX_GPS_METERS` (1000 m) of the green centre gives GPS distances to front/centre/back;
+  otherwise distances are measured from `tee` and labelled source `tee`; with no `tee` the watch
+  shows nothing (never a straight line from far away).
+- **Patch validation** (`parseWatchCommand`): enums as listed above plus `recoveryOutcome: 'none'`;
+  `approachBunker` must be a boolean (not null); `teePenalties` 0..9. Unknown keys (e.g.
+  `approachLie`) are rejected.
+- **Normalization** (`normalizeWatchShotPatch` in `store/scoring.js`; the panel's handlers were
+  extracted into `driveDirectionPatch`, `teeClubPatch`, `approachBucketPatch`,
+  `approachFinishPatch`, `recoveryOutcomePatch` and `ShotDetailPanel` uses the same functions):
+  - `drive` -> `{drive, driveLie: null}` (a direction resets the explicit lie).
+  - `driveLie` alone -> sets the lie and clears `drive` (legacy v1 behaviour); sent together with
+    `drive` it only refines that direction's lie.
+  - `teeClub` -> `null` for the driver (the watch sends null; `'driver'` is invalid).
+  - `approachBucket: null` clears `approachResult/Miss/Bunker/Lie`.
+  - Approach finish (needs an approach distance, otherwise ignored): `approachResult: 'green'` ->
+    green, miss null, bunker false. `approachMiss` / `approachBunker` -> stored, and
+    `approachResult` is derived (`'miss'` if a direction or bunker, else null); if the hole was on
+    green, a direction or bunker replaces it (the other one resets). `approachResult: null`
+    alone clears the finish. `approachResult: 'miss'` with no direction/bunker derives to null.
+  - Par 3: `teeClub`, `drive`, `driveLie`, `driveDistBucket` and the approach-finish keys are
+    ignored (the panel hides those rows). Approach distance, putts, penalties, sand and recovery
+    still apply.
+  - `recoveryOutcome`, `firstPuttBucket` and the counters are absolute. `firstPuttBucket` is not
+    cleared when putts go to 0 by patch (as in the panel); `reconcileShotDetail` clears it only
+    when putts are trimmed to 0.
+  - Then `reconcileShotDetail(detail, strokes)`: putts, sand, other penalties, then **tee
+    penalties** are trimmed in that order; tee penalties are now counted from the watch too.

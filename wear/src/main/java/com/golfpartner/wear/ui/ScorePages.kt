@@ -1,5 +1,8 @@
 package com.golfpartner.wear.ui
 
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.golfpartner.wear.data.Blocked
 import com.golfpartner.wear.data.Entry
 import com.golfpartner.wear.data.EntryDraft
+import com.golfpartner.wear.data.Extra
 import com.golfpartner.wear.data.EntryPlan
 import com.golfpartner.wear.data.WatchState
 import com.golfpartner.wear.ui.theme.Hud
@@ -47,23 +51,26 @@ fun ScorePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: D
         Caption(Copy.holeHeader(hole.number, hole.par))
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            RoundButton("−", 52.dp, { onChange { Entry.stepStrokes(hole, plan, it, me, -1) } }, enabled = on && strokes != null && strokes > 1)
-            Box(Modifier.width(72.dp), contentAlignment = Alignment.Center) {
-                HudText(strokes?.toString() ?: "–", 56, weight = FontWeight.ExtraBold, color = if (strokes == null) Hud.textMuted else Hud.text)
+            RoundButton("−", 52.dp, { onChange { Entry.stepStrokes(hole, it, -1) } }, enabled = on && strokes != null && strokes > 1)
+            Column(Modifier.width(72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                // Unscored: a short dash, not a bar the width of the digit.
+                if (strokes == null) HudText("–", 34, color = Hud.textMuted)
+                else HudText(strokes.toString(), 56, weight = FontWeight.ExtraBold)
+                HudText(Copy.STROKES_LABEL, 10, color = Hud.textMuted)
             }
-            RoundButton("+", 52.dp, { onChange { Entry.stepStrokes(hole, plan, it, me, +1) } }, enabled = on && (strokes ?: 0) < Entry.STROKES_MAX)
+            RoundButton("+", 52.dp, { onChange { Entry.stepStrokes(hole, it, +1) } }, enabled = on && (strokes ?: 0) < Entry.STROKES_MAX)
         }
-        if (plan.hasPutts) {
+        if (plan.putts) {
             Spacer(Modifier.height(4.dp))
-            val putts = draft.putts
+            val putts = draft.shot.putts
             val puttsOn = on && strokes != null
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                RoundButton("−", 44.dp, { onChange { Entry.stepPutts(plan, it, me, -1) } }, enabled = puttsOn && putts != null && putts > 0)
+                RoundButton("−", 44.dp, { onChange { Entry.stepPutts(it, -1) } }, enabled = puttsOn && putts != null && putts > 0)
                 Column(Modifier.width(72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     HudText(putts?.toString() ?: "–", 26, weight = FontWeight.Bold, color = if (putts == null) Hud.textMuted else Hud.text)
                     HudText(Copy.PUTTS, 10, color = Hud.textMuted)
                 }
-                RoundButton("+", 44.dp, { onChange { Entry.stepPutts(plan, it, me, +1) } }, enabled = puttsOn && (putts == null || putts < Entry.puttsMax(strokes ?: 0)))
+                RoundButton("+", 44.dp, { onChange { Entry.stepPutts(it, +1) } }, enabled = puttsOn && (putts == null || putts < Entry.puttsMax(strokes ?: 0)))
             }
         }
         Spacer(Modifier.weight(1f))
@@ -75,72 +82,145 @@ fun ScorePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: D
     }
 }
 
-/**
- * Stats page: one row of tee-shot toggles (hidden on a par 3, which gets a note), then Sand and
- * Penalty rows. Rows whose track group is off are not shown. The strokes cap is explained by a
- * one-line hint rather than a silent grey-out.
- */
+private val PAGE_MODIFIER = Modifier.fillMaxSize()
+
+/** The one-line hint under a stats page: dispute, strokes unset, or the strokes cap. */
 @Composable
-fun StatsPage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: DraftChange) {
-    val hole = state.hole ?: return
-    val me = state.me ?: return
-    val dispute = state.blocked == Blocked.Dispute
-    val on = state.inputsOn && draft.strokes != null
-    Column(
-        Modifier.fillMaxSize().padding(top = 18.dp, bottom = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Caption(if (plan.hasLie) Copy.TEE_SHOT else Copy.holeHeader(hole.number, hole.par))
-        Spacer(Modifier.weight(1f))
-        if (plan.hasLie) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Entry.LIES.forEach { lie ->
-                    RoundButton(
-                        Copy.lieLabel(lie), 42.dp, { onChange { Entry.toggleLie(it, lie) } },
-                        enabled = on, selected = draft.lie == lie, fontSize = 11,
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-        } else if (plan.par3Note) {
-            HudText(Copy.PAR3_NOTE, 11, color = Hud.textMuted)
-            Spacer(Modifier.height(8.dp))
-        }
-        if (plan.hasSand) {
-            val max = Entry.sandMax(plan, draft, me)
-            StepRow(Copy.SAND, draft.sand, on && draft.sand > 0, on && draft.sand < max,
-                { onChange { Entry.stepSand(plan, it, me, -1) } }, { onChange { Entry.stepSand(plan, it, me, +1) } })
-        }
-        if (plan.hasPenalty) {
-            val max = Entry.penaltyMax(plan, draft, me)
-            StepRow(Copy.PENALTY, draft.penalty, on && draft.penalty > 0, on && draft.penalty < max,
-                { onChange { Entry.stepPenalty(plan, it, me, -1) } }, { onChange { Entry.stepPenalty(plan, it, me, +1) } })
-        }
-        Spacer(Modifier.weight(1f))
-        val hint = when {
-            dispute -> Copy.RESOLVE_ON_PHONE to Hud.warn
-            draft.strokes == null -> Copy.SET_STROKES_FIRST to Hud.textMuted
-            Entry.extrasCapped(plan, draft, me) -> Copy.maxFor(draft.strokes) to Hud.textMuted
-            else -> null
-        }
-        Box(Modifier.height(16.dp), contentAlignment = Alignment.Center) {
-            hint?.let { (text, color) -> HudText(text, 11, color = color, weight = FontWeight.SemiBold) }
-        }
+private fun Hint(state: WatchState, draft: EntryDraft, capped: Boolean, extra: Pair<String, androidx.compose.ui.graphics.Color>? = null) {
+    val hint = when {
+        state.blocked == Blocked.Dispute -> Copy.RESOLVE_ON_PHONE to Hud.warn
+        draft.strokes == null -> Copy.SET_STROKES_FIRST to Hud.textMuted
+        extra != null -> extra
+        capped -> Copy.maxFor(draft.strokes) to Hud.textMuted
+        else -> null
+    }
+    Box(Modifier.height(18.dp), contentAlignment = Alignment.Center) {
+        hint?.let { (text, color) -> HudText(text, 11, color = color, weight = FontWeight.SemiBold) }
     }
 }
 
-/** `label  −  n  +`, 40dp buttons, about 160dp wide so the bottom row clears the round edge. */
+/** Scrolls when the rows do not fit the round screen; top/bottom padding keeps rows off the bezel at rest. */
 @Composable
-private fun StepRow(label: String, value: Int, minusOn: Boolean, plusOn: Boolean, onMinus: () -> Unit, onPlus: () -> Unit) {
-    val size: Dp = 40.dp
-    Row(
-        Modifier.padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+private fun StatsColumn(caption: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        PAGE_MODIFIER.verticalScroll(rememberScrollState()).padding(top = 22.dp, bottom = 30.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Box(Modifier.width(48.dp), contentAlignment = Alignment.CenterStart) { HudText(label, 12, color = Hud.textMuted, weight = FontWeight.SemiBold) }
-        RoundButton("−", size, onMinus, enabled = minusOn, fontSize = 20)
-        Box(Modifier.width(26.dp), contentAlignment = Alignment.Center) { HudText(value.toString(), 20, weight = FontWeight.Bold) }
-        RoundButton("+", size, onPlus, enabled = plusOn, fontSize = 20)
+        Caption(caption)
+        content()
+    }
+}
+
+/** Tee page: direction (Left / Fairway / Right / Short / Super), club, drive distance, tee penalties. */
+@Composable
+fun TeePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: DraftChange) {
+    val on = state.inputsOn && draft.strokes != null
+    val s = draft.shot
+    StatsColumn(Copy.TEE_SHOT) {
+        if (plan.drive) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("left", "fairway", "right").forEach { DriveButton(it, s.drive, on, onChange) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("short", "super").forEach { DriveButton(it, s.drive, on, onChange) }
+            }
+            HudText(s.drive?.let { Copy.driveLabel(it) } ?: Copy.DIRECTION, 12, color = if (s.drive == null) Hud.textMuted else Hud.accent, weight = FontWeight.SemiBold)
+            FieldLabel(Copy.CLUB)
+            val club = s.teeClub ?: "driver"
+            OptionStepper(Copy.clubLabel(club), true, on, { onChange { Entry.cycleClub(it, -1) } }, { onChange { Entry.cycleClub(it, +1) } })
+            FieldLabel("Drive distance · ${Copy.unitWord(state.units)}")
+            OptionStepper(
+                s.driveDistBucket?.let { Copy.driveDistLabel(it, state.units) } ?: Copy.NOT_SET, s.driveDistBucket != null, on,
+                { onChange { Entry.cycleDriveDist(it, -1) } }, { onChange { Entry.cycleDriveDist(it, +1) } },
+            )
+        } else if (plan.par3Note) {
+            HudText(Copy.PAR3_NOTE, 11, color = Hud.textMuted)
+        }
+        if (plan.teePenalties) {
+            val max = Entry.extraMax(draft, Extra.Tee)
+            StepRow(Copy.TEE_PENALTIES, s.teePenalties, on && s.teePenalties > 0, on && s.teePenalties < max,
+                { onChange { Entry.stepExtra(it, Extra.Tee, -1) } }, { onChange { Entry.stepExtra(it, Extra.Tee, +1) } })
+        }
+        Hint(state, draft, plan.teePenalties && Entry.extrasCapped(draft, setOf(Extra.Tee)))
+    }
+}
+
+@Composable
+private fun DriveButton(key: String, selected: String?, on: Boolean, onChange: DraftChange) {
+    GlyphButton(driveGlyph(key), Copy.driveLabel(key), { onChange { Entry.toggleDrive(it, key) } }, enabled = on, selected = selected == key)
+}
+
+/** Approach page: distance bucket, then (not on a par 3) where it finished, once a distance is set. */
+@Composable
+fun ApproachPage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: DraftChange) {
+    val on = state.inputsOn && draft.strokes != null
+    val s = draft.shot
+    val finishOn = on && s.approachBucket != null
+    StatsColumn(if (plan.par3) Copy.HOLE_DISTANCE else Copy.APPROACH) {
+        FieldLabel(Copy.unitWord(state.units))
+        OptionStepper(
+            s.approachBucket?.let { Copy.approachLabel(it, state.units) } ?: Copy.NOT_SET, s.approachBucket != null, on,
+            { onChange { Entry.cycleApproach(it, -1) } }, { onChange { Entry.cycleApproach(it, +1) } },
+        )
+        if (plan.approachFinish) {
+            FieldLabel(Copy.FINISH)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("left", "long", "short", "right").forEach { key ->
+                    GlyphButton(
+                        finishGlyph(key), Copy.finishLabel(key), { onChange { Entry.toggleFinish(it, key) } },
+                        size = 44.dp, enabled = finishOn, selected = Entry.finishActive(s, key),
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                ChipButton(Copy.ON_GREEN, { onChange { Entry.toggleFinish(it, "green") } }, enabled = finishOn, selected = Entry.finishActive(s, "green"), width = 94.dp)
+                ChipButton(Copy.BUNKER, { onChange { Entry.toggleFinish(it, "bunker") } }, enabled = finishOn, selected = Entry.finishActive(s, "bunker"), width = 90.dp)
+            }
+        }
+        val extra = if (plan.approachFinish && on && s.approachBucket == null) Copy.SET_DISTANCE_FIRST to Hud.textMuted else null
+        Hint(state, draft, capped = false, extra = extra)
+    }
+}
+
+/** First putt distance, sand shots, recovery outcome and other penalties. */
+@Composable
+fun ShortGamePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: DraftChange) {
+    val hole = state.hole ?: return
+    val on = state.inputsOn && draft.strokes != null
+    val s = draft.shot
+    val hasPutts = (s.putts ?: 0) >= 1
+    StatsColumn(Copy.SHORT_GAME) {
+        if (plan.firstPutt && hasPutts) {
+            FieldLabel("${Copy.FIRST_PUTT} · ${Copy.unitWord(state.units)}")
+            OptionStepper(
+                s.firstPuttBucket?.let { Copy.firstPuttLabel(it, state.units) } ?: Copy.NOT_SET, s.firstPuttBucket != null, on,
+                { onChange { Entry.cycleFirstPutt(it, -1) } }, { onChange { Entry.cycleFirstPutt(it, +1) } },
+            )
+        }
+        if (plan.sand) {
+            val max = Entry.extraMax(draft, Extra.Sand)
+            StepRow(Copy.SAND, s.sandShots, on && s.sandShots > 0, on && s.sandShots < max,
+                { onChange { Entry.stepExtra(it, Extra.Sand, -1) } }, { onChange { Entry.stepExtra(it, Extra.Sand, +1) } })
+        }
+        if (plan.recovery && Entry.missedGir(hole, draft)) {
+            val eff = Entry.effectiveRecovery(hole, draft)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("up-and-down", "sand-save").forEach { key ->
+                    ChipButton(Copy.recoveryLabel(key), { onChange { Entry.toggleRecovery(hole, it, key) } }, enabled = on, selected = eff == key, width = 94.dp)
+                }
+            }
+        }
+        if (plan.otherPenalties) {
+            val max = Entry.extraMax(draft, Extra.Other)
+            StepRow(Copy.OTHER_PENALTIES, s.otherPenalties, on && s.otherPenalties > 0, on && s.otherPenalties < max,
+                { onChange { Entry.stepExtra(it, Extra.Other, -1) } }, { onChange { Entry.stepExtra(it, Extra.Other, +1) } })
+        }
+        val extra = if (plan.firstPutt && !plan.sand && !plan.otherPenalties && !hasPutts && on) Copy.SET_PUTTS_FIRST to Hud.textMuted else null
+        val capped = (plan.sand || plan.otherPenalties) && Entry.extrasCapped(draft, buildSet {
+            if (plan.sand) add(Extra.Sand)
+            if (plan.otherPenalties) add(Extra.Other)
+        })
+        Hint(state, draft, capped, extra)
     }
 }

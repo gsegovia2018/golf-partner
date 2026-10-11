@@ -36,12 +36,22 @@ describe('watchStateOf', () => {
         green: base.green,
         phone: base.phoneDistances,
       },
+      course: null,
+      mine: {},
       me: {
         playerId: 'p1', name: 'Marcos', strokes: 5, points: 2, totalPoints: 14, thru: 6,
         putts: 2, driveLie: 'fairway', sandShots: 0, penalties: 1,
       },
-      track: { putting: true, teeShot: true, shortGame: false, penalties: true },
+      track: { putting: true, teeShot: true, approach: true, shortGame: false, penalties: true },
     });
+  });
+
+  test('carries the whole-course state and my per-hole values', () => {
+    const course = { holes: [{ number: 7, par: 4, si: 3, extraShots: 1, green: base.green, tee: [1, 1] }] };
+    const mine = { 7: { strokes: 5, points: 2, shot: { putts: 2 } } };
+    const s = watchStateOf({ ...base, course, mine });
+    expect(s.course).toBe(course);
+    expect(s.mine).toBe(mine);
   });
 
   test('metres by default, nulls for a missing green and phone fix', () => {
@@ -109,7 +119,18 @@ describe('parseWatchCommand', () => {
     ['sand 10', cmd({ type: 'shot', patch: { sandShots: 10 } })],
     ['penalties 10', cmd({ type: 'shot', patch: { otherPenalties: 10 } })],
     ['bad lie', cmd({ type: 'shot', patch: { driveLie: 'left' } })],
-    ['disallowed key', cmd({ type: 'shot', patch: { putts: 2, teePenalties: 1 } })],
+    ['unknown key', cmd({ type: 'shot', patch: { putts: 2, approachLie: 'rough' } })],
+    ['tee penalties 10', cmd({ type: 'shot', patch: { teePenalties: 10 } })],
+    ['drive bad', cmd({ type: 'shot', patch: { drive: 'middle' } })],
+    ['tee club driver', cmd({ type: 'shot', patch: { teeClub: 'driver' } })],
+    ['drive dist bad', cmd({ type: 'shot', patch: { driveDistBucket: '300+' } })],
+    ['recovery bad', cmd({ type: 'shot', patch: { recoveryOutcome: 'maybe' } })],
+    ['first putt bad', cmd({ type: 'shot', patch: { firstPuttBucket: '9' } })],
+    ['approach bucket bad', cmd({ type: 'shot', patch: { approachBucket: '50' } })],
+    ['approach result bad', cmd({ type: 'shot', patch: { approachResult: 'bunker' } })],
+    ['approach miss bad', cmd({ type: 'shot', patch: { approachMiss: 'center' } })],
+    ['bunker not boolean', cmd({ type: 'shot', patch: { approachBunker: 1 } })],
+    ['bunker null', cmd({ type: 'shot', patch: { approachBunker: null } })],
   ])('rejects %s', (_name, json) => {
     expect(parseWatchCommand(json)).toBeNull();
   });
@@ -118,6 +139,20 @@ describe('parseWatchCommand', () => {
     expect(parseWatchCommand(cmd({ value: 1 }))).not.toBeNull();
     expect(parseWatchCommand(cmd({ value: 15 }))).not.toBeNull();
     expect(parseWatchCommand(cmd({ type: 'shot', patch: { putts: 0, sandShots: 9, otherPenalties: 0, driveLie: null } }))).not.toBeNull();
+  });
+});
+
+describe('parseWatchCommand: v1.2 shot patch keys', () => {
+  test('accepts every new key and value, nulls clear', () => {
+    const patch = {
+      drive: 'super', teeClub: 'iron', driveDistBucket: '240+', teePenalties: 9,
+      recoveryOutcome: 'sand-save', firstPuttBucket: '6+', approachBucket: '200+',
+      approachResult: 'miss', approachMiss: 'long', approachBunker: true, driveLie: 'trouble',
+    };
+    expect(parseWatchCommand(cmd({ type: 'shot', patch }))).toMatchObject({ patch });
+    const cleared = Object.fromEntries(Object.keys(patch).filter((k) => k !== 'approachBunker' && k !== 'teePenalties').map((k) => [k, null]));
+    expect(parseWatchCommand(cmd({ type: 'shot', patch: { ...cleared, approachBunker: false, teePenalties: 0 } }))).not.toBeNull();
+    expect(parseWatchCommand(cmd({ type: 'shot', patch: { recoveryOutcome: 'none', approachResult: 'green' } }))).not.toBeNull();
   });
 });
 

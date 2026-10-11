@@ -400,4 +400,44 @@ describe('ScorecardScreen watch commands', () => {
     expect(setWatchState.mock.calls.length).toBeGreaterThan(before);
     expect(mockCardActions.publishHole).not.toHaveBeenCalled();
   });
+  test('a watch shot with a drive and an approach finish lands as the panel would store it', async () => {
+    await mount();
+    await act(async () => {
+      await watch({ type: 'strokes', hole: 1, value: 5 });
+      await watch({ type: 'shot', hole: 1, patch: { drive: 'left', driveLie: 'trouble', teeClub: 'iron' } });
+      await watch({ type: 'shot', hole: 1, patch: { approachBucket: '100-150' } });
+      await watch({
+        type: 'shot', hole: 1, patch: { approachResult: 'miss', approachMiss: 'left', approachBunker: true, putts: 2 },
+      });
+    });
+    expect(mockCardState.draft['1'].shots.p1).toMatchObject({
+      // panel: a direction tap resets the lie, then the lie chip refines it
+      drive: 'left', driveLie: 'trouble', teeClub: 'iron',
+      approachBucket: '100-150', approachResult: 'miss', approachMiss: 'left', approachBunker: true,
+      putts: 2,
+    });
+    // the pushed state shows my values for the hole
+    await waitFor(() => expect(lastState().mine[1].shot).toMatchObject({
+      drive: 'left', approachMiss: 'left', approachBunker: true, putts: 2,
+    }));
+
+    // On green clears the miss and the bunker; a direction then replaces it.
+    await act(async () => {
+      await watch({ type: 'shot', hole: 1, patch: { approachResult: 'green' } });
+    });
+    expect(mockCardState.draft['1'].shots.p1).toMatchObject({
+      approachResult: 'green', approachMiss: null, approachBunker: false,
+    });
+  });
+
+  test('tee penalties from the watch are trimmed against strokes like the rest', async () => {
+    await mount();
+    await act(async () => {
+      await watch({ type: 'strokes', hole: 1, value: 3 });
+      await watch({ type: 'shot', hole: 1, patch: { teePenalties: 2, putts: 2 } });
+    });
+    const shot = mockCardState.draft['1'].shots.p1;
+    // 4 > 3: putts are trimmed first, the tee penalties stay.
+    expect(shot).toMatchObject({ putts: 1, teePenalties: 2 });
+  });
 });

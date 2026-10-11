@@ -21,11 +21,34 @@ data class HoleInfo(
     val extraShots: Int,
     val green: Green?,
     val phone: PhoneDistances?,
+    /** Where the hole starts, for distances from the tee when the player is not on the hole. */
+    val tee: LatLng? = null,
 ) {
     /** The score that earns 2 Stableford points. */
     val netPar: Int get() = par + extraShots
     val isPar3: Boolean get() = par == 3
 }
+
+/**
+ * The watch-visible subset of the phone's per-hole shot detail (DEFAULT_SHOT).
+ * Option strings are the phone's own storage keys; unknown values parse to null.
+ */
+data class ShotDetail(
+    val putts: Int? = null,
+    val drive: String? = null,
+    /** Null means driver, like the phone. */
+    val teeClub: String? = null,
+    val driveDistBucket: String? = null,
+    val teePenalties: Int = 0,
+    val otherPenalties: Int = 0,
+    val sandShots: Int = 0,
+    val recoveryOutcome: String? = null,
+    val firstPuttBucket: String? = null,
+    val approachBucket: String? = null,
+    val approachResult: String? = null,
+    val approachMiss: String? = null,
+    val approachBunker: Boolean = false,
+)
 
 data class Me(
     val playerId: String?,
@@ -34,16 +57,32 @@ data class Me(
     val points: Int?,
     val totalPoints: Int,
     val thru: Int,
-    val putts: Int?,
-    val driveLie: String?,
-    val sandShots: Int,
-    val penalties: Int,
+    val shot: ShotDetail = ShotDetail(),
 )
 
+/** One hole of the whole-course state (`state.course.holes`). */
+data class CourseHole(
+    val number: Int,
+    val par: Int,
+    val si: Int?,
+    val extraShots: Int,
+    val green: Green?,
+    val tee: LatLng?,
+)
+
+/** What the phone shows for me on one hole (`state.mine["<hole>"]`). */
+data class MineHole(val strokes: Int?, val points: Int?, val shot: ShotDetail?)
+
 /** Settings -> Stats tracking: which entry steps exist. */
-data class Track(val putting: Boolean, val teeShot: Boolean, val shortGame: Boolean, val penalties: Boolean) {
+data class Track(
+    val putting: Boolean,
+    val teeShot: Boolean,
+    val shortGame: Boolean,
+    val penalties: Boolean,
+    val approach: Boolean = false,
+) {
     companion object {
-        val None = Track(putting = false, teeShot = false, shortGame = false, penalties = false)
+        val None = Track(putting = false, teeShot = false, shortGame = false, penalties = false, approach = false)
     }
 }
 
@@ -71,9 +110,36 @@ data class WatchState(
     val hole: HoleInfo?,
     val me: Me?,
     val track: Track,
+    /** Every hole of the round; empty from an older phone (then no instant hole switch). */
+    val course: List<CourseHole> = emptyList(),
+    /** What the phone shows for me on every hole, by hole number. */
+    val mine: Map<Int, MineHole> = emptyMap(),
 ) {
     /** Entry (the pill, the crown) is available only on an unblocked live round. */
     val canEnter: Boolean get() = active && blocked == null && hole != null && me != null
+
+    /**
+     * This state as if the phone were on hole [number]: par, SI, shots, green, tee and my
+     * strokes/points/stats come from [course] and [mine] at once. The phone's own distances
+     * belong to its hole and are dropped. Falls back to `this` for the phone's hole, an
+     * unknown hole, or a phone that sends no course.
+     */
+    fun at(number: Int): WatchState {
+        val cur = hole ?: return this
+        if (number == cur.number) return this
+        val ch = course.firstOrNull { it.number == number } ?: return this
+        val m = me ?: return this
+        val entry = mine[number]
+        val strokes = entry?.strokes
+        return copy(
+            hole = HoleInfo(number, cur.count, ch.par, ch.si, ch.extraShots, ch.green, null, ch.tee),
+            me = m.copy(
+                strokes = strokes,
+                points = entry?.points ?: strokes?.let { Entry.points(ch.par, ch.extraShots, it) },
+                shot = entry?.shot ?: ShotDetail(),
+            ),
+        )
+    }
 
     companion object {
         val Inactive = WatchState(
@@ -118,6 +184,9 @@ object WatchStateParser {
         val holeObj = o.optJSONObject("hole") ?: throw IllegalArgumentException("hole")
         val meObj = o.optJSONObject("me") ?: throw IllegalArgumentException("me")
         val trackObj = o.optJSONObject("track")
+        val course = parseCourse(o.optJSONObject("course"))
+        val mine = parseMine(o.optJSONObject("mine"))
+        val holeNumber = holeObj.intOrNull("number") ?: throw IllegalArgumentException("number")
         return WatchState(
             rev = rev,
             ack = o.stringOrNull("ack"),
@@ -132,21 +201,67 @@ object WatchStateParser {
                 else -> Blocked.Other
             },
             units = if (o.stringOrNull("units") == "yd") Units.YD else Units.M,
-            hole = parseHole(holeObj),
-            me = parseMe(meObj),
+            hole = parseHole(holeObj, course.firstOrNull { it.number == holeNumber }),
+            me = parseMe(meObj, mine[holeNumber]),
             track = Track(
                 putting = trackObj?.optBoolean("putting", false) ?: false,
                 teeShot = trackObj?.optBoolean("teeShot", false) ?: false,
                 shortGame = trackObj?.optBoolean("shortGame", false) ?: false,
                 penalties = trackObj?.optBoolean("penalties", false) ?: false,
+                approach = trackObj?.optBoolean("approach", false) ?: false,
             ),
+            course = course,
+            mine = mine,
         )
     }
 
-    private fun parseHole(h: JSONObject): HoleInfo {
-        val green = h.optJSONObject("green")?.let {
-            Green(it.latLngOrNull("front"), it.latLngOrNull("center"), it.latLngOrNull("back"))
+    private fun parseGreen(g: JSONObject?) =
+        g?.let { Green(it.latLngOrNull("front"), it.latLngOrNull("center"), it.latLngOrNull("back")) }
+
+    private fun parseCourse(c: JSONObject?): List<CourseHole> {
+        val arr = c?.optJSONArray("holes") ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val h = arr.optJSONObject(i) ?: return@mapNotNull null
+            CourseHole(
+                number = h.intOrNull("number") ?: return@mapNotNull null,
+                par = h.intOrNull("par") ?: return@mapNotNull null,
+                si = h.intOrNull("si"),
+                extraShots = h.intOrNull("extraShots") ?: 0,
+                green = parseGreen(h.optJSONObject("green")),
+                tee = h.latLngOrNull("tee"),
+            )
         }
+    }
+
+    private fun parseMine(m: JSONObject?): Map<Int, MineHole> {
+        if (m == null) return emptyMap()
+        val out = LinkedHashMap<Int, MineHole>()
+        m.keys().forEach { key ->
+            val n = key.toIntOrNull() ?: return@forEach
+            val e = m.optJSONObject(key) ?: return@forEach
+            out[n] = MineHole(e.intOrNull("strokes"), e.intOrNull("points"), e.optJSONObject("shot")?.let { parseShot(it) })
+        }
+        return out
+    }
+
+    private fun parseShot(o: JSONObject) = ShotDetail(
+        putts = o.intOrNull("putts"),
+        drive = o.optionOrNull("drive", Options.DRIVES),
+        teeClub = o.optionOrNull("teeClub", Options.CLUBS)?.takeIf { it != "driver" },
+        driveDistBucket = o.optionOrNull("driveDistBucket", Options.DRIVE_DIST),
+        teePenalties = o.intOrNull("teePenalties") ?: 0,
+        otherPenalties = o.intOrNull("otherPenalties") ?: 0,
+        sandShots = o.intOrNull("sandShots") ?: 0,
+        recoveryOutcome = o.optionOrNull("recoveryOutcome", Options.RECOVERY),
+        firstPuttBucket = o.optionOrNull("firstPuttBucket", Options.FIRST_PUTT),
+        approachBucket = o.optionOrNull("approachBucket", Options.APPROACH),
+        approachResult = o.optionOrNull("approachResult", Options.APPROACH_RESULTS),
+        approachMiss = o.optionOrNull("approachMiss", Options.MISS_DIRS),
+        approachBunker = (o.rawOrNull("approachBunker") as? Boolean) ?: false,
+    )
+
+    private fun parseHole(h: JSONObject, fromCourse: CourseHole?): HoleInfo {
+        val green = parseGreen(h.optJSONObject("green"))
         val phone = h.optJSONObject("phone")?.let {
             PhoneDistances(
                 front = it.doubleOrNull("front"),
@@ -163,20 +278,23 @@ object WatchStateParser {
             extraShots = h.intOrNull("extraShots") ?: 0,
             green = green,
             phone = phone,
+            tee = h.latLngOrNull("tee") ?: fromCourse?.tee,
         )
     }
 
-    private fun parseMe(m: JSONObject) = Me(
+    /** The current hole's detail comes from `mine`; an older phone only sends putts/sand/penalties on `me`. */
+    private fun parseMe(m: JSONObject, mineNow: MineHole?) = Me(
         playerId = m.stringOrNull("playerId"),
         name = m.stringOrNull("name") ?: "",
         strokes = m.intOrNull("strokes"),
         points = m.intOrNull("points"),
         totalPoints = m.intOrNull("totalPoints") ?: 0,
         thru = m.intOrNull("thru") ?: 0,
-        putts = m.intOrNull("putts"),
-        driveLie = m.stringOrNull("driveLie"),
-        sandShots = m.intOrNull("sandShots") ?: 0,
-        penalties = m.intOrNull("penalties") ?: 0,
+        shot = mineNow?.shot ?: ShotDetail(
+            putts = m.intOrNull("putts"),
+            sandShots = m.intOrNull("sandShots") ?: 0,
+            otherPenalties = m.intOrNull("penalties") ?: 0,
+        ),
     )
 }
 
@@ -190,6 +308,9 @@ private fun JSONObject.longOrNull(key: String): Long? = (rawOrNull(key) as? Numb
 private fun JSONObject.doubleOrNull(key: String): Double? = (rawOrNull(key) as? Number)?.toDouble()
 
 private fun JSONObject.stringOrNull(key: String): String? = rawOrNull(key) as? String
+
+private fun JSONObject.optionOrNull(key: String, allowed: List<String>): String? =
+    stringOrNull(key)?.takeIf { it in allowed }
 
 private fun JSONObject.latLngOrNull(key: String): LatLng? {
     val a = rawOrNull(key) as? JSONArray ?: return null

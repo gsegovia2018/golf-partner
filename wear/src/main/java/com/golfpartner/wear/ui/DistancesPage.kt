@@ -19,16 +19,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.golfpartner.wear.data.Blocked
 import com.golfpartner.wear.data.DistanceReading
-import com.golfpartner.wear.data.StepAccumulator
+import com.golfpartner.wear.data.Distances
+import com.golfpartner.wear.data.Fix
+import com.golfpartner.wear.data.NoReading
+import com.golfpartner.wear.data.OneStepGesture
 import com.golfpartner.wear.data.Units
 import com.golfpartner.wear.data.WatchState
 import com.golfpartner.wear.ui.theme.Hud
 
-/** Vertical drag pixels per hole step. */
-private const val VERTICAL_STEP_PX = 80f
+/** A vertical drag moves one hole once it has travelled this far (or a flick past half of it on release). */
+private const val SWIPE_STEP_PX = 56f
 
 data class HomeInfo(
-    val reading: DistanceReading,
+    val fix: Fix?,
+    val nowMs: Long,
     val locationDenied: Boolean,
     val pendingHoles: Int,
     val phoneConnected: Boolean,
@@ -44,34 +48,37 @@ data class HomeInfo(
 fun DistancesPage(
     state: WatchState,
     info: HomeInfo,
-    shownHole: Int,
-    onHoleSteps: (Int) -> Unit,
+    moving: Boolean,
+    movingTo: Int,
+    onHoleStep: (Int) -> Unit,
 ) {
     val hole = state.hole ?: return
-    val moving = shownHole != hole.number
-    val steps by rememberUpdatedState(onHoleSteps)
-    val drag = remember { StepAccumulator(VERTICAL_STEP_PX) }
+    val reading = Distances.resolve(hole, state.units, info.fix, info.nowMs)
+    val steps by rememberUpdatedState(onHoleStep)
+    val drag = remember { OneStepGesture(SWIPE_STEP_PX) }
     Column(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
-                    onDragStart = { drag.reset() },
+                    onDragStart = { drag.start() },
+                    onDragEnd = { drag.end().let { if (it != 0) steps(-it) } },
+                    onDragCancel = { drag.cancel() },
                     onVerticalDrag = { change, dy ->
                         change.consume()
-                        // Finger up (negative dy) = next hole.
-                        val n = drag.feed(-dy)
-                        if (n != 0) steps(n)
+                        // Finger up (negative dy) = next hole; one hole per drag.
+                        val n = drag.drag(dy)
+                        if (n != 0) steps(-n)
                     },
                 )
             }
             .padding(top = 18.dp, bottom = 26.dp, start = 24.dp, end = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Caption(if (moving) Copy.movingTo(shownHole) else Copy.holeHeader(hole.number, hole.par))
+        Caption(if (moving) Copy.movingTo(movingTo) else Copy.holeHeader(hole.number, hole.par))
         Spacer(Modifier.weight(1f))
         Column(Modifier.alpha(if (moving) 0.4f else 1f), horizontalAlignment = Alignment.CenterHorizontally) {
-            Distances(info, state.units)
+            Distances(reading, info, state.units)
         }
         Spacer(Modifier.weight(1f))
         Footer(state, info)
@@ -79,15 +86,21 @@ fun DistancesPage(
 }
 
 @Composable
-private fun Distances(info: HomeInfo, units: Units) {
-    val r = info.reading
+private fun Distances(r: DistanceReading, info: HomeInfo, units: Units) {
     val suffix = if (units == Units.YD) "yd" else "m"
     if (!r.hasAny) {
         HudText("—", 52, weight = FontWeight.ExtraBold)
         HudText(suffix, 13, color = Hud.textMuted)
-        HudText(if (info.locationDenied) Copy.LOCATION_OFF else Copy.GETTING_FIX, 12, color = Hud.textSoft)
+        val status = when {
+            info.locationDenied && r.reason == NoReading.NoFix -> Copy.LOCATION_OFF
+            r.reason == NoReading.OffHole -> Copy.OFF_HOLE
+            r.reason == NoReading.NoGreen -> Copy.NO_GREEN
+            else -> Copy.GETTING_FIX
+        }
+        HudText(status, 12, color = Hud.textSoft)
         return
     }
+    if (r.fromTee) HudText(Copy.FROM_TEE, 10, color = Hud.accent, weight = FontWeight.Bold, letterSpacing = 1f)
     SmallDistance("B", r.back)
     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.Center) {
         HudText(r.center?.toString() ?: "—", 56, weight = FontWeight.ExtraBold)

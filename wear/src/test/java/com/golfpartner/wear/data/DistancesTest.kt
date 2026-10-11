@@ -66,17 +66,75 @@ class DistancesTest {
     fun noGreenUsesPhoneAndNothingGivesNone() {
         val fix = Fix(41.0, 2.0, 5f, now)
         assertEquals(DistanceSource.Phone, Distances.resolve(hole(green = null), Units.M, fix, now).source)
-        assertEquals(DistanceReading.None, Distances.resolve(hole(green = null, phone = null), Units.M, fix, now))
+        val none = Distances.resolve(hole(green = null, phone = null), Units.M, fix, now)
+        assertFalse(none.hasAny)
+        assertEquals(NoReading.NoGreen, none.reason)
         assertEquals(DistanceReading.None, Distances.resolve(null, Units.M, fix, now))
     }
 
     @Test
-    fun partialGreenGivesPartialReading() {
-        val g = Green(null, LatLng(41.001, 2.0), null)
-        val r = Distances.resolve(hole(green = g), Units.M, Fix(41.0, 2.0, 5f, now), now)
+    fun partialGreenWithoutACentreCannotApplyTheOnHoleRule() {
+        // The phone needs a finite centre to decide "on the hole"; front/back alone give nothing.
+        val g = Green(LatLng(41.0005, 2.0), null, LatLng(41.0015, 2.0))
+        val r = Distances.resolve(hole(green = g, phone = null), Units.M, Fix(41.0, 2.0, 5f, now), now)
+        assertFalse(r.hasAny)
+    }
+
+    // --- the phone's rule: live within 1000 m of the centre, else from the tee, else nothing ---
+
+    private val tee = LatLng(40.998, 2.0) // 333.6 m from the centre (0.003 deg)
+    private val farAway = Fix(41.5, 2.0, 5f, now) // ~55 km north
+
+    @Test
+    fun withinAKilometreOfTheGreenIsLive() {
+        val near = Fix(41.001 - 1000.0 / 111_195.0 + 0.00001, 2.0, 5f, now) // just inside 1000 m
+        val r = Distances.resolve(hole(phone = null).copy(tee = tee), Units.M, near, now)
+        assertFalse(r.fromTee)
         assertEquals(DistanceSource.Watch, r.source)
-        assertEquals(null, r.front)
-        assertEquals(111, r.center)
-        assertEquals(null, r.back)
+        assertTrue(r.center!! in 990..1000)
+    }
+
+    @Test
+    fun beyondAKilometreItMeasuresFromTheTee() {
+        val h = hole(phone = null).copy(tee = tee)
+        val r = Distances.resolve(h, Units.M, farAway, now)
+        assertTrue(r.fromTee)
+        assertEquals(334, r.center) // tee -> centre, not the 55 km from the player
+        assertEquals(278, r.front) // 0.0025 deg = 278 m
+        assertEquals(389, r.back)
+        // exactly at the limit still counts as on the hole (<=)
+        val edge = Fix(41.001 - 1000.0 / 111_195.0 - 0.0005, 2.0, 5f, now)
+        assertTrue(Distances.resolve(h, Units.M, edge, now).fromTee)
+    }
+
+    @Test
+    fun noFixYetStillMeasuresFromTheTeeLikeThePhone() {
+        val r = Distances.resolve(hole(phone = null).copy(tee = tee), Units.M, null, now)
+        assertTrue(r.fromTee)
+        assertEquals(334, r.center)
+        assertTrue(Distances.resolve(hole(phone = null).copy(tee = tee), Units.M, Fix(41.0, 2.0, 80f, now), now).fromTee)
+    }
+
+    @Test
+    fun beyondAKilometreWithoutATeeShowsNothingNeverAFarLine() {
+        val r = Distances.resolve(hole(phone = null), Units.M, farAway, now)
+        assertFalse(r.hasAny)
+        assertEquals(NoReading.OffHole, r.reason)
+        assertEquals(NoReading.NoFix, Distances.resolve(hole(phone = null), Units.M, null, now).reason)
+    }
+
+    @Test
+    fun theTeeReadingBeatsTheWatchFixWhenOffTheHoleAndUnitsApply() {
+        val h = hole(phone = null).copy(tee = tee)
+        assertEquals(365, Distances.resolve(h, Units.YD, farAway, now).center) // 333.6 m = 364.8 yd
+    }
+
+    @Test
+    fun phoneFiguresKeepTheirTeeLabel() {
+        val h = hole(green = null, phone = PhoneDistances(300.0, 326.0, 339.0, "tee"))
+        val r = Distances.resolve(h, Units.M, farAway, now)
+        assertEquals(DistanceSource.Phone, r.source)
+        assertTrue(r.fromTee)
+        assertEquals(326, r.center)
     }
 }

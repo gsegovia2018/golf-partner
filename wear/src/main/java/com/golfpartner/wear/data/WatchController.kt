@@ -115,7 +115,7 @@ class WatchController(context: Context, private val scope: CoroutineScope) {
             cur = null
         }
         val plan = cur?.plan ?: Entry.plan(hole, opened.track)
-        val draft = change(cur?.draft ?: Entry.initialDraft(hole, me))
+        val draft = change(cur?.draft ?: Entry.initialDraft(me))
         _edit.value = PendingEdit(cur?.opened ?: opened, plan, draft)
         debounce?.cancel()
         debounce = scope.launch {
