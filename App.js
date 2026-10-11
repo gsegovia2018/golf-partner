@@ -84,6 +84,8 @@ import ClaimPlayerScreen from './src/screens/ClaimPlayerScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import BagScreen from './src/screens/BagScreen';
+import SwingHomeScreen from './src/screens/SwingHomeScreen';
+import SwingPlaceholderScreen from './src/screens/SwingPlaceholderScreen';
 import ClubStatScreen from './src/screens/ClubStatScreen';
 import PlayersScreen from './src/screens/PlayersScreen';
 import FinishedScreen from './src/screens/FinishedScreen';
@@ -430,6 +432,11 @@ function AppNavigator() {
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="Bag" component={BagScreen} />
+        <Stack.Screen name="SwingHome" component={SwingHomeScreen} />
+        {/* Placeholders until the swing capture / results / compare PRs land. */}
+        <Stack.Screen name="SwingCapture" component={SwingPlaceholderScreen} />
+        <Stack.Screen name="SwingResults" component={SwingPlaceholderScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
+        <Stack.Screen name="SwingCompare" component={SwingPlaceholderScreen} />
         <Stack.Screen name="ClubStat" component={ClubStatScreen} />
         <Stack.Screen name="Players" component={PlayersScreen} />
         <Stack.Screen name="Finished" component={FinishedScreen} />

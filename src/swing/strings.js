@@ -6,6 +6,56 @@ const r0 = (v) => Math.round(v);
 export const SWING_STRINGS = {
   privacy: 'Your video and analysis stay on this phone. Nothing is uploaded.',
   approximate: 'approx.',
+
+  // Swing home (S5, design B).
+  home: {
+    title: 'My swing',
+    record: 'Record',
+    import: 'Import',
+    back: 'Back',
+    emptyTitle: 'Film your first swing',
+    emptyBody: 'Down the line works best: phone at hip height behind the ball, aimed at the hands, whole body in frame, room above the head. The app records at the fastest rate your phone offers (240 fps on most recent phones).',
+    emptyHint: 'Have a slow-motion clip already? Import it below.',
+    updateTitle: 'Update the app to analyse swings',
+    updateBody: "This version of Golf Partner can't record or analyse yet. Your saved swings are still here.",
+    analysing: 'Analysing',
+    failed: 'Could not analyse',
+    noFault: 'No clear fault',
+    footer: (n, size) => `${n} swing${n === 1 ? '' : 's'} · ${size} on this phone · swipe a row to delete${n > 1 ? ' · long-press to compare' : ''}`,
+    attribution: 'Pose detection by MediaPipe (Apache 2.0).',
+    pickTwo: 'Pick two swings to compare',
+    picked: (n) => `${n} of 2 picked.`,
+    compare: (a, b) => `Compare ${a} with ${b}`,
+    compareShort: 'Compare these two',
+    comparePick:'Pick two swings',
+    cancel: 'Cancel',
+    deleteTitle: 'Delete this swing?',
+    deleteBody: 'The video, the analysis and your marks are removed from this phone. This cannot be undone.',
+    delete: 'Delete',
+    importFailed: 'Could not import that video.',
+    countLabel: (g, y, r) => `${g} good, ${y} to watch, ${r} to fix`,
+  },
+
+  // First-run sheet (D5, D6).
+  profileSheet: {
+    title: 'Before your first analysis',
+    body: 'Your height sets the scale for every centimetre value. It is stored on this phone only.',
+    height: 'Height',
+    cm: 'cm',
+    handedness: 'Handedness',
+    right: 'Right-handed',
+    left: 'Left-handed',
+    save: 'Save and analyse',
+    skip: (cm) => `Skip for now · use ${cm} cm (approx.)`,
+    invalid: 'Enter a height between 120 and 230 cm.',
+  },
+
+  // Screens owned by later PRs.
+  placeholder: {
+    capture: 'Recording arrives with the next update.',
+    results: 'Results arrive with the next update. Your video is saved on this phone.',
+    compare: 'Compare arrives with a later update.',
+  },
   statusWord: { green: 'Good', yellow: 'Watch', red: 'Fix', unknown: 'Hidden' },
 
   // D12: what the processing screen says when analyze() returns { error }.

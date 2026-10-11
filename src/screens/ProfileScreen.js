@@ -342,6 +342,21 @@ export default function ProfileScreen({ navigation, route }) {
                 <Text style={s.linkRowText}>Your Bag</Text>
                 <Feather name="chevron-right" size={18} color={theme.text.muted} />
               </PressableScale>
+              {/* Swing analyzer needs the Android-only native module: no row on web or iOS. */}
+              {Platform.OS === 'android' && (
+                <PressableScale
+                  style={[s.linkRow, s.linkRowDivider]}
+                  onPress={() => navigation.navigate('SwingHome')}
+                  accessibilityRole="button"
+                  accessibilityLabel="My swing"
+                >
+                  <View style={s.linkIconDisc}>
+                    <Feather name="activity" size={15} color={theme.accent.primary} />
+                  </View>
+                  <Text style={s.linkRowText}>My swing</Text>
+                  <Feather name="chevron-right" size={18} color={theme.text.muted} />
+                </PressableScale>
+              )}
               <PressableScale
                 style={[s.linkRow, s.linkRowDivider]}
                 onPress={() => navigation.navigate('Settings')}
