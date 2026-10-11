@@ -305,14 +305,22 @@ object Entry {
     // --- sending ---
 
     /**
-     * Only the stats the plan collects (absolute values); null when none are. Putts are left out
-     * while unset. `driveLie` is never sent: the phone derives it when it applies `drive`.
+     * Only the stats the plan collects (absolute values), and of those only the ones that differ
+     * from [seed] (what the hole showed when the edit began; null sends them all); null when
+     * nothing is left. Putts are left out while unset. `driveLie` is never sent: the phone derives
+     * it when a `drive` changes, so a re-sent drive would also be harmless.
      */
-    fun shotPatch(plan: EntryPlan, draft: EntryDraft): Map<String, Any?>? {
+    fun shotPatch(plan: EntryPlan, draft: EntryDraft, seed: ShotDetail? = null): Map<String, Any?>? {
         val strokes = draft.strokes ?: return null
-        val s = draft.shot
+        val patch = patchValues(plan, draft.shot, strokes)
+        // The seed unclamped: a value the reconcile trimmed differs from it and goes out.
+        val base = seed?.let { patchValues(plan, it, null) }
+        return patch.filter { (k, v) -> base == null || !base.containsKey(k) || base[k] != v }.ifEmpty { null }
+    }
+
+    private fun patchValues(plan: EntryPlan, s: ShotDetail, strokes: Int?): Map<String, Any?> {
         val patch = LinkedHashMap<String, Any?>()
-        if (plan.putts) s.putts?.let { patch[ShotKeys.PUTTS] = it.coerceIn(0, puttsMax(strokes)) }
+        if (plan.putts) s.putts?.let { patch[ShotKeys.PUTTS] = if (strokes == null) it else it.coerceIn(0, puttsMax(strokes)) }
         if (plan.firstPutt) patch[ShotKeys.FIRST_PUTT_BUCKET] = if ((s.putts ?: 0) >= 1) s.firstPuttBucket else null
         if (plan.drive) {
             patch[ShotKeys.DRIVE] = s.drive
@@ -331,7 +339,7 @@ object Entry {
                 patch[ShotKeys.APPROACH_BUNKER] = s.approachBunker
             }
         }
-        return patch.ifEmpty { null }
+        return patch
     }
 
     /** Whether [a] and [b] are the same round and hole. */
@@ -346,13 +354,16 @@ object Entry {
     fun stillOn(opened: WatchState, now: WatchState?): Boolean =
         now != null && now.active && now.roundId == opened.roundId && now.hole?.number == opened.hole?.number
 
-    /** `strokes` first, then one `shot` if there is anything to say. Nothing while strokes are unset. */
+    /**
+     * `strokes` first, then one `shot` with the stats that changed from what [state] showed for
+     * the hole (its `me.shot`, the edit's seed), if any did. Nothing while strokes are unset.
+     */
     fun saveCommands(state: WatchState, plan: EntryPlan, draft: EntryDraft): List<Command> {
         val hole = state.hole ?: return emptyList()
         val roundId = state.roundId ?: return emptyList()
         val strokes = draft.strokes ?: return emptyList()
         val out = mutableListOf(Commands.strokes(roundId, state.rev, hole.number, strokes))
-        shotPatch(plan, draft)?.let { out += Commands.shot(roundId, state.rev, hole.number, it) }
+        shotPatch(plan, draft, state.me?.shot)?.let { out += Commands.shot(roundId, state.rev, hole.number, it) }
         return out
     }
 }

@@ -287,3 +287,33 @@ test('a push before the write lands still carries the previous ack', async () =>
   await act(async () => { release(); await done; });
   expect(pushed().at(-1).ack).toBe('slow');
 });
+
+test('lastReject names the last refused command with its reason and hole, and outlives applied ones', async () => {
+  const raw = (id, obj) => JSON.stringify({
+    v: 1, id, roundId: 'r1', baseRev: pushed().at(-1).rev, ...obj,
+  });
+  const onShot = jest.fn(() => Promise.reject(new Error('refused')));
+  render(<Probe {...base} onShot={onShot} />);
+  expect(pushed()[0].lastReject).toBeNull();
+  // Not the hole the phone is on.
+  await act(async () => { await listener()(raw('r-hole', { type: 'strokes', hole: 2, value: 5 })); });
+  expect(pushed().at(-1)).toMatchObject({ ack: 'r-hole', lastReject: { id: 'r-hole', reason: 'hole', hole: 2 } });
+  // An applied command does not clear it: the watch may only see a later state.
+  await act(async () => { await listener()(raw('ok', { type: 'strokes', hole: 1, value: 4 })); });
+  expect(pushed().at(-1)).toMatchObject({ ack: 'ok', lastReject: { id: 'r-hole' } });
+  // The scorecard turning the write down is a reject too.
+  await act(async () => { await listener()(raw('r-write', { type: 'shot', hole: 1, patch: { putts: 2 } })); });
+  expect(pushed().at(-1).lastReject).toEqual({ id: 'r-write', reason: 'refused', hole: 1 });
+  // A duplicate is only acked.
+  await act(async () => { await listener()(raw('ok', { type: 'strokes', hole: 1, value: 4 })); });
+  expect(pushed().at(-1).lastReject.id).toBe('r-write');
+});
+
+test('a hole move the phone did not make is a reject for that hole', async () => {
+  // e.g. leaving the hole opened the dispute sheet: the pager stays.
+  const onGoToHole = jest.fn(() => Promise.resolve());
+  render(<Probe {...base} getCurrentHole={() => 1} onGoToHole={onGoToHole} />);
+  await send({ type: 'hole', to: 2 });
+  expect(onGoToHole).toHaveBeenCalledWith(2);
+  expect(pushed().at(-1).lastReject).toMatchObject({ reason: 'refused', hole: 2 });
+});

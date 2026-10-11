@@ -31,6 +31,11 @@ class StateRepository(private val seqOf: (String) -> Long? = { null }) {
 
     private data class Tracked(val command: Command, val seq: Long, val handedOffAtMs: Long? = null)
 
+    private val _notSaved = MutableStateFlow<RejectedSave?>(null)
+
+    /** The latest save of mine the phone refused (each a new value); the UI tells the user once. */
+    val notSaved: StateFlow<RejectedSave?> = _notSaved.asStateFlow()
+
     /** The phone speaks a protocol version this watch app does not. */
     val unsupported: StateFlow<Boolean> = _unsupported.asStateFlow()
 
@@ -67,8 +72,10 @@ class StateRepository(private val seqOf: (String) -> Long? = { null }) {
             unacked.value = emptyList()
             return
         }
-        val ack = incoming.ack ?: return
         val list = unacked.value
+        // Matched before the ack ends the overlay: afterwards the id is no longer ours to find.
+        Rejects.notSaved(incoming.lastReject, list.map { it.command })?.let { _notSaved.value = it }
+        val ack = incoming.ack ?: return
         val seq = list.firstOrNull { it.command.id == ack }?.seq ?: seqOf(ack) ?: return
         val kept = list.filterNot { it.command.roundId == incoming.roundId && it.seq <= seq }
         if (kept.size != list.size) unacked.value = kept
@@ -97,6 +104,22 @@ class StateRepository(private val seqOf: (String) -> Long? = { null }) {
     companion object {
         /** Above the outbox's re-send interval, so one re-send gets its chance to be acked. */
         const val OVERLAY_TIMEOUT_MS = 45_000L
+    }
+}
+
+/** A strokes/shot save the phone refused; the watch shows the phone's values again. */
+data class RejectedSave(val id: String, val hole: Int)
+
+object Rejects {
+    /**
+     * [reject] names one of [mine] (the strokes/shot commands still shown as overlay): that save
+     * was not applied. Null for anything else (another device's or a `hole` move's reject, or one
+     * already reported, whose overlay is gone).
+     */
+    fun notSaved(reject: Reject?, mine: List<Command>): RejectedSave? {
+        val r = reject ?: return null
+        val c = mine.firstOrNull { it.id == r.id && it.type != CommandType.Hole } ?: return null
+        return RejectedSave(r.id, c.hole ?: r.hole ?: return null)
     }
 }
 

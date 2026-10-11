@@ -26,6 +26,7 @@ describe('watchStateOf', () => {
       v: 1,
       rev: 3,
       ack: null,
+      lastReject: null,
       roundId: 'r1',
       courseName: 'Lomas-Bosque',
       active: true,
@@ -69,13 +70,19 @@ describe('watchStateOf', () => {
 
   test('no round: inactive shape', () => {
     expect(watchStateOf({ rev: 9, round: null })).toEqual({
-      v: 1, rev: 9, ack: null, active: false, roundId: null, courseName: null, blocked: null,
+      v: 1, rev: 9, ack: null, lastReject: null, active: false, roundId: null, courseName: null, blocked: null,
     });
   });
 
   test('carries the id of the last command processed', () => {
     expect(watchStateOf({ ...base, ack: 'c9' }).ack).toBe('c9');
     expect(watchStateOf({ rev: 9, ack: 'c9', round: null }).ack).toBe('c9');
+  });
+
+  test('carries the last rejected command, active or not', () => {
+    const lastReject = { id: 'c8', reason: 'hole', hole: 7 };
+    expect(watchStateOf({ ...base, lastReject }).lastReject).toEqual(lastReject);
+    expect(watchStateOf({ rev: 9, lastReject, round: null }).lastReject).toEqual(lastReject);
   });
 });
 

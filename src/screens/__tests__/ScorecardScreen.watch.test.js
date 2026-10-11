@@ -430,6 +430,30 @@ describe('ScorecardScreen watch commands', () => {
     });
   });
 
+  test('a watch save that re-sends the same drive keeps the lie picked on the phone', async () => {
+    // On the phone: Left, then the lie chip refined it to Trouble.
+    mockCardState = {
+      ...EMPTY_CARDS,
+      cardsByAuthor: {
+        'dev-me': {
+          scorer: { playerId: 'p1', userId: null },
+          holes: { 2: { v: 1, ts: 1000, entries: { p1: 5 }, shots: { p1: { drive: 'left', driveLie: 'trouble' } } } },
+        },
+      },
+    };
+    await mountOnHole2();
+    await act(async () => {
+      await watch({ type: 'shot', hole: 2, patch: { putts: 2, drive: 'left' } });
+    });
+    expect(mockCardState.draft['2'].shots.p1).toMatchObject({ putts: 2, drive: 'left', driveLie: 'trouble' });
+
+    // A different direction is a new tee shot: its lie resets, as on the panel.
+    await act(async () => {
+      await watch({ type: 'shot', hole: 2, patch: { drive: 'right' } });
+    });
+    expect(mockCardState.draft['2'].shots.p1).toMatchObject({ drive: 'right', driveLie: null });
+  });
+
   test('tee penalties from the watch are trimmed against strokes like the rest', async () => {
     await mount();
     await act(async () => {

@@ -97,6 +97,13 @@ enum class Blocked {
 
 enum class Units { M, YD }
 
+/**
+ * The most recent watch command the phone refused (`state.lastReject`). [reason] is the
+ * phone's ('hole', 'blocked', 'stale', 'refused', ...); [hole] is the hole the command was for
+ * (a move's target).
+ */
+data class Reject(val id: String, val reason: String, val hole: Int?)
+
 /** One `/golf/state` payload. When [active] is false everything but [rev] is empty. */
 data class WatchState(
     val rev: Long,
@@ -114,6 +121,8 @@ data class WatchState(
     val course: List<CourseHole> = emptyList(),
     /** What the phone shows for me on every hole, by hole number. */
     val mine: Map<Int, MineHole> = emptyMap(),
+    /** The last command the phone refused; null from an older phone or before any. */
+    val lastReject: Reject? = null,
 ) {
     /** Entry (the pill, the crown) is available only on an unblocked live round. */
     val canEnter: Boolean get() = active && blocked == null && hole != null && me != null
@@ -179,7 +188,7 @@ object WatchStateParser {
     private fun parseV1(o: JSONObject): WatchState {
         val rev = o.longOrNull("rev") ?: throw IllegalArgumentException("rev")
         if (o.optBoolean("active", false).not()) {
-            return WatchState.Inactive.copy(rev = rev, ack = o.stringOrNull("ack"))
+            return WatchState.Inactive.copy(rev = rev, ack = o.stringOrNull("ack"), lastReject = parseReject(o.optJSONObject("lastReject")))
         }
         val holeObj = o.optJSONObject("hole") ?: throw IllegalArgumentException("hole")
         val meObj = o.optJSONObject("me") ?: throw IllegalArgumentException("me")
@@ -212,7 +221,13 @@ object WatchStateParser {
             ),
             course = course,
             mine = mine,
+            lastReject = parseReject(o.optJSONObject("lastReject")),
         )
+    }
+
+    private fun parseReject(r: JSONObject?): Reject? {
+        val id = r?.stringOrNull("id") ?: return null
+        return Reject(id, r.stringOrNull("reason") ?: "", r.intOrNull("hole"))
     }
 
     private fun parseGreen(g: JSONObject?) =

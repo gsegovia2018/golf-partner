@@ -1346,6 +1346,12 @@ describe('shot-detail edit helpers (ShotDetailPanel handlers, shared with the wa
       expect(normalizeWatchShotPatch(d, { drive: null }, 4)).toEqual({ drive: null, driveLie: null });
     });
 
+    test('the same direction again keeps the lie picked on the phone', () => {
+      const d = { drive: 'left', driveLie: 'trouble' };
+      expect(normalizeWatchShotPatch(d, { drive: 'left', putts: 2 }, 4)).toEqual({ putts: 2 });
+      expect(normalizeWatchShotPatch({ driveLie: 'rough' }, { drive: null }, 4)).toEqual({});
+    });
+
     test('lie alone clears the direction (legacy); with a direction it keeps it', () => {
       expect(normalizeWatchShotPatch({ drive: 'left' }, { driveLie: 'trouble' }, 4)).toEqual({ driveLie: 'trouble', drive: null });
       expect(normalizeWatchShotPatch({}, { drive: 'left', driveLie: 'fairway' }, 4))

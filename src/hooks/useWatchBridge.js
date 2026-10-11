@@ -155,6 +155,7 @@ export function useWatchBridge({
   // the old rev: the watch's later commands still carry their older baseRev.
   const holeMark = useRef({ hole: null, rev: 0 });
   const ackRef = useRef(null); // id of the last command processed, see watchStateOf
+  const rejectRef = useRef(null); // the last command refused, see watchStateOf
   // geomVersion: course geometry hydrates late and swaps in, which re-derives this.
   const meId = inputs.meId;
   const meRow = inputs.players?.find((p) => p.id === meId);
@@ -197,7 +198,9 @@ export function useWatchBridge({
     if (hole !== holeMark.current.hole) holeMark.current = { hole, rev };
     // Only a distance-only refresh may wait for the Data Layer's batching.
     const urgent = forced || !prev || prev.key !== contentKey;
-    setWatchState(watchStateOf({ ...state, rev, ack: ackRef.current }), { urgent });
+    setWatchState(watchStateOf({
+      ...state, rev, ack: ackRef.current, lastReject: rejectRef.current,
+    }), { urgent });
     // `state` is derived from the same inputs contentKey and center summarise.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contentKey, center, ackTick]);
@@ -222,6 +225,7 @@ export function useWatchBridge({
         currentHole,
         holeRev: currentHole === mark.hole ? mark.rev : Infinity,
       });
+      let reason = decision.kind === 'reject' ? decision.reason : null;
       try {
         if (decision.kind === 'strokes') await ctx.onStrokes(decision.hole, decision.value);
         else if (decision.kind === 'shot') await ctx.onShot(decision.hole, decision.patch);
@@ -229,13 +233,18 @@ export function useWatchBridge({
           await ctx.onGoToHole(decision.to);
           const now = ctx.getCurrentHole ? ctx.getCurrentHole() : decision.to;
           if (now === decision.to) holeMark.current = { hole: now, rev: mark.rev };
+          else reason = 'refused'; // e.g. leaving opened the dispute sheet
         }
       } catch {
         // A handler failure is just a rejected command: the republish below
         // tells the watch what the phone really has.
+        reason = 'refused';
       }
       // An unparseable message has no id to ack; the republish still goes out.
-      if (cmd) ackRef.current = cmd.id;
+      if (cmd) {
+        ackRef.current = cmd.id;
+        if (reason) rejectRef.current = { id: cmd.id, reason, hole: cmd.type === 'hole' ? cmd.to : cmd.hole };
+      }
       if (live) republish();
     };
     const sub = addWatchCommandListener((json) => {
@@ -248,7 +257,9 @@ export function useWatchBridge({
       // Leaving the scorecard: the watch must not keep showing a stale hole.
       last.current = null;
       holeMark.current = { hole: null, rev: 0 };
-      setWatchState(watchStateOf({ rev: takeRev(), ack: ackRef.current, round: null }), { urgent: true });
+      setWatchState(watchStateOf({
+        rev: takeRev(), ack: ackRef.current, lastReject: rejectRef.current, round: null,
+      }), { urgent: true });
     };
   }, [republish]);
 }
