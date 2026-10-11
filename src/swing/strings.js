@@ -53,7 +53,42 @@ export const SWING_STRINGS = {
   // Screens owned by later PRs.
   placeholder: {
     capture: 'Recording arrives with the next update.',
-    compare: 'Compare arrives with a later update.',
+  },
+
+  // Compare (S8, design B).
+  compare: {
+    title: 'Compare',
+    overline: 'What changed',
+    swap: 'Swap the two swings',
+    back: 'Back',
+    verdict: { better: 'Better.', betterNotFixed: 'Better, not fixed.', worse: 'Worse.', same: 'About the same.' },
+    stillFault: (f) => `Still ${f.toLowerCase()}.`,
+    faultMoved: (from, to) => `The main fault moved from ${from.toLowerCase()} to ${to.toLowerCase()}.`,
+    newFault: (f) => `New main fault: ${f.toLowerCase()}.`,
+    faultGone: (f) => `${f} is no longer the main fault.`,
+    noFault: 'No clear main fault in either swing.',
+    move: (label, a, b, change) => `${change === 'better' ? 'Biggest gain' : 'Biggest slip'}: ${label}, ${a} against ${b}.`,
+    better: (n) => `${n} better`,
+    same: (n) => `${n} same`,
+    worse: (n) => `${n} worse`,
+    unclear: (n) => `${n} unclear`,
+    check: 'Check',
+    change: 'Change',
+    changeWord: { better: 'Better', same: 'Same', worse: 'Worse', unclear: 'Unclear' },
+    impactStills: 'At impact',
+    noStill: 'No still',
+    unclearHint: 'Unclear: the clubhead is hidden or not placed in one of the swings.',
+    loadFailed: 'Could not open these swings. Go back and pick two analysed swings.',
+    rowLabel: (label, a, b, change) => `${label}: ${a} against ${b}, ${change}`,
+  },
+
+  // Export (S8, D18).
+  exportSwing: {
+    menu: 'Export swing',
+    hint: 'Share the clip, the analysis and your marks as one file. Nothing is sent automatically.',
+    failed: 'Could not export this swing.',
+    unavailable: 'Sharing is not available on this device.',
+    dialogTitle: 'Export swing',
   },
   statusWord: { green: 'Good', yellow: 'Watch', red: 'Fix', unknown: 'Hidden' },
 

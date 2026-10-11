@@ -2,7 +2,7 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore,
 } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, Modal, useWindowDimensions,
+  View, Text, StyleSheet, ScrollView, TextInput, Modal, Alert, useWindowDimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -20,6 +20,7 @@ import {
   markSwingFailed, swingVideoUri,
 } from '../store/swingStore';
 import { runAnalysis } from '../swing/runAnalysis';
+import { shareSwingExport } from '../swing/shareExport';
 import { nativeApi, getStill, ensureStills } from '../swing/frames';
 import { poseAtFrame } from '../swing/poseAt';
 import { highlightFor } from '../swing/highlights';
@@ -143,7 +144,7 @@ function PlayerBody({ uri, onClose, s }) {
 
 export function SwingResultsView({
   row, phase, analysis, pose, progress, error, pass2Pending = false, stillTick = 0, stillFor,
-  onBack, onCancel, onRetry, onRecord, onEditMarks, onRename, onPlay, onNeedStills,
+  onBack, onCancel, onRetry, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
@@ -366,6 +367,13 @@ export function SwingResultsView({
               <Feather name="edit-2" size={18} color={theme.text.primary} />
               <Text style={s.menuText}>{T.editMarks}</Text>
             </PressableScale>
+            <PressableScale style={s.menuRow} onPress={() => { setSheet(null); onExport?.(); }} accessibilityRole="button" accessibilityLabel={SWING_STRINGS.exportSwing.menu}>
+              <Feather name="share" size={18} color={theme.text.primary} />
+              <View style={s.flex}>
+                <Text style={s.menuText}>{SWING_STRINGS.exportSwing.menu}</Text>
+                <Text style={s.hint}>{SWING_STRINGS.exportSwing.hint}</Text>
+              </View>
+            </PressableScale>
           </>
         )}
       </BottomSheet>
@@ -462,6 +470,13 @@ export default function SwingResultsScreen({ navigation, route }) {
     navigation.goBack();
   };
   const onRetry = () => { started.current = false; start(); };
+  const onExport = async () => {
+    try {
+      if ((await shareSwingExport(swingId)) === 'unavailable') Alert.alert(SWING_STRINGS.exportSwing.unavailable);
+    } catch {
+      Alert.alert(SWING_STRINGS.exportSwing.failed);
+    }
+  };
 
   return (
     <>
@@ -481,6 +496,7 @@ export default function SwingResultsScreen({ navigation, route }) {
         onRecord={() => navigation.navigate('SwingCapture')}
         onEditMarks={(checkpoint) => navigation.navigate('SwingEditMarks', { swingId, checkpoint })}
         onRename={(name) => renameSwing(swingId, name)}
+        onExport={onExport}
         onPlay={() => setPlaying(true)}
         onNeedStills={onNeedStills}
       />

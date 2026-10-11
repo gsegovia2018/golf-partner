@@ -46,3 +46,17 @@ Python env lives outside the repo (so the app lint never scans it):
 `uv venv -p 3.12 ~/.venvs/swing-lab && uv pip install -p ~/.venvs/swing-lab/bin/python mediapipe opencv-python-headless numpy`.
 Models (git-ignored): `pose_landmarker_full.task` / `pose_landmarker_heavy.task` from storage.googleapis.com/mediapipe-models.
 Run: `~/.venvs/swing-lab/bin/python -I detect.py <clip> --variant d15`, `~/.venvs/swing-lab/bin/python -I eval.py`, `python3 serve.py`.
+
+## Importing a swing from the app (D18)
+The app's **Export swing** (Results header menu > Export swing) shares ONE file, `<name>.swing.zip`
+(a stored zip written in JS, schema `swing-export/1`), through the system share sheet. Nothing is sent
+automatically. It contains:
+- `video.mp4` (the original clip) and `analysis.json` (the app's analysis),
+- `marks.json` (the corrected labels, `swing-club-labels/1`: frames/hands/head/hidden/ball),
+- `swing.json` (index row, `handedness`, `heightCm`, clip size `video.width/height/frameCount/containerFps/captureFps`).
+
+Unpack it into a lab test case:
+`python3 -I import_export.py ~/Downloads/<name>.swing.zip [--clip NAME]` (a folder holding the four files also works).
+It writes `clips/<clip>.mp4` (default clip name `swing-<date>-<id8>`) and `out/<clip>/truth.json` in the shape above
+(`source: "manual"`; the app's normalised coordinates become pixels of the video's display size; a hidden clubhead gets `head: null`).
+Then `detect.py <clip>` and `eval.py` as usual. Tests: `python3 -m unittest test_import_export` from this directory.

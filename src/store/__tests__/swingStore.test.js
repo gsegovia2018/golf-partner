@@ -42,6 +42,10 @@ jest.mock('expo-file-system', () => {
     create() { files.set(this.uri, files.get(this.uri) ?? ''); }
     write(s) { files.set(this.uri, s); }
     async text() { return files.get(this.uri); }
+    async bytes() {
+      const v = files.get(this.uri);
+      return typeof v === 'string' ? Uint8Array.from(v, (c) => c.charCodeAt(0)) : v;
+    }
     copy(dest) {
       if (!files.has(this.uri)) throw new Error('missing source');
       files.set(dest.uri, files.get(this.uri));
@@ -216,20 +220,44 @@ describe('storage and export (D18)', () => {
     expect(store.overStorageWarning()).toBe(false);
   });
 
-  it('exportSwing writes a folder with swing.json, the video and the stills', async () => {
+  // Read the stored-zip entries back by walking the local headers.
+  const unzip = (bytes) => {
+    const d = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const dec = (u) => String.fromCharCode(...u);
+    const out = {};
+    let p = 0;
+    while (d.getUint32(p, true) === 0x04034b50) {
+      const size = d.getUint32(p + 18, true);
+      const nameLen = d.getUint16(p + 26, true);
+      const name = dec(bytes.slice(p + 30, p + 30 + nameLen));
+      out[name] = dec(bytes.slice(p + 30 + nameLen, p + 30 + nameLen + size));
+      p += 30 + nameLen + size;
+    }
+    return out;
+  };
+
+  it('exportSwing writes ONE .swing.zip holding the video, analysis, marks and swing.json', async () => {
     const row = await store.createSwing({ videoUri: 'file:///picked/clip.mp4' });
     await store.saveAnalysis(row.id, analysisFixture);
-    fs.__dirs.add(`file:///doc/swings/${row.id}/frames`);
-    fs.__files.set(`file:///doc/swings/${row.id}/frames/556.jpg`, 'JPEG');
+    fs.__files.set(`file:///doc/swings/${row.id}/probe.json`, JSON.stringify({
+      width: 478, height: 850, frameCount: 1297, containerFps: 29.97, captureFps: 240,
+    }));
     const out = await store.exportSwing(row.id);
     expect(out.dir).toBe(`file:///cache/swing-export/${row.id}`);
-    const json = JSON.parse(fs.__files.get(out.jsonUri));
-    expect(json.schema).toBe('swing-export/1');
-    expect(json.swing.id).toBe(row.id);
-    expect(json.analysis.main.fault).toBe('early_extension');
-    expect(json.marks.schema).toBe('swing-club-labels/1');
-    expect(fs.__files.get(out.videoUri)).toBe('VIDEO-BYTES');
-    expect(fs.__files.get(`${out.dir}/frames/556.jpg`)).toBe('JPEG');
+    expect(out.zipUri.startsWith(`${out.dir}/`)).toBe(true);
+    expect(out.zipUri).toMatch(/\.swing\.zip$/);
+    const entries = unzip(fs.__files.get(out.zipUri));
+    expect(Object.keys(entries).sort()).toEqual(['analysis.json', 'marks.json', 'swing.json', 'video.mp4']);
+    expect(entries['video.mp4']).toBe('VIDEO-BYTES');
+    const meta = JSON.parse(entries['swing.json']);
+    expect(meta).toMatchObject({
+      schema: 'swing-export/1',
+      handedness: 'right',
+      video: { width: 478, height: 850, frameCount: 1297, containerFps: 29.97, captureFps: 240 },
+    });
+    expect(meta.swing.id).toBe(row.id);
+    expect(JSON.parse(entries['analysis.json']).main.fault).toBe('early_extension');
+    expect(JSON.parse(entries['marks.json']).schema).toBe('swing-club-labels/1');
   });
 
   it('exportSwing rejects an unknown id', async () => {
