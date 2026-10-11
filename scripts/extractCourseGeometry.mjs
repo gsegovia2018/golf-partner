@@ -63,7 +63,11 @@ function segDist(p, a, b) {
 }
 
 async function overpass(query) {
-  const r = await fetch(OVERPASS, { method: 'POST', body: 'data=' + encodeURIComponent(query) });
+  const r = await fetch(OVERPASS, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'data=' + encodeURIComponent(query),
+  });
   if (!r.ok) throw new Error(`Overpass HTTP ${r.status}`);
   return r.json();
 }
