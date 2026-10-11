@@ -1,0 +1,5 @@
+clips/
+out/
+.venv/
+*.task
+__pycache__/
