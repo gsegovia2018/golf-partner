@@ -1,0 +1,171 @@
+import React from 'react';
+import { View, Image, Text, StyleSheet } from 'react-native';
+import Svg, {
+  Line, Circle, Rect, Polyline, Text as SvgText,
+} from 'react-native-svg';
+import { SWING_STRINGS } from '../../swing/strings';
+
+// The still of a checkpoint with everything drawn on it (design B): pose skeleton, hands
+// square, clubhead (dot when placed, dashed ring when estimated), ball ring, the address
+// planes and the drawing of the selected measure. Used by Results and Edit marks (and
+// Compare later). Everything arrives in coordinates normalised to the decoded frame; the
+// still is contain-fit into the box, so the drawing always sits on the picture.
+//
+// It draws on photographs, so the palette is the fixed HUD one, not the theme.
+
+const ACCENT = '#4fae8a';
+const WHITE = '#ffffff';
+const INK = '#0a0d10';
+const HIGHLIGHT = '#ffd98a';
+const SOFT = '#cfe3d5';
+
+const BONES = [[11, 12], [23, 24], [11, 23], [12, 24], [23, 25], [25, 27], [24, 26], [26, 28], [11, 13], [13, 15], [12, 14], [14, 16]];
+const JOINTS = [11, 12, 13, 14, 23, 24, 25, 26, 27, 28];
+const NOSE = 0;
+const MIN_VIS = 0.2;
+
+/** The rect the frame occupies inside a box of boxW x boxH (contain fit), in view px. */
+export function fitRect(boxW, boxH, videoW, videoH) {
+  if (!boxW || !boxH || !videoW || !videoH) return { x: 0, y: 0, w: boxW || 0, h: boxH || 0 };
+  const s = Math.min(boxW / videoW, boxH / videoH);
+  const w = videoW * s;
+  const h = videoH * s;
+  return { x: (boxW - w) / 2, y: (boxH - h) / 2, w, h };
+}
+
+/** Where the ray a -> b leaves the frame (normalised), so a plane runs to the edge of the picture. */
+function extendToEdge(a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const t = [
+    dx < 0 ? (0 - a[0]) / dx : dx > 0 ? (1 - a[0]) / dx : Infinity,
+    dy < 0 ? (0 - a[1]) / dy : dy > 0 ? (1 - a[1]) / dy : Infinity,
+  ].reduce((m, v) => (v > 0 && v < m ? v : m), Infinity);
+  return Number.isFinite(t) ? [a[0] + dx * t, a[1] + dy * t] : b;
+}
+
+function Label({ x, y, text, anchor = 'start', color = WHITE }) {
+  const common = {
+    x, y, fontSize: 10.5, fontWeight: '700', fontFamily: 'PlusJakartaSans-Bold', textAnchor: anchor,
+  };
+  return (
+    <>
+      <SvgText {...common} stroke={INK} strokeWidth={3} strokeLinejoin="round" fill={INK}>{text}</SvgText>
+      <SvgText {...common} fill={color}>{text}</SvgText>
+    </>
+  );
+}
+
+// A plane's name sits just inside the frame where the line leaves it.
+function PlaneLabel({ p, X, Y, w, text, color }) {
+  const right = X(p[0]) > w / 2;
+  return <Label x={X(p[0]) + (right ? -6 : 6)} y={Math.min(Y(p[1]) + 16, Y(1) - 8)} text={text} anchor={right ? 'end' : 'start'} color={color} />;
+}
+
+export default function SwingOverlay({
+  width, height, video, uri = null, pose = null, club = null, ball = null, reference = null,
+  highlight = [], showPlanes = true, edit = false, label, style, children,
+}) {
+  const r = fitRect(width, height, video?.width, video?.height);
+  const X = (x) => x * r.w;
+  const Y = (y) => y * r.h;
+  const lm = (i) => {
+    const p = pose?.[i];
+    return p && p[2] >= MIN_VIS ? [X(p[0]), Y(p[1])] : null;
+  };
+  const dash = '4 3';
+  const handHalf = edit ? 14 : 8;
+  const headR = edit ? 10 : 7;
+  const labelAnchor = (x) => (x > r.w * 0.62 ? 'end' : 'start');
+
+  const hands = club?.hands ? [X(club.hands[0]), Y(club.hands[1])] : null;
+  const head = club?.head ? [X(club.head[0]), Y(club.head[1])] : null;
+  const prior = !head && club?.priorHead ? [X(club.priorHead[0]), Y(club.priorHead[1])] : null;
+
+  const planes = showPlanes && reference?.ball && reference.handsAddress && reference.trailShoulder ? (() => {
+    const b = reference.ball;
+    const e1 = extendToEdge(b, reference.handsAddress);
+    const e2 = extendToEdge(b, reference.trailShoulder);
+    return { b, e1, e2 };
+  })() : null;
+
+  return (
+    <View style={[styles.box, { width, height }, style]}>
+      <View style={[styles.frame, { left: r.x, top: r.y, width: r.w, height: r.h }]}>
+        {uri ? (
+          <Image source={{ uri }} style={{ width: r.w, height: r.h }} resizeMode="stretch" accessibilityLabel={label} accessibilityIgnoresInvertColors />
+        ) : (
+          <View style={[styles.none, { width: r.w, height: r.h }]} accessibilityLabel={label}>
+            <Text style={styles.noneText}>{SWING_STRINGS.results.noStill}</Text>
+          </View>
+        )}
+        <Svg width={r.w} height={r.h} style={StyleSheet.absoluteFill} pointerEvents="none">
+          {planes ? (
+            <>
+              <Line x1={X(planes.b[0])} y1={Y(planes.b[1])} x2={X(planes.e1[0])} y2={Y(planes.e1[1])} stroke={ACCENT} strokeWidth={1.5} />
+              <Line x1={X(planes.b[0])} y1={Y(planes.b[1])} x2={X(planes.e2[0])} y2={Y(planes.e2[1])} stroke={SOFT} strokeWidth={1.5} strokeDasharray="5 4" />
+              {reference.shaftPlaneDeg != null ? <PlaneLabel p={planes.e1} X={X} Y={Y} w={r.w} text={`Shaft plane ${Math.round(reference.shaftPlaneDeg)}°`} color={ACCENT} /> : null}
+              {reference.shoulderPlaneDeg != null ? <PlaneLabel p={planes.e2} X={X} Y={Y} w={r.w} text={`Shoulder plane ${Math.round(reference.shoulderPlaneDeg)}°`} color={SOFT} /> : null}
+            </>
+          ) : null}
+
+          {pose ? (
+            <>
+              {BONES.map(([a, b]) => {
+                const p = lm(a);
+                const q = lm(b);
+                return p && q ? <Line key={`${a}-${b}`} x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]} stroke={ACCENT} strokeWidth={2} /> : null;
+              })}
+              {JOINTS.map((j) => {
+                const p = lm(j);
+                return p ? <Circle key={j} cx={p[0]} cy={p[1]} r={3} fill={WHITE} stroke={ACCENT} strokeWidth={1.5} /> : null;
+              })}
+              {lm(NOSE) ? <Circle cx={lm(NOSE)[0]} cy={lm(NOSE)[1]} r={X(0.04)} fill="none" stroke={ACCENT} strokeWidth={1.5} /> : null}
+            </>
+          ) : null}
+
+          {highlight.map((h, k) => {
+            const key = `h${k}`;
+            switch (h.t) {
+              case 'line': return <Line key={key} x1={X(h.a[0])} y1={Y(h.a[1])} x2={X(h.b[0])} y2={Y(h.b[1])} stroke={HIGHLIGHT} strokeWidth={2} strokeDasharray={h.dash ? dash : undefined} />;
+              case 'circle': return <Circle key={key} cx={X(h.c[0])} cy={Y(h.c[1])} r={X(h.r)} fill="none" stroke={HIGHLIGHT} strokeWidth={2} strokeDasharray={h.dash ? dash : undefined} />;
+              case 'rect': return <Rect key={key} x={X(h.c[0]) - X(h.half)} y={Y(h.c[1]) - X(h.half)} width={X(h.half) * 2} height={X(h.half) * 2} fill="none" stroke={HIGHLIGHT} strokeWidth={2} strokeDasharray={h.dash ? dash : undefined} />;
+              case 'dot': return <Circle key={key} cx={X(h.c[0])} cy={Y(h.c[1])} r={4} fill={HIGHLIGHT} />;
+              case 'poly': return <Polyline key={key} points={h.pts.map((p) => `${X(p[0])},${Y(p[1])}`).join(' ')} fill="none" stroke={HIGHLIGHT} strokeWidth={2} strokeDasharray={h.dash ? dash : undefined} />;
+              case 'label': return <Label key={key} x={X(h.at[0])} y={Y(h.at[1]) + 4} text={h.text} anchor={labelAnchor(X(h.at[0]))} color={HIGHLIGHT} />;
+              default: return null;
+            }
+          })}
+
+          {ball ? <Circle cx={X(ball[0])} cy={Y(ball[1])} r={Math.max(10, X(ball[2]) + 4)} fill="none" stroke={WHITE} strokeWidth={2} /> : null}
+
+          {hands ? (
+            <>
+              {hands && head ? <Line x1={hands[0]} y1={hands[1]} x2={head[0]} y2={head[1]} stroke="rgba(255,255,255,0.7)" strokeWidth={2} /> : null}
+              <Rect x={hands[0] - handHalf} y={hands[1] - handHalf} width={handHalf * 2} height={handHalf * 2} fill="rgba(79,174,138,0.35)" stroke={WHITE} strokeWidth={2} />
+              {edit ? <Circle cx={hands[0]} cy={hands[1]} r={22} fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth={1} strokeDasharray="3 3" /> : null}
+            </>
+          ) : null}
+          {head && club?.source === 'user' ? <Circle cx={head[0]} cy={head[1]} r={headR} fill={WHITE} stroke={INK} strokeWidth={1.5} /> : null}
+          {head && club?.source !== 'user' ? (
+            <>
+              <Circle cx={head[0]} cy={head[1]} r={headR} fill="none" stroke={WHITE} strokeWidth={2} strokeDasharray="3 2" />
+              <Label x={head[0] + 14} y={head[1] + 4} text={SWING_STRINGS.results.estimated} />
+            </>
+          ) : null}
+          {head && edit ? <Circle cx={head[0]} cy={head[1]} r={22} fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth={1} strokeDasharray="3 3" /> : null}
+          {prior ? <Circle cx={prior[0]} cy={prior[1]} r={headR} fill="none" stroke={WHITE} strokeWidth={2} strokeDasharray="3 2" /> : null}
+          {club?.hidden && hands ? <Label x={hands[0] + 22} y={hands[1] + 18} text={SWING_STRINGS.results.clubHidden} /> : null}
+        </Svg>
+        {children}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  box: { backgroundColor: '#0a0d10', overflow: 'hidden' },
+  frame: { position: 'absolute' },
+  none: { backgroundColor: '#1b2420', alignItems: 'center', justifyContent: 'center' },
+  noneText: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: '#9fb0a4' },
+});
