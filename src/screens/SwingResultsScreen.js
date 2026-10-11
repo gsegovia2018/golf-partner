@@ -24,7 +24,7 @@ import { nativeApi, getStill, ensureStills } from '../swing/frames';
 import { poseAtFrame } from '../swing/poseAt';
 import { highlightFor } from '../swing/highlights';
 import {
-  checksAt, worstByCheckpoint, unplacedCheckpoint, CHECK_KEY, homeOf,
+  checksAt, worstByCheckpoint, unplacedCheckpoint, CHECK_KEY, homeOf, frameOfKey,
 } from '../swing/checkpointChecks';
 import { CHECKPOINT_KEYS } from '../swing/phases';
 import { drillsForFault } from '../swing/drills';
@@ -32,9 +32,6 @@ import { SWING_STRINGS } from '../swing/strings';
 
 const T = SWING_STRINGS.results;
 const MAX_NUDGE = 2; // stills exist for the checkpoint frame +-2 (D4)
-
-/** Frame index of any of the twelve checkpoints. */
-export const frameOfKey = (analysis, key) => analysis.checkpoints[key]?.i ?? analysis.internal?.[key];
 
 // --- Sections --------------------------------------------------------------------------------
 

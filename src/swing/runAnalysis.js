@@ -17,6 +17,7 @@ import { analyze } from './analyze';
 import { nativeApi, getStill } from './frames';
 import { expectedShaftPx } from './scale';
 import { marksForAnalyze } from './labels';
+import { frameOfKey } from './checkpointChecks';
 import {
   getSwing, getSwingProfile, swingVideoUri, saveAnalysis, markSwingFailed, readMarks,
 } from '../store/swingStore';
@@ -26,8 +27,6 @@ const PASS2_KEYS = [
   'address', 'takeaway', 'leadArm', 'top', 'transition', 'shaftDown', 'impact', 'trailArm', 'finish',
   'lateBackswing', 'preImpact', 'postImpact',
 ];
-
-export const frameOf = (analysis, key) => analysis.checkpoints[key]?.i ?? analysis.internal?.[key];
 
 export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = () => {}, isCancelled = () => false } = {}) {
   const api = nativeApi();
@@ -49,6 +48,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
       club: row.club,
       source: row.source,
       marks: marksForAnalyze(saved),
+      ball: saved?.ball?.final ?? undefined,
     };
 
     onProgress({ stage: 'reading' });
@@ -84,7 +84,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
       if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
       const r = await api.extractCheckpoints(path, {
         frames: PASS2_KEYS.map((key) => ({
-          key, i: frameOf(first, key), hands: first.clubMarks[key].hands, neighbours: 2,
+          key, i: frameOfKey(first, key), hands: first.clubMarks[key].hands, neighbours: 2,
         })),
         ball: pose.ball ?? null,
         expectedShaftPx: expectedShaftPx(first.scale.pxPerCm),
@@ -98,7 +98,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
         await saveAnalysis(swingId, second, {
           pose: { ...pose, pass2: p2 },
           probe,
-          thumb: getStill(swingId, frameOf(second, 'impact')),
+          thumb: getStill(swingId, frameOfKey(second, 'impact')),
         });
       }
     } catch { /* keep the first analysis; the clubhead waits for the user's marks */ }
