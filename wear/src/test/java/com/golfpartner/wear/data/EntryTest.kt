@@ -95,44 +95,43 @@ class EntryTest {
     }
 
     @Test
-    fun clubCyclesAndDriverIsNull() {
+    fun clubChipsAndDriverIsNull() {
         val x = d(4)
-        val wood = Entry.cycleClub(x, +1)
+        val wood = Entry.pickClub(x, "wood")
         assertEquals("wood", wood.shot.teeClub)
-        assertEquals("iron", Entry.cycleClub(Entry.cycleClub(wood, +1), +1).shot.teeClub)
-        assertNull(Entry.cycleClub(Entry.cycleClub(Entry.cycleClub(Entry.cycleClub(x, +1), +1), +1), +1).shot.teeClub) // full lap
-        assertEquals("iron", Entry.cycleClub(x, -1).shot.teeClub)
-        assertNull(Entry.cycleClub(empty, +1).shot.teeClub)
+        assertEquals("iron", Entry.pickClub(wood, "iron").shot.teeClub)
+        assertNull(Entry.pickClub(wood, "wood").shot.teeClub) // the lit non-driver goes back to driver
+        assertNull(Entry.pickClub(x, "driver").shot.teeClub) // driver stays the unstored default
+        assertNull(Entry.pickClub(empty, "wood").shot.teeClub)
     }
 
     @Test
-    fun bucketPickersWrapThroughUnset() {
-        val a = Entry.cycleDriveDist(d(4), +1)
+    fun bucketChipsToggleOff() {
+        val a = Entry.pickDriveDist(d(4), "0-150")
         assertEquals("0-150", a.shot.driveDistBucket)
-        assertEquals("150-180", Entry.cycleDriveDist(a, +1).shot.driveDistBucket)
-        assertNull(Entry.cycleDriveDist(a, -1).shot.driveDistBucket)
-        assertEquals("240+", Entry.cycleDriveDist(d(4), -1).shot.driveDistBucket)
-        assertNull(Entry.cycleDriveDist(d(4, ShotDetail(driveDistBucket = "240+")), +1).shot.driveDistBucket)
-        assertEquals(empty, Entry.cycleDriveDist(empty, +1))
+        assertEquals("150-180", Entry.pickDriveDist(a, "150-180").shot.driveDistBucket)
+        assertNull(Entry.pickDriveDist(a, "0-150").shot.driveDistBucket)
+        assertEquals(empty, Entry.pickDriveDist(empty, "0-150"))
         // first putt needs putts
-        assertEquals(d(4), Entry.cycleFirstPutt(d(4), +1))
-        assertEquals("0-1", Entry.cycleFirstPutt(d(4, ShotDetail(putts = 2)), +1).shot.firstPuttBucket)
+        assertEquals(d(4), Entry.pickFirstPutt(d(4), "0-1"))
+        assertEquals("0-1", Entry.pickFirstPutt(d(4, ShotDetail(putts = 2)), "0-1").shot.firstPuttBucket)
+        assertNull(Entry.pickFirstPutt(Entry.pickFirstPutt(d(4, ShotDetail(putts = 2)), "0-1"), "0-1").shot.firstPuttBucket)
     }
 
     @Test
     fun approachDistanceClearsTheFinishWhenCleared() {
-        val set = Entry.cycleApproach(d(4), +1)
+        val set = Entry.pickApproach(d(4), "0-50")
         assertEquals("0-50", set.shot.approachBucket)
         val finished = Entry.toggleFinish(set, "left")
         assertEquals("left", finished.shot.approachMiss)
-        val cleared = Entry.cycleApproach(finished, -1) // 0-50 -> unset
+        val cleared = Entry.pickApproach(finished, "0-50") // tap the lit chip -> unset
         assertNull(cleared.shot.approachBucket)
         assertEquals(ShotDetail(), cleared.shot)
     }
 
     @Test
     fun approachFinishFollowsThePhonesRules() {
-        val base = Entry.cycleApproach(d(4), +1)
+        val base = Entry.pickApproach(d(4), "0-50")
         val green = Entry.toggleFinish(base, "green")
         assertEquals(ShotDetail(approachBucket = "0-50", approachResult = "green"), green.shot)
         assertTrue(Entry.finishActive(green.shot, "green"))
@@ -191,8 +190,11 @@ class EntryTest {
         assertFalse(p3.drive) // direction, club, drive distance hidden on a par 3
         assertFalse(p3.approachFinish) // finish hidden, distance stays ("hole distance")
         assertTrue(p3.approach && p3.teePenalties && p3.sand && p3.par3Note)
-        assertFalse(Entry.plan(par3, Track.None.copy(teeShot = true)).hasTeePage)
-        assertTrue(Entry.plan(par3, Track.None.copy(teeShot = true, penalties = true)).hasTeePage)
+        assertFalse(Entry.plan(par3, Track.None.copy(teeShot = true)).hasDrivePage)
+        assertTrue(Entry.plan(par3, Track.None.copy(teeShot = true, penalties = true)).hasDrivePage)
+        assertFalse(Entry.plan(par3, Track.None.copy(teeShot = true, penalties = true)).hasTeeShotPage)
+        assertTrue(Entry.plan(par4, Track.None.copy(teeShot = true)).hasTeeShotPage)
+        assertFalse(Entry.plan(par4, Track.None.copy(penalties = true)).hasTeeShotPage)
         assertFalse(Entry.plan(par4, Track.None.copy(approach = false, putting = false)).hasApproachPage)
         assertTrue(Entry.plan(par4, Track.None.copy(putting = true)).hasShortPage)
         assertFalse(Entry.plan(par4, Track.None.copy(teeShot = true)).hasShortPage)
@@ -201,14 +203,14 @@ class EntryTest {
     @Test
     fun pagesFollowGroupsAndBlocks() {
         assertEquals(
-            listOf(PageKind.Distances, PageKind.Score, PageKind.Tee, PageKind.Approach, PageKind.ShortGame),
+            listOf(PageKind.Distances, PageKind.Score, PageKind.TeeShot, PageKind.Drive, PageKind.Approach, PageKind.ShortGame),
             Pages.of(Fixtures.state()),
         )
         val onlyPutting = Fixtures.activeJson(track = """{"putting":true,"teeShot":false,"shortGame":false,"penalties":false,"approach":false}""")
         assertEquals(listOf(PageKind.Distances, PageKind.Score, PageKind.ShortGame), Pages.of(Fixtures.state(onlyPutting)))
-        val onlyApproach = Fixtures.activeJson(track = """{"approach":true}""")
+        val onlyApproach = Fixtures.activeJson(track = """{"putting":false,"teeShot":false,"shortGame":false,"penalties":false,"approach":true}""")
         assertEquals(listOf(PageKind.Distances, PageKind.Score, PageKind.Approach), Pages.of(Fixtures.state(onlyApproach)))
-        assertEquals(5, Pages.of(Fixtures.state(Fixtures.activeJson(blocked = "dispute"))).size)
+        assertEquals(6, Pages.of(Fixtures.state(Fixtures.activeJson(blocked = "dispute"))).size)
         assertEquals(listOf(PageKind.Distances), Pages.of(Fixtures.state(Fixtures.activeJson(blocked = "viewOnly"))))
         assertEquals(listOf(PageKind.Distances), Pages.of(Fixtures.state(Fixtures.activeJson(blocked = "official"))))
         assertEquals(listOf(PageKind.Distances), Pages.of(WatchState.Inactive))

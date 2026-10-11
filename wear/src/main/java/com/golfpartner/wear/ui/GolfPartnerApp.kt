@@ -98,7 +98,7 @@ private const val HOLE_SETTLE_MS = 4_000L
 private const val NOTICE_MS = 3_000L
 
 /**
- * Distances | Score | Tee | Approach | Short game in a pager. Stays on its page when the hole
+ * Distances | Score | Tee shot | Drive | Approach | Short game in a pager. Stays on its page when the hole
  * changes. Crown: hole on Distances, strokes on Score. Vertical swipe on Distances: one hole per
  * drag. The hole changes on screen at once ([WatchState.at] from the whole-course state), the
  * `hole` command goes out and the phone catches up. Edits go through [WatchController.edit]
@@ -203,7 +203,8 @@ private fun RoundScreens(state: WatchState, controller: WatchController, info: H
             when (pages.getOrElse(index) { PageKind.Distances }) {
                 PageKind.Distances -> DistancesPage(shown, info, moving, target ?: phoneHole, stepHole)
                 PageKind.Score -> draft?.let { ScorePage(shown, it, plan, onChange, movingTo) }
-                PageKind.Tee -> draft?.let { TeePage(shown, it, plan, onChange, movingTo) }
+                PageKind.TeeShot -> draft?.let { TeeShotPage(shown, it, plan, onChange, movingTo) }
+                PageKind.Drive -> draft?.let { DrivePage(shown, it, plan, onChange, movingTo) }
                 PageKind.Approach -> draft?.let { ApproachPage(shown, it, plan, onChange, movingTo) }
                 PageKind.ShortGame -> draft?.let { ShortGamePage(shown, it, plan, onChange, movingTo) }
             }

@@ -63,6 +63,11 @@ describe('watchStateOf', () => {
     expect(s.blocked).toBe('dispute');
   });
 
+  test('a stat group missing from settings is tracked, as the panel shows it', () => {
+    const s = watchStateOf({ ...base, track: { shortGame: false } });
+    expect(s.track).toEqual({ putting: true, teeShot: true, approach: true, shortGame: false, penalties: true });
+  });
+
   test('unscored hole keeps nulls', () => {
     const s = watchStateOf({ ...base, me: { ...base.me, strokes: null, points: null, putts: null, driveLie: null } });
     expect(s.me).toMatchObject({ strokes: null, points: null, putts: null, driveLie: null });

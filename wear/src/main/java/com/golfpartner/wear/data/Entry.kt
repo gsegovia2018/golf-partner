@@ -41,7 +41,10 @@ data class EntryPlan(
     /** Tee shot tracking is on but the hole is a par 3. */
     val par3Note: Boolean,
 ) {
-    val hasTeePage: Boolean get() = drive || teePenalties
+    /** Direction toggles: not on a par 3 (the phone ignores them there). */
+    val hasTeeShotPage: Boolean get() = drive
+    /** Club, drive distance and tee penalties; on a par 3 only the penalties. */
+    val hasDrivePage: Boolean get() = drive || teePenalties
     val hasApproachPage: Boolean get() = approach
     val hasShortPage: Boolean get() = firstPutt || sand || recovery || otherPenalties
 }
@@ -198,39 +201,34 @@ object Entry {
 
     // --- option pickers (all need strokes: the phone refuses a shot without them) ---
 
-    /** Next/previous of [options] with "unset" as one more stop, wrapping around. */
-    fun cycle(options: List<String>, current: String?, delta: Int): String? {
-        val all = listOf<String?>(null) + options
-        val i = all.indexOf(current).coerceAtLeast(0)
-        return all[Math.floorMod(i + delta, all.size)]
-    }
-
     /** Tapping the selected direction clears it. */
     fun toggleDrive(draft: EntryDraft, key: String): EntryDraft =
         if (draft.strokes == null) draft else draft.copy(shot = draft.shot.copy(drive = if (draft.shot.drive == key) null else key))
 
-    /** Driver is the default and stays unstored (null), like the phone. */
-    fun cycleClub(draft: EntryDraft, delta: Int): EntryDraft {
+    /** Single-select club chips; driver is the default and stays unstored (null), like the phone. */
+    fun pickClub(draft: EntryDraft, key: String): EntryDraft {
         if (draft.strokes == null) return draft
         val cur = draft.shot.teeClub ?: "driver"
-        val i = Options.CLUBS.indexOf(cur).coerceAtLeast(0)
-        val next = Options.CLUBS[Math.floorMod(i + delta, Options.CLUBS.size)]
+        val next = if (cur == key) "driver" else key // the lit chip again goes back to the default
         return draft.copy(shot = draft.shot.copy(teeClub = if (next == "driver") null else next))
     }
 
-    fun cycleDriveDist(draft: EntryDraft, delta: Int): EntryDraft =
+    /** Tapping the selected chip clears it. */
+    private fun String?.toggled(key: String): String? = if (this == key) null else key
+
+    fun pickDriveDist(draft: EntryDraft, key: String): EntryDraft =
         if (draft.strokes == null) draft
-        else draft.copy(shot = draft.shot.copy(driveDistBucket = cycle(Options.DRIVE_DIST, draft.shot.driveDistBucket, delta)))
+        else draft.copy(shot = draft.shot.copy(driveDistBucket = draft.shot.driveDistBucket.toggled(key)))
 
     /** Only meaningful once there are putts; the page hides it before. */
-    fun cycleFirstPutt(draft: EntryDraft, delta: Int): EntryDraft =
+    fun pickFirstPutt(draft: EntryDraft, key: String): EntryDraft =
         if (draft.strokes == null || (draft.shot.putts ?: 0) < 1) draft
-        else draft.copy(shot = draft.shot.copy(firstPuttBucket = cycle(Options.FIRST_PUTT, draft.shot.firstPuttBucket, delta)))
+        else draft.copy(shot = draft.shot.copy(firstPuttBucket = draft.shot.firstPuttBucket.toggled(key)))
 
     /** No distance clears where the approach finished, like the phone. */
-    fun cycleApproach(draft: EntryDraft, delta: Int): EntryDraft {
+    fun pickApproach(draft: EntryDraft, key: String): EntryDraft {
         if (draft.strokes == null) return draft
-        val b = cycle(Options.APPROACH, draft.shot.approachBucket, delta)
+        val b = draft.shot.approachBucket.toggled(key)
         val s = draft.shot.copy(approachBucket = b)
         return draft.copy(
             shot = if (b == null) s.copy(approachResult = null, approachMiss = null, approachBunker = false) else s,
@@ -369,7 +367,7 @@ object Entry {
 }
 
 /** Page kinds of the pager, in swipe order. */
-enum class PageKind { Distances, Score, Tee, Approach, ShortGame }
+enum class PageKind { Distances, Score, TeeShot, Drive, Approach, ShortGame }
 
 object Pages {
     /**
@@ -386,7 +384,8 @@ object Pages {
         return buildList {
             add(PageKind.Distances)
             add(PageKind.Score)
-            if (plan.hasTeePage) add(PageKind.Tee)
+            if (plan.hasTeeShotPage) add(PageKind.TeeShot)
+            if (plan.hasDrivePage) add(PageKind.Drive)
             if (plan.hasApproachPage) add(PageKind.Approach)
             if (plan.hasShortPage) add(PageKind.ShortGame)
         }

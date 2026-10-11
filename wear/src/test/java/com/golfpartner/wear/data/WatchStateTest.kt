@@ -36,6 +36,16 @@ class WatchStateTest {
     }
 
     @Test
+    fun aMissingTrackGroupIsOnLikeThePhone() {
+        val t = Fixtures.state(Fixtures.activeJson(track = """{"putting":false}""")).track
+        assertEquals(false, t.putting)
+        assertEquals(true, t.teeShot)
+        assertEquals(true, t.shortGame)
+        assertEquals(true, t.penalties)
+        assertEquals(true, t.approach)
+    }
+
+    @Test
     fun parsesTheInactiveShape() {
         val s = (WatchStateParser.parse("""{"v":1,"rev":3,"active":false,"roundId":null,"courseName":null,"blocked":null}""")
             as StateParse.Ok).state
