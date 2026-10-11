@@ -1,0 +1,126 @@
+{
+ "note": "Seeded from the hand-placed marks of 2026-10-10 (finish clubhead was estimated behind the head).",
+ "clip": "marcos-2026-10-10",
+ "source": "manual",
+ "handedness": "right",
+ "heightCm": 176,
+ "ball": {
+  "x": 273,
+  "y": 505,
+  "conf": 1
+ },
+ "checkpoints": {
+  "address": {
+   "frame": 333,
+   "hands": {
+    "x": 210,
+    "y": 425
+   },
+   "head": {
+    "x": 270,
+    "y": 505
+   },
+   "hidden": false,
+   "conf": 1
+  },
+  "takeaway": {
+   "frame": 414,
+   "hands": {
+    "x": 197.8,
+    "y": 391.2
+   },
+   "head": {
+    "x": 166.4,
+    "y": 408.8
+   },
+   "hidden": false,
+   "conf": 1
+  },
+  "leadArm": {
+   "frame": 434,
+   "hands": {
+    "x": 188,
+    "y": 362.9
+   },
+   "head": {
+    "x": 114.5,
+    "y": 272
+   },
+   "hidden": false,
+   "conf": 1
+  },
+  "top": {
+   "frame": 495,
+   "hands": {
+    "x": 181.9,
+    "y": 294.3
+   },
+   "head": {
+    "x": 226.7,
+    "y": 319.9
+   },
+   "hidden": false,
+   "conf": 1
+  },
+  "transition": {
+   "frame": 535,
+   "hands": {
+    "x": 210,
+    "y": 375
+   },
+   "head": {
+    "x": 151.8,
+    "y": 250.9
+   },
+   "hidden": false,
+   "conf": 1
+  },
+  "shaftDown": {
+   "frame": 544,
+   "hands": {
+    "x": 216.5,
+    "y": 393.5
+   },
+   "head": null,
+   "hidden": true,
+   "conf": 1
+  },
+  "impact": {
+   "frame": 556,
+   "hands": {
+    "x": 221.5,
+    "y": 412
+   },
+   "head": {
+    "x": 274.1,
+    "y": 511.5
+   },
+   "hidden": false,
+   "conf": 1
+  },
+  "trailArm": {
+   "frame": 576,
+   "hands": {
+    "x": 203.1,
+    "y": 349.6
+   },
+   "head": null,
+   "hidden": true,
+   "conf": 1
+  },
+  "finish": {
+   "frame": 640,
+   "hands": {
+    "x": 157,
+    "y": 274
+   },
+   "head": {
+    "x": 205,
+    "y": 296
+   },
+   "hidden": false,
+   "conf": 1
+  }
+ },
+ "savedAt": "2026-10-11T17:44:19.561Z"
+}
