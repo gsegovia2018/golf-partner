@@ -22,6 +22,7 @@ import { getAppSettings } from '../store/settingsStore';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { useGpsDistances } from '../hooks/useGpsDistances';
 import { useRoundTracking } from '../hooks/useRoundTracking';
+import { useWatchBridge } from '../hooks/useWatchBridge';
 import {
   loadTournament, subscribeTournamentChanges,
   calcBestWorstBall, DEFAULT_SETTINGS,
@@ -59,7 +60,7 @@ import {
 } from '../components/scorecard/constants';
 import {
   reconcileShotDetail, roundScoringMode, roundBestBallValues,
-  clampScoreInput, resolvePlayerHandicap, holeCountOf,
+  clampScoreInput, resolvePlayerHandicap, holeCountOf, isScrambleMode,
 } from '../store/scoring';
 import {
   cellView, discrepancies, roundCells, scorerKeyOf, shownScores, unverifiedCells,
@@ -267,6 +268,9 @@ export default function ScorecardScreen({ navigation, route }) {
   // Where a blocked hole change is going: the leave-hole conflict prompt has
   // to hold the move until the scorer answers it. Null means "next hole".
   const pendingHoleRef = useRef(null);
+  // True while a hole change publishes the hole being left: a watch write
+  // queued in that window must not open a fresh draft the move walks away from.
+  const leavingHoleRef = useRef(false);
   const autoAdvanceTimer = useRef(null);
   useEffect(() => () => { if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current); }, []);
   // goToNextHole is declared later (it needs state defined further down) but
@@ -324,6 +328,8 @@ export default function ScorecardScreen({ navigation, route }) {
   const notesDirtyRef = useRef(false);
   const scoreAnims = useRef({});
   const hasAutoJumpedRef = useRef(false);
+  // Mirrors hasAutoJumpedRef as state, so the watch bridge re-renders on it.
+  const [holeResumed, setHoleResumed] = useState(false);
   const [celebration, setCelebration] = useState({
     playerId: null, holeNumber: null, label: null, delta: null,
   });
@@ -419,6 +425,7 @@ export default function ScorecardScreen({ navigation, route }) {
   // in round 1.
   useEffect(() => {
     hasAutoJumpedRef.current = false;
+    setHoleResumed(false);
   }, [paramRoundIndex]);
 
   const onRefresh = useCallback(async () => {
@@ -839,6 +846,7 @@ export default function ScorecardScreen({ navigation, route }) {
     setCurrentHole(resumeHole(round.holes, marked, {
       complete: isRoundComplete({ ...round, scores }, players) || !!tournament?.finishedAt,
     }));
+    setHoleResumed(true);
   }, [official, round, players, scores, cardState, tournament?.finishedAt]);
   const settings = useMemo(
     () => ({
@@ -1423,8 +1431,17 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const goToNextHole = useCallback(async () => {
     pendingHoleRef.current = null;
-    if (await leaveHole(currentHoleRef.current)) advanceHole();
-  }, [leaveHole, advanceHole]);
+    const leaving = currentHoleRef.current;
+    leavingHoleRef.current = true;
+    try {
+      if (await leaveHole(leaving)) {
+        currentHoleRef.current = Math.min(round?.holes?.length ?? 18, leaving + 1);
+        advanceHole();
+      }
+    } finally {
+      leavingHoleRef.current = false;
+    }
+  }, [leaveHole, advanceHole, round]);
   useEffect(() => { goToNextHoleRef.current = goToNextHole; }, [goToNextHole]);
 
   // Both the "Go to hole" picker and the pager's swipe settle land here, so
@@ -1435,11 +1452,83 @@ export default function ScorecardScreen({ navigation, route }) {
     haptic('light');
     if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; }
     pendingHoleRef.current = h;
-    if (await leaveHole(leaving)) {
-      pendingHoleRef.current = null;
-      setCurrentHole(h);
+    leavingHoleRef.current = true;
+    try {
+      if (await leaveHole(leaving)) {
+        pendingHoleRef.current = null;
+        // Synchronously: a watch command queued behind this move reads it.
+        currentHoleRef.current = h;
+        setCurrentHole(h);
+      }
+    } finally {
+      leavingHoleRef.current = false;
     }
   }, [leaveHole]);
+
+  // Wear OS companion: the watch edits MY score only, on the same draft chain
+  // a tap uses, as one queued unit per command. A write that lands behind the
+  // publish of the hole it targets would open a draft nobody publishes, so it
+  // is refused: when a leave/finish/back publish is already queued (every one
+  // queues its publish the moment its flag goes up, so a write queued earlier
+  // rides along with it), or when, by the time it runs, the pager has moved.
+  // My shot detail is read from the store inside the unit, not from the last
+  // render, so a `shot` never undoes the trim its `strokes` just made.
+  // Resolves once the write is on disk (the watch's ack waits for it); rejects
+  // when refused. Strokes skip maybeAutoAdvance — the watch drives hole changes.
+  const watchWrite = useCallback(async (h, write) => {
+    const behindPublish = leavingHoleRef.current || finishingRef.current || leavingViaBackRef.current;
+    const ok = await queueDraft(async () => {
+      if (behindPublish || currentHoleRef.current !== h) return false;
+      await seedDraftFromCard(h);
+      const st = getRoundState(tid, round?.id);
+      const key = String(h);
+      const shot = st.draft?.[key]?.shots?.[meId]
+        ?? st.cardsByAuthor?.[st.myAuthorId]?.holes?.[key]?.shots?.[meId] ?? null;
+      return write(st.draft?.[key]?.entries?.[meId] ?? null, shot);
+    });
+    if (!ok) throw new Error(`Watch write refused on hole ${h}`);
+  }, [queueDraft, seedDraftFromCard, tid, round?.id, meId]);
+  const watchStrokes = useCallback((h, value) => {
+    const v = clampEnteredScore(round, players, meId, h, value);
+    return watchWrite(h, async (_strokes, shot) => {
+      if (v != null) stampRoundStarted();
+      lastWriteRef.current.delete(`${meId}:${h}`);
+      await actions.setDraftEntry(h, meId, v ?? null);
+      // A cleared score deletes the detail; a lower one trims it.
+      const next = v == null ? null : reconcileShotDetail(shot, v);
+      if (shot && next !== shot) await actions.setDraftShot(h, meId, next);
+      return true;
+    });
+  }, [round, players, meId, watchWrite, stampRoundStarted, actions]);
+  // A lie set from the watch is explicit, so it clears the phone's direction chip.
+  const watchShot = useCallback((h, patch) => watchWrite(h, async (strokes, shot) => {
+    if (strokes == null) return false; // a detail never outlives its strokes
+    const detail = { ...DEFAULT_SHOT, ...shot, ...patch, ...('driveLie' in patch ? { drive: null } : {}) };
+    await actions.setDraftShot(h, meId, reconcileShotDetail(detail, strokes));
+    return true;
+  }), [watchWrite, actions, meId]);
+  useWatchBridge({
+    // Not before the cards are loaded and the pager has jumped to my resume hole.
+    active: !!round && !!meId && !isScrambleMode(roundScoringMode(tournament, round))
+      && (official || holeResumed),
+    round,
+    players,
+    meId,
+    scores: visibleScores,
+    shotDetails,
+    currentHole,
+    courseName: round?.courseName,
+    distances: trackingGps.distances,
+    source: trackingGps.source,
+    units: appSettings.units,
+    statGroups: appSettings.statGroups,
+    blocked: official ? 'official' : viewOnly ? 'viewOnly'
+      : (holeConflictPrompt || finishConflictsOpen) ? 'dispute' : null,
+    onStrokes: watchStrokes,
+    onShot: watchShot,
+    onGoToHole: goToHole,
+    getCurrentHole: () => currentHoleRef.current,
+  });
 
   // A peer's card or an agreement arrived: every newly disagreeing cell opens
   // one batched sheet. Nothing publishes here — arrivals never touch my draft.

@@ -1,0 +1,21 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.golfpartner'
+version = '1.0.0'
+
+android {
+  namespace "com.golfpartner.watchbridge"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // Wear OS Data Layer: DataClient (state out), MessageClient (commands in),
+  // NodeClient (connected watches).
+  implementation "com.google.android.gms:play-services-wearable:19.0.0"
+}

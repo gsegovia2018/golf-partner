@@ -11,6 +11,7 @@ export default [
       'web-build/*',
       '.expo/*',
       '.worktrees/**',
+      '.claude/worktrees/**',
       'coverage/*',
       // Generated vendor bundle — inlined third-party dist files, not our code.
       'src/lib/vendor/**',
