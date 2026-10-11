@@ -5,12 +5,10 @@ import IconButton from '../components/ui/IconButton';
 import { useTheme } from '../theme/ThemeContext';
 import { SWING_STRINGS } from '../swing/strings';
 
-// Stand-in for the swing routes that later PRs replace (SwingCapture,
-// SwingCompare), so navigating from Swing home never hits an
+// Stand-in for the swing routes that later PRs replace (SwingCapture), so navigating from Swing home never hits an
 // unregistered route. Deleted route by route as the real screens land.
 const COPY = {
   SwingCapture: SWING_STRINGS.placeholder.capture,
-  SwingCompare: SWING_STRINGS.placeholder.compare,
 };
 
 export default function SwingPlaceholderScreen({ navigation, route }) {

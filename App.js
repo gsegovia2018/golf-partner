@@ -87,6 +87,7 @@ import BagScreen from './src/screens/BagScreen';
 import SwingHomeScreen from './src/screens/SwingHomeScreen';
 import SwingPlaceholderScreen from './src/screens/SwingPlaceholderScreen';
 import SwingResultsScreen from './src/screens/SwingResultsScreen';
+import SwingCompareScreen from './src/screens/SwingCompareScreen';
 import SwingEditMarksScreen from './src/screens/SwingEditMarksScreen';
 import ClubStatScreen from './src/screens/ClubStatScreen';
 import PlayersScreen from './src/screens/PlayersScreen';
@@ -439,7 +440,7 @@ function AppNavigator() {
         <Stack.Screen name="SwingCapture" component={SwingPlaceholderScreen} />
         <Stack.Screen name="SwingResults" component={SwingResultsScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
         <Stack.Screen name="SwingEditMarks" component={SwingEditMarksScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
-        <Stack.Screen name="SwingCompare" component={SwingPlaceholderScreen} />
+        <Stack.Screen name="SwingCompare" component={SwingCompareScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
         <Stack.Screen name="ClubStat" component={ClubStatScreen} />
         <Stack.Screen name="Players" component={PlayersScreen} />
         <Stack.Screen name="Finished" component={FinishedScreen} />

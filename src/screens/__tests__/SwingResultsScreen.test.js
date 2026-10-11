@@ -1,9 +1,11 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import SwingResultsScreen from '../SwingResultsScreen';
 import * as store from '../../store/swingStore';
 import { runAnalysis } from '../../swing/runAnalysis';
+import { shareSwingExport } from '../../swing/shareExport';
 import { getStill, ensureStills } from '../../swing/frames';
 import { analyze } from '../../swing/analyze';
 import { SWING_STRINGS } from '../../swing/strings';
@@ -30,6 +32,7 @@ jest.mock('../../store/swingStore', () => ({
   markSwingFailed: jest.fn(() => Promise.resolve()),
   swingVideoUri: jest.fn(() => 'file:///doc/swings/s1/video.mp4'),
 }));
+jest.mock('../../swing/shareExport', () => ({ shareSwingExport: jest.fn(() => Promise.resolve('shared')) }));
 jest.mock('../../swing/runAnalysis', () => ({ runAnalysis: jest.fn() }));
 jest.mock('../../swing/frames', () => ({
   nativeApi: jest.fn(() => ({ cancelAnalysis: jest.fn() })),
@@ -183,6 +186,20 @@ describe('SwingResultsScreen: a stored swing', () => {
     fireEvent.changeText(getByPlaceholderText(T.renamePlaceholder), 'Range · 7-iron');
     await act(async () => { fireEvent.press(getByLabelText(T.save)); });
     expect(store.renameSwing).toHaveBeenCalledWith('s1', 'Range · 7-iron');
+  });
+
+  test('Export swing in the header menu builds the zip and opens the share sheet; a failure says so', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const { findByText, getByLabelText } = setup();
+    await findByText('Early extension.');
+    fireEvent.press(getByLabelText(T.menu));
+    await act(async () => { fireEvent.press(getByLabelText(SWING_STRINGS.exportSwing.menu)); });
+    expect(shareSwingExport).toHaveBeenCalledWith('s1');
+    expect(alert).not.toHaveBeenCalled();
+    shareSwingExport.mockRejectedValueOnce(new Error('boom'));
+    fireEvent.press(getByLabelText(T.menu));
+    await act(async () => { fireEvent.press(getByLabelText(SWING_STRINGS.exportSwing.menu)); });
+    expect(alert).toHaveBeenCalledWith(SWING_STRINGS.exportSwing.failed);
   });
 
   test('asks for the stills it is missing and redraws when they arrive', async () => {

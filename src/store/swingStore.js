@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
 import { Paths, Directory, File } from 'expo-file-system';
 import { emptyMarks, parseMarks } from '../swing/labels';
+import { makeZip, utf8 } from '../swing/zip';
 
 // Local swing library (plan 7). Same shape as shotStore.js (module state, a
 // version counter for useSyncExternalStore, an AsyncStorage mirror) with no
@@ -255,36 +256,50 @@ export function overStorageWarning() { return storageBytes() >= STORAGE_WARN_BYT
 export const EXPORT_SCHEMA = 'swing-export/1';
 
 /**
- * Write a self-contained folder under Paths.cache/swing-export/<id>/ for the
- * user-initiated share: swing.json (index row + analysis + marks), the original
- * video and the checkpoint stills. No zip library is bundled (adding one would
- * need a native change), so the folder is the unit; a later PR zips it or shares
- * the files. Returns { dir, jsonUri, videoUri }.
+ * Build the single file the user shares (D18): `<name>.swing.zip` under
+ * Paths.cache/swing-export/<id>/ holding video.mp4 (the original clip), analysis.json,
+ * marks.json (the corrected labels) and swing.json (the index row, handedness, height and
+ * the clip's size). It is a "stored" zip written in JS (src/swing/zip.js), so no native
+ * module is needed and `expo-sharing` can hand over exactly one file, which is all its
+ * share sheet takes. tools/swing-lab/import_export.py unpacks it.
+ * Returns { dir, zipUri, bytes }.
  */
 export async function exportSwing(id) {
   const row = getSwing(id);
   if (!row) throw new Error('Swing not found.');
-  const out = new Directory(Paths.cache, 'swing-export', id);
-  if (out.exists) out.delete();
-  out.create({ intermediates: true, idempotent: true });
   const analysis = await readAnalysis(id);
   const marks = await readMarks(id);
-  const json = new File(out, 'swing.json');
-  json.create({ intermediates: true });
-  json.write(JSON.stringify({
+  const probe = await readProbe(id);
+  const entries = [];
+  const json = (name, value) => entries.push({ name, data: utf8(JSON.stringify(value)) });
+  json('swing.json', {
     schema: EXPORT_SCHEMA,
     exportedAt: new Date().toISOString(),
     swing: row,
-    analysis,
-    marks,
-    files: { video: 'video.mp4', frames: 'frames/' },
-  }));
-  const video = swingFile(id, 'video.mp4');
-  const videoOut = new File(out, 'video.mp4');
-  if (video.exists) video.copy(videoOut);
-  const frames = new Directory(Paths.document, 'swings', id, 'frames');
-  if (frames.exists) frames.copy(new Directory(out, 'frames'));
-  return { dir: out.uri, jsonUri: json.uri, videoUri: videoOut.uri };
+    handedness: analysis?.handedness ?? PROFILE.handedness,
+    heightCm: analysis?.scale?.heightCm ?? PROFILE.heightCm ?? null,
+    video: {
+      width: probe?.width ?? marks?.video?.width ?? null,
+      height: probe?.height ?? marks?.video?.height ?? null,
+      frameCount: probe?.frameCount ?? marks?.video?.frameCount ?? null,
+      containerFps: probe?.containerFps ?? marks?.video?.containerFps ?? null,
+      captureFps: probe?.captureFps ?? analysis?.fps?.capture ?? null,
+    },
+    files: ['video.mp4', 'analysis.json', 'marks.json'],
+  });
+  json('analysis.json', analysis);
+  json('marks.json', marks);
+  const clip = swingFile(id, 'video.mp4');
+  if (clip.exists) entries.push({ name: 'video.mp4', data: await clip.bytes() });
+  const zip = makeZip(entries);
+  const out = new Directory(Paths.cache, 'swing-export', id);
+  if (out.exists) out.delete();
+  out.create({ intermediates: true, idempotent: true });
+  const slug = (row.name || id).replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || id;
+  const file = new File(out, `${slug}.swing.zip`);
+  file.create({ intermediates: true });
+  file.write(zip);
+  return { dir: out.uri, zipUri: file.uri, bytes: zip.length };
 }
 
 export function _resetForTests() {
