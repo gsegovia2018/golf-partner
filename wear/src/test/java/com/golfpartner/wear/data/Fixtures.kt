@@ -19,13 +19,14 @@ object Fixtures {
         totalPoints: Int = 14,
         putts: String = "null",
         driveLie: String = "null",
-        track: String = """{"putting":true,"teeShot":true,"shortGame":true,"penalties":true}""",
+        tee: String? = null,
+        track: String = """{"putting":true,"teeShot":true,"shortGame":true,"penalties":true,"approach":true}""",
         extra: String = "",
     ) = """
         {"v":$v,"rev":$rev,"ack":${ack?.let { "\"$it\"" } ?: "null"},"roundId":"$roundId","courseName":"El Saler","active":true,
          "blocked":${blocked?.let { "\"$it\"" } ?: "null"},"units":"m",
          "hole":{"number":$number,"count":$count,"par":$par,"si":3,"extraShots":$extraShots,
-                 "green":$green,"phone":$phone},
+                 "green":$green,"phone":$phone${tee?.let { ""","tee":$it""" } ?: ""}},
          "me":{"playerId":"p1","name":"Marcos","strokes":$strokes,"points":$points,"totalPoints":$totalPoints,
                "thru":6,"putts":$putts,"driveLie":$driveLie,"sandShots":0,"penalties":0},
          "track":$track$extra}

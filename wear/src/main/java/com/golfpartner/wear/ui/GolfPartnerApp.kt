@@ -30,7 +30,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.MaterialTheme
 import com.golfpartner.wear.data.CommandOutbox
-import com.golfpartner.wear.data.Distances
 import com.golfpartner.wear.data.Entry
 import com.golfpartner.wear.data.PageKind
 import com.golfpartner.wear.data.Pages
@@ -73,7 +72,8 @@ fun GolfPartnerApp(controller: WatchController, locationDenied: Boolean) {
                     state = s,
                     controller = controller,
                     info = HomeInfo(
-                        reading = Distances.resolve(s.hole, s.units, fix, now),
+                        fix = fix,
+                        nowMs = now,
                         locationDenied = locationDenied,
                         pendingHoles = pendingHoles,
                         phoneConnected = connected,
@@ -89,36 +89,42 @@ private const val CROWN_HOLE_PX = 70f
 private const val CROWN_STROKES_PX = 45f
 
 /** How long a hole picked by crown or swipe waits for the phone before snapping back to what the state says. */
-private const val HOLE_SETTLE_MS = 2_500L
+private const val HOLE_SETTLE_MS = 4_000L
 
 /**
- * Distances | Score | Stats in a pager. Stays on its page when the hole changes. Crown: hole on
- * Distances, strokes on Score. Vertical swipe on Distances: hole. Edits go through
- * [WatchController.edit] (debounced auto-send); a hole move flushes them first.
+ * Distances | Score | Tee | Approach | Short game in a pager. Stays on its page when the hole
+ * changes. Crown: hole on Distances, strokes on Score. Vertical swipe on Distances: one hole per
+ * drag. The hole changes on screen at once ([WatchState.at] from the whole-course state), the
+ * `hole` command goes out and the phone catches up. Edits go through [WatchController.edit]
+ * (debounced auto-send); a hole move flushes them first.
  */
 @Composable
 private fun RoundScreens(state: WatchState, controller: WatchController, info: HomeInfo) {
-    val hole = state.hole!!
     val haptics = LocalHapticFeedback.current
-    val pages = Pages.of(state)
-    val pagerState = rememberPagerState { pages.size }
-    val pageNow = pages.getOrElse(pagerState.currentPage) { PageKind.Distances }
 
     // The hole picked on the watch, ahead of the phone's state; cleared on arrival or after a timeout.
     var target by remember { mutableStateOf<Int?>(null) }
-    val shownHole = target ?: hole.number
-    LaunchedEffect(hole.number, target) {
+    val phoneHole = state.hole!!.number
+    LaunchedEffect(phoneHole, target) {
         when {
-            target == hole.number -> target = null
+            target == phoneHole -> target = null
             target != null -> {
                 delay(HOLE_SETTLE_MS)
                 target = null
             }
         }
     }
+    val shown = state.at(target ?: phoneHole)
+    val hole = shown.hole!!
+    // Without the whole-course state (older phone) the pages cannot show the target hole yet.
+    val moving = hole.number != (target ?: hole.number)
+    val pages = Pages.of(shown)
+    val pagerState = rememberPagerState { pages.size }
+    val pageNow = pages.getOrElse(pagerState.currentPage) { PageKind.Distances }
+
     val stepHole: (Int) -> Unit = { delta ->
         if (state.canEnter) {
-            val base = target ?: hole.number // read now: several events can arrive before a recomposition
+            val base = target ?: phoneHole // read now: several events can arrive before a recomposition
             val next = (base + delta).coerceIn(1, hole.count)
             if (next != base) {
                 target = next
@@ -130,16 +136,16 @@ private fun RoundScreens(state: WatchState, controller: WatchController, info: H
 
     // What the pages show: the pending edit if it belongs to this hole, else the phone's values.
     val pending by controller.edit.collectAsState()
-    val plan = Entry.plan(hole, state.track)
-    val draft = pending?.takeIf { Entry.stillOn(it.opened, state) }?.draft
-        ?: state.me?.let { Entry.initialDraft(hole, it) }
-    val onChange: DraftChange = { change -> controller.edit(state, change) }
+    val plan = Entry.plan(hole, shown.track)
+    val draft = pending?.takeIf { Entry.stillOn(it.opened, shown) }?.draft
+        ?: shown.me?.let { Entry.initialDraft(it) }
+    val onChange: DraftChange = { change -> controller.edit(shown, change) }
 
     val focus = remember { FocusRequester() }
     LaunchedEffect(pagerState.currentPage) { focus.requestFocus() }
     val holeCrown = remember { StepAccumulator(CROWN_HOLE_PX) }
     val strokesCrown = remember { StepAccumulator(CROWN_STROKES_PX) }
-    val me = state.me
+    val me = shown.me
 
     Box(
         Modifier
@@ -152,15 +158,15 @@ private fun RoundScreens(state: WatchState, controller: WatchController, info: H
                         true
                     }
                     PageKind.Score -> {
-                        if (!state.canEnter || me == null) return@onRotaryScrollEvent true
+                        if (!shown.canEnter || me == null) return@onRotaryScrollEvent true
                         val n = strokesCrown.feed(e.verticalScrollPixels)
                         if (n != 0) {
                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            repeat(abs(n)) { onChange { d -> Entry.stepStrokes(hole, plan, d, me, if (n > 0) 1 else -1) } }
+                            repeat(abs(n)) { onChange { d -> Entry.stepStrokes(hole, d, if (n > 0) 1 else -1) } }
                         }
                         true
                     }
-                    PageKind.Stats -> false
+                    else -> false
                 }
             }
             .focusRequester(focus)
@@ -168,9 +174,11 @@ private fun RoundScreens(state: WatchState, controller: WatchController, info: H
     ) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { index ->
             when (pages.getOrElse(index) { PageKind.Distances }) {
-                PageKind.Distances -> DistancesPage(state, info, shownHole, stepHole)
-                PageKind.Score -> draft?.let { ScorePage(state, it, plan, onChange) }
-                PageKind.Stats -> draft?.let { StatsPage(state, it, plan, onChange) }
+                PageKind.Distances -> DistancesPage(shown, info, moving, target ?: phoneHole, stepHole)
+                PageKind.Score -> draft?.let { ScorePage(shown, it, plan, onChange) }
+                PageKind.Tee -> draft?.let { TeePage(shown, it, plan, onChange) }
+                PageKind.Approach -> draft?.let { ApproachPage(shown, it, plan, onChange) }
+                PageKind.ShortGame -> draft?.let { ShortGamePage(shown, it, plan, onChange) }
             }
         }
         if (pages.size > 1) PageDots(pages.size, pagerState.currentPage, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))

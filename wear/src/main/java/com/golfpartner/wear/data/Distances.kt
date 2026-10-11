@@ -12,8 +12,21 @@ data class Fix(val lat: Double, val lng: Double, val accuracyM: Float?, val time
 
 enum class DistanceSource { Watch, Phone, None }
 
-/** Whole numbers in the display unit, ready to print. Parts may be missing individually. */
-data class DistanceReading(val front: Int?, val center: Int?, val back: Int?, val source: DistanceSource) {
+/** Why there is no reading, for the status line under the dash. */
+enum class NoReading { NoFix, OffHole, NoGreen }
+
+/**
+ * Whole numbers in the display unit, ready to print. Parts may be missing individually.
+ * [fromTee] = measured from the tee (the player is off the hole), like the phone's source 'tee'.
+ */
+data class DistanceReading(
+    val front: Int?,
+    val center: Int?,
+    val back: Int?,
+    val source: DistanceSource,
+    val fromTee: Boolean = false,
+    val reason: NoReading? = null,
+) {
     val hasAny: Boolean get() = front != null || center != null || back != null
 
     companion object {
@@ -50,30 +63,52 @@ object Distances {
             (fix.accuracyM ?: Float.MAX_VALUE) <= MAX_ACCURACY_M &&
             nowMs - fix.timeMs <= MAX_FIX_AGE_MS
 
-    /** Watch fix (accurate enough) -> phone's figures from the state -> nothing. */
+    /** src/lib/flyoverModel.js ANCHOR_MAX_GPS_METERS. */
+    const val ANCHOR_MAX_GPS_M = 1000.0
+
+    private fun reading(from: LatLng, g: Green, units: Units, fromTee: Boolean) = DistanceReading(
+        front = g.front?.let { display(haversineMeters(from, it), units) },
+        center = g.center?.let { display(haversineMeters(from, it), units) },
+        back = g.back?.let { display(haversineMeters(from, it), units) },
+        source = DistanceSource.Watch,
+        fromTee = fromTee,
+    )
+
+    /**
+     * The phone's resolveScorecardDistances: a usable fix within 1000 m of the green centre gives
+     * live distances; otherwise, when the hole has a tee, distances measured from the tee
+     * (also while there is no fix yet); otherwise nothing, never a straight line from far away.
+     * The phone's own figures (already ruled by it) fill in when the watch cannot decide.
+     */
     fun resolve(hole: HoleInfo?, units: Units, fix: Fix?, nowMs: Long): DistanceReading {
         if (hole == null) return DistanceReading.None
         val green = hole.green
-        if (green != null && fixIsUsable(fix, nowMs)) {
-            val here = LatLng(fix!!.lat, fix.lng)
-            val reading = DistanceReading(
-                front = green.front?.let { display(haversineMeters(here, it), units) },
-                center = green.center?.let { display(haversineMeters(here, it), units) },
-                back = green.back?.let { display(haversineMeters(here, it), units) },
-                source = DistanceSource.Watch,
-            )
-            if (reading.hasAny) return reading
+        val here = fix?.takeIf { fixIsUsable(it, nowMs) }?.let { LatLng(it.lat, it.lng) }
+        if (green != null) {
+            val center = green.center
+            if (here != null && center != null && haversineMeters(here, center) <= ANCHOR_MAX_GPS_M) {
+                return reading(here, green, units, fromTee = false)
+            }
+            hole.tee?.let { tee ->
+                val r = reading(tee, green, units, fromTee = true)
+                if (r.hasAny) return r
+            }
         }
-        val phone = hole.phone
-        if (phone != null) {
-            val reading = DistanceReading(
-                front = phone.front?.let { display(it, units) },
-                center = phone.center?.let { display(it, units) },
-                back = phone.back?.let { display(it, units) },
+        hole.phone?.let { p ->
+            val r = DistanceReading(
+                front = p.front?.let { display(it, units) },
+                center = p.center?.let { display(it, units) },
+                back = p.back?.let { display(it, units) },
                 source = DistanceSource.Phone,
+                fromTee = p.source == "tee",
             )
-            if (reading.hasAny) return reading
+            if (r.hasAny) return r
         }
-        return DistanceReading.None
+        val why = when {
+            green == null -> NoReading.NoGreen
+            here == null -> NoReading.NoFix
+            else -> NoReading.OffHole
+        }
+        return DistanceReading.None.copy(reason = why)
     }
 }

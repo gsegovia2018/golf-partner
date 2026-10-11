@@ -12,16 +12,18 @@ class OptimisticTest {
     fun savedValuesShowAtOnce() {
         val cmds = listOf(
             Commands.strokes("r1", 10, 7, 5),
-            Commands.shot("r1", 10, 7, mapOf("putts" to 2, "driveLie" to "fairway", "sandShots" to 1, "otherPenalties" to 1)),
+            Commands.shot("r1", 10, 7, mapOf("putts" to 2, "drive" to "fairway", "sandShots" to 1, "otherPenalties" to 1, "teePenalties" to 1, "approachBunker" to true)),
         )
         val me = Optimistic.apply(state, cmds).me!!
         assertEquals(5, me.strokes)
         assertEquals(2, me.points)
         assertEquals(16, me.totalPoints)
-        assertEquals(2, me.putts)
-        assertEquals("fairway", me.driveLie)
-        assertEquals(1, me.sandShots)
-        assertEquals(1, me.penalties)
+        assertEquals(2, me.shot.putts)
+        assertEquals("fairway", me.shot.drive)
+        assertEquals(1, me.shot.sandShots)
+        assertEquals(1, me.shot.otherPenalties)
+        assertEquals(1, me.shot.teePenalties)
+        assertEquals(true, me.shot.approachBunker)
     }
 
     @Test
@@ -88,7 +90,7 @@ class OptimisticTest {
         repo.onPayload(Fixtures.activeJson(rev = 11, ack = "nav"))
         val me = shown(repo).me!!
         assertNull(me.strokes) // seq 2 <= 4: done
-        assertEquals(2, me.putts) // seq 6 > 4: still showing
+        assertEquals(2, me.shot.putts) // seq 6 > 4: still showing
     }
 
     @Test

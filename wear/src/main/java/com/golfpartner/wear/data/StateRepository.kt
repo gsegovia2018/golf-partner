@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlin.math.max
 
 /**
  * The latest `/golf/state`, with the watch's own unacknowledged writes laid
@@ -102,32 +101,39 @@ class StateRepository(private val seqOf: (String) -> Long? = { null }) {
 }
 
 object Optimistic {
+    /**
+     * Lays the unacknowledged commands over [state]: onto `mine` for every hole the course
+     * knows, and onto `me` for the phone's hole. Without a course only the phone's hole counts.
+     */
     fun apply(state: WatchState, commands: List<Command>): WatchState {
         val hole = state.hole ?: return state
-        var me = state.me ?: return state
+        val me = state.me ?: return state
+        val course = state.course.associateBy { it.number }
+        val mine = state.mine.toMutableMap()
+        mine[hole.number] = MineHole(me.strokes, me.points, me.shot)
+        var total = me.totalPoints
         for (c in commands) {
-            if (c.roundId != state.roundId || c.hole != hole.number) continue
+            if (c.roundId != state.roundId) continue
+            val h = c.hole ?: continue
+            val (par, extra) = when {
+                h == hole.number -> hole.par to hole.extraShots
+                else -> course[h]?.let { it.par to it.extraShots } ?: continue
+            }
+            val cur = mine[h] ?: MineHole(null, null, null)
             when (c.type) {
                 CommandType.Strokes -> {
-                    val pts = c.value?.let { Entry.points(hole, it) }
-                    me = me.copy(
-                        strokes = c.value,
-                        points = pts,
-                        totalPoints = me.totalPoints - (me.points ?: 0) + (pts ?: 0),
-                    )
+                    val pts = c.value?.let { Entry.points(par, extra, it) }
+                    total += (pts ?: 0) - (cur.points ?: 0)
+                    mine[h] = cur.copy(strokes = c.value, points = pts)
                 }
-                CommandType.Shot -> c.patch.forEach { (k, v) ->
-                    me = when (k) {
-                        ShotKeys.PUTTS -> me.copy(putts = v as? Int)
-                        ShotKeys.DRIVE_LIE -> me.copy(driveLie = v as? String)
-                        ShotKeys.SAND_SHOTS -> me.copy(sandShots = max(0, v as? Int ?: 0))
-                        ShotKeys.OTHER_PENALTIES -> me.copy(penalties = max(0, v as? Int ?: 0))
-                        else -> me
-                    }
-                }
+                CommandType.Shot -> mine[h] = cur.copy(shot = ShotKeys.applyTo(cur.shot ?: ShotDetail(), c.patch))
                 CommandType.Hole -> Unit
             }
         }
-        return state.copy(me = me)
+        val m = mine.getValue(hole.number)
+        return state.copy(
+            me = me.copy(strokes = m.strokes, points = m.points, totalPoints = total, shot = m.shot ?: ShotDetail()),
+            mine = mine,
+        )
     }
 }

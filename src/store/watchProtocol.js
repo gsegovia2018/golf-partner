@@ -7,7 +7,27 @@ export const WATCH_PROTOCOL_VERSION = 1;
 
 export const WATCH_DRIVE_LIES = ['fairway', 'rough', 'sand', 'trouble'];
 export const WATCH_STROKES_MAX = 15;
-const PATCH_RANGES = { putts: [0, 10], sandShots: [0, 9], otherPenalties: [0, 9] };
+const PATCH_RANGES = {
+  putts: [0, 10], sandShots: [0, 9], otherPenalties: [0, 9], teePenalties: [0, 9],
+};
+// Enumerated patch keys -> allowed values (null clears). Mirrors the options
+// of the phone's ShotDetailPanel; `teeClub` has no 'driver' (driver is null).
+const PATCH_ENUMS = {
+  drive: ['left', 'fairway', 'right', 'short', 'super'],
+  teeClub: ['wood', 'hybrid', 'iron'],
+  driveDistBucket: ['0-150', '150-180', '180-210', '210-240', '240+'],
+  recoveryOutcome: ['up-and-down', 'sand-save', 'none'],
+  firstPuttBucket: ['0-1', '1-2', '2-3', '3-6', '6+'],
+  approachBucket: ['0-50', '50-100', '100-150', '150-200', '200+'],
+  approachResult: ['green', 'miss'],
+  approachMiss: ['long', 'short', 'left', 'right'],
+};
+// The watch-visible subset of a hole's shot detail (see state.mine).
+export const WATCH_SHOT_FIELDS = [
+  'putts', 'drive', 'teeClub', 'driveDistBucket', 'teePenalties', 'otherPenalties', 'sandShots',
+  'recoveryOutcome', 'firstPuttBucket', 'approachBucket', 'approachResult', 'approachMiss',
+  'approachBunker',
+];
 
 const isInt = (n) => Number.isInteger(n);
 const inRange = (n, lo, hi) => isInt(n) && n >= lo && n <= hi;
@@ -20,7 +40,7 @@ const wireUnits = (units) => (units === 'yards' || units === 'yd' ? 'yd' : 'm');
 // command when it sees that command's id here, not on any newer rev.
 export function watchStateOf({
   rev, ack, round, courseName, holeNumber, holeCount, par, si, extraShots,
-  green, phoneDistances, units, me, track, blocked,
+  green, phoneDistances, units, me, track, blocked, course, mine,
 }) {
   if (!round) {
     return {
@@ -45,6 +65,8 @@ export function watchStateOf({
       green: green ?? null,
       phone: phoneDistances ?? null,
     },
+    course: course ?? null,
+    mine: mine ?? {},
     me: {
       playerId: me.playerId,
       name: me.name ?? '',
@@ -60,6 +82,7 @@ export function watchStateOf({
     track: {
       putting: !!track?.putting,
       teeShot: !!track?.teeShot,
+      approach: !!track?.approach,
       shortGame: !!track?.shortGame,
       penalties: !!track?.penalties,
     },
@@ -75,6 +98,10 @@ function parsePatch(patch) {
     const value = patch[key];
     if (key === 'driveLie') {
       if (value !== null && !WATCH_DRIVE_LIES.includes(value)) return null;
+    } else if (key === 'approachBunker') {
+      if (typeof value !== 'boolean') return null;
+    } else if (PATCH_ENUMS[key]) {
+      if (value !== null && !PATCH_ENUMS[key].includes(value)) return null;
     } else if (PATCH_RANGES[key]) {
       if (!inRange(value, ...PATCH_RANGES[key])) return null;
     } else {

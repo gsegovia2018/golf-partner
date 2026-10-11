@@ -1,6 +1,19 @@
 package com.golfpartner.wear.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.CircleShape
@@ -93,5 +106,135 @@ fun MessageScreen(title: String, body: String? = null, extra: String? = null, ti
             if (body != null) HudText(body, 13, color = Hud.textSoft)
             if (extra != null) HudText(extra, 13, color = Hud.warn, weight = FontWeight.SemiBold)
         }
+    }
+}
+
+/** Icon-like glyphs for the direction toggles; arrows point [degrees] clockwise from "up". */
+sealed interface Glyph {
+    data class Arrow(val degrees: Float) : Glyph
+    data object Dot : Glyph
+    data object Star : Glyph
+}
+
+/** Glyph for a drive direction (the phone's DRIVE_META icons). */
+fun driveGlyph(key: String): Glyph = when (key) {
+    "left" -> Glyph.Arrow(-45f)
+    "right" -> Glyph.Arrow(45f)
+    "short" -> Glyph.Arrow(180f)
+    "super" -> Glyph.Star
+    else -> Glyph.Dot
+}
+
+/** Glyph for where an approach finished (arrows only; green and bunker are labelled chips). */
+fun finishGlyph(key: String): Glyph = when (key) {
+    "left" -> Glyph.Arrow(-90f)
+    "right" -> Glyph.Arrow(90f)
+    "short" -> Glyph.Arrow(180f)
+    else -> Glyph.Arrow(0f)
+}
+
+/** A round toggle with a drawn glyph. [description] is the accessibility label. */
+@Composable
+fun GlyphButton(
+    glyph: Glyph,
+    description: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp = 46.dp,
+    enabled: Boolean = true,
+    selected: Boolean = false,
+) {
+    val tint = if (selected) Hud.onAccent else Hud.text
+    Box(
+        modifier = modifier
+            .size(size)
+            .alpha(if (enabled) 1f else 0.35f)
+            .clip(CircleShape)
+            .background(if (selected) Hud.accent else Hud.inset)
+            .semantics { contentDescription = description; this.selected = selected }
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(20.dp)) {
+            val c = center
+            val r = this.size.minDimension / 2
+            val stroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            when (glyph) {
+                Glyph.Dot -> drawCircle(tint, radius = r * 0.55f, style = stroke)
+                Glyph.Star -> {
+                    val p = Path()
+                    for (i in 0 until 10) {
+                        val rad = if (i % 2 == 0) r else r * 0.45f
+                        val a = Math.toRadians((i * 36 - 90).toDouble())
+                        val pt = Offset(c.x + (rad * cos(a)).toFloat(), c.y + (rad * sin(a)).toFloat())
+                        if (i == 0) p.moveTo(pt.x, pt.y) else p.lineTo(pt.x, pt.y)
+                    }
+                    p.close()
+                    drawPath(p, tint)
+                }
+                is Glyph.Arrow -> rotate(glyph.degrees, pivot = c) {
+                    val tip = Offset(c.x, c.y - r)
+                    val tail = Offset(c.x, c.y + r)
+                    drawLine(tint, tail, tip, strokeWidth = stroke.width, cap = StrokeCap.Round)
+                    drawLine(tint, tip, Offset(c.x - r * 0.6f, c.y - r * 0.4f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                    drawLine(tint, tip, Offset(c.x + r * 0.6f, c.y - r * 0.4f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                }
+            }
+        }
+    }
+}
+
+/** A 44dp-high pill toggle with a text label. */
+@Composable
+fun ChipButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    selected: Boolean = false,
+    width: Dp = 92.dp,
+) {
+    Box(
+        modifier = modifier
+            .size(width = width, height = 44.dp)
+            .alpha(if (enabled) 1f else 0.35f)
+            .clip(CircleShape)
+            .background(if (selected) Hud.accent else Hud.inset)
+            .semantics { this.selected = selected }
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = if (selected) Hud.onAccent else Hud.text, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+    }
+}
+
+/** Tiny muted caption above a control. */
+@Composable
+fun FieldLabel(text: String) = HudText(text, 10, color = Hud.textMuted, weight = FontWeight.SemiBold)
+
+/** `‹  150-180  ›`: one compact control for a 4-5 way choice; arrows are 44dp targets. */
+@Composable
+fun OptionStepper(value: String, set: Boolean, enabled: Boolean, onPrev: () -> Unit, onNext: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        RoundButton("‹", 44.dp, onPrev, enabled = enabled, fontSize = 22)
+        Box(Modifier.width(84.dp), contentAlignment = Alignment.Center) {
+            HudText(value, 17, weight = FontWeight.Bold, color = if (set) Hud.text else Hud.textMuted)
+        }
+        RoundButton("›", 44.dp, onNext, enabled = enabled, fontSize = 22)
+    }
+}
+
+/** `label  −  n  +`, 44dp buttons, about 190dp wide. */
+@Composable
+fun StepRow(label: String, value: Int, minusOn: Boolean, plusOn: Boolean, onMinus: () -> Unit, onPlus: () -> Unit) {
+    Row(
+        Modifier.padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Box(Modifier.width(56.dp), contentAlignment = Alignment.CenterStart) { HudText(label, 12, color = Hud.textMuted, weight = FontWeight.SemiBold) }
+        RoundButton("−", 44.dp, onMinus, enabled = minusOn, fontSize = 20)
+        Box(Modifier.width(24.dp), contentAlignment = Alignment.Center) { HudText(value.toString(), 20, weight = FontWeight.Bold) }
+        RoundButton("+", 44.dp, onPlus, enabled = plusOn, fontSize = 20)
     }
 }

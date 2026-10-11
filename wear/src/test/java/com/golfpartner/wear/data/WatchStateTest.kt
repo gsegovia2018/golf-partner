@@ -95,10 +95,9 @@ class WatchStateTest {
 
     @Test
     fun carriesSavedValues() {
-        val s = Fixtures.state(Fixtures.activeJson(strokes = "5", points = "2", putts = "2", driveLie = "\"fairway\""))
+        val s = Fixtures.state(Fixtures.activeJson(strokes = "5", points = "2", putts = "2"))
         assertEquals(5, s.me!!.strokes)
         assertEquals(2, s.me!!.points)
-        assertEquals(2, s.me!!.putts)
-        assertEquals("fairway", s.me!!.driveLie)
+        assertEquals(2, s.me!!.shot.putts) // an older phone: putts on `me`
     }
 }
