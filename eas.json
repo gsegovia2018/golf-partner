@@ -36,6 +36,13 @@
         "GOLF_ANDROID_BUILD_ARCHS": "x86_64"
       }
     },
+    "wear-preview": {
+      "extends": "preview-arm64",
+      "android": {
+        "gradleCommand": ":wear:assembleRelease",
+        "applicationArchivePath": "android/wear/build/outputs/apk/release/*.apk"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "channel": "production",

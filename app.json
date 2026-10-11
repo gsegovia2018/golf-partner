@@ -75,7 +75,8 @@
         {
           "cameraPermission": "Necesitamos acceder a la cámara para mostrarte la dirección de la bandera."
         }
-      ]
+      ],
+      "./plugins/withWearApp"
     ],
     "extra": {
       "eas": {

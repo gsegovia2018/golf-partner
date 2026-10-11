@@ -1,0 +1,82 @@
+package com.golfpartner.wear.data
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class DistancesTest {
+    // 0.001 deg of latitude = 111.195 m with R = 6371000.
+    private val here = LatLng(41.0, 2.0)
+
+    @Test
+    fun haversineKnownPair() {
+        assertEquals(111.195, Distances.haversineMeters(here, LatLng(41.001, 2.0)), 0.01)
+        assertEquals(0.0, Distances.haversineMeters(here, here), 0.0)
+        // Madrid -> Barcelona is ~505 km.
+        val km = Distances.haversineMeters(LatLng(40.4168, -3.7038), LatLng(41.3874, 2.1686)) / 1000
+        assertEquals(505.0, km, 2.0)
+    }
+
+    @Test
+    fun displayRoundsLikeThePhone() {
+        assertEquals(131, Distances.display(130.9, Units.M))
+        assertEquals(100, Distances.display(99.5, Units.M)) // half rounds up, like Math.round
+        assertEquals(109, Distances.display(100.0, Units.YD)) // 109.361
+        assertEquals(144, Distances.display(131.5, Units.YD)) // 143.8
+    }
+
+    private fun hole(green: Green? = Green(LatLng(41.0005, 2.0), LatLng(41.001, 2.0), LatLng(41.0015, 2.0)),
+                     phone: PhoneDistances? = PhoneDistances(120.4, 131.5, 142.0, "gps")) =
+        HoleInfo(7, 18, 4, 3, 1, green, phone)
+
+    private val now = 1_000_000L
+
+    @Test
+    fun watchFixWinsWhenAccurate() {
+        val r = Distances.resolve(hole(), Units.M, Fix(41.0, 2.0, 12f, now - 1_000), now)
+        assertEquals(DistanceSource.Watch, r.source)
+        assertEquals(56, r.front) // 55.6 m
+        assertEquals(111, r.center)
+        assertEquals(167, r.back) // 166.8 m
+    }
+
+    @Test
+    fun unitsApplyToWatchFixToo() {
+        val r = Distances.resolve(hole(), Units.YD, Fix(41.0, 2.0, 12f, now), now)
+        assertEquals(122, r.center) // 111.195 * 1.09361 = 121.6
+    }
+
+    @Test
+    fun poorOrStaleFixFallsBackToThePhone() {
+        val poor = Distances.resolve(hole(), Units.M, Fix(41.0, 2.0, 31f, now), now)
+        assertEquals(DistanceSource.Phone, poor.source)
+        assertEquals(132, poor.center) // 131.5 rounds up
+        assertEquals(120, poor.front)
+
+        val stale = Distances.resolve(hole(), Units.M, Fix(41.0, 2.0, 5f, now - 31_000), now)
+        assertEquals(DistanceSource.Phone, stale.source)
+
+        assertFalse(Distances.fixIsUsable(null, now))
+        assertTrue(Distances.fixIsUsable(Fix(41.0, 2.0, 30f, now), now))
+        assertTrue(Distances.fixIsUsable(Fix(41.0, 2.0, null, now), now).not()) // unknown accuracy is not trusted
+    }
+
+    @Test
+    fun noGreenUsesPhoneAndNothingGivesNone() {
+        val fix = Fix(41.0, 2.0, 5f, now)
+        assertEquals(DistanceSource.Phone, Distances.resolve(hole(green = null), Units.M, fix, now).source)
+        assertEquals(DistanceReading.None, Distances.resolve(hole(green = null, phone = null), Units.M, fix, now))
+        assertEquals(DistanceReading.None, Distances.resolve(null, Units.M, fix, now))
+    }
+
+    @Test
+    fun partialGreenGivesPartialReading() {
+        val g = Green(null, LatLng(41.001, 2.0), null)
+        val r = Distances.resolve(hole(green = g), Units.M, Fix(41.0, 2.0, 5f, now), now)
+        assertEquals(DistanceSource.Watch, r.source)
+        assertEquals(null, r.front)
+        assertEquals(111, r.center)
+        assertEquals(null, r.back)
+    }
+}

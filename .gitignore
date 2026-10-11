@@ -51,3 +51,7 @@ yarn-error.*
 # git worktrees
 .claude/worktrees/
 .worktrees/
+
+# local Expo module build output, EAS credentials
+modules/*/android/build/
+/credentials.json

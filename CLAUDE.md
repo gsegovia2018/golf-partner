@@ -67,6 +67,37 @@ fetches in the background, applying on the next start. Rounds get played on
 courses with no signal, and a launch that blocks on the network is worse
 than a day-old bundle.
 
+### Wear OS companion
+
+The watch app is a native Kotlin/Compose module in `wear/` (same package,
+`com.golfpartner.app`). `plugins/withWearApp.js` copies it to `android/wear`
+at prebuild and adds `include ':wear'`; the phone build never compiles it.
+
+- **Build on EAS:** `npx eas-cli build -p android --profile wear-preview` —
+  runs `:wear:assembleRelease` and signs with the project keystore (read from
+  the `credentials.json` EAS writes; the build fails rather than ship a
+  debug-signed watch APK).
+- **Build locally:** `GOLF_ANDROID_BUILD_ARCHS=arm64-v8a npx expo prebuild -p android --no-install --clean`,
+  then `cd android && ./gradlew :wear:assembleDebug :wear:testDebugUnitTest`.
+  Edit `wear/`, never `android/wear` (overwritten on every prebuild).
+- **Same key or no pairing.** The Data Layer only connects phone and watch
+  apps with the same package *and* signing key: install EAS phone + EAS watch,
+  or local phone + local watch (both use `android/app/debug.keystore`) —
+  never mix.
+- **Install on a Galaxy Watch** (Play doesn't offer internal APKs to the
+  watch): on the watch, Settings → About watch → Software → tap *Software
+  version* 5× for Developer options; enable *ADB debugging* and *Wireless
+  debugging*; join the same Wi-Fi as the computer. *Wireless debugging → Pair
+  new device* shows a code and port: `adb pair <ip>:<pair-port> <code>`, then
+  `adb connect <ip>:<port>` (the port on the Wireless debugging screen), then
+  `adb -s <ip>:<port> install -r <watch>.apk`.
+- **Fingerprint:** `wear/` is not a fingerprint source, so watch-only changes
+  don't move the phone runtime (OTA keeps reaching the phone APK) — the
+  protocol `v` field guards phone/watch skew instead. `eas.json` and
+  `plugins/withWearApp.js` *are* sources: any edit to either (even a
+  watch-only profile tweak) needs a new phone APK. Run `fingerprint:compare`
+  without a generated `android/` folder — its mere presence changes the hash.
+
 ## Domain Concepts
 
 - **Tournament:** A multi-round event across different courses. Each round
