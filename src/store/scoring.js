@@ -1296,7 +1296,11 @@ export function normalizeWatchShotPatch(detail, patch, par) {
   if (!isPar3) {
     if (has('teeClub')) Object.assign(out, teeClubPatch(patch.teeClub));
     if (has('driveDistBucket')) out.driveDistBucket = patch.driveDistBucket;
-    if (has('drive')) Object.assign(out, driveDirectionPatch(null, patch.drive));
+    // Only a changed direction resets the lie: the watch re-sends the drive it
+    // was seeded with, which must not erase a lie picked on the phone.
+    if (has('drive') && patch.drive !== (d.drive ?? null)) {
+      Object.assign(out, driveDirectionPatch(null, patch.drive));
+    }
     // A lie alone is explicit and clears the direction chip (legacy v1 watch);
     // sent with a direction it just refines that direction's lie.
     if (has('driveLie')) {

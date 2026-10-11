@@ -22,6 +22,7 @@ import com.golfpartner.wear.data.Blocked
 import com.golfpartner.wear.data.Entry
 import com.golfpartner.wear.data.EntryDraft
 import com.golfpartner.wear.data.Extra
+import com.golfpartner.wear.data.HoleMove
 import com.golfpartner.wear.data.EntryPlan
 import com.golfpartner.wear.data.WatchState
 import com.golfpartner.wear.ui.theme.Hud
@@ -29,8 +30,12 @@ import com.golfpartner.wear.ui.theme.Hud
 /** Applies a pure change to the pending draft (see WatchController.edit). */
 typealias DraftChange = ((EntryDraft) -> EntryDraft) -> Unit
 
-/** Inputs are live on an unblocked live round; a dispute shows them off with a note. */
-private val WatchState.inputsOn: Boolean get() = canEnter
+/**
+ * Inputs are live on an unblocked live round, on the phone's own hole: [movingTo] is the hole
+ * shown ahead of the phone (see HoleMove), look-only until the phone arrives. A dispute shows
+ * them off with a note.
+ */
+private fun WatchState.inputsOn(movingTo: Int?): Boolean = HoleMove.inputsOn(this, movingTo)
 
 /**
  * Score page: strokes (large, 48dp+ buttons), putts below, footer with points.
@@ -38,10 +43,10 @@ private val WatchState.inputsOn: Boolean get() = canEnter
  * Layout stays within ~±170px of centre on a 450px round: the widest row is 190dp at the middle.
  */
 @Composable
-fun ScorePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: DraftChange) {
+fun ScorePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: DraftChange, movingTo: Int? = null) {
     val hole = state.hole ?: return
     val me = state.me ?: return
-    val on = state.inputsOn
+    val on = state.inputsOn(movingTo)
     val strokes = draft.strokes
     val (pts, total) = Entry.pointsAndTotal(hole, me, strokes)
     Column(
@@ -76,6 +81,8 @@ fun ScorePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: D
         Spacer(Modifier.weight(1f))
         if (state.blocked == Blocked.Dispute) {
             HudText(Copy.RESOLVE_ON_PHONE, 12, color = Hud.warn, weight = FontWeight.SemiBold)
+        } else if (movingTo != null) {
+            HudText(Copy.movingToHole(movingTo), 12, color = Hud.textMuted, weight = FontWeight.SemiBold)
         } else {
             HudText(Copy.footer(pts, total), 12, color = Hud.textSoft, weight = FontWeight.SemiBold)
         }
@@ -86,9 +93,10 @@ private val PAGE_MODIFIER = Modifier.fillMaxSize()
 
 /** The one-line hint under a stats page: dispute, strokes unset, or the strokes cap. */
 @Composable
-private fun Hint(state: WatchState, draft: EntryDraft, capped: Boolean, extra: Pair<String, androidx.compose.ui.graphics.Color>? = null) {
+private fun Hint(state: WatchState, draft: EntryDraft, capped: Boolean, extra: Pair<String, androidx.compose.ui.graphics.Color>? = null, movingTo: Int? = null) {
     val hint = when {
         state.blocked == Blocked.Dispute -> Copy.RESOLVE_ON_PHONE to Hud.warn
+        movingTo != null -> Copy.movingToHole(movingTo) to Hud.textMuted
         draft.strokes == null -> Copy.SET_STROKES_FIRST to Hud.textMuted
         extra != null -> extra
         capped -> Copy.maxFor(draft.strokes) to Hud.textMuted
@@ -114,8 +122,8 @@ private fun StatsColumn(caption: String, content: @Composable ColumnScope.() -> 
 
 /** Tee page: direction (Left / Fairway / Right / Short / Super), club, drive distance, tee penalties. */
 @Composable
-fun TeePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: DraftChange) {
-    val on = state.inputsOn && draft.strokes != null
+fun TeePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: DraftChange, movingTo: Int? = null) {
+    val on = state.inputsOn(movingTo) && draft.strokes != null
     val s = draft.shot
     StatsColumn(Copy.TEE_SHOT) {
         if (plan.drive) {
@@ -142,7 +150,7 @@ fun TeePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: Dra
             StepRow(Copy.TEE_PENALTIES, s.teePenalties, on && s.teePenalties > 0, on && s.teePenalties < max,
                 { onChange { Entry.stepExtra(it, Extra.Tee, -1) } }, { onChange { Entry.stepExtra(it, Extra.Tee, +1) } })
         }
-        Hint(state, draft, plan.teePenalties && Entry.extrasCapped(draft, setOf(Extra.Tee)))
+        Hint(state, draft, plan.teePenalties && Entry.extrasCapped(draft, setOf(Extra.Tee)), movingTo = movingTo)
     }
 }
 
@@ -153,8 +161,8 @@ private fun DriveButton(key: String, selected: String?, on: Boolean, onChange: D
 
 /** Approach page: distance bucket, then (not on a par 3) where it finished, once a distance is set. */
 @Composable
-fun ApproachPage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: DraftChange) {
-    val on = state.inputsOn && draft.strokes != null
+fun ApproachPage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: DraftChange, movingTo: Int? = null) {
+    val on = state.inputsOn(movingTo) && draft.strokes != null
     val s = draft.shot
     val finishOn = on && s.approachBucket != null
     StatsColumn(if (plan.par3) Copy.HOLE_DISTANCE else Copy.APPROACH) {
@@ -179,15 +187,15 @@ fun ApproachPage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange
             }
         }
         val extra = if (plan.approachFinish && on && s.approachBucket == null) Copy.SET_DISTANCE_FIRST to Hud.textMuted else null
-        Hint(state, draft, capped = false, extra = extra)
+        Hint(state, draft, capped = false, extra = extra, movingTo = movingTo)
     }
 }
 
 /** First putt distance, sand shots, recovery outcome and other penalties. */
 @Composable
-fun ShortGamePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: DraftChange) {
+fun ShortGamePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChange: DraftChange, movingTo: Int? = null) {
     val hole = state.hole ?: return
-    val on = state.inputsOn && draft.strokes != null
+    val on = state.inputsOn(movingTo) && draft.strokes != null
     val s = draft.shot
     val hasPutts = (s.putts ?: 0) >= 1
     StatsColumn(Copy.SHORT_GAME) {
@@ -221,6 +229,6 @@ fun ShortGamePage(state: WatchState, draft: EntryDraft, plan: EntryPlan, onChang
             if (plan.sand) add(Extra.Sand)
             if (plan.otherPenalties) add(Extra.Other)
         })
-        Hint(state, draft, capped, extra)
+        Hint(state, draft, capped, extra, movingTo = movingTo)
     }
 }

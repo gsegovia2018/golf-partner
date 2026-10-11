@@ -27,10 +27,13 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.MaterialTheme
 import com.golfpartner.wear.data.CommandOutbox
 import com.golfpartner.wear.data.Entry
+import com.golfpartner.wear.data.HoleMove
+import com.golfpartner.wear.data.Notice
 import com.golfpartner.wear.data.PageKind
 import com.golfpartner.wear.data.Pages
 import com.golfpartner.wear.data.StepAccumulator
@@ -91,6 +94,9 @@ private const val CROWN_STROKES_PX = 45f
 /** How long a hole picked by crown or swipe waits for the phone before snapping back to what the state says. */
 private const val HOLE_SETTLE_MS = 4_000L
 
+/** How long a notice ("Not saved — hole 7", a failed move) stays over the pages. */
+private const val NOTICE_MS = 3_000L
+
 /**
  * Distances | Score | Tee | Approach | Short game in a pager. Stays on its page when the hole
  * changes. Crown: hole on Distances, strokes on Score. Vertical swipe on Distances: one hole per
@@ -102,22 +108,43 @@ private const val HOLE_SETTLE_MS = 4_000L
 private fun RoundScreens(state: WatchState, controller: WatchController, info: HomeInfo) {
     val haptics = LocalHapticFeedback.current
 
-    // The hole picked on the watch, ahead of the phone's state; cleared on arrival or after a timeout.
+    // The hole picked on the watch, ahead of the phone's state; cleared on arrival, or with a
+    // notice when the phone's state says it will not come (blocked) or it times out.
     var target by remember { mutableStateOf<Int?>(null) }
+    var notice by remember { mutableStateOf<Notice?>(null) }
     val phoneHole = state.hole!!.number
-    LaunchedEffect(phoneHole, target) {
-        when {
-            target == phoneHole -> target = null
-            target != null -> {
-                delay(HOLE_SETTLE_MS)
-                target = null
-            }
+    LaunchedEffect(phoneHole, target, state.blocked) {
+        val t = target ?: return@LaunchedEffect
+        if (t == phoneHole) {
+            target = null
+            return@LaunchedEffect
+        }
+        HoleMove.failure(state)?.let {
+            target = null
+            notice = it
+            return@LaunchedEffect
+        }
+        delay(HOLE_SETTLE_MS)
+        target = null
+        notice = Notice.MoveFailed
+    }
+    // A refused save of mine: the phone's values are back on screen, say so once. One already
+    // reported before these screens (re)appeared is not news.
+    val rejected by controller.notSaved.collectAsState()
+    val reportedBefore = remember { controller.notSaved.value }
+    LaunchedEffect(rejected) { rejected?.takeIf { it != reportedBefore }?.let { notice = Notice.NotSaved(it.hole) } }
+    LaunchedEffect(notice) {
+        if (notice != null) {
+            delay(NOTICE_MS)
+            notice = null
         }
     }
     val shown = state.at(target ?: phoneHole)
     val hole = shown.hole!!
     // Without the whole-course state (older phone) the pages cannot show the target hole yet.
     val moving = hole.number != (target ?: hole.number)
+    // Look, don't touch: the phone takes strokes and stats only for the hole it is on.
+    val movingTo = HoleMove.movingTo(target, phoneHole)
     val pages = Pages.of(shown)
     val pagerState = rememberPagerState { pages.size }
     val pageNow = pages.getOrElse(pagerState.currentPage) { PageKind.Distances }
@@ -158,7 +185,7 @@ private fun RoundScreens(state: WatchState, controller: WatchController, info: H
                         true
                     }
                     PageKind.Score -> {
-                        if (!shown.canEnter || me == null) return@onRotaryScrollEvent true
+                        if (!HoleMove.inputsOn(shown, movingTo) || me == null) return@onRotaryScrollEvent true
                         val n = strokesCrown.feed(e.verticalScrollPixels)
                         if (n != 0) {
                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -175,13 +202,22 @@ private fun RoundScreens(state: WatchState, controller: WatchController, info: H
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { index ->
             when (pages.getOrElse(index) { PageKind.Distances }) {
                 PageKind.Distances -> DistancesPage(shown, info, moving, target ?: phoneHole, stepHole)
-                PageKind.Score -> draft?.let { ScorePage(shown, it, plan, onChange) }
-                PageKind.Tee -> draft?.let { TeePage(shown, it, plan, onChange) }
-                PageKind.Approach -> draft?.let { ApproachPage(shown, it, plan, onChange) }
-                PageKind.ShortGame -> draft?.let { ShortGamePage(shown, it, plan, onChange) }
+                PageKind.Score -> draft?.let { ScorePage(shown, it, plan, onChange, movingTo) }
+                PageKind.Tee -> draft?.let { TeePage(shown, it, plan, onChange, movingTo) }
+                PageKind.Approach -> draft?.let { ApproachPage(shown, it, plan, onChange, movingTo) }
+                PageKind.ShortGame -> draft?.let { ShortGamePage(shown, it, plan, onChange, movingTo) }
             }
         }
         if (pages.size > 1) PageDots(pages.size, pagerState.currentPage, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
+        notice?.let { NoticeBanner(Copy.notice(it), Modifier.align(Alignment.TopCenter).padding(top = 10.dp)) }
+    }
+}
+
+/** A brief, non-blocking line over the top of the pages. */
+@Composable
+private fun NoticeBanner(text: String, modifier: Modifier = Modifier) {
+    Box(modifier.clip(CircleShape).background(Hud.card).padding(horizontal = 12.dp, vertical = 5.dp)) {
+        HudText(text, 12, color = Hud.warn, weight = FontWeight.SemiBold)
     }
 }
 

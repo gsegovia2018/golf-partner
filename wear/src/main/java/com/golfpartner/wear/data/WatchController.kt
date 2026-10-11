@@ -32,6 +32,9 @@ class WatchController(context: Context, private val scope: CoroutineScope) {
     val fix: StateFlow<Fix?> = location.fix
     val pending = outbox.pending
 
+    /** A save of mine the phone refused (each a new value); the UI says "Not saved — hole N". */
+    val notSaved = repository.notSaved
+
     /** Edits made on the watch and not yet handed to the outbox; null when none. */
     val edit: StateFlow<PendingEdit?> = _edit.asStateFlow()
 
@@ -104,11 +107,13 @@ class WatchController(context: Context, private val scope: CoroutineScope) {
      * Change the draft for the hole on screen. [opened] is the state shown (with the
      * optimistic overlay); the first change pins the edit to its round and hole, and later
      * changes keep that pin. [change] gets the current draft, so several crown ticks in one
-     * frame all land. Sent [EDIT_DEBOUNCE_MS] after the last change.
+     * frame all land. Sent [EDIT_DEBOUNCE_MS] after the last change. Ignored for a hole the
+     * phone is not on (a move still in flight): the phone would refuse it.
      */
     fun edit(opened: WatchState, change: (EntryDraft) -> EntryDraft) {
         val hole = opened.hole ?: return
         val me = opened.me ?: return
+        if (!Entry.stillOn(opened, repository.current)) return
         var cur = _edit.value
         if (cur != null && !Entry.sameHole(cur.opened, opened)) {
             sendEdits() // edits for another hole go out first, for that hole

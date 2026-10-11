@@ -38,19 +38,24 @@ const wireUnits = (units) => (units === 'yards' || units === 'yd' ? 'yd' : 'm');
 // `ack` is the id of the last watch command the phone finished processing
 // (applied or rejected), or null: the watch ends its optimistic overlay for a
 // command when it sees that command's id here, not on any newer rev.
+// `lastReject` is the most recent watch command the phone refused,
+// `{ id, reason, hole }` (reason from decideWatchCommand, or 'refused' when the
+// scorecard turned the write or move down), or null; it outlives later
+// commands, so a reject is not lost when the state that carried it is coalesced.
 export function watchStateOf({
-  rev, ack, round, courseName, holeNumber, holeCount, par, si, extraShots,
+  rev, ack, lastReject, round, courseName, holeNumber, holeCount, par, si, extraShots,
   green, phoneDistances, units, me, track, blocked, course, mine,
 }) {
   if (!round) {
     return {
-      v: WATCH_PROTOCOL_VERSION, rev, ack: ack ?? null, active: false, roundId: null, courseName: null, blocked: null,
+      v: WATCH_PROTOCOL_VERSION, rev, ack: ack ?? null, lastReject: lastReject ?? null, active: false, roundId: null, courseName: null, blocked: null,
     };
   }
   return {
     v: WATCH_PROTOCOL_VERSION,
     rev,
     ack: ack ?? null,
+    lastReject: lastReject ?? null,
     roundId: round.id,
     courseName: courseName ?? null,
     active: true,

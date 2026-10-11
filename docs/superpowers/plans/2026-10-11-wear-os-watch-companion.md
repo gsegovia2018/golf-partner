@@ -306,3 +306,41 @@ the phone's ShotDetailPanel (what it hides on a par 3, the watch hides).
     when putts are trimmed to 0.
   - Then `reconcileShotDetail(detail, strokes)`: putts, sand, other penalties, then **tee
     penalties** are trimmed in that order; tee penalties are now counted from the watch too.
+
+## v1.3 — review fixes: no input ahead of the phone, refused saves, minimal patches
+
+**Contract addition (still `v: 1`, additive):**
+
+```js
+state.lastReject = null | { id, reason, hole }   // also on the inactive state
+```
+
+- `lastReject` is the **most recent** watch command the phone refused: `reason` is
+  `decideWatchCommand`'s (`invalid`, `round`, `blocked`, `stale`, `range`, `same-hole`, `hole`) or
+  `refused` when the scorecard turned it down (a write behind the publish of the hole being left,
+  a shot without strokes, a `hole` move after which the phone is not on `to`, e.g. the dispute sheet
+  opened). `hole` is the command's hole (a move's `to`). It lives as long as `ack` (a ref in
+  `useWatchBridge`), is not cleared by later applied commands (a coalesced Data Layer item must not
+  lose it) and is unchanged by duplicates and unparseable messages.
+- **Watch:** while a strokes/shot command is still shown as overlay, a state whose `lastReject.id`
+  names it shows a brief, non-blocking `Not saved — hole N`; the ack in the same state ends the
+  overlay, so the phone's values show again (no retry: the phone said no). Only the latest reject
+  is visible, so a burst of refusals reports the last one.
+
+**A hole shown ahead of the phone is look-only.** The phone takes `strokes`/`shot` only for its
+current hole, so the watch never pins an edit to a hole the phone is not on:
+
+- While the picked hole (`target`) ≠ the phone's hole, the target's Distances/Score/stats show at
+  once (from `course` + `mine`), but the inputs and the Score crown are off and the hint/footer says
+  `Moving to hole N…`. `WatchController.edit` also drops a change for a hole the phone is not on.
+- Inputs come back when the phone's state shows the target hole.
+- The move fails when the phone's state turns `blocked` while it is in flight (`dispute` →
+  `Resolve on phone`, anything else → `Couldn't change hole — check phone`) or after
+  `HOLE_SETTLE_MS` (4 s) without arrival (`Couldn't change hole — check phone`); the pager snaps
+  back to the phone's hole.
+
+**Drive lie survives watch saves.** `normalizeWatchShotPatch` resets `driveLie` only when the
+patch's `drive` differs from the stored one; the same direction again keeps a lie picked on the
+phone. The watch now sends only the shot keys whose values differ from what the hole showed when
+the edit began (`me.shot`, the seed; still absolute values). The seed is compared unclamped, so a
+counter the strokes reconcile trimmed is still sent; a strokes-only edit sends no `shot` command.

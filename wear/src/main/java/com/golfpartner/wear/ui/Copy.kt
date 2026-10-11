@@ -1,5 +1,6 @@
 package com.golfpartner.wear.ui
 
+import com.golfpartner.wear.data.Notice
 import com.golfpartner.wear.data.Units
 
 /** All user-facing English copy, as written in the plan. */
@@ -35,6 +36,19 @@ object Copy {
 
     /** The score page's footer; no points while the hole is unscored. */
     fun footer(pts: Int?, total: Int) = if (pts == null) "$total total" else scoreAndTotal(pts, total)
+
+    /** Under the inputs of a hole shown ahead of the phone: they wait for the phone to arrive. */
+    fun movingToHole(number: Int) = "Moving to hole $number…"
+
+    const val MOVE_FAILED = "Couldn't change hole — check phone"
+
+    fun notSaved(hole: Int) = "Not saved — hole $hole"
+
+    fun notice(n: Notice) = when (n) {
+        is Notice.NotSaved -> notSaved(n.hole)
+        Notice.MoveFailed -> MOVE_FAILED
+        Notice.ResolveOnPhone -> RESOLVE_ON_PHONE
+    }
 
     /** The hole being moved to, before the phone confirms (its par is not known here). */
     fun movingTo(number: Int) = "HOLE $number"
