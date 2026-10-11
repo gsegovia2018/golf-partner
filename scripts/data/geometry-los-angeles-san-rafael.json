@@ -1,14 +1,9 @@
 {
   "key": "los-angeles-san-rafael",
-  "name": "Los Ángeles de San Rafael",
+  "name": "Los \u00c1ngeles de San Rafael",
   "matchTokens": [
     [
-      "angeles",
-      "rafael"
-    ],
-    [
-      "san",
-      "rafael"
+      "angeles san rafael"
     ]
   ],
   "mode": "holes",
