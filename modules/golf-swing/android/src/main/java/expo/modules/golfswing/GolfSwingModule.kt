@@ -31,11 +31,29 @@ class AnalyzePoseOptions : Record {
   @Field val heightCm: Double = Ball.DEFAULT_HEIGHT_CM
 }
 
+class CheckpointRequest : Record {
+  @Field val key: String = ""
+  @Field val i: Int = 0
+  @Field val neighbours: Int = 2
+}
+
+/** hands, ball and expectedShaftPx are accepted and unused until N2 (shaft/clubhead, address onset). */
+class ExtractCheckpointsOptions : Record {
+  @Field val frames: List<CheckpointRequest> = emptyList()
+  @Field val outDir: String = ""
+}
+
+class ExtractFramesOptions : Record {
+  @Field val frames: List<Int> = emptyList()
+  @Field val outDir: String = ""
+}
+
 class GolfSwingModule : Module() {
   // Long-running work gets its own thread: Expo's shared async queue would stall every
   // other module's async calls for the seconds an analysis takes.
   private val executor = Executors.newSingleThreadExecutor { Thread(it, "golf-swing") }
   private val busy = AtomicBoolean(false)
+  @Volatile private var cancelRequested = false
 
   private val context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
 
@@ -64,6 +82,7 @@ class GolfSwingModule : Module() {
       }
       val o = options ?: AnalyzePoseOptions()
       val ctx = context
+      cancelRequested = false
       executor.execute {
         try {
           val opts = AnalyzeOptions(
@@ -74,14 +93,58 @@ class GolfSwingModule : Module() {
             rightHanded = o.handedness != "left",
             heightCm = o.heightCm,
           )
-          val result = PoseAnalyzer(ctx, opts) { stage, done, total ->
+          val result = PoseAnalyzer(ctx, opts, { cancelRequested }) { stage, done, total ->
             sendEvent("progress", mapOf("stage" to stage, "done" to done, "total" to total))
           }.run(path)
           promise.resolve(result)
+        } catch (e: CancelledException) {
+          promise.reject("ERR_CANCELLED", "analysis cancelled", e)
         } catch (e: Throwable) {
           promise.reject("ERR_ANALYZE", e.message ?: e.toString(), e)
         } finally {
           busy.set(false)
+        }
+      }
+    }
+
+    /** Stops a running analyzePose or still extraction at the next frame (rejects with ERR_CANCELLED). */
+    Function("cancelAnalysis") {
+      cancelRequested = true
+    }
+
+    // N1 stub of the N2 contract: stills only. shaft stays empty and addressFrame null until
+    // N2 adds the clubhead search and the image-based address onset (plan §4.3, §5.1 P1).
+    AsyncFunction("extractCheckpoints") { path: String, options: ExtractCheckpointsOptions, promise: Promise ->
+      val ctx = context
+      cancelRequested = false
+      executor.execute {
+        try {
+          val wanted = options.frames.flatMap { c -> (c.i - c.neighbours)..(c.i + c.neighbours) }
+          val uris = Stills.extract(ctx, path, wanted, options.outDir) { cancelRequested }
+          val stills = options.frames.associate { c ->
+            c.key to ((c.i - c.neighbours)..(c.i + c.neighbours)).mapNotNull { f -> uris[f]?.let { f.toString() to it } }.toMap()
+          }
+          promise.resolve(mapOf("stills" to stills, "shaft" to emptyMap<String, Any?>(), "addressFrame" to null))
+        } catch (e: CancelledException) {
+          promise.reject("ERR_CANCELLED", "cancelled", e)
+        } catch (e: Throwable) {
+          promise.reject("ERR_STILLS", e.message ?: e.toString(), e)
+        }
+      }
+    }
+
+    /** Edit-marks scrubber: JPEGs of arbitrary frames, `<outDir>/<frame>.jpg` → { [frame]: uri }. */
+    AsyncFunction("extractFrames") { path: String, options: ExtractFramesOptions, promise: Promise ->
+      val ctx = context
+      cancelRequested = false
+      executor.execute {
+        try {
+          val uris = Stills.extract(ctx, path, options.frames, options.outDir) { cancelRequested }
+          promise.resolve(uris.mapKeys { it.key.toString() })
+        } catch (e: CancelledException) {
+          promise.reject("ERR_CANCELLED", "cancelled", e)
+        } catch (e: Throwable) {
+          promise.reject("ERR_STILLS", e.message ?: e.toString(), e)
         }
       }
     }

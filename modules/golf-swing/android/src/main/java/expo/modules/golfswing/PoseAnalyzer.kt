@@ -46,6 +46,7 @@ internal class AnalyzeOptions(
 internal class PoseAnalyzer(
   private val context: Context,
   private val opts: AnalyzeOptions,
+  private val cancelled: () -> Boolean,
   private val progress: (stage: String, done: Int, total: Int) -> Unit,
 ) {
   companion object {
@@ -99,6 +100,7 @@ internal class PoseAnalyzer(
     val step = max(1, total / 50)
     try {
       Media.decode(context, path, 0) { n, ptsUs, img, full ->
+        if (cancelled()) throw CancelledException()
         val slot = n % RING
         val f = ring[slot]?.takeIf { it.codedW == Media.cropSize(img).first && it.codedH == Media.cropSize(img).second }
           ?: Media.cropSize(img).let { (w, h) -> YuvFrame(w, h, track.rotation, full) }

@@ -22,6 +22,12 @@ function nativeModule() {
   return cached;
 }
 
+/** The installed binary's contract version, or null without the module (read by availability.js). */
+export function apiVersion() {
+  const v = Platform.OS === 'android' ? nativeModule()?.apiVersion : null;
+  return typeof v === 'number' ? v : null;
+}
+
 /**
  * @returns {{ supported: boolean, reason: null | 'platform' | 'update_app',
  *   apiVersion: number | null, message: string | null }}
@@ -32,12 +38,11 @@ export function swingSupport() {
   if (Platform.OS !== 'android') {
     return { supported: false, reason: 'platform', apiVersion: null, message: null };
   }
-  const mod = nativeModule();
-  const apiVersion = typeof mod?.apiVersion === 'number' ? mod.apiVersion : null;
-  if (apiVersion === null || apiVersion < REQUIRED_API_VERSION) {
-    return { supported: false, reason: 'update_app', apiVersion, message: UPDATE_APP_MESSAGE };
+  const version = apiVersion();
+  if (version === null || version < REQUIRED_API_VERSION) {
+    return { supported: false, reason: 'update_app', apiVersion: version, message: UPDATE_APP_MESSAGE };
   }
-  return { supported: true, reason: null, apiVersion, message: null };
+  return { supported: true, reason: null, apiVersion: version, message: null };
 }
 
 function requireSupported() {
@@ -77,11 +82,41 @@ export async function analyzePose(path, opts = {}) {
 }
 
 /**
- * Progress of analyzePose: { stage: 'decode'|'pose', done, total } (frames). Both stages
- * advance together (decoding overlaps inference). Returns a subscription with remove().
+ * Checkpoint stills (plan 3). N1 delivers the stills only: `shaft` is {} and
+ * `addressFrame` null until N2 adds the clubhead search and the image-based address onset.
+ * @param {{ frames: Array<{ key, i, hands?, neighbours?: number }>, ball?, expectedShaftPx?, outDir: string }} opts
+ * @returns {Promise<{ stills: { [key]: { [frame]: string } }, shaft: object, addressFrame: number | null }>}
  */
-export function addProgressListener(listener) {
+export async function extractCheckpoints(path, opts) {
+  return requireSupported().extractCheckpoints(path, opts);
+}
+
+/**
+ * JPEGs of arbitrary frames for the Edit-marks scrubber: `<outDir>/<frame>.jpg`, full
+ * decode resolution, display orientation.
+ * @param {{ frames: number[], outDir: string }} opts
+ * @returns {Promise<{ [frame]: string }>}  file:// URIs
+ */
+export async function extractFrames(path, opts) {
+  return requireSupported().extractFrames(path, opts);
+}
+
+/** Stops a running analyzePose / extraction; its promise rejects with code ERR_CANCELLED. */
+export function cancelAnalysis() {
+  if (swingSupport().supported) nativeModule().cancelAnalysis();
+}
+
+/**
+ * Module events. 'progress' (analyzePose): { stage: 'decode'|'pose', done, total } in
+ * frames; both stages advance together (decoding overlaps inference). Returns a
+ * subscription with remove().
+ */
+export function addListener(eventName, listener) {
   const mod = nativeModule();
   if (!mod || !swingSupport().supported) return { remove() {} };
-  return mod.addListener('progress', listener);
+  return mod.addListener(eventName, listener);
+}
+
+export function addProgressListener(listener) {
+  return addListener('progress', listener);
 }

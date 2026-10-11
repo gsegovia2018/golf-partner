@@ -3,6 +3,8 @@
 export const REQUIRED_API_VERSION = 1;
 export const UPDATE_APP_MESSAGE = 'Update the app to analyse your swing.';
 
+export const apiVersion = jest.fn(() => REQUIRED_API_VERSION);
+
 export const swingSupport = jest.fn(() => ({
   supported: true,
   reason: null,
@@ -28,5 +30,13 @@ export const analyzePose = jest.fn(async () => ({
   ballGoneFrame: null,
   timings: { decodeMs: 0, inferMs: 0, totalMs: 0, inferences: 0, delegate: 'cpu' },
 }));
+
+export const extractCheckpoints = jest.fn(async () => ({ stills: {}, shaft: {}, addressFrame: null }));
+
+export const extractFrames = jest.fn(async () => ({}));
+
+export const cancelAnalysis = jest.fn();
+
+export const addListener = jest.fn(() => ({ remove: jest.fn() }));
 
 export const addProgressListener = jest.fn(() => ({ remove: jest.fn() }));
