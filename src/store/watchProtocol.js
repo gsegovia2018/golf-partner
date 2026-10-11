@@ -84,12 +84,13 @@ export function watchStateOf({
       sandShots: me.sandShots ?? 0,
       penalties: me.otherPenalties ?? 0,
     },
+    // A group missing from settings is on, as ShotDetailPanel treats it.
     track: {
-      putting: !!track?.putting,
-      teeShot: !!track?.teeShot,
-      approach: !!track?.approach,
-      shortGame: !!track?.shortGame,
-      penalties: !!track?.penalties,
+      putting: track?.putting !== false,
+      teeShot: track?.teeShot !== false,
+      approach: track?.approach !== false,
+      shortGame: track?.shortGame !== false,
+      penalties: track?.penalties !== false,
     },
   };
 }

@@ -344,3 +344,16 @@ patch's `drive` differs from the stored one; the same direction again keeps a li
 phone. The watch now sends only the shot keys whose values differ from what the hole showed when
 the edit began (`me.shot`, the seed; still absolute values). The seed is compared unclamped, so a
 counter the strokes reconcile trimmed is still sent; a strokes-only edit sends no `shot` command.
+
+## v1.4 — watch UI polish after device feedback (SM-R910)
+
+- Every `‹ value ›` stepper is now single-select **chips** (drive distance, approach distance, first
+  putt, tee club): tap the lit chip to clear; the club defaults to Driver (null) and tapping the lit
+  non-driver goes back to Driver. 5 options lay out 3 + 2, 4 options 2 + 2; chips are >= 40dp high.
+- The Tee page is split: **Tee shot** (direction toggles) and **Drive** (club, drive distance, tee
+  penalties). On a par 3 the phone ignores direction/club/distance, so Tee shot is hidden and Drive
+  holds only the tee penalties (hidden too when penalties tracking is off).
+  Order: Distances | Score | Tee shot | Drive | Approach | Short game.
+- "Other pen." is now "Penalty"; row labels are single-line. Stats pages keep a 22dp strip free
+  for the page dots, and scroll above it.
+- A track group missing from the state is read as ON (the phone's ShotDetailPanel default).

@@ -3,6 +3,7 @@ package com.golfpartner.wear.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -49,6 +50,7 @@ fun HudText(
     color: Color = Hud.text,
     weight: FontWeight = FontWeight.Normal,
     letterSpacing: Float = 0f,
+    maxLines: Int = 2,
 ) {
     Text(
         text = text,
@@ -58,7 +60,7 @@ fun HudText(
         fontWeight = weight,
         textAlign = TextAlign.Center,
         letterSpacing = letterSpacing.sp,
-        maxLines = 2,
+        maxLines = maxLines,
     )
 }
 
@@ -212,15 +214,46 @@ fun ChipButton(
 @Composable
 fun FieldLabel(text: String) = HudText(text, 10, color = Hud.textMuted, weight = FontWeight.SemiBold)
 
-/** `‹  150-180  ›`: one compact control for a 4-5 way choice; arrows are 44dp targets. */
+/** Compact single-select pill: inset when idle, accent when selected. At least 40dp high. */
 @Composable
-fun OptionStepper(value: String, set: Boolean, enabled: Boolean, onPrev: () -> Unit, onNext: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        RoundButton("‹", 44.dp, onPrev, enabled = enabled, fontSize = 22)
-        Box(Modifier.width(84.dp), contentAlignment = Alignment.Center) {
-            HudText(value, 17, weight = FontWeight.Bold, color = if (set) Hud.text else Hud.textMuted)
+fun OptionChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .defaultMinSize(minWidth = 44.dp, minHeight = 40.dp)
+            .alpha(if (enabled) 1f else 0.35f)
+            .clip(CircleShape)
+            .background(if (selected) Hud.accent else Hud.inset)
+            .semantics { this.selected = selected }
+            .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (selected) Hud.onAccent else Hud.textSoft,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+/**
+ * Single-select chips ([options] = key to label) in centred rows: 3 + 2 for five, 2 + 2 for four,
+ * otherwise as even as possible. Tapping a chip calls [onPick] with its key (the caller decides
+ * what a second tap on the selected one means).
+ */
+@Composable
+fun ChipGroup(options: List<Pair<String, String>>, selected: String?, enabled: Boolean, onPick: (String) -> Unit) {
+    val firstRow = (options.size + 1) / 2
+    val rows = listOf(options.take(firstRow), options.drop(firstRow)).filter { it.isNotEmpty() }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        rows.forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                row.forEach { (key, label) -> OptionChip(label, key == selected, enabled) { onPick(key) } }
+            }
         }
-        RoundButton("›", 44.dp, onNext, enabled = enabled, fontSize = 22)
     }
 }
 
@@ -232,7 +265,7 @@ fun StepRow(label: String, value: Int, minusOn: Boolean, plusOn: Boolean, onMinu
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Box(Modifier.width(56.dp), contentAlignment = Alignment.CenterStart) { HudText(label, 12, color = Hud.textMuted, weight = FontWeight.SemiBold) }
+        Box(Modifier.width(58.dp), contentAlignment = Alignment.CenterStart) { HudText(label, 12, color = Hud.textMuted, weight = FontWeight.SemiBold, maxLines = 1) }
         RoundButton("−", 44.dp, onMinus, enabled = minusOn, fontSize = 20)
         Box(Modifier.width(24.dp), contentAlignment = Alignment.Center) { HudText(value.toString(), 20, weight = FontWeight.Bold) }
         RoundButton("+", 44.dp, onPlus, enabled = plusOn, fontSize = 20)
