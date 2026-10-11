@@ -54,4 +54,26 @@ describe('labels', () => {
     expect(parseMarks('nope')).toBeNull();
     expect(parseMarks({ schema: 'other/1', frames: [] })).toBeNull();
   });
+
+  it('a moved checkpoint is a correction on its own and marksForAnalyze carries the new frame', () => {
+    const f = frameLabel({
+      i: 560, iProposed: 556, checkpoint: 'impact',
+      hands: { proposed: [0.4, 0.5], final: [0.4, 0.5] }, head: { proposed: [0.3, 0.6], final: [0.3, 0.6] }, editedAt: 'x',
+    });
+    expect(f).toMatchObject({ corrected: true, i: 560, iProposed: 556 });
+    expect(marksForAnalyze(withFrame(emptyMarks({ swingId: 's' }), f)).impact.frame).toBe(560);
+    expect(untouched().iProposed).toBe(556); // defaults to the frame itself
+  });
+
+  it('hands that follow the tracked grip are not sent to analyze() as the golfer\'s own', () => {
+    const auto = frameLabel({
+      i: 560, iProposed: 556, checkpoint: 'impact',
+      hands: { proposed: [0.4, 0.5], final: [0.41, 0.52], placed: false }, head: { proposed: null, final: null }, editedAt: 'x',
+    });
+    expect(auto.hands.placed).toBe(false);
+    expect(marksForAnalyze(withFrame(emptyMarks({ swingId: 's' }), auto)).impact.hands).toBeNull();
+    // older files have no flag: differing hands count as placed
+    const legacy = { ...auto, hands: { proposed: [0.4, 0.5], final: [0.45, 0.5] } };
+    expect(marksForAnalyze({ frames: [legacy] }).impact.hands).toEqual([0.45, 0.5]);
+  });
 });

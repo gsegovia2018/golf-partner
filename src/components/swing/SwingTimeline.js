@@ -17,7 +17,7 @@ const NAMED = ['Address', 'Top', 'Impact', 'Finish']; // the anchors, under step
  * With `skeleton` the dots are neutral (the result is still being calculated).
  */
 export default function SwingTimeline({
-  current, worst = {}, onSelect, frameLine, onPrev, onNext, canPrev = true, canNext = true, skeleton = false,
+  current, title, worst = {}, onSelect, frameLine, onPrev, onNext, canPrev = true, canNext = true, skeleton = false,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
@@ -60,8 +60,8 @@ export default function SwingTimeline({
         >
           <Feather name="chevron-left" size={18} color={theme.text.primary} />
         </PressableScale>
-        <Text style={s.curText} numberOfLines={1}>
-          {skeleton ? ' ' : <Text>{SWING_STRINGS.checkpoint[current]} <Text style={s.curSub}>· {frameLine}</Text></Text>}
+        <Text style={s.curText} numberOfLines={2}>
+          {skeleton ? ' ' : <Text>{title ?? SWING_STRINGS.checkpoint[current]} <Text style={s.curSub}>· {frameLine}</Text></Text>}
         </Text>
         <PressableScale
           style={[s.nudge, !canNext && s.nudgeOff]}

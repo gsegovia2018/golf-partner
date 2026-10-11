@@ -52,3 +52,6 @@ export function unplacedCheckpoint(check, clubMarks = {}) {
   const hit = wants.find((k) => clubMarks[k] && !clubMarks[k].hidden && !clubMarks[k].head);
   return hit ?? null;
 }
+
+/** Frame index of any of the twelve checkpoints (nine on the timeline, three internal). */
+export const frameOfKey = (analysis, key) => analysis.checkpoints[key]?.i ?? analysis.internal?.[key];

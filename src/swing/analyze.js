@@ -41,7 +41,10 @@ function makePoseAt(idx, L) {
  * @param {{captureFps?:number|null, duplicateFrameRatio?:number}} [opts.probe]  probeVideo result
  * @param {object} [opts.pass2]  extractCheckpoints result: { shaft: { [frame]: { head: [x, y] px, hidden, conf, source } },
  *   addressFrame } (D16: only address and impact are proposed; addressFrame = last still frame before the clubhead moves)
- * @param {Object<string,{hands?:number[],head:number[]|null,hidden?:boolean}>} [opts.marks]  user marks (normalised)
+ * @param {Object<string,{hands?:number[],head?:number[]|null,hidden?:boolean,frame?:number}>} [opts.marks]  user marks
+ *   (normalised). `frame` moves the checkpoint itself (Edit marks: "Set to this frame"). A mark with neither a
+ *   head nor `hidden` is a hands-only correction: the club stays whatever it was proposed (or unplaced).
+ * @param {number[]|null} [opts.ball]  [x, y, r] normalised, the user's ball mark
  * @param {'right'|'left'} [opts.handedness]
  * @param {number|null} [opts.heightCm]  the golfer's height; default by gender, flagged approximate
  * @param {'male'|'female'} [opts.gender]
@@ -62,7 +65,9 @@ export function analyze(native, opts = {}) {
 
   const idx = samples.map((f) => f.i);
   const L = samples.map((f) => f.lm.map(([x, y, v]) => [x * W, y * H, v]));
-  const ballPx = native.ball ? { x: native.ball.x * W, y: native.ball.y * H, r: native.ball.r * W } : null;
+  // opts.ball: the golfer's own ball mark from Edit marks, [x, y, r] normalised; it wins over the proposal.
+  const ballN = opts.ball ?? (native.ball ? [native.ball.x, native.ball.y, native.ball.r] : null);
+  const ballPx = ballN ? { x: ballN[0] * W, y: ballN[1] * H, r: ballN[2] * W } : null;
 
   let ph;
   try {
@@ -88,13 +93,25 @@ export function analyze(native, opts = {}) {
 
   // The twelve checkpoints: frame, smoothed grip, and the club (user mark > native seed > prior).
   const frames = { ...Object.fromEntries(CHECKPOINT_KEYS.map((k) => [k, ph.checkpoints[k].i])), ...ph.internal };
+  const checkpoints = { ...ph.checkpoints };
+  const moved = CHECKPOINT_KEYS.filter((k) => Number.isFinite(marks[k]?.frame) && marks[k].frame !== frames[k]);
+  moved.forEach((k) => {
+    const d = marks[k].frame - frames[k];
+    frames[k] = marks[k].frame;
+    checkpoints[k] = { ...checkpoints[k], i: marks[k].frame, conf: 1 };
+    if (k === 'impact') { frames.preImpact += d; frames.postImpact += d; }
+  });
+  if (moved.some((k) => k === 'leadArm' || k === 'top')) frames.lateBackswing = Math.round((frames.leadArm + frames.top) / 2);
   const resolved = {};
   const cps = {};
   CLUB_KEYS.forEach((k) => {
     const f = frames[k];
-    const mark = marks[k] ? { hands: toPx(marks[k].hands, W, H), head: toPx(marks[k].head, W, H), hidden: marks[k].hidden } : null;
+    const m = marks[k];
+    const placed = !!(m && (m.head || m.hidden));
+    const mark = placed ? { hands: toPx(m.hands, W, H), head: toPx(m.head, W, H), hidden: m.hidden } : null;
     const cand = pass2.shaft?.[f] ?? null;
     const c = resolveClub(k, handsAt(f), cand, mark, ballPx);
+    if (m?.hands && !placed) c.hands = toPx(m.hands, W, H); // hands-only correction
     resolved[k] = c;
     cps[k] = { frame: f, ...c };
   });
@@ -131,8 +148,8 @@ export function analyze(native, opts = {}) {
     fps: ph.fps,
     approximate: ph.fps.approximate,
     scale: { pxPerCm: scale.pxPerCm, heightCm, approx: approxHeight },
-    checkpoints: Object.fromEntries(CHECKPOINT_KEYS.map((k) => [k, ph.checkpoints[k]])),
-    internal: ph.internal,
+    checkpoints: Object.fromEntries(CHECKPOINT_KEYS.map((k) => [k, checkpoints[k]])),
+    internal: Object.fromEntries(Object.keys(ph.internal).map((k) => [k, frames[k] ?? ph.internal[k]])),
     reference,
     clubMarks: Object.fromEntries(CLUB_KEYS.map((k) => [k, {
       hands: toNorm(resolved[k].hands, W, H),
