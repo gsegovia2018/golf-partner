@@ -87,6 +87,7 @@ import BagScreen from './src/screens/BagScreen';
 import SwingHomeScreen from './src/screens/SwingHomeScreen';
 import SwingPlaceholderScreen from './src/screens/SwingPlaceholderScreen';
 import SwingResultsScreen from './src/screens/SwingResultsScreen';
+import SwingEditMarksScreen from './src/screens/SwingEditMarksScreen';
 import ClubStatScreen from './src/screens/ClubStatScreen';
 import PlayersScreen from './src/screens/PlayersScreen';
 import FinishedScreen from './src/screens/FinishedScreen';
@@ -434,10 +435,10 @@ function AppNavigator() {
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="Bag" component={BagScreen} />
         <Stack.Screen name="SwingHome" component={SwingHomeScreen} />
-        {/* Placeholders until the swing capture / edit marks / compare PRs land. */}
+        {/* Placeholders until the swing capture / compare PRs land. */}
         <Stack.Screen name="SwingCapture" component={SwingPlaceholderScreen} />
         <Stack.Screen name="SwingResults" component={SwingResultsScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
-        <Stack.Screen name="SwingEditMarks" component={SwingPlaceholderScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
+        <Stack.Screen name="SwingEditMarks" component={SwingEditMarksScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
         <Stack.Screen name="SwingCompare" component={SwingPlaceholderScreen} />
         <Stack.Screen name="ClubStat" component={ClubStatScreen} />
         <Stack.Screen name="Players" component={PlayersScreen} />

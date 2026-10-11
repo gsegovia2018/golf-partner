@@ -23,14 +23,17 @@ const sameXY = (a, b) => (a == null && b == null) || (a != null && b != null && 
  * One frame entry. `proposed` is what analyze() suggested, `final` what the user
  * left (equal when untouched); `corrected` is derived, never typed by callers.
  */
-export function frameLabel({ i, checkpoint, hands, head, editedAt = null }) {
-  const corrected = !sameXY(hands.proposed, hands.final)
+export function frameLabel({ i, checkpoint, iProposed = null, hands, head, editedAt = null }) {
+  const corrected = (iProposed != null && iProposed !== i)
+    || !sameXY(hands.proposed, hands.final)
     || !sameXY(head.proposed, head.final)
     || !!head.proposedHidden !== !!head.finalHidden;
   return {
     i,
     checkpoint,
-    hands: { proposed: hands.proposed ?? null, final: hands.final ?? null },
+    iProposed: iProposed ?? i,
+    // placed: the user put the hands there (false = they follow the smoothed grip at the frame)
+    hands: { proposed: hands.proposed ?? null, final: hands.final ?? null, placed: hands.placed ?? !sameXY(hands.proposed, hands.final) },
     head: {
       proposed: head.proposed ?? null,
       proposedHidden: !!head.proposedHidden,
@@ -56,11 +59,15 @@ export function withBall(marks, { proposed = marks.ball.proposed, final }) {
   return { ...marks, ball: { proposed, final, corrected: !same(proposed, final) } };
 }
 
+/** Did the user place the hands (older files without the flag: they did if they differ from the proposal)? */
+export const handsPlaced = (f) => f.hands.placed ?? !sameXY(f.hands.final, f.hands.proposed);
+
 /** Marks in the shape analyze() takes as opts.marks: { [checkpoint]: { hands, head, hidden } }. */
 export function marksForAnalyze(marks) {
   const out = {};
   (marks?.frames || []).filter((f) => f.corrected).forEach((f) => {
-    out[f.checkpoint] = { hands: f.hands.final, head: f.head.final, hidden: f.head.finalHidden };
+    out[f.checkpoint] = { hands: handsPlaced(f) ? f.hands.final : null, head: f.head.final, hidden: f.head.finalHidden };
+    if (f.iProposed != null && f.iProposed !== f.i) out[f.checkpoint].frame = f.i; // the checkpoint itself moved
   });
   return out;
 }
