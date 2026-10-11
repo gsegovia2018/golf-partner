@@ -1,6 +1,6 @@
 # Wear OS watch companion — plan
 
-**Date:** 2026-10-11 · **Status:** design B picked, building · **Lifecycle:** `deliver` (full)
+**Date:** 2026-10-11 · **Status:** pager UI (B revised 2026-10-11), building · **Lifecycle:** `deliver` (full)
 
 ## Goal
 
@@ -12,25 +12,41 @@ without taking the phone out.
 **v1 decisions (2026-10-11):** Wear OS only (Apple Watch later, if ever) · input =
 strokes + putts + stats · watch edits **my own** score only (the me-player).
 
-## Watch UI — design B (picked 2026-10-11)
+## Watch UI — pager: Distances | Score | Stats
 
-Mockups: https://claude.ai/artifact/TZMXXaDAEjw65YFo7kdC94 (private, not committed).
+Design B (picked 2026-10-11) was revised after on-device feedback the same day (Galaxy Watch
+SM-R910): the Picker lagged, strokes started at net par, the sand/penalty caps felt broken, the
+tee-shot screen was cluttered, and hole change / scoring were hard to reach. Mockups of B:
+https://claude.ai/artifact/TZMXXaDAEjw65YFo7kdC94 (private, not committed).
 
-- **Home (one per hole):** `HOLE 7 · PAR 4` · back (small) · **centre (large)** · front
-  (small) · `SI 3 · +1 shot` · bottom pill: `Score hole` when unscored, else ghost pill
-  `5 · 2 pts`. Crown on home = previous/next hole (sends `hole` command).
-- **Entry flow** (tap the pill): ① Strokes — crown picker starting at **net par**
-  (par + extraShots) or the saved value, shows the Stableford points live and "net par"
-  when equal, `Next`. ② Putts — crown, 0…strokes, starts at saved or 2, `Next` (`Save` on
-  par 3). ③ Tee shot — 2×2 chips Fairway/Rough/Sand/Trouble (toggle), `More` → Sand and
-  Penalty steppers, `Save`. Steps whose stats group is off in Settings are skipped.
-- **Saved:** `Hole 7 saved` · strokes · `2 pts · 14 total` · `2 putts · fairway` ·
-  `Hole 8 ›` (sends `hole`). Swipe back from any step returns home without saving.
-- **Save** sends one `strokes` command then one `shot` command (absolute values).
-- **States:** no GPS fix (`— m` + "Getting GPS fix"), phone out of range (entries queued
-  on the watch, "2 holes waiting"), `blocked: 'dispute'` ("Resolve on phone", distances
-  live), no round ("Open a round on your phone to start."), par 3 (no tee step).
-- HUD palette from `src/theme/tokens.js` `hud`; Plus Jakarta Sans.
+A `HorizontalPager` with a dot indicator; page 0 on launch, and the watch **stays on its page**
+when the hole changes. HUD palette from `src/theme/tokens.js` `hud`; Plus Jakarta Sans.
+
+- **Distances:** `HOLE 7 · PAR 4` · back (small) · **centre (large)** · front (small) ·
+  `SI 3 · +1 shot`; status lines for no fix / phone not connected / `2 holes waiting`.
+  **Hole change = crown or vertical swipe (up = next, down = previous)**, sent as an absolute
+  `hole` command; the header shows the target at once (distances dimmed) and snaps back after
+  2.5 s if the phone does not confirm.
+- **Score:** caption `HOLE n · PAR p`; **Strokes** large with `−`/`+` (52dp); **Putts** smaller
+  below (44dp); footer `3 pts · 14 total`. Unscored = `–`; the first `+` (or first crown tick)
+  lands on **par**, not net par. Putts `–` until strokes exist; the first `+` gives 2; range
+  0..min(strokes, 10). The crown adjusts strokes with a light haptic per step (no Picker; the
+  rotary delta is accumulated into whole steps).
+- **Stats:** `TEE SHOT` and one row of four round toggles (Fwy · Rgh · Sand · Trbl, selected =
+  accent fill), replaced by `Par 3 · no tee shot` on a par 3; then `Sand` and `Penalty` rows
+  (`label − n +`). Rows whose Stats-tracking group is off are hidden; a page with no rows is
+  dropped from the pager. The phone's cap stays (putts + sand + penalty <= strokes), explained
+  by a hint: `Max for 4 strokes` when a `+` is blocked by it, `Set strokes first` (inputs off)
+  while strokes are unset.
+- **No Save.** Edits are sent ~1 s after the last change: `strokes` then `shot` (absolute
+  values), through one outbox `enqueueAll`. Before a `hole` command (crown / swipe) pending
+  edits are flushed in the same call, ahead of it. Edits are pinned to the round and hole they
+  were made on: if the phone's state moves to another hole or round while edits are pending,
+  they are sent at once for their own hole (the phone accepts them only if still on it) and are
+  never re-targeted. The watch also flushes when the app stops.
+- **States:** dispute -> Score/Stats show `Resolve on phone` with inputs off; viewOnly / official
+  -> Distances only; no round -> "Open a round on your phone to start."; phone out of range ->
+  edits queue on the watch ("2 holes waiting"); unsupported `v` -> "Update the watch app".
 
 ## Non-goals (v1)
 

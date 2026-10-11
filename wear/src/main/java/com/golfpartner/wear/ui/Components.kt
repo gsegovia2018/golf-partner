@@ -1,16 +1,19 @@
 package com.golfpartner.wear.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,11 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.wear.compose.material3.Button
-import androidx.wear.compose.material3.ButtonDefaults
-import androidx.wear.compose.material3.FilledTonalIconButton
-import androidx.wear.compose.material3.IconButtonDefaults
-import androidx.wear.compose.material3.OutlinedButton
 import androidx.wear.compose.material3.Text
 import com.golfpartner.wear.ui.theme.Hud
 
@@ -56,82 +54,33 @@ fun HudText(
 fun Caption(text: String, color: Color = Hud.textMuted, modifier: Modifier = Modifier) =
     HudText(text, 12, modifier, color, FontWeight.SemiBold, letterSpacing = 1f)
 
-/** The main action: accent fill, 48dp tall. */
+/** A round tap target: `−`/`+` or a tee-shot toggle. Selected = accent fill; disabled = dimmed, no click. */
 @Composable
-fun PrimaryButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Button(
-        onClick = onClick,
-        modifier = modifier.height(TouchMin).widthIn(min = 120.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Hud.accent, contentColor = Hud.onAccent),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
-    ) {
-        Text(label, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-    }
-}
-
-/** The quiet action: outline only (already-scored pill, "More"). */
-@Composable
-fun GhostButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier.height(TouchMin).widthIn(min = 96.dp),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = Hud.text),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 0.dp),
-    ) {
-        Text(label, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-    }
-}
-
-/** A two-state chip (tee-shot lie). Tapping the selected one clears it. */
-@Composable
-fun LieChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Button(
-        onClick = onClick,
-        modifier = modifier.height(TouchMin),
-        colors = if (selected) {
-            ButtonDefaults.buttonColors(containerColor = Hud.accent, contentColor = Hud.onAccent)
-        } else {
-            ButtonDefaults.buttonColors(containerColor = Hud.inset, contentColor = Hud.text)
-        },
-        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-    ) {
-        Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-    }
-}
-
-/** `−  n  +` with a caption under the value. */
-@Composable
-fun Stepper(
+fun RoundButton(
     label: String,
-    value: Int,
-    min: Int,
-    max: Int,
-    onChange: (Int) -> Unit,
+    size: Dp,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    selected: Boolean = false,
+    fontSize: Int = 22,
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+    Box(
+        modifier = modifier
+            .size(size)
+            .alpha(if (enabled) 1f else 0.35f)
+            .clip(CircleShape)
+            .background(if (selected) Hud.accent else Hud.inset)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        StepButton("−", enabled = value > min) { onChange(value - 1) }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            HudText(value.toString(), 24, weight = FontWeight.Bold)
-            HudText(label, 10, color = Hud.textMuted)
-        }
-        StepButton("+", enabled = value < max) { onChange(value + 1) }
-    }
-}
-
-@Composable
-private fun StepButton(glyph: String, enabled: Boolean, onClick: () -> Unit) {
-    FilledTonalIconButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.size(TouchMin),
-        colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Hud.inset, contentColor = Hud.text),
-    ) {
-        Text(glyph, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(
+            label,
+            color = if (selected) Hud.onAccent else Hud.text,
+            fontSize = fontSize.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
     }
 }
 
