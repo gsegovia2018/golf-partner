@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.golfpartner'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.golfswing"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  // Same MediaPipe release as the swing lab (tools/swing-lab runs mediapipe 1.1.0),
+  // so the phone and the lab run one pose graph on one model file.
+  implementation "com.google.mediapipe:tasks-vision:1.1.0"
+  testImplementation "junit:junit:4.13.2"
+}
