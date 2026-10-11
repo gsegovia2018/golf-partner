@@ -8,11 +8,14 @@ object Copy {
     const val KEPT_ON_WATCH = "Scores are kept on the watch and sent when the phone is back."
     const val GETTING_FIX = "Getting GPS fix"
     const val LOCATION_OFF = "Allow location"
-    const val SCORE_HOLE = "Score hole"
+    const val TEE_SHOT = "TEE SHOT"
+    const val PAR3_NOTE = "Par 3 · no tee shot"
+    const val SET_STROKES_FIRST = "Set strokes first"
+    const val STROKES = "STROKES"
+    const val PUTTS = "Putts"
+    const val SAND = "Sand"
+    const val PENALTY = "Penalty"
     const val UPDATE_WATCH = "Update the watch app"
-    const val NEXT = "Next"
-    const val SAVE = "Save"
-    const val MORE = "More"
 
     fun holeHeader(number: Int, par: Int) = "HOLE $number · PAR $par"
 
@@ -24,17 +27,24 @@ object Copy {
 
     fun points(n: Int) = "$n ${if (n == 1) "pt" else "pts"}"
 
-    fun ghostPill(strokes: Int, pts: Int) = "$strokes · ${points(pts)}"
-
     fun waiting(holes: Int) = "$holes ${if (holes == 1) "hole" else "holes"} waiting"
-
-    fun saved(hole: Int) = "Hole $hole saved"
 
     fun scoreAndTotal(pts: Int, total: Int) = "${points(pts)} · $total total"
 
-    fun putts(n: Int) = "$n ${if (n == 1) "putt" else "putts"}"
+    /** The score page's footer; no points while the hole is unscored. */
+    fun footer(pts: Int?, total: Int) = if (pts == null) "$total total" else scoreAndTotal(pts, total)
 
-    fun nextHole(n: Int) = "Hole $n ›"
+    /** The hole being moved to, before the phone confirms (its par is not known here). */
+    fun movingTo(number: Int) = "HOLE $number"
 
-    fun lieLabel(lie: String) = lie.replaceFirstChar { it.uppercase() }
+    fun maxFor(strokes: Int) = "Max for $strokes ${if (strokes == 1) "stroke" else "strokes"}"
+
+    /** Short tee-shot labels, one per [com.golfpartner.wear.data.Entry.LIES]. */
+    fun lieLabel(lie: String) = when (lie) {
+        "fairway" -> "Fwy"
+        "rough" -> "Rgh"
+        "sand" -> "Sand"
+        "trouble" -> "Trbl"
+        else -> lie.replaceFirstChar { it.uppercase() }
+    }
 }

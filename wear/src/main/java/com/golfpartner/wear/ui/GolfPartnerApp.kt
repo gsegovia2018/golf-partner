@@ -1,36 +1,45 @@
 package com.golfpartner.wear.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.wear.compose.foundation.BasicSwipeToDismissBox
-import androidx.wear.compose.foundation.rememberSwipeToDismissBoxState
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.rotary.onRotaryScrollEvent
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.MaterialTheme
 import com.golfpartner.wear.data.CommandOutbox
 import com.golfpartner.wear.data.Distances
 import com.golfpartner.wear.data.Entry
-import com.golfpartner.wear.data.SavedSummary
+import com.golfpartner.wear.data.PageKind
+import com.golfpartner.wear.data.Pages
+import com.golfpartner.wear.data.StepAccumulator
 import com.golfpartner.wear.data.WatchController
 import com.golfpartner.wear.data.WatchState
 import com.golfpartner.wear.ui.theme.Hud
 import kotlinx.coroutines.delay
-
-private sealed interface Screen {
-    data object Home : Screen
-    /** [opened]: the state the entry was opened on; the save is for its round and hole. */
-    data class Entry(val opened: WatchState) : Screen
-    data class Saved(val summary: SavedSummary, val opened: WatchState) : Screen
-}
+import kotlin.math.abs
 
 @Composable
 fun GolfPartnerApp(controller: WatchController, locationDenied: Boolean) {
@@ -75,53 +84,104 @@ fun GolfPartnerApp(controller: WatchController, locationDenied: Boolean) {
     }
 }
 
+/** Crown pixels per hole step / per strokes step. */
+private const val CROWN_HOLE_PX = 70f
+private const val CROWN_STROKES_PX = 45f
+
+/** How long a hole picked by crown or swipe waits for the phone before snapping back to what the state says. */
+private const val HOLE_SETTLE_MS = 2_500L
+
+/**
+ * Distances | Score | Stats in a pager. Stays on its page when the hole changes. Crown: hole on
+ * Distances, strokes on Score. Vertical swipe on Distances: hole. Edits go through
+ * [WatchController.edit] (debounced auto-send); a hole move flushes them first.
+ */
 @Composable
 private fun RoundScreens(state: WatchState, controller: WatchController, info: HomeInfo) {
     val hole = state.hole!!
-    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
-    // Entry only exists on an unblocked hole; if the phone blocks (or the round goes away) mid-entry, go home.
-    // Entry and Saved belong to the hole they were opened on: if the phone moved on, go home, write nothing.
-    when (val sc = screen) {
-        is Screen.Entry -> if (!state.canEnter || !Entry.stillOn(sc.opened, state)) screen = Screen.Home
-        is Screen.Saved -> if (!Entry.stillOn(sc.opened, state)) screen = Screen.Home
-        Screen.Home -> Unit
+    val haptics = LocalHapticFeedback.current
+    val pages = Pages.of(state)
+    val pagerState = rememberPagerState { pages.size }
+    val pageNow = pages.getOrElse(pagerState.currentPage) { PageKind.Distances }
+
+    // The hole picked on the watch, ahead of the phone's state; cleared on arrival or after a timeout.
+    var target by remember { mutableStateOf<Int?>(null) }
+    val shownHole = target ?: hole.number
+    LaunchedEffect(hole.number, target) {
+        when {
+            target == hole.number -> target = null
+            target != null -> {
+                delay(HOLE_SETTLE_MS)
+                target = null
+            }
+        }
+    }
+    val stepHole: (Int) -> Unit = { delta ->
+        if (state.canEnter) {
+            val base = target ?: hole.number // read now: several events can arrive before a recomposition
+            val next = (base + delta).coerceIn(1, hole.count)
+            if (next != base) {
+                target = next
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                controller.goToHole(state, next)
+            }
+        }
     }
 
-    val atHome = screen == Screen.Home
-    BackHandler(enabled = !atHome) { screen = Screen.Home }
-    BasicSwipeToDismissBox(
-        onDismissed = { screen = Screen.Home },
-        state = rememberSwipeToDismissBoxState(),
-        userSwipeEnabled = !atHome,
-    ) { isBackground ->
-        // Behind a swipe is always home; in front is whatever we are on.
-        val shown = if (isBackground) Screen.Home else screen
-        Box(Modifier.fillMaxSize().background(Hud.bg)) {
-            when (shown) {
-                Screen.Home -> HomeScreen(
-                    state = state,
-                    info = info,
-                    onScore = { screen = Screen.Entry(state) },
-                    onGoToHole = { controller.goToHole(state, it) },
-                )
-                is Screen.Entry -> {
-                    val opened = shown.opened
-                    val plan = Entry.plan(opened.hole!!, opened.track)
-                    EntryFlow(opened.hole, opened.me!!, plan) { draft ->
-                        val summary = SavedSummary.of(opened, plan, draft)
-                        controller.save(opened, plan, draft)
-                        screen = summary?.let { Screen.Saved(it, opened) } ?: Screen.Home
+    // What the pages show: the pending edit if it belongs to this hole, else the phone's values.
+    val pending by controller.edit.collectAsState()
+    val plan = Entry.plan(hole, state.track)
+    val draft = pending?.takeIf { Entry.stillOn(it.opened, state) }?.draft
+        ?: state.me?.let { Entry.initialDraft(hole, it) }
+    val onChange: DraftChange = { change -> controller.edit(state, change) }
+
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(pagerState.currentPage) { focus.requestFocus() }
+    val holeCrown = remember { StepAccumulator(CROWN_HOLE_PX) }
+    val strokesCrown = remember { StepAccumulator(CROWN_STROKES_PX) }
+    val me = state.me
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onRotaryScrollEvent { e ->
+                when (pageNow) {
+                    PageKind.Distances -> {
+                        val n = holeCrown.feed(e.verticalScrollPixels)
+                        if (n != 0) stepHole(if (n > 0) 1 else -1)
+                        true
                     }
+                    PageKind.Score -> {
+                        if (!state.canEnter || me == null) return@onRotaryScrollEvent true
+                        val n = strokesCrown.feed(e.verticalScrollPixels)
+                        if (n != 0) {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            repeat(abs(n)) { onChange { d -> Entry.stepStrokes(hole, plan, d, me, if (n > 0) 1 else -1) } }
+                        }
+                        true
+                    }
+                    PageKind.Stats -> false
                 }
-                is Screen.Saved -> SavedScreen(
-                    summary = shown.summary,
-                    pendingHoles = info.pendingHoles,
-                    onNextHole = {
-                        controller.goToHole(state, shown.summary.hole + 1)
-                        screen = Screen.Home
-                    },
-                )
             }
+            .focusRequester(focus)
+            .focusable(),
+    ) {
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { index ->
+            when (pages.getOrElse(index) { PageKind.Distances }) {
+                PageKind.Distances -> DistancesPage(state, info, shownHole, stepHole)
+                PageKind.Score -> draft?.let { ScorePage(state, it, plan, onChange) }
+                PageKind.Stats -> draft?.let { StatsPage(state, it, plan, onChange) }
+            }
+        }
+        if (pages.size > 1) PageDots(pages.size, pagerState.currentPage, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
+    }
+}
+
+@Composable
+private fun PageDots(count: Int, current: Int, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        repeat(count) { i ->
+            Box(Modifier.size(5.dp).clip(CircleShape).background(if (i == current) Hud.accent else Hud.textMuted.copy(alpha = 0.4f)))
         }
     }
 }
