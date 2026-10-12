@@ -42,7 +42,7 @@ Option B of https://claude.ai/artifact/E6Us5WaTcjAr6BeEK746bA, picked 2026-10-07
 the board rows' points column, bottom sheets for reschedule/reopen/approve that state the
 consequence, an "Awaiting approval" board section. The Card screen opens status-only cards.
 
-## Backend: one migration, `20261006000006_league_post_deadline.sql`
+## Backend: one migration, `20261012000000_league_post_deadline.sql`
 
 - `CREATE EXTENSION IF NOT EXISTS pg_cron` (available on the project, not installed today).
 - `league_cards`: add `post_by timestamptz`, `reminded_at timestamptz`,
