@@ -18,6 +18,7 @@ import { nativeApi, getStill } from './frames';
 import { expectedShaftPx } from './scale';
 import { marksForAnalyze } from './labels';
 import { frameOfKey } from './checkpointChecks';
+import { APPROX_FPS } from './fpsModel';
 import {
   getSwing, getSwingProfile, swingVideoUri, saveAnalysis, markSwingFailed, readMarks,
 } from '../store/swingStore';
@@ -28,13 +29,28 @@ const PASS2_KEYS = [
   'lateBackswing', 'preImpact', 'postImpact',
 ];
 
-// The swing profile drives the native ball search side and the expected ball size. A
-// missing height is left out (not sent as null): native then uses its own default, 176 cm.
-export function poseOptions(profile) {
+// The swing profile drives the native ball search side and the expected ball size, and the
+// probe gives the sampling policy its time base. Unknown values are left out (never sent as
+// null): native then uses its defaults (right-handed, 176 cm, the file's capture-rate tag or
+// 240 fps). Native clamps the height to 120-230 cm.
+export function poseOptions(profile, probe) {
   const opts = { model: 'full', handedness: profile?.handedness === 'left' ? 'left' : 'right' };
   const h = Number(profile?.heightCm);
   if (profile?.heightCm != null && Number.isFinite(h) && h > 0) opts.heightCm = h;
+  const fps = policyFps(probe);
+  if (fps) opts.captureFps = fps;
   return opts;
+}
+
+// Capture frames per second of one container frame step, before any pose exists (plan 4.2):
+// the capture-rate tag when the file has one; a high-rate container (>= 100 fps) is its own
+// capture rate; otherwise unknown (a 30 fps container may be 8x slow motion).
+export function policyFps(probe) {
+  const capture = Number(probe?.captureFps);
+  if (Number.isFinite(capture) && capture > 0) return capture;
+  const container = Number(probe?.containerFps);
+  if (Number.isFinite(container) && container >= APPROX_FPS) return container;
+  return null;
 }
 
 export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = () => {}, isCancelled = () => false } = {}) {
@@ -61,7 +77,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
     };
 
     onProgress({ stage: 'reading' });
-    const probe = await api.probeVideo(path);
+    let probe = await api.probeVideo(path);
     if (isCancelled()) return { cancelled: true };
     onProgress({ stage: 'reading', probe });
 
@@ -71,11 +87,13 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
     });
     let pose;
     try {
-      pose = await api.analyzePose(path, poseOptions(profile));
+      pose = await api.analyzePose(path, poseOptions(profile, probe));
     } finally {
       sub?.remove?.();
     }
     if (isCancelled()) return { cancelled: true };
+    // the duplicate-frame check runs inside analyzePose (it decodes every frame anyway)
+    if (typeof pose?.duplicateFrameRatio === 'number') probe = { ...probe, duplicateFrameRatio: pose.duplicateFrameRatio };
 
     onProgress({ stage: 'planes', probe });
     const opts = { ...base, probe };

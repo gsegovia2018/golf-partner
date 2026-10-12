@@ -82,6 +82,14 @@ describe('runAnalysis', () => {
     expect(poseOptions({ heightCm: '181', handedness: 'left' })).toEqual({ model: 'full', handedness: 'left', heightCm: 181 });
   });
 
+  test('poseOptions passes the capture rate the sampling policy should use, when known', () => {
+    const right = { handedness: 'right' };
+    expect(poseOptions(right, { containerFps: 30, captureFps: 240 }).captureFps).toBe(240);
+    expect(poseOptions(right, { containerFps: 240, captureFps: null }).captureFps).toBe(240);
+    expect(poseOptions(right, { containerFps: 29.97, captureFps: null })).not.toHaveProperty('captureFps');
+    expect(poseOptions(right, undefined)).not.toHaveProperty('captureFps');
+  });
+
   test('pass 2 asks native for the thirteen checkpoint frames with their grip estimate', async () => {
     const api = makeApi();
     frames.nativeApi.mockReturnValue(api);

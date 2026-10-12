@@ -56,9 +56,12 @@ function requireSupported() {
 }
 
 /**
- * Container facts (plan 3). width/height are in display orientation (rotation applied).
+ * Container facts (plan 3), read without decoding. width/height are in display orientation
+ * (rotation applied). hdr = PQ/HLG transfer or a 10-bit profile (frames are analysed from
+ * their top 8 bits). duplicateFrameRatio is always null here: the check needs decoded frames,
+ * so analyzePose reports it.
  * @returns {Promise<{ width, height, durationMs, frameCount, containerFps,
- *   captureFps: number | null, rotationDeg, duplicateFrameRatio }>}
+ *   captureFps: number | null, rotationDeg, hdr: boolean, duplicateFrameRatio: null }>}
  */
 export async function probeVideo(path) {
   return requireSupported().probeVideo(path);
@@ -70,12 +73,17 @@ export async function probeVideo(path) {
  * time (multiply by the slow-mo factor for captured time).
  * @param {string} path  file path, file:// or content:// URI
  * @param {{ model?: 'full'|'lite', sampling?: { sparseEvery?, afterImpactEvery?, denseEvery? },
- *   handedness?: 'right'|'left', heightCm?: number }} [opts]
- *   handedness and heightCm only steer the native ball search (lead foot side, expected size).
+ *   handedness?: 'right'|'left', heightCm?: number, captureFps?: number }} [opts]
+ *   handedness and heightCm only steer the native ball search (lead foot side, expected
+ *   size; height clamped to 120-230 cm, default 176). captureFps is the sampling policy's
+ *   time base (default: the file's capture-rate tag, else 240).
  * @returns {Promise<{ video: { width, height, containerFps, frameCount },
  *   frames: Array<{ i, tMs, lm: Array<[x, y, vis]> }>,
  *   ball: { x, y, r, conf, frame } | null, ballGoneFrame: number | null,
- *   timings: { decodeMs, inferMs, totalMs, inferences, delegate: 'gpu'|'cpu' } }>}
+ *   duplicateFrameRatio: number,
+ *   timings: { decodeMs, inferMs, totalMs, inferences, delegate: 'gpu'|'cpu', createMs, stagesMs } }>}
+ *   Rejects with ERR_UNSUPPORTED_VIDEO when the phone can't read the clip's frames,
+ *   ERR_CANCELLED after cancelAnalysis(), ERR_BUSY while another analysis runs.
  */
 export async function analyzePose(path, opts = {}) {
   return requireSupported().analyzePose(path, opts);
@@ -92,8 +100,8 @@ export async function extractCheckpoints(path, opts) {
 }
 
 /**
- * JPEGs of arbitrary frames for the Edit-marks scrubber: `<outDir>/<frame>.jpg`, full
- * decode resolution, display orientation.
+ * JPEGs of arbitrary frames for the Edit-marks scrubber: `<outDir>/<frame>.jpg`, decode
+ * resolution (halved when the long side is over 1920), display orientation.
  * @param {{ frames: number[], outDir: string }} opts
  * @returns {Promise<{ [frame]: string }>}  file:// URIs
  */
@@ -101,7 +109,10 @@ export async function extractFrames(path, opts) {
   return requireSupported().extractFrames(path, opts);
 }
 
-/** Stops a running analyzePose / extraction; its promise rejects with code ERR_CANCELLED. */
+/**
+ * Stops every analyzePose / extraction running or queued at the time of the call; their
+ * promises reject with code ERR_CANCELLED. Calls made afterwards are not affected.
+ */
 export function cancelAnalysis() {
   if (swingSupport().supported) nativeModule().cancelAnalysis();
 }
