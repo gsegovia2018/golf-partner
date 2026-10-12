@@ -39,6 +39,17 @@ def clip_name(meta):
     return f"swing-{day}-{ident}"
 
 
+CLUBS = ("iron", "driver")
+
+
+def club_of(meta, analysis):
+    """'iron' | 'driver'. Exports from before the club picker carry none: they read as iron (D19)."""
+    for c in (meta.get("club"), (meta.get("swing") or {}).get("club"), analysis.get("club")):
+        if c in CLUBS:
+            return c
+    return "iron"
+
+
 def build_truth(meta, analysis, marks, clip):
     """The lab's truth.json for one exported swing (pure; no file access)."""
     video = meta.get("video") or {}
@@ -96,6 +107,7 @@ def build_truth(meta, analysis, marks, clip):
             "interpolated": bool(fps.get("approximate")),
         },
         "handedness": meta.get("handedness") or analysis.get("handedness") or "right",
+        "club": club_of(meta, analysis),
         "heightCm": meta.get("heightCm"),
         "ball": ({"x": round(ball[0] * w, 2), "y": round(ball[1] * h, 2), "conf": 1} if ball else None),
         "checkpoints": checkpoints,

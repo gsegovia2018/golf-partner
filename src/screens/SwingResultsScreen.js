@@ -17,9 +17,11 @@ import { useSwingTone } from '../components/swing/swingTone';
 import { useTheme } from '../theme/ThemeContext';
 import {
   subscribeSwings, getSwingsVersion, getSwing, hydrateSwings, renameSwing, readAnalysis, readPose,
-  markSwingFailed, swingVideoUri,
+  markSwingFailed, swingVideoUri, readProbe, readMarks, saveAnalysis,
 } from '../store/swingStore';
 import { runAnalysis } from '../swing/runAnalysis';
+import { reanalyzeForClub } from '../swing/reanalyze';
+import ClubPicker from '../components/swing/ClubPicker';
 import { shareSwingExport } from '../swing/shareExport';
 import { nativeApi, getStill, ensureStills } from '../swing/frames';
 import { poseAtFrame } from '../swing/poseAt';
@@ -36,7 +38,9 @@ const MAX_NUDGE = 2; // stills exist for the checkpoint frame +-2 (D4)
 
 // --- Sections --------------------------------------------------------------------------------
 
-function Hero({ s, analysis, row, loading }) {
+function Hero({
+  s, analysis, row, loading, onClubChange, clubLocked,
+}) {
   const main = analysis?.main;
   const c = analysis?.counts;
   return (
@@ -60,6 +64,11 @@ function Hero({ s, analysis, row, loading }) {
           </>
         )}
       </View>
+      {loading ? null : (
+        <View style={s.clubLine}>
+          <ClubPicker value={analysis.club} onChange={onClubChange} disabled={clubLocked} onDark compact testID="results-club-picker" />
+        </View>
+      )}
     </View>
   );
 }
@@ -144,7 +153,7 @@ function PlayerBody({ uri, onClose, s }) {
 
 export function SwingResultsView({
   row, phase, analysis, pose, progress, error, pass2Pending = false, stillTick = 0, stillFor,
-  onBack, onCancel, onRetry, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport,
+  onBack, onCancel, onRetry, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport, onClubChange,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
@@ -232,7 +241,7 @@ export function SwingResultsView({
 
         {ready ? (
           <>
-            <Hero s={s} analysis={analysis} row={row} />
+            <Hero s={s} analysis={analysis} row={row} onClubChange={onClubChange} clubLocked={pass2Pending} />
             {analysis.approximate ? (
               <View style={s.banner}>
                 <Feather name="alert-triangle" size={16} color={tone.yellow} />
@@ -464,6 +473,23 @@ export default function SwingResultsScreen({ navigation, route }) {
     if (alive.current && Object.values(got).some(Boolean)) setStillTick((t) => t + 1);
   }, [swingId]);
 
+  // D19: another club re-scores the stored pose and marks (no native call) and saves.
+  const onClubChange = useCallback(async (club) => {
+    const cur = data.analysis;
+    if (!cur || started.current) return;
+    const [pose, probe, marks] = await Promise.all([
+      poseRef.current ?? readPose(swingId), readProbe(swingId), readMarks(swingId),
+    ]);
+    if (!pose) return;
+    const next = reanalyzeForClub({
+      pose, probe, marks, analysis: cur,
+    }, club);
+    if (next.error) return;
+    await saveAnalysis(swingId, next);
+    poseRef.current = pose;
+    await load();
+  }, [data.analysis, swingId, load]);
+
   const onCancel = () => {
     cancelled.current = true;
     try { nativeApi()?.cancelAnalysis?.(); } catch { /* best effort */ }
@@ -497,6 +523,7 @@ export default function SwingResultsScreen({ navigation, route }) {
         onEditMarks={(checkpoint) => navigation.navigate('SwingEditMarks', { swingId, checkpoint })}
         onRename={(name) => renameSwing(swingId, name)}
         onExport={onExport}
+        onClubChange={onClubChange}
         onPlay={() => setPlaying(true)}
         onNeedStills={onNeedStills}
       />
@@ -528,6 +555,7 @@ const makeStyles = (theme) => StyleSheet.create({
   why: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12.5, lineHeight: 18, color: 'rgba(255,255,255,0.88)' },
   skelHero: { height: 26, width: '60%', borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.18)', marginVertical: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  clubLine: { marginTop: 8 },
   chip: { backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   chipText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, color: '#ffffff' },
 

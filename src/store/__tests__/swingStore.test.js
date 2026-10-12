@@ -184,18 +184,64 @@ describe('rename and delete', () => {
 
 describe('profile (D5, D6)', () => {
   it('defaults to right-handed with no height, persists, and hydrates back', async () => {
-    expect(store.getSwingProfile()).toEqual({ heightCm: null, handedness: 'right', asked: false });
+    expect(store.getSwingProfile()).toEqual({
+      heightCm: null, handedness: 'right', asked: false, lastClub: 'iron',
+    });
     await store.setSwingProfile({ heightCm: 176, handedness: 'left' });
-    expect(store.getSwingProfile()).toEqual({ heightCm: 176, handedness: 'left', asked: true });
+    expect(store.getSwingProfile()).toEqual({
+      heightCm: 176, handedness: 'left', asked: true, lastClub: 'iron',
+    });
     store._resetForTests();
     await store.hydrateSwings();
-    expect(store.getSwingProfile()).toEqual({ heightCm: 176, handedness: 'left', asked: true });
+    expect(store.getSwingProfile()).toEqual({
+      heightCm: 176, handedness: 'left', asked: true, lastClub: 'iron',
+    });
   });
 
   it('keeps the height when only handedness changes', async () => {
     await store.setSwingProfile({ heightCm: 180 });
     await store.setSwingProfile({ handedness: 'left' });
     expect(store.getSwingProfile().heightCm).toBe(180);
+  });
+});
+
+describe('club (D19)', () => {
+  it('a new swing is an iron swing unless told otherwise; junk reads as iron', async () => {
+    expect((await store.createSwing({ videoUri: 'file:///picked/clip.mp4' })).club).toBe('iron');
+    expect((await store.createSwing({ videoUri: 'file:///picked/clip.mp4', club: 'driver' })).club).toBe('driver');
+    expect((await store.createSwing({ videoUri: 'file:///picked/clip.mp4', club: 'wedge' })).club).toBe('iron');
+  });
+
+  it('rows saved before the picker (no club, or null) hydrate as iron and are re-saved lazily', async () => {
+    const old = (id, extra = {}) => ({ id, createdAt: `2026-10-0${id}T10:00:00.000Z`, name: id, status: 'ready', source: 'import', ...extra });
+    await AsyncStorage.setItem('golf_swings.v1', JSON.stringify([old('1'), old('2', { club: null }), old('3', { club: 'driver' })]));
+    await store.hydrateSwings();
+    expect(Object.fromEntries(store.getSwings().map((r) => [r.id, r.club]))).toEqual({ 1: 'iron', 2: 'iron', 3: 'driver' });
+  });
+
+  it('setSwingClub saves the choice to the row and the index', async () => {
+    const row = await store.createSwing({ videoUri: 'file:///picked/clip.mp4' });
+    await store.setSwingClub(row.id, 'driver');
+    expect(store.getSwing(row.id).club).toBe('driver');
+    expect(JSON.parse(await AsyncStorage.getItem('golf_swings.v1'))[0].club).toBe('driver');
+    expect(await store.setSwingClub('nope', 'driver')).toBeNull();
+  });
+
+  it('saveAnalysis takes the club from the analysis (the Results picker re-saves this way)', async () => {
+    const row = await store.createSwing({ videoUri: 'file:///picked/clip.mp4' });
+    await store.saveAnalysis(row.id, { ...analysisFixture, club: 'driver' });
+    expect(store.getSwing(row.id).club).toBe('driver');
+  });
+
+  it('remembers the last club chosen on Home without counting as the first-run answer', async () => {
+    expect(store.getSwingProfile().lastClub).toBe('iron');
+    await store.setLastSwingClub('driver');
+    expect(store.getSwingProfile()).toMatchObject({ lastClub: 'driver', asked: false });
+    store._resetForTests();
+    await store.hydrateSwings();
+    expect(store.getSwingProfile().lastClub).toBe('driver');
+    await store.setLastSwingClub('putter');
+    expect(store.getSwingProfile().lastClub).toBe('iron');
   });
 });
 
@@ -256,6 +302,7 @@ describe('storage and export (D18)', () => {
       video: { width: 478, height: 850, frameCount: 1297, containerFps: 29.97, captureFps: 240 },
     });
     expect(meta.swing.id).toBe(row.id);
+    expect(meta.club).toBe('iron');
     expect(JSON.parse(entries['analysis.json']).main.fault).toBe('early_extension');
     expect(JSON.parse(entries['marks.json']).schema).toBe('swing-club-labels/1');
   });

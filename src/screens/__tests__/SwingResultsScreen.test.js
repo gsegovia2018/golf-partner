@@ -9,6 +9,7 @@ import { shareSwingExport } from '../../swing/shareExport';
 import { getStill, ensureStills } from '../../swing/frames';
 import { analyze } from '../../swing/analyze';
 import { SWING_STRINGS } from '../../swing/strings';
+import { emptyMarks, frameLabel, withFrame } from '../../swing/labels';
 import { fixtureNative, TRUTH, W, H } from '../../swing/__tests__/helpers';
 
 const lab = require('../../swing/__tests__/fixtures/lab-d15-pass1.json');
@@ -29,6 +30,9 @@ jest.mock('../../store/swingStore', () => ({
   renameSwing: jest.fn(() => Promise.resolve()),
   readAnalysis: jest.fn(),
   readPose: jest.fn(),
+  readProbe: jest.fn(),
+  readMarks: jest.fn(),
+  saveAnalysis: jest.fn(),
   markSwingFailed: jest.fn(() => Promise.resolve()),
   swingVideoUri: jest.fn(() => 'file:///doc/swings/s1/video.mp4'),
 }));
@@ -52,12 +56,22 @@ ownerMarks.preImpact = { hands: norm({ x: 222, y: 400 }), head: norm({ x: 240, y
 const MARKED = analyze(pose, { ...base, marks: ownerMarks });
 const UNMARKED = analyze(pose, base);
 
+// marks.json as Edit marks wrote it: the owner's hands and clubheads (what a re-score reads back).
+const OWNER_MARKS = [...Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, c.frame, c.hands, c.hidden ? null : c.head, c.hidden]),
+  ['preImpact', 550, { x: 222, y: 400 }, { x: 240, y: 470 }, false]]
+  .reduce((m, [k, i, hands, head, hidden]) => withFrame(m, frameLabel({
+    i, checkpoint: k, hands: { proposed: null, final: norm(hands), placed: true }, head: { proposed: null, final: norm(head), finalHidden: hidden },
+  })), emptyMarks({ swingId: 's1' }));
+
 const ROW = { id: 's1', name: 'Sat 11 Oct · 18:42', createdAt: '2026-10-11T16:42:00.000Z', status: 'ready', club: null, source: 'import' };
 
 function setup({ row = ROW, analysis = MARKED } = {}) {
   store.getSwing.mockReturnValue(row);
   store.readAnalysis.mockResolvedValue(analysis);
-  store.readPose.mockResolvedValue(pose);
+  store.readPose.mockResolvedValue({ ...pose, pass2: base.pass2 });
+  store.readProbe.mockResolvedValue(null);
+  store.readMarks.mockResolvedValue(OWNER_MARKS);
+  store.saveAnalysis.mockImplementation(async (_id, a) => { store.readAnalysis.mockResolvedValue(a); });
   const navigation = { navigate: jest.fn(), goBack: jest.fn(), addListener: jest.fn(() => () => {}) };
   const utils = render(<ThemeProvider><SwingResultsScreen navigation={navigation} route={{ params: { swingId: 's1' } }} /></ThemeProvider>);
   return { ...utils, navigation };
@@ -219,6 +233,53 @@ describe('SwingResultsScreen: a stored swing', () => {
     store.readAnalysis.mockClear();
     await act(async () => { focus(); });
     expect(store.readAnalysis).toHaveBeenCalled();
+  });
+});
+
+describe('SwingResultsScreen: the club chip (D19)', () => {
+  test('shows Iron for a swing from before the picker, with Driver one tap away', async () => {
+    const { findByText, getByLabelText } = setup();
+    await findByText('Early extension.');
+    expect(MARKED.club).toBe('iron');
+    expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(true);
+    expect(getByLabelText('Driver').props.accessibilityState.selected).toBe(false);
+  });
+
+  test('changing it re-scores from the stored pose and marks (no native run), saves, and redraws the verdict', async () => {
+    const { findByText, getByLabelText, getAllByText } = setup();
+    await findByText('Early extension.');
+    const redBefore = MARKED.counts.red;
+    expect(getAllByText(T.fix(redBefore)).length).toBeGreaterThan(0);
+    store.readAnalysis.mockClear();
+    await act(async () => { fireEvent.press(getByLabelText('Driver')); });
+    await waitFor(() => expect(store.saveAnalysis).toHaveBeenCalledTimes(1));
+    const [id, saved] = store.saveAnalysis.mock.calls[0];
+    expect(id).toBe('s1');
+    expect(saved.club).toBe('driver');
+    expect(saved.counts.red).toBeLessThan(redBefore); // hands height and butt end soften to Watch
+    expect(runAnalysis).not.toHaveBeenCalled();
+    await waitFor(() => expect(getByLabelText('Driver').props.accessibilityState.selected).toBe(true));
+    expect(getAllByText(T.fix(saved.counts.red)).length).toBeGreaterThan(0);
+    expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(false);
+  });
+
+  test('pressing the club already selected does nothing', async () => {
+    const { findByText, getByLabelText } = setup();
+    await findByText('Early extension.');
+    await act(async () => { fireEvent.press(getByLabelText('Iron')); });
+    expect(store.saveAnalysis).not.toHaveBeenCalled();
+  });
+
+  test('is locked while the second pass is still running (it would overwrite the choice)', async () => {
+    let onPartial;
+    runAnalysis.mockImplementation((id, o) => { ({ onPartial } = o); return new Promise(() => {}); });
+    const { findByText, getByLabelText } = setup({ row: { ...ROW, status: 'pending' }, analysis: UNMARKED });
+    await waitFor(() => expect(onPartial).toBeDefined());
+    await act(async () => { await onPartial(UNMARKED); });
+    await findByText('Early extension.');
+    expect(getByLabelText('Driver').props.accessibilityState.disabled).toBe(true);
+    await act(async () => { fireEvent.press(getByLabelText('Driver')); });
+    expect(store.saveAnalysis).not.toHaveBeenCalled();
   });
 });
 

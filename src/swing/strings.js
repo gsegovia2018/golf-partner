@@ -7,6 +7,13 @@ export const SWING_STRINGS = {
   privacy: 'Your video and analysis stay on this phone. Nothing is uploaded.',
   approximate: 'approx.',
 
+  // Club picker (D19): exactly two clubs.
+  club: {
+    label: 'Club',
+    iron: 'Iron',
+    driver: 'Driver',
+  },
+
   // Swing home (S5, design B).
   home: {
     title: 'My swing',
@@ -59,6 +66,7 @@ export const SWING_STRINGS = {
   compare: {
     title: 'Compare',
     overline: 'What changed',
+    differentClubs: 'Different clubs — limits differ',
     swap: 'Swap the two swings',
     back: 'Back',
     verdict: { better: 'Better.', betterNotFixed: 'Better, not fixed.', worse: 'Worse.', same: 'About the same.' },
@@ -254,7 +262,7 @@ export const SWING_STRINGS = {
   },
 
   checkText: {
-    posture_address: (t) => `Spine tilt ${r0(t)}° from vertical (25–40° is good)`,
+    posture_address: (t, lo = 25, hi = 40) => `Spine tilt ${r0(t)}° from vertical (${lo}–${hi}° is good)`,
     hands_between_planes_ok: 'Hands travel between shaft and shoulder planes',
     hands_between_planes: (cm, dir, where) =>
       `Hands ${r0(cm)} cm ${dir === 'steep' ? 'outside the shoulder plane (steep)' : 'inside the shaft plane (flat)'} at ${where}`,
