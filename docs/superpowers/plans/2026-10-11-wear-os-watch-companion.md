@@ -244,7 +244,7 @@ putting, short game.
 **Contract additions (still `v: 1`, additive — older watch builds ignore them):**
 
 ```js
-state.course = { holes: [ { number, par, si, extraShots, green: {front,center,back}|null, tee: [lat,lng]|null } ] } // every hole of the round
+state.course = { holes: [ { number, par, si, extraShots, green: {front,center,back,outline?}|null, tee: [lat,lng]|null } ] } // every hole of the round; `outline` ([[lat,lng]…], the traced green) only when front and back are both null — front/back are then its nearest/farthest vertex, as geo.holeTargetDistances
 state.mine = { "<hole>": { strokes|null, points|null, shot: ShotDetail|null } }              // what the phone SHOWS for me, every hole
 state.track = { putting, teeShot, approach, shortGame, penalties }                            // + approach
 // ShotDetail (watch-visible subset of DEFAULT_SHOT):

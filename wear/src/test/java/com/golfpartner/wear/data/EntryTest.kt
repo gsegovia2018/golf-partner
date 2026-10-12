@@ -203,17 +203,19 @@ class EntryTest {
     @Test
     fun pagesFollowGroupsAndBlocks() {
         assertEquals(
-            listOf(PageKind.Distances, PageKind.Score, PageKind.TeeShot, PageKind.Drive, PageKind.Approach, PageKind.ShortGame),
+            listOf(PageKind.Distances, PageKind.Score, PageKind.Stats),
             Pages.of(Fixtures.state()),
         )
         val onlyPutting = Fixtures.activeJson(track = """{"putting":true,"teeShot":false,"shortGame":false,"penalties":false,"approach":false}""")
-        assertEquals(listOf(PageKind.Distances, PageKind.Score, PageKind.ShortGame), Pages.of(Fixtures.state(onlyPutting)))
+        assertEquals(listOf(PageKind.Distances, PageKind.Score, PageKind.Stats), Pages.of(Fixtures.state(onlyPutting)))
         val onlyApproach = Fixtures.activeJson(track = """{"putting":false,"teeShot":false,"shortGame":false,"penalties":false,"approach":true}""")
-        assertEquals(listOf(PageKind.Distances, PageKind.Score, PageKind.Approach), Pages.of(Fixtures.state(onlyApproach)))
-        assertEquals(6, Pages.of(Fixtures.state(Fixtures.activeJson(blocked = "dispute"))).size)
+        assertEquals(listOf(PageKind.Distances, PageKind.Score, PageKind.Stats), Pages.of(Fixtures.state(onlyApproach)))
+        assertEquals(3, Pages.of(Fixtures.state(Fixtures.activeJson(blocked = "dispute"))).size)
         assertEquals(listOf(PageKind.Distances), Pages.of(Fixtures.state(Fixtures.activeJson(blocked = "viewOnly"))))
         assertEquals(listOf(PageKind.Distances), Pages.of(Fixtures.state(Fixtures.activeJson(blocked = "official"))))
         assertEquals(listOf(PageKind.Distances), Pages.of(WatchState.Inactive))
+        val noStats = Fixtures.activeJson(track = """{"putting":false,"teeShot":false,"shortGame":false,"penalties":false,"approach":false}""")
+        assertEquals(listOf(PageKind.Distances, PageKind.Score), Pages.of(Fixtures.state(noStats)))
     }
 
     @Test

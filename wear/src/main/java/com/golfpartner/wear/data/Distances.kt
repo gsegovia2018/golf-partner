@@ -66,13 +66,17 @@ object Distances {
     /** src/lib/flyoverModel.js ANCHOR_MAX_GPS_METERS. */
     const val ANCHOR_MAX_GPS_M = 1000.0
 
-    private fun reading(from: LatLng, g: Green, units: Units, fromTee: Boolean) = DistanceReading(
-        front = g.front?.let { display(haversineMeters(from, it), units) },
-        center = g.center?.let { display(haversineMeters(from, it), units) },
-        back = g.back?.let { display(haversineMeters(from, it), units) },
-        source = DistanceSource.Watch,
-        fromTee = fromTee,
-    )
+    /** src/lib/geo.js holeTargetDistances: front/back points win, else the outline's nearest/farthest vertex. */
+    private fun reading(from: LatLng, g: Green, units: Units, fromTee: Boolean): DistanceReading {
+        val edges = if (g.front == null && g.back == null) g.outline.map { haversineMeters(from, it) } else emptyList()
+        return DistanceReading(
+            front = (g.front?.let { haversineMeters(from, it) } ?: edges.minOrNull())?.let { display(it, units) },
+            center = g.center?.let { display(haversineMeters(from, it), units) },
+            back = (g.back?.let { haversineMeters(from, it) } ?: edges.maxOrNull())?.let { display(it, units) },
+            source = DistanceSource.Watch,
+            fromTee = fromTee,
+        )
+    }
 
     /**
      * The phone's resolveScorecardDistances: a usable fix within 1000 m of the green centre gives

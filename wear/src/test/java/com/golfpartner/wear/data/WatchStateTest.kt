@@ -57,6 +57,15 @@ class WatchStateTest {
     }
 
     @Test
+    fun parsesTheGreenOutlineSkippingBadPoints() {
+        val s = Fixtures.state(
+            Fixtures.activeJson(green = """{"front":null,"center":[41.001,2.0],"back":null,"outline":[[41.0,2.0],[1],"x",[41.002,2.0]]}"""),
+        )
+        assertEquals(listOf(LatLng(41.0, 2.0), LatLng(41.002, 2.0)), s.hole!!.green!!.outline)
+        assertEquals(emptyList<LatLng>(), Fixtures.state(Fixtures.activeJson()).hole!!.green!!.outline)
+    }
+
+    @Test
     fun toleratesNullGreenAndNullParts() {
         val noGreen = Fixtures.state(Fixtures.activeJson(green = "null", phone = "null"))
         assertNull(noGreen.hole!!.green)

@@ -51,6 +51,18 @@ describe('watchInputsOf: whole-course state', () => {
     expect(s.hole.green.center).toEqual([43.0, -2.0]);
   });
 
+  test('a green with no front/back points carries its traced outline', () => {
+    const outline = [[43.2, -2.2], [43.2, -2.199], [43.201, -2.2]];
+    mockFeatures[3] = { greenCenter: [43.2005, -2.1995], greenFront: null, greenBack: null, green: outline, start: null };
+    try {
+      const holes = watchStateOf({ rev: 1, ...watchInputsOf(base) }).course.holes;
+      expect(holes[2].green).toEqual({ front: null, center: [43.2005, -2.1995], back: null, outline });
+      expect(holes[0].green).not.toHaveProperty('outline'); // admin points win, as on the phone
+    } finally {
+      delete mockFeatures[3];
+    }
+  });
+
   test('mine has every hole: strokes, points and the watch-visible shot subset', () => {
     expect(Object.keys(s.mine)).toEqual(['1', '2', '3']);
     expect(s.mine[1].strokes).toBe(5);

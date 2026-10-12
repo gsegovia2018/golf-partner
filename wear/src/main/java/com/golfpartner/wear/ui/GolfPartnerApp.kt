@@ -2,6 +2,8 @@ package com.golfpartner.wear.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -18,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +44,7 @@ import com.golfpartner.wear.data.WatchController
 import com.golfpartner.wear.data.WatchState
 import com.golfpartner.wear.ui.theme.Hud
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 @Composable
@@ -172,6 +176,8 @@ private fun RoundScreens(state: WatchState, controller: WatchController, info: H
     LaunchedEffect(pagerState.currentPage) { focus.requestFocus() }
     val holeCrown = remember { StepAccumulator(CROWN_HOLE_PX) }
     val strokesCrown = remember { StepAccumulator(CROWN_STROKES_PX) }
+    val statsScroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
     val me = shown.me
 
     Box(
@@ -193,7 +199,10 @@ private fun RoundScreens(state: WatchState, controller: WatchController, info: H
                         }
                         true
                     }
-                    else -> false
+                    PageKind.Stats -> {
+                        scope.launch { statsScroll.scrollBy(e.verticalScrollPixels) }
+                        true
+                    }
                 }
             }
             .focusRequester(focus)
@@ -203,10 +212,7 @@ private fun RoundScreens(state: WatchState, controller: WatchController, info: H
             when (pages.getOrElse(index) { PageKind.Distances }) {
                 PageKind.Distances -> DistancesPage(shown, info, moving, target ?: phoneHole, stepHole)
                 PageKind.Score -> draft?.let { ScorePage(shown, it, plan, onChange, movingTo) }
-                PageKind.TeeShot -> draft?.let { TeeShotPage(shown, it, plan, onChange, movingTo) }
-                PageKind.Drive -> draft?.let { DrivePage(shown, it, plan, onChange, movingTo) }
-                PageKind.Approach -> draft?.let { ApproachPage(shown, it, plan, onChange, movingTo) }
-                PageKind.ShortGame -> draft?.let { ShortGamePage(shown, it, plan, onChange, movingTo) }
+                PageKind.Stats -> draft?.let { StatsPage(shown, it, plan, onChange, statsScroll, movingTo) }
             }
         }
         if (pages.size > 1) PageDots(pages.size, pagerState.currentPage, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))

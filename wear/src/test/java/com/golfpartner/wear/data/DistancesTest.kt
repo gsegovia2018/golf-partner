@@ -42,6 +42,19 @@ class DistancesTest {
     }
 
     @Test
+    fun withoutFrontBackPointsTheOutlineGivesNearestAndFarthestEdge() {
+        val outline = listOf(LatLng(41.0005, 2.0), LatLng(41.001, 2.0001), LatLng(41.0015, 2.0))
+        val g = Green(null, LatLng(41.001, 2.0), null, outline)
+        val r = Distances.resolve(hole(green = g), Units.M, Fix(41.0, 2.0, 12f, now), now)
+        assertEquals(56, r.front)
+        assertEquals(111, r.center)
+        assertEquals(167, r.back)
+        // Front/back points win over the outline, as on the phone.
+        val pts = hole().green!!.copy(outline = listOf(LatLng(41.1, 2.0)))
+        assertEquals(167, Distances.resolve(hole(green = pts), Units.M, Fix(41.0, 2.0, 12f, now), now).back)
+    }
+
+    @Test
     fun unitsApplyToWatchFixToo() {
         val r = Distances.resolve(hole(), Units.YD, Fix(41.0, 2.0, 12f, now), now)
         assertEquals(122, r.center) // 111.195 * 1.09361 = 121.6

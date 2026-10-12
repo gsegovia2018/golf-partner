@@ -50,7 +50,11 @@ const triple = (p) => (Array.isArray(p) && p.length === 2 ? p : null);
 function greenOf(courseName, holeNumber) {
   const f = holeFeatures(courseName, holeNumber);
   if (!f?.greenCenter) return null;
-  return { front: triple(f.greenFront), center: triple(f.greenCenter), back: triple(f.greenBack) };
+  const green = { front: triple(f.greenFront), center: triple(f.greenCenter), back: triple(f.greenBack) };
+  // No front/back points: the phone measures front/back to the nearest and
+  // farthest vertex of the traced green (geo.holeTargetDistances), so does the watch.
+  if (!green.front && !green.back && f.green?.length) green.outline = f.green.map(triple).filter(Boolean);
+  return green;
 }
 
 // Every hole of the round for the watch: static per round + course geometry, so
