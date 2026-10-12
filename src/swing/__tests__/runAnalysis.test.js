@@ -1,4 +1,4 @@
-import { runAnalysis, poseOptions } from '../runAnalysis';
+import { runAnalysis, poseOptions, pass2Ball } from '../runAnalysis';
 import { fixtureNative, TRUTH, W, H } from './helpers';
 import * as frames from '../frames';
 import * as store from '../../store/swingStore';
@@ -100,6 +100,89 @@ describe('runAnalysis', () => {
     opts.frames.forEach((f) => { expect(f.neighbours).toBe(2); expect(f.hands).toHaveLength(2); });
     expect(opts.expectedShaftPx).toBeGreaterThan(100);
     expect(opts.ball).toEqual(expect.objectContaining({ x: ball.x }));
+  });
+
+  test('pass 2 gets the address window of the first analysis (detect.py clubhead_onset)', async () => {
+    const api = makeApi();
+    frames.nativeApi.mockReturnValue(api);
+    const partial = jest.fn();
+    await runAnalysis('s1', { onPartial: partial });
+    const first = partial.mock.calls[0][0];
+    const [, opts] = api.extractCheckpoints.mock.calls[0];
+    const { motionStart } = first.internal;
+    expect(opts.addressSearch).toEqual({
+      run: [expect.any(Number), motionStart + lab.expected.holdFrames],
+      latest: motionStart,
+      quiet: [first.checkpoints.leadArm.i, first.checkpoints.top.i],
+      minRun: 5,
+    });
+    expect(opts.addressSearch.run[0]).toBeLessThan(motionStart);
+  });
+
+  test('the native clubhead at address and impact reaches the final analysis; a user mark wins', async () => {
+    const shaft = {
+      [lab.expected.addressFrame]: { head: [251, 481], hidden: false, conf: 0.47, source: 'edge' },
+      [lab.expected.checkpoints.impact]: { head: [270, 504], hidden: false, conf: 0.77, source: 'edge' },
+      [lab.expected.checkpoints.top]: { head: null, hidden: false, conf: 0.1, source: 'prior' },
+    };
+    const timings = { totalMs: 900 };
+    const api = makeApi({ extractCheckpoints: jest.fn(async () => ({ shaft, addressFrame: lab.expected.addressFrame, stills: {}, timings })) });
+    frames.nativeApi.mockReturnValue(api);
+    const res = await runAnalysis('s1');
+    const cm = res.analysis.clubMarks;
+    expect(res.analysis.checkpoints.address.i).toBe(lab.expected.addressFrame);
+    expect(cm.address).toMatchObject({ source: 'edge', hidden: false, conf: 0.47 });
+    expect(cm.address.head[0] * W).toBeCloseTo(251, 6);
+    expect(cm.impact).toMatchObject({ source: 'edge', conf: 0.77 });
+    expect(cm.impact.head[1] * H).toBeCloseTo(504, 6);
+    expect(cm.top).toMatchObject({ source: 'prior', head: null });
+    const [, , o2] = store.saveAnalysis.mock.calls[1];
+    expect(o2.pose.pass2).toEqual({ shaft, addressFrame: lab.expected.addressFrame, timings });
+
+    // a saved user mark at impact beats the native proposal on the next analysis
+    store.readMarks.mockResolvedValueOnce({
+      schema: 'swing-club-labels/1',
+      ball: { proposed: null, final: null, corrected: false },
+      frames: [{
+        i: lab.expected.checkpoints.impact,
+        checkpoint: 'impact',
+        hands: { proposed: null, final: null },
+        head: { proposed: [270 / W, 504 / H], proposedHidden: false, final: [0.6, 0.6], finalHidden: false },
+        corrected: true,
+      }],
+    });
+    const again = await runAnalysis('s1');
+    expect(again.analysis.clubMarks.impact.source).toBe('user');
+    expect(again.analysis.clubMarks.impact.head[0]).toBeCloseTo(0.6, 9);
+  });
+
+  test("pass 2 seeds from the golfer's corrected ball, also when native found none", async () => {
+    const marks = (final) => ({ schema: 'swing-club-labels/1', ball: { proposed: null, final, corrected: true }, frames: [] });
+    const corrected = [0.6, 0.62, 0.006];
+
+    store.readMarks.mockResolvedValueOnce(marks(corrected));
+    let api = makeApi();
+    frames.nativeApi.mockReturnValue(api);
+    await runAnalysis('s1');
+    expect(api.extractCheckpoints.mock.calls[0][1].ball).toEqual({ x: 0.6, y: 0.62, r: 0.006 });
+
+    store.readMarks.mockResolvedValueOnce(marks(corrected));
+    api = makeApi({ analyzePose: jest.fn(async () => fixtureNative({ ball: null, ballGoneFrame: lab.expected.ballGoneFrame })) });
+    frames.nativeApi.mockReturnValue(api);
+    await runAnalysis('s1');
+    expect(api.extractCheckpoints.mock.calls[0][1].ball).toEqual({ x: 0.6, y: 0.62, r: 0.006 });
+
+    // no mark: native's own proposal
+    api = makeApi();
+    frames.nativeApi.mockReturnValue(api);
+    await runAnalysis('s1');
+    expect(api.extractCheckpoints.mock.calls[0][1].ball).toEqual(ball);
+  });
+
+  test('pass2Ball keeps native r when the mark has none, and null without either', () => {
+    expect(pass2Ball([0.5, 0.5], { x: 0.1, y: 0.1, r: 0.004 })).toEqual({ x: 0.5, y: 0.5, r: 0.004 });
+    expect(pass2Ball(null, null)).toBeNull();
+    expect(pass2Ball(undefined, { x: 0.1, y: 0.2, r: 0.003 })).toEqual({ x: 0.1, y: 0.2, r: 0.003 });
   });
 
   test('D12: no golfer found marks the swing failed and saves nothing', async () => {

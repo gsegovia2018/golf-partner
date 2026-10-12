@@ -19,6 +19,7 @@ export const CHECKPOINT_KEYS = [
 export const LEVEL_TOL_DEG = 5; // "arm level": within 5 degrees of the shoulder's height
 export const FINISH_HOLD_S = 0.15; // grip and head stopped this long
 const BALL_GONE_SLACK_S = 0.02; // the pose impact's sampling slack
+const ONSET_SUSTAIN_S = 0.02; // clubhead motion at address must last this long (detect.py)
 const PRE_IMPACT_S = 0.025; // preImpact = impact - 25 ms
 const POST_IMPACT_FRAMES = 10;
 
@@ -275,6 +276,15 @@ export function detectPhases(idx, L, o) {
     sources,
     notes: [...new Set(P.notes)],
     addressRun: P.addressRun,
+    // Where native looks for the clubhead leaving the ball (pass 2, detect.py clubhead_onset):
+    // the hands' still run up to motionStart + one hold window, onsets no later than
+    // motionStart, noise from the ball alone (lead arm -> top), sustained 0.02 s.
+    addressSearch: {
+      run: [P.addressRun[0], P.motionStart + P.d.holdW],
+      latest: P.motionStart,
+      quiet: [P.leadArm, P.top],
+      minRun: Math.max(2, Math.ceil(ONSET_SUSTAIN_S * fps)),
+    },
     finishQuietS: finishQuietSeconds(P, fps),
     sigmaGrip: S.sigmaGrip,
     bodyH,

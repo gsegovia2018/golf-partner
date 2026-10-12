@@ -53,6 +53,15 @@ export function policyFps(probe) {
   return null;
 }
 
+// The ball pass 2 seeds the clubhead from: the golfer's own ball mark ([x, y, r] normalised,
+// Edit marks) wins over native's pass-1 proposal, also when native found none.
+export function pass2Ball(userBall, nativeBall) {
+  if (Array.isArray(userBall) && userBall.length >= 2 && userBall.slice(0, 2).every(Number.isFinite)) {
+    return { x: userBall[0], y: userBall[1], r: Number.isFinite(userBall[2]) ? userBall[2] : nativeBall?.r ?? 0 };
+  }
+  return nativeBall ?? null;
+}
+
 export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = () => {}, isCancelled = () => false } = {}) {
   const api = nativeApi();
   if (!api) return { error: 'update' };
@@ -113,11 +122,13 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
         frames: PASS2_KEYS.map((key) => ({
           key, i: frameOfKey(first, key), hands: first.clubMarks[key].hands, neighbours: 2,
         })),
-        ball: pose.ball ?? null,
+        ball: pass2Ball(saved?.ball?.final, pose.ball),
         expectedShaftPx: expectedShaftPx(first.scale.pxPerCm),
+        addressSearch: first.addressSearch ?? null,
         outDir: dir.uri,
       });
       const p2 = { shaft: r?.shaft ?? {}, addressFrame: r?.addressFrame ?? null };
+      if (r?.timings) p2.timings = r.timings;
       const second = analyze(pose, { ...opts, pass2: p2 });
       if (!second.error) {
         final = second;

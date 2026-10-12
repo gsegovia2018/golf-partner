@@ -98,10 +98,13 @@ extractCheckpoints(path, {
   trackRanges: [ [i0, i1, every] ],                        // v1 (D16): empty; clubhead only at address and impact
   ball: { x, y, r } | null,
   expectedShaftPx,                                         // from scale.js
+  addressSearch: { run: [a, b], latest, quiet: [a, b], minRun } | null,   // phases.js, detect.py clubhead_onset (N2, apiVersion 2)
   outDir
 }) → {
   stills: { [key]: { [i]: 'file://…/frames/556.jpg' } },   // checkpoint ±neighbours, full decode resolution, JPEG q85
-  shaft: { [i]: { angleDeg, lengthPx, head: [x, y] | null, hidden, conf, source: 'edge'|'prior' } }
+  shaft: { [i]: { angleDeg, lengthPx, head: [x, y] | null, hidden, conf, source: 'edge'|'prior' } },   // v1: 'edge' at address and impact only (D16)
+  addressFrame: number | null,                              // image-based P1 (onset in the ball patch − 1)
+  timings: { totalMs, scanMs, decodeMs, addressDecodeMs, jpegWaitMs, onsetMs, shaftMs, decoded, stills }
 }
 
 listRecordingModes() → [ { width, height, fps, highSpeed: bool } ]   // sorted by fps desc
@@ -157,7 +160,7 @@ At 30 fps container (imported slow-mo), the same policy holds in container frame
 
 ### 4.3 Assisted club heuristics (v1)
 
-**v1 scope (D16, D17):** the ball is detected once in pass 1; the clubhead is proposed **only at address and impact**, seeded from the hands→ball direction (lab: 7 cm off at impact); the shaft search below is **not run elsewhere in v1** (it failed in the lab: 75–110 cm off at every other checkpoint) and stays as the v2 starting point. Pure Kotlin on a grayscale, half-resolution copy; no OpenCV (20 MB and a second native dependency for two functions).
+**v1 scope (D16, D17):** the ball is detected once in pass 1; the clubhead is proposed **only at address and impact**, seeded from the hands→ball direction (lab: 7 cm off at impact); the shaft search below is **not run elsewhere in v1** (it failed in the lab: 75–110 cm off at every other checkpoint) and stays as the v2 starting point. **As shipped in N2:** the impact clubhead is ONE search at the impact frame, seeded hands → ball (±15°). The lab instead tracks top → trailArm + 2 and reseeds hands → ball at impact − 2. v1 keeps the single search on purpose: no tracking cost, and the golden clip lands at 3.8 cm through the native module, against 6.9 cm for the lab's tracked result. The address search runs on the image-based address frame. Pure Kotlin on a grayscale, half-resolution copy; no OpenCV (20 MB and a second native dependency for two functions).
 
 **Ball (camera static; searched AFTER the club leaves).** At address the soled club hides the ball, so the search frames are the lead-arm→top frames (club in the air, scene static), median over three of them. ROI: x from the lead-foot toe to the hands x + 0.3 W, y from ankle y − 0.1 H to ankle y + 0.05 H (pose gives feet and hands). Expected diameter from scale: 4.27 cm × px/cm (≈ 12–18 px at 720p with the golfer filling the frame). Candidate = connected component of the top 2 % brightness in the ROI with area within ±50 % of expected, circularity > 0.7, closest to the extension of the address shaft (hands → down-and-toward-the-target). Confidence from circularity and brightness contrast. **Impact refinement:** the patch at the ball position is compared frame to frame after top; the first frame whose patch difference exceeds 4× the noise of the static window (lead-arm→top, per clip) is `ballGoneFrame`; impact = `ballGoneFrame − 1`. Lab: ball 1.8 cm, impact +1 frame. The same ball patch gives the address frame (5.1, P1).
 

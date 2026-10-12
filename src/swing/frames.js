@@ -17,10 +17,11 @@
 //       emits 'progress' { stage: 'decode' | 'pose', done, total } through
 //       module.addListener('progress', cb) -> { remove() }
 //   extractCheckpoints(videoPath, { frames: [{ key, i, hands: [x, y], neighbours: 2 }],
-//                                    ball: { x, y, r } | null, expectedShaftPx, outDir })
+//                                    ball: { x, y, r } | null, expectedShaftPx,
+//                                    addressSearch: { run, latest, quiet, minRun } | null, outDir })
 //                         -> { stills: { [key]: { [frame]: 'file://.../frames/<frame>.jpg' } },
 //                              shaft: { [frame]: { head: [x, y] px | null, hidden, conf, source } },
-//                              addressFrame: number | null }        (pass 2, plan 3 and D16)
+//                              addressFrame: number | null, timings }   (pass 2, plan 3 and D16)
 //   extractFrames(videoPath, { frames: number[], outDir })
 //                         -> { [frame]: 'file://.../frames/<frame>.jpg' }
 //       any frame by index (the Edit marks scrubber). One sequential decode, never a seek per
