@@ -1,4 +1,4 @@
-import { runAnalysis, poseOptions } from '../runAnalysis';
+import { runAnalysis, poseOptions, pass2Ball } from '../runAnalysis';
 import { fixtureNative, TRUTH, W, H } from './helpers';
 import * as frames from '../frames';
 import * as store from '../../store/swingStore';
@@ -154,6 +154,35 @@ describe('runAnalysis', () => {
     const again = await runAnalysis('s1');
     expect(again.analysis.clubMarks.impact.source).toBe('user');
     expect(again.analysis.clubMarks.impact.head[0]).toBeCloseTo(0.6, 9);
+  });
+
+  test("pass 2 seeds from the golfer's corrected ball, also when native found none", async () => {
+    const marks = (final) => ({ schema: 'swing-club-labels/1', ball: { proposed: null, final, corrected: true }, frames: [] });
+    const corrected = [0.6, 0.62, 0.006];
+
+    store.readMarks.mockResolvedValueOnce(marks(corrected));
+    let api = makeApi();
+    frames.nativeApi.mockReturnValue(api);
+    await runAnalysis('s1');
+    expect(api.extractCheckpoints.mock.calls[0][1].ball).toEqual({ x: 0.6, y: 0.62, r: 0.006 });
+
+    store.readMarks.mockResolvedValueOnce(marks(corrected));
+    api = makeApi({ analyzePose: jest.fn(async () => fixtureNative({ ball: null, ballGoneFrame: lab.expected.ballGoneFrame })) });
+    frames.nativeApi.mockReturnValue(api);
+    await runAnalysis('s1');
+    expect(api.extractCheckpoints.mock.calls[0][1].ball).toEqual({ x: 0.6, y: 0.62, r: 0.006 });
+
+    // no mark: native's own proposal
+    api = makeApi();
+    frames.nativeApi.mockReturnValue(api);
+    await runAnalysis('s1');
+    expect(api.extractCheckpoints.mock.calls[0][1].ball).toEqual(ball);
+  });
+
+  test('pass2Ball keeps native r when the mark has none, and null without either', () => {
+    expect(pass2Ball([0.5, 0.5], { x: 0.1, y: 0.1, r: 0.004 })).toEqual({ x: 0.5, y: 0.5, r: 0.004 });
+    expect(pass2Ball(null, null)).toBeNull();
+    expect(pass2Ball(undefined, { x: 0.1, y: 0.2, r: 0.003 })).toEqual({ x: 0.1, y: 0.2, r: 0.003 });
   });
 
   test('D12: no golfer found marks the swing failed and saves nothing', async () => {

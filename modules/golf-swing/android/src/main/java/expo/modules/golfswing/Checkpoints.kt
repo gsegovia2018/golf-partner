@@ -13,6 +13,7 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -103,10 +104,13 @@ internal class Checkpoints(
     val onsetRect = search?.let { ClubheadOnset.patchRect(ball!!.x / decim.toDouble(), ball.y / decim.toDouble(), pxPerCm!! / decim, frameW, frameH) }
     val onsetFrames = search?.let { s -> ((s.run.first - 1)..s.run.last).toSet() + ((s.quiet.first - 1)..s.quiet.last) }
       ?.filter { it in 0 until n }?.toSet() ?: emptySet()
-    // the address can only move inside the run, onto a frame no later than `latest`
-    val addrFrames = addr?.let { a ->
-      (search?.let { s -> ((s.run.first - 1)..min(s.run.last, s.latest)).toSet() } ?: emptySet()) + a.frame
-    }?.filter { it in 0 until n }?.toSet() ?: emptySet()
+    // Memory: only ONE address grey is ever kept (the requested frame, the fallback). The
+    // onset frame is only known after the quiet window, so its grey comes from the short
+    // follow-up decode below instead of keeping a patch for every frame of the still run
+    // (~200 MB for 1080p 240 fps with a 2 s hold). What the main pass retains: the ball
+    // patches (±1.5 ball diameters: ~40 × 40 px at 1080p, < 2 KB/frame, ~1 MB per clip),
+    // two shaft greys (≤ (2 × 1.1 × expected shaft)² work px, ~250 KB at 1080p) and at most
+    // JPEG_IN_FLIGHT + 2 full frames (~3 MB each at 1080p) waiting for the encoders.
     val addrRoi = addr?.let { roi(it.hands!!, exp, ballD) }
     val impRoi = imp?.let { roi(it.hands!!, exp, ballD) }
 
@@ -138,11 +142,11 @@ internal class Checkpoints(
     var onset: Int? = null
     var addressShaft: ShaftFound? = null
     try {
-      val wanted = stills + onsetFrames + addrFrames + listOfNotNull(imp?.frame)
+      val wanted = stills + onsetFrames + listOfNotNull(addr?.frame, imp?.frame)
       var t = SystemClock.elapsedRealtime()
       decodeSplit(path, wanted, keep = { it in stills }) { f, y ->
         if (f in onsetFrames) patches[f] = y.grayStrip(onsetRect!!, 1)
-        if (f in addrFrames) addrGrays[f] = y.grayStrip(addrRoi!!, step)
+        if (addr != null && f == addr.frame) addrGrays[f] = y.grayStrip(addrRoi!!, step)
         if (imp != null && f == imp.frame) {
           val s = System.nanoTime()
           impactShaft.set(seeded(y.grayStrip(impRoi!!, step), imp.hands!!, ball!!, exp, ballD))
@@ -156,17 +160,21 @@ internal class Checkpoints(
       onset = search?.let { ClubheadOnset.detect(patches, it.run, it.latest, it.quiet, it.minRun) }?.takeIf { it in 0 until n }
       onsetMs = SystemClock.elapsedRealtime() - t
       if (addr != null) {
-        val f = onset ?: addr.frame
-        addrGrays[f]?.let { g ->
+        val at = onset ?: addr.frame
+        if (at != addr.frame) {
+          // the address moved: one short decode for its grey and the stills the main pass didn't write
+          val missing = span(CheckpointSpec("address", at, null, addr.neighbours)).filter { it !in stills }.toSet()
+          t = SystemClock.elapsedRealtime()
+          decodeSpan(path, missing + at, keep = { it in missing }, handle = { f2, y ->
+            if (f2 == at) addrGrays[f2] = y.grayStrip(addrRoi!!, step)
+            if (f2 in missing) encode(f2, y)
+          })
+          addrMs = SystemClock.elapsedRealtime() - t
+        }
+        addrGrays[at]?.let { g ->
           val s = System.nanoTime()
           addressShaft = seeded(g, addr.hands!!, ball!!, exp, ballD)
           shaftNs.addAndGet(System.nanoTime() - s)
-        }
-        if (onset != null) {
-          val missing = span(CheckpointSpec("address", onset, null, addr.neighbours)).filter { it !in stills }.toSet()
-          t = SystemClock.elapsedRealtime()
-          decodeSpan(path, missing, keep = { true }) { f2, y -> encode(f2, y) }
-          addrMs = SystemClock.elapsedRealtime() - t
         }
       }
       t = SystemClock.elapsedRealtime()
@@ -289,6 +297,12 @@ internal class Checkpoints(
    * when that shortens the longest run of frames either has to decode (e.g. the address
    * window reaching back into the previous GOP). Frames are still decoded sequentially from a
    * sync frame, never seeked per checkpoint; [handle] must be thread-safe.
+   *
+   * The second decoder is an optimisation, never a requirement: if it can't be created or
+   * fails (CodecException, no codec resources), the frames it didn't deliver are decoded by
+   * the calling thread afterwards. Both halves poll a shared abort flag, so a failure or a
+   * cancel in the calling thread stops the second decoder (and frees its codec) before this
+   * returns or throws.
    */
   private fun decodeSplit(path: String, frames: Set<Int>, keep: (Int) -> Boolean, handle: (Int, YuvFrame) -> Unit) {
     if (frames.isEmpty()) return
@@ -308,17 +322,36 @@ internal class Checkpoints(
       }
     }
     val split = best ?: return decodeSpan(path, frames, keep, handle)
+    val abort = AtomicBoolean(false)
+    val stop = { abort.get() || cancelled() }
+    val done = ConcurrentHashMap.newKeySet<Int>()
+    val laterFrames = frames.filter { it >= split }.toSet()
     val second = Executors.newSingleThreadExecutor { Thread(it, "golf-swing-decode").apply { isDaemon = true } }
+    var secondFailed: Throwable? = null
     try {
-      val later = second.submit { decodeSpan(path, frames.filter { it >= split }.toSet(), keep, handle) }
-      decodeSpan(path, frames.filter { it < split }.toSet(), keep, handle)
+      val later = second.submit { decodeSpan(path, laterFrames, keep, handle, stop, done) }
+      try {
+        decodeSpan(path, frames.filter { it < split }.toSet(), keep, handle, stop, done)
+      } catch (e: Throwable) {
+        abort.set(true)
+        try {
+          later.get()
+        } catch (_: Exception) {
+        }
+        throw e
+      }
       try {
         later.get()
       } catch (e: ExecutionException) {
-        throw e.cause ?: e
+        secondFailed = e.cause ?: e
       }
     } finally {
       second.shutdownNow()
+    }
+    secondFailed?.let { e ->
+      if (e is CancelledException || cancelled()) throw CancelledException()
+      Log.w(PoseAnalyzer.TAG, "second decoder failed, finishing on one: $e")
+      decodeSpan(path, laterFrames - done, keep, handle, cancelled, done)
     }
   }
 
@@ -330,14 +363,21 @@ internal class Checkpoints(
    * [frames] over once as a display-oriented copy: a fresh one when [keep] says the handler
    * holds on to it (a still on its way to the JPEG pool), else a reused scratch frame.
    */
-  private fun decodeSpan(path: String, frames: Set<Int>, keep: (Int) -> Boolean, handle: (Int, YuvFrame) -> Unit) {
+  private fun decodeSpan(
+    path: String,
+    frames: Set<Int>,
+    keep: (Int) -> Boolean,
+    handle: (Int, YuvFrame) -> Unit,
+    stop: () -> Boolean = cancelled,
+    done: MutableSet<Int>? = null,
+  ) {
     if (frames.isEmpty()) return
     val first = frames.min()
     val last = frames.max()
     val seek = syncs.lastOrNull { it <= pts[first] } ?: pts[0]
     var scratch: YuvFrame? = null
     val seen = HashSet<Int>()
-    Media.decode(context, path, seek, cancelled) { _, ptsUs, img, full ->
+    Media.decode(context, path, seek, stop) { _, ptsUs, img, full ->
       decoded.incrementAndGet()
       val f = frameOf[ptsUs] ?: return@decode true
       if (img != null && f in frames && seen.add(f)) {
@@ -348,6 +388,7 @@ internal class Checkpoints(
         y.frame = f
         y.ptsUs = ptsUs
         handle(f, y)
+        done?.add(f)
       }
       f < last
     }
