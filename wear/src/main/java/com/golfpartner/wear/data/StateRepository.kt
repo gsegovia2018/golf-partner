@@ -81,9 +81,15 @@ class StateRepository(private val seqOf: (String) -> Long? = { null }) {
         if (kept.size != list.size) unacked.value = kept
     }
 
-    /** Show [command]'s values until the phone acknowledges it; [seq] is its outbox seq. */
+    /**
+     * Show [command]'s values until the phone acknowledges it; [seq] is its outbox seq. A newer
+     * save of the same key merges over the older one, as in the outbox: a shot patch carries
+     * only what changed, so replacing would hide an earlier, still unacked pick.
+     */
     fun track(command: Command, seq: Long) {
-        unacked.value = (unacked.value.filter { it.command.key != command.key } + Tracked(command, seq)).sortedBy { it.seq }
+        val list = unacked.value
+        val merged = list.firstOrNull { it.command.key == command.key }?.command?.supersededBy(command) ?: command
+        unacked.value = (list.filter { it.command.key != command.key } + Tracked(merged, seq)).sortedBy { it.seq }
     }
 
     /** [command] was handed to the phone: its overlay timeout starts now (the first hand-off only). */
