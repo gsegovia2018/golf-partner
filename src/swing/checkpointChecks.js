@@ -1,4 +1,4 @@
-// Which checks belong to which of the nine user-facing checkpoints (D10), the worst status
+// Which checks belong to which of the ten user-facing checkpoints (D10, D22), the worst status
 // per checkpoint for the timeline dots, and where a "Place clubhead" CTA should send the
 // user (D16). Pure.
 
@@ -19,6 +19,8 @@ const HOME = {
   hands_over_heels: ['top'],
   lead_arm_shoulder_plane: ['top'],
   downswing_path: ['shaftDown'],
+  shaft_down_shallow: ['shaftDown'],
+  shaft_through_steep: ['shaftThrough'],
   clubhead_vs_plane: ['impact'],
   hands_height_impact: ['impact'],
   hands_out_impact: ['impact'],
@@ -59,5 +61,5 @@ export function unplacedCheckpoint(check, clubMarks = {}) {
   return hit ?? null;
 }
 
-/** Frame index of any of the twelve checkpoints (nine on the timeline, three internal). */
+/** Frame index of any of the thirteen checkpoints (ten on the timeline, three internal). */
 export const frameOfKey = (analysis, key) => analysis.checkpoints[key]?.i ?? analysis.internal?.[key];

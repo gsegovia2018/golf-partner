@@ -92,7 +92,7 @@ export function analyze(native, opts = {}) {
   const S = ph.series;
   const handsAt = (f) => ({ x: interp(f, idx, S.hands.map((p) => p[0])), y: interp(f, idx, S.hands.map((p) => p[1])) });
 
-  // The twelve checkpoints: frame, smoothed grip, and the club (user mark > native seed > prior).
+  // The thirteen checkpoints: frame, smoothed grip, and the club (user mark > native seed > prior).
   const frames = { ...Object.fromEntries(CHECKPOINT_KEYS.map((k) => [k, ph.checkpoints[k].i])), ...ph.internal };
   const checkpoints = { ...ph.checkpoints };
   const moved = CHECKPOINT_KEYS.filter((k) => Number.isFinite(marks[k]?.frame) && marks[k].frame !== frames[k]);

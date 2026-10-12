@@ -14,7 +14,7 @@ const r1 = (v) => Math.round(v * 10) / 10;
 const PHASES = ['Setup', 'Backswing', 'Transition', 'Impact', 'Finish'];
 const DOT = { green: 'g', yellow: 'y', red: 'r', unknown: 'u' };
 const SEV = { red: 3, yellow: 2, green: 1, unknown: 0 };
-const SHORT = { address: 'Addr', takeaway: 'Take', leadArm: 'Lead', top: 'Top', transition: 'Trans', shaftDown: 'Shaft', impact: 'Impact', trailArm: 'Trail', finish: 'Finish' };
+const SHORT = { address: 'Addr', takeaway: 'Take', leadArm: 'Lead', top: 'Top', transition: 'Trans', shaftDown: 'Shaft', impact: 'Impact', shaftThrough: 'Thru', trailArm: 'Trail', finish: 'Finish' };
 const DEFAULT_VIDEO = { w: 478, h: 850 };
 
 const S = {

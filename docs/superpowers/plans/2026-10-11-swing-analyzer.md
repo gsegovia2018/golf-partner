@@ -57,7 +57,7 @@ modules/golf-swing (Kotlin)                      src/swing (pure JS, Jest)      
 ──────────────────────────────                   ──────────────────────────            ───────────────────
 probeVideo(path)       → fps, capture fps,       fpsModel.js  slow-mo factor, fake     swingStore.js   index + files
                          duplicate-frame ratio   smoothing.js One-Euro + gates         SwingHome / Capture /
-analyzePose(path,opts) → sampled landmarks,      phases.js    12 checkpoints           Results / EditMarks /
+analyzePose(path,opts) → sampled landmarks,      phases.js    13 checkpoints           Results / EditMarks /
                          ball candidate, timings scale.js     px → cm                  Compare
 extractCheckpoints(…)  → stills (jpg) + shaft    club.js      marks ⊕ candidates
                          candidates per frame    checks.js    21 checks (20 ids; clubhead_vs_plane is evaluated at pre-impact and impact), traffic light
@@ -94,7 +94,7 @@ analyzePose(path, { model: 'full'|'lite', sampling: { sparseEvery: 8, afterImpac
 events: 'progress' { stage: 'decode'|'pose', done, total }
 
 extractCheckpoints(path, {
-  frames: [ { key, i, hands: [x, y], neighbours: 2 } ],   // the 12 checkpoints with the smoothed grip estimate (4.5)
+  frames: [ { key, i, hands: [x, y], neighbours: 2 } ],   // the 13 checkpoints (D22) with the smoothed grip estimate (4.5)
   trackRanges: [ [i0, i1, every] ],                        // v1 (D16): empty; clubhead only at address and impact
   ball: { x, y, r } | null,
   expectedShaftPx,                                         // from scale.js
@@ -202,18 +202,19 @@ The rules are **geometric**, one per D15 definition (below); there are no timing
 | `transition` P5 | First frame in `top → impact` where the lead wrist is back in the level band. |
 | `shaftDown` P6 | First frame in `transition → impact` where the grip falls to trail-hip height (the shaft is end-on there; no image check). |
 | `impact` P7 | `ballGoneFrame − 1` when the ball leaves inside `top < ballGone ≤ descent end + 0.02 s`; otherwise the bottom of the hands' largest descent (confidence 0.5). |
+| `shaftThrough` P8 (D22) | First frame in `impact → trailArm` where the grip rises back to the **lead-hip height** (the mirror of P6; the shaft points along the target line there, no image check). |
 | `trailArm` P9 | First frame in `impact → end` where the trail wrist enters the level band around the trail shoulder's height. |
 | `finish` P10 | First frame after `trailArm` where grip **and** nose both stay below stopped speed for 0.15 s. Fallback: the last frame. |
 
 After any change to `impact` the rules between `address` and `finish` are re-run. **Order is enforced** P1 < P2 < … < P10: a checkpoint at or before its predecessor moves to predecessor + 1 and its confidence is capped at 0.2.
 
-Internal frames: `lateBackswing` = midpoint of `leadArm` → `top`; `preImpact` = impact − 6 captured frames (25 ms); `postImpact` = impact + 10; `followThrough` is `trailArm` (the old separate rule is dropped). The 12 stills of the contract (3) are these nine plus the three internal frames.
+Internal frames: `lateBackswing` = midpoint of `leadArm` → `top`; `preImpact` = impact − 6 captured frames (25 ms); `postImpact` = impact + 10; `followThrough` is `trailArm` (the old separate rule is dropped). The 13 stills of the contract (3) are these ten (D22) plus the three internal frames.
 
 Backswing = `motionStart` → `top`; downswing = `top` → `impact`.
 
 #### User-facing checkpoint definitions (D15)
 
-Down-the-line view, right-handed (mirror left/right for left-handed). Source of truth for the swing lab editor (`tools/swing-lab/editor/checkpoints.js`); the detector rules above and the golden tests target these. Where a definition is about the shaft (P2, P6), v1 detects it from the grip's height (trail hip), not from the shaft.
+Down-the-line view, right-handed (mirror left/right for left-handed). Source of truth for the swing lab editor (`tools/swing-lab/editor/checkpoints.js`); the detector rules above and the golden tests target these. Where a definition is about the shaft (P2, P6, P8), v1 detects it from the grip's height (trail hip for P2/P6, lead hip for P8), not from the shaft.
 
 | Key | P | Definition | Stop on |
 |---|---|---|---|
@@ -224,6 +225,7 @@ Down-the-line view, right-handed (mirror left/right for left-handed). Source of 
 | `transition` | P5 | Left arm parallel to the ground on the way down. | The first frame the left arm is level again in the downswing. |
 | `shaftDown` | P6 | Shaft parallel to the ground in the downswing, hands around the right hip. | The first frame the shaft is level. From behind it often points at the camera: mark the clubhead hidden. |
 | `impact` | P7 | The clubface meets the ball. | The last frame where the ball is still sitting where it was (on the next frame it has gone or moved). |
+| `shaftThrough` | P8 | Shaft parallel to the ground after impact, hands around the left hip (D22). | The first frame the shaft is level on the way through. From behind it often points away from the camera: mark the clubhead hidden. |
 | `trailArm` | P9 | Right arm parallel to the ground after impact. | The first frame the right arm is level in the follow-through. |
 | `finish` | P10 | Swing complete and held. | The first frame where the body and the club have stopped moving. |
 
@@ -252,10 +254,12 @@ Every check returns `{ id, phase, status: 'green'|'yellow'|'red'|'unknown', valu
 | `back_line` (D21) | address | angle between ear→shoulder and shoulder→hip (mid-points); side says "head dropped / rounded" or "head lifted" [38°, dropped] | ≤ 10° | ≤ 20° | > 20° |
 | `hand_gap` (D21) | address | grip x − the lead thigh line (hip→knee, extended to the grip's height), cm [29, red] | 10–20 | 6–10 / 20–25 | else ("too close" / "reaching") |
 | `hands_between_planes` | leadArmParallel, lateBackswing, top | hands side vs shaft plane (+) and shoulder plane (−) | between | ≤ 4 cm outside either | > 4 cm outside |
-| `butt_extension` | leadArmParallel | butt-end line hits ground between toes and ball | between (10 % margin) | beyond ball ≤ 15 cm (flat) / inside toes ≤ 15 cm (steep) | further |
+| `butt_extension` "Halfway back: steep" (D23) | leadArmParallel | butt-end line hits ground between toes and ball | between (10 % margin): steep enough | beyond ball ≤ 15 cm (shallow/flat) / inside toes ≤ 15 cm (too steep) | further |
 | `top_direction` | top | clubhead x − hands x, in H units; foreshortened | \|dx\| ≤ 0.08 H | > 0.08 H ("crossed" if +, "laid off" if −) | never red |
 | `hands_over_heels` (D21) | top | grip x − trail heel x (pose heel landmark), cm; − = behind the heel [+16, red] | \|d\| ≤ 6 | ≤ 12 | > 12 ("too deep" if −, "not enough depth" if +) |
 | `lead_arm_shoulder_plane` (D21) | top | 2D angle of the lead arm (shoulder→wrist) minus the address shoulder plane (ball→trail shoulder); + = above (more upright) [−16°, yellow] | \|d\| ≤ 10° | ≤ 20° | > 20° ("above" / "below the plane") |
+| `shaft_down_shallow` "Halfway down: shallow" (D23) | shaftDown (P6) | shaft line (grip → clubhead) extended to ball height, cm from the ball; needs the clubhead | beyond the ball (shallow) | between toes and ball | inside the toes (steep, over the top) |
+| `shaft_through_steep` "Halfway through: steep" (D23) | shaftThrough (P8) | the same line at P8; needs the clubhead | between toes and ball, or inside (steep again) | beyond the ball ≤ 15 cm (flat) | further (flip) |
 | `downswing_path` | shaftParallelDown | hands x vs the backswing hand path interpolated at the same y | ≤ 3 cm inside/under (shallower) or ±3 | 3–6 cm outside | > 6 cm outside (over the top) |
 | `clubhead_vs_plane` | preImpact, impact | clubhead side vs shaft plane | −4…+4 cm | +4…+8 (steep) / < −4 (under) | > +8 cm |
 | `hands_height_impact` | impact vs address | Δy of hands [≈ +10 cm high] | ≤ 5 | 5–8 | > 8 |
@@ -294,9 +298,10 @@ Faults are clusters of checks, each with a swing phase and a weight:
 | `top_position` | backswing | hands_over_heels, lead_arm_shoulder_plane | 0.8 |
 | `across_the_line` / `laid_off` | — | top_direction | never main (no cluster) |
 | `tempo_fast` / `tempo_slow` | transition | tempo | 0.6 |
-| `over_the_top` | transition | downswing_path (outside), clubhead_vs_plane (steep) | 0.95 |
+| `over_the_top` | transition | downswing_path (outside), clubhead_vs_plane (steep), shaft_down_shallow (steep, D23) | 0.95 |
 | `early_extension` | impact | spine_loss, hip_drift, hands_height_impact, hands_out_impact, shaft_angle_impact | 1.0 |
 | `head_sway` | impact | head_drift | 0.7 |
+| `flip` (D23) | impact | shaft_through_steep (flat) | 0.6 |
 | `balance` | finish | finish_balance | 0.5 |
 
 A fault is **significant** when its cluster has ≥ 1 red or ≥ 2 yellows (a single yellow is a "watch"). The **main fault is the significant fault of the earliest phase** (setup → backswing → transition/downswing → impact → finish): an early fault usually causes what shows up later, so it is the one to fix first. Within one phase the weighted score decides — score = weight × (red: 1, yellow: 0.5) summed over the cluster, × (1 + 0.25 × (agreeing signals − 1)) — and an exact tie goes to the table order. With no significant fault there is no main fault (the old weighted rule never promoted a lone yellow either). The significant faults of **later** phases are returned as `consequences`; the Results hero shows them as one line, "Likely also causing: …" (the first two by phase, then "and N more"). Output: `{ fault, label, phase, score, evidence: [checks], drills: [ids], consequences: [faultIds] }`.
@@ -342,7 +347,7 @@ Per the owner's workflow every screen below goes through the **three-option desi
 | **SwingEditMarks** | Per checkpoint: the still, draggable hands square and clubhead dot (`PanResponder`), "hidden" toggle, ball ring draggable on address, ±2 frame choice, Undo, live recompute of the three club-dependent checks, Save. | overlay component shared with Results |
 | **SwingCompare** | Two swings side by side: date/club, impact stills with overlay, check rows paired with deltas, main fault each. | `ReportDeltaRow` |
 
-Results follow design B (D8). The stepper and the checkpoint stills show the nine user-facing checkpoints of D10 (address, takeaway, leadArm, top, transition, shaftDown, impact, trailArm, finish); the other frames are internal and reachable with the ±2 nudge where useful.
+Results follow design B (D8). The stepper and the checkpoint stills show the ten user-facing checkpoints of D10 + D22 (address, takeaway, leadArm, top, transition, shaftDown, impact, shaftThrough, trailArm, finish); the other frames are internal and reachable with the ±2 nudge where useful.
 
 Shared component: `src/components/swing/SwingOverlay.js` (react-native-svg over an `Image` of the still, normalised coordinates → view coordinates; used by Results, EditMarks, Compare).
 
@@ -513,18 +518,20 @@ S1–S3 and N1 run in parallel from day one. **APK 1** (`preview-arm64`) after N
 | D7 | Compare in v1 as a two-column check table + impact stills (no ghost overlay). | Yes — two-column check table + impact stills. |
 | D8 | Design direction | Option B "the still leads": results open on the checkpoint still with the selected measure drawn, verdict hero above, timeline below, checks at that checkpoint; Edit marks = the same screen in edit mode. From A: a flat "All checks" list (plain scroll, no collapsible chapters). From C: a retake/analyse review step after recording stops, before decoding. No pins, no gesture navigation. Design page: https://claude.ai/artifact/LP34gefW9UbDHVxbRM96f7 |
 | D9 | Tempo thresholds | green 2.5–3.5 : 1, yellow 1.6–2.5 or 3.5–4.5, red < 1.6 or > 4.5 (the golden swing's ~1.8–2.0 is yellow; the upper band keeps `tempo_slow` meaningful). |
-| D10 | User-facing checkpoints | Exactly 9: address, takeaway, leadArm, top, transition, shaftDown, impact, trailArm, finish. lateBackswing / preImpact / followThrough remain internal frames, reachable with the ±2 nudge only where useful; preImpact = impact − 6 capture frames for the clubhead_pre check. `motionStart` stays internal (tempo and takeaway search only). |
+| D10 | User-facing checkpoints | Exactly 9: address, takeaway, leadArm, top, transition, shaftDown, impact, trailArm, finish (10 since D22: shaftThrough between impact and trailArm). lateBackswing / preImpact / followThrough remain internal frames, reachable with the ±2 nudge only where useful; preImpact = impact − 6 capture frames for the clubhead_pre check. `motionStart` stays internal (tempo and takeaway search only). |
 | D11 | Hands out at impact | New check `hands_out_impact`: horizontal distance of the hands at impact vs address toward the ball line, cm; green ≤ 4, yellow ≤ 8, red > 8; part of the early_extension cluster. |
 | D12 | Errors | `analyze.js` returns `{ error: 'no_pose' \| 'partial_pose' \| 'too_long' }`; the processing screen renders them ("No golfer found — keep your whole body in frame"). |
 | D13 | Swing name | Default name = capture date ("Sat 11 Oct · 18:42"); rename from the results menu; optional club class chip. |
 | D14 | Status display | Always a dot + word (Good / Watch / Fix / Hidden); values in ink colour; never yellow text (fails AA on white). |
-| D15 | Checkpoint definitions | Checkpoint definitions follow the P-system (P1–P7, P9, P10) as in editor/checkpoints.js; detector rules and golden tests must target these definitions. |
+| D15 | Checkpoint definitions | Checkpoint definitions follow the P-system (P1–P7, P9, P10; P1–P10 since D22) as in editor/checkpoints.js; detector rules and golden tests must target these definitions. |
 | D16 | Clubhead in v1 | The shaft-tracking heuristic (§4.3) failed in the swing lab (2026-10-11: 75–110 cm off at every checkpoint except impact, 13 cm there with the old rules; 7 cm with the D17 seeding). v1 proposes the clubhead only at address and impact (seeded from the ball and the hands); at every other checkpoint the user places it (or marks it hidden) in Edit marks, and club-dependent checks stay 'unknown' until placed. Every placement is stored as a label for the v2 learned detector (§7 marks.json). N2 scope shrinks accordingly: no backswing/downswing shaft tracking in v1. |
 | D17 | Validated detection rules | Folded in from the swing lab (2026-10-11, one clip; reference implementation `tools/swing-lab/detect.py --variant d15`, which the Kotlin/JS port must match on the lab clips): (1) **sampling** every frame from `motionStart` to impact, sparse only before and after, thresholds per-clip from the pose jitter (σ, moving > 3σ, stopped = 3 × P25 of the 0.15 s speed), never a fixed H/s (4.2); (2) **zero-lag One-Euro** offline, in px and captured time (4.5); (3) **hands = grip estimate** `wrist + 0.35·(wrist − elbow)` with the visibility < 0.5 wrist gate (4.5); (4) **geometric phase rules**, P1 from the ball patch, P2/P6 grip at trail-hip height, P3/P5/P9 wrist in the shoulder band, P4 end of the hands' plateau, P7 `ballGone − 1`, P10 grip and nose stopped 0.15 s, order enforced (5.1); ball searched after the club leaves; clubhead per D16. Status and the ≥ 10-clip gate: 8.5. |
 | D18 | Ship before the 10-clip gate | Owner decision 2026-10-11: build and ship v1 now; accuracy improves from real use. The §8.5 gate becomes a tracking target, not a merge blocker. Consequence: S8's "Export swing" is required in v1 — one explicit share action producing a zip (original clip + `analysis.json` + `marks.json` with the user's corrected frames/marks) that `tools/swing-lab/import_export.py` unpacks into `clips/` + `out/<clip>/truth.json`, so every corrected swing becomes a lab test case. Nothing is sent automatically. |
 | D19 | Club | Club: `iron` \| `driver`, per-club thresholds table in `checks.js` `THRESHOLDS` (§5.4); driver values provisional (2026-10-12), to be calibrated on real swings; picker on Home (remembers the last choice) and on Results (re-scores the stored pose and marks, no native call); default iron, also for swings saved before the picker. Supersedes the "optional club class chip" of D13. Carried in `swing.json` and `truth.json` as `club`. |
 | D20 | Drag loupe | Drag loupe in Edit marks, 3×, above finger, flips below at top edge. A ~120 px circle shows the same still at 3× around the mark being dragged (hands, clubhead or ball), a crosshair at the exact mark, ~80 px above the fingertip, clamped inside the still; arrow nudges show it for ~600 ms; hidden on release; no fade under reduced motion; decorative for screen readers (`src/swing/loupe.js`, `DragLoupe`). |
 | D21 | Earliest fault first; setup and top checks | Owner-approved 2026-10-12, from a coaching guide the owner shared (all wording our own). **Priority (§5.5):** the main fault is the significant fault (≥ 1 red or ≥ 2 yellows) of the earliest phase, setup → backswing → transition → impact → finish, weights break ties within a phase; later significant faults are `consequences`, shown in the hero as "Likely also causing: …". **Six pose-only checks (§5.4):** `hands_under_shoulders`, `waist_bend`, `back_line`, `hand_gap` at address (posture cluster) and `hands_over_heels`, `lead_arm_shoulder_plane` at the top (new `top_position` cluster). Limits provisional (2026-10-12), the same for iron and driver. Consequence on the golden swing: the main fault moves from early extension to posture at address, with early extension a consequence (§8.2). Calibration caveat: MediaPipe's shoulder landmark is the shoulder joint, not the base of the neck, and the lead hip is partly hidden down the line, so `back_line` and `hand_gap` read high on the one labelled clip; recalibrate on more clips before trusting their reds. |
+| D22 | P8 checkpoint `shaftThrough` | Owner-approved 2026-10-12. A 10th user-facing checkpoint, **shaft parallel after impact (P8)**, between impact and trailArm: the first frame after impact the grip rises back to lead-hip height (the mirror of P6), order enforced; confidence 0.2 on the window-midpoint fallback. Now **10 user-facing checkpoints** (D10, D15): timeline, Edit marks, scrubber, Compare, export and pass 2 (13 stills) carry it. Lab: optional `shaftThrough` in CONTRACT.md, editor cue, `detect.py --variant d15` (same rule; 568 on the golden clip, impact 557, trailArm 575) and `eval.py` (scored when the truth has it). The owner has not labelled P8 yet, so the golden test checks order and lab parity only. |
+| D23 | Steep → shallow → steep | Owner-approved 2026-10-12. Three readings of the shaft line (grip → clubhead extended to ball height) against the ball and the toes: halfway back (`butt_extension`, relabelled: just inside the ball = steep enough = green), halfway down (`shaft_down_shallow` at P6: beyond the ball = shallow = green, toes…ball = yellow, inside the toes = steep, red, feeds `over_the_top`) and halfway through (`shaft_through_steep` at P8: inside the ball = green, beyond ≤ 15 cm yellow, further red, new fault `flip`). P6 and P8 need a clubhead the user places (D16) and stay 'unknown' with the "Place clubhead" CTA until then. Results shows one "Swing pattern: steep → shallow → steep" row with the three statuses. Driver = iron for now (provisional). |
 
 
 ## 12. Out of scope

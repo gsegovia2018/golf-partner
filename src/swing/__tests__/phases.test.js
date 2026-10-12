@@ -7,7 +7,9 @@ import { fixtureSamples, CONTAINER_FPS, TRUTH } from './helpers';
 
 const lab = require('./fixtures/lab-d15-pass1.json');
 
-const truth = Object.fromEntries(CHECKPOINT_KEYS.map((k) => [k, TRUTH.checkpoints[k].frame]));
+// The owner has not labelled P8 (shaftThrough, D22) yet: it is checked by order and lab parity.
+const LABELLED = CHECKPOINT_KEYS.filter((k) => TRUTH.checkpoints[k]);
+const truth = Object.fromEntries(LABELLED.map((k) => [k, TRUTH.checkpoints[k].frame]));
 const EVAL_TOL = { address: 3, top: 3, impact: 3 };
 const tolFor = (k) => EVAL_TOL[k] ?? 6;
 
@@ -33,7 +35,7 @@ describe('golden phases: the lab d15 pass-1 samples against the owner labels', (
   // the owner's; address and transition were disputed). Not hacked: see plan 8.5.
   const labParity = { address: 8, top: 4, transition: 9 };
 
-  test.each(CHECKPOINT_KEYS)('%s', (k) => {
+  test.each(LABELLED)('%s', (k) => {
     const err = Math.abs(r.checkpoints[k].i - truth[k]);
     if (labParity[k]) {
       // lab parity, see §8.5
@@ -49,6 +51,14 @@ describe('golden phases: the lab d15 pass-1 samples against the owner labels', (
     expect(r.internal.motionStart).toBeLessThanOrEqual(400); // the lab d15 itself gives 397
     const f = frames(r);
     CHECKPOINT_KEYS.slice(1).forEach((k, n) => expect(f[k]).toBeGreaterThan(f[CHECKPOINT_KEYS[n]]));
+  });
+
+  test('D22: shaftThrough (P8) sits between impact and the trail arm, where the grip is back at lead-hip height', () => {
+    const f = frames(r);
+    expect(f.shaftThrough).toBeGreaterThan(f.impact);
+    expect(f.shaftThrough).toBeLessThan(f.trailArm);
+    expect(r.checkpoints.shaftThrough.conf).toBe(0.7); // the rule fired, no fallback
+    expect(Math.abs(f.shaftThrough - truth.trailArm)).toBeLessThanOrEqual(12);
   });
 
   test('internal frames: lateBackswing between lead arm and top, preImpact 6 frames before impact', () => {

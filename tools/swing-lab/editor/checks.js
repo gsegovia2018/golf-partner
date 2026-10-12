@@ -2,10 +2,10 @@
 // Coordinates are video pixels (y down). Everything is mirrored internally so the golfer is "right-handed,
 // ball on the +x side"; left-handers are mirrored around ball.x.
 
-export const CHECKPOINTS = ['address', 'takeaway', 'leadArm', 'top', 'transition', 'shaftDown', 'impact', 'trailArm', 'finish'];
+export const CHECKPOINTS = ['address', 'takeaway', 'leadArm', 'top', 'transition', 'shaftDown', 'impact', 'shaftThrough', 'trailArm', 'finish'];
 export const CP_LABEL = {
   address: 'Address', takeaway: 'Takeaway', leadArm: 'Lead arm', top: 'Top', transition: 'Transition',
-  shaftDown: 'Shaft down', impact: 'Impact', trailArm: 'Trail arm', finish: 'Finish',
+  shaftDown: 'Shaft down', impact: 'Impact', shaftThrough: 'Shaft through', trailArm: 'Trail arm', finish: 'Finish',
 };
 export const STATUS_WORD = { green: 'Good', yellow: 'Watch', red: 'Fix', unknown: 'Hidden' };
 

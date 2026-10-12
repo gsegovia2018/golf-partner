@@ -67,13 +67,13 @@ describe('runAnalysis', () => {
     expect(o2.thumb).toMatch(/556\.jpg$/);
   });
 
-  test('pass 2 asks native for the twelve checkpoint frames with their grip estimate', async () => {
+  test('pass 2 asks native for the thirteen checkpoint frames with their grip estimate', async () => {
     const api = makeApi();
     frames.nativeApi.mockReturnValue(api);
     await runAnalysis('s1');
     const [, opts] = api.extractCheckpoints.mock.calls[0];
-    expect(opts.frames).toHaveLength(12);
-    expect(opts.frames.map((f) => f.key)).toEqual(expect.arrayContaining(['address', 'impact', 'preImpact', 'postImpact', 'lateBackswing']));
+    expect(opts.frames).toHaveLength(13);
+    expect(opts.frames.map((f) => f.key)).toEqual(expect.arrayContaining(['address', 'impact', 'shaftThrough', 'preImpact', 'postImpact', 'lateBackswing']));
     opts.frames.forEach((f) => { expect(f.neighbours).toBe(2); expect(f.hands).toHaveLength(2); });
     expect(opts.expectedShaftPx).toBeGreaterThan(100);
     expect(opts.ball).toEqual(expect.objectContaining({ x: ball.x }));

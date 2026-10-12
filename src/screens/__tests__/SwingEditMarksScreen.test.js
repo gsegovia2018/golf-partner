@@ -151,10 +151,10 @@ const HOW_TO = ['Hands', 'Clubhead', 'Ball', 'Clubhead hidden'];
 describe('SwingEditMarksScreen: placing and dragging', () => {
   test('D16: a tap on the image places the clubhead, and the club-dependent row recomputes at once', async () => {
     const { getAllByLabelText, getByLabelText, queryAllByLabelText, layer } = await open({ checkpoint: 'leadArm' });
-    expect(getAllByLabelText(/^Place clubhead: Butt end/).length).toBeGreaterThan(0);
+    expect(getAllByLabelText(/^Place clubhead: Halfway back/).length).toBeGreaterThan(0);
     fireEvent.press(getByLabelText(E.clubhead));
     await act(async () => { touch(layer, px([0.24, 0.32])); });
-    expect(queryAllByLabelText(/^Place clubhead: Butt end/)).toHaveLength(0);
+    expect(queryAllByLabelText(/^Place clubhead: Halfway back/)).toHaveLength(0);
     await act(async () => { fireEvent.press(getByLabelText(E.save)); });
     const lead = savedMarks().frames.find((f) => f.checkpoint === 'leadArm');
     expect(lead.head.final[0]).toBeCloseTo(0.24, 2);
@@ -272,7 +272,7 @@ describe('SwingEditMarksScreen: placing and dragging', () => {
     fireEvent.press(getByLabelText(E.clubhead));
     await act(async () => { touch(layer, px([0.24, 0.32])); });
     await act(async () => { fireEvent.press(getByLabelText(E.reset)); });
-    expect(getAllByLabelText(/^Place clubhead: Butt end/).length).toBeGreaterThan(0);
+    expect(getAllByLabelText(/^Place clubhead: Halfway back/).length).toBeGreaterThan(0);
     expect(getByLabelText(E.save).props.accessibilityState?.disabled ?? getByLabelText(E.save).props['aria-disabled']).toBeTruthy();
   });
 
@@ -314,9 +314,9 @@ describe('SwingEditMarksScreen: saving and leaving', () => {
     const marks = savedMarks();
     const analysis = savedAnalysis();
     const again = await open({ analysis, marks, checkpoint: 'leadArm' });
-    expect(again.queryAllByLabelText(/^Place clubhead: Butt end/)).toHaveLength(0);
+    expect(again.queryAllByLabelText(/^Place clubhead: Halfway back/)).toHaveLength(0);
     fireEvent.press(again.getByLabelText(E.reset));
-    expect(again.getAllByLabelText(/^Place clubhead: Butt end/).length).toBeGreaterThan(0);
+    expect(again.getAllByLabelText(/^Place clubhead: Halfway back/).length).toBeGreaterThan(0);
   });
 
   test('unsaved changes ask before leaving, with Keep editing and Discard as the choices', async () => {

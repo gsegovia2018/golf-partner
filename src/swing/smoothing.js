@@ -152,13 +152,14 @@ export function buildSeries(idx, L, { containerFps, factor, handedness = 'right'
   const [leadSh, leadWr] = right ? [LM.lSh, LM.lWr] : [LM.rSh, LM.rWr];
   const [trailSh, trailWr] = right ? [LM.rSh, LM.rWr] : [LM.lSh, LM.lWr];
   const trailHip = right ? LM.rHip : LM.lHip;
+  const leadHip = right ? LM.lHip : LM.rHip;
 
   const perSide = L.map((lm) => [gripPoint(lm[LM.lWr], lm[LM.lEl], gripK), gripPoint(lm[LM.rWr], lm[LM.rEl], gripK)]);
   const gripRaw = gatedHands(idx, L, { fixed: true, pts: perSide });
   const wrMid = gatedHands(idx, L, { fixed: true });
   const hands = smoothZeroLag(t, gripRaw, EURO_HANDS);
   const body = {};
-  [leadSh, trailSh, trailHip, LM.nose].forEach((k) => {
+  [leadSh, trailSh, trailHip, leadHip, LM.nose].forEach((k) => {
     body[k] = smoothZeroLag(t, L.map((lm) => [lm[k][0], lm[k][1]]), EURO_BODY);
   });
   const armEnd = (wr) => smoothZeroLag(t, L.map((lm, k) => {
@@ -173,7 +174,7 @@ export function buildSeries(idx, L, { containerFps, factor, handedness = 'right'
   const speed = hands.map((p, k) => (k ? Math.hypot(p[0] - hands[k - 1][0], p[1] - hands[k - 1][1]) / (t[k] - t[k - 1]) : 0));
   return {
     idx, t, L, hands, speed, body, ends, effFps, armPx, bodyH,
-    lead: [leadSh, leadWr], trail: [trailSh, trailWr], trailHip,
+    lead: [leadSh, leadWr], trail: [trailSh, trailWr], trailHip, leadHip,
     sigmaGrip: robustSigma(gripRaw.flatMap((p, k) => [p[0] - hands[k][0], p[1] - hands[k][1]])),
     sigmaHead: robustSigma(L.flatMap((lm, k) => [lm[LM.nose][0] - body[LM.nose][k][0], lm[LM.nose][1] - body[LM.nose][k][1]])),
   };

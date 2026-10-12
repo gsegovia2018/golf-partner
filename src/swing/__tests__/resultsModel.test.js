@@ -25,8 +25,8 @@ const ctx = (a) => ({ analysis: a, poseAt: (f) => poseAtFrame(native, f), frameO
 const row = (a, id, cp) => a.checks.find((c) => c.id === id && (!cp || c.cp === cp));
 
 describe('checkpointChecks', () => {
-  test('every check has a home among the nine checkpoints, and clubhead_vs_plane rows live at impact', () => {
-    expect(unmarked.checks).toHaveLength(21);
+  test('every check has a home among the ten checkpoints, and clubhead_vs_plane rows live at impact', () => {
+    expect(unmarked.checks).toHaveLength(23);
     unmarked.checks.forEach((c) => expect(checksAt(unmarked.checks, homeOf(c))).toContain(c));
     expect(checksAt(unmarked.checks, 'impact').filter((c) => c.id === 'clubhead_vs_plane')).toHaveLength(2);
     expect(checksAt(unmarked.checks, 'takeaway')).toHaveLength(0);
@@ -36,7 +36,7 @@ describe('checkpointChecks', () => {
   test('a timeline dot is the worst measured status; unknowns do not count', () => {
     expect(worstAt(marked.checks, 'impact')).toBe('red');
     const w = worstByCheckpoint(marked.checks);
-    expect(Object.keys(w)).toHaveLength(9);
+    expect(Object.keys(w)).toHaveLength(10);
     expect(w.takeaway).toBe('none');
     const onlyUnknown = [{ id: 'top_direction', status: 'unknown' }];
     expect(worstAt(onlyUnknown, 'top')).toBe('none');

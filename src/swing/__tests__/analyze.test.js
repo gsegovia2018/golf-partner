@@ -27,17 +27,17 @@ describe('analyze: the whole pipeline on the fixture', () => {
     expect(a.fps).toMatchObject({ factor: 8, source: 'estimate', approximate: false });
     expect(a.scale.approx).toBe(false);
     expect(a.scale.pxPerCm).toBeGreaterThan(1.1);
-    expect(Object.keys(a.checkpoints)).toEqual(['address', 'takeaway', 'leadArm', 'top', 'transition', 'shaftDown', 'impact', 'trailArm', 'finish']);
-    expect(Object.keys(a.clubMarks)).toHaveLength(12);
+    expect(Object.keys(a.checkpoints)).toEqual(['address', 'takeaway', 'leadArm', 'top', 'transition', 'shaftDown', 'impact', 'shaftThrough', 'trailArm', 'finish']);
+    expect(Object.keys(a.clubMarks)).toHaveLength(13);
     expect(a.reference.ball).toEqual([ball.x, ball.y]);
     expect(Math.abs(a.reference.shaftPlaneDeg - 52)).toBeLessThanOrEqual(6);
   });
 
-  test('all 21 rows produce a status; counts add up', () => {
-    expect(a.checks).toHaveLength(21);
+  test('all 23 rows produce a status; counts add up', () => {
+    expect(a.checks).toHaveLength(23);
     a.checks.forEach((c) => expect(['green', 'yellow', 'red', 'unknown']).toContain(c.status));
     const c = a.counts;
-    expect(c.green + c.yellow + c.red + c.unknown).toBe(21);
+    expect(c.green + c.yellow + c.red + c.unknown).toBe(23);
   });
 
   test('D16: without placed marks the club-dependent checks are unknown, the rest are measured', () => {
@@ -61,7 +61,8 @@ describe('analyze with the owner marks as user marks (golden)', () => {
   const a = analyze(native(), { pass2, marks: ownerMarks(), heightCm: 176 });
 
   test('every club check has a verdict; setup leads and the early-extension story follows (D21)', () => {
-    expect(a.checks.filter((c) => c.status === 'unknown').map((c) => c.id)).toEqual([]);
+    // The owner marked the clubhead hidden at shaft down and has not placed one at shaft through (D23).
+    expect(a.checks.filter((c) => c.status === 'unknown').map((c) => c.id)).toEqual(['shaft_down_shallow', 'shaft_through_steep']);
     expect(a.main.fault).toBe('posture');
     expect(a.main.consequences).toContain('early_extension');
     expect(a.clubMarks.impact.source).toBe('user');

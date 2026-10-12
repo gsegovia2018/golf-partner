@@ -34,7 +34,8 @@ import numpy as np
 
 LAB = Path(__file__).resolve().parent
 OUT = LAB / "out"
-KEYS = ["address", "takeaway", "leadArm", "top", "transition", "shaftDown", "impact", "trailArm", "finish"]
+# shaftThrough (P8, D22) is optional: scored only when both auto and truth have it.
+KEYS = ["address", "takeaway", "leadArm", "top", "transition", "shaftDown", "impact", "shaftThrough", "trailArm", "finish"]
 
 # Acceptance targets (from the task brief).
 FRAME_TOL_240 = {"address": 3, "top": 3, "impact": 3}   # others: 6
@@ -74,8 +75,8 @@ def evaluate(auto: dict, truth: dict, px_cm: float) -> dict:
     eff_fps = v["playbackFps"] * v["slowmoFactor"]
     rows = []
     for k in KEYS:
-        a, t = auto["checkpoints"][k], truth["checkpoints"].get(k)
-        if t is None:
+        a, t = auto["checkpoints"].get(k), truth["checkpoints"].get(k)
+        if a is None or t is None:
             continue
         df = a["frame"] - t["frame"]
         f240 = df * 240.0 / eff_fps
@@ -211,7 +212,9 @@ def overlay(clip_dir: Path, auto: dict, truth: dict, E: dict, out: Path) -> None
 
     tiles = []
     for key in KEYS:
-        a = auto["checkpoints"][key]
+        a = auto["checkpoints"].get(key)
+        if a is None:
+            continue
         t = truth["checkpoints"].get(key, {})
         img = cv2.imread(str(clip_dir / "frames" / f"{a['frame']}.jpg"))
         tile = cv2.resize(img[y0:y1, x0:x1], None, fx=k, fy=k, interpolation=cv2.INTER_CUBIC)

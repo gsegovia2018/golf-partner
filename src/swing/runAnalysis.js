@@ -22,9 +22,9 @@ import {
   getSwing, getSwingProfile, swingVideoUri, saveAnalysis, markSwingFailed, readMarks,
 } from '../store/swingStore';
 
-// The twelve frames pass 2 decodes: the nine checkpoints plus the three internal ones.
+// The thirteen frames pass 2 decodes: the ten checkpoints (D22) plus the three internal ones.
 const PASS2_KEYS = [
-  'address', 'takeaway', 'leadArm', 'top', 'transition', 'shaftDown', 'impact', 'trailArm', 'finish',
+  'address', 'takeaway', 'leadArm', 'top', 'transition', 'shaftDown', 'impact', 'shaftThrough', 'trailArm', 'finish',
   'lateBackswing', 'preImpact', 'postImpact',
 ];
 

@@ -21,7 +21,9 @@ const SCORE = {
   lead_arm_shoulder_plane: { of: Math.abs, eps: 1 },
   waist_bend: { of: (v) => Math.abs(v - 135), eps: 1 },
   hand_gap: { of: (v) => Math.abs(v - 15), eps: 1 },
-};
+  // D23: at P6 further beyond the ball is shallower (better); at P8 further inside is better.
+  shaft_down_shallow: { of: (v) => -v, eps: 1 },
+}; // shaft_through_steep: smaller (further inside the ball) is better, the default
 const DEFAULT_SCORE = { of: (v) => v, eps: 1 };
 // Posture tilt and the shaft direction at the top are angles with no better direction,
 // only a band: inside one band the swings are the same.

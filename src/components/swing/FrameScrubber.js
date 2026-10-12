@@ -9,7 +9,7 @@ const STEPS = [-10, -1, 1, 10];
 
 /**
  * The whole-clip scrubber of Edit marks (the lab editor's flow): drag or tap the track to
- * preview any frame, step with the buttons, and see where the nine checkpoints sit. A
+ * preview any frame, step with the buttons, and see where the ten checkpoints sit. A
  * ghost tick shows where analyze() had put a checkpoint the user moved. Previewing never
  * changes a checkpoint: that is the "Set <checkpoint> to this frame" button's job (or
  * placing a mark, which adopts the frame you are looking at).

@@ -19,7 +19,7 @@ import zipfile
 from pathlib import Path
 
 CHECKPOINTS = ["address", "takeaway", "leadArm", "top", "transition",
-               "shaftDown", "impact", "trailArm", "finish"]
+               "shaftDown", "impact", "shaftThrough", "trailArm", "finish"]
 EXPORT_SCHEMA = "swing-export/1"
 LABELS_SCHEMA = "swing-club-labels/1"
 

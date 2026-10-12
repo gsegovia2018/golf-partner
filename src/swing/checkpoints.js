@@ -2,7 +2,7 @@
 // checkpoints.js (the owner used it and liked its flow). Down-the-line view, right-handed
 // text; cueFor(key, handedness) mirrors left and right for left-handed golfers.
 //
-// The nine definitions follow the P-system (P1-P7, P9, P10). The three internal frames
+// The ten definitions follow the P-system (P1-P10; P8 added by D22). The three internal frames
 // (lateBackswing, preImpact, postImpact) are reachable from a check's "Place clubhead"
 // button, so they get a short cue of their own.
 
@@ -48,6 +48,12 @@ export const CHECKPOINT_DEFS = [
     what: 'The clubface meets the ball.',
     stopWhen: 'the last frame where the ball is still sitting where it was (on the next frame it has gone or moved).',
     markTips: 'Hands: middle of the grip. Clubhead: centre of the head at the ball.',
+  },
+  {
+    key: 'shaftThrough', p: 'P8', name: 'Shaft parallel after impact',
+    what: 'Shaft parallel to the ground after impact, hands around the left hip.',
+    stopWhen: 'the first frame the shaft is level on the way through. From behind it often points away from the camera — mark the clubhead hidden if you cannot see it.',
+    markTips: 'Hands: middle of the grip. Clubhead: centre of the head, or hidden when the shaft points along the target line.',
   },
   {
     key: 'trailArm', p: 'P9', name: 'Trail arm parallel',
@@ -105,6 +111,6 @@ export function cueFor(key, handedness = 'right') {
   return { ...d, what: swapLR(d.what), stopWhen: swapLR(d.stopWhen), markTips: swapLR(d.markTips) };
 }
 
-// The timeline has nine steps (D10); an internal frame lives under the step it belongs to.
+// The timeline has ten steps (D10, D22); an internal frame lives under the step it belongs to.
 const STEP_OF = { lateBackswing: 'leadArm', preImpact: 'impact', postImpact: 'impact' };
 export const timelineStep = (key) => STEP_OF[key] ?? key;

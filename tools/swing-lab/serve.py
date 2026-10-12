@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 EDITOR = os.path.join(ROOT, "editor")
 OUT = os.path.join(ROOT, "out")
 CLIP_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-CHECKPOINTS = ["address", "takeaway", "leadArm", "top", "transition", "shaftDown", "impact", "trailArm", "finish"]
+CHECKPOINTS = ["address", "takeaway", "leadArm", "top", "transition", "shaftDown", "impact", "shaftThrough", "trailArm", "finish"]
 MAX_BODY = 2 * 1024 * 1024
 mimetypes.add_type("text/javascript", ".js")
 mimetypes.add_type("text/javascript", ".mjs")

@@ -2,7 +2,7 @@
 // the live recompute of the club-dependent checks, and the conversion to marks.json.
 // Pure: no I/O, no React. Coordinates are normalised to the decoded frame.
 //
-// A draft holds, per checkpoint (the nine plus the three internal frames):
+// A draft holds, per checkpoint (the ten plus the three internal frames):
 //   frame   the checkpoint's frame (the user can move it: "Set <checkpoint> to this frame")
 //   hands   [x, y] the user placed, or null = automatic (the smoothed grip at that frame)
 //   head    [x, y] | null  the clubhead; null with hidden=false means "not placed yet" (D16)

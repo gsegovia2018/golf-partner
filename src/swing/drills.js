@@ -35,6 +35,11 @@ export const DRILLS = [
     passTarget: '10 swings with the pause',
   },
   {
+    id: 'fl-freeze', fault: 'flip', title: 'Freeze past impact',
+    instruction: 'Hit three-quarter shots and freeze when the shaft is level after the ball. From behind, the shaft should point between your toes and the ball, not out past it. Film a few to check.',
+    passTarget: '8 of 10 frozen with the shaft pointing inside the ball',
+  },
+  {
     id: 'sb-plano', fault: 'steep_backswing', title: 'Club on the plane',
     instruction: 'Stick a club in the ground at the angle of your address shaft. Swing back to lead arm parallel: your shaft should be parallel to the club in the ground.',
     passTarget: '8 of 10 parallel',
