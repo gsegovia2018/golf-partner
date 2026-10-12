@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import SwingCaptureScreen from '../SwingCaptureScreen';
 import * as native from '../../swing/native';
 import { createSwing } from '../../store/swingStore';
@@ -85,6 +85,10 @@ async function recordAndStop(utils) {
   await waitFor(() => expect(utils.getByTestId('capture-review')).toBeTruthy(), WAIT);
 }
 
+afterEach(() => {
+  jest.useRealTimers();
+});
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockDeleted.length = 0;
@@ -142,22 +146,6 @@ test('leaving with an unreviewed take deletes it', async () => {
   await recordAndStop(utils);
   utils.unmount();
   expect(mockDeleted).toContain(TAKE.path);
-});
-
-test('auto-stops at 8 s', async () => {
-  jest.useFakeTimers();
-  try {
-    const utils = setup();
-    await waitFor(() => expect(utils.getByTestId('native-camera')).toBeTruthy());
-    await act(async () => { fireEvent.press(utils.getByTestId('capture-record')); });
-    expect(mockCamera.stop).not.toHaveBeenCalled();
-    await act(async () => { jest.advanceTimersByTime(7900); });
-    expect(mockCamera.stop).not.toHaveBeenCalled();
-    await act(async () => { jest.advanceTimersByTime(300); });
-    expect(mockCamera.stop).toHaveBeenCalledTimes(1);
-  } finally {
-    jest.useRealTimers();
-  }
 });
 
 test('a phone without high speed gets the fallback card first', async () => {
@@ -230,7 +218,8 @@ test('a camera error during a pending start keeps the Retry action', async () =>
 test('going to the background disables Record until the camera is ready again', async () => {
   const { AppState } = require('react-native');
   const listeners = [];
-  const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation((type, cb) => {
+  const original = AppState.addEventListener;
+  AppState.addEventListener = jest.fn((type, cb) => {
     listeners.push(cb);
     return { remove: jest.fn() };
   });
@@ -243,7 +232,35 @@ test('going to the background disables Record until the camera is ready again', 
     await act(async () => { mockCamera.props.onCameraReady({ nativeEvent: HS240 }); });
     expect(utils.getByTestId('capture-record').props.accessibilityState.disabled).toBe(false);
   } finally {
-    spy.mockRestore();
+    AppState.addEventListener = original;
   }
+});
+
+// Fake timers only here, and only for the clock: promises, nextTick and setImmediate stay real
+// so React's act() and the testing library can still flush. The screen is unmounted and every
+// pending timer drained before the real clock comes back, so nothing leaks into other tests.
+describe('auto-stop', () => {
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+  });
+  afterEach(async () => {
+    await act(async () => { cleanup(); });
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
+  });
+
+  test('stops the take at 8 s', async () => {
+    const utils = setup();
+    await act(async () => {});
+    expect(utils.getByTestId('native-camera')).toBeTruthy();
+    await act(async () => { fireEvent.press(utils.getByTestId('capture-record')); });
+    expect(mockCamera.start).toHaveBeenCalled();
+    await act(async () => { jest.advanceTimersByTime(7900); });
+    expect(mockCamera.stop).not.toHaveBeenCalled();
+    await act(async () => { jest.advanceTimersByTime(300); });
+    expect(mockCamera.stop).toHaveBeenCalledTimes(1);
+    await act(async () => {});
+    expect(utils.getByTestId('capture-review')).toBeTruthy();
+  });
 });
 
