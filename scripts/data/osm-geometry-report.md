@@ -1,0 +1,161 @@
+# OSM course geometry import report
+
+42 accepted, 78 rejected of 120 candidates.
+
+## Rejected
+
+- 15 x par-mismatch
+- 14 x hole-refs
+- 27 x sibling-clash
+- 10 x no-name-match
+- 2 x already-geometry
+- 4 x ambiguous
+- 3 x weak-evidence
+- 1 x hijack-existing
+- 2 x bad-geometry
+
+- Club de Golf Novo Sancti Petri (relation/21447371): [par-mismatch] name matches [Real Novo Sancti Petri Golf Club (Centro); Real Novo Sancti Petri Golf Club (Mar y Pinos); Real Novo Sancti Petri Golf Club — Mar + Centro; Real Novo Sancti Petri Golf Club — P&P] but pars differ
+- Costa Ballena Ocean Golf Club (relation/3302571): [hole-refs] duplicate hole refs (1,2,3,4,5,6,7,8,9)
+- Meliá Villaitana (way/114577114): [hole-refs] duplicate hole refs (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)
+- Club de Golf Escorpión (way/48876790): [hole-refs] duplicate hole refs (10,11,12,13,14,15,16,17,18)
+- Atalaya Golf & Country Club (relation/3300476): [hole-refs] duplicate hole refs (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)
+- Real Club de Golf Guadalmina (relation/3300481): [hole-refs] duplicate hole refs (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)
+- Club de Golf Valderrama (way/237391513): [sibling-clash] tokens [real club valderrama] clash with Real Club Valderrama — Pares 3
+- Club de Golf de Guadalhorce (way/175483665): [par-mismatch] name matches [Real Guadalhorce Club de Golf — Pares 3; Real Guadalhorce Club de Golf — Real Guadalhorce] but pars differ
+- Reial Club de Golf de la Cerdanya (relation/13936370): [hole-refs] duplicate hole refs (1,2,3,4,5,6,7,8,9)
+- Golf Club Ibiza (relation/17187353): [hole-refs] duplicate hole refs (1,2,3,4,5,6,7,8,9)
+- Pitch & Putt Vallromanes (relation/3333392): [hole-refs] duplicate hole refs (1,2,3,4,5,6,7,8,9)
+- Lauro Golf (way/213412144): [sibling-clash] tokens [lauro golf a b] clash with Lauro Golf — B+C
+- Sherry Golf Jerez (way/297353455): [sibling-clash] tokens [sherry golf jerez] clash with Sherry Golf Jerez — P&P
+- Hills Course (relation/3319640): [hole-refs] [bbox fallback] missing hole refs (8,9,11)
+- Stadium Course at Camiral Golf & Wellness (way/1165605014): [hole-refs] [bbox fallback] missing hole refs (8,9)
+- Marina Golf Mojácar (relation/3324010): [sibling-clash] tokens [marina golf mojacar] clash with Club Marina Golf-mojacar — Pequecircuito
+- Club de Golf Alcanada (way/40755710): [sibling-clash] tokens [club golf alcanada] clash with Club de Golf Alcanada — Alcanada B+B
+- Campo de Golf Río Real (relation/3299743): [sibling-clash] tokens [rio real golf] clash with Golf Río Real — Par 68
+- Club de Golf La Cañada (way/105294806): [sibling-clash] tokens [club golf canada] clash with Club de Golf Alcanada — Alcanada B+B; Club de Golf la Cañada — P&P; Club de Golf Alcanada
+- Campo de Golf de Pineda (way/488915399): [sibling-clash] tokens [real club pineda sevilla] clash with Real Club Pineda de Sevilla — P&Pi; Real Club Pineda de Sevilla — Rcg Pineda A+A
+- Serena Golf (way/130569838): [sibling-clash] tokens [serena golf] clash with Club de Golf Playa Serena — Pequecircuito; Escuela Pública de Golf de Villanueva de la Serena — Quinto Coto; Club de Golf Playa Serena
+- Villa Nueva Golf Resort (way/183417445): [no-name-match] no library course shares distinctive name words
+- Real Club de Golf de Sevilla (way/73922417): [par-mismatch] name matches [Real Club de Golf de Sevilla] but pars differ
+- Santa Clara Golf Club Marbella (relation/3299716): [already-geometry] Santa Clara Golf Marbella -> existing santa-clara-marbella [["santa","clara","marbella"]]
+- Las Colinas Golf & Country Club (way/374409231): [hole-refs] [bbox fallback] missing hole refs (7)
+- La Reserva Golf Club (way/237391514): [par-mismatch] name matches [Club de Golf la Reserva de Sotogrande] but pars differ
+- Club de Golf Playa Serena (relation/2501899): [sibling-clash] tokens [club golf playa serena] clash with Club de Golf Playa Serena — Pequecircuito
+- El Chaparral Golf Club (way/172432255): [sibling-clash] tokens [chaparral golf club] clash with El Chaparral Golf Club — B+B
+- Valle del Este Golf Resort (relation/3319413): [par-mismatch] name matches [Valle del Este Hotel Golf Spa — Pequecircuito; Valle del Este Golf Spa] but pars differ
+- Rioja Alta (way/90889948): [sibling-clash] tokens [rioja alta golf club] clash with Rioja Alta Golf Club — P&P
+- Real Club de Golf Las Palmas (way/138316442): [hole-refs] duplicate hole refs (12)
+- Club de Golf Llavaneres (way/172545406): [no-name-match] no library course shares distinctive name words
+- Campo Los Olivos (way/244709315): [ambiguous] Costa Ballena Ocean Golf Club — Olivos + Palmeras; Costa Ballena Ocean Golf Club — Ficus + Olivos; Mijas Golf Los Olivos
+- Alhaurin Golf (relation/3308783): [sibling-clash] tokens [alhaurin golf hotel resort] clash with Alhaurín Golf Hotel & Resort — P&P
+- Isla Canela Golf Course (way/154575700): [sibling-clash] tokens [isla canela old course] clash with Isla Canela Old Course — Pequecircuito
+- El Paraíso Golf Club (way/147409088): [par-mismatch] name matches [El Paraíso Golf Club — El Paraíso New Course; El Paraíso Golf Club — El Paraíso B + A] but pars differ
+- Campo de Golf Los Ángeles de San Rafael (relation/3332693): [already-geometry] Los Angeles de San Rafael Golf — Los Angeles San Rafael -> existing los-angeles-san-rafael [["angeles san rafael"]]
+- Aguilón Golf (way/631135335): [sibling-clash] tokens [aguilon golf] clash with Aguilon Golf — Pequecircuito
+- Barceló Montecastillo Golf (way/319147500): [par-mismatch] name matches [Montecastillo Barceló Golf Club] but pars differ
+- Granada Club de Golf (relation/7091039): [sibling-clash] tokens [granada club golf] clash with Granada Club de Golf — Pequecircuito; Santa Clara Golf Club Granada — R.C.I.
+- Flamingos Golf (way/139728265): [sibling-clash] tokens [villa padierna golf club flamingos] clash with Villa Padierna Golf Club — Flamingos R.C.I.
+- Lorca Resort Golf & Spa (relation/3319459): [no-name-match] no library course shares distinctive name words
+- La Galiana Campo de Golf (way/234987843): [weak-evidence] only 0 par tags for "La Galiana Campo de Golf"
+- Añoreta Golf (relation/3310202): [sibling-clash] tokens [anoreta golf] clash with Club Deportivo Añoreta Golf — 9 hoyos
+- null (way/81088629): [no-name-match] no library course shares distinctive name words
+- Pitch & Putt Lleida (way/1024910497): [par-mismatch] name matches [Golf Lleida & Country Club] but pars differ
+- Pitch & Putt Palma de Cervelló (way/335651972): [no-name-match] no library course shares distinctive name words
+- Benalup (way/976038708): [no-name-match] no library course shares distinctive name words
+- Club de Golf El Plantío (way/25035117): [sibling-clash] tokens [club golf plantio] clash with Club de Golf el Plantio — Pares 3
+- Los Lagos Golf (way/222799515): [sibling-clash] tokens [golf lagos] clash with Club de Golf Escorpion — Nuevos+Lagos; Golf Costa Adeje — Los Lagos; Mijas Golf Los Lagos
+- Golf de Son Térmens (way/81397943): [weak-evidence] only 0 par tags for "Golf Son Termens"
+- T Golf Palma Puntiro (way/108783334): [sibling-clash] tokens [t golf palma] clash with Club Son Quint Golf — Palma P&P
+- Los Moriscos Club de Golf (relation/1725567): [par-mismatch] name matches [Los Moriscos Club de Golf — Pequecircuito; Los Moriscos Club de Golf — Los Moriscos Pequecircuito 2; Los Moriscos Club de Golf] but pars differ
+- Club de Golf Alenda (way/25484741): [sibling-clash] tokens [alenda golf club] clash with Alenda Golf Club — Family Game
+- Marbella Golf Country Club (relation/3299714): [par-mismatch] name matches [Marbella Club Golf Resort] but pars differ
+- Cabopino golf (way/172434912): [sibling-clash] tokens [cabopino golf marbella r c i] clash with Cabopino Golf Marbella
+- Santana Golf & Country Club (way/171834521): [no-name-match] no library course shares distinctive name words
+- Arcos Gardens Golf Club (way/631134701): [sibling-clash] tokens [arcos golf] clash with Arcosur Golf — Rec A; Arcosur Golf — Rec B; Arcosur Golf — Rec C
+- Real Golf Club de San Sebastián (relation/3332836): [sibling-clash] tokens [real club golf san sebastian] clash with Real Nuevo Club de Golf de San Sebastian Basozàbal; Real Golf Club de San Sebastian — A+A; Real Golf Club de San Sebastian — San Sebastian B+B
+- Santa María Golf & Country Club (way/172443763): [par-mismatch] name matches [Santa María Golf & Country Club] but pars differ
+- Golf Córdoba (way/153946662): [hijack-existing] tokens [real club campo cordoba] clash with Real Club de Campo de Cordoba — P&P Pequecircuito 1; Real Club de Campo de Cordoba — P&P B+B; Real Club de Campo de Cordoba — P&P A+A
+- Real Club de Golf de Sotogrande (way/258648125): [ambiguous] Real Club de Golf Sotogrande — Recorrido 1; Real Club de Golf Sotogrande — Recorrido 2
+- Escuela Pública de Golf El Toyo (relation/1690176): [no-name-match] no library course shares distinctive name words
+- Club de Golf Las Ramblas de Orihuela (way/27249484): [par-mismatch] name matches [Club de Golf Las Ramblas] but pars differ
+- Golf La Estancia (way/729640031): [par-mismatch] name matches [La Estancia Golf] but pars differ
+- Los Naranjos Golf Club (relation/3299800): [sibling-clash] tokens [naranjos golf club] clash with Los Naranjos Golf Club — Los Naranjos A+A; Los Naranjos Golf Club — Los Naranjos B+B
+- La Monacilla Golf Club (relation/3296981): [par-mismatch] name matches [La Monacilla Golf Club — La Monacilla; La Monacilla Golf Club — R.C.I.] but pars differ
+- Alcaidesa Links Golf Resort (relation/3873410): [hole-refs] duplicate hole refs (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)
+- Golf Villa Mayor (relation/3323987): [no-name-match] no library course shares distinctive name words
+- Campo de roda golf (way/123009371): [par-mismatch] name matches [Roda Golf Club; Club Golf la Roda — Club La RODA. Amado Quintanilla; Club Golf la Roda — Club La Roda P&P 1; Club Golf la Roda — Club La Roda P&P 2] but pars differ
+- Anfi Tauro Golf (way/437040736): [sibling-clash] tokens [anfi tauro golf] clash with Anfi Tauro Golf — P&P
+- Seminario Urban Golf (way/155189991): [hole-refs] [bbox fallback] missing hole refs (9)
+- Urnieta Pitch & Putt (way/1165087757): [no-name-match] no library course shares distinctive name words
+- Club de Golf Villarias (relation/3330776): [weak-evidence] only 2 par tags for "Club de Golf Villarias"
+- Fontanals Golf (relation/7566056): [bad-geometry] 6/18 greens, 12 holes with missing or far (>60m) greens
+- Club de Golf Vallromanes (relation/14613034): [ambiguous] Club de Golf Vallromanes — R.C.I.; Club de Golf Vallromanes
+- Club de Golf Son Servera (relation/7257090): [bad-geometry] 0/18 greens, 18 holes with missing or far (>60m) greens
+- El Campo de Logroño (relation/365264): [ambiguous] Club de Golf el Campo de Logroño — P&P; Campo de Golf Logroño
+
+## Accepted
+
+- Abama Golf (relation/1301223) -> Abama Golf [abama], pars 18/18, greens 18/18, hazards 113
+- Club de Golf Aloha (relation/1402560) -> Aloha Golf Club [aloha golf club], pars 18/18, greens 18/18, hazards 65
+- Antequera Golf (relation/3300116) -> Antequera Golf [antequera], pars 18/18, greens 18/18, hazards 65
+- Golf de Son Muntaner (way/51852280) -> Arabella Golf Mallorca - Son Muntaner Golf [arabella mallorca son muntaner], pars 18/18, greens 18/18, hazards 76
+- Buenavista Golf (relation/4523109) -> Buenavista Golf [buenavista golf], pars 18/18, greens 18/18, hazards 58
+- Calanova Golf Club (relation/16378288) -> Calanova Golf Club [calanova], pars 18/18, greens 18/18, hazards 51
+- Golf Canyamel (relation/3332769) -> Campo de Golf Canyamel [canyamel], pars 18/18, greens 18/18, hazards 51
+- Montenmedio Golf & Country Club (way/220296432) -> Campo de Golf Dehesa Montenmedio [dehesa montenmedio], pars 18/18, greens 18/18, hazards 77
+- Centro Nacional de Golf de la Real Federación Española de Golf (way/30750432) -> Centro Nacional de Golf [centro nacional], pars 18/18, greens 17/18, hazards 60
+- Zagaleta New Course (way/1562550930) -> Club de Campo la Zagaleta — New Course [zagaleta new], pars 18/18, greens 18/18, hazards 67
+- Campo de Golf Campano (way/52868185) -> Club de Golf Campano [campano], pars 18/18, greens 18/18, hazards 66
+- Real Club de Golf Campoamor (way/27249377) -> Club de Golf Campoamor [campoamor], pars 18/18, greens 18/18, hazards 75
+- Larrabea Club de Golf (way/32877582) -> Club de Golf Larrabea [larrabea], pars 18/18, greens 18/18, hazards 53
+- Maioris (way/98739153) -> Club Deportivo Golf Maioris [deportivo maioris], pars 18/18, greens 18/18, hazards 74
+- Font del Llop Golf Resort (way/98854430) -> Font del Llop Golf Resort [font llop golf resort], pars 18/18, greens 18/18, hazards 93
+- Foressos Golf (way/152186589) -> Foressos Golf [foressos], pars 18/18, greens 18/18, hazards 75
+- Golf El Rompido - Campo Norte (way/222133571) -> Golf El Rompido (Norte) [rompido norte], pars 18/18, greens 18/18, hazards 49
+- Golf El Rompido - Campo Sur (way/223150371) -> Golf El Rompido (Sur) [rompido sur], pars 18/18, greens 18/18, hazards 40
+- Golf la Roca (relation/10365099) -> Golf La Roca – Vilalba [roca vilalba], pars 18/18, greens 18/18, hazards 86
+- Golf Lleida & Country Club (relation/1643090) -> Golf Lleida & Country Club [lleida], pars 18/18, greens 18/18, hazards 40
+- Golf Nuevo Portil (way/226069291) -> Golf Nuevo Portil [nuevo portil], pars 18/18, greens 18/18, hazards 51
+- Campo de Golf Santander (way/29254617) -> Golf Santander S.A. [santander s a], pars 18/18, greens 18/18, hazards 31
+- Golf Torrequebrada (relation/1170115) -> Golf Torrequebrada [torrequebrada], pars 18/18, greens 18/18, hazards 92
+- Campo de Golf Isla Canela Links by Isla Canela (way/180595723) -> Isla Canela Links [isla canela links], pars 18/18, greens 18/18, hazards 54
+- Islantilla Golf Resort (relation/3296953) -> Islantilla Golf Resort — Azul+Amarillo [islantilla azul amarillo], pars 18/18, greens 18/18, hazards 67
+- Izki Golf (way/129384371) -> Izki Golf [izki], pars 18/18, greens 18/18, hazards 35
+- Campo Asia (way/343672934) -> La Cala Resort Campo Asia (South) [cala asia south], pars 18/18, greens 18/18, hazards 56
+- Club de Golf La Finca (way/27597549) -> La Finca Resort [finca resort], pars 18/18, greens 18/18, hazards 53
+- Lo Romero (way/133629743) -> Lo Romero Golf [lo romero], pars 18/18, greens 18/18, hazards 66
+- Marbella Club Golf Resort (way/139728266) -> Marbella Club Golf Resort [marbella club golf resort], pars 18/18, greens 18/18, hazards 46
+- Miraflores golf (relation/2297099) -> Miraflores Golf [miraflores], pars 18/18, greens 18/18, hazards 34
+- Golf El Fresnillo (way/72885092) -> Naturávila Golf El Fresnillo [naturavila fresnillo], pars 18/18, greens 18/18, hazards 42
+- Golf Oliva Nova (relation/3330820) -> Oliva Nova Beach & Golf Resort [oliva nova beach], pars 18/18, greens 18/18, hazards 41
+- Palomarejos Golf (way/165913033) -> Palomarejos Golf [palomarejos], pars 18/18, greens 18/18, hazards 74
+- Club de Golf Málaga Parador (way/60046149) -> Parador Málaga del Golf — Amarillo+Blanco [parador malaga amarillo blanco], pars 18/18, greens 18/18, hazards 115
+- Pula Golf (relation/2738804) -> Pula Golf Resort [pula], pars 18/18, greens 18/18, hazards 52
+- Real Club de Golf La Herrería (way/61456526) -> Real Club de Golf La Herrería [herreria], pars 18/18, greens 18/18, hazards 25
+- Real Club de Golf Las Brisas (way/97671239) -> Real Club de Golf Las Brisas [brisas], pars 18/18, greens 18/18, hazards 92
+- Real Nuevo Club de Golf Basozabal (way/211691537) -> Real Nuevo Club de Golf de San Sebastian Basozàbal [nuevo san sebastian basozabal], pars 18/18, greens 18/18, hazards 71
+- Santa Clara Golf Granada (relation/3310266) -> Santa Clara Golf Club Granada — R.C.I. [santa clara granada r c i], pars 18/18, greens 18/18, hazards 48
+- Alferini Golf (relation/3300452) -> Villa Padierna Golf Club — Alferini [villa padierna alferini], pars 18/18, greens 18/18, hazards 16
+- Club de Golf Villamartín (way/27249332) -> Villamartin Golf Club [villamartin], pars 18/18, greens 18/18, hazards 73
+
+## Accepted, flagged for review
+
+- parador-malaga-del-golf-amarillo-blanco: an existing group also matches this name (ccvm-amarillo [["amarillo"],["yellow"],["club de campo","amarillo"],["ccvm","amarillo"],["villa de madrid","amarillo"]]); the new longer group wins in the app
+- abama-golf: hole 10: nearest tee >60m, dropped
+- islantilla-golf-resort-azul-amarillo: an existing group also matches this name (ccvm-amarillo [["amarillo"],["yellow"],["club de campo","amarillo"],["ccvm","amarillo"],["villa de madrid","amarillo"]]); the new longer group wins in the app
+- la-cala-resort-campo-asia-south: name is not an exact club-name match: OSM "Campo Asia" vs "La Cala Resort Campo Asia (South)"
+- club-de-campo-la-zagaleta-new-course: an existing group also matches this name (ccvm [["villa de madrid"],["ccvm"],["club de campo"]]); the new longer group wins in the app
+- centro-nacional-de-golf: hole 1: nearest tee >60m, dropped; hole 2: nearest tee >60m, dropped; hole 3: nearest tee >60m, dropped; hole 4: nearest tee >60m, dropped; hole 5: green 85m from line end, aiming at the line end; hole 5: nearest tee >60m, dropped; hole 6: nearest tee >60m, dropped; hole 7: nearest tee >60m, dropped; hole 8: nearest tee >60m, dropped; hole 9: nearest tee >60m, dropped; hole 10: nearest tee >60m, dropped; hole 11: nearest tee >60m, dropped; hole 12: nearest tee >60m, dropped; hole 13: nearest tee >60m, dropped; hole 14: nearest tee >60m, dropped; hole 15: nearest tee >60m, dropped; hole 16: nearest tee >60m, dropped; hole 17: nearest tee >60m, dropped; hole 18: nearest tee >60m, dropped; name is not an exact club-name match: OSM "Centro Nacional de Golf de la Real Federación Española de Golf" vs "Centro Nacional de Golf"
+- club-deportivo-golf-maioris: hole 5: nearest tee >60m, dropped; name is not an exact club-name match: OSM "Maioris" vs "Club Deportivo Golf Maioris"
+- campo-de-golf-dehesa-montenmedio: name is not an exact club-name match: OSM "Montenmedio Golf & Country Club" vs "Campo de Golf Dehesa Montenmedio"
+- campo-de-golf-canyamel: hole 3: nearest tee >60m, dropped; hole 18: nearest tee >60m, dropped
+- isla-canela-links: name is not an exact club-name match: OSM "Campo de Golf Isla Canela Links by Isla Canela" vs "Isla Canela Links"
+- oliva-nova-beach-and-golf-resort: name is not an exact club-name match: OSM "Golf Oliva Nova" vs "Oliva Nova Beach & Golf Resort"
+- golf-la-roca-vilalba: hole 2: nearest tee >60m, dropped; hole 3: nearest tee >60m, dropped; hole 4: nearest tee >60m, dropped; hole 5: nearest tee >60m, dropped; hole 6: nearest tee >60m, dropped; hole 7: nearest tee >60m, dropped; hole 8: nearest tee >60m, dropped; hole 11: nearest tee >60m, dropped; hole 12: nearest tee >60m, dropped; hole 13: nearest tee >60m, dropped; hole 14: nearest tee >60m, dropped; hole 15: nearest tee >60m, dropped; hole 16: nearest tee >60m, dropped; hole 17: nearest tee >60m, dropped; name is not an exact club-name match: OSM "Golf la Roca" vs "Golf La Roca – Vilalba"
+- golf-torrequebrada: hole 13: nearest tee >60m, dropped
+- golf-santander-s-a: name is not an exact club-name match: OSM "Campo de Golf Santander" vs "Golf Santander S.A."
+- real-club-de-golf-la-herreria: hole 2: nearest tee >60m, dropped; hole 3: nearest tee >60m, dropped; hole 4: nearest tee >60m, dropped; hole 5: nearest tee >60m, dropped; hole 6: nearest tee >60m, dropped; hole 7: nearest tee >60m, dropped; hole 9: nearest tee >60m, dropped; hole 11: nearest tee >60m, dropped; hole 13: nearest tee >60m, dropped; hole 14: nearest tee >60m, dropped; hole 15: nearest tee >60m, dropped; hole 16: nearest tee >60m, dropped; hole 17: nearest tee >60m, dropped; hole 18: nearest tee >60m, dropped
+- real-nuevo-club-de-golf-de-san-sebastian-basozabal: name is not an exact club-name match: OSM "Real Nuevo Club de Golf Basozabal" vs "Real Nuevo Club de Golf de San Sebastian Basozàbal"
+- naturavila-golf-el-fresnillo: name is not an exact club-name match: OSM "Golf El Fresnillo" vs "Naturávila Golf El Fresnillo"
+- arabella-golf-mallorca-son-muntaner-golf: name is not an exact club-name match: OSM "Golf de Son Muntaner" vs "Arabella Golf Mallorca - Son Muntaner Golf"
+- villa-padierna-golf-club-alferini: name is not an exact club-name match: OSM "Alferini Golf" vs "Villa Padierna Golf Club — Alferini"

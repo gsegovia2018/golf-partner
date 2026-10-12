@@ -14,7 +14,7 @@ import {
   subscribeShots, getShotsVersion, getShots, clearAllShots,
 } from '../store/shotStore';
 import {
-  subscribeCourseGeometry, getCourseGeometryVersion, getCourseGeometry,
+  subscribeCourseGeometry, getCourseGeometryVersion, getCourseGeometry, hasCourseDetails,
 } from '../lib/geo';
 import { clubAverages } from '../lib/shotStats';
 import { describeConditions } from '../lib/playConditions';
@@ -47,9 +47,13 @@ export default function BagScreen({ navigation }) {
   const averages = useMemo(() => clubAverages(getShots()), [shotsVersion]);
 
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
-  // Courses to offer an elevation input for, de-duped by name.
+  // Courses to offer an elevation input for, de-duped by name: only those
+  // with details loaded (bundled, or opened this session) or an altitude set —
+  // not the whole course index.
+  const courses = useMemo(() => dedupeCoursesByName(getCourseGeometry()
+    .filter((c) => hasCourseDetails(c) || courseAltitudes?.[c.name] != null)),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const courses = useMemo(() => dedupeCoursesByName(getCourseGeometry()), [geomVersion]);
+  [geomVersion, courseAltitudes]);
   const month = new Date().getMonth();
 
   const setAltitude = (name, text) => {

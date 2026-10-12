@@ -1,5 +1,5 @@
 import React, {
-  useEffect, useRef, useState, useCallback, useMemo, useSyncExternalStore,
+  useEffect, useRef, useState, useCallback, useMemo,
 } from 'react';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import {
@@ -77,9 +77,7 @@ import ConflictWizardSheet from '../components/scorecard/ConflictWizardSheet';
 import { FlagFinderView } from '../components/scorecard/FlagFinderView';
 import TourOverlay from '../components/tour/TourOverlay';
 import { SCORECARD_TOUR_STEPS } from '../components/tour/tourSteps';
-import {
-  findCourseGeometry, subscribeCourseGeometry, getCourseGeometryVersion,
-} from '../lib/geo';
+import { useCourseGeometry } from '../hooks/useCourseGeometry';
 import { compassLikelyAvailable } from '../hooks/useCompassHeading';
 
 // Stable empty roster so the useRoundRoster memo below does not see a new
@@ -783,14 +781,9 @@ export default function ScorecardScreen({ navigation, route }) {
   // Flag finder header icon: shown only when the round's course has mapped
   // geometry (holes/pins) and the device has a compass worth trying. Geometry
   // hydrates asynchronously from Supabase, so subscribe the same way
-  // useGpsDistances does — the bundled seed resolves first, live data swaps
-  // in via geomVersion.
-  const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
-  const hasCourseGeometry = useMemo(
-    () => !!findCourseGeometry(round?.courseName),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [round?.courseName, geomVersion],
-  );
+  // useGpsDistances does — the bundled seed resolves first, live data merges
+  // in (and this course's details load on demand).
+  const hasCourseGeometry = !!useCourseGeometry(round?.courseName);
   const showFlagFinder = hasCourseGeometry && compassLikelyAvailable();
 
   // Keep GPS alive while this live round is open, screen off or not — see

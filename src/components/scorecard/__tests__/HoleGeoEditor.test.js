@@ -21,7 +21,7 @@ jest.mock('../../../lib/geo', () => ({
   getCourseGeometryVersion: () => 1,
 }));
 jest.mock('../../../lib/supabase', () => ({ supabase: {} }));
-jest.mock('../../../store/courseGeometryStore', () => ({ hydrateCourseGeometry: jest.fn() }));
+jest.mock('../../../store/courseGeometryStore', () => ({ ensureCourseGeometry: jest.fn() }));
 jest.mock('../../../store/tileCache', () => ({ courseKeyFor: (name) => `key:${name}` }));
 
 const baseProps = { courseName: 'Lomas Bosque', onClose: jest.fn(), onSaved: jest.fn() };

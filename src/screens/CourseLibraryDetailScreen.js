@@ -17,7 +17,7 @@ import {
   prefetchCourseTiles, getPrefetchState, subscribePrefetch,
   deleteBucket, courseKeyFor, estimateTileBytes, PREFETCH_ZOOMS,
 } from '../store/tileCache';
-import { findCourseGeometry } from '../lib/geo';
+import { useCourseGeometry } from '../hooks/useCourseGeometry';
 import { holeBbox, tilesForBbox } from '../lib/tileMath';
 
 function defaultHoles() {
@@ -73,7 +73,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
   // Offline map: visible only for courses with per-hole ('holes'-mode) mapped
   // geometry — the satellite tile prefetch needs a bbox per hole.
   const prefetch = useSyncExternalStore(subscribePrefetch, getPrefetchState);
-  const geometry = findCourseGeometry(name);
+  const geometry = useCourseGeometry(name);
   const tileCount = useMemo(() => {
     if (!geometry?.holes?.length) return 0;
     const seen = new Set();

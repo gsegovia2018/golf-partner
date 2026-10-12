@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Platform, AppState } from 'react-native';
 import * as Location from 'expo-location';
-import {
-  findCourseGeometry, holeFeatures, haversineMeters,
-  subscribeCourseGeometry, getCourseGeometryVersion,
-} from '../lib/geo';
+import { holeFeatures, haversineMeters } from '../lib/geo';
+import { useCourseGeometry } from './useCourseGeometry';
 import { resolveScorecardDistances } from '../lib/flyoverModel';
 import { subscribeAppSettings, getAppSettings } from '../store/settingsStore';
 import { getLiveFix, subscribeLiveFix } from '../lib/roundTracking';
@@ -60,10 +58,8 @@ const COARSE_FIX_METERS = 50;
 const COARSE_FIX_GRACE_MS = 15000;
 
 export function useGpsDistances(courseName, holeNumber) {
-  const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
-  // geomVersion bumps when hydration swaps in live geometry — recompute then.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const geometry = useMemo(() => findCourseGeometry(courseName), [courseName, geomVersion]);
+  // Re-resolves when live geometry merges in (and loads this course's details).
+  const geometry = useCourseGeometry(courseName);
   const appSettings = useSyncExternalStore(subscribeAppSettings, getAppSettings, getAppSettings);
   const gpsEnabled = appSettings.gpsEnabled !== false;
   const [denied, setDenied] = useState(false);

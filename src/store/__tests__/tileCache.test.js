@@ -5,6 +5,9 @@ import {
 } from '../tileCache';
 import * as geo from '../../lib/geo';
 
+// Course details load on demand; here geometry is stubbed via findCourseGeometry.
+jest.mock('../courseGeometryStore', () => ({ ensureCourseGeometry: jest.fn(async () => null) }));
+
 export function fakeAdapter() {
   const store = new Map(); // 'bucket|z/x/y' -> dataUrl
   return {

@@ -1,0 +1,1442 @@
+[
+ {
+  "name": "Club de Golf Novo Sancti Petri",
+  "osm": "relation/21447371",
+  "ref": 35,
+  "par": 36,
+  "bbox": [
+   36.3381,
+   -6.1611,
+   36.3505,
+   -6.1406
+  ]
+ },
+ {
+  "name": "Costa Ballena Ocean Golf Club",
+  "osm": "relation/3302571",
+  "ref": 27,
+  "par": 36,
+  "bbox": [
+   36.6748,
+   -6.4175,
+   36.6909,
+   -6.4019
+  ]
+ },
+ {
+  "name": "Meliá Villaitana",
+  "osm": "way/114577114",
+  "ref": 18,
+  "par": 36,
+  "bbox": [
+   38.5475,
+   -0.1634,
+   38.5608,
+   -0.1382
+  ]
+ },
+ {
+  "name": "Club de Golf Málaga Parador",
+  "osm": "way/60046149",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.6485,
+   -4.4778,
+   36.6599,
+   -4.4657
+  ]
+ },
+ {
+  "name": "Club de Golf Escorpión",
+  "osm": "way/48876790",
+  "ref": 18,
+  "par": 27,
+  "bbox": [
+   39.5611,
+   -0.4819,
+   39.58,
+   -0.4673
+  ]
+ },
+ {
+  "name": "Atalaya Golf & Country Club",
+  "osm": "relation/3300476",
+  "ref": 18,
+  "par": 36,
+  "bbox": [
+   36.4797,
+   -5.0306,
+   36.4961,
+   -5.0143
+  ]
+ },
+ {
+  "name": "Real Club de Golf Guadalmina",
+  "osm": "relation/3300481",
+  "ref": 18,
+  "par": 36,
+  "bbox": [
+   36.4612,
+   -5.0114,
+   36.4899,
+   -4.9938
+  ]
+ },
+ {
+  "name": "Club de Golf Valderrama",
+  "osm": "way/237391513",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.2814,
+   -5.341,
+   36.2896,
+   -5.3188
+  ]
+ },
+ {
+  "name": "Abama Golf",
+  "osm": "relation/1301223",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   28.1656,
+   -16.8017,
+   28.1738,
+   -16.7791
+  ]
+ },
+ {
+  "name": "Club de Golf de Guadalhorce",
+  "osm": "way/175483665",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.6942,
+   -4.5338,
+   36.7045,
+   -4.5238
+  ]
+ },
+ {
+  "name": "Reial Club de Golf de la Cerdanya",
+  "osm": "relation/13936370",
+  "ref": 18,
+  "par": 27,
+  "bbox": [
+   42.4063,
+   1.8947,
+   42.4203,
+   1.9128
+  ]
+ },
+ {
+  "name": "Islantilla Golf Resort",
+  "osm": "relation/3296953",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.2084,
+   -7.2496,
+   37.2188,
+   -7.2203
+  ]
+ },
+ {
+  "name": "Golf Club Ibiza",
+  "osm": "relation/17187353",
+  "ref": 18,
+  "par": 27,
+  "bbox": [
+   38.9417,
+   1.4867,
+   38.9535,
+   1.5078
+  ]
+ },
+ {
+  "name": "Pitch & Putt Vallromanes",
+  "osm": "relation/3333392",
+  "ref": 18,
+  "par": 27,
+  "bbox": [
+   41.5351,
+   2.3062,
+   41.5409,
+   2.3144
+  ]
+ },
+ {
+  "name": "Lauro Golf",
+  "osm": "way/213412144",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.6439,
+   -4.6358,
+   36.6596,
+   -4.6212
+  ]
+ },
+ {
+  "name": "Sherry Golf Jerez",
+  "osm": "way/297353455",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.6543,
+   -6.1626,
+   36.6638,
+   -6.1499
+  ]
+ },
+ {
+  "name": "Buenavista Golf",
+  "osm": "relation/4523109",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   28.3693,
+   -16.8696,
+   28.3754,
+   -16.8577
+  ]
+ },
+ {
+  "name": "Izki Golf",
+  "osm": "way/129384371",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   42.6598,
+   -2.5243,
+   42.6676,
+   -2.5033
+  ]
+ },
+ {
+  "name": "Hills Course",
+  "osm": "relation/3319640",
+  "ref": 18,
+  "par": 0,
+  "bbox": [
+   41.0674,
+   1.1557,
+   41.0796,
+   1.1743
+  ]
+ },
+ {
+  "name": "Stadium Course at Camiral Golf & Wellness",
+  "osm": "way/1165605014",
+  "ref": 18,
+  "par": 23,
+  "bbox": [
+   41.8492,
+   2.7543,
+   41.8566,
+   2.7722
+  ]
+ },
+ {
+  "name": "Campo Asia",
+  "osm": "way/343672934",
+  "ref": 18,
+  "par": 19,
+  "bbox": [
+   36.5355,
+   -4.7234,
+   36.5439,
+   -4.7102
+  ]
+ },
+ {
+  "name": "Marina Golf Mojácar",
+  "osm": "relation/3324010",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.1551,
+   -1.8407,
+   37.1646,
+   -1.8262
+  ]
+ },
+ {
+  "name": "Zagaleta New Course",
+  "osm": "way/1562550930",
+  "ref": 18,
+  "par": 19,
+  "bbox": [
+   36.5355,
+   -5.0404,
+   36.5495,
+   -5.0287
+  ]
+ },
+ {
+  "name": "Club de Golf Alcanada",
+  "osm": "way/40755710",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   39.8373,
+   3.1604,
+   39.85,
+   3.1786
+  ]
+ },
+ {
+  "name": "Campo de Golf Río Real",
+  "osm": "relation/3299743",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.5033,
+   -4.8472,
+   36.5163,
+   -4.8409
+  ]
+ },
+ {
+  "name": "Club de Golf La Cañada",
+  "osm": "way/105294806",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.2888,
+   -5.3177,
+   36.3009,
+   -5.3063
+  ]
+ },
+ {
+  "name": "Campo de Golf de Pineda",
+  "osm": "way/488915399",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.3443,
+   -5.9711,
+   37.3559,
+   -5.9588
+  ]
+ },
+ {
+  "name": "Centro Nacional de Golf de la Real Federación Española de Golf",
+  "osm": "way/30750432",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   40.4812,
+   -3.7455,
+   40.4929,
+   -3.7295
+  ]
+ },
+ {
+  "name": "Maioris",
+  "osm": "way/98739153",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   39.4459,
+   2.7556,
+   39.4522,
+   2.771
+  ]
+ },
+ {
+  "name": "Serena Golf",
+  "osm": "way/130569838",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.7211,
+   -0.8708,
+   37.7376,
+   -0.8642
+  ]
+ },
+ {
+  "name": "Villa Nueva Golf Resort",
+  "osm": "way/183417445",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.4997,
+   -6.1403,
+   36.5088,
+   -6.127
+  ]
+ },
+ {
+  "name": "Real Club de Golf de Sevilla",
+  "osm": "way/73922417",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.3477,
+   -5.9268,
+   37.3566,
+   -5.9123
+  ]
+ },
+ {
+  "name": "Santa Clara Golf Club Marbella",
+  "osm": "relation/3299716",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.5061,
+   -4.8329,
+   36.5156,
+   -4.8161
+  ]
+ },
+ {
+  "name": "Las Colinas Golf & Country Club",
+  "osm": "way/374409231",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.9224,
+   -0.8181,
+   37.9328,
+   -0.8024
+  ]
+ },
+ {
+  "name": "Montenmedio Golf & Country Club",
+  "osm": "way/220296432",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.2348,
+   -5.9161,
+   36.2442,
+   -5.8978
+  ]
+ },
+ {
+  "name": "La Reserva Golf Club",
+  "osm": "way/237391514",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.2897,
+   -5.3377,
+   36.2996,
+   -5.319
+  ]
+ },
+ {
+  "name": "Club de Golf Playa Serena",
+  "osm": "relation/2501899",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.7177,
+   -2.6421,
+   36.7304,
+   -2.6274
+  ]
+ },
+ {
+  "name": "El Chaparral Golf Club",
+  "osm": "way/172432255",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.5078,
+   -4.6726,
+   36.5192,
+   -4.6556
+  ]
+ },
+ {
+  "name": "Valle del Este Golf Resort",
+  "osm": "relation/3319413",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.1955,
+   -1.9019,
+   37.2082,
+   -1.8842
+  ]
+ },
+ {
+  "name": "Golf Canyamel",
+  "osm": "relation/3332769",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   39.6605,
+   3.4277,
+   39.6775,
+   3.4412
+  ]
+ },
+ {
+  "name": "Rioja Alta",
+  "osm": "way/90889948",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   42.4082,
+   -2.8875,
+   42.4225,
+   -2.8692
+  ]
+ },
+ {
+  "name": "Real Club de Golf Las Palmas",
+  "osm": "way/138316442",
+  "ref": 18,
+  "par": 3,
+  "bbox": [
+   28.0275,
+   -15.4668,
+   28.0346,
+   -15.4591
+  ]
+ },
+ {
+  "name": "Foressos Golf",
+  "osm": "way/152186589",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   39.3016,
+   -0.4426,
+   39.3126,
+   -0.4349
+  ]
+ },
+ {
+  "name": "Club de Golf Llavaneres",
+  "osm": "way/172545406",
+  "ref": 18,
+  "par": 17,
+  "bbox": [
+   41.5586,
+   2.4767,
+   41.5657,
+   2.4888
+  ]
+ },
+ {
+  "name": "Campo Los Olivos",
+  "osm": "way/244709315",
+  "ref": 18,
+  "par": 0,
+  "bbox": [
+   36.5483,
+   -4.6782,
+   36.5585,
+   -4.6665
+  ]
+ },
+ {
+  "name": "Golf El Rompido - Campo Norte",
+  "osm": "way/222133571",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.2262,
+   -7.1469,
+   37.2369,
+   -7.1349
+  ]
+ },
+ {
+  "name": "Miraflores golf",
+  "osm": "relation/2297099",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.4962,
+   -4.7117,
+   36.5075,
+   -4.6998
+  ]
+ },
+ {
+  "name": "Alhaurin Golf",
+  "osm": "relation/3308783",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.6016,
+   -4.711,
+   36.6143,
+   -4.6996
+  ]
+ },
+ {
+  "name": "Isla Canela Golf Course",
+  "osm": "way/154575700",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.191,
+   -7.3995,
+   37.1999,
+   -7.3828
+  ]
+ },
+ {
+  "name": "Club de Golf La Finca",
+  "osm": "way/27597549",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   38.0572,
+   -0.8012,
+   38.0677,
+   -0.7855
+  ]
+ },
+ {
+  "name": "Club de Golf Aloha",
+  "osm": "relation/1402560",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.5049,
+   -4.9675,
+   36.5182,
+   -4.9544
+  ]
+ },
+ {
+  "name": "Golf El Rompido - Campo Sur",
+  "osm": "way/223150371",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.2191,
+   -7.1473,
+   37.2279,
+   -7.1271
+  ]
+ },
+ {
+  "name": "El Paraíso Golf Club",
+  "osm": "way/147409088",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.4685,
+   -5.0402,
+   36.4823,
+   -5.0272
+  ]
+ },
+ {
+  "name": "Campo de Golf Isla Canela Links by Isla Canela",
+  "osm": "way/180595723",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.2545,
+   -7.4286,
+   37.2647,
+   -7.41
+  ]
+ },
+ {
+  "name": "Campo de Golf Los Ángeles de San Rafael",
+  "osm": "relation/3332693",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   40.7763,
+   -4.2611,
+   40.786,
+   -4.2353
+  ]
+ },
+ {
+  "name": "Golf Oliva Nova",
+  "osm": "relation/3330820",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   38.8863,
+   -0.0673,
+   38.9016,
+   -0.0495
+  ]
+ },
+ {
+  "name": "Aguilón Golf",
+  "osm": "way/631135335",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.356,
+   -1.7151,
+   37.3762,
+   -1.7014
+  ]
+ },
+ {
+  "name": "Barceló Montecastillo Golf",
+  "osm": "way/319147500",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.694,
+   -6.0468,
+   36.7098,
+   -6.0242
+  ]
+ },
+ {
+  "name": "Granada Club de Golf",
+  "osm": "relation/7091039",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.1148,
+   -3.6673,
+   37.1237,
+   -3.6593
+  ]
+ },
+ {
+  "name": "Flamingos Golf",
+  "osm": "way/139728265",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.4702,
+   -5.0605,
+   36.4789,
+   -5.0516
+  ]
+ },
+ {
+  "name": "Golf la Roca",
+  "osm": "relation/10365099",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   41.6251,
+   2.3468,
+   41.6363,
+   2.3559
+  ]
+ },
+ {
+  "name": "Santa Clara Golf Granada",
+  "osm": "relation/3310266",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.0688,
+   -3.6377,
+   37.0823,
+   -3.6298
+  ]
+ },
+ {
+  "name": "Campo de Golf Campano",
+  "osm": "way/52868185",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.3475,
+   -6.1152,
+   36.3579,
+   -6.1039
+  ]
+ },
+ {
+  "name": "Golf Torrequebrada",
+  "osm": "relation/1170115",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.5816,
+   -4.5576,
+   36.5904,
+   -4.542
+  ]
+ },
+ {
+  "name": "Lorca Resort Golf & Spa",
+  "osm": "relation/3319459",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.5469,
+   -1.6344,
+   37.556,
+   -1.619
+  ]
+ },
+ {
+  "name": "Calanova Golf Club",
+  "osm": "relation/16378288",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.5073,
+   -4.7124,
+   36.5176,
+   -4.6981
+  ]
+ },
+ {
+  "name": "La Galiana Campo de Golf",
+  "osm": "way/234987843",
+  "ref": 18,
+  "par": 0,
+  "bbox": [
+   39.0774,
+   -0.365,
+   39.0854,
+   -0.3456
+  ]
+ },
+ {
+  "name": "Campo de Golf Santander",
+  "osm": "way/29254617",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   40.3886,
+   -3.8784,
+   40.395,
+   -3.8511
+  ]
+ },
+ {
+  "name": "Marbella Club Golf Resort",
+  "osm": "way/139728266",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.4922,
+   -5.0633,
+   36.5058,
+   -5.0499
+  ]
+ },
+ {
+  "name": "Antequera Golf",
+  "osm": "relation/3300116",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.0083,
+   -4.6044,
+   37.0285,
+   -4.595
+  ]
+ },
+ {
+  "name": "Añoreta Golf",
+  "osm": "relation/3310202",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.7166,
+   -4.2495,
+   36.7301,
+   -4.234
+  ]
+ },
+ {
+  "name": "Real Club de Golf Campoamor",
+  "osm": "way/27249377",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.9242,
+   -0.7882,
+   37.9351,
+   -0.7683
+  ]
+ },
+ {
+  "name": null,
+  "osm": "way/81088629",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.8539,
+   -0.9891,
+   37.8767,
+   -0.9775
+  ]
+ },
+ {
+  "name": "Font del Llop Golf Resort",
+  "osm": "way/98854430",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   38.3298,
+   -0.7171,
+   38.3408,
+   -0.6897
+  ]
+ },
+ {
+  "name": "Pitch & Putt Lleida",
+  "osm": "way/1024910497",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   41.6687,
+   0.641,
+   41.6722,
+   0.6461
+  ]
+ },
+ {
+  "name": "Pitch & Putt Palma de Cervelló",
+  "osm": "way/335651972",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   41.3998,
+   1.974,
+   41.4034,
+   1.983
+  ]
+ },
+ {
+  "name": "Benalup",
+  "osm": "way/976038708",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.3339,
+   -5.8295,
+   36.3417,
+   -5.8194
+  ]
+ },
+ {
+  "name": "Club de Golf El Plantío",
+  "osm": "way/25035117",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   38.306,
+   -0.5485,
+   38.3162,
+   -0.54
+  ]
+ },
+ {
+  "name": "Los Lagos Golf",
+  "osm": "way/222799515",
+  "ref": 18,
+  "par": 16,
+  "bbox": [
+   41.7257,
+   -1.0816,
+   41.732,
+   -1.0679
+  ]
+ },
+ {
+  "name": "Golf de Son Térmens",
+  "osm": "way/81397943",
+  "ref": 18,
+  "par": 0,
+  "bbox": [
+   39.6683,
+   2.6544,
+   39.6773,
+   2.6644
+  ]
+ },
+ {
+  "name": "Palomarejos Golf",
+  "osm": "way/165913033",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   39.9665,
+   -4.7961,
+   39.975,
+   -4.7833
+  ]
+ },
+ {
+  "name": "T Golf Palma Puntiro",
+  "osm": "way/108783334",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   39.5808,
+   2.7802,
+   39.5913,
+   2.7914
+  ]
+ },
+ {
+  "name": "Los Moriscos Club de Golf",
+  "osm": "relation/1725567",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.7161,
+   -3.5666,
+   36.7237,
+   -3.5508
+  ]
+ },
+ {
+  "name": "Real Club de Golf La Herrería",
+  "osm": "way/61456526",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   40.5761,
+   -4.1652,
+   40.585,
+   -4.1511
+  ]
+ },
+ {
+  "name": "Larrabea Club de Golf",
+  "osm": "way/32877582",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   42.9622,
+   -2.6245,
+   42.9715,
+   -2.6108
+  ]
+ },
+ {
+  "name": "Club de Golf Alenda",
+  "osm": "way/25484741",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   38.3541,
+   -0.68,
+   38.3625,
+   -0.6649
+  ]
+ },
+ {
+  "name": "Club de Golf Villamartín",
+  "osm": "way/27249332",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.9324,
+   -0.7653,
+   37.9442,
+   -0.7541
+  ]
+ },
+ {
+  "name": "Golf Lleida & Country Club",
+  "osm": "relation/1643090",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   41.6672,
+   0.5069,
+   41.6748,
+   0.5246
+  ]
+ },
+ {
+  "name": "Pula Golf",
+  "osm": "relation/2738804",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   39.6424,
+   3.3752,
+   39.6523,
+   3.389
+  ]
+ },
+ {
+  "name": "Marbella Golf Country Club",
+  "osm": "relation/3299714",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.5054,
+   -4.8163,
+   36.5213,
+   -4.8077
+  ]
+ },
+ {
+  "name": "Lo Romero",
+  "osm": "way/133629743",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.8822,
+   -0.838,
+   37.8907,
+   -0.8218
+  ]
+ },
+ {
+  "name": "Golf Nuevo Portil",
+  "osm": "way/226069291",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.2137,
+   -7.0738,
+   37.2205,
+   -7.0535
+  ]
+ },
+ {
+  "name": "Cabopino golf",
+  "osm": "way/172434912",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.4889,
+   -4.7489,
+   36.5005,
+   -4.7358
+  ]
+ },
+ {
+  "name": "Real Nuevo Club de Golf Basozabal",
+  "osm": "way/211691537",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   43.2802,
+   -1.9717,
+   43.2911,
+   -1.9569
+  ]
+ },
+ {
+  "name": "Santana Golf & Country Club",
+  "osm": "way/171834521",
+  "ref": 18,
+  "par": 0,
+  "bbox": [
+   36.5399,
+   -4.7115,
+   36.5471,
+   -4.6885
+  ]
+ },
+ {
+  "name": "Golf El Fresnillo",
+  "osm": "way/72885092",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   40.6215,
+   -4.6564,
+   40.6326,
+   -4.6412
+  ]
+ },
+ {
+  "name": "Arcos Gardens Golf Club",
+  "osm": "way/631134701",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.7203,
+   -5.7623,
+   36.7306,
+   -5.7444
+  ]
+ },
+ {
+  "name": "Real Golf Club de San Sebastián",
+  "osm": "relation/3332836",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   43.3341,
+   -1.8364,
+   43.3467,
+   -1.8215
+  ]
+ },
+ {
+  "name": "Santa María Golf & Country Club",
+  "osm": "way/172443763",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.5003,
+   -4.7746,
+   36.5196,
+   -4.7648
+  ]
+ },
+ {
+  "name": "Golf Córdoba",
+  "osm": "way/153946662",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.9642,
+   -4.8194,
+   37.9755,
+   -4.8026
+  ]
+ },
+ {
+  "name": "Real Club de Golf de Sotogrande",
+  "osm": "way/258648125",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.2739,
+   -5.3006,
+   36.2864,
+   -5.2833
+  ]
+ },
+ {
+  "name": "Escuela Pública de Golf El Toyo",
+  "osm": "relation/1690176",
+  "ref": 18,
+  "par": 17,
+  "bbox": [
+   36.8355,
+   -2.323,
+   36.8496,
+   -2.3077
+  ]
+ },
+ {
+  "name": "Golf de Son Muntaner",
+  "osm": "way/51852280",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   39.5762,
+   2.5965,
+   39.5894,
+   2.6135
+  ]
+ },
+ {
+  "name": "Club de Golf Las Ramblas de Orihuela",
+  "osm": "way/27249484",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.9134,
+   -0.7846,
+   37.9253,
+   -0.7649
+  ]
+ },
+ {
+  "name": "Golf La Estancia",
+  "osm": "way/729640031",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.3619,
+   -6.1378,
+   36.3748,
+   -6.1188
+  ]
+ },
+ {
+  "name": "Los Naranjos Golf Club",
+  "osm": "relation/3299800",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.5012,
+   -4.9882,
+   36.519,
+   -4.9703
+  ]
+ },
+ {
+  "name": "La Monacilla Golf Club",
+  "osm": "relation/3296981",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.282,
+   -7.0171,
+   37.2967,
+   -6.9911
+  ]
+ },
+ {
+  "name": "Alcaidesa Links Golf Resort",
+  "osm": "relation/3873410",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.2356,
+   -5.3367,
+   36.2515,
+   -5.3047
+  ]
+ },
+ {
+  "name": "Golf Villa Mayor",
+  "osm": "relation/3323987",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   40.9769,
+   -5.7316,
+   40.9966,
+   -5.6958
+  ]
+ },
+ {
+  "name": "Campo de roda golf",
+  "osm": "way/123009371",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   37.764,
+   -0.856,
+   37.7782,
+   -0.8459
+  ]
+ },
+ {
+  "name": "Anfi Tauro Golf",
+  "osm": "way/437040736",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   27.7967,
+   -15.728,
+   27.8095,
+   -15.7154
+  ]
+ },
+ {
+  "name": "Alferini Golf",
+  "osm": "relation/3300452",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.4785,
+   -5.0532,
+   36.504,
+   -5.0435
+  ]
+ },
+ {
+  "name": "Real Club de Golf Las Brisas",
+  "osm": "way/97671239",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   36.5001,
+   -4.978,
+   36.5107,
+   -4.9599
+  ]
+ },
+ {
+  "name": "Seminario Urban Golf",
+  "osm": "way/155189991",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   42.8484,
+   -2.6936,
+   42.8506,
+   -2.6909
+  ]
+ },
+ {
+  "name": "Urnieta Pitch & Putt",
+  "osm": "way/1165087757",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   43.2301,
+   -1.9869,
+   43.2326,
+   -1.9842
+  ]
+ },
+ {
+  "name": "Club de Golf Villarias",
+  "osm": "relation/3330776",
+  "ref": 18,
+  "par": 2,
+  "bbox": [
+   42.9139,
+   -3.5357,
+   42.927,
+   -3.5298
+  ]
+ },
+ {
+  "name": "Fontanals Golf",
+  "osm": "relation/7566056",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   42.3929,
+   1.8655,
+   42.4015,
+   1.8836
+  ]
+ },
+ {
+  "name": "Club de Golf Vallromanes",
+  "osm": "relation/14613034",
+  "ref": 18,
+  "par": 0,
+  "bbox": [
+   41.52,
+   2.281,
+   41.539,
+   2.2934
+  ]
+ },
+ {
+  "name": "Club de Golf Son Servera",
+  "osm": "relation/7257090",
+  "ref": 18,
+  "par": 18,
+  "bbox": [
+   39.6369,
+   3.4032,
+   39.6443,
+   3.4202
+  ]
+ },
+ {
+  "name": "El Campo de Logroño",
+  "osm": "relation/365264",
+  "ref": 18,
+  "par": 0,
+  "bbox": [
+   42.4329,
+   -2.5105,
+   42.4431,
+   -2.4876
+  ]
+ }
+]

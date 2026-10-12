@@ -1,0 +1,636 @@
+[
+  {
+    "key": "abama-golf",
+    "osm": "relation/1301223",
+    "osmName": "Abama Golf",
+    "libraryCourseId": "48934b0c-cee0-4d3d-8096-f2b90cc3585e",
+    "libraryName": "Abama Golf",
+    "matchTokens": [
+      "abama"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 113,
+    "greensMatched": 18
+  },
+  {
+    "key": "aloha-golf-club",
+    "osm": "relation/1402560",
+    "osmName": "Club de Golf Aloha",
+    "libraryCourseId": "f408cb94-8b48-48d2-8f6e-3543014ab023",
+    "libraryName": "Aloha Golf Club",
+    "matchTokens": [
+      "aloha",
+      "golf",
+      "club"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 65,
+    "greensMatched": 18
+  },
+  {
+    "key": "antequera-golf",
+    "osm": "relation/3300116",
+    "osmName": "Antequera Golf",
+    "libraryCourseId": "133973d4-4dce-595a-b2fb-e0961fe20c0a",
+    "libraryName": "Antequera Golf",
+    "matchTokens": [
+      "antequera"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 65,
+    "greensMatched": 18
+  },
+  {
+    "key": "arabella-golf-mallorca-son-muntaner-golf",
+    "osm": "way/51852280",
+    "osmName": "Golf de Son Muntaner",
+    "libraryCourseId": "285b0461-377a-4dd7-b0a2-f240e80a9959",
+    "libraryName": "Arabella Golf Mallorca - Son Muntaner Golf",
+    "matchTokens": [
+      "arabella",
+      "mallorca",
+      "son",
+      "muntaner"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 76,
+    "greensMatched": 18
+  },
+  {
+    "key": "buenavista-golf",
+    "osm": "relation/4523109",
+    "osmName": "Buenavista Golf",
+    "libraryCourseId": "627345b2-5e76-410c-a32b-59e1e0ceb5a7",
+    "libraryName": "Buenavista Golf",
+    "matchTokens": [
+      "buenavista",
+      "golf"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 58,
+    "greensMatched": 18
+  },
+  {
+    "key": "calanova-golf-club",
+    "osm": "relation/16378288",
+    "osmName": "Calanova Golf Club",
+    "libraryCourseId": "1c049feb-be34-402a-945d-8bc515beda00",
+    "libraryName": "Calanova Golf Club",
+    "matchTokens": [
+      "calanova"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 51,
+    "greensMatched": 18
+  },
+  {
+    "key": "campo-de-golf-canyamel",
+    "osm": "relation/3332769",
+    "osmName": "Golf Canyamel",
+    "libraryCourseId": "a321f718-94ca-5c50-81e2-6bcc2482f531",
+    "libraryName": "Campo de Golf Canyamel",
+    "matchTokens": [
+      "canyamel"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 51,
+    "greensMatched": 18
+  },
+  {
+    "key": "campo-de-golf-dehesa-montenmedio",
+    "osm": "way/220296432",
+    "osmName": "Montenmedio Golf & Country Club",
+    "libraryCourseId": "4406d466-c886-5f0d-b328-e46d0754f9d9",
+    "libraryName": "Campo de Golf Dehesa Montenmedio",
+    "matchTokens": [
+      "dehesa",
+      "montenmedio"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 77,
+    "greensMatched": 18
+  },
+  {
+    "key": "centro-nacional-de-golf",
+    "osm": "way/30750432",
+    "osmName": "Centro Nacional de Golf de la Real Federación Española de Golf",
+    "libraryCourseId": "994a705f-57df-44be-8a99-3816eb3bbfa8",
+    "libraryName": "Centro Nacional de Golf",
+    "matchTokens": [
+      "centro",
+      "nacional"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 60,
+    "greensMatched": 17
+  },
+  {
+    "key": "club-de-campo-la-zagaleta-new-course",
+    "osm": "way/1562550930",
+    "osmName": "Zagaleta New Course",
+    "libraryCourseId": "f9f92acc-54de-53f3-8a50-9d75e39f8df9",
+    "libraryName": "Club de Campo la Zagaleta — New Course",
+    "matchTokens": [
+      "zagaleta",
+      "new"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 67,
+    "greensMatched": 18
+  },
+  {
+    "key": "club-de-golf-campano",
+    "osm": "way/52868185",
+    "osmName": "Campo de Golf Campano",
+    "libraryCourseId": "36403b3c-af54-57c6-8ebe-c54a11a4305c",
+    "libraryName": "Club de Golf Campano",
+    "matchTokens": [
+      "campano"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 66,
+    "greensMatched": 18
+  },
+  {
+    "key": "club-de-golf-campoamor",
+    "osm": "way/27249377",
+    "osmName": "Real Club de Golf Campoamor",
+    "libraryCourseId": "5ac782f4-75ff-5af8-8ae8-ffa5668978d7",
+    "libraryName": "Club de Golf Campoamor",
+    "matchTokens": [
+      "campoamor"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 75,
+    "greensMatched": 18
+  },
+  {
+    "key": "club-de-golf-larrabea",
+    "osm": "way/32877582",
+    "osmName": "Larrabea Club de Golf",
+    "libraryCourseId": "935144ee-b7a6-41d4-8767-6c5767e40add",
+    "libraryName": "Club de Golf Larrabea",
+    "matchTokens": [
+      "larrabea"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 53,
+    "greensMatched": 18
+  },
+  {
+    "key": "club-deportivo-golf-maioris",
+    "osm": "way/98739153",
+    "osmName": "Maioris",
+    "libraryCourseId": "b2cbf6c5-4996-5df1-9dfa-3ce4b77f57c1",
+    "libraryName": "Club Deportivo Golf Maioris",
+    "matchTokens": [
+      "deportivo",
+      "maioris"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 74,
+    "greensMatched": 18
+  },
+  {
+    "key": "font-del-llop-golf-resort",
+    "osm": "way/98854430",
+    "osmName": "Font del Llop Golf Resort",
+    "libraryCourseId": "fffe2aa3-6832-441d-bccc-adb8604f2d4d",
+    "libraryName": "Font del Llop Golf Resort",
+    "matchTokens": [
+      "font",
+      "llop",
+      "golf",
+      "resort"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 93,
+    "greensMatched": 18
+  },
+  {
+    "key": "foressos-golf",
+    "osm": "way/152186589",
+    "osmName": "Foressos Golf",
+    "libraryCourseId": "f370da83-b848-458b-9c4f-3745aecc1854",
+    "libraryName": "Foressos Golf",
+    "matchTokens": [
+      "foressos"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 75,
+    "greensMatched": 18
+  },
+  {
+    "key": "golf-el-rompido-norte",
+    "osm": "way/222133571",
+    "osmName": "Golf El Rompido - Campo Norte",
+    "libraryCourseId": "cba87d21-1164-4292-bcb6-5ad8edbaf818",
+    "libraryName": "Golf El Rompido (Norte)",
+    "matchTokens": [
+      "rompido",
+      "norte"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 49,
+    "greensMatched": 18
+  },
+  {
+    "key": "golf-el-rompido-sur",
+    "osm": "way/223150371",
+    "osmName": "Golf El Rompido - Campo Sur",
+    "libraryCourseId": "5d09ecc3-22b8-4193-a0f3-0053176a02ec",
+    "libraryName": "Golf El Rompido (Sur)",
+    "matchTokens": [
+      "rompido",
+      "sur"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 40,
+    "greensMatched": 18
+  },
+  {
+    "key": "golf-la-roca-vilalba",
+    "osm": "relation/10365099",
+    "osmName": "Golf la Roca",
+    "libraryCourseId": "5388b111-2ad0-43bd-b2b2-e236e20ee9e7",
+    "libraryName": "Golf La Roca – Vilalba",
+    "matchTokens": [
+      "roca",
+      "vilalba"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 86,
+    "greensMatched": 18
+  },
+  {
+    "key": "golf-lleida-and-country-club",
+    "osm": "relation/1643090",
+    "osmName": "Golf Lleida & Country Club",
+    "libraryCourseId": "a7d5c6cc-db5b-59b3-b346-ed7ca413ac13",
+    "libraryName": "Golf Lleida & Country Club",
+    "matchTokens": [
+      "lleida"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 40,
+    "greensMatched": 18
+  },
+  {
+    "key": "golf-nuevo-portil",
+    "osm": "way/226069291",
+    "osmName": "Golf Nuevo Portil",
+    "libraryCourseId": "9385f9b2-534c-5978-a211-4d30de135831",
+    "libraryName": "Golf Nuevo Portil",
+    "matchTokens": [
+      "nuevo",
+      "portil"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 51,
+    "greensMatched": 18
+  },
+  {
+    "key": "golf-santander-s-a",
+    "osm": "way/29254617",
+    "osmName": "Campo de Golf Santander",
+    "libraryCourseId": "9d52370a-9a93-4fb4-a38a-152202b655d7",
+    "libraryName": "Golf Santander S.A.",
+    "matchTokens": [
+      "santander",
+      "s",
+      "a"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 31,
+    "greensMatched": 18
+  },
+  {
+    "key": "golf-torrequebrada",
+    "osm": "relation/1170115",
+    "osmName": "Golf Torrequebrada",
+    "libraryCourseId": "e6b357db-c8ef-4a5f-b51d-699b1b2dcfd4",
+    "libraryName": "Golf Torrequebrada",
+    "matchTokens": [
+      "torrequebrada"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 92,
+    "greensMatched": 18
+  },
+  {
+    "key": "isla-canela-links",
+    "osm": "way/180595723",
+    "osmName": "Campo de Golf Isla Canela Links by Isla Canela",
+    "libraryCourseId": "43f5de9b-9a0a-497b-8681-f88277536566",
+    "libraryName": "Isla Canela Links",
+    "matchTokens": [
+      "isla",
+      "canela",
+      "links"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 54,
+    "greensMatched": 18
+  },
+  {
+    "key": "islantilla-golf-resort-azul-amarillo",
+    "osm": "relation/3296953",
+    "osmName": "Islantilla Golf Resort",
+    "libraryCourseId": "29984837-fe5b-55d7-bdb7-f96df0683c5a",
+    "libraryName": "Islantilla Golf Resort — Azul+Amarillo",
+    "matchTokens": [
+      "islantilla",
+      "azul",
+      "amarillo"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 67,
+    "greensMatched": 18
+  },
+  {
+    "key": "izki-golf",
+    "osm": "way/129384371",
+    "osmName": "Izki Golf",
+    "libraryCourseId": "e92aedfe-9854-4114-ab29-6688cc575115",
+    "libraryName": "Izki Golf",
+    "matchTokens": [
+      "izki"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 35,
+    "greensMatched": 18
+  },
+  {
+    "key": "la-cala-resort-campo-asia-south",
+    "osm": "way/343672934",
+    "osmName": "Campo Asia",
+    "libraryCourseId": "d1bb1025-4a2a-4b51-a336-91c79b663b87",
+    "libraryName": "La Cala Resort Campo Asia (South)",
+    "matchTokens": [
+      "cala",
+      "asia",
+      "south"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 56,
+    "greensMatched": 18
+  },
+  {
+    "key": "la-finca-resort",
+    "osm": "way/27597549",
+    "osmName": "Club de Golf La Finca",
+    "libraryCourseId": "6b544f3d-c72f-40b9-ac03-d5a867c9fdba",
+    "libraryName": "La Finca Resort",
+    "matchTokens": [
+      "finca",
+      "resort"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 53,
+    "greensMatched": 18
+  },
+  {
+    "key": "lo-romero-golf",
+    "osm": "way/133629743",
+    "osmName": "Lo Romero",
+    "libraryCourseId": "ce7cca26-657f-4a5f-bc49-a651bc9d5e7a",
+    "libraryName": "Lo Romero Golf",
+    "matchTokens": [
+      "lo",
+      "romero"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 66,
+    "greensMatched": 18
+  },
+  {
+    "key": "marbella-club-golf-resort",
+    "osm": "way/139728266",
+    "osmName": "Marbella Club Golf Resort",
+    "libraryCourseId": "9c151554-ca85-4732-8614-0044289528f3",
+    "libraryName": "Marbella Club Golf Resort",
+    "matchTokens": [
+      "marbella",
+      "club",
+      "golf",
+      "resort"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 46,
+    "greensMatched": 18
+  },
+  {
+    "key": "miraflores-golf",
+    "osm": "relation/2297099",
+    "osmName": "Miraflores golf",
+    "libraryCourseId": "0cdae4d6-2aaa-540a-9091-d394e5e66006",
+    "libraryName": "Miraflores Golf",
+    "matchTokens": [
+      "miraflores"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 34,
+    "greensMatched": 18
+  },
+  {
+    "key": "naturavila-golf-el-fresnillo",
+    "osm": "way/72885092",
+    "osmName": "Golf El Fresnillo",
+    "libraryCourseId": "0a8dbe26-dbc6-4a3f-9f67-fbf5dcea85c5",
+    "libraryName": "Naturávila Golf El Fresnillo",
+    "matchTokens": [
+      "naturavila",
+      "fresnillo"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 42,
+    "greensMatched": 18
+  },
+  {
+    "key": "oliva-nova-beach-and-golf-resort",
+    "osm": "relation/3330820",
+    "osmName": "Golf Oliva Nova",
+    "libraryCourseId": "716e70dd-54ce-424f-b7c9-af3673a9ba50",
+    "libraryName": "Oliva Nova Beach & Golf Resort",
+    "matchTokens": [
+      "oliva",
+      "nova",
+      "beach"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 41,
+    "greensMatched": 18
+  },
+  {
+    "key": "palomarejos-golf",
+    "osm": "way/165913033",
+    "osmName": "Palomarejos Golf",
+    "libraryCourseId": "0221dfca-0243-4fc1-8406-c9a1bcefa8d5",
+    "libraryName": "Palomarejos Golf",
+    "matchTokens": [
+      "palomarejos"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 74,
+    "greensMatched": 18
+  },
+  {
+    "key": "parador-malaga-del-golf-amarillo-blanco",
+    "osm": "way/60046149",
+    "osmName": "Club de Golf Málaga Parador",
+    "libraryCourseId": "895a10a3-9612-55a7-9808-0422e797cba0",
+    "libraryName": "Parador Málaga del Golf — Amarillo+Blanco",
+    "matchTokens": [
+      "parador",
+      "malaga",
+      "amarillo",
+      "blanco"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 115,
+    "greensMatched": 18
+  },
+  {
+    "key": "pula-golf-resort",
+    "osm": "relation/2738804",
+    "osmName": "Pula Golf",
+    "libraryCourseId": "774eaa95-9271-4ae7-826d-8582dde9cffa",
+    "libraryName": "Pula Golf Resort",
+    "matchTokens": [
+      "pula"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 52,
+    "greensMatched": 18
+  },
+  {
+    "key": "real-club-de-golf-la-herreria",
+    "osm": "way/61456526",
+    "osmName": "Real Club de Golf La Herrería",
+    "libraryCourseId": "94907f6f-2334-457c-a9d1-bcba3fc4a5ad",
+    "libraryName": "Real Club de Golf La Herrería",
+    "matchTokens": [
+      "herreria"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 25,
+    "greensMatched": 18
+  },
+  {
+    "key": "real-club-de-golf-las-brisas",
+    "osm": "way/97671239",
+    "osmName": "Real Club de Golf Las Brisas",
+    "libraryCourseId": "e1f72f85-8dd2-4071-a6f9-6ddc8f719bc1",
+    "libraryName": "Real Club de Golf Las Brisas",
+    "matchTokens": [
+      "brisas"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 92,
+    "greensMatched": 18
+  },
+  {
+    "key": "real-nuevo-club-de-golf-de-san-sebastian-basozabal",
+    "osm": "way/211691537",
+    "osmName": "Real Nuevo Club de Golf Basozabal",
+    "libraryCourseId": "db57e89e-7b42-4a88-994a-4411e1c9eac3",
+    "libraryName": "Real Nuevo Club de Golf de San Sebastian Basozàbal",
+    "matchTokens": [
+      "nuevo",
+      "san",
+      "sebastian",
+      "basozabal"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 71,
+    "greensMatched": 18
+  },
+  {
+    "key": "santa-clara-golf-club-granada-r-c-i",
+    "osm": "relation/3310266",
+    "osmName": "Santa Clara Golf Granada",
+    "libraryCourseId": "9b47c141-115b-5292-a681-c896a305420c",
+    "libraryName": "Santa Clara Golf Club Granada — R.C.I.",
+    "matchTokens": [
+      "santa",
+      "clara",
+      "granada",
+      "r",
+      "c",
+      "i"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 48,
+    "greensMatched": 18
+  },
+  {
+    "key": "villa-padierna-golf-club-alferini",
+    "osm": "relation/3300452",
+    "osmName": "Alferini Golf",
+    "libraryCourseId": "de1f229b-dc17-5f8a-8442-135811f691cc",
+    "libraryName": "Villa Padierna Golf Club — Alferini",
+    "matchTokens": [
+      "villa",
+      "padierna",
+      "alferini"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 16,
+    "greensMatched": 18
+  },
+  {
+    "key": "villamartin-golf-club",
+    "osm": "way/27249332",
+    "osmName": "Club de Golf Villamartín",
+    "libraryCourseId": "0caec6f4-2b00-4fcd-bb34-811c7a70e502",
+    "libraryName": "Villamartin Golf Club",
+    "matchTokens": [
+      "villamartin"
+    ],
+    "holes": 18,
+    "parsChecked": 18,
+    "hazards": 73,
+    "greensMatched": 18
+  }
+]

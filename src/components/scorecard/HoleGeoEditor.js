@@ -1,15 +1,13 @@
-import React, { useMemo, useState, useSyncExternalStore } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, Modal, Pressable, ActivityIndicator, Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import {
-  holeFeatures, findCourseGeometry,
-  subscribeCourseGeometry, getCourseGeometryVersion,
-} from '../../lib/geo';
+import { holeFeatures } from '../../lib/geo';
+import { useCourseGeometry } from '../../hooks/useCourseGeometry';
 import { supabase } from '../../lib/supabase';
 import { hud } from '../../theme/tokens';
-import { hydrateCourseGeometry } from '../../store/courseGeometryStore';
+import { ensureCourseGeometry } from '../../store/courseGeometryStore';
 import { courseKeyFor } from '../../store/tileCache';
 import { HoleMapView } from './HoleMapView';
 
@@ -25,11 +23,10 @@ const FIELDS = [
 // golf_hole. Center is required; the rest optional. Prefilled from existing
 // geometry. Pan/zoom the map freely; tapping drops the active point.
 export function HoleGeoEditor({ courseName, holeNumber, visible, onClose, onSaved }) {
-  const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
+  const geometry = useCourseGeometry(courseName);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geomVersion]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const courseId = useMemo(() => findCourseGeometry(courseName)?.key ?? null, [courseName, geomVersion]);
+  const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geometry]);
+  const courseId = geometry?.key ?? null;
 
   const seedPts = () => ({
     front: feat?.greenFront ?? null,
@@ -84,7 +81,7 @@ export function HoleGeoEditor({ courseName, holeNumber, visible, onClose, onSave
         green_center: pts.center, green_front: pts.front, green_back: pts.back, start_pt: pts.tee,
       }).eq('course_id', courseId).eq('number', holeNumber);
       if (error) throw error;
-      await hydrateCourseGeometry();
+      await ensureCourseGeometry(courseId, { force: true });
       onSaved?.();
       onClose?.();
     } catch (err) {
