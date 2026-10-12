@@ -78,7 +78,7 @@ import ConflictWizardSheet from '../components/scorecard/ConflictWizardSheet';
 import { FlagFinderView } from '../components/scorecard/FlagFinderView';
 import TourOverlay from '../components/tour/TourOverlay';
 import { SCORECARD_TOUR_STEPS } from '../components/tour/tourSteps';
-import { subscribeCourseGeometry, getCourseGeometryVersion } from '../lib/geo';
+import { subscribeCourseGeometry, getCourseGeometryVersion, hasCourseDetails } from '../lib/geo';
 import { useCourseGeometry } from '../hooks/useCourseGeometry';
 import { compassLikelyAvailable } from '../hooks/useCompassHeading';
 
@@ -791,7 +791,7 @@ export default function ScorecardScreen({ navigation, route }) {
   // hydrates asynchronously from Supabase, so subscribe the same way
   // useGpsDistances does — the bundled seed resolves first, live data merges
   // in (and this course's details load on demand).
-  const hasCourseGeometry = !!useCourseGeometry(round?.courseName);
+  const hasCourseGeometry = hasCourseDetails(useCourseGeometry(round?.courseName));
   // The watch bridge re-derives its course state when geometry swaps in.
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
   const showFlagFinder = hasCourseGeometry && compassLikelyAvailable();
