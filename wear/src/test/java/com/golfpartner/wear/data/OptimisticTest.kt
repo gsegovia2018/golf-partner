@@ -81,6 +81,18 @@ class OptimisticTest {
     }
 
     @Test
+    fun aSecondShotSaveKeepsTheFirstPickShownUntilItsAck() {
+        // Chip, pause (sent), another chip: the second patch only carries what changed.
+        val repo = StateRepository()
+        repo.onPayload(Fixtures.activeJson(rev = 10))
+        repo.track(Commands.shot("r1", 10, 7, mapOf("driveDistBucket" to "150-180"), id = "s1"), seq = 1)
+        repo.track(Commands.shot("r1", 10, 7, mapOf("teeClub" to "wood"), id = "s2"), seq = 2)
+        val shot = shown(repo).me!!.shot
+        assertEquals("150-180", shot.driveDistBucket)
+        assertEquals("wood", shot.teeClub)
+    }
+
+    @Test
     fun anAckOfAnIdNoLongerTrackedIsResolvedThroughTheOutboxSeq() {
         val seqs = mapOf("nav" to 4L) // a `hole` move, sent and retired by the outbox
         val repo = StateRepository { seqs[it] }
