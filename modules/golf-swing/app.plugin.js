@@ -32,4 +32,11 @@ function withoutCctTelemetry(config) {
   });
 }
 
-module.exports = withoutCctTelemetry;
+// Swing capture (GolfSwingCameraView) needs the camera. expo-camera declares it today, but the
+// recorder must not depend on another plugin staying in app.json. No RECORD_AUDIO: the
+// recorder has no audio source.
+function withCamera(config) {
+  return AndroidConfig.Permissions.withPermissions(config, ['android.permission.CAMERA']);
+}
+
+module.exports = (config) => withoutCctTelemetry(withCamera(config));

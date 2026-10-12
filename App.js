@@ -85,7 +85,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import BagScreen from './src/screens/BagScreen';
 import SwingHomeScreen from './src/screens/SwingHomeScreen';
-import SwingPlaceholderScreen from './src/screens/SwingPlaceholderScreen';
+import SwingCaptureScreen from './src/screens/SwingCaptureScreen';
 import SwingResultsScreen from './src/screens/SwingResultsScreen';
 import SwingCompareScreen from './src/screens/SwingCompareScreen';
 import SwingEditMarksScreen from './src/screens/SwingEditMarksScreen';
@@ -436,8 +436,7 @@ function AppNavigator() {
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="Bag" component={BagScreen} />
         <Stack.Screen name="SwingHome" component={SwingHomeScreen} />
-        {/* Placeholders until the swing capture / compare PRs land. */}
-        <Stack.Screen name="SwingCapture" component={SwingPlaceholderScreen} />
+        <Stack.Screen name="SwingCapture" component={SwingCaptureScreen} />
         <Stack.Screen name="SwingResults" component={SwingResultsScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
         <Stack.Screen name="SwingEditMarks" component={SwingEditMarksScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
         <Stack.Screen name="SwingCompare" component={SwingCompareScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />

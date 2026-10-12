@@ -98,4 +98,44 @@ describe('swing native bridge', () => {
     native.addProgressListener(cb);
     expect(mod.addListener).toHaveBeenCalledWith('progress', cb);
   });
+
+  describe('capture gate (N3, apiVersion 2)', () => {
+    function loadCapture({ apiVersion, camera }) {
+      let native;
+      const requireNativeView = jest.fn(() => 'GolfSwingCameraView');
+      const requireOptionalNativeModule = jest.fn((name) => (name === 'GolfSwing' ? fakeModule(apiVersion) : camera));
+      jest.isolateModules(() => {
+        jest.doMock('react-native', () => ({ Platform: { OS: 'android' } }));
+        jest.doMock('expo', () => ({ requireOptionalNativeModule, requireNativeView }));
+        native = require('../native');
+      });
+      return { native, requireNativeView };
+    }
+    const camera = () => ({ listRecordingModes: jest.fn(async () => [{ cameraId: '0', width: 1280, height: 720, fps: 240, highSpeed: true }]) });
+
+    it('records on a binary with the camera module and apiVersion 2', async () => {
+      const cam = camera();
+      const { native, requireNativeView } = loadCapture({ apiVersion: 2, camera: cam });
+      expect(native.captureSupport()).toMatchObject({ supported: true, apiVersion: 2 });
+      await expect(native.listRecordingModes()).resolves.toHaveLength(1);
+      expect(native.getCameraView()).toBe('GolfSwingCameraView');
+      expect(requireNativeView).toHaveBeenCalledWith('GolfSwingCamera');
+    });
+
+    it('an apiVersion 1 binary keeps analysing but never touches the camera', async () => {
+      const cam = camera();
+      const { native, requireNativeView } = loadCapture({ apiVersion: 1, camera: cam });
+      expect(native.swingSupport().supported).toBe(true);
+      expect(native.captureSupport()).toMatchObject({ supported: false, reason: 'update_app', message: native.UPDATE_CAPTURE_MESSAGE });
+      expect(native.getCameraView()).toBeNull();
+      await expect(native.listRecordingModes()).rejects.toMatchObject({ code: 'ERR_UPDATE_APP' });
+      expect(cam.listRecordingModes).not.toHaveBeenCalled();
+      expect(requireNativeView).not.toHaveBeenCalled();
+    });
+
+    it('a binary without the camera module asks for an update', () => {
+      const { native } = loadCapture({ apiVersion: 2, camera: null });
+      expect(native.captureSupport()).toMatchObject({ supported: false, reason: 'update_app' });
+    });
+  });
 });

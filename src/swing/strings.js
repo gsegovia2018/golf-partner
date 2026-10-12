@@ -57,9 +57,48 @@ export const SWING_STRINGS = {
     invalid: 'Enter a height between 120 and 230 cm.',
   },
 
-  // Screens owned by later PRs.
-  placeholder: {
-    capture: 'Recording arrives with the next update.',
+  // Capture (S2, N3; design B with C's review step, D8).
+  capture: {
+    close: 'Close the camera',
+    guideToggle: 'Set-up guide',
+    guideTitle: 'Set up down the line',
+    guideTips: [
+      'Stand the phone behind you, on your toe line',
+      'At hand height, aimed at your hands',
+      'Whole body and club in the box',
+      'Room above the head for the top of the swing',
+    ],
+    guideBox: 'keep the whole body and the club in the box',
+    gotIt: 'Got it',
+    fps: (fps) => (fps >= 240 ? `${fps} fps` : fps >= 120 ? `${fps} fps · good enough` : `${fps} fps · approximate analysis`),
+    record: 'Start recording',
+    stop: 'Stop recording',
+    autoStop: (max) => `/ ${max} · auto-stop`,
+    loading: 'Starting the camera…',
+    fallbackTitle: (fps) => `This phone can't record above ${fps} fps here`,
+    fallbackNoCamera: 'No back camera is available',
+    fallbackBody: 'Impact timing will be approximate and the impact checks will say so. For a precise check, record slow motion (120 or 240 fps) with your camera app and import it.',
+    importSlowMo: 'Import a slow-mo video',
+    recordAnyway: (fps) => `Record at ${fps} fps anyway`,
+    updateTitle: 'Update the app to record',
+    permissionTitle: 'Camera access is off',
+    permissionBody: 'Allow the camera to film your swing. The video stays on this phone.',
+    openSettings: 'Open settings',
+    allow: 'Allow camera',
+    back: 'Back',
+    review: (secs, fps, rate) => `${secs} s · ${fps} fps${rate < 1 ? ` · plays at ${rate === 0.125 ? '⅛' : '¼'} speed` : ''}`,
+    reviewHint: 'Nothing has been analysed yet. Retake if the swing was not in the box.',
+    retake: 'Retake',
+    analyse: 'Analyse',
+    saving: 'Saving…',
+    errors: {
+      camera: 'The camera stopped. Try again.',
+      interrupted: 'Recording stopped when the app left the screen. Record again.',
+      failed: 'Could not record. Try again.',
+      short: 'That take was too short. Record again.',
+      save: 'Could not save this take.',
+    },
+    retry: 'Try again',
   },
 
   // Compare (S8, design B).
