@@ -31,7 +31,7 @@ describe('ensureStills', () => {
   test('asks native only for the frames that are missing', async () => {
     mockExists.add('swings/s1/frames/556.jpg');
     const extractFrames = jest.fn(async () => ({ 557: 'file:///doc/swings/s1/frames/557.jpg' }));
-    jest.doMock('../native', () => ({ apiVersion: 1, analyzePose: jest.fn(), extractFrames }), { virtual: true });
+    jest.doMock('../native', () => ({ REQUIRED_API_VERSION: 1, apiVersion: 1, analyzePose: jest.fn(), extractFrames }), { virtual: true });
     const { ensureStills } = require('../frames');
     const out = await ensureStills('s1', [556, 557]);
     expect(extractFrames).toHaveBeenCalledWith('file:///doc/swings/s1/video.mp4', { frames: [557], outDir: 'file:///doc/swings/s1/frames' });
@@ -45,7 +45,7 @@ describe('ensureStills', () => {
     expect(await mod.ensureStills('s1', [556, 557])).toEqual({ 556: 'file:///doc/swings/s1/frames/556.jpg', 557: null });
 
     jest.resetModules();
-    jest.doMock('../native', () => ({ apiVersion: 1, analyzePose: jest.fn(), extractFrames: jest.fn(async () => { throw new Error('decode'); }) }), { virtual: true });
+    jest.doMock('../native', () => ({ REQUIRED_API_VERSION: 1, apiVersion: 1, analyzePose: jest.fn(), extractFrames: jest.fn(async () => { throw new Error('decode'); }) }), { virtual: true });
     mod = require('../frames');
     expect(await mod.ensureStills('s1', [557])).toEqual({ 557: null });
   });

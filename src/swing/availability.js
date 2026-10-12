@@ -1,7 +1,8 @@
-// Can this build record and analyse swings? A seam over the native module that
-// another PR owns (src/swing/native.js). The require is lazy and inside a try,
-// so the app runs before the module exists, with a binary that lacks it, and on
-// web. Metro treats a require inside try/catch as an optional dependency.
+// Can this build record and analyse swings? A seam over the native bridge
+// (src/swing/native.js), which owns the contract version: REQUIRED_API_VERSION
+// is read from the bridge itself, so the two can never disagree. The require is
+// lazy and inside a try, so the app still runs with a binary that lacks the
+// module, and on web.
 //
 // Returns { supported: true } or { supported: false, reason }:
 //   'web'    this platform never has the module (web, iOS)
@@ -9,8 +10,6 @@
 //            older apiVersion: the user needs a new build (plan R8)
 
 import { Platform } from 'react-native';
-
-export const REQUIRED_API_VERSION = 1;
 
 export function getSwingAvailability() {
   if (Platform.OS !== 'android') return { supported: false, reason: 'web' };
@@ -23,7 +22,8 @@ export function getSwingAvailability() {
   }
   const api = native?.apiVersion ?? native?.default?.apiVersion;
   const version = typeof api === 'function' ? api() : api;
-  if (typeof version !== 'number' || version < REQUIRED_API_VERSION) {
+  const required = native?.REQUIRED_API_VERSION ?? native?.default?.REQUIRED_API_VERSION;
+  if (typeof version !== 'number' || typeof required !== 'number' || version < required) {
     return { supported: false, reason: 'update' };
   }
   return { supported: true };

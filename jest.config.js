@@ -33,7 +33,5 @@ module.exports = {
     '^expo-haptics$': '<rootDir>/__mocks__/expo-haptics.js',
     '^expo-screen-orientation$': '<rootDir>/__mocks__/expo-screen-orientation.js',
     '^expo-video$': '<rootDir>/__mocks__/expo-video.js',
-    // The GolfSwing native bridge (src/swing/native.js); its own test imports '../native'.
-    '^.*/swing/native$': '<rootDir>/__mocks__/swingNative.js',
   },
 };

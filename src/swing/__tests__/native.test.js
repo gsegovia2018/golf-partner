@@ -1,6 +1,5 @@
-// The real bridge (imported as '../native', which the jest.config.js mapper for
-// '/swing/native' does not catch): the apiVersion gate that keeps OTA bundles safe on
-// older APKs (plan S10).
+// The real bridge: the apiVersion gate that keeps OTA bundles safe on older APKs
+// (plan S10). Tests that need a fake module jest.doMock('../native') themselves.
 
 function load({ os = 'android', mod = null } = {}) {
   let native;
