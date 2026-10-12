@@ -47,6 +47,10 @@ data class EntryPlan(
     val hasDrivePage: Boolean get() = drive || teePenalties
     val hasApproachPage: Boolean get() = approach
     val hasShortPage: Boolean get() = firstPutt || sand || recovery || otherPenalties
+    /** The Stats page shows when any section has a row. */
+    val hasStatsPage: Boolean get() = hasDrivePage || hasApproachPage || hasShortPage
+    /** Counters that share the strokes cap. */
+    val hasExtras: Boolean get() = teePenalties || sand || otherPenalties
 }
 
 /** The values being entered; seeded from the phone's saved ones. */
@@ -367,12 +371,12 @@ object Entry {
 }
 
 /** Page kinds of the pager, in swipe order. */
-enum class PageKind { Distances, Score, TeeShot, Drive, Approach, ShortGame }
+enum class PageKind { Distances, Score, Stats }
 
 object Pages {
     /**
      * Distances always. Score and the stats pages only where the watch may enter (not
-     * viewOnly/official/unknown blocks); a stats page only if its track group has any row.
+     * viewOnly/official/unknown blocks); the Stats page only if a track group has any row.
      * A dispute keeps the pages (they say "Resolve on phone") with inputs off.
      */
     fun of(state: WatchState): List<PageKind> {
@@ -384,10 +388,7 @@ object Pages {
         return buildList {
             add(PageKind.Distances)
             add(PageKind.Score)
-            if (plan.hasTeeShotPage) add(PageKind.TeeShot)
-            if (plan.hasDrivePage) add(PageKind.Drive)
-            if (plan.hasApproachPage) add(PageKind.Approach)
-            if (plan.hasShortPage) add(PageKind.ShortGame)
+            if (plan.hasStatsPage) add(PageKind.Stats)
         }
     }
 }

@@ -7,8 +7,11 @@ import org.json.JSONObject
 /** A point on the globe, as the phone sends it: `[lat, lng]`. */
 data class LatLng(val lat: Double, val lng: Double)
 
-/** Green geometry for the current hole; any part may be missing. */
-data class Green(val front: LatLng?, val center: LatLng?, val back: LatLng?)
+/**
+ * Green geometry for the current hole; any part may be missing. [outline] is the traced green,
+ * sent only when there are no front/back points: front/back are then its nearest/farthest vertex.
+ */
+data class Green(val front: LatLng?, val center: LatLng?, val back: LatLng?, val outline: List<LatLng> = emptyList())
 
 /** The phone's own distances to the green, always in metres. */
 data class PhoneDistances(val front: Double?, val center: Double?, val back: Double?, val source: String)
@@ -231,7 +234,18 @@ object WatchStateParser {
     }
 
     private fun parseGreen(g: JSONObject?) =
-        g?.let { Green(it.latLngOrNull("front"), it.latLngOrNull("center"), it.latLngOrNull("back")) }
+        g?.let { Green(it.latLngOrNull("front"), it.latLngOrNull("center"), it.latLngOrNull("back"), parseOutline(it.optJSONArray("outline"))) }
+
+    private fun parseOutline(a: JSONArray?): List<LatLng> {
+        if (a == null) return emptyList()
+        return (0 until a.length()).mapNotNull { i ->
+            val p = a.optJSONArray(i) ?: return@mapNotNull null
+            if (p.length() != 2) return@mapNotNull null
+            val lat = (p.opt(0) as? Number)?.toDouble() ?: return@mapNotNull null
+            val lng = (p.opt(1) as? Number)?.toDouble() ?: return@mapNotNull null
+            LatLng(lat, lng)
+        }
+    }
 
     private fun parseCourse(c: JSONObject?): List<CourseHole> {
         val arr = c?.optJSONArray("holes") ?: return emptyList()

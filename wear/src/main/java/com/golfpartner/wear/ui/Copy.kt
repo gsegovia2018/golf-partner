@@ -12,7 +12,6 @@ object Copy {
     const val GETTING_FIX = "Getting GPS fix"
     const val LOCATION_OFF = "Allow location"
     const val TEE_SHOT = "TEE SHOT"
-    const val DRIVE = "DRIVE"
     const val PAR3_NOTE = "Par 3 · no tee shot"
     const val SET_STROKES_FIRST = "Set strokes first"
     const val STROKES = "STROKES"
@@ -71,6 +70,7 @@ object Copy {
     const val DIRECTION = "Direction"
     const val FIRST_PUTT = "First putt"
     const val SHORT_GAME = "SHORT GAME"
+    fun statsHeader(hole: Int) = "STATS · HOLE $hole"
     const val APPROACH = "APPROACH"
     const val HOLE_DISTANCE = "HOLE DISTANCE"
 
