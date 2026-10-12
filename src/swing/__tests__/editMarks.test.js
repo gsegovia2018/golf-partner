@@ -139,7 +139,9 @@ describe('marks.json', () => {
   test('Reset checkpoint to auto restores the proposal, and the ball at address', () => {
     const { c, draft } = edited();
     const r = resetCheckpoint(resetCheckpoint(draft, c.base, 'impact'), c.base, 'address');
-    expect(r.cps.impact).toEqual({ frame: c.base.cps.impact.frame, hands: null, head: c.base.cps.impact.head, hidden: false });
+    expect(r.cps.impact).toEqual({
+      frame: c.base.cps.impact.frame, hands: null, head: c.base.cps.impact.head, hidden: false, confirmed: { hands: false, head: false },
+    });
     expect(r.ball).toEqual(c.base.ball);
     expect(r.cps.leadArm.head).toEqual([0.24, 0.32]); // other checkpoints untouched
   });
@@ -180,6 +182,17 @@ describe('checkpoints.js (the lab editor cues)', () => {
     expect(cueFor('leadArm', 'left').what).toMatch(/^Right arm/);
     expect(cueFor('trailArm', 'left').what).toMatch(/^Left arm/);
     expect(cueFor('shaftThrough', 'left').what).toMatch(/right hip/);
+  });
+  test('D26: every checkpoint has a short stop line (FIRST / LAST frame, condition, what to watch, strip captions)', () => {
+    CHECKPOINT_DEFS.forEach((d) => {
+      expect(['first', 'last']).toContain(d.stop.kind);
+      ['short', 'watch', 'before', 'after'].forEach((f) => expect(d.stop[f]).toEqual(expect.any(String)));
+      expect(d.stopWhen.startsWith(`the ${d.stop.kind} frame`)).toBe(true); // the badge agrees with the full cue
+    });
+    expect(cueFor('top').stop).toMatchObject({ kind: 'last', short: 'before the club starts down', watch: 'the clubhead, not the hands' });
+    expect(cueFor('shaftDown', 'left').stop.short).toMatch(/left hip/);
+    expect(cueFor('leadArm', 'left').stop.watch).toBe('the right arm');
+    expect(cueFor('preImpact').stop).toBeUndefined();
   });
   test('internal frames have a cue and live under their timeline step', () => {
     expect(cueFor('preImpact').name).toBe('Pre-impact');

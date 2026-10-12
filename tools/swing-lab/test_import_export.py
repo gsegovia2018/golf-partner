@@ -66,6 +66,21 @@ class ImportExportTest(unittest.TestCase):
         self.assertEqual(ie.build_truth(META, {**ANALYSIS, "club": "driver"}, MARKS, "c")["club"], "driver")
         self.assertEqual(ie.build_truth({**META, "club": "wood"}, ANALYSIS, MARKS, "c")["club"], "iron")
 
+    def test_mark_first_fields_are_read_compatibly(self):
+        # D26 adds confirmed flags and a pass block to swing-club-labels/1; a confirmed but
+        # unmoved position is a full-confidence label, the extra fields are ignored otherwise.
+        marks = {**MARKS, "pass": {"state": "done", "skipped": ["top"]},
+                 "ball": {**MARKS["ball"], "confirmed": True},
+                 "frames": MARKS["frames"] + [{
+                     "i": 100, "checkpoint": "address", "corrected": False, "confirmed": True,
+                     "hands": {"final": [0.5, 0.25], "confirmed": True},
+                     "head": {"final": [0.6, 0.5], "finalHidden": False, "confirmed": True},
+                 }]}
+        t = ie.build_truth(META, ANALYSIS, marks, "c")
+        a = t["checkpoints"]["address"]
+        self.assertEqual((a["frame"], a["head"], a["conf"]), (100, {"x": 240.0, "y": 400.0}, 1))
+        self.assertEqual(t["checkpoints"]["impact"]["frame"], 560)
+
     def test_hidden_clubhead_has_no_head_point(self):
         t = ie.build_truth(META, ANALYSIS, {"frames": []}, "c")
         self.assertTrue(t["checkpoints"]["impact"]["hidden"])
