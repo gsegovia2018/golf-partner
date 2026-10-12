@@ -84,7 +84,9 @@ export function captureReducer(state, action) {
       return { ...state, phase: 'live', mode, ready: false };
     }
     case 'ready':
-      return state.phase === 'blocked' ? state : { ...state, ready: true, error: null };
+      // A reopened camera clears its own error; why a take was dropped stays until the next start.
+      if (state.phase === 'blocked') return state;
+      return { ...state, ready: true, error: state.error === 'camera' ? null : state.error };
     case 'acceptLowFps':
       return { ...state, lowFpsOk: true };
     case 'start':

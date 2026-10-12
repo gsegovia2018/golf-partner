@@ -96,5 +96,9 @@ describe('captureReducer', () => {
   test('an interrupted take goes back to live with a message', () => {
     const s = run({ type: 'modes', modes: [m(240, true)] }, { type: 'ready' }, { type: 'start' }, { type: 'started' }, { type: 'interrupted' });
     expect(s).toMatchObject({ phase: 'live', error: 'interrupted', ready: false });
+    // The camera reopens on return; the message stays until the next take starts.
+    const back = captureReducer(s, { type: 'ready' });
+    expect(back).toMatchObject({ ready: true, error: 'interrupted' });
+    expect(captureReducer(back, { type: 'start' }).error).toBeNull();
   });
 });

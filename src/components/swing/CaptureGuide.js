@@ -9,43 +9,39 @@ import { hud } from '../../theme/tokens';
 // and the club should fit; the room above the head is for the top of the swing.
 //
 // Drawn in a 360 × 640 (9:16) box over exactly the recorded picture (previewRect), so the box
-// means the same on every phone.
+// means the same on every phone. The box stays in the upper part, clear of the record controls.
+const SHADOW = 'rgba(4,6,8,0.45)';
+
+// Golfer at address (head is the circle at 196,120): spine tilted from the hips with the seat
+// back, flexed legs and feet, arms hanging under the shoulders, club from the hands to the ball.
+const FIGURE = [
+  'M182 146 L128 262 Q108 268 116 284',
+  'M128 262 L152 348 L140 440 L172 446',
+  'M120 276 L140 352 L128 442 L158 448',
+  'M184 152 L198 222 L204 282',
+  'M204 282 L270 434',
+];
+
 export default function CaptureGuide({ rect, left = false, label }) {
   if (!rect || !rect.width || !rect.height) return null;
   return (
     <View pointerEvents="none" style={[styles.wrap, { left: rect.x, top: rect.y, width: rect.width, height: rect.height }]}>
       <Svg width="100%" height="100%" viewBox="0 0 360 640" preserveAspectRatio="xMidYMid meet">
-        <Rect x={40} y={92} width={280} height={500} rx={16} fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={1.5} />
+        <Rect x={70} y={70} width={240} height={400} rx={16} fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={1.5} />
         {label ? (
-          <SvgText x={180} y={80} textAnchor="middle" fontSize={13} fontWeight="700" fill={hud.textSoft}>{label}</SvgText>
+          <>
+            <SvgText x={190} y={58} textAnchor="middle" fontSize={12} fontWeight="700" stroke={SHADOW} strokeWidth={3}>{label}</SvgText>
+            <SvgText x={190} y={58} textAnchor="middle" fontSize={12} fontWeight="700" fill={hud.textSoft}>{label}</SvgText>
+          </>
         ) : null}
-        <G
-          transform={left ? 'translate(360 0) scale(-1 1)' : undefined}
-          fill="none"
-          stroke="rgba(255,255,255,0.75)"
-          strokeWidth={2.5}
-          strokeDasharray="7 6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {/* head, tilted toward the ball */}
-          <Circle cx={176} cy={196} r={19} />
-          {/* spine: neck down and back to the hips */}
-          <Path d="M168 222 L120 352" />
-          {/* seat */}
-          <Path d="M120 352 Q100 366 112 388" />
-          {/* legs, knees flexed */}
-          <Path d="M124 372 L150 450 L138 552" />
-          <Path d="M118 380 L132 456 L116 556" />
-          {/* feet */}
-          <Path d="M138 552 L170 556" />
-          <Path d="M116 556 L146 560" />
-          {/* arms hanging from the shoulder to the hands */}
-          <Path d="M172 232 L196 300 L206 352" />
-          {/* club: hands down to the ball */}
-          <Path d="M206 352 L282 546" />
+        <G transform={left ? 'translate(380 0) scale(-1 1)' : undefined} fill="none" strokeLinecap="round" strokeLinejoin="round">
+          {/* a soft dark underlay keeps the dashes visible on bright backgrounds */}
+          {FIGURE.map((d) => <Path key={`u${d}`} d={d} stroke={SHADOW} strokeWidth={4.5} />)}
+          {FIGURE.map((d) => <Path key={d} d={d} stroke="rgba(255,255,255,0.85)" strokeWidth={2.5} strokeDasharray="7 6" />)}
+          <Circle cx={196} cy={120} r={17} stroke={SHADOW} strokeWidth={4.5} />
+          <Circle cx={196} cy={120} r={17} stroke="rgba(255,255,255,0.85)" strokeWidth={2.5} strokeDasharray="7 6" />
+          <Circle cx={277} cy={440} r={6} stroke="rgba(255,255,255,0.85)" strokeWidth={2} />
         </G>
-        <Circle cx={left ? 360 - 288 : 288} cy={552} r={7} fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth={2} />
       </Svg>
     </View>
   );
