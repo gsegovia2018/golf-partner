@@ -82,7 +82,7 @@ describe('SwingHomeScreen', () => {
   test('empty state teaches the set-up and shows the privacy line', () => {
     const { getByText, queryByText } = setup();
     expect(getByText(SWING_STRINGS.home.emptyTitle)).toBeTruthy();
-    expect(getByText(/phone at hip height/)).toBeTruthy();
+    expect(getByText(/phone on your toe line, at hand height, aimed at your hands/)).toBeTruthy();
     expect(getByText('Your video and analysis stay on this phone. Nothing is uploaded.')).toBeTruthy();
     expect(queryByText(/swipe a row to delete/)).toBeNull();
   });

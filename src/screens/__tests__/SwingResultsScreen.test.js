@@ -33,6 +33,8 @@ jest.mock('../../store/swingStore', () => ({
   readProbe: jest.fn(),
   readMarks: jest.fn(),
   saveAnalysis: jest.fn(),
+  getSwingProfile: jest.fn(() => ({ practiceOpen: false })),
+  setPracticeOpen: jest.fn(() => Promise.resolve(true)),
   markSwingFailed: jest.fn(() => Promise.resolve()),
   swingVideoUri: jest.fn(() => 'file:///doc/swings/s1/video.mp4'),
 }));
@@ -159,6 +161,25 @@ describe('SwingResultsScreen: a stored swing', () => {
     expect(getByTestId('results-also-causing').props.children).toBe('Likely also causing: flat backswing, top position and 3 more');
   });
 
+  test('D24: the practice card under the drills opens, remembers, and slots the main drill into Block', async () => {
+    const { findByText, getByLabelText, queryByText, getByText } = setup();
+    await findByText(VERDICT);
+    expect(queryByText(T.practice.blocks[1].body)).toBeNull();
+    fireEvent.press(getByLabelText(T.practice.show));
+    expect(store.setPracticeOpen).toHaveBeenCalledWith(true);
+    T.practice.blocks.forEach((b) => expect(getByText(b.name)).toBeTruthy());
+    expect(getByText(T.practice.drillIn('Let the arms hang'))).toBeTruthy();
+    fireEvent.press(getByLabelText(T.practice.hide));
+    expect(store.setPracticeOpen).toHaveBeenLastCalledWith(false);
+  });
+
+  test('D24: the practice card opens as it was left', async () => {
+    store.getSwingProfile.mockReturnValueOnce({ practiceOpen: true });
+    const { findByText, getByText } = setup();
+    await findByText(VERDICT);
+    expect(getByText(T.practice.blocks[3].body)).toBeTruthy();
+  });
+
   test('D23: the swing pattern row shows back, down and through; a cell opens its checkpoint', async () => {
     const { findByText, getByTestId, getByLabelText, getByText } = setup();
     await findByText(VERDICT);
@@ -179,7 +200,8 @@ describe('SwingResultsScreen: a stored swing', () => {
   });
 
   test('shows the drills for the main fault and expands the rest', async () => {
-    const ee = { ...MARKED, main: { ...MARKED.main, fault: 'early_extension', label: 'Early extension', consequences: [] } };
+    const evidence = MARKED.checks.filter((c) => c.cluster === 'early_extension');
+    const ee = { ...MARKED, main: { ...MARKED.main, fault: 'early_extension', label: 'Early extension', evidence, consequences: [] } };
     const { findByText, getByText, queryByText, getByLabelText } = setup({ analysis: ee });
     await findByText('Early extension.');
     expect(getByText(T.drillsTitle('Early extension'))).toBeTruthy();

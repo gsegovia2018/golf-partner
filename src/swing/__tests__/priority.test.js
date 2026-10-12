@@ -27,7 +27,8 @@ describe('priority: the one main fault', () => {
     expect(main.label).toBe('Posture at address');
     expect(main.evidence.map((c) => c.id)).toEqual(['hands_under_shoulders', 'back_line', 'hand_gap']);
     expect(main.consequences).toEqual(['flat_backswing', 'top_position', 'over_the_top', 'early_extension']);
-    expect(main.drills[0]).toBe('po-espejo');
+    // D24: drills aimed at the evidence checks lead, then the cluster's own
+    expect(main.drills).toEqual(['su-brazos', 'su-palo-espalda', 'su-palmo', 'su-bisagra', 'po-espejo']);
   });
 
   test('D21: the earliest significant phase wins over a bigger later score, and names what it causes', () => {

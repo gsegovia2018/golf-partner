@@ -19,6 +19,7 @@ export const STORAGE_WARN_BYTES = 1024 * 1024 * 1024; // soft cap, plan 7.4
 
 const DEFAULT_PROFILE = {
   heightCm: null, handedness: 'right', asked: false, lastClub: DEFAULT_CLUB, // lastClub: the Home picker's last choice (D19)
+  practiceOpen: false, // the Results practice card stays as the golfer left it (D24)
 };
 
 let SWINGS = []; // [{ id, createdAt, name, club, source, status, fps, mainFault, counts, thumb, bytes }]
@@ -76,6 +77,14 @@ export async function setLastSwingClub(club) {
   emit();
   await persistProfile();
   return PROFILE.lastClub;
+}
+
+/** Remember whether the Results practice card is open (D24). */
+export async function setPracticeOpen(open) {
+  PROFILE = { ...PROFILE, practiceOpen: !!open };
+  emit();
+  await persistProfile();
+  return PROFILE.practiceOpen;
 }
 
 // --- Names (D13) -------------------------------------------------------------

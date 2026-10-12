@@ -52,7 +52,7 @@ describe('analyze: the whole pipeline on the fixture', () => {
   test('main fault (D21): the setup is the earliest significant fault; early extension is a consequence', () => {
     expect(a.main.fault).toBe('posture');
     expect(a.main.evidence.length).toBeGreaterThanOrEqual(2);
-    expect(a.main.drills[0]).toBe('po-espejo');
+    expect(a.main.drills[0]).toBe('su-brazos'); // D24: the drill for the first evidence check leads
     expect(a.main.consequences).toEqual(expect.arrayContaining(['over_the_top', 'early_extension']));
   });
 });

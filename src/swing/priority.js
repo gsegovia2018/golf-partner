@@ -12,7 +12,7 @@
 // weighted score never promotes a lone yellow either). across_the_line / laid_off
 // (top_direction) are not clusters: never main on their own.
 
-import { drillsForFault } from './drills';
+import { drillsForMain } from './drills';
 import { SWING_STRINGS as T } from './strings';
 
 const isDir = (c, ids, dir) => ids.includes(c.id) && c.dir === dir;
@@ -70,7 +70,7 @@ export function mainFault(checks) {
     phase: best.fault.phase,
     score: round2(best.score),
     evidence: best.evidence,
-    drills: drillsForFault(best.fault.id).map((d) => d.id),
+    drills: drillsForMain({ fault: best.fault.id, evidence: best.evidence }).map((d) => d.id),
     consequences: sig.filter((x) => rank(x) > rank(best)).map((x) => x.fault.id),
   };
 }
