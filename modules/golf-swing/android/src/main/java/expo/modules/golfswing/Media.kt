@@ -152,31 +152,30 @@ internal object Media {
       val fmt = ex.getTrackFormat(track)
       fmt.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
       val codec = MediaCodec.createDecoderByType(fmt.getString(MediaFormat.KEY_MIME)!!)
+      var feeder: Feeder? = null
       try {
-        codec.configure(fmt, null, null, 0)
+        // as fast as it can, not paced for playback (hardware decoders clock for the stated rate)
+        val fast = MediaFormat(fmt).apply {
+          setInteger(MediaFormat.KEY_PRIORITY, 1)
+          setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE.toInt())
+        }
+        try {
+          codec.configure(fast, null, null, 0)
+        } catch (e: Exception) {
+          codec.reset()
+          codec.configure(fmt, null, null, 0)
+        }
+        android.util.Log.i(PoseAnalyzer.TAG, "decoder ${codec.name} hw=${if (android.os.Build.VERSION.SDK_INT >= 29) codec.codecInfo.isHardwareAccelerated else null}")
         codec.start()
+        feeder = Feeder(ex, codec).also { it.start() }
         val info = MediaCodec.BufferInfo()
-        var inputDone = false
         var n = 0
         var full: Boolean? = null
         var nullImages = 0
         var lastProgress = System.nanoTime()
         while (true) {
           if (cancelled()) throw CancelledException()
-          if (!inputDone) {
-            val i = codec.dequeueInputBuffer(if (n == 0) 2_000 else 0)
-            if (i >= 0) {
-              val size = ex.readSampleData(codec.getInputBuffer(i)!!, 0)
-              if (size < 0) {
-                codec.queueInputBuffer(i, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                inputDone = true
-              } else {
-                codec.queueInputBuffer(i, 0, size, ex.sampleTime, 0)
-                ex.advance()
-              }
-              lastProgress = System.nanoTime()
-            }
-          }
+          feeder!!.error?.let { throw it }
           val t = System.nanoTime()
           val o = codec.dequeueOutputBuffer(info, 2_000)
           prof?.add("codecWait", System.nanoTime() - t)
@@ -185,7 +184,7 @@ internal object Media {
             full = of.containsKey(MediaFormat.KEY_COLOR_RANGE) && of.getInteger(MediaFormat.KEY_COLOR_RANGE) == MediaFormat.COLOR_RANGE_FULL
           }
           if (o < 0) {
-            if (System.nanoTime() - lastProgress > STALL_NS) throw IllegalStateException("decoder stalled after $n frames")
+            if (System.nanoTime() - max(lastProgress, feeder!!.lastInputNs) > STALL_NS) throw IllegalStateException("decoder stalled after $n frames")
             continue
           }
           lastProgress = System.nanoTime()
@@ -210,6 +209,7 @@ internal object Media {
           if (eos || !more) break
         }
       } finally {
+        feeder?.finish()
         try {
           codec.stop()
         } catch (_: IllegalStateException) {
@@ -218,6 +218,47 @@ internal object Media {
       }
     } finally {
       ex.release()
+    }
+  }
+
+  /**
+   * Feeds the decoder on its own thread, so reading samples from the file overlaps the
+   * frame work on the decode thread and the codec always has input queued (sync-mode
+   * MediaCodec takes input and output calls from different threads). The extractor is only
+   * touched here once started. [finish] must be called before the codec is stopped.
+   */
+  private class Feeder(private val ex: MediaExtractor, private val codec: MediaCodec) : Thread("golf-swing-feed") {
+    @Volatile var error: Throwable? = null
+    @Volatile var lastInputNs = System.nanoTime()
+    @Volatile private var stopping = false
+
+    init {
+      isDaemon = true
+    }
+
+    override fun run() {
+      PerfHint.raiseThisThread()
+      try {
+        while (!stopping) {
+          val i = codec.dequeueInputBuffer(5_000)
+          if (i < 0) continue
+          val size = ex.readSampleData(codec.getInputBuffer(i)!!, 0)
+          if (size < 0) {
+            codec.queueInputBuffer(i, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+            return
+          }
+          codec.queueInputBuffer(i, 0, size, ex.sampleTime, 0)
+          ex.advance()
+          lastInputNs = System.nanoTime()
+        }
+      } catch (e: Throwable) {
+        if (!stopping) error = e
+      }
+    }
+
+    fun finish() {
+      stopping = true
+      join(1_000)
     }
   }
 
