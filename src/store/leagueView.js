@@ -1,6 +1,6 @@
 // League screens: presentational helpers (no I/O). Wording and number
 // formats live here so the Play tab, board and members screens agree.
-import { cardMonth } from './leagueRules';
+import { cardMonth, isMissed, needsApproval, deadlineInfo } from './leagueRules';
 import { seasonTable, monthResults } from './leagueStandings';
 import { isRatedTee, netDoubleBogeyCap } from './handicapIndex';
 import { calcExtraShots, calcStablefordPoints } from './scoring';
@@ -76,7 +76,7 @@ export function potCents(members, entryFeeCents) {
 // in the season table refer to (same rule as seasonTable).
 export function lastScoredMonth(cardsByMonth) {
   return Object.keys(cardsByMonth ?? {}).sort().reverse()
-    .find((m) => (cardsByMonth[m] ?? []).some((c) => c.status === 'confirmed')) ?? null;
+    .find((m) => (cardsByMonth[m] ?? []).some((c) => c.status === 'confirmed' && !needsApproval(c))) ?? null;
 }
 
 // '+245 Sep' under a season row; '' when nothing scored yet or 0 earned.
@@ -93,7 +93,7 @@ export function positionText(table, userId, cardsByMonth) {
   return `${row.isTie ? 'T' : ''}${ordinal(row.place)} of ${table.length} · ${formatPoints(row.total)} pts`;
 }
 
-const STATUS_RANK = { confirmed: 0, submitted: 1, playing: 2, announced: 3 };
+const STATUS_RANK = { confirmed: 0, submitted: 1, playing: 2, announced: 3, missed: 4 };
 
 function clock(iso, now) {
   const d = new Date(iso);
@@ -103,12 +103,15 @@ function clock(iso, now) {
 }
 
 // One member's line for the current month: { text, tone, flag, lead, leadTone }.
-// tone: 'done' (counts), 'live' (in progress), 'muted' (no card). `lead` is the
+// tone: 'done' (counts), 'live' (in progress), 'muted' (no card, or not posted
+// in time: `missed: true`). Live cards carry `deadline` (deadlineInfo). `lead` is the
 // spoken net differential ('2.4 better') that `text` starts with, so the screen
 // can colour it; leadTone is 'better' | 'worse' | null.
 export function cardStatus(card, now = new Date()) {
   if (!card) return { text: 'No card yet', tone: 'muted', flag: null };
-  const flag = card.notAnnounced ? 'Not announced in the app' : null;
+  if (isMissed(card, now)) return { text: 'Not posted', tone: 'muted', flag: null, missed: true };
+  let flag = card.notAnnounced ? 'Not announced in the app' : null;
+  if (needsApproval(card)) flag = 'Awaiting approval · not counted yet';
   const offApp = card.source === 'offapp';
   const hasNet = card.netDifferential != null;
   const pts = card.points != null ? `${formatPoints(card.points)} pts` : '';
@@ -123,16 +126,18 @@ export function cardStatus(card, now = new Date()) {
       return { text: `${lead ?? pts} · ${how}`, tone: 'done', flag, lead, leadTone };
     }
     case 'playing':
-      return { text: 'Playing now', tone: 'live', flag };
+      return { text: 'Playing now', tone: 'live', flag, deadline: deadlineInfo(card, now) };
     case 'announced':
-      return { text: `Declared · ${clock(card.announcedAt, now)}`.trim(), tone: 'live', flag };
+      return {
+        text: `Declared · ${clock(card.announcedAt, now)}`.trim(), tone: 'live', flag, deadline: deadlineInfo(card, now),
+      };
     default:
       return { text: 'No card yet', tone: 'muted', flag: null };
   }
 }
 
 // Members with this month's card, best first: confirmed by net differential
-// (lowest first, unrated after), then submitted, playing, announced, then nobody.
+// (lowest first, unrated after), then submitted, playing, announced, not posted, then nobody.
 export function monthRows(members, cardsByMonth, month, now = new Date()) {
   const cards = cardsByMonth?.[month] ?? [];
   const rows = (members ?? []).filter((m) => !m.leftAt).map((m) => {
@@ -167,7 +172,10 @@ function waitingReason(card) {
 // is listed after the ranked ones with place null and `unrated: true`.
 // `seasonPoints` is the table points the place earns if the month ended now. waiting = submitted, onCourse = playing or announced
 // (playing first), noCard = active members with nothing this month.
-export function monthBoard(members, cardsByMonth, month, pointsTable) {
+// awaiting = scored cards (submitted or confirmed) of a not-announced round an
+// admin hasn't approved: they don't rank. missed = not posted in time (a live
+// card past its deadline counts), listed apart from onCourse and noCard.
+export function monthBoard(members, cardsByMonth, month, pointsTable, now = new Date()) {
   const active = (members ?? []).filter((m) => !m.leftAt);
   const cards = (cardsByMonth?.[month] ?? []).filter((c) => c.status !== 'void');
   // Lowest net differential first; a card without one (unrated) after, by points.
@@ -178,7 +186,7 @@ export function monthBoard(members, cardsByMonth, month, pointsTable) {
   for (const r of monthResults(cards, active, pointsTable)) {
     const member = (members ?? []).find((m) => m.userId === r.userId);
     if ((r.place == null && !r.unrated) || !member) continue;
-    const card = bestCard(r.userId, (c) => c.status === 'confirmed');
+    const card = bestCard(r.userId, (c) => c.status === 'confirmed' && !needsApproval(c));
     confirmed.push({
       member, card, place: r.place, isTie: r.isTie, unrated: !!r.unrated,
       netDifferential: r.netDifferential, cardPoints: r.cardPoints, seasonPoints: r.seasonPoints,
@@ -189,16 +197,20 @@ export function monthBoard(members, cardsByMonth, month, pointsTable) {
   const waiting = [];
   const onCourse = [];
   const noCard = [];
+  const awaiting = [];
+  const missed = [];
   for (const member of active) {
     if (placed.has(member.userId)) continue;
     const card = bestCard(member.userId, () => true);
-    if (card?.status === 'submitted') waiting.push({ member, card, reason: waitingReason(card) });
+    if (card && needsApproval(card)) awaiting.push({ member, card });
+    else if (card && isMissed(card, now)) missed.push({ member, card });
+    else if (card?.status === 'submitted') waiting.push({ member, card, reason: waitingReason(card) });
     else if (card?.status === 'playing' || card?.status === 'announced') onCourse.push({ member, card });
     else noCard.push(member);
   }
   waiting.sort((a, b) => byNet(a.card, b.card));
   onCourse.sort((a, b) => (a.card.status === 'playing' ? 0 : 1) - (b.card.status === 'playing' ? 0 : 1));
-  return { confirmed, waiting, onCourse, noCard };
+  return { confirmed, waiting, onCourse, noCard, awaiting, missed };
 }
 
 // Days left in the calendar month, for the "27 days left" caption.

@@ -24,6 +24,7 @@ import { semantic } from '../theme/tokens';
 //                  muted     dim points (the row does not count yet, or is listed but not ranked)
 //                  subGold   gold sub (table points)
 //                  unranked  dashed place badge
+//                  warn      amber points and sub (a deadline under 2 hours away)
 //                A row may set compact (shorter, no sub), or be { key, gap: true }: a "⋯" spacer
 //                for rows left out.
 //   more         optional { label, onPress }: a text button under the rows (Show all 18)
@@ -64,8 +65,8 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
           </View>
           {!!row.detail && <Text style={s.mastersDetail} numberOfLines={2}>{row.detail}</Text>}
         </View>
-        <Text style={[s.mastersPoints, isFirstPlace && { fontSize: 18 }, row.muted && s.mastersPointsMuted]}>{row.points}</Text>
-        {row.sub != null && <Text style={[s.mastersSub, row.subGold && s.mastersSubGold]}>{row.compact ? '' : row.sub}</Text>}
+        <Text style={[s.mastersPoints, isFirstPlace && { fontSize: 18 }, row.muted && s.mastersPointsMuted, row.warn && s.mastersWarn]}>{row.points}</Text>
+        {row.sub != null && <Text style={[s.mastersSub, row.subGold && s.mastersSubGold, row.warn && s.mastersWarn]}>{row.compact ? '' : row.sub}</Text>}
         {!!row.onPress && <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.45)" style={{ marginLeft: 4 }} />}
       </Row>
     );
@@ -136,6 +137,7 @@ function makeStyles(t) {
     mastersName: { fontFamily: 'PlusJakartaSans-Medium', color: '#ffffff', fontSize: 14 },
     mastersPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 16, marginRight: 8 },
     mastersPointsMuted: { color: 'rgba(255,255,255,0.75)', fontSize: 14 },
+    mastersWarn: { color: semantic.warning.dark },
     mastersSubGold: { color: semantic.winner.dark, fontFamily: 'PlusJakartaSans-Bold' },
     // 0.75 white on the deep green is 5.9:1 (the old 0.45 was 3.1:1, under WCAG AA).
     mastersSub: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.75)', fontSize: 11, width: 60, textAlign: 'right' },

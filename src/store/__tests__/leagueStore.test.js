@@ -5,6 +5,7 @@ import {
   notifyLeagueTeeOff, submitLeagueCard, addUnannouncedLeagueCard, confirmLeagueCardByPartner,
   attachLeagueProof, createMarkerToken, voidLeagueCard, recordLeagueFinal, getMyLeagues, getMyCardsForMonth,
   getLeagueCard, setLeagueRole, archiveLeague, deleteLeague, getLeague, getLeagueCached, setLeagueCache, uploadLeagueProof, rowToCard,
+  rescheduleLeagueCard, reopenLeagueCard, approveLeagueCard,
 } from '../leagueStore';
 
 // mockState is read inside the jest.mock factories; the `mock` prefix is what
@@ -283,6 +284,28 @@ describe('RPC params', () => {
   });
 });
 
+describe('post deadline RPCs', () => {
+  test('rescheduleLeagueCard, reopenLeagueCard, approveLeagueCard', async () => {
+    ok({ id: 'C1', tee_time: '2026-10-12T08:00:00Z', post_by: '2026-10-12T16:00:00Z' });
+    expect(await rescheduleLeagueCard('C1', '2026-10-12T08:00:00Z'))
+      .toEqual({ id: 'C1', teeTime: '2026-10-12T08:00:00Z', postBy: '2026-10-12T16:00:00Z' });
+    expect(lastRpc()).toEqual(['reschedule_league_card', { p_card: 'C1', p_tee_time: '2026-10-12T08:00:00Z' }]);
+    ok({ id: 'C1', status: 'announced', post_by: '2026-10-12T16:00:00Z' });
+    expect(await reopenLeagueCard('C1')).toEqual({ id: 'C1', status: 'announced', postBy: '2026-10-12T16:00:00Z' });
+    expect(lastRpc()).toEqual(['reopen_league_card', { p_card: 'C1' }]);
+    ok({ id: 'C1', approved_at: '2026-10-12T09:00:00Z' });
+    expect(await approveLeagueCard('C1')).toEqual({ id: 'C1', approvedAt: '2026-10-12T09:00:00Z' });
+    expect(lastRpc()).toEqual(['approve_league_card', { p_card: 'C1' }]);
+  });
+
+  test('a refusal keeps its hint for the screen', async () => {
+    mockState.rpcResult = { data: null, error: { code: 'P0001', message: 'Too late to move it.', hint: 'tee_time_passed' } };
+    const err = await rescheduleLeagueCard('C1', 'x').catch((e) => e);
+    expect(err).toBeInstanceOf(LeagueError);
+    expect(err.hint).toBe('tee_time_passed');
+  });
+});
+
 describe('errors', () => {
   test('a server refusal keeps the postgres message, code and hint', async () => {
     mockState.rpcResult = {
@@ -398,6 +421,12 @@ describe('reads and cache', () => {
       announcedAt: '2026-10-04T09:00:00Z', firstShotAt: '2026-10-04T10:00:00Z', notAnnounced: false,
       leagueHandicap: 18, playingHandicap: 20, confirmation: 'partner', confirmedByName: 'Javi',
     });
+  });
+
+  test('rowToCard maps the deadline and approval columns, null when absent', () => {
+    expect(rowToCard({ ...cardRow(), post_by: '2026-10-04T18:00:00Z', approved_by: 'u9', approved_at: '2026-10-05T00:00:00Z' }))
+      .toMatchObject({ postBy: '2026-10-04T18:00:00Z', approvedBy: 'u9', approvedAt: '2026-10-05T00:00:00Z' });
+    expect(rowToCard(cardRow())).toMatchObject({ postBy: null, approvedBy: null, approvedAt: null });
   });
 
   test('rowToCard maps the server net differential (numeric comes back as a string) and keeps null', () => {

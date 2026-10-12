@@ -123,7 +123,7 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
 
   const noteText = cardId
     ? `League card · announced ${timeLabel(card.announcedAt)}`
-    : 'Not announced in the app';
+    : "You didn't announce this round, so it won't count until an admin approves it.";
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>

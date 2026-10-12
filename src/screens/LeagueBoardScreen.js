@@ -7,14 +7,17 @@ import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import PullToRefresh from '../components/PullToRefresh';
 import LeaderboardCard from '../components/LeaderboardCard';
+import DeadlineLine, { countdownText } from '../components/league/DeadlineLine';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
+import { useMinuteClock } from '../hooks/useMinuteClock';
+import { isMissed, needsApproval, deadlineInfo } from '../store/leagueRules';
 import { seasonTable, monthResults } from '../store/leagueStandings';
 import {
   monthName, formatPoints, formatNetDiff, formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard,
-  daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, viewableCards,
+  daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, viewableCards, monthRows,
 } from '../store/leagueView';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
 
@@ -29,6 +32,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const { data, stale, loading, refreshing, error, reload, refresh } = useLeague(navigation, leagueId);
   const [scope, setScope] = useState(null); // null = this month (the season when archived)
   const [showAllSeason, setShowAllSeason] = useState(false);
+  const now = useMinuteClock();
 
   const view = useMemo(() => {
     if (!data) return null;
@@ -37,7 +41,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
     const table = seasonTable(active, cardsByMonth, league.pointsTable);
     const last = lastScoredMonth(cardsByMonth);
     const scoredMonths = Object.keys(cardsByMonth)
-      .filter((m) => cardsByMonth[m].some((c) => c.status === 'confirmed'))
+      .filter((m) => cardsByMonth[m].some((c) => c.status === 'confirmed' && !needsApproval(c)))
       .sort().reverse().slice(0, 6);
     return { league, members, active, cardsByMonth, table, last, scoredMonths };
   }, [data]);
@@ -90,7 +94,6 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const openCard = (month, userId) => navigation.navigate('LeagueCard', { leagueId, month, userId });
   const viewable = (month) => new Set(viewableCards(members, cardsByMonth, month).map((c) => c.userId));
   const noCardsYet = !last;
-  const now = new Date();
   const curKey = currentMonthKey(now);
   const curMonth = monthName(curKey);
   const archived = !!league.archivedAt;
@@ -110,8 +113,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
   if (monthScope) {
     const left = daysLeftInMonth(now);
     boardTitle = `${curMonth.toUpperCase()} SO FAR · ${left === 0 ? 'LAST DAY' : `${left} ${left === 1 ? 'DAY' : 'DAYS'} LEFT`}`;
-    const board = monthBoard(members, cardsByMonth, curKey, league.pointsTable);
-    const canOpen = viewable(curKey);
+    const board = monthBoard(members, cardsByMonth, curKey, league.pointsTable, now);
+    // Any card this month opens: live and missed ones show their status.
+    const canOpen = new Set(monthRows(members, cardsByMonth, curKey, now).filter((r) => r.card).map((r) => r.member.userId));
     const rowOf = (member) => ({
       key: member.userId,
       name: nameOf(member.userId),
@@ -160,18 +164,51 @@ export default function LeagueBoardScreen({ navigation, route }) {
         key: 'oncourse',
         label: `Playing or announced · ${board.onCourse.length}`,
         icon: 'flag',
-        rows: board.onCourse.map((r) => ({
+        rows: board.onCourse.map((r) => {
+          const dl = deadlineInfo(r.card, now);
+          return {
           ...rowOf(r.member),
           place: null,
           unranked: true,
           muted: true,
-          points: '—',
+          points: dl ? countdownText(dl.msLeft) : '—',
+          sub: dl ? (dl.urgent ? 'left' : 'to post') : null,
+          warn: !!dl?.urgent,
           detail: detailOf(
             r.card,
             ...(r.card.status === 'playing'
               ? ['Playing now', r.card.course?.name]
               : ['Announced', [dayLabel(r.card.teeTime), timeLabel(r.card.teeTime)].filter(Boolean).join(' '), r.card.course?.name]),
           ),
+          };
+        }),
+      },
+      board.awaiting.length > 0 && {
+        key: 'awaiting',
+        label: `Awaiting approval · ${board.awaiting.length}`,
+        icon: 'user-check',
+        rows: board.awaiting.map((r) => ({
+          ...rowOf(r.member),
+          place: null,
+          unranked: true,
+          muted: true,
+          points: r.card.netDifferential != null ? formatNetDiff(r.card.netDifferential)
+            : r.card.points != null ? String(r.card.points) : '—',
+          sub: 'not counted',
+          detail: detailOf(r.card, r.card.course?.name, "needs an admin's approval"),
+        })),
+      },
+      board.missed.length > 0 && {
+        key: 'missed',
+        label: `Not posted · ${board.missed.length}`,
+        icon: 'slash',
+        rows: board.missed.map((r) => ({
+          ...rowOf(r.member),
+          place: null,
+          unranked: true,
+          muted: true,
+          points: '—',
+          detail: detailOf(r.card, 'Not posted in time', r.card.course?.name),
         })),
       },
       noCard.length > 0 && {
@@ -315,6 +352,13 @@ export default function LeagueBoardScreen({ navigation, route }) {
           </View>
         </>
       );
+    } else if (isMissed(mine.card, now)) {
+      badge = 'Not posted';
+      body = (
+        <Text style={s.cardText}>
+          {`Not posted in time${mine.course ? ` · ${mine.course}` : ''}. This month's card is used; an admin can reopen it.`}
+        </Text>
+      );
     } else if (mine.kind === 'announced' || mine.kind === 'playing') {
       badge = mine.kind === 'playing' ? 'Playing' : 'Announced';
       body = (
@@ -335,11 +379,12 @@ export default function LeagueBoardScreen({ navigation, route }) {
               <Text style={s.primaryText}>Add your score</Text>
             </TouchableOpacity>
           )}
+          <DeadlineLine card={mine.card} now={now} />
           {finishValidating}
         </>
       );
     } else {
-      badge = mine.kind === 'confirmed' ? 'Confirmed' : 'Submitted';
+      badge = needsApproval(mine.card) ? 'Awaiting approval' : mine.kind === 'confirmed' ? 'Confirmed' : 'Submitted';
       const proofText = mine.card.proofPath
         ? (mine.card.confirmation === 'official' ? 'official result attached' : 'photo attached')
         : null;

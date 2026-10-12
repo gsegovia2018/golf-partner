@@ -6,13 +6,16 @@ import IconButton from '../components/ui/IconButton';
 import { makeOffAppStyles } from '../components/league/offAppStyles';
 import DifferentialBreakdown from '../components/league/DifferentialBreakdown';
 import CardHoleGrid from '../components/league/CardHoleGrid';
+import DeadlineLine from '../components/league/DeadlineLine';
+import LeagueCardActions from '../components/league/LeagueCardActions';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { getLeagueProofUrl } from '../store/leagueStore';
-import { dayLabel } from '../store/leagueOffApp';
+import { dayLabel, timeLabel } from '../store/leagueOffApp';
+import { isMissed, needsApproval } from '../store/leagueRules';
 import {
-  monthName, formatNetDiff, netDiffTone, memberName, viewableCards, cardBreakdown,
+  monthName, formatNetDiff, netDiffTone, memberName, monthRows, cardBreakdown,
 } from '../store/leagueView';
 
 // A member's card, read-only, with ‹ › to flick through that month's cards
@@ -24,11 +27,11 @@ export default function LeagueCardScreen({ navigation, route }) {
   const l = useMemo(() => makeStyles(theme), [theme]);
   const meId = user?.id ?? null;
   const { leagueId, month, userId } = route?.params ?? {};
-  const { data, loading, error } = useLeague(navigation, leagueId);
+  const { data, loading, error, reload } = useLeague(navigation, leagueId);
   const [shownUser, setShownUser] = useState(userId);
 
   const cards = useMemo(
-    () => (data ? viewableCards(data.members, data.cardsByMonth, month) : []),
+    () => (data ? monthRows(data.members, data.cardsByMonth, month).map((r) => r.card).filter(Boolean) : []),
     [data, month],
   );
   const idx = cards.findIndex((c) => c.userId === shownUser);
@@ -61,7 +64,12 @@ export default function LeagueCardScreen({ navigation, route }) {
   }
 
   const offApp = card.source === 'offapp';
-  const badge = card.status === 'confirmed' ? 'Confirmed' : offApp ? 'Added after the round' : 'Submitted';
+  const scored = !!card.holes && (card.status === 'confirmed' || card.status === 'submitted');
+  const missed = isMissed(card);
+  const awaiting = needsApproval(card);
+  const isOwner = card.userId === meId;
+  const isAdmin = !!data.members.find((m) => m.userId === meId && !m.leftAt && m.role === 'admin');
+  const badge = missed ? 'Not posted' : awaiting ? 'Awaiting approval' : card.status === 'playing' ? 'Playing' : card.status === 'announced' ? 'Announced' : card.status === 'confirmed' ? 'Confirmed' : offApp ? 'Added after the round' : 'Submitted';
   const course = card.course;
   const played = card.playedOn ? dayLabel(card.playedOn) : null;
   const breakdown = cardBreakdown(card);
@@ -101,25 +109,52 @@ export default function LeagueCardScreen({ navigation, route }) {
         />
       </View>
       <ScrollView contentContainerStyle={s.content}>
-        <View style={s.card}>
-          <View style={l.headRow}>
-            <View style={l.valueRow}>
-              <Text style={[l.value, { color: valueColor }]}>{valueText}</Text>
-              <Text style={l.valueKey}>{valueKey}</Text>
+        {scored ? (
+          <View style={s.card}>
+            <View style={l.headRow}>
+              <View style={l.valueRow}>
+                <Text style={[l.value, { color: valueColor }]}>{valueText}</Text>
+                <Text style={l.valueKey}>{valueKey}</Text>
+              </View>
+              <View style={l.badge}><Text style={l.badgeText}>{badge}</Text></View>
             </View>
-            <View style={l.badge}><Text style={l.badgeText}>{badge}</Text></View>
+            {!!subline && <Text style={s.text}>{subline}</Text>}
+            <Text style={s.text}>
+              {[card.playingHandicap != null ? `Playing handicap ${card.playingHandicap}` : null,
+                card.gross != null ? `Gross ${card.gross}` : null,
+                card.points != null ? `${card.points} pts` : null].filter(Boolean).join(' · ')}
+            </Text>
+            {!!card.confirmedByName && <Text style={s.text}>{`Confirmed by ${card.confirmedByName}`}</Text>}
+            {card.notAnnounced && <Text style={s.text}>Not announced in the app</Text>}
+            {awaiting && <Text style={s.text}>Awaiting an admin's approval · not counted yet</Text>}
           </View>
-          {!!subline && <Text style={s.text}>{subline}</Text>}
-          <Text style={s.text}>
-            {[card.playingHandicap != null ? `Playing handicap ${card.playingHandicap}` : null,
-              card.gross != null ? `Gross ${card.gross}` : null,
-              card.points != null ? `${card.points} pts` : null].filter(Boolean).join(' · ')}
-          </Text>
-          {!!card.confirmedByName && <Text style={s.text}>{`Confirmed by ${card.confirmedByName}`}</Text>}
-          {card.notAnnounced && <Text style={s.text}>Not announced in the app</Text>}
-        </View>
+        ) : (
+          <View style={s.card}>
+            <View style={l.headRow}>
+              <Text style={s.cardTitle}>{missed ? 'Not posted' : card.status === 'playing' ? 'Playing now' : 'Announced'}</Text>
+              <View style={l.badge}><Text style={l.badgeText}>{badge}</Text></View>
+            </View>
+            {!!subline && <Text style={s.text}>{subline}</Text>}
+            {!!card.teeTime && (
+              <Text style={s.text}>{`Tee time ${[dayLabel(card.teeTime), timeLabel(card.teeTime)].filter(Boolean).join(' ')}`}</Text>
+            )}
+            {!!card.announcedAt && <Text style={s.text}>{`Announced ${timeLabel(card.announcedAt)}`}</Text>}
+            {missed
+              ? <Text style={s.text}>{`Not posted — this month's card is used.`}</Text>
+              : <DeadlineLine card={card} />}
+          </View>
+        )}
 
-        {!!course?.holes && (
+        <LeagueCardActions
+          card={card}
+          who={who}
+          monthLabel={monthLabel}
+          isOwner={isOwner}
+          isAdmin={isAdmin}
+          onDone={reload}
+        />
+
+        {scored && !!course?.holes && (
           <>
             <DifferentialBreakdown breakdown={breakdown} />
             <CardHoleGrid perHole={breakdown.perHole} />

@@ -148,6 +148,23 @@ describe('monthResults', () => {
   });
 });
 
+describe('monthResults and approval', () => {
+  test('an unapproved not-announced card scores nothing; approved it counts', () => {
+    const pending = { ...card('a', -3), notAnnounced: true };
+    const approved = { ...pending, approvedAt: '2026-10-11T00:00:00Z' };
+    const rows = monthResults([pending, card('b', 1)], ['a', 'b']);
+    expect(byUser(rows).a).toMatchObject({ place: null, seasonPoints: 0 });
+    expect(byUser(rows).b.place).toBe(1);
+    const after = byUser(monthResults([approved, card('b', 1)], ['a', 'b']));
+    expect(after.a).toMatchObject({ place: 1, seasonPoints: 500 });
+  });
+
+  test('an unapproved unrated card is not listed as unrated either', () => {
+    const rows = monthResults([{ ...card('a', null), notAnnounced: true }], ['a']);
+    expect(byUser(rows).a.unrated).toBeUndefined();
+  });
+});
+
 describe('seasonTable', () => {
   const members = ['nacho', 'javi', 'you', 'dani', 'pablo', 'alvaro', 'ruben'];
 
