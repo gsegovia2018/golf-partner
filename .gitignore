@@ -54,3 +54,6 @@ yarn-error.*
 
 # bulk OSM geometry import (cache + per-course output); manifest/report are committed
 /scripts/data/osm-geometry/
+# local Expo module build output, EAS credentials
+modules/*/android/build/
+/credentials.json

@@ -1295,3 +1295,110 @@ describe('matchPlayEffectiveHandicaps', () => {
   });
 });
 
+
+describe('shot-detail edit helpers (ShotDetailPanel handlers, shared with the watch)', () => {
+  const {
+    driveDirectionPatch, teeClubPatch, approachBucketPatch, approachFinishPatch,
+    recoveryOutcomePatch, normalizeWatchShotPatch,
+  } = require('../scoring');
+
+  test('drive direction toggles and resets the lie', () => {
+    expect(driveDirectionPatch(null, 'left')).toEqual({ drive: 'left', driveLie: null });
+    expect(driveDirectionPatch('left', 'left')).toEqual({ drive: null, driveLie: null });
+    expect(driveDirectionPatch('left', 'right')).toEqual({ drive: 'right', driveLie: null });
+  });
+
+  test('driver is stored as null', () => {
+    expect(teeClubPatch('driver')).toEqual({ teeClub: null });
+    expect(teeClubPatch('iron')).toEqual({ teeClub: 'iron' });
+  });
+
+  test('clearing the approach distance clears the finish and lie', () => {
+    expect(approachBucketPatch(null)).toEqual({
+      approachBucket: null, approachResult: null, approachMiss: null, approachBunker: false, approachLie: null,
+    });
+    expect(approachBucketPatch('50-100')).toEqual({ approachBucket: '50-100' });
+  });
+
+  test('approach finish grid rules', () => {
+    expect(approachFinishPatch({}, 'green')).toEqual({ approachResult: 'green', approachMiss: null, approachBunker: false });
+    expect(approachFinishPatch({ approachResult: 'green' }, 'green'))
+      .toEqual({ approachResult: null, approachMiss: null, approachBunker: false });
+    expect(approachFinishPatch({ approachResult: 'green' }, 'left')).toEqual({ approachMiss: 'left', approachResult: 'miss' });
+    expect(approachFinishPatch({ approachMiss: 'left', approachResult: 'miss' }, 'left'))
+      .toEqual({ approachMiss: null, approachResult: null });
+    expect(approachFinishPatch({ approachMiss: 'left', approachResult: 'miss' }, 'bunker'))
+      .toEqual({ approachBunker: true, approachResult: 'miss' });
+  });
+
+  test('recovery chip toggles off the effective outcome', () => {
+    expect(recoveryOutcomePatch('up-and-down', 'up-and-down')).toEqual({ recoveryOutcome: 'none' });
+    expect(recoveryOutcomePatch(null, 'sand-save')).toEqual({ recoveryOutcome: 'sand-save' });
+  });
+
+  describe('normalizeWatchShotPatch parity', () => {
+    // What the panel stores after the same taps: the patch each handler emits, merged.
+    const panel = (detail, ...patches) => Object.assign({}, detail, ...patches);
+
+    test('drive direction = the panel tap (and resets driveLie)', () => {
+      const d = { drive: 'fairway', driveLie: 'rough' };
+      expect(panel(d, driveDirectionPatch(null, 'left'))).toEqual(panel(d, normalizeWatchShotPatch(d, { drive: 'left' }, 4)));
+      expect(normalizeWatchShotPatch(d, { drive: null }, 4)).toEqual({ drive: null, driveLie: null });
+    });
+
+    test('the same direction again keeps the lie picked on the phone', () => {
+      const d = { drive: 'left', driveLie: 'trouble' };
+      expect(normalizeWatchShotPatch(d, { drive: 'left', putts: 2 }, 4)).toEqual({ putts: 2 });
+      expect(normalizeWatchShotPatch({ driveLie: 'rough' }, { drive: null }, 4)).toEqual({});
+    });
+
+    test('lie alone clears the direction (legacy); with a direction it keeps it', () => {
+      expect(normalizeWatchShotPatch({ drive: 'left' }, { driveLie: 'trouble' }, 4)).toEqual({ driveLie: 'trouble', drive: null });
+      expect(normalizeWatchShotPatch({}, { drive: 'left', driveLie: 'fairway' }, 4))
+        .toEqual({ drive: 'left', driveLie: 'fairway' });
+    });
+
+    test('tee club driver is null, tee keys are ignored on a par 3', () => {
+      expect(normalizeWatchShotPatch({}, { teeClub: null }, 4)).toEqual({ teeClub: null });
+      expect(normalizeWatchShotPatch({}, {
+        teeClub: 'iron', drive: 'left', driveLie: 'rough', driveDistBucket: '0-150', teePenalties: 1,
+      }, 3)).toEqual({ teePenalties: 1 });
+    });
+
+    test('approach: green, miss directions, bunker and clears', () => {
+      const withBucket = { approachBucket: '100-150' };
+      expect(normalizeWatchShotPatch(withBucket, { approachResult: 'green' }, 4))
+        .toEqual({ approachResult: 'green', approachMiss: null, approachBunker: false });
+      expect(normalizeWatchShotPatch(withBucket, { approachResult: 'miss', approachMiss: 'left' }, 4))
+        .toEqual({ approachMiss: 'left', approachBunker: false, approachResult: 'miss' });
+      // a miss direction over an on-green finish replaces it (panel: direction clears green)
+      const green = {
+        approachBucket: '100-150', approachResult: 'green', approachMiss: null, approachBunker: false,
+      };
+      expect(panel(green, approachFinishPatch(green, 'right')))
+        .toEqual(panel(green, normalizeWatchShotPatch(green, { approachMiss: 'right' }, 4)));
+      expect(normalizeWatchShotPatch(green, { approachBunker: true }, 4))
+        .toEqual({ approachMiss: null, approachBunker: true, approachResult: 'miss' });
+      expect(normalizeWatchShotPatch(green, { approachResult: null }, 4))
+        .toEqual({ approachResult: null, approachMiss: null, approachBunker: false });
+      const miss = { approachBucket: '100-150', approachMiss: 'long', approachResult: 'miss' };
+      expect(normalizeWatchShotPatch(miss, { approachBunker: true }, 4))
+        .toEqual({ approachMiss: 'long', approachBunker: true, approachResult: 'miss' });
+      expect(normalizeWatchShotPatch(miss, { approachMiss: null }, 4))
+        .toEqual({ approachMiss: null, approachBunker: false, approachResult: null });
+    });
+
+    test('approach distance cleared wipes the finish; finish without a distance is ignored; par 3 has no finish row', () => {
+      expect(normalizeWatchShotPatch({ approachBucket: '50-100' }, { approachBucket: null, approachResult: 'green' }, 4))
+        .toEqual(approachBucketPatch(null));
+      expect(normalizeWatchShotPatch({}, { approachResult: 'green' }, 4)).toEqual({});
+      expect(normalizeWatchShotPatch({ approachBucket: '50-100' }, { approachResult: 'green', approachBucket: '0-50' }, 3))
+        .toEqual({ approachBucket: '0-50' });
+    });
+
+    test('plain fields pass through', () => {
+      expect(normalizeWatchShotPatch({}, { putts: 2, sandShots: 1, otherPenalties: 1, recoveryOutcome: 'none', firstPuttBucket: '2-3' }, 5))
+        .toEqual({ putts: 2, sandShots: 1, otherPenalties: 1, recoveryOutcome: 'none', firstPuttBucket: '2-3' });
+    });
+  });
+});

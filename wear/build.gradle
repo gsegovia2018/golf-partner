@@ -1,0 +1,144 @@
+// Wear OS companion (watch app). Lives at the repo root as `wear/`; the
+// config plugin `plugins/withWearApp.js` copies it to `android/wear` at
+// prebuild and adds `include ':wear'` to settings.gradle. It only builds
+// from there — it borrows the root project's AGP/Kotlin classpath, SDK
+// levels (`rootProject.ext`, set by expo-root-project) and keystores.
+//
+//   cd android && ./gradlew :wear:assembleDebug :wear:testDebugUnitTest
+//   EAS: `eas build -p android --profile wear-preview`
+//
+// The phone build never compiles this module (EAS runs :app:assembleRelease)
+// but Gradle still *configures* it, so keep this file free of anything that
+// can fail at configuration time.
+
+import groovy.json.JsonSlurper
+
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    // Kotlin 2.x moved the Compose compiler into a Kotlin Gradle plugin that
+    // must match the Kotlin version exactly — take it from the phone project.
+    classpath("org.jetbrains.kotlin:compose-compiler-gradle-plugin:${rootProject.ext.kotlinVersion}")
+  }
+}
+
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "org.jetbrains.kotlin.plugin.compose"
+
+// versionName follows app.json `expo.version`. versionCode must differ from
+// the phone's once both ship through Play (same package, separate APKs), so
+// the watch lives in its own range: 1_000_000_000 + major*10000 + minor*100
+// + patch (1.0.0 -> 1000010000). Irrelevant for adb installs.
+def appJson = new File(rootProject.projectDir, "../app.json")
+def appVersion = appJson.exists() ? new JsonSlurper().parse(appJson).expo.version : "1.0.0"
+def (vMajor, vMinor, vPatch) = (appVersion.tokenize(".") + ["0", "0", "0"]).take(3).collect { it.toInteger() }
+
+// Release signing. EAS Build restores the project's Android keystore and
+// describes it in <repo>/credentials.json (the documented local-credentials
+// format: android.keystore.{keystorePath,keystorePassword,keyAlias,keyPassword}).
+// :app gets it through the eas-build.gradle EAS injects into app/. Applying
+// that script here was tried and fails on this module (it sets signing from
+// tasks.whenTaskAdded, too late for AGP: "too late to set storeFilePath"),
+// so read the same file directly. Phone and watch MUST share the key or the Data Layer won't
+// connect them. Without the file (local builds), release is debug-signed
+// with the phone's debug keystore, exactly like the phone's local release.
+def credentialsFile = new File(rootProject.projectDir, "../credentials.json")
+def keystore = credentialsFile.exists() ? new JsonSlurper().parse(credentialsFile).android?.keystore : null
+
+android {
+  namespace "com.golfpartner.wear"
+  compileSdk rootProject.ext.compileSdkVersion
+
+  defaultConfig {
+    // MUST equal the phone's package: the Wearable Data Layer only connects
+    // apps with the same applicationId AND the same signing key.
+    applicationId "com.golfpartner.app"
+    minSdkVersion 30 // Wear OS 3
+    targetSdkVersion rootProject.ext.targetSdkVersion
+    versionCode 1_000_000_000 + vMajor * 10000 + vMinor * 100 + vPatch
+    versionName appVersion
+  }
+
+  signingConfigs {
+    // Same keystore the phone's debug/release builds use locally
+    // (android/app/debug.keystore), so a local phone build and a local
+    // watch build pair over the Data Layer. AGP's default would be
+    // ~/.android/debug.keystore — a different key, and no pairing.
+    debug {
+      storeFile file("../app/debug.keystore")
+      storePassword "android"
+      keyAlias "androiddebugkey"
+      keyPassword "android"
+    }
+    if (keystore) {
+      release {
+        def path = new File(keystore.keystorePath)
+        storeFile path.isAbsolute() ? path : new File(credentialsFile.parentFile, keystore.keystorePath)
+        storePassword keystore.keystorePassword
+        keyAlias keystore.keyAlias
+        keyPassword keystore.keyPassword ?: keystore.keystorePassword
+      }
+    }
+  }
+
+  buildTypes {
+    debug {
+      signingConfig signingConfigs.debug
+    }
+    release {
+      signingConfig keystore ? signingConfigs.release : signingConfigs.debug
+      minifyEnabled false
+      proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  buildFeatures {
+    compose true
+  }
+}
+
+// On EAS a debug-signed watch APK would install fine and then silently never
+// pair with the phone — fail the watch release build instead. Checked at
+// execution time so configuring :wear never breaks a phone build.
+tasks.configureEach { task ->
+  if (task.name == "preReleaseBuild") {
+    task.doFirst {
+      if (System.getenv("EAS_BUILD") == "true" && keystore == null) {
+        throw new GradleException("wear: no keystore in ${credentialsFile} on EAS — the watch APK must be signed with the phone's key")
+      }
+    }
+  }
+}
+
+dependencies {
+  implementation platform("androidx.compose:compose-bom:2025.08.00")
+  implementation "androidx.compose.ui:ui"
+  implementation "androidx.compose.foundation:foundation"
+  implementation "androidx.compose.ui:ui-tooling-preview"
+  implementation "androidx.wear:wear-tooling-preview:1.0.0"
+  implementation "androidx.activity:activity-compose:1.10.1"
+  implementation "androidx.wear.compose:compose-material3:1.5.6"
+  implementation "androidx.wear.compose:compose-foundation:1.5.6"
+
+  // Data Layer (state from the phone, commands back) and fused location
+  // (distances computed on the watch) — used from W4 on.
+  implementation "com.google.android.gms:play-services-wearable:19.0.0"
+  implementation "com.google.android.gms:play-services-location:21.3.0"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2"
+
+  debugImplementation "androidx.compose.ui:ui-tooling"
+
+  testImplementation "junit:junit:4.13.2"
+  // org.json ships in android.jar as stubs that throw in JVM unit tests;
+  // the real implementation lets protocol parsing be tested off-device.
+  testImplementation "org.json:json:20250517"
+}

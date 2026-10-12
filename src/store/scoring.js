@@ -1228,6 +1228,109 @@ export function reconcileShotDetail(detail, strokes) {
   return out;
 }
 
+// ── Shot-detail edits ───────────────────────────────────────────────────────
+// How one tap in the ShotDetailPanel combines fields. Pure, shared by the
+// panel and by the watch write path (which sends absolute values).
+
+// Tee-direction chip: a tap on the active one clears it; either way the
+// explicit driveLie resets so the lie derives from the direction again.
+export function driveDirectionPatch(current, key) {
+  return { drive: current === key ? null : key, driveLie: null };
+}
+
+// Driver is the unstored default.
+export const teeClubPatch = (key) => ({ teeClub: key === 'driver' ? null : key });
+
+// Clearing the approach distance clears everything about the finish.
+export function approachBucketPatch(key) {
+  return {
+    approachBucket: key,
+    ...(key == null ? {
+      approachResult: null, approachMiss: null, approachBunker: false, approachLie: null,
+    } : {}),
+  };
+}
+
+// A miss is anything with a direction or a bunker; otherwise the cell clears.
+const approachMissResult = (dir, bunker) => (dir || bunker ? 'miss' : null);
+
+// Approach-finish grid tap: `green` is exclusive (clears direction + bunker);
+// the four directions are single-select and clear an on-green selection;
+// `bunker` toggles on top of a direction or stands alone.
+export function approachFinishPatch(detail, key) {
+  const dir = detail?.approachMiss ?? null;
+  const bunker = !!detail?.approachBunker;
+  const onGreen = detail?.approachResult === 'green';
+  if (key === 'green') {
+    return onGreen
+      ? { approachResult: null, approachMiss: null, approachBunker: false }
+      : { approachResult: 'green', approachMiss: null, approachBunker: false };
+  }
+  if (key === 'bunker') {
+    const nextBunker = !bunker;
+    return { approachBunker: nextBunker, approachResult: approachMissResult(dir, nextBunker) };
+  }
+  const nextDir = dir === key && !onGreen ? null : key;
+  return { approachMiss: nextDir, approachResult: approachMissResult(nextDir, bunker) };
+}
+
+// Up & Down / Sand Save chip: tapping the effective outcome turns it off.
+export function recoveryOutcomePatch(effectiveOutcome, key) {
+  return { recoveryOutcome: effectiveOutcome === key ? 'none' : key };
+}
+
+// Turns a watch `shot` patch (absolute values) into the field changes the
+// panel's own handlers would have made, so the stored detail is the same.
+// Par 3s have no tee shot and no approach-finish rows (the panel hides them),
+// so those keys are ignored there. Returns a full patch to spread onto the
+// detail; the caller reconciles against strokes.
+export function normalizeWatchShotPatch(detail, patch, par) {
+  const d = detail ?? {};
+  const isPar3 = par === 3;
+  const out = {};
+  const has = (k) => Object.prototype.hasOwnProperty.call(patch, k);
+  for (const k of ['putts', 'teePenalties', 'otherPenalties', 'sandShots',
+    'recoveryOutcome', 'firstPuttBucket']) {
+    if (has(k)) out[k] = patch[k];
+  }
+  if (!isPar3) {
+    if (has('teeClub')) Object.assign(out, teeClubPatch(patch.teeClub));
+    if (has('driveDistBucket')) out.driveDistBucket = patch.driveDistBucket;
+    // Only a changed direction resets the lie: the watch re-sends the drive it
+    // was seeded with, which must not erase a lie picked on the phone.
+    if (has('drive') && patch.drive !== (d.drive ?? null)) {
+      Object.assign(out, driveDirectionPatch(null, patch.drive));
+    }
+    // A lie alone is explicit and clears the direction chip (legacy v1 watch);
+    // sent with a direction it just refines that direction's lie.
+    if (has('driveLie')) {
+      out.driveLie = patch.driveLie;
+      if (!has('drive')) out.drive = null;
+    }
+  }
+  if (has('approachBucket')) Object.assign(out, approachBucketPatch(patch.approachBucket));
+  const finishKeys = ['approachResult', 'approachMiss', 'approachBunker'];
+  if (!isPar3 && finishKeys.some(has)) {
+    const bucket = has('approachBucket') ? patch.approachBucket : d.approachBucket;
+    if (bucket) {
+      if (patch.approachResult === 'green') {
+        Object.assign(out, approachFinishPatch({}, 'green'));
+      } else if (has('approachResult') && patch.approachResult === null
+        && !has('approachMiss') && !has('approachBunker')) {
+        Object.assign(out, { approachResult: null, approachMiss: null, approachBunker: false });
+      } else {
+        const wasGreen = d.approachResult === 'green';
+        const dir = has('approachMiss') ? patch.approachMiss : (wasGreen ? null : d.approachMiss ?? null);
+        const bunker = has('approachBunker') ? !!patch.approachBunker : (wasGreen ? false : !!d.approachBunker);
+        Object.assign(out, {
+          approachMiss: dir, approachBunker: bunker, approachResult: approachMissResult(dir, bunker),
+        });
+      }
+    }
+  }
+  return out;
+}
+
 // ── Match Play tournament ────────────────────────────────────────────────────
 
 // Match Play tournament standing. Across played rounds, sums each of the two
