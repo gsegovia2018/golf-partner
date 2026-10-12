@@ -1,6 +1,6 @@
 {
   "platforms": ["android"],
   "android": {
-    "modules": ["expo.modules.golfswing.GolfSwingModule"]
+    "modules": ["expo.modules.golfswing.GolfSwingModule", "expo.modules.golfswing.camera.GolfSwingCameraModule"]
   }
 }

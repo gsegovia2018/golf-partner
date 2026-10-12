@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * refuses to call a binary whose apiVersion is older than the one it was written for, so an
  * OTA bundle never calls a method the installed APK lacks.
  */
-const val API_VERSION = 2
+const val API_VERSION = 2 // 2: N2 pass 2 and GolfSwingCamera (capture, N3), one APK
 
 private const val MIN_HEIGHT_CM = 120.0
 private const val MAX_HEIGHT_CM = 230.0

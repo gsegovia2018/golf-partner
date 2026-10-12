@@ -4,22 +4,38 @@
 // OTA safety (plan S10, R8): a JS bundle can be newer than the installed APK. Before
 // offering capture or analysis, call swingSupport(): it refuses a binary whose
 // apiVersion is older than REQUIRED_API_VERSION, and the UI shows "Update the app"
-// instead of calling a method the binary lacks. Bump REQUIRED_API_VERSION together with
-// API_VERSION in GolfSwingModule.kt whenever the contract changes.
+// instead of calling a method the binary lacks. API_VERSION in GolfSwingModule.kt is bumped on
+// every contract change; raise REQUIRED_API_VERSION (analysis) or CAPTURE_API_VERSION
+// (recording, captureSupport()) to the version whose methods this bundle calls.
 import { Platform } from 'react-native';
-import { requireOptionalNativeModule } from 'expo';
+import { requireOptionalNativeModule, requireNativeView } from 'expo';
 
 export const REQUIRED_API_VERSION = 2;
 
+// Capture (N3) arrived in apiVersion 2 as a second native module, GolfSwingCamera. It is gated
+// on its own so an APK with only the pose module keeps importing and analysing.
+export const CAPTURE_API_VERSION = 2;
+
 export const UPDATE_APP_MESSAGE = 'Update the app to analyse your swing.';
 
+export const UPDATE_CAPTURE_MESSAGE = 'Update the app to record here. You can still import a slow-motion video.';
+
 let cached;
+let cachedCamera;
+let cachedCameraView;
 
 function nativeModule() {
   if (cached === undefined) {
     cached = Platform.OS === 'android' ? requireOptionalNativeModule('GolfSwing') : null;
   }
   return cached;
+}
+
+function cameraModule() {
+  if (cachedCamera === undefined) {
+    cachedCamera = Platform.OS === 'android' ? requireOptionalNativeModule('GolfSwingCamera') : null;
+  }
+  return cachedCamera;
 }
 
 /** The installed binary's contract version, or null without the module (read by availability.js). */
@@ -53,6 +69,52 @@ function requireSupported() {
     throw err;
   }
   return nativeModule();
+}
+
+/**
+ * Can this binary record (plan S2, S10)? Same shape as swingSupport(); 'update_app' when the
+ * binary analyses but predates capture (apiVersion < CAPTURE_API_VERSION or no camera module).
+ */
+export function captureSupport() {
+  const s = swingSupport();
+  if (!s.supported) return s;
+  if (s.apiVersion < CAPTURE_API_VERSION || !cameraModule()) {
+    return { supported: false, reason: 'update_app', apiVersion: s.apiVersion, message: UPDATE_CAPTURE_MESSAGE };
+  }
+  return s;
+}
+
+function requireCapture() {
+  const s = captureSupport();
+  if (!s.supported) {
+    const err = new Error(s.message ?? 'Recording is not available on this device.');
+    err.code = s.reason === 'update_app' ? 'ERR_UPDATE_APP' : 'ERR_UNSUPPORTED';
+    throw err;
+  }
+  return cameraModule();
+}
+
+/**
+ * Back-camera recording modes, best first: 240 fps, then 120 (constrained high-speed
+ * sessions), then the ordinary session's rate. Empty = no usable back camera.
+ * @returns {Promise<Array<{ cameraId: string, width: number, height: number, fps: number, highSpeed: boolean }>>}
+ */
+export async function listRecordingModes() {
+  return requireCapture().listRecordingModes();
+}
+
+/**
+ * The native preview component, or null when captureSupport() says no. Props: `mode` (one
+ * entry of listRecordingModes()), `onCameraReady({ nativeEvent: mode })`,
+ * `onCameraError({ nativeEvent: { code, message } })`, `onRecordingInterrupted`. Ref methods:
+ * `startRecording({ outPath })` and `stopRecording()` →
+ * `{ path: 'file://…', fps, width, height, highSpeed, durationMs }`. The camera is open only
+ * while the view is mounted and the app is in the foreground.
+ */
+export function getCameraView() {
+  if (!captureSupport().supported) return null;
+  if (cachedCameraView === undefined) cachedCameraView = requireNativeView('GolfSwingCamera');
+  return cachedCameraView;
 }
 
 /**
