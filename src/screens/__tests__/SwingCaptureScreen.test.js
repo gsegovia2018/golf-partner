@@ -14,6 +14,11 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
+jest.mock('expo-screen-orientation', () => ({
+  lockAsync: jest.fn(() => Promise.resolve()),
+  OrientationLock: { PORTRAIT_UP: 'PORTRAIT_UP' },
+}));
+
 const mockDeleted = [];
 jest.mock('expo-file-system', () => {
   class File {
@@ -37,11 +42,13 @@ jest.mock('../../store/swingStore', () => ({
 jest.mock('../../swing/importVideo', () => ({ pickSwingVideo: jest.fn() }));
 
 // The native preview: becomes ready on mount and records on demand.
-const mockCamera = { start: jest.fn(), stop: jest.fn(), mounts: 0 };
+const mockCamera = { start: jest.fn(), stop: jest.fn(), mounts: 0, props: null };
 jest.mock('../../swing/native', () => {
   const React = require('react');
   const { View } = require('react-native');
-  const CameraView = React.forwardRef(function MockCameraView({ onCameraReady, mode }, ref) {
+  const CameraView = React.forwardRef(function MockCameraView(props, ref) {
+    const { onCameraReady, mode } = props;
+    mockCamera.props = props;
     React.useImperativeHandle(ref, () => ({
       startRecording: (o) => mockCamera.start(o),
       stopRecording: () => mockCamera.stop(),
@@ -88,8 +95,9 @@ beforeEach(() => {
   native.captureSupport.mockReturnValue({ supported: true, reason: null, apiVersion: 2, message: null });
 });
 
-test('shows the 240 fps pill, the privacy line and the set-up guide', async () => {
+test('shows the 240 fps pill, the privacy line and the set-up guide, locked to portrait', async () => {
   const utils = setup();
+  expect(require('expo-screen-orientation').lockAsync).toHaveBeenCalledWith('PORTRAIT_UP');
   await waitFor(() => expect(utils.getByTestId('native-camera')).toBeTruthy());
   expect(utils.getByText('240 fps')).toBeTruthy();
   expect(utils.getByText(SWING_STRINGS.privacy)).toBeTruthy();
@@ -191,3 +199,51 @@ test('a denied permission shows the settings card', async () => {
   expect(utils.getByText(T.openSettings)).toBeTruthy();
   expect(native.listRecordingModes).not.toHaveBeenCalled();
 });
+
+test('leaving while the take is still being finalised deletes it', async () => {
+  let finish;
+  mockCamera.stop.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  const utils = setup();
+  await waitFor(() => expect(utils.getByTestId('native-camera')).toBeTruthy(), WAIT);
+  await act(async () => { fireEvent.press(utils.getByTestId('capture-record')); });
+  await waitFor(() => expect(mockCamera.start).toHaveBeenCalled(), WAIT);
+  await act(async () => { fireEvent.press(utils.getByTestId('capture-record')); });
+  utils.unmount();
+  await act(async () => { finish(TAKE); });
+  expect(mockDeleted).toContain(TAKE.path);
+});
+
+test('a camera error during a pending start keeps the Retry action', async () => {
+  let fail;
+  mockCamera.start.mockReturnValue(new Promise((_, reject) => { fail = reject; }));
+  const utils = setup();
+  await waitFor(() => expect(utils.getByTestId('native-camera')).toBeTruthy(), WAIT);
+  await act(async () => { fireEvent.press(utils.getByTestId('capture-record')); });
+  await act(async () => { mockCamera.props.onCameraError({ nativeEvent: { code: 'ERR_CAMERA' } }); });
+  await act(async () => { fail(Object.assign(new Error('gone'), { code: 'ERR_NOT_READY' })); });
+  expect(utils.getByText(T.errors.camera)).toBeTruthy();
+  expect(utils.getByText(T.retry)).toBeTruthy();
+  fireEvent.press(utils.getByText(T.retry));
+  await waitFor(() => expect(mockCamera.mounts).toBe(2), WAIT);
+});
+
+test('going to the background disables Record until the camera is ready again', async () => {
+  const { AppState } = require('react-native');
+  const listeners = [];
+  const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation((type, cb) => {
+    listeners.push(cb);
+    return { remove: jest.fn() };
+  });
+  try {
+    const utils = setup();
+    await waitFor(() => expect(utils.getByTestId('native-camera')).toBeTruthy(), WAIT);
+    expect(utils.getByTestId('capture-record').props.accessibilityState.disabled).toBe(false);
+    await act(async () => { listeners.forEach((cb) => cb('background')); });
+    expect(utils.getByTestId('capture-record').props.accessibilityState.disabled).toBe(true);
+    await act(async () => { mockCamera.props.onCameraReady({ nativeEvent: HS240 }); });
+    expect(utils.getByTestId('capture-record').props.accessibilityState.disabled).toBe(false);
+  } finally {
+    spy.mockRestore();
+  }
+});
+

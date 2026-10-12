@@ -55,6 +55,7 @@ internal class CameraSession(private val context: Context, private val events: E
   private var gen = 0
   private var released = false
   private var mode: RecordingMode? = null
+  private var sensorOrientation = 90
   private var orientationHint = 90
   private var device: CameraDevice? = null
   private var session: CameraCaptureSession? = null
@@ -62,7 +63,7 @@ internal class CameraSession(private val context: Context, private val events: E
   private var inputSurface: Surface? = null
   private var take: Take? = null
 
-  /** Opens [mode] on [texture]; closes whatever was open first. [displayRotationDeg] sets the file's orientation hint. */
+  /** Opens [mode] on [texture]; closes whatever was open first. */
   fun open(texture: SurfaceTexture, mode: RecordingMode, displayRotationDeg: Int) {
     handler.post {
       closeInternal("reconfigured")
@@ -73,8 +74,8 @@ internal class CameraSession(private val context: Context, private val events: E
         return@post
       }
       this.mode = mode
-      // Back camera: rotate the sensor image by its orientation, minus the display's rotation.
-      orientationHint = (CameraModes.sensorOrientation(context, mode.cameraId) - displayRotationDeg + 360) % 360
+      sensorOrientation = CameraModes.sensorOrientation(context, mode.cameraId)
+      orientationHint = hintFor(displayRotationDeg)
       texture.setDefaultBufferSize(mode.width, mode.height)
       previewSurface = Surface(texture)
       try {
@@ -193,8 +194,13 @@ internal class CameraSession(private val context: Context, private val events: E
     return (m.width.toDouble() * m.height * m.fps * bpp).toInt().coerceIn(4_000_000, 60_000_000)
   }
 
-  fun startRecording(path: String, promise: Promise) {
+  /** Back camera: rotate the sensor image by its orientation, minus the display's rotation. */
+  private fun hintFor(displayRotationDeg: Int) = (sensorOrientation - displayRotationDeg + 360) % 360
+
+  /** [displayRotationDeg] is read per take, so the file is upright however the phone was turned. */
+  fun startRecording(path: String, displayRotationDeg: Int, promise: Promise) {
     handler.post {
+      orientationHint = hintFor(displayRotationDeg)
       val m = mode
       val input = inputSurface
       if (session == null || m == null || input == null) {

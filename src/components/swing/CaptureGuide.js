@@ -1,6 +1,6 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, G, Path, Rect, Text as SvgText } from 'react-native-svg';
+import { StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
 import { hud } from '../../theme/tokens';
 
 // Down-the-line set-up silhouette for the capture preview (plan S2, R5): our own drawing, a
@@ -28,12 +28,6 @@ export default function CaptureGuide({ rect, left = false, label }) {
     <View pointerEvents="none" style={[styles.wrap, { left: rect.x, top: rect.y, width: rect.width, height: rect.height }]}>
       <Svg width="100%" height="100%" viewBox="0 0 360 640" preserveAspectRatio="xMidYMid meet">
         <Rect x={70} y={70} width={240} height={400} rx={16} fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={1.5} />
-        {label ? (
-          <>
-            <SvgText x={190} y={58} textAnchor="middle" fontSize={12} fontWeight="700" stroke={SHADOW} strokeWidth={3}>{label}</SvgText>
-            <SvgText x={190} y={58} textAnchor="middle" fontSize={12} fontWeight="700" fill={hud.textSoft}>{label}</SvgText>
-          </>
-        ) : null}
         <G transform={left ? 'translate(380 0) scale(-1 1)' : undefined} fill="none" strokeLinecap="round" strokeLinejoin="round">
           {/* a soft dark underlay keeps the dashes visible on bright backgrounds */}
           {FIGURE.map((d) => <Path key={`u${d}`} d={d} stroke={SHADOW} strokeWidth={4.5} />)}
@@ -43,10 +37,20 @@ export default function CaptureGuide({ rect, left = false, label }) {
           <Circle cx={277} cy={440} r={6} stroke="rgba(255,255,255,0.85)" strokeWidth={2} />
         </G>
       </Svg>
+      {label ? (
+        <View style={[styles.labelRow, { top: rect.height * (40 / 640) }]}>
+          <Text style={styles.label}>{label}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { position: 'absolute' },
+  labelRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  label: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 11.5, color: hud.textSoft, backgroundColor: hud.scrim,
+    borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, overflow: 'hidden',
+  },
 });

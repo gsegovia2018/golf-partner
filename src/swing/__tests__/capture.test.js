@@ -101,4 +101,20 @@ describe('captureReducer', () => {
     expect(back).toMatchObject({ ready: true, error: 'interrupted' });
     expect(captureReducer(back, { type: 'start' }).error).toBeNull();
   });
+
+  test('a camera error is not overwritten by the start/stop rejection that follows it', () => {
+    const starting = run({ type: 'modes', modes: [m(240, true)] }, { type: 'ready' }, { type: 'start' });
+    const s = captureReducer(captureReducer(starting, { type: 'cameraError' }), { type: 'failed', error: 'failed' });
+    expect(s).toMatchObject({ phase: 'live', error: 'camera', ready: false });
+    // Retry remounts the camera and clears it.
+    expect(captureReducer(s, { type: 'retryCamera' })).toMatchObject({ error: null, cameraKey: s.cameraKey + 1 });
+  });
+
+  test('backgrounding resets ready until the camera reports ready again', () => {
+    const s = run({ type: 'modes', modes: [m(240, true)] }, { type: 'ready' }, { type: 'closed' });
+    expect(s.ready).toBe(false);
+    expect(captureReducer(s, { type: 'start' }).phase).toBe('live');
+    expect(captureReducer(s, { type: 'ready' }).ready).toBe(true);
+  });
 });
+

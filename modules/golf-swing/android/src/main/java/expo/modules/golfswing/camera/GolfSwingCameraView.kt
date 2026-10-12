@@ -65,7 +65,7 @@ class GolfSwingCameraView(context: Context, appContext: AppContext) :
 
   fun startRecording(outPath: String, promise: Promise) {
     val s = session
-    if (s == null) promise.reject("ERR_NOT_READY", "the camera is not ready", null) else s.startRecording(outPath, promise)
+    if (s == null) promise.reject("ERR_NOT_READY", "the camera is not ready", null) else s.startRecording(outPath, displayRotationDeg(), promise)
   }
 
   fun stopRecording(promise: Promise) {

@@ -98,8 +98,16 @@ export function captureReducer(state, action) {
     case 'stopped':
       return { ...state, phase: 'review', take: action.take, ready: false };
     case 'failed':
-      // A failed start/stop leaves no take behind; the camera stays as it was.
-      return { ...state, phase: state.phase === 'blocked' ? 'blocked' : 'live', error: action.error ?? 'failed' };
+      // A failed start/stop leaves no take behind. When the camera itself failed meanwhile, its
+      // error (with Retry) wins over the start/stop rejection that follows it.
+      return {
+        ...state,
+        phase: state.phase === 'blocked' ? 'blocked' : 'live',
+        error: state.error === 'camera' ? 'camera' : action.error ?? 'failed',
+      };
+    case 'closed':
+      // The app went to the background: native closed the camera; onCameraReady follows on return.
+      return { ...state, ready: false };
     case 'cameraError':
       // Remount the native view on retry (a fresh session).
       return { ...state, phase: state.phase === 'review' ? 'review' : 'live', ready: false, error: 'camera' };

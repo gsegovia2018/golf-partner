@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, Alert, Linking, StatusBar, AppState,
+  View, Text, StyleSheet, Pressable, Alert, Linking, StatusBar, AppState, useWindowDimensions,
 } from 'react-native';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -100,12 +101,15 @@ export default function SwingCaptureScreen({ navigation, route }) {
   const support = useMemo(() => captureSupport(), []);
   const CameraView = useMemo(() => (support.supported ? getCameraView() : null), [support]);
   const left = getSwingProfile()?.handedness === 'left';
+  const win = useWindowDimensions();
+  const portrait = win.height >= win.width;
 
   const camRef = useRef(null);
   const phaseRef = useRef(state.phase);
   phaseRef.current = state.phase;
   const takeUri = useRef(null);
   const asked = useRef(false);
+  const mounted = useRef(true);
   const [elapsed, setElapsed] = useState(0);
   const [guideOpen, setGuideOpen] = useState(false);
   const [box, setBox] = useState({ width: 0, height: 0 });
@@ -152,7 +156,22 @@ export default function SwingCaptureScreen({ navigation, route }) {
   }, [state.blocked, getPermission]);
 
   // The take is ours until Analyse copies it into the swing store: never leave it behind.
-  useEffect(() => () => deleteFile(takeUri.current), []);
+  useEffect(() => () => {
+    mounted.current = false;
+    deleteFile(takeUri.current);
+  }, []);
+
+  // Portrait capture: the guide, the preview box and the file orientation all assume it. The app
+  // is portrait-locked globally; lock again here in case a screen left it unlocked.
+  useEffect(() => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+  }, []);
+
+  // Native closes the camera in the background; not ready until onCameraReady says so again.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'background') dispatch({ type: 'closed' }); });
+    return () => sub.remove();
+  }, []);
 
   const stop = useCallback(() => {
     if (phaseRef.current !== 'recording' || !camRef.current) return;
@@ -161,6 +180,8 @@ export default function SwingCaptureScreen({ navigation, route }) {
     haptic('medium');
     camRef.current.stopRecording()
       .then((take) => {
+        // Left the screen while the file was being finalised: nobody will review it.
+        if (!mounted.current) { deleteFile(take.path); return; }
         takeUri.current = take.path;
         dispatch({ type: 'stopped', take });
       })
@@ -302,7 +323,7 @@ export default function SwingCaptureScreen({ navigation, route }) {
           />
         ) : null}
         {phase === 'review' || phase === 'saving' ? <ReviewPlayer take={take} /> : null}
-        {phase === 'live' && !showFallback ? (
+        {phase === 'live' && !showFallback && portrait ? (
           <CaptureGuide rect={rect} left={left} label={T.guideBox} />
         ) : null}
       </View>
