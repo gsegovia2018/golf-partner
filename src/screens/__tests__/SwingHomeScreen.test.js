@@ -27,6 +27,7 @@ jest.mock('../../store/swingStore', () => ({
   deleteSwing: jest.fn(),
   storageBytes: jest.fn(() => 184 * 1024 * 1024),
   setSwingProfile: jest.fn(() => Promise.resolve()),
+  setLastSwingClub: jest.fn(() => Promise.resolve()),
   defaultSwingName: jest.requireActual('../../store/swingStore').defaultSwingName,
 }));
 jest.mock('../../swing/availability', () => ({ getSwingAvailability: jest.fn() }));
@@ -115,7 +116,7 @@ describe('SwingHomeScreen', () => {
   test('Record opens the capture route', () => {
     const { getByLabelText, navigation } = setup();
     fireEvent.press(getByLabelText('Record'));
-    expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture');
+    expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture', { club: 'iron' });
   });
 
   test('Import picks a video, stores a swing and opens results', async () => {
@@ -125,6 +126,61 @@ describe('SwingHomeScreen', () => {
     fireEvent.press(getByLabelText('Import'));
     await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('SwingResults', { swingId: 'new1' }));
     expect(store.createSwing).toHaveBeenCalledWith(expect.objectContaining({ videoUri: 'file:///clip.mp4', source: 'import' }));
+  });
+
+  describe('club picker (D19)', () => {
+    test('shows Iron selected by default, with Driver one tap away', () => {
+      const { getByLabelText } = setup();
+      expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(true);
+      expect(getByLabelText('Driver').props.accessibilityState.selected).toBe(false);
+    });
+
+    test('starts on the last club used and remembers a new choice', () => {
+      store.getSwingProfile.mockReturnValue({ heightCm: null, handedness: 'right', asked: true, lastClub: 'driver' });
+      const { getByLabelText } = setup();
+      expect(getByLabelText('Driver').props.accessibilityState.selected).toBe(true);
+      fireEvent.press(getByLabelText('Iron'));
+      expect(store.setLastSwingClub).toHaveBeenCalledWith('iron');
+      expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(true);
+    });
+
+    test('follows the remembered club when the profile hydrates after the first render, but never overrides a pick', () => {
+      const profile = (lastClub) => ({ heightCm: null, handedness: 'right', asked: true, lastClub });
+      const again = () => <ThemeProvider><SwingHomeScreen navigation={{ navigate: jest.fn(), goBack: jest.fn() }} /></ThemeProvider>;
+      const { getByLabelText, rerender } = setup();
+      expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(true);
+      store.getSwingProfile.mockReturnValue(profile('driver'));
+      rerender(again());
+      expect(getByLabelText('Driver').props.accessibilityState.selected).toBe(true);
+      fireEvent.press(getByLabelText('Iron'));
+      store.getSwingProfile.mockReturnValue(profile('driver '));
+      rerender(again());
+      expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(true);
+    });
+
+    test('Record carries the chosen club to the capture route', () => {
+      const { getByLabelText, navigation } = setup();
+      fireEvent.press(getByLabelText('Driver'));
+      fireEvent.press(getByLabelText('Record'));
+      expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture', { club: 'driver' });
+    });
+
+    test('Import creates the swing with the chosen club', async () => {
+      pickSwingVideo.mockResolvedValue({ uri: 'file:///clip.mp4' });
+      store.createSwing.mockResolvedValue({ id: 'new1' });
+      const { getByLabelText, navigation } = setup();
+      fireEvent.press(getByLabelText('Driver'));
+      fireEvent.press(getByLabelText('Import'));
+      await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('SwingResults', { swingId: 'new1' }));
+      expect(store.createSwing).toHaveBeenCalledWith(expect.objectContaining({ club: 'driver' }));
+    });
+
+    test('is hidden while picking swings to compare', () => {
+      const { getByLabelText, queryByLabelText } = setup({ swings: [A, B] });
+      expect(getByLabelText('Iron')).toBeTruthy();
+      fireEvent(getByLabelText(/^Early extension, /), 'longPress');
+      expect(queryByLabelText('Iron')).toBeNull();
+    });
   });
 
   test('cancelling the picker creates nothing', async () => {
@@ -157,7 +213,7 @@ describe('SwingHomeScreen', () => {
     fireEvent.press(getByLabelText('Left-handed'));
     await act(async () => { fireEvent.press(getByLabelText('Save and analyse')); });
     expect(store.setSwingProfile).toHaveBeenCalledWith({ heightCm: 181, handedness: 'left' });
-    expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture');
+    expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture', { club: 'iron' });
   });
 
   test('skipping stores no height (approximate) and still carries on', async () => {
@@ -167,7 +223,7 @@ describe('SwingHomeScreen', () => {
     expect(getByText(/Skip for now · use \d+ cm \(approx\.\)/)).toBeTruthy();
     await act(async () => { fireEvent.press(getByLabelText(/^Skip for now/)); });
     expect(store.setSwingProfile).toHaveBeenCalledWith({ heightCm: null, handedness: 'right' });
-    expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture');
+    expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture', { club: 'iron' });
   });
 
   test('an implausible height keeps Save disabled and explains', () => {

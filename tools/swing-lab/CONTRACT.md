@@ -27,6 +27,7 @@ address, takeaway, leadArm, top, transition, shaftDown, impact, trailArm, finish
   "video": { "w": 478, "h": 850, "frames": 1297, "playbackFps": 29.97, "captureFps": 240,
              "slowmoFactor": 8, "interpolated": false },
   "handedness": "right",
+  "club": "iron" | "driver",   // plan D19: which per-club thresholds column applies; absent = iron
   "heightCm": 176,
   "ball": { "x": 273, "y": 505, "conf": 0.9 },
   "checkpoints": {
@@ -53,7 +54,7 @@ The app's **Export swing** (Results header menu > Export swing) shares ONE file,
 automatically. It contains:
 - `video.mp4` (the original clip) and `analysis.json` (the app's analysis),
 - `marks.json` (the corrected labels, `swing-club-labels/1`: frames/hands/head/hidden/ball),
-- `swing.json` (index row, `handedness`, `heightCm`, clip size `video.width/height/frameCount/containerFps/captureFps`).
+- `swing.json` (index row, `club` (`iron` | `driver`, absent in older exports = iron), `handedness`, `heightCm`, clip size `video.width/height/frameCount/containerFps/captureFps`).
 
 Unpack it into a lab test case:
 `python3 -I import_export.py ~/Downloads/<name>.swing.zip [--clip NAME]` (a folder holding the four files also works).

@@ -48,6 +48,7 @@ const ROWS = {
   b: { id: 'b', name: 'Sat 27 Sep · 18:50', createdAt: '2026-09-27T16:50:00.000Z', status: 'ready' },
 };
 const ANALYSES = { a: NEW, b: OLD };
+afterEach(() => { ANALYSES.a = NEW; ANALYSES.b = OLD; });
 
 function setup(ids = ['b', 'a']) {
   store.getSwing.mockImplementation((id) => ROWS[id] ?? null);
@@ -65,6 +66,25 @@ beforeEach(() => {
 });
 
 describe('SwingCompareScreen', () => {
+  test('names the club of each swing, and warns when the two differ (the values are still compared)', async () => {
+    ANALYSES.a = { ...NEW, club: 'driver' };
+    ANALYSES.b = { ...OLD, club: 'iron' };
+    const { findByText, getByText, getAllByText } = setup(['b', 'a']);
+    expect(await findByText(T.differentClubs)).toBeTruthy();
+    expect(getByText(/18:42 · Driver$/)).toBeTruthy();
+    expect(getByText(/18:50 · Iron$/)).toBeTruthy();
+    expect(getAllByText(/^(better|worse)$/i).length).toBeGreaterThan(0);
+    expect(getByText('Better, not fixed.')).toBeTruthy();
+  });
+
+  test('says nothing about clubs when both swings use the same one (or none, which reads as iron)', async () => {
+    ANALYSES.a = NEW;
+    ANALYSES.b = OLD;
+    const { findByText, queryByText } = setup(['b', 'a']);
+    await findByText('Better, not fixed.');
+    expect(queryByText(T.differentClubs)).toBeNull();
+  });
+
   test('puts the newer swing on the left whatever order they were picked in, and reads what changed', async () => {
     const { findByText, getByText, getAllByText } = setup(['b', 'a']);
     expect(await findByText('Better, not fixed.')).toBeTruthy();

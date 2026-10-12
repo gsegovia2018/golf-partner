@@ -130,3 +130,29 @@ describe('analyze errors (D12)', () => {
     ['no_pose', 'partial_pose', 'too_long'].forEach((e) => expect(SWING_STRINGS.errors[e].length).toBeGreaterThan(10));
   });
 });
+
+describe('analyze: the club picks the thresholds (D19)', () => {
+  const run = (club) => analyze(native(), { pass2, marks: ownerMarks(), heightCm: 176, club });
+
+  test('no club, null, an unknown club and iron are the same iron analysis, stored as iron', () => {
+    const iron = run('iron');
+    expect(iron.club).toBe('iron');
+    ['wood', null, undefined].forEach((c) => {
+      const a = run(c);
+      expect(a.club).toBe('iron');
+      expect(a.checks).toEqual(iron.checks);
+    });
+  });
+
+  test('driver keeps the measurements and moves the statuses the table says it moves', () => {
+    const iron = run('iron');
+    const driver = run('driver');
+    expect(driver.club).toBe('driver');
+    expect(driver.checks.map((c) => c.value)).toEqual(iron.checks.map((c) => c.value));
+    expect(byId(iron, 'hands_height_impact').status).toBe('red');
+    expect(byId(driver, 'hands_height_impact').status).toBe('yellow');
+    expect(byId(iron, 'butt_extension').status).toBe('red');
+    expect(byId(driver, 'butt_extension').status).toBe('yellow');
+    expect(driver.counts.red).toBeLessThan(iron.counts.red);
+  });
+});

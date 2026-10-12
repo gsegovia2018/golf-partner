@@ -10,7 +10,7 @@ import { interp, median } from './smoothing';
 import { defaultHeightCm, scaleFromWindow } from './scale';
 import { detectPhases, CHECKPOINT_KEYS } from './phases';
 import { resolveClub } from './club';
-import { runChecks } from './checks';
+import { runChecks, normClub } from './checks';
 import { mainFault } from './priority';
 
 export const SCHEMA = 'swing-analysis/1';
@@ -48,13 +48,14 @@ function makePoseAt(idx, L) {
  * @param {'right'|'left'} [opts.handedness]
  * @param {number|null} [opts.heightCm]  the golfer's height; default by gender, flagged approximate
  * @param {'male'|'female'} [opts.gender]
- * @param {'driver'|'wood'|'iron'|'wedge'|null} [opts.club]
+ * @param {'iron'|'driver'|null} [opts.club]  selects the per-club thresholds (checks.js THRESHOLDS); null reads as iron
  * @param {'camera'|'import'} [opts.source]
  * @returns {object|{error:'no_pose'|'partial_pose'|'too_long'}}
  */
 export function analyze(native, opts = {}) {
   const t0 = Date.now();
-  const { probe = {}, pass2 = {}, marks = {}, handedness = 'right', club = null, source = 'import' } = opts;
+  const { probe = {}, pass2 = {}, marks = {}, handedness = 'right', source = 'import' } = opts;
+  const club = normClub(opts.club);
   const { width: W, height: H, containerFps, frameCount } = native.video;
 
   const samples = (native.frames || []).filter((f) => f && Array.isArray(f.lm) && f.lm.length === 33);
@@ -121,6 +122,7 @@ export function analyze(native, opts = {}) {
     ball: ballPx,
     pose: poseAt,
     handedness,
+    club,
     pxPerCm: scale.pxPerCm,
     heightCm,
     motionStart: ph.internal.motionStart,

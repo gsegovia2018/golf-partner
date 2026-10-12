@@ -13,11 +13,13 @@ import { semantic } from '../theme/tokens';
 import { haptic } from '../lib/haptics';
 import {
   subscribeSwings, getSwingsVersion, getSwings, getSwingProfile, hydrateSwings,
-  createSwing, deleteSwing, storageBytes, defaultSwingName, setSwingProfile,
+  createSwing, deleteSwing, storageBytes, defaultSwingName, setSwingProfile, setLastSwingClub,
 } from '../store/swingStore';
 import { getSwingAvailability } from '../swing/availability';
 import { pickSwingVideo } from '../swing/importVideo';
 import { defaultHeightCm } from '../swing/scale';
+import { normClub } from '../swing/checks';
+import ClubPicker from '../components/swing/ClubPicker';
 import { SWING_STRINGS } from '../swing/strings';
 
 const T = SWING_STRINGS.home;
@@ -72,6 +74,10 @@ export default function SwingHomeScreen({ navigation }) {
   const [heightText, setHeightText] = useState('');
   const [handed, setHanded] = useState('right');
   const [busy, setBusy] = useState(false);
+  const [club, setClub] = useState(() => normClub(profile.lastClub)); // D19: the last choice, remembered
+  const clubPicked = useRef(false);
+  // The profile hydrates after first render: follow it until the golfer picks a club here.
+  useEffect(() => { if (!clubPicked.current) setClub(normClub(profile.lastClub)); }, [profile.lastClub]);
   const afterSheet = useRef(null);
 
   const groups = useMemo(() => groupByMonth(swings), [swings]);
@@ -82,16 +88,19 @@ export default function SwingHomeScreen({ navigation }) {
     try {
       const clip = await pickSwingVideo();
       if (!clip) return;
-      const row = await createSwing({ videoUri: clip.uri, source: 'import', createdAt: new Date() });
+      const row = await createSwing({
+        videoUri: clip.uri, source: 'import', createdAt: new Date(), club,
+      });
       navigation.navigate('SwingResults', { swingId: row.id });
     } catch {
       Alert.alert(T.importFailed);
     } finally {
       setBusy(false);
     }
-  }, [busy, navigation]);
+  }, [busy, navigation, club]);
 
-  const doRecord = useCallback(() => navigation.navigate('SwingCapture'), [navigation]);
+  const doRecord = useCallback(() => navigation.navigate('SwingCapture', { club }), [navigation, club]);
+  const pickClub = useCallback((c) => { clubPicked.current = true; setClub(c); setLastSwingClub(c); }, []);
 
   // First analysis asks height + handedness once (D5, D6), then carries on.
   const gate = useCallback((action) => {
@@ -282,30 +291,36 @@ export default function SwingHomeScreen({ navigation }) {
             </PressableScale>
           </View>
         ) : (
-          <View style={s.btnRow}>
-            <PressableScale
-              style={[s.btn, s.btnPrimary, s.btnRecord, !canAnalyse && s.btnDisabled]}
-              disabled={!canAnalyse}
-              onPress={() => gate(doRecord)}
-              accessibilityRole="button"
-              accessibilityLabel={T.record}
-              accessibilityState={{ disabled: !canAnalyse }}
-            >
-              <Feather name="camera" size={18} color={theme.text.inverse} />
-              <Text style={s.btnPrimaryText}>{T.record}</Text>
-            </PressableScale>
-            <PressableScale
-              style={[s.btn, s.btnSecondary, s.btnFlex, (!canAnalyse || busy) && s.btnDisabled]}
-              disabled={!canAnalyse || busy}
-              onPress={() => gate(doImport)}
-              accessibilityRole="button"
-              accessibilityLabel={T.import}
-              accessibilityState={{ disabled: !canAnalyse || busy }}
-            >
-              <Feather name="download" size={18} color={theme.text.primary} />
-              <Text style={s.btnSecondaryText}>{T.import}</Text>
-            </PressableScale>
-          </View>
+          <>
+            <View style={s.clubRow}>
+              <Text style={s.clubLabel}>{SWING_STRINGS.club.label}</Text>
+              <ClubPicker value={club} onChange={pickClub} testID="home-club-picker" />
+            </View>
+            <View style={s.btnRow}>
+              <PressableScale
+                style={[s.btn, s.btnPrimary, s.btnRecord, !canAnalyse && s.btnDisabled]}
+                disabled={!canAnalyse}
+                onPress={() => gate(doRecord)}
+                accessibilityRole="button"
+                accessibilityLabel={T.record}
+                accessibilityState={{ disabled: !canAnalyse }}
+              >
+                <Feather name="camera" size={18} color={theme.text.inverse} />
+                <Text style={s.btnPrimaryText}>{T.record}</Text>
+              </PressableScale>
+              <PressableScale
+                style={[s.btn, s.btnSecondary, s.btnFlex, (!canAnalyse || busy) && s.btnDisabled]}
+                disabled={!canAnalyse || busy}
+                onPress={() => gate(doImport)}
+                accessibilityRole="button"
+                accessibilityLabel={T.import}
+                accessibilityState={{ disabled: !canAnalyse || busy }}
+              >
+                <Feather name="download" size={18} color={theme.text.primary} />
+                <Text style={s.btnSecondaryText}>{T.import}</Text>
+              </PressableScale>
+            </View>
+          </>
         )}
       </View>
 
@@ -444,6 +459,8 @@ const makeStyles = (theme) => StyleSheet.create({
   privacy: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginBottom: 10 },
   privacyIcon: { marginTop: 1 },
   privacyText: { flex: 1, fontFamily: 'PlusJakartaSans-Medium', fontSize: 11.5, color: theme.text.secondary, lineHeight: 16 },
+  clubRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  clubLabel: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase' },
   btnRow: { flexDirection: 'row', gap: 10 },
   btn: {
     minHeight: 48, borderRadius: 14, paddingHorizontal: 16,

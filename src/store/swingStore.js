@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Paths, Directory, File } from 'expo-file-system';
 import { emptyMarks, parseMarks } from '../swing/labels';
 import { makeZip, utf8 } from '../swing/zip';
+import { normClub, DEFAULT_CLUB } from '../swing/checks';
 
 // Local swing library (plan 7). Same shape as shotStore.js (module state, a
 // version counter for useSyncExternalStore, an AsyncStorage mirror) with no
@@ -16,7 +17,9 @@ const INDEX_KEY = 'golf_swings.v1';
 const PROFILE_KEY = 'golf_swing_profile.v1';
 export const STORAGE_WARN_BYTES = 1024 * 1024 * 1024; // soft cap, plan 7.4
 
-const DEFAULT_PROFILE = { heightCm: null, handedness: 'right', asked: false };
+const DEFAULT_PROFILE = {
+  heightCm: null, handedness: 'right', asked: false, lastClub: DEFAULT_CLUB, // lastClub: the Home picker's last choice (D19)
+};
 
 let SWINGS = []; // [{ id, createdAt, name, club, source, status, fps, mainFault, counts, thumb, bytes }]
 let PROFILE = { ...DEFAULT_PROFILE };
@@ -44,7 +47,7 @@ const sortNewest = (rows) => [...rows].sort((a, b) => (b.createdAt || '').locale
 export async function hydrateSwings() {
   try {
     const raw = await AsyncStorage.getItem(INDEX_KEY);
-    if (raw) { const rows = JSON.parse(raw); if (Array.isArray(rows)) SWINGS = sortNewest(rows); }
+    if (raw) { const rows = JSON.parse(raw); if (Array.isArray(rows)) SWINGS = sortNewest(rows.map((r) => ({ ...r, club: normClub(r.club) }))); } // rows saved before D19 have no club: they read as iron
   } catch { /* corrupt index: start empty */ }
   try {
     const raw = await AsyncStorage.getItem(PROFILE_KEY);
@@ -57,6 +60,7 @@ export async function hydrateSwings() {
 
 export async function setSwingProfile({ heightCm, handedness }) {
   PROFILE = {
+    ...PROFILE,
     heightCm: heightCm === undefined ? PROFILE.heightCm : heightCm,
     handedness: handedness ?? PROFILE.handedness,
     asked: true,
@@ -64,6 +68,14 @@ export async function setSwingProfile({ heightCm, handedness }) {
   emit();
   await persistProfile();
   return PROFILE;
+}
+
+/** Remember the club chosen on Swing home (D19); does not count as answering the first-run sheet. */
+export async function setLastSwingClub(club) {
+  PROFILE = { ...PROFILE, lastClub: normClub(club) };
+  emit();
+  await persistProfile();
+  return PROFILE.lastClub;
 }
 
 // --- Names (D13) -------------------------------------------------------------
@@ -124,7 +136,7 @@ function patchRow(id, patch) {
  * Copy a clip into the swing directory and add a row in `pending` state. The
  * source file is never modified (plan 7.1). Returns the row.
  */
-export async function createSwing({ videoUri, source = 'import', createdAt = new Date(), club = null }) {
+export async function createSwing({ videoUri, source = 'import', createdAt = new Date(), club = DEFAULT_CLUB }) {
   const id = uuidv4();
   const when = createdAt instanceof Date ? createdAt : new Date(createdAt);
   const dir = swingDir(id);
@@ -139,7 +151,7 @@ export async function createSwing({ videoUri, source = 'import', createdAt = new
     id,
     createdAt: when.toISOString(),
     name: defaultSwingName(when),
-    club,
+    club: normClub(club),
     source,
     status: 'pending',
     fps: null,
@@ -171,7 +183,7 @@ export async function saveAnalysis(id, analysis, { pose = null, probe = null, th
   const next = patchRow(id, {
     status: 'ready',
     error: undefined,
-    club: analysis.club ?? row.club,
+    club: normClub(analysis.club ?? row.club),
     fps: analysis.fps
       ? { capture: analysis.fps.capture, effective: analysis.fps.effective, factor: analysis.fps.factor, approximate: !!analysis.fps.approximate }
       : null,
@@ -215,7 +227,7 @@ export async function renameSwing(id, name) {
 }
 
 export async function setSwingClub(id, club) {
-  const next = patchRow(id, { club });
+  const next = patchRow(id, { club: normClub(club) });
   if (!next) return null;
   emit();
   await persistIndex();
@@ -276,6 +288,7 @@ export async function exportSwing(id) {
     schema: EXPORT_SCHEMA,
     exportedAt: new Date().toISOString(),
     swing: row,
+    club: normClub(row.club),
     handedness: analysis?.handedness ?? PROFILE.handedness,
     heightCm: analysis?.scale?.heightCm ?? PROFILE.heightCm ?? null,
     video: {

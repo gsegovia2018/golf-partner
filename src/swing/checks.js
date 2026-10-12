@@ -14,6 +14,37 @@ const round = (v, d = 1) => (v == null || !Number.isFinite(v) ? v : Math.round(v
 const has = (p) => p && Number.isFinite(p.x) && Number.isFinite(p.y);
 const band = (v, g, y) => (v <= g ? 'green' : v <= y ? 'yellow' : 'red');
 const FINISH_QUIET_S = 0.4;
+
+// Per-club limits (plan 5.4, D19). Exactly two clubs; 'iron' is the default and the reading
+// for every swing saved before the picker existed. Iron values are the owner-reviewed ones.
+// PROVISIONAL: the driver values are starting points set on 2026-10-12, to be calibrated on
+// real driver swings. Each `band: [green, yellow]` is "<= green is green, <= yellow is yellow,
+// else red". Every check not listed here is the same for both clubs.
+export const CLUBS = ['iron', 'driver'];
+export const DEFAULT_CLUB = 'iron';
+export const THRESHOLDS = {
+  iron: {
+    posture: { green: [25, 40], yellow: [20, 45] }, // spine tilt from vertical, degrees
+    handsHeight: [5, 8], // cm
+    shaftAngle: [6, 10], // degrees
+    spineLoss: [3, 6], // degrees
+    clubheadPlane: { green: 4, yellow: 8 }, // cm; yellow also below -green
+    buttYellowCm: 15,
+    headDrift: [5, 10], // cm
+  },
+  driver: {
+    posture: { green: [20, 35], yellow: [15, 40] },
+    handsHeight: [8, 12],
+    shaftAngle: [8, 12],
+    spineLoss: [4, 7],
+    clubheadPlane: { green: 6, yellow: 10 },
+    buttYellowCm: 20,
+    headDrift: [6, 12],
+  },
+};
+
+/** 'iron' | 'driver'; anything else (null, undefined, an old 'wood') reads as the default. */
+export const normClub = (club) => (CLUBS.includes(club) ? club : DEFAULT_CLUB);
 const FINISH_BALANCE_H = 0.08; // mid-hip x within 0.08 H of the lead ankle x
 
 // Checks whose value depends on the impact frame inherit `approximate` from the fps model.
@@ -53,11 +84,13 @@ export function getPlanes({ checkpoints = {}, ball, pose, handedness = 'right' }
  * @param {number} [input.motionStart]  frame; tempo's backswing starts here (D10), takeaway if absent
  * @param {number} [input.finishQuietS]  seconds the golfer stays still after the finish
  * @param {boolean} [input.approximate]  effective fps < 100 or interpolated slow-mo
+ * @param {'iron'|'driver'|null} [input.club]  selects the THRESHOLDS column; default iron
  * @returns {{checks: object[], planes: object}}
  */
 export function runChecks(input) {
   const { checkpoints: cps = {}, ball, pose, handedness = 'right', pxPerCm, heightCm } = input;
   const approximate = !!input.approximate;
+  const TH = THRESHOLDS[normClub(input.club)];
   const sgn = handedness === 'left' ? -1 : 1;
   const cm = 1 / pxPerCm; // cm per px
   const H = heightCm * pxPerCm; // golfer height in px
@@ -98,8 +131,9 @@ export function runChecks(input) {
     const t = tiltOf('address');
     if (t === null) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame')));
     else {
-      const s = t >= 25 && t <= 40 ? 'green' : (t >= 20 && t < 25) || (t > 40 && t <= 45) ? 'yellow' : 'red';
-      push(m, s, round(t, 0), '°', T.checkText.posture_address(t));
+      const { green: [gLo, gHi], yellow: [yLo, yHi] } = TH.posture;
+      const s = t >= gLo && t <= gHi ? 'green' : t >= yLo && t <= yHi ? 'yellow' : 'red';
+      push(m, s, round(t, 0), '°', T.checkText.posture_address(t, gLo, gHi));
     }
   }
 
@@ -149,11 +183,11 @@ export function runChecks(input) {
         let text = T.checkText.butt_extension_ok;
         if (beyond > 0) {
           dir = 'flat';
-          s = beyond <= 15 ? 'yellow' : 'red';
+          s = beyond <= TH.buttYellowCm ? 'yellow' : 'red';
           text = T.checkText.butt_extension_flat(beyond);
         } else if (inside > 0) {
           dir = 'steep';
-          s = inside <= 15 ? 'yellow' : 'red';
+          s = inside <= TH.buttYellowCm ? 'yellow' : 'red';
           text = T.checkText.butt_extension_steep(inside);
         }
         push(m, s, round((x - bx) * cm, 0), 'cm', text, { dir });
@@ -210,7 +244,8 @@ export function runChecks(input) {
     else if (!planes.shaft) rows.push(unknown(m, 'nodata', T.reason.nodata('No address plane')));
     else {
       const d = sideOfLine(c.head, planes.shaft.a, planes.shaft.b) * cm;
-      const s = Math.abs(d) <= 4 ? 'green' : d > 4 && d <= 8 ? 'yellow' : d < -4 ? 'yellow' : 'red';
+      const { green: g, yellow: y } = TH.clubheadPlane;
+      const s = Math.abs(d) <= g ? 'green' : d > g && d <= y ? 'yellow' : d < -g ? 'yellow' : 'red';
       push(m, s, round(d, 0), 'cm',
         s === 'green' ? T.checkText.clubhead_vs_plane_ok : d > 0 ? T.checkText.clubhead_vs_plane_steep(d) : T.checkText.clubhead_vs_plane_under(-d),
         { dir: d > 0 ? 'steep' : 'under' });
@@ -225,7 +260,7 @@ export function runChecks(input) {
     if (!a || !i) rows.push(unknown(m, 'nodata', T.reason.nodata('Needs address and impact')));
     else {
       const d = (a.hands.y - i.hands.y) * cm;
-      push(m, band(d, 5, 8), round(d, 0), 'cm', d > 0 ? T.checkText.hands_height_impact_up(d) : T.checkText.hands_height_impact_down(-d));
+      push(m, band(d, ...TH.handsHeight), round(d, 0), 'cm', d > 0 ? T.checkText.hands_height_impact_up(d) : T.checkText.hands_height_impact_down(-d));
     }
   }
 
@@ -251,7 +286,7 @@ export function runChecks(input) {
       rows.push(unknown(m, a.unplaced || i.unplaced ? 'unplaced' : 'hidden', headMissing(a.head ? i : a, a.head ? 'impact' : 'address')));
     } else {
       const d = angleAboveHorizontal(i.head, i.hands) - angleAboveHorizontal(a.head, a.hands);
-      push(m, band(d, 6, 10), round(d, 0), '°', d >= 0 ? T.checkText.shaft_angle_impact_up(d) : T.checkText.shaft_angle_impact_down(-d));
+      push(m, band(d, ...TH.shaftAngle), round(d, 0), '°', d >= 0 ? T.checkText.shaft_angle_impact_up(d) : T.checkText.shaft_angle_impact_down(-d));
     }
   }
 
@@ -263,7 +298,7 @@ export function runChecks(input) {
     if (ta === null || ti === null) rows.push(unknown(m, 'nopose', T.reason.nopose('address and impact')));
     else {
       const loss = ta - ti;
-      push(m, band(loss, 3, 6), round(loss, 0), '°', T.checkText.spine_loss(ta, ti, loss));
+      push(m, band(loss, ...TH.spineLoss), round(loss, 0), '°', T.checkText.spine_loss(ta, ti, loss));
     }
   }
 
@@ -287,7 +322,7 @@ export function runChecks(input) {
     if (!a || !i) rows.push(unknown(m, 'nopose', T.reason.nopose('address and impact')));
     else {
       const d = Math.hypot(i.x - a.x, i.y - a.y) * cm;
-      push(m, band(d, 5, 10), round(d, 0), 'cm', T.checkText.head_drift(d));
+      push(m, band(d, ...TH.headDrift), round(d, 0), 'cm', T.checkText.head_drift(d));
     }
   }
 

@@ -59,6 +59,13 @@ class ImportExportTest(unittest.TestCase):
                          (560, {"x": 180.0, "y": 400.0}, {"x": 280.0, "y": 720.0}, False, 1))
         self.assertNotIn("takeaway", t["checkpoints"])
 
+    def test_club_is_carried_through_and_defaults_to_iron(self):
+        self.assertEqual(ie.build_truth(META, ANALYSIS, MARKS, "c")["club"], "iron")  # export from before the picker
+        self.assertEqual(ie.build_truth({**META, "club": "driver"}, ANALYSIS, MARKS, "c")["club"], "driver")
+        self.assertEqual(ie.build_truth({**META, "swing": {**META["swing"], "club": "driver"}}, ANALYSIS, MARKS, "c")["club"], "driver")
+        self.assertEqual(ie.build_truth(META, {**ANALYSIS, "club": "driver"}, MARKS, "c")["club"], "driver")
+        self.assertEqual(ie.build_truth({**META, "club": "wood"}, ANALYSIS, MARKS, "c")["club"], "iron")
+
     def test_hidden_clubhead_has_no_head_point(self):
         t = ie.build_truth(META, ANALYSIS, {"frames": []}, "c")
         self.assertTrue(t["checkpoints"]["impact"]["hidden"])

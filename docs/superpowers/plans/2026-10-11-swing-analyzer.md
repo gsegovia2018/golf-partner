@@ -263,6 +263,18 @@ Every check returns `{ id, phase, status: 'green'|'yellow'|'red'|'unknown', valu
 
 Impact-dependent checks inherit `approximate` from `fpsModel` (effective fps < 100 or interpolated).
 
+**Per club (D19).** The table above is the **iron** column (the default, and the reading for every swing saved before the picker). Exactly one more club, **driver**, changes seven rows; every other row is identical for both. The values live in one constant, `THRESHOLDS[club]` in `checks.js`. **The driver values are provisional starting points (2026-10-12), to be calibrated on real driver swings.**
+
+| id | iron green | iron yellow | driver green | driver yellow | red (either club) |
+|---|---|---|---|---|---|
+| `posture_address` (spine tilt) | 25–40 | 20–25 / 40–45 | 20–35 | 15–20 / 35–40 | beyond yellow |
+| `clubhead_vs_plane` | \|d\| ≤ 4 cm | 4 < d ≤ 8; d < −4 | \|d\| ≤ 6 cm | 6 < d ≤ 10; d < −6 | beyond yellow |
+| `butt_extension` | between | beyond ball / inside toes ≤ 15 cm | between | ≤ 20 cm | beyond yellow |
+| `hands_height_impact` | ≤ 5 | 5–8 | ≤ 8 | 8–12 | beyond yellow |
+| `shaft_angle_impact` | ≤ 6 | 6–10 | ≤ 8 | 8–12 | beyond yellow |
+| `spine_loss` | ≤ 3 | 3–6 | ≤ 4 | 4–7 | beyond yellow |
+| `head_drift` | ≤ 5 | 5–10 | ≤ 6 | 6–12 | beyond yellow |
+
 ### 5.5 Priority (`priority.js`)
 
 Faults are clusters of checks with a weight (impact-affecting first) and a confidence that rises with agreeing signals:
@@ -501,6 +513,7 @@ S1–S3 and N1 run in parallel from day one. **APK 1** (`preview-arm64`) after N
 | D16 | Clubhead in v1 | The shaft-tracking heuristic (§4.3) failed in the swing lab (2026-10-11: 75–110 cm off at every checkpoint except impact, 13 cm there with the old rules; 7 cm with the D17 seeding). v1 proposes the clubhead only at address and impact (seeded from the ball and the hands); at every other checkpoint the user places it (or marks it hidden) in Edit marks, and club-dependent checks stay 'unknown' until placed. Every placement is stored as a label for the v2 learned detector (§7 marks.json). N2 scope shrinks accordingly: no backswing/downswing shaft tracking in v1. |
 | D17 | Validated detection rules | Folded in from the swing lab (2026-10-11, one clip; reference implementation `tools/swing-lab/detect.py --variant d15`, which the Kotlin/JS port must match on the lab clips): (1) **sampling** every frame from `motionStart` to impact, sparse only before and after, thresholds per-clip from the pose jitter (σ, moving > 3σ, stopped = 3 × P25 of the 0.15 s speed), never a fixed H/s (4.2); (2) **zero-lag One-Euro** offline, in px and captured time (4.5); (3) **hands = grip estimate** `wrist + 0.35·(wrist − elbow)` with the visibility < 0.5 wrist gate (4.5); (4) **geometric phase rules**, P1 from the ball patch, P2/P6 grip at trail-hip height, P3/P5/P9 wrist in the shoulder band, P4 end of the hands' plateau, P7 `ballGone − 1`, P10 grip and nose stopped 0.15 s, order enforced (5.1); ball searched after the club leaves; clubhead per D16. Status and the ≥ 10-clip gate: 8.5. |
 | D18 | Ship before the 10-clip gate | Owner decision 2026-10-11: build and ship v1 now; accuracy improves from real use. The §8.5 gate becomes a tracking target, not a merge blocker. Consequence: S8's "Export swing" is required in v1 — one explicit share action producing a zip (original clip + `analysis.json` + `marks.json` with the user's corrected frames/marks) that `tools/swing-lab/import_export.py` unpacks into `clips/` + `out/<clip>/truth.json`, so every corrected swing becomes a lab test case. Nothing is sent automatically. |
+| D19 | Club | Club: `iron` \| `driver`, per-club thresholds table in `checks.js` `THRESHOLDS` (§5.4); driver values provisional (2026-10-12), to be calibrated on real swings; picker on Home (remembers the last choice) and on Results (re-scores the stored pose and marks, no native call); default iron, also for swings saved before the picker. Supersedes the "optional club class chip" of D13. Carried in `swing.json` and `truth.json` as `club`. |
 
 
 ## 12. Out of scope

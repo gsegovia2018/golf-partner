@@ -13,6 +13,7 @@ import {
 } from '../store/swingStore';
 import { getStill, ensureStills } from '../swing/frames';
 import { compareAnalyses } from '../swing/compare';
+import { normClub } from '../swing/checks';
 import { SWING_STRINGS } from '../swing/strings';
 
 const T = SWING_STRINGS.compare;
@@ -40,6 +41,8 @@ export function SwingCompareView({ left, right, onBack, onSwap }) {
   const colW = (Math.min(winW, 480) - 40 - 10) / 2;
   const ready = !!(left?.analysis && right?.analysis);
   const result = useMemo(() => (ready ? compareAnalyses(left.analysis, right.analysis) : null), [ready, left, right]);
+  const clubOf = (side) => normClub(side?.analysis?.club ?? side?.row?.club);
+  const mixedClubs = ready && clubOf(left) !== clubOf(right);
   const changeColor = { better: tone.green, worse: tone.red, same: theme.text.secondary, unclear: theme.text.secondary };
 
   return (
@@ -68,7 +71,7 @@ export function SwingCompareView({ left, right, onBack, onSwap }) {
             <View style={s.stills}>
               {[left, right].map((side, i) => (
                 <View key={side.row.id} style={{ width: colW }}>
-                  <Text style={s.colName} numberOfLines={1}>{side.row.name}</Text>
+                  <Text style={s.colName} numberOfLines={1}>{`${side.row.name} · ${SWING_STRINGS.club[clubOf(side)]}`}</Text>
                   <View style={[s.stillBox, { width: colW, height: colW / (side.aspect || 0.75) }]} accessibilityLabel={`${side.row.name}, ${T.impactStills.toLowerCase()}`}>
                     {side.stillUri ? (
                       <Image source={{ uri: side.stillUri }} style={s.still} resizeMode="cover" />
@@ -79,6 +82,7 @@ export function SwingCompareView({ left, right, onBack, onSwap }) {
               ))}
             </View>
             <Text style={s.hint}>{T.impactStills}</Text>
+            {mixedClubs ? <Text style={s.clubNote} accessibilityRole="alert">{T.differentClubs}</Text> : null}
 
             <View style={s.card}>
               <View style={s.tr}>
@@ -192,6 +196,7 @@ const makeStyles = (theme) => StyleSheet.create({
   noStill: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: 'rgba(255,255,255,0.7)' },
   stillTag: { position: 'absolute', left: 8, bottom: 8, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
   stillTagText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: '#ffffff' },
+  clubNote: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: theme.text.primary, lineHeight: 17 },
   hint: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11.5, color: theme.text.secondary, lineHeight: 16 },
 
   card: {
