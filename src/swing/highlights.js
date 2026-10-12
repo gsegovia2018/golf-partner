@@ -164,9 +164,12 @@ export function highlightFor(check, ctx) {
       const h = head(check.cp);
       return h ? [{ t: 'circle', c: h, r: 0.03 }, ...text(h, signed(check))] : [];
     }
-    case 'butt_extension': {
-      const h = head('leadArm');
-      const g = hands('leadArm');
+    case 'butt_extension':
+    case 'shaft_down_shallow':
+    case 'shaft_through_steep': {
+      const k = homeOf(check);
+      const h = head(k);
+      const g = hands(k);
       const ball = analysis.reference?.ball;
       if (!h || !g || !ball || g[1] === h[1]) return [];
       const t = (ball[1] - h[1]) / (g[1] - h[1]);

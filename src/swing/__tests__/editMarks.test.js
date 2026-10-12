@@ -170,8 +170,8 @@ describe('helpers', () => {
 });
 
 describe('checkpoints.js (the lab editor cues)', () => {
-  test('nine definitions in order with all four fields; P-numbers per D15', () => {
-    expect(CHECKPOINT_DEFS.map((d) => d.p)).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P9', 'P10']);
+  test('ten definitions in order with all four fields; P-numbers per D15 and D22', () => {
+    expect(CHECKPOINT_DEFS.map((d) => d.p)).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']);
     CHECKPOINT_DEFS.forEach((d) => ['name', 'what', 'stopWhen', 'markTips'].forEach((f) => expect(d[f]).toEqual(expect.any(String))));
     expect(HOW_TO_MARK.map(([k]) => k)).toEqual(['Hands', 'Clubhead', 'Ball', 'Clubhead hidden']);
   });
@@ -179,6 +179,7 @@ describe('checkpoints.js (the lab editor cues)', () => {
     expect(cueFor('leadArm', 'right').what).toMatch(/^Left arm/);
     expect(cueFor('leadArm', 'left').what).toMatch(/^Right arm/);
     expect(cueFor('trailArm', 'left').what).toMatch(/^Left arm/);
+    expect(cueFor('shaftThrough', 'left').what).toMatch(/right hip/);
   });
   test('internal frames have a cue and live under their timeline step', () => {
     expect(cueFor('preImpact').name).toBe('Pre-impact');

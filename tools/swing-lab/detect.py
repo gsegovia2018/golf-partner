@@ -51,6 +51,9 @@ CHECKPOINT_MAP = {
     "finish": "finish",
 }
 KEYS = list(CHECKPOINT_MAP)
+# D22: d15 also detects P8 (shaft parallel after impact) between impact and trailArm. The
+# older variants do not, so they keep the nine contract keys.
+KEYS_D15 = KEYS[:KEYS.index("trailArm")] + ["shaftThrough"] + KEYS[KEYS.index("trailArm"):]
 NEIGHBOURS = 2  # stills saved at checkpoint ±2 (plan D4)
 
 # MediaPipe pose landmark indices.
@@ -649,7 +652,8 @@ def series_d15(pose: dict, info: dict, factor: int, handed: str, grip_k: float) 
     lead_sh, lead_wr = (L_SH, L_WR) if right else (R_SH, R_WR)
     trail_sh, trail_wr = (R_SH, R_WR) if right else (L_SH, L_WR)
     trail_hip = R_HIP if right else L_HIP
-    body = {k: smooth_zero_lag(t, L[:, k, :2], EURO_BODY) for k in (lead_sh, trail_sh, trail_hip, NOSE)}
+    lead_hip = L_HIP if right else R_HIP
+    body = {k: smooth_zero_lag(t, L[:, k, :2], EURO_BODY) for k in (lead_sh, trail_sh, trail_hip, lead_hip, NOSE)}
 
     def arm_end(wr):
         v = np.clip(L[:, wr, 2:3], 0, 1)
@@ -661,7 +665,7 @@ def series_d15(pose: dict, info: dict, factor: int, handed: str, grip_k: float) 
                  for s, sh in (("lead", lead_sh), ("trail", trail_sh)))
     v = np.r_[0.0, np.linalg.norm(np.diff(grip, axis=0), axis=1) / np.diff(t)]
     return {"idx": idx, "t": t, "L": L, "hands": grip, "speed": v, "body": body, "ends": ends,
-            "lead": (lead_sh, lead_wr), "trail": (trail_sh, trail_wr), "trailHip": trail_hip,
+            "lead": (lead_sh, lead_wr), "trail": (trail_sh, trail_wr), "trailHip": trail_hip, "leadHip": lead_hip,
             "effFps": eff_fps, "armPx": arm_px,
             "sigmaGrip": robust_sigma(grip_raw - grip), "sigmaHead": robust_sigma(L[:, NOSE, :2] - body[NOSE])}
 
@@ -730,6 +734,7 @@ def detect_phases_d15(S: dict, body_h: float) -> dict:
     lead_dy = dense(S["ends"]["lead"])[:, 1] - dense(S["body"][S["lead"][0]])[:, 1]
     trail_dy = dense(S["ends"]["trail"])[:, 1] - dense(S["body"][S["trail"][0]])[:, 1]
     hip_y = dense(S["body"][S["trailHip"]])[:, 1]
+    lead_hip_y = dense(S["body"][S["leadHip"]])[:, 1]
     r_grip = NOISE_MULT * S["sigmaGrip"]
     band = S["armPx"] * math.sin(math.radians(LEVEL_TOL_DEG))
     hold_w = int(math.ceil(FINISH_HOLD_S * fps))
@@ -773,7 +778,7 @@ def detect_phases_d15(S: dict, body_h: float) -> dict:
     P = {"motionStart": motion_start, "address": motion_start, "addressRun": (int(F[k_run]), motion_start),
          "top": top, "handsTop": hands_top, "impact": impact, "conf": conf, "notes": notes,
          "descentEnd": int(idx[k_bottom]), "vStill": r_grip * fps / hold_w, "trailArmCrosses": None,
-         "_d": dict(F=F, gy=gy, lead_dy=lead_dy, trail_dy=trail_dy, hip_y=hip_y, vg=vg, vn=vn, tg=tg, tn=tn,
+         "_d": dict(F=F, gy=gy, lead_dy=lead_dy, trail_dy=trail_dy, hip_y=hip_y, lead_hip_y=lead_hip_y, vg=vg, vn=vn, tg=tg, tn=tn,
                     r_grip=r_grip, band=band, hold_w=hold_w)}
     conf["address"] = 0.5
     conf["top"] = 0.7
@@ -816,6 +821,10 @@ def d15_rules(P: dict) -> None:
     # P9 trail arm level after impact: first frame the trail wrist rises into the band.
     pick("trailArm", first_frame(F, d["trail_dy"] <= band, impact + 1, F[-1]), impact + 1, int(F[-1]),
          "trail wrist at shoulder height")
+    # P8 shaft level after impact (D22), the mirror of P6: first frame the grip rises back to the
+    # lead hip's height, searched impact -> trailArm.
+    pick("shaftThrough", first_frame(F, gy <= d["lead_hip_y"], impact + 1, P["trailArm"]), impact + 1, P["trailArm"],
+         "grip at lead-hip height")
     # P10 finish: first frame after trailArm from which the grip AND the head move slower than
     # their per-clip "stopped" speed, averaged over the next FINISH_HOLD_S of real time.
     fin = first_frame(F, (d["vg"] <= d["tg"]) & (d["vn"] <= d["tn"]), P["trailArm"], F[-1])
@@ -831,7 +840,7 @@ def d15_rules(P: dict) -> None:
 def enforce_order(P: dict) -> None:
     """P1 < P2 < ... < P10 (D15 order): a checkpoint at or before its predecessor moves to the
     predecessor + 1 (noted, confidence capped)."""
-    for a, b in zip(KEYS, KEYS[1:]):
+    for a, b in zip(KEYS_D15, KEYS_D15[1:]):
         if P[b] <= P[a]:
             P["notes"].append(f"order: {b} {P[b]} <= {a} {P[a]} -> {P[a] + 1}")
             P[b] = P[a] + 1
@@ -1269,6 +1278,7 @@ def main() -> None:
                     help=f"v_still = k x body height px/s (plan {V_STILL_K}; fixed {V_STILL_K_FIXED})")
     a = ap.parse_args()
     d15 = a.variant == "d15"
+    keys = KEYS_D15 if d15 else KEYS
     fixed = a.variant == "fixed"
     # d15 reuses the fixed variant's pass 1 (sampling policy) unchanged; only its phase rules differ
     vstill_k = a.vstill_k or (V_STILL_K_FIXED if (fixed or d15) else V_STILL_K)
@@ -1357,7 +1367,7 @@ def main() -> None:
 
     # takeaway / shaftDown / impact may have moved -> make sure their stills exist (in the app
     # these come from the same pass-2 decode; here a short second read keeps the code simple).
-    missing = sorted({f for k in KEYS for f in range(P[k] - NEIGHBOURS, P[k] + NEIGHBOURS + 1)
+    missing = sorted({f for k in keys for f in range(P[k] - NEIGHBOURS, P[k] + NEIGHBOURS + 1)
                       if 0 <= f < info["frames"]} - set(R["saved"]))
     if missing:
         cap = cv2.VideoCapture(str(path))
@@ -1371,7 +1381,7 @@ def main() -> None:
 
     # assemble checkpoints
     checkpoints = {}
-    for k in KEYS:
+    for k in keys:
         fr = int(P[k])
         hx, hy = R["handsAt"](fr)
         sh = R["shaft"].get(fr)
@@ -1446,7 +1456,7 @@ def main() -> None:
     for jpg in (out_dir / "frames").glob("*.jpg"):
         if int(jpg.stem) not in keep:
             jpg.unlink()
-    print("[phases] " + "  ".join(f"{k}={checkpoints[k]['frame']}" for k in KEYS))
+    print("[phases] " + "  ".join(f"{k}={checkpoints[k]['frame']}" for k in keys))
     print(f"[ball] {R['ball']}  ballGoneFrame={bgf}")
     print(f"[timings] {auto['timings']}")
     print(f"wrote {out.relative_to(LAB)} and {len(saved)} stills")

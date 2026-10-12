@@ -41,6 +41,7 @@ export const THRESHOLDS = {
     clubheadPlane: { green: 4, yellow: 8 }, // cm; yellow also below -green
     buttYellowCm: 15,
     headDrift: [5, 10], // cm
+    shaftThroughYellowCm: 15, // D23, PROVISIONAL: P8 shaft line beyond the ball, yellow up to this
     ...SETUP_TOP,
   },
   driver: {
@@ -51,6 +52,7 @@ export const THRESHOLDS = {
     clubheadPlane: { green: 6, yellow: 10 },
     buttYellowCm: 20,
     headDrift: [6, 12],
+    shaftThroughYellowCm: 15, // D23: the iron value until driver swings say otherwise
     ...SETUP_TOP,
   },
 };
@@ -87,7 +89,7 @@ export function getPlanes({ checkpoints = {}, ball, pose, handedness = 'right' }
 /**
  * @param {object} input
  * @param {Object<string,{frame:number,hands:{x,y},head:{x,y}|null,hidden:boolean,source?:string}>} input.checkpoints
- *   the twelve checkpoints, keyed address ... finish plus lateBackswing / preImpact / postImpact
+ *   the thirteen checkpoints, keyed address ... finish plus lateBackswing / preImpact / postImpact
  * @param {{x:number,y:number}|null} input.ball
  * @param {(frame:number)=>number[][]|null} input.pose  raw landmarks (33 x [x, y, vis], px) at a frame
  * @param {'right'|'left'} [input.handedness]
@@ -252,7 +254,14 @@ export function runChecks(input) {
     }
   }
 
-  // butt_extension (leadArm)
+  // Mid-toe x at address (mirrored), or null.
+  const toesX = () => {
+    const toeL = lm('address', LM.lToe);
+    const toeR = lm('address', LM.rToe);
+    return toeL && toeR ? (toeL.x + toeR.x) / 2 : toeL?.x ?? toeR?.x ?? null;
+  };
+
+  // butt_extension (leadArm): halfway back, the first leg of steep -> shallow -> steep (D23)
   {
     const m = M('butt_extension', 'backswing', ['leadArm']);
     const c = C.leadArm;
@@ -262,9 +271,7 @@ export function runChecks(input) {
       const x = extendToY(c.head, c.hands, ball.y);
       if (x === null) rows.push(unknown(m, 'nodata', T.reason.nodata('Shaft is horizontal')));
       else {
-        const toeL = lm('address', LM.lToe);
-        const toeR = lm('address', LM.rToe);
-        const toes = toeL && toeR ? (toeL.x + toeR.x) / 2 : toeL?.x ?? toeR?.x ?? null;
+        const toes = toesX();
         const span = toes !== null && toes < ball.x ? bx - toes : 0;
         const margin = 0.1 * span;
         const beyond = (x - bx - margin) * cm; // + = beyond the ball (flat)
@@ -360,6 +367,45 @@ export function runChecks(input) {
         const s = outCm <= 3 ? 'green' : outCm <= 6 ? 'yellow' : 'red';
         push(m, s, round(outCm, 0), 'cm', s === 'green' ? T.checkText.downswing_path_ok : T.checkText.downswing_path(outCm));
       }
+    }
+  }
+
+  // The shaft line (grip -> clubhead) extended to ball height (D23): where it lands against the
+  // ball and the toes. Returns null with an 'unknown' row pushed when it cannot be read.
+  const shaftLanding = (m, k, where) => {
+    const c = C[k];
+    if (!c) rows.push(unknown(m, 'nodata', T.reason.nodata(`No ${where} mark`)));
+    else if (!c.head || !ball) rows.push(unknown(m, c.unplaced ? 'unplaced' : 'hidden', headMissing(c, where)));
+    else {
+      const x = extendToY(c.hands, c.head, ball.y);
+      const toes = toesX();
+      if (x === null || toes === null || toes >= bx) rows.push(unknown(m, 'nodata', T.reason.nodata('Shaft is horizontal')));
+      else return { x, toes, cmFromBall: (x - bx) * cm };
+    }
+    return null;
+  };
+
+  // shaft_down_shallow (shaftDown, P6): beyond the ball = shallow; toes..ball = watch; inside the toes = steep (over the top)
+  {
+    const m = M('shaft_down_shallow', 'transition', ['shaftDown']);
+    const r = shaftLanding(m, 'shaftDown', 'shaft down');
+    if (r) {
+      const where = r.x > bx ? 'shallow' : r.x >= r.toes ? 'between' : 'steep';
+      const s = where === 'shallow' ? 'green' : where === 'between' ? 'yellow' : 'red';
+      push(m, s, round(r.cmFromBall, 0), 'cm', T.checkText.shaft_down_shallow[where](r.cmFromBall), { dir: where === 'shallow' ? 'shallow' : 'steep' });
+    }
+  }
+
+  // shaft_through_steep (shaftThrough, P8): between the toes and the ball, or a little inside = steep again (good);
+  // beyond the ball = flat through impact (a flip)
+  {
+    const m = M('shaft_through_steep', 'impact', ['shaftThrough']);
+    const r = shaftLanding(m, 'shaftThrough', 'shaft through');
+    if (r) {
+      const beyond = r.cmFromBall;
+      const s = beyond <= 0 ? 'green' : beyond <= TH.shaftThroughYellowCm ? 'yellow' : 'red';
+      push(m, s, round(beyond, 0), 'cm', s === 'green' ? T.checkText.shaft_through_steep_ok(-beyond) : T.checkText.shaft_through_steep_flat(beyond),
+        { dir: s === 'green' ? 'steep' : 'flat' });
     }
   }
 

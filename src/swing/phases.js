@@ -14,7 +14,7 @@ import {
 } from './fpsModel';
 
 export const CHECKPOINT_KEYS = [
-  'address', 'takeaway', 'leadArm', 'top', 'transition', 'shaftDown', 'impact', 'trailArm', 'finish',
+  'address', 'takeaway', 'leadArm', 'top', 'transition', 'shaftDown', 'impact', 'shaftThrough', 'trailArm', 'finish',
 ];
 export const LEVEL_TOL_DEG = 5; // "arm level": within 5 degrees of the shoulder's height
 export const FINISH_HOLD_S = 0.15; // grip and head stopped this long
@@ -76,6 +76,7 @@ function phasesD15(S) {
   const leadDy = dense(S.ends.lead).map((p, k) => p[1] - lShY[k]);
   const trailDy = dense(S.ends.trail).map((p, k) => p[1] - tShY[k]);
   const hipY = dense(S.body[S.trailHip]).map((p) => p[1]);
+  const leadHipY = dense(S.body[S.leadHip]).map((p) => p[1]);
   const rGrip = NOISE_MULT * S.sigmaGrip;
   const band = S.armPx * Math.sin((LEVEL_TOL_DEG * Math.PI) / 180);
   const holdW = Math.ceil(FINISH_HOLD_S * fps);
@@ -122,7 +123,7 @@ function phasesD15(S) {
   const P = {
     motionStart, top, handsTop, impact: idx[kBottom], descentEnd: idx[kBottom], conf, notes,
     addressRun: [F[kRun], motionStart],
-    d: { F, gy, leadDy, trailDy, hipY, vg, vn, tg, tn, band, holdW },
+    d: { F, gy, leadDy, trailDy, hipY, leadHipY, vg, vn, tg, tn, band, holdW },
   };
   conf.address = 0.5;
   conf.top = 0.7;
@@ -133,7 +134,7 @@ function phasesD15(S) {
 
 /** Checkpoints between address and finish given top and impact (re-run whenever impact moves). */
 function applyRules(P) {
-  const { F, gy, hipY, leadDy, trailDy, band, vg, vn, tg, tn } = P.d;
+  const { F, gy, hipY, leadHipY, leadDy, trailDy, band, vg, vn, tg, tn } = P.d;
   const { top, impact, motionStart: ms, conf, notes } = P;
   const pick = (key, f, lo, hi, why) => {
     if (f === null) {
@@ -155,6 +156,8 @@ function applyRules(P) {
   pick('shaftDown', firstFrame(F, (k) => gy[k] >= hipY[k], P.transition, impact), P.transition, impact, 'grip at trail-hip height');
   // P9: the trail wrist rises into the band around the trail shoulder's height.
   pick('trailArm', firstFrame(F, (k) => trailDy[k] <= band, impact + 1, F[F.length - 1]), impact + 1, F[F.length - 1], 'trail wrist at shoulder height');
+  // P8 (D22): shaft level after impact, the mirror of P6: the grip rises to lead-hip height.
+  pick('shaftThrough', firstFrame(F, (k) => gy[k] <= leadHipY[k], impact + 1, P.trailArm), impact + 1, P.trailArm, 'grip at lead-hip height');
   // P10: grip AND head stopped for the hold window.
   const still = (k) => vg[k] <= tg && vn[k] <= tn;
   const fin = firstFrame(F, still, P.trailArm, F[F.length - 1]);

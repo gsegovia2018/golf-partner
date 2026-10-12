@@ -29,9 +29,13 @@ export const FAULTS = [
   { id: 'top_position', phase: 'backswing', weight: 0.8, pick: (c) => c.id === 'hands_over_heels' || c.id === 'lead_arm_shoulder_plane' },
   { id: 'tempo_fast', phase: 'transition', weight: 0.6, pick: (c) => isDir(c, ['tempo'], 'fast') },
   { id: 'tempo_slow', phase: 'transition', weight: 0.6, pick: (c) => isDir(c, ['tempo'], 'slow') },
-  { id: 'over_the_top', phase: 'transition', weight: 0.95, pick: (c) => c.id === 'downswing_path' || isDir(c, ['clubhead_vs_plane'], 'steep') },
+  {
+    id: 'over_the_top', phase: 'transition', weight: 0.95,
+    pick: (c) => c.id === 'downswing_path' || isDir(c, ['clubhead_vs_plane', 'shaft_down_shallow'], 'steep'),
+  },
   { id: 'early_extension', phase: 'impact', weight: 1.0, pick: (c) => c.cluster === 'early_extension' },
   { id: 'head_sway', phase: 'impact', weight: 0.7, pick: (c) => c.id === 'head_drift' },
+  { id: 'flip', phase: 'impact', weight: 0.6, pick: (c) => isDir(c, ['shaft_through_steep'], 'flat') },
   { id: 'balance', phase: 'finish', weight: 0.5, pick: (c) => c.id === 'finish_balance' },
 ];
 

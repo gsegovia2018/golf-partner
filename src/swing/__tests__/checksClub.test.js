@@ -60,6 +60,7 @@ describe('THRESHOLDS table (D19)', () => {
       clubheadPlane: { green: 4, yellow: 8 },
       buttYellowCm: 15,
       headDrift: [5, 10],
+      shaftThroughYellowCm: 15,
       ...SETUP_TOP,
     });
     expect(THRESHOLDS.driver).toEqual({
@@ -70,6 +71,7 @@ describe('THRESHOLDS table (D19)', () => {
       clubheadPlane: { green: 6, yellow: 10 },
       buttYellowCm: 20,
       headDrift: [6, 12],
+      shaftThroughYellowCm: 15,
       ...SETUP_TOP,
     });
   });

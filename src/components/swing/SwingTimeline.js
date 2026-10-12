@@ -8,10 +8,10 @@ import { SWING_STRINGS } from '../../swing/strings';
 import { CHECKPOINT_KEYS } from '../../swing/phases';
 
 const T = SWING_STRINGS.results;
-const NAMED = ['Address', 'Top', 'Impact', 'Finish']; // the anchors, under steps 1, 4, 7 and 9
+const NAMED = ['Address', 'Top', 'Impact', 'Finish']; // the anchors, under steps 1, 4, 7 and 10
 
 /**
- * The nine checkpoints as a stepper (D10): a dot per step in the worst status measured there,
+ * The ten checkpoints as a stepper (D10, D22): a dot per step in the worst status measured there,
  * the checkpoint's name and frame underneath, and the +-1 frame nudge. `worst` maps
  * checkpoint -> 'green' | 'yellow' | 'red' | 'none'. Steps are 44 px tall tap targets.
  * With `skeleton` the dots are neutral (the result is still being calculated).

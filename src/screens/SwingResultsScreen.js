@@ -76,6 +76,37 @@ function Hero({
   );
 }
 
+const PATTERN = ['butt_extension', 'shaft_down_shallow', 'shaft_through_steep'];
+
+/** D23: the three shaft readings of steep -> shallow -> steep in one row; a cell opens its check. */
+function SwingPattern({ s, tone, checks, onPick }) {
+  const cells = PATTERN.map((id) => checks.find((c) => c.id === id)).filter(Boolean);
+  if (!cells.length) return null;
+  return (
+    <View style={s.card} testID="results-swing-pattern">
+      <Text style={s.overlineDark}>{T.patternTitle}</Text>
+      <View style={s.patternRow}>
+        {cells.map((c) => {
+          const word = c.status === 'unknown' ? '—' : SWING_STRINGS.statusWord[c.status];
+          return (
+            <PressableScale
+              key={c.id}
+              style={s.patternCell}
+              onPress={() => onPick(c)}
+              accessibilityRole="button"
+              accessibilityLabel={`${T.patternLeg(T.patternLegs[c.id], word)}. ${c.text}`}
+            >
+              <View style={[s.patternDot, { backgroundColor: tone[c.status] }]} />
+              <Text style={s.patternLeg}>{T.patternLegs[c.id]}</Text>
+              <Text style={s.patternWord}>{word}</Text>
+            </PressableScale>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 function Processing({ s, tone, progress, width }) {
   const stage = progress?.stage ?? 'reading';
   const order = ['reading', 'pose', 'planes'];
@@ -296,6 +327,8 @@ export function SwingResultsView({
                 />
               )) : <Text style={s.hint}>{T.noChecksAt}</Text>}
             </View>
+
+            <SwingPattern s={s} tone={tone} checks={checks} onPick={jumpToCheck} />
 
             {drills.length ? (
               <View style={s.card}>
@@ -579,6 +612,14 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4, paddingBottom: 4 },
   overlineDark: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: theme.text.secondary, paddingHorizontal: 4, paddingBottom: 4 },
+  patternRow: { flexDirection: 'row', gap: 8 },
+  patternCell: {
+    flex: 1, minHeight: 64, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 4,
+    backgroundColor: theme.bg.secondary, paddingVertical: 8,
+  },
+  patternDot: { width: 10, height: 10, borderRadius: 5 },
+  patternLeg: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.text.primary },
+  patternWord: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, color: theme.text.secondary },
   drill: { paddingVertical: 8, paddingHorizontal: 4, gap: 2 },
   drillTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.text.primary },
   drillBody: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12.5, lineHeight: 18, color: theme.text.secondary },

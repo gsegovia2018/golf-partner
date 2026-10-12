@@ -102,7 +102,7 @@ describe('SwingResultsScreen: a stored swing', () => {
   test('lists all 15 check rows in the flat "All checks" list, with approx. only where flagged', async () => {
     const { findByText, getAllByLabelText } = setup();
     await findByText(T.allChecks);
-    const rows = getAllByLabelText(/^(Posture at address|Hands between the planes|Butt end|Shaft direction|Downswing path|Clubhead on the plane|Hands height|Hands toward|Shaft angle|Spine angle|Hips hold|Head stays|Tempo|Finish balance)/);
+    const rows = getAllByLabelText(/^(Posture at address|Hands between the planes|Halfway back|Shaft direction|Downswing path|Clubhead on the plane|Hands height|Hands toward|Shaft angle|Spine angle|Hips hold|Head stays|Tempo|Finish balance)/);
     // each check appears once in the list; the ones at impact also appear in the "At impact" card
     expect(rows.length).toBeGreaterThanOrEqual(15);
   });
@@ -159,6 +159,18 @@ describe('SwingResultsScreen: a stored swing', () => {
     expect(getByTestId('results-also-causing').props.children).toBe('Likely also causing: flat backswing, top position and 3 more');
   });
 
+  test('D23: the swing pattern row shows back, down and through; a cell opens its checkpoint', async () => {
+    const { findByText, getByTestId, getByLabelText, getByText } = setup();
+    await findByText(VERDICT);
+    expect(getByTestId('results-swing-pattern')).toBeTruthy();
+    expect(getByText(T.patternTitle)).toBeTruthy();
+    // owner swing: flat halfway back (Fix), the shaft-down head hidden, nothing placed at shaft through
+    expect(getByLabelText(/^Back: Fix\./)).toBeTruthy();
+    expect(getByLabelText(/^Down: —\./)).toBeTruthy();
+    fireEvent.press(getByLabelText(/^Through: —\./));
+    expect(getByText(T.atCheckpoint('Shaft through'))).toBeTruthy();
+  });
+
   test('no consequence line when nothing later is significant', async () => {
     const lone = { ...MARKED, main: { ...MARKED.main, consequences: [] } };
     const { findByText, queryByTestId } = setup({ analysis: lone });
@@ -180,7 +192,7 @@ describe('SwingResultsScreen: a stored swing', () => {
   test('D16: club checks with no clubhead placed offer "Place clubhead", which opens Edit marks on that checkpoint', async () => {
     const { findByText, getAllByLabelText, navigation } = setup({ analysis: UNMARKED });
     await findByText(VERDICT);
-    const cta = getAllByLabelText(/^Place clubhead: Butt end/);
+    const cta = getAllByLabelText(/^Place clubhead: Halfway back/);
     fireEvent.press(cta[cta.length - 1]);
     expect(navigation.navigate).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'leadArm' });
   });

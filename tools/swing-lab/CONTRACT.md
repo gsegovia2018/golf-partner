@@ -17,8 +17,12 @@ Local-only validation tool for the swing analyzer plan
 - `eval.py` — compares `auto.json` with `truth.json` for every clip that has both; prints a table
   and writes `out/report.md`.
 
-## The 9 checkpoints (keys, in order)
-address, takeaway, leadArm, top, transition, shaftDown, impact, trailArm, finish
+## The checkpoints (keys, in order)
+address, takeaway, leadArm, top, transition, shaftDown, impact, shaftThrough, trailArm, finish
+
+`shaftThrough` (P8, shaft parallel after impact; plan D22) is **optional**: `detect.py --variant d15`
+writes it (first frame after impact the grip is back at lead-hip height), the older variants and
+older truth files do not, and `eval.py` scores it only when both auto and truth have it.
 
 ## auto.json / truth.json (same shape; truth.json may omit `pose`, `video`)
 {

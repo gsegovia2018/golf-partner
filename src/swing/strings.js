@@ -154,6 +154,10 @@ export const SWING_STRINGS = {
     mainTitle: 'Main thing to fix',
     noFaultTitle: 'No clear fault',
     noFaultWhy: 'Nothing stands out. Check the list below for what to watch.',
+    // D23: the shaft pattern, one row with the three readings.
+    patternTitle: 'Swing pattern: steep → shallow → steep',
+    patternLegs: { butt_extension: 'Back', shaft_down_shallow: 'Down', shaft_through_steep: 'Through' },
+    patternLeg: (leg, word) => `${leg}: ${word}`,
     // D21: the main fault is the earliest one; later significant faults are likely its knock-on effects.
     alsoCausing: (labels) => `Likely also causing: ${labels.length > 2
       ? `${labels.slice(0, 2).join(', ').toLowerCase()} and ${labels.length - 2} more`
@@ -220,7 +224,7 @@ export const SWING_STRINGS = {
 
   checkpoint: {
     address: 'Address', takeaway: 'Takeaway', leadArm: 'Lead arm', top: 'Top', transition: 'Transition',
-    shaftDown: 'Shaft down', impact: 'Impact', trailArm: 'Trail arm', finish: 'Finish',
+    shaftDown: 'Shaft down', impact: 'Impact', shaftThrough: 'Shaft through', trailArm: 'Trail arm', finish: 'Finish',
     lateBackswing: 'Late backswing', preImpact: 'Pre-impact', postImpact: 'Post-impact',
   },
 
@@ -235,7 +239,9 @@ export const SWING_STRINGS = {
     hands_over_heels: 'Hands over the heels at the top',
     lead_arm_shoulder_plane: 'Lead arm on the shoulder plane',
     hands_between_planes: 'Hands between the planes',
-    butt_extension: 'Butt end points at the ball',
+    butt_extension: 'Halfway back: steep',
+    shaft_down_shallow: 'Halfway down: shallow',
+    shaft_through_steep: 'Halfway through: steep',
     top_direction: 'Shaft direction at the top',
     downswing_path: 'Downswing path',
     clubhead_vs_plane: 'Clubhead on the plane',
@@ -262,6 +268,7 @@ export const SWING_STRINGS = {
     balance: 'Finish balance',
     posture: 'Posture at address',
     top_position: 'Top position',
+    flip: 'Flat through impact',
   },
 
   // Reasons a check has no verdict ('unknown'), shown instead of a value.
@@ -294,9 +301,16 @@ export const SWING_STRINGS = {
     hands_between_planes_ok: 'Hands travel between shaft and shoulder planes',
     hands_between_planes: (cm, dir, where) =>
       `Hands ${r0(cm)} cm ${dir === 'steep' ? 'outside the shoulder plane (steep)' : 'inside the shaft plane (flat)'} at ${where}`,
-    butt_extension_ok: 'Butt-end line lands between toes and ball',
-    butt_extension_flat: (cm) => `Butt-end line lands ${r0(cm)} cm beyond the ball (flat)`,
-    butt_extension_steep: (cm) => `Butt-end line lands ${r0(cm)} cm inside the toes (steep)`,
+    butt_extension_ok: 'Shaft line lands just inside the ball: steep enough going back',
+    butt_extension_flat: (cm) => `Shaft line lands ${r0(cm)} cm beyond the ball: shallow going back (flat)`,
+    butt_extension_steep: (cm) => `Shaft line lands ${r0(cm)} cm inside the toes: too steep going back`,
+    shaft_down_shallow: {
+      shallow: (cm) => `Shaft line lands ${r0(cm)} cm beyond the ball: shallow coming down`,
+      between: () => 'Shaft line lands between your toes and the ball: a little steep coming down',
+      steep: () => 'Shaft line lands inside your toes: steep coming down (over the top)',
+    },
+    shaft_through_steep_ok: (cm) => (cm >= 1 ? `Shaft line lands ${r0(cm)} cm inside the ball: steep again through` : 'Shaft line lands at the ball: steep again through'),
+    shaft_through_steep_flat: (cm) => `Shaft line lands ${r0(cm)} cm beyond the ball: flat through (a flip)`,
     top_direction_ok: 'Shaft points near the target line',
     top_direction_across: 'Shaft crossed the line (points right)',
     top_direction_laid_off: 'Shaft laid off (points left)',
