@@ -13,7 +13,30 @@ import { formatDistance, unitSuffix } from '../../lib/units';
 // side of the camera's centerline. Inside it we place a marker at the exact
 // offset; outside it we fall back to a plain left/right chevron banner —
 // there's no useful "x position" for a flag that's behind your shoulder.
+// Default only; the screen uses visibleHalfFovDeg so the marker moves at the
+// same rate as the picture.
 const HALF_FOV_DEG = 30;
+
+// A typical phone main camera (~26mm equivalent, 4:3 sensor) sees about 51°
+// across its short side and 65° across its long side.
+const SENSOR_HALF_FOV_SHORT_DEG = 25.5;
+const SENSOR_HALF_FOV_LONG_DEG = 32.5;
+const SENSOR_ASPECT = 4 / 3;
+
+// Horizontal half-angle actually visible on screen. CameraView fills the
+// screen ("cover"), so a tall portrait screen crops the 3:4 preview's sides —
+// on a 20:9 phone only ~60% of the width survives, i.e. ~16° either side, not
+// the 25° the lens sees. Getting this wrong makes the marker slide at a
+// different speed from the green behind it.
+export function visibleHalfFovDeg(width, height) {
+  if (!(width > 0 && height > 0)) return HALF_FOV_DEG;
+  const portrait = height >= width;
+  const lensHalf = portrait ? SENSOR_HALF_FOV_SHORT_DEG : SENSOR_HALF_FOV_LONG_DEG;
+  const previewAspect = portrait ? 1 / SENSOR_ASPECT : SENSOR_ASPECT; // width / height
+  const visibleFraction = Math.min(1, (width / height) / previewAspect);
+  const k = Math.PI / 180;
+  return Math.atan(Math.tan(lensHalf * k) * visibleFraction) / k;
+}
 
 // A flag pill near a screen edge would get half-clipped by the icon's own
 // width — this keeps it fully on-screen even at the ±1 extremes.
@@ -55,7 +78,7 @@ function FlagFinderContent({ courseName, holeNumber, onClose }) {
   const { units } = useAppSettings();
 
   const { position, accuracy, distances } = useGpsDistances(courseName, holeNumber);
-  const { heading, lowAccuracy, status: compassStatus, requestPermission } = useCompassHeading();
+  const { heading, lowAccuracy, flat, status: compassStatus, requestPermission } = useCompassHeading();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
   // Ask for the camera the moment the sheet opens, same as any other
@@ -73,11 +96,14 @@ function FlagFinderContent({ courseName, holeNumber, onClose }) {
     [courseName, holeNumber],
   );
 
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  const halfFovDeg = visibleHalfFovDeg(screenWidth, screenHeight);
+
   const overlay = useMemo(() => {
     if (!position || !target || heading == null) return null;
     const bearing = bearingDeg(position, target);
-    return flagOverlayState({ heading, bearing });
-  }, [position, target, heading]);
+    return flagOverlayState({ heading, bearing, halfFovDeg });
+  }, [position, target, heading, halfFovDeg]);
 
   const cameraGranted = !!cameraPermission?.granted;
 
@@ -94,12 +120,13 @@ function FlagFinderContent({ courseName, holeNumber, onClose }) {
     statusMessage = 'Locating GPS…';
   } else if (!target) {
     statusMessage = "This hole isn't mapped yet";
+  } else if (flat) {
+    statusMessage = 'Hold your phone upright, camera toward the green';
   } else if (heading == null) {
     statusMessage = 'Reading compass…';
   }
 
   const distanceMeters = distances?.pin ?? distances?.center ?? null;
-  const screenWidth = Dimensions.get('window').width;
   const markerLeft = overlay?.mode === 'marker'
     ? Math.min(Math.max(((overlay.x + 1) / 2) * screenWidth, MARKER_HALF_WIDTH), screenWidth - MARKER_HALF_WIDTH)
     : 0;

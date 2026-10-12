@@ -1,17 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import * as Location from 'expo-location';
+import { DeviceMotion, Magnetometer } from 'expo-sensors';
 
-// Device compass heading for the flag finder's camera overlay: degrees
-// clockwise from true north, smoothed so the arrow doesn't twitch. Returns
-// { heading, lowAccuracy, status, requestPermission } where `heading` is null
-// until the first reading lands, `lowAccuracy` drives the "wave your phone in
-// a figure 8" hint, and `status` is the sensor's health
+// Device compass heading for the flag finder's camera overlay: the direction
+// the BACK CAMERA faces, in degrees clockwise from north, smoothed so the
+// arrow doesn't twitch. Returns { heading, lowAccuracy, flat, status,
+// requestPermission } where `heading` is null until the first reading lands,
+// `lowAccuracy` drives the "wave your phone in a figure 8" hint, `flat` means
+// the camera points at the ground/sky so it has no usable direction, and
+// `status` is the sensor's health
 // ('ok' | 'acquiring' | 'needs-permission' | 'unavailable').
 //
-// The two platforms share nothing but the smoothing: native reads expo-location's
-// heading watch, web reads raw DOM orientation events (see the web effect for
-// why expo is not usable there).
+// Camera axis, not top edge: a plain compass heading (expo-location's
+// watchHeadingAsync on Android, Chrome's bare alpha) is the azimuth of the
+// phone's top edge. Held upright to aim the camera, that edge points at the
+// sky, its azimuth is decided by hand tremor, and the arrow spins. Every path
+// below instead projects the device's -Z axis (out of the back) onto the
+// horizon, which is well defined exactly when the phone is upright.
+//
+// Android reads expo-sensors' DeviceMotion (the fused rotation-vector sensor),
+// iOS keeps expo-location's heading, web reads raw DOM orientation events (see
+// the web effect for why expo is not usable there).
 
 // Low-pass factor for the sin/cos EMA. 0.25 keeps ~4 readings of memory: enough
 // to kill the ±5–10° jitter a phone magnetometer emits while standing still,
@@ -31,6 +41,59 @@ const NATIVE_LOW_ACCURACY_MAX = 1;
 // iOS reports its compass accuracy as ± degrees. Anything looser than 30° is
 // worse than "roughly the right side of the fairway" and worth calibrating.
 const WEB_LOW_ACCURACY_DEGREES = 30;
+
+// The camera axis' horizontal component is sin of its tilt from vertical.
+// Below 0.35 (camera within ~20° of straight down or up) the heading is
+// mostly noise — the overlay asks the player to raise the phone instead.
+const MIN_HORIZONTAL = 0.35;
+
+// DeviceMotion tick. 50ms = 20Hz, which with SMOOTH_ALPHA gives the arrow a
+// ~200ms time constant: steady, but still tracks a deliberate turn.
+const MOTION_INTERVAL_MS = 50;
+
+// Earth's field is 25–65µT everywhere. Readings outside a loose band mean
+// nearby metal or an uncalibrated magnetometer — the figure-8 hint's cue.
+// The rotation-vector sensor exposes no accuracy of its own.
+const MAG_MIN_UT = 20;
+const MAG_MAX_UT = 70;
+
+// Heading (clockwise from north) of a device-frame vector whose world-frame
+// east/north components are given, or `flat` when it barely leaves the
+// vertical. Shared tail of both camera-heading functions below.
+function headingOf(east, north) {
+  if (Math.hypot(east, north) < MIN_HORIZONTAL) return { deg: null, flat: true };
+  const deg = (Math.atan2(east, north) * 180) / Math.PI;
+  return { deg: (deg + 360) % 360, flat: false };
+}
+
+// Android, from expo-sensors DeviceMotion `rotation` (radians). expo builds it
+// from SensorManager.getOrientation on the rotation-vector matrix R and then
+// flips signs: alpha = -azimuth, beta = -pitch, gamma = roll. Rebuilding the
+// two entries of R we need (R[2], R[5]: east/north components of the device
+// Z axis) from those angles is exact — the camera looks along -Z.
+export function cameraHeadingFromDeviceMotion({ alpha, beta, gamma } = {}) {
+  if (![alpha, beta, gamma].every(Number.isFinite)) return null;
+  const a = -alpha;
+  const p = -beta;
+  const r = gamma;
+  const r2 = Math.cos(a) * Math.sin(r) + Math.sin(a) * Math.sin(p) * Math.cos(r);
+  const r5 = -Math.sin(a) * Math.sin(r) + Math.cos(a) * Math.sin(p) * Math.cos(r);
+  return headingOf(-r2, -r5);
+}
+
+// Web (W3C DeviceOrientation, degrees): R = Rz(alpha)·Rx(beta)·Ry(gamma) in an
+// east/north/up frame. The camera's world direction is minus R's third
+// column — the same vector as the spec's own "compass heading" example.
+export function cameraHeadingFromOrientation(alphaDeg, betaDeg, gammaDeg) {
+  if (![alphaDeg, betaDeg, gammaDeg].every(Number.isFinite)) return null;
+  const k = Math.PI / 180;
+  const ca = Math.cos(alphaDeg * k);
+  const sa = Math.sin(alphaDeg * k);
+  const sb = Math.sin(betaDeg * k);
+  const cg = Math.cos(gammaDeg * k);
+  const sg = Math.sin(gammaDeg * k);
+  return headingOf(-ca * sg - sa * sb * cg, -sa * sg + ca * sb * cg);
+}
 
 // Vector-space low-pass filter. Averaging degrees directly breaks at the wrap
 // point — the mean of 359° and 1° is 180°, i.e. the arrow flips to point
@@ -79,6 +142,7 @@ function webNeedsPermission() {
 export function useCompassHeading() {
   const [heading, setHeading] = useState(null);
   const [lowAccuracy, setLowAccuracy] = useState(false);
+  const [flat, setFlat] = useState(false);
   const [status, setStatus] = useState('acquiring');
   // 'granted' everywhere except iOS Safari web, where it starts 'pending' and
   // only a tap on requestPermission can move it. Flipping it re-runs the
@@ -112,20 +176,70 @@ export function useCompassHeading() {
     let cancelled = false;
     // Feeds every accepted reading through the smoother. `low` is passed
     // separately because only some platforms/events carry an accuracy signal.
+    // `low` undefined leaves lowAccuracy alone (Android sets it from its own
+    // magnetometer listener).
     const apply = (rawDeg, low) => {
       if (cancelled || !Number.isFinite(rawDeg)) return;
       smoothRef.current = smoothHeading(smoothRef.current, rawDeg);
       setHeading(smoothRef.current.deg);
-      setLowAccuracy(!!low);
+      setFlat(false);
+      if (low !== undefined) setLowAccuracy(!!low);
       setStatus('ok');
     };
+    // Camera-axis readings: a flat phone keeps the last heading (and the
+    // smoother's state) but tells the UI to ask for an upright phone.
+    const applyCamera = (result, low) => {
+      if (cancelled || !result) return;
+      if (result.flat) {
+        setFlat(true);
+        setStatus('ok');
+        return;
+      }
+      apply(result.deg, low);
+    };
+
+    if (Platform.OS === 'android') {
+      const subs = [];
+      (async () => {
+        try {
+          if (!(await DeviceMotion.isAvailableAsync())) {
+            if (!cancelled) setStatus('unavailable');
+            return;
+          }
+          if (cancelled) return;
+          DeviceMotion.setUpdateInterval(MOTION_INTERVAL_MS);
+          subs.push(DeviceMotion.addListener((m) => {
+            applyCamera(cameraHeadingFromDeviceMotion(m?.rotation));
+          }));
+          // Calibration hint only — a missing magnetometer listener must not
+          // take the compass down with it.
+          try {
+            if (await Magnetometer.isAvailableAsync()) {
+              if (cancelled) return;
+              Magnetometer.setUpdateInterval(500);
+              subs.push(Magnetometer.addListener(({ x, y, z }) => {
+                const ut = Math.hypot(x, y, z);
+                if (!cancelled && Number.isFinite(ut)) setLowAccuracy(ut < MAG_MIN_UT || ut > MAG_MAX_UT);
+              }));
+            }
+          } catch { /* no hint, compass still works */ }
+        } catch {
+          if (!cancelled) setStatus('unavailable');
+        }
+      })();
+      return () => {
+        cancelled = true;
+        subs.forEach((sub) => { try { sub?.remove?.(); } catch { /* already gone */ } });
+      };
+    }
 
     if (Platform.OS !== 'web') {
       let sub = null;
       (async () => {
         try {
-          // Android requires location permission for the magnetometer-backed
-          // heading; iOS grants it with the same prompt. A refusal leaves us
+          // iOS: Core Location's heading needs the location prompt. CLHeading
+          // follows the device's interface orientation rather than the camera
+          // axis; untested on an upright iPhone. A refusal leaves us
           // with no sensor at all, which reads to the UI as 'unavailable'
           // (the 'needs-permission' status is the web re-prompt flow only).
           const { status: perm } = await Location.requestForegroundPermissionsAsync();
@@ -185,22 +299,20 @@ export function useCompassHeading() {
         apply(event.webkitCompassHeading, typeof acc === 'number' && acc > WEB_LOW_ACCURACY_DEGREES);
         return;
       }
-      // Chrome/Android: alpha is counter-clockwise from north, hence 360 − alpha.
+      // Chrome/Android: the full alpha/beta/gamma triple gives the camera axis
+      // (alpha alone is the top edge's azimuth, which spins when upright). The
+      // camera axis doesn't rotate with the screen, so no orientation angle.
       // Only absolute events are earth-referenced; a relative 'deviceorientation'
       // event measures drift from wherever the device happened to be and would
       // point the arrow at nothing, so it's discarded.
       const absolute = event.type === 'deviceorientationabsolute' || event.absolute === true;
-      if (!absolute || typeof event.alpha !== 'number') return;
-      // The sensor frame is fixed to the device, the UI frame rotates with the
-      // screen. Adding the screen angle re-expresses the heading in the frame
-      // the overlay is drawn in, so a landscape phone still points correctly.
-      // Assumes the overlay follows the OS orientation (it does — no locked
-      // portrait override); 0 is the right answer for a plain portrait phone.
-      const screenAngle = window.screen?.orientation?.angle ?? 0;
+      if (!absolute) return;
+      const result = cameraHeadingFromOrientation(event.alpha, event.beta, event.gamma);
+      if (!result) return;
       if (timer) { clearTimeout(timer); timer = null; }
       // No accuracy field outside iOS — report calibrated rather than nag with
       // a hint we have no evidence for.
-      apply((360 - event.alpha + screenAngle) % 360, false);
+      applyCamera(result, false);
     };
 
     // Both are registered: 'deviceorientationabsolute' is the Chromium-only
@@ -228,6 +340,7 @@ export function useCompassHeading() {
   return {
     heading, // smoothed degrees 0–360 clockwise from north, null before the first reading
     lowAccuracy, // magnetometer needs a figure-8 calibration wave
+    flat, // camera points at the ground or sky — no usable direction
     status, // 'ok' | 'acquiring' | 'needs-permission' | 'unavailable'
     requestPermission, // iOS Safari web only — must be called from a tap handler
   };

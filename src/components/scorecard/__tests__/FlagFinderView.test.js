@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { FlagFinderView, flagOverlayState } from '../FlagFinderView';
+import { FlagFinderView, flagOverlayState, visibleHalfFovDeg } from '../FlagFinderView';
 
 // --- flagOverlayState (pure helper) -----------------------------------
 
@@ -141,6 +141,12 @@ describe('FlagFinderView', () => {
     getByText("This hole isn't mapped yet");
   });
 
+  it('asks for an upright phone when the camera points at the ground', () => {
+    mockCompassResult = { ...mockCompassResult, flat: true };
+    const { getByText } = render(<FlagFinderView {...baseProps} />);
+    getByText('Hold your phone upright, camera toward the green');
+  });
+
   it('shows a reading-compass message before the first heading', () => {
     mockCompassResult = { ...mockCompassResult, heading: null };
     const { getByText } = render(<FlagFinderView {...baseProps} />);
@@ -175,5 +181,24 @@ describe('FlagFinderView', () => {
     const { getByText } = render(<FlagFinderView {...baseProps} />);
     getByText(/GPS accuracy ±22m — direction is approximate/);
     getByText('Compass needs calibration — wave your phone in a figure 8');
+  });
+});
+
+describe('visibleHalfFovDeg', () => {
+  it('a tall portrait screen crops the preview to ~16° either side', () => {
+    expect(visibleHalfFovDeg(1080, 2400)).toBeGreaterThan(15);
+    expect(visibleHalfFovDeg(1080, 2400)).toBeLessThan(17);
+  });
+
+  it('a 3:4 portrait screen shows the whole short-side lens angle', () => {
+    expect(visibleHalfFovDeg(750, 1000)).toBeCloseTo(25.5, 6);
+  });
+
+  it('landscape shows the long-side lens angle', () => {
+    expect(visibleHalfFovDeg(2400, 1080)).toBeCloseTo(32.5, 6);
+  });
+
+  it('falls back to the default for a zero-size window', () => {
+    expect(visibleHalfFovDeg(0, 0)).toBe(30);
   });
 });
