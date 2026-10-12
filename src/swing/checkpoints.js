@@ -103,13 +103,6 @@ const INTERNAL_DEFS = [
   },
 ];
 
-export const HOW_TO_MARK = [
-  ['Hands', 'the middle of the grip, between the two hands (not the wrists).'],
-  ['Clubhead', 'the centre of the clubhead. At address, the club neck where the shaft meets the head.'],
-  ['Ball', 'the centre of the ball, marked at Address. If the clubhead hides it, scrub forward to after the takeaway (the ball does not move until impact) and mark it there.'],
-  ['Clubhead hidden', 'the shaft points at the camera, or the head is out of frame.'],
-];
-
 const swapLR = (t) => t.replace(/\b(left|right)\b/gi, (m) => {
   const o = m.toLowerCase() === 'left' ? 'right' : 'left';
   return m[0] === m[0].toUpperCase() ? o[0].toUpperCase() + o.slice(1) : o;
@@ -125,7 +118,3 @@ export function cueFor(key, handedness = 'right') {
     ...d, what: swapLR(d.what), stopWhen: swapLR(d.stopWhen), markTips: swapLR(d.markTips), stop,
   };
 }
-
-// The timeline has ten steps (D10, D22); an internal frame lives under the step it belongs to.
-const STEP_OF = { lateBackswing: 'leadArm', preImpact: 'impact', postImpact: 'impact' };
-export const timelineStep = (key) => STEP_OF[key] ?? key;
