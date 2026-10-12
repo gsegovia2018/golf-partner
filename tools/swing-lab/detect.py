@@ -258,6 +258,290 @@ def run_pose(path: Path, info: dict, model: str, dense: bool, vstill_k: float,
 
 
 # =============================================================================================
+# Pass 1, sparse165 — the native app's sampling policy (plan §4.2, owner decision 2026-10-12)
+# =============================================================================================
+# Validated on marcos-2026-10-10 against the owner truth (PR #130): every 4th after impact moved
+# finish from -6 (pass) to -8 (fail), so impact -> finish is every 2nd; a 12-frame top back-fill
+# did not reach top − 6 (the top is seen ~14 frames after it), 20 does.
+SPARSE_EVERY = 16      # before motion start, after the finish
+MID_EVERY = 4          # motion start -> top
+FOLLOW_EVERY = 2       # impact + 6 -> finish
+DENSE_MARGIN = 6       # every frame from top − 6 to impact + 6
+TOP_BACK = 20          # back-fill reaches this far behind the frame the top is seen at
+
+
+def _median_pt(pts: list[np.ndarray]) -> np.ndarray:
+    return np.array([float(np.median([p[0] for p in pts])), float(np.median([p[1] for p in pts]))])
+
+
+def _diff_sigma(xs: np.ndarray) -> float:
+    if len(xs) < 3:
+        return float("nan")
+    return robust_sigma(np.diff(xs)) / math.sqrt(2)
+
+
+def grip_point(lm: np.ndarray, k: float = 0.35) -> np.ndarray:
+    """Single-sample grip with the visibility half of the wrist gate (Kotlin Grip.point)."""
+    l = lm[L_WR, :2] + k * (lm[L_WR, :2] - lm[L_EL, :2])
+    r = lm[R_WR, :2] + k * (lm[R_WR, :2] - lm[R_EL, :2])
+    lv, rv = lm[L_WR, 2] >= 0.5, lm[R_WR, 2] >= 0.5
+    if lv and not rv:
+        return l
+    if rv and not lv:
+        return r
+    return (l + r) / 2
+
+
+class SparsePolicy:
+    """Mirror of the Kotlin SamplingPolicy (modules/golf-swing/.../SamplingPolicy.kt); keep the two
+    in step. Zones and strides: STILL every 16th -> (trigger: grip left its rolling still
+    reference by 3σ√2) BACKSWING every 4th -> (top: risen >= 0.2 H, then the grip dropped 3σ√2
+    below its highest sample) DOWNSWING every frame, back-filled from the frame the top was seen
+    at − TOP_BACK -> (impact: bottom of the descent, as before) every frame to impact + 6, then
+    FOLLOW every 2nd -> (grip and nose stopped for 0.15 s, or 1.5 s) DONE every 16th.
+    The trigger back-fills the frames lost to the 16-stride at the 4-stride."""
+
+    def __init__(self, fps: float, sparse: int = SPARSE_EVERY, mid: int = MID_EVERY,
+                 margin: int = DENSE_MARGIN, top_back: int = TOP_BACK, follow: int = FOLLOW_EVERY):
+        self.sparse, self.mid, self.margin, self.top_back, self.follow = sparse, mid, margin, top_back, follow
+        self.hold = max(2, math.ceil(0.15 * fps))
+        self.calib = math.ceil(0.5 * fps)
+        self.after_max = math.ceil(1.5 * fps)
+        self.dense_max = math.ceil(3.0 * fps)
+        self.zone = "still"
+        self.origin = 0
+        self.dense_until = -1
+        self.last = -1
+        self.still: list[tuple] = []
+        self.calibrated = False
+        self.sigma = self.sigma_nose = self.stop_g = self.stop_n = self.body_h = float("nan")
+        self.window: list[tuple] = []
+        self.ref_y = 0.0
+        self.top_y = self.top_frame = None
+        self.bottom_y, self.bottom_frame = -1e9, -1
+        self.risen = False
+        self.trigger = self.top_seen = self.impact = self.after_from = -1
+
+    def every(self) -> int:
+        return {"still": self.sparse, "done": self.sparse, "backswing": self.mid,
+                "downswing": 1, "follow": self.follow}[self.zone]
+
+    def wants(self, f: int) -> bool:
+        if f < self.origin:
+            return False
+        if self.zone == "follow" and f <= self.dense_until:
+            return True
+        return (f - self.origin) % self.every() == 0
+
+    def move_radius(self, s: float) -> float:
+        return 3 * math.sqrt(2) * s
+
+    def observe(self, f: int, grip: np.ndarray, nose: np.ndarray, body_h: float):
+        if f <= self.last:
+            return None
+        self.last = f
+        o = (f, grip, nose, body_h)
+        return getattr(self, "_" + self.zone)(o) if self.zone != "done" else None
+
+    def _calibrate(self, now: int) -> None:
+        st = self.still
+        if len(st) < 4 or (now - st[0][0] < self.calib and len(st) < self.calib // self.sparse):
+            return
+        c = [o for o in st if o[0] - st[0][0] <= self.calib]
+        c = c if len(c) >= 4 else st
+        self.body_h = float(np.median([o[3] for o in c]))
+        floor = max(0.5, 0.003 * self.body_h)
+
+        def sig(j):
+            P = np.array([o[j] for o in c])
+            return max(floor, _diff_sigma(P[:, 0]), _diff_sigma(P[:, 1]))
+        self.sigma, self.sigma_nose = sig(1), sig(2)
+        lag = max(1, int(math.floor(self.hold / self.sparse + 0.5)))
+
+        def stop(j, s):
+            d = [float(np.linalg.norm(c[i][j] - c[i + lag][j])) for i in range(max(0, len(c) - lag))]
+            p25 = float(np.percentile(d, 25)) if d else 0.0
+            return max(3 * p25, self.move_radius(s))
+        self.stop_g, self.stop_n = stop(1, self.sigma), stop(2, self.sigma_nose)
+        self.calibrated = True
+
+    def _still(self, o):
+        if not self.calibrated:
+            self._calibrate(o[0])
+        if self.calibrated and len(self.still) >= 4:
+            ref = _median_pt([s[1] for s in self.still[-4:]])
+            if float(np.linalg.norm(o[1] - ref)) > self.move_radius(self.sigma):
+                self.zone, self.origin, self.trigger = "backswing", o[0], o[0]
+                self.ref_y, self.top_y, self.top_frame = float(ref[1]), float(o[1][1]), o[0]
+                self.risen = False
+                self.window = [o]
+                return ("trigger", o[0], o[0] - (self.sparse - self.mid))
+        self.still.append(o)
+        return None
+
+    def _push(self, o):
+        self.window.append(o)
+        while len(self.window) > 1 and self.window[0][0] < o[0] - self.hold:
+            self.window.pop(0)
+
+    def _stopped(self, nose_too: bool) -> bool:
+        w = self.window
+        if len(w) < 4 or w[-1][0] - w[0][0] < self.hold - self.mid:
+            return False
+
+        def end(j, i0):
+            return _median_pt([w[i][j] for i in range(i0, i0 + 3)])
+        g_ok = float(np.linalg.norm(end(1, 0) - end(1, len(w) - 3))) <= self.stop_g
+        n_ok = not nose_too or float(np.linalg.norm(end(2, 0) - end(2, len(w) - 3))) <= self.stop_n
+        return g_ok and n_ok
+
+    def _capped(self, o):
+        if o[0] - self.trigger > self.dense_max:
+            self.zone, self.origin, self.after_from, self.dense_until = "follow", o[0], o[0], o[0]
+            self.window = []
+            return ("capped", o[0])
+        return None
+
+    def _backswing(self, o):
+        self._push(o)
+        e = self._capped(o)
+        if e:
+            return e
+        g = float(o[1][1])
+        if not self.risen:
+            if g < self.top_y:
+                self.top_y, self.top_frame = g, o[0]
+            if self.ref_y - self.top_y >= 0.2 * self.body_h:
+                self.risen = True
+            elif self._stopped(False):
+                self.zone, self.origin = "still", o[0]
+                self.still = list(self.window)
+                self.window = []
+                return ("reset", o[0])
+            return None
+        if g < self.top_y:
+            self.top_y, self.top_frame = g, o[0]
+            return None
+        if g > self.top_y + self.move_radius(self.sigma):
+            self.zone, self.origin, self.top_seen = "downswing", o[0], o[0]
+            self.bottom_y, self.bottom_frame = g, o[0]
+            return ("top", o[0], o[0] - self.top_back)
+        return None
+
+    def _downswing(self, o):
+        self._push(o)
+        e = self._capped(o)
+        if e:
+            return e
+        g = float(o[1][1])
+        if g < self.top_y:
+            self.top_y, self.bottom_y = g, -1e9
+            return None
+        if g > self.bottom_y:
+            self.bottom_y, self.bottom_frame = g, o[0]
+        if self.bottom_y - self.top_y >= 0.2 * self.body_h and g < self.bottom_y - 0.02 * self.body_h:
+            self.impact = self.after_from = self.bottom_frame
+            self.dense_until = max(o[0], self.impact + self.margin)
+            self.zone, self.origin = "follow", self.dense_until
+            self.window = []
+            return ("impact", self.impact)
+        return None
+
+    def _follow(self, o):
+        self._push(o)
+        if (o[0] > self.dense_until and self._stopped(True)) or o[0] - self.after_from > self.after_max:
+            self.zone, self.origin = "done", o[0]
+            return ("done", o[0])
+        return None
+
+
+def run_pose_sparse(path: Path, info: dict, model: str, top_back: int = TOP_BACK,
+                    follow: int = FOLLOW_EVERY, still: int = SPARSE_EVERY) -> dict:
+    """sparse165: the native analyzer's loop. One sequential decode into a ring of the last
+    RING frames; pose on the frames the SparsePolicy wants; a trigger or top re-runs the ring
+    from its back-fill frame on a fresh VIDEO-mode landmarker (timestamps must increase per
+    instance), the transition frame included, exactly like the app's spare instance."""
+    import mediapipe as mp
+    from mediapipe.tasks.python import BaseOptions, vision
+
+    RING = 24
+    model_path = LAB / f"pose_landmarker_{model}.task"
+
+    def new():
+        return vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=str(model_path)),
+            running_mode=vision.RunningMode.VIDEO, num_poses=1))
+    policy = SparsePolicy(info["captureFps"] or 240.0, sparse=still, top_back=top_back, follow=follow)
+    w, h, fps = info["w"], info["h"], info["containerFps"]
+    cap = cv2.VideoCapture(str(path))
+    samples: dict[int, list] = {}
+    ring: dict[int, np.ndarray] = {}
+    diffs, prev_small = [], None
+    state = {"lmk": new(), "n": 0, "s": 0.0, "instances": 1}
+    events = []
+
+    def infer(f: int):
+        t1 = time.perf_counter()
+        img = mp.Image(image_format=mp.ImageFormat.SRGB, data=ring[f])
+        r = state["lmk"].detect_for_video(img, int(round(f * 1000 / fps)))
+        state["s"] += time.perf_counter() - t1
+        state["n"] += 1
+        if not r.pose_landmarks:
+            samples.pop(f, None)
+            return None
+        lm = [[p.x * w, p.y * h, p.visibility] for p in r.pose_landmarks[0]]
+        samples[f] = lm
+        return np.array(lm)
+
+    def observe(f: int, L: np.ndarray):
+        H = float(L[:, 1].max() - L[:, 1].min())
+        return policy.observe(f, grip_point(L), L[NOSE, :2].copy(), H)
+
+    def refill(lo: int, cur: int, stride: int):
+        state["lmk"].close()
+        state["lmk"] = new()
+        state["instances"] += 1
+        for f in range(max(lo, cur - RING + 1, 0), cur + 1):
+            if (cur - f) % stride == 0 and f in ring:
+                L = infer(f)
+                if L is not None:
+                    observe(f, L)   # ignored by the policy (older than its last frame)
+
+    i = 0
+    t0 = time.perf_counter()
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        small = cv2.cvtColor(cv2.resize(frame, (w // 4, h // 4)), cv2.COLOR_BGR2GRAY).astype(np.int16)
+        diffs.append(float(np.mean(np.abs(small - prev_small))) if prev_small is not None else 0.0)
+        prev_small = small
+        ring[i] = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        ring.pop(i - RING, None)
+        if policy.wants(i):
+            L = infer(i)
+            e = observe(i, L) if L is not None else None
+            if e:
+                events.append(list(e))
+                if e[0] == "trigger":
+                    refill(e[2], i, policy.mid)
+                elif e[0] == "top":
+                    refill(e[2], i, 1)
+        i += 1
+    cap.release()
+    state["lmk"].close()
+    total_s = time.perf_counter() - t0
+    print(f"[sparse165] events={events} sigma={policy.sigma:.2f} bodyH={policy.body_h:.1f} "
+          f"topDelta={policy.move_radius(policy.sigma):.2f} instances={state['instances']}")
+    return {
+        "model": model, "dense": False, "sampling": "sparse165", "samples": samples, "diffs": diffs,
+        "bodyH": policy.body_h, "events": events,
+        "timings": {"poseMs": round(state["s"] * 1000), "pass1Ms": round(total_s * 1000),
+                    "inferences": state["n"], "withPose": len(samples)},
+    }
+
+
+# =============================================================================================
 # Smoothing (§4.5)
 # =============================================================================================
 class OneEuro:
@@ -1263,6 +1547,16 @@ def main() -> None:
                     help="grey working scale for club heuristics; default 0.5 when the short side "
                          ">= 720 px (the plan's half-resolution copy), else 1.0")
     ap.add_argument("--dense", action="store_true", help="run pose on every frame (ignores §4.2)")
+    ap.add_argument("--sampling", choices=["policy", "sparse165"], default="policy",
+                    help="pass-1 sampling: policy = the §4.2 speed policy of the variant; sparse165 = the "
+                         "native app's policy (every 16th still, every 4th to the top, every frame "
+                         "top-6 .. impact+6, every 2nd to the finish), with its ring back-fill")
+    ap.add_argument("--top-back", type=int, default=TOP_BACK,
+                    help=f"sparse165: frames re-run behind the frame the top is seen at (default {TOP_BACK})")
+    ap.add_argument("--still-every", type=int, default=SPARSE_EVERY,
+                    help=f"sparse165: stride before motion start and after the finish (default {SPARSE_EVERY})")
+    ap.add_argument("--follow-every", type=int, default=FOLLOW_EVERY,
+                    help=f"sparse165: stride from impact + 6 to the finish (default {FOLLOW_EVERY})")
     ap.add_argument("--reuse-pose", action="store_true", help="reuse cached pass-1 pose if present")
     ap.add_argument("--out-suffix", default=None,
                     help="write auto<suffix>.json; default '' for the plan with the full model, plus "
@@ -1294,14 +1588,17 @@ def main() -> None:
     print(f"[probe] {info['w']}x{info['h']} {info['frames']} frames @ {info['containerFps']:.3f} fps, "
           f"captureFps={info['captureFps']}")
 
-    tag = "dense" if a.dense else ("policy-fixed" if (fixed or d15) else "policy-plan")
+    sparse = a.sampling == "sparse165" and not a.dense
+    tag = "dense" if a.dense else (f"sparse165-s{a.still_every}-b{a.top_back}-f{a.follow_every}" if sparse else
+                                   "policy-fixed" if (fixed or d15) else "policy-plan")
     cache = out_dir / f".pose-{a.model}-{tag}.json"
     if a.reuse_pose and cache.exists():
         pose = json.loads(cache.read_text())
         pose["samples"] = {int(k): v for k, v in pose["samples"].items()}
         print(f"[pass1] reused {cache.name}")
     else:
-        pose = run_pose(path, info, a.model, a.dense, vstill_k, smoothed_policy=fixed or d15)
+        pose = run_pose_sparse(path, info, a.model, a.top_back, a.follow_every, a.still_every) if sparse else \
+            run_pose(path, info, a.model, a.dense, vstill_k, smoothed_policy=fixed or d15)
         cache.write_text(json.dumps(pose))
     tp = pose["timings"]
     print(f"[pass1] model={a.model} inferences={tp['inferences']}/{info['frames']} "
@@ -1424,7 +1721,7 @@ def main() -> None:
                     **R["timings"], "totalMs": total_ms},
         # lab-only diagnostics (not part of the app contract)
         "debug": {
-            "variant": a.variant, "vStillK": vstill_k, "model": a.model, "dense": a.dense, "workScale": ws, "factorSource": factor_src,
+            "variant": a.variant, "sampling": "dense" if a.dense else a.sampling, "vStillK": vstill_k, "model": a.model, "dense": a.dense, "workScale": ws, "factorSource": factor_src,
             "duplicateFrameRatio": round(dup, 3), "scale": scale, "bodyHPx": round(pose["bodyH"], 1),
             "vStillPxPerS": round(P["vStill"], 2), "motionStart": P["motionStart"],
             "addressRun": list(P["addressRun"]), "ballGoneFrame": bgf,

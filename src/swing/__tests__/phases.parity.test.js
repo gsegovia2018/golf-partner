@@ -1,11 +1,16 @@
 // Parity with the swing lab reference: the same pass-1 pose samples go through
-// tools/swing-lab/detect.py --variant d15 (expected) and through phases.js.
+// tools/swing-lab/detect.py --variant d15 (expected) and through phases.js. Two inputs: the
+// lab's speed policy (455 inferences) and sparse165, the native app's policy (218 samples:
+// every 16th frame still, every 4th or 2nd moving, every frame only top -> impact).
 import { detectPhases, CHECKPOINT_KEYS } from '../phases';
 import { scaleFromWindow } from '../scale';
 
-const lab = require('./fixtures/lab-d15-pass1.json');
+const FIXTURES = [
+  ['speed policy', require('./fixtures/lab-d15-pass1.json')],
+  ['sparse165', require('./fixtures/lab-d15-sparse165-pass1.json')],
+];
 
-function labSamples() {
+function labSamples(lab) {
   const L = lab.data.map((rows) => {
     const lm = Array.from({ length: 33 }, () => [0, 0, 0]);
     lab.landmarks.forEach((id, n) => {
@@ -16,8 +21,8 @@ function labSamples() {
   return { idx: lab.idx, L };
 }
 
-describe('phases.js matches detect.py --variant d15 on the lab pass-1 samples', () => {
-  const { idx, L } = labSamples();
+describe.each(FIXTURES)('phases.js matches detect.py --variant d15 on the lab pass-1 samples (%s)', (_name, lab) => {
+  const { idx, L } = labSamples(lab);
   const run = () => detectPhases(idx, L, {
     containerFps: lab.containerFps,
     bodyH: lab.bodyH,
