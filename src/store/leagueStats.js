@@ -1,11 +1,13 @@
 // League stats: honours, leaders, season grid and rivals, derived from the
 // cards a league snapshot already carries (pure, no I/O). Only confirmed
 // cards count. Month comparisons (card of the month, grid, rivals) use the net
-// differential, lower is better, like the board; a card without one (unrated
+// differential, lower is better, like the board (an unapproved not-announced
+// card is left out of the grid and rivals, as on the board); a card without one (unrated
 // tee) is never the best. Plan: docs/superpowers/plans/2026-10-05-league-stats-and-board.md
 import { calcExtraShots, calcStablefordPoints } from './scoring';
 import { memberName, ordinal, formatNetDiff } from './leagueView';
 import { dayLabel, timeLabel } from './leagueOffApp';
+import { needsApproval } from './leagueRules';
 
 export const MIN_HONOUR_CARDS = 3; // fewer confirmed cards than this: no honours
 export const MIN_STAT_CARDS = 3; // fewer cards than this: a player's average is not shown
@@ -230,7 +232,7 @@ function bestByUser(cards) {
   const nd = (c) => netDiffOf(c) ?? Infinity;
   const better = (a, b) => (nd(a) === nd(b) ? (Number(a.points) || 0) > (Number(b.points) || 0) : nd(a) < nd(b));
   const best = new Map();
-  confirmed(cards).forEach((c) => {
+  confirmed(cards).filter((c) => !needsApproval(c)).forEach((c) => {
     if (!best.has(c.userId) || better(c, best.get(c.userId))) best.set(c.userId, c);
   });
   return best;

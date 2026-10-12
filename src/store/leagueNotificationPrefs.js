@@ -13,6 +13,7 @@ export const LEAGUE_NOTIFICATION_ROWS = [
   { type: 'league_card_confirmed', label: 'A card is confirmed' },
   { type: 'league_ranking_updated', label: 'Ranking updated' },
   { type: 'league_month_reminder', label: '3 days left, no card yet' },
+  { type: 'league_post_reminder', label: '2 hours left to post' },
   { type: 'league_vote_opened', label: 'A handicap vote opens' },
 ];
 

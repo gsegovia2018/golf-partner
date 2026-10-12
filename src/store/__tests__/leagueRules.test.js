@@ -1,5 +1,6 @@
 import {
   cardMonth, madridMonthManual, canAnnounce, isNotAnnounced, scoreCard, clampHandicap,
+  POST_WINDOW_HOURS, REMINDER_LEAD_HOURS, postByFor, isMissed, needsApproval, deadlineInfo,
 } from '../leagueRules';
 
 describe('cardMonth (Europe/Madrid)', () => {
@@ -256,5 +257,60 @@ describe('scoreCard', () => {
     expect(r.playingHandicap).toBe(9);
     expect(r.perHole).toHaveLength(9);
     expect(r.perHole.every((h) => h.extra === 1)).toBe(true);
+  });
+});
+
+describe('post deadline', () => {
+  const H = 3600000;
+  const postBy = '2026-10-10T18:00:00Z';
+  const at = (offsetMs) => new Date(Date.parse(postBy) + offsetMs);
+
+  test('constants and postByFor', () => {
+    expect(POST_WINDOW_HOURS).toBe(8);
+    expect(REMINDER_LEAD_HOURS).toBe(2);
+    expect(postByFor('2026-10-10T10:00:00Z').toISOString()).toBe(postBy.replace('18:00:00Z', '18:00:00.000Z'));
+    expect(postByFor(null)).toBeNull();
+    expect(postByFor('nope')).toBeNull();
+  });
+
+  test('isMissed: swept, or live and at/after postBy', () => {
+    expect(isMissed({ status: 'missed' }, at(-99 * H))).toBe(true);
+    expect(isMissed({ status: 'announced', postBy }, at(-1))).toBe(false);
+    expect(isMissed({ status: 'announced', postBy }, at(0))).toBe(true);
+    expect(isMissed({ status: 'playing', postBy }, at(H))).toBe(true);
+  });
+
+  test('isMissed: no deadline, or not live, is never missed', () => {
+    expect(isMissed({ status: 'announced', postBy: null }, at(H))).toBe(false);
+    expect(isMissed({ status: 'submitted', postBy }, at(H))).toBe(false);
+    expect(isMissed({ status: 'confirmed', postBy }, at(H))).toBe(false);
+    expect(isMissed(null, at(H))).toBe(false);
+  });
+
+  test('needsApproval: unapproved not-announced scored card only', () => {
+    expect(needsApproval({ status: 'submitted', notAnnounced: true })).toBe(true);
+    expect(needsApproval({ status: 'confirmed', notAnnounced: true })).toBe(true);
+    expect(needsApproval({ status: 'confirmed', notAnnounced: true, approvedAt: '2026-10-11T00:00:00Z' })).toBe(false);
+    expect(needsApproval({ status: 'confirmed', notAnnounced: false })).toBe(false);
+    expect(needsApproval({ status: 'playing', notAnnounced: true })).toBe(false);
+    expect(needsApproval({ status: 'void', notAnnounced: true })).toBe(false);
+    expect(needsApproval(null)).toBe(false);
+  });
+
+  test('deadlineInfo: countdown, urgent under 2 hours', () => {
+    const card = { status: 'announced', postBy };
+    const info = deadlineInfo(card, at(-5 * H));
+    expect(info.postBy.toISOString()).toBe('2026-10-10T18:00:00.000Z');
+    expect(info).toMatchObject({ msLeft: 5 * H, urgent: false });
+    expect(deadlineInfo(card, at(-2 * H)).urgent).toBe(false);
+    expect(deadlineInfo(card, at(-2 * H + 1)).urgent).toBe(true);
+    expect(deadlineInfo(card, at(H)).msLeft).toBe(-H);
+  });
+
+  test('deadlineInfo is null without a deadline or when not live', () => {
+    expect(deadlineInfo({ status: 'announced', postBy: null }, at(0))).toBeNull();
+    expect(deadlineInfo({ status: 'submitted', postBy }, at(0))).toBeNull();
+    expect(deadlineInfo({ status: 'missed', postBy }, at(0))).toBeNull();
+    expect(deadlineInfo(null, at(0))).toBeNull();
   });
 });
