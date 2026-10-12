@@ -2,17 +2,54 @@ import React from 'react';
 import { Text, Platform } from 'react-native';
 import { render, screen, waitFor, act } from '@testing-library/react-native';
 import * as Location from 'expo-location';
-import { useCompassHeading, smoothHeading, compassLikelyAvailable } from '../useCompassHeading';
+import { DeviceMotion, Magnetometer } from 'expo-sensors';
+import {
+  useCompassHeading, smoothHeading, compassLikelyAvailable,
+  cameraHeadingFromDeviceMotion, cameraHeadingFromOrientation,
+} from '../useCompassHeading';
 
 jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
   watchHeadingAsync: jest.fn().mockResolvedValue({ remove: jest.fn() }),
 }));
 
+jest.mock('expo-sensors', () => {
+  const sensor = () => ({
+    isAvailableAsync: jest.fn().mockResolvedValue(true),
+    setUpdateInterval: jest.fn(),
+    addListener: jest.fn(() => ({ remove: jest.fn() })),
+  });
+  return { DeviceMotion: sensor(), Magnetometer: sensor() };
+});
+
 function Probe() {
   const c = useCompassHeading();
   return <Text testID="out">{JSON.stringify({ h: c.heading, l: c.lowAccuracy, s: c.status })}</Text>;
 }
+
+// Rotation matrix (device -> world east/north/up, row-major) from a
+// quaternion, the way Android's getRotationMatrixFromVector builds it.
+function rotFromQuat(w0, x0, y0, z0) {
+  const n = Math.hypot(w0, x0, y0, z0);
+  const [w, x, y, z] = [w0 / n, x0 / n, y0 / n, z0 / n];
+  return [
+    1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y),
+    2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x),
+    2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y),
+  ];
+}
+
+// What expo-sensors' DeviceMotion reports for R on Android:
+// SensorManager.getOrientation, then alpha = -azimuth, beta = -pitch.
+function expoRotationOf(R) {
+  return {
+    alpha: -Math.atan2(R[1], R[4]),
+    beta: -Math.asin(-R[7]),
+    gamma: Math.atan2(-R[6], R[8]),
+  };
+}
+
+const angleDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
 
 const out = () => JSON.parse(screen.getByTestId('out').props.children);
 
@@ -98,6 +135,76 @@ describe('smoothHeading', () => {
   });
 });
 
+describe('cameraHeadingFromDeviceMotion (Android)', () => {
+  // Held upright with the camera tilted 5° up. Exactly vertical is an Euler
+  // gimbal lock — getOrientation itself returns atan2(0, 0) for the azimuth —
+  // which a hand-held phone never sits on.
+  const c5 = Math.cos((5 * Math.PI) / 180);
+  const s5 = Math.sin((5 * Math.PI) / 180);
+
+  test('upright phone, camera facing north -> 0', () => {
+    // Device X east, Y up, Z (out of the screen) south.
+    const R = [1, 0, 0, 0, -s5, -c5, 0, c5, -s5];
+    const r = cameraHeadingFromDeviceMotion(expoRotationOf(R));
+    expect(r.flat).toBe(false);
+    expect(angleDiff(r.deg, 0)).toBeLessThan(1e-6);
+  });
+
+  test('upright phone, camera facing east -> 90', () => {
+    // Device X south, Y up, Z west.
+    const R = [0, -s5, -c5, -1, 0, 0, 0, c5, -s5];
+    expect(angleDiff(cameraHeadingFromDeviceMotion(expoRotationOf(R)).deg, 90)).toBeLessThan(1e-6);
+  });
+
+  test('matches the true camera axis for arbitrary orientations', () => {
+    // Seeded LCG so a failure reproduces.
+    let seed = 7;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 - 0.5; };
+    for (let i = 0; i < 2000; i += 1) {
+      const R = rotFromQuat(rnd(), rnd(), rnd(), rnd());
+      const east = -R[2];
+      const north = -R[5];
+      const r = cameraHeadingFromDeviceMotion(expoRotationOf(R));
+      if (Math.hypot(east, north) < 0.35) {
+        expect(r.flat).toBe(true);
+      } else {
+        const want = ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
+        expect(angleDiff(r.deg, want)).toBeLessThan(1e-6);
+      }
+    }
+  });
+
+  test('a phone lying flat has no camera heading', () => {
+    expect(cameraHeadingFromDeviceMotion({ alpha: 1, beta: 0, gamma: 0 })).toEqual({ deg: null, flat: true });
+  });
+
+  test('missing angles return null', () => {
+    expect(cameraHeadingFromDeviceMotion(undefined)).toBeNull();
+    expect(cameraHeadingFromDeviceMotion({ alpha: 0, beta: null, gamma: 0 })).toBeNull();
+  });
+});
+
+describe('cameraHeadingFromOrientation (web)', () => {
+  test('upright portrait: alpha counter-clockwise becomes a clockwise heading', () => {
+    expect(angleDiff(cameraHeadingFromOrientation(0, 90, 0).deg, 0)).toBeLessThan(1e-6);
+    expect(angleDiff(cameraHeadingFromOrientation(90, 90, 0).deg, 270)).toBeLessThan(1e-6);
+    expect(angleDiff(cameraHeadingFromOrientation(270, 90, 0).deg, 90)).toBeLessThan(1e-6);
+  });
+
+  test('tilting the phone back keeps the heading', () => {
+    expect(angleDiff(cameraHeadingFromOrientation(90, 60, 0).deg, 270)).toBeLessThan(1e-6);
+    expect(angleDiff(cameraHeadingFromOrientation(90, 120, 0).deg, 270)).toBeLessThan(1e-6);
+  });
+
+  test('flat on a table is flat', () => {
+    expect(cameraHeadingFromOrientation(123, 0, 0)).toEqual({ deg: null, flat: true });
+  });
+
+  test('missing beta/gamma return null', () => {
+    expect(cameraHeadingFromOrientation(90, null, 0)).toBeNull();
+  });
+});
+
 describe('compassLikelyAvailable', () => {
   test('native is always a candidate', () => {
     expect(compassLikelyAvailable()).toBe(true);
@@ -118,7 +225,76 @@ describe('compassLikelyAvailable', () => {
   });
 });
 
-describe('native', () => {
+describe('android', () => {
+  let osDesc;
+  beforeEach(() => {
+    osDesc = Object.getOwnPropertyDescriptor(Platform, 'OS');
+    Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'android' });
+    DeviceMotion.isAvailableAsync.mockResolvedValue(true);
+    Magnetometer.isAvailableAsync.mockResolvedValue(true);
+  });
+  afterEach(() => { Object.defineProperty(Platform, 'OS', osDesc); });
+
+  const motionCb = () => DeviceMotion.addListener.mock.calls.at(-1)[0];
+  const magCb = () => Magnetometer.addListener.mock.calls.at(-1)[0];
+
+  function FlatProbe() {
+    const c = useCompassHeading();
+    return <Text testID="out">{JSON.stringify({ h: c.heading, l: c.lowAccuracy, f: c.flat, s: c.status })}</Text>;
+  }
+
+  test('reports the camera heading from DeviceMotion, not the location heading', async () => {
+    render(<FlatProbe />);
+    await waitFor(() => expect(DeviceMotion.addListener).toHaveBeenCalled());
+    expect(DeviceMotion.setUpdateInterval).toHaveBeenCalledWith(50);
+    // Upright, camera facing north.
+    await act(async () => { motionCb()({ rotation: { alpha: 0, beta: Math.PI / 2, gamma: 0 } }); });
+    expect(out().h).toBeCloseTo(0, 6);
+    expect(out()).toMatchObject({ f: false, s: 'ok' });
+    expect(Location.watchHeadingAsync).not.toHaveBeenCalled();
+  });
+
+  test('a flat phone sets flat and keeps the last heading', async () => {
+    render(<FlatProbe />);
+    await waitFor(() => expect(DeviceMotion.addListener).toHaveBeenCalled());
+    await act(async () => { motionCb()({ rotation: { alpha: 0, beta: Math.PI / 2, gamma: 0 } }); });
+    await act(async () => { motionCb()({ rotation: { alpha: 1, beta: 0, gamma: 0 } }); });
+    expect(out()).toMatchObject({ f: true, s: 'ok' });
+    expect(out().h).toBeCloseTo(0, 6);
+    await act(async () => { motionCb()({ rotation: { alpha: 0, beta: Math.PI / 2, gamma: 0 } }); });
+    expect(out().f).toBe(false);
+  });
+
+  test('a magnetometer field outside Earth range raises lowAccuracy', async () => {
+    render(<FlatProbe />);
+    await waitFor(() => expect(Magnetometer.addListener).toHaveBeenCalled());
+    await act(async () => { magCb()({ x: 150, y: 0, z: 0 }); });
+    expect(out().l).toBe(true);
+    await act(async () => { magCb()({ x: 30, y: 0, z: -30 }); });
+    expect(out().l).toBe(false);
+  });
+
+  test('no DeviceMotion sensor reports unavailable', async () => {
+    DeviceMotion.isAvailableAsync.mockResolvedValueOnce(false);
+    render(<FlatProbe />);
+    await waitFor(() => expect(out().s).toBe('unavailable'));
+    expect(DeviceMotion.addListener).not.toHaveBeenCalled();
+  });
+
+  test('unmount removes both listeners', async () => {
+    const motionRemove = jest.fn();
+    const magRemove = jest.fn(() => { throw new Error('gone'); });
+    DeviceMotion.addListener.mockReturnValueOnce({ remove: motionRemove });
+    Magnetometer.addListener.mockReturnValueOnce({ remove: magRemove });
+    const view = render(<FlatProbe />);
+    await waitFor(() => expect(Magnetometer.addListener).toHaveBeenCalled());
+    expect(() => view.unmount()).not.toThrow();
+    expect(motionRemove).toHaveBeenCalled();
+    expect(magRemove).toHaveBeenCalled();
+  });
+});
+
+describe('ios (expo-location heading)', () => {
   test('starts acquiring, then reports smoothed headings from the watch', async () => {
     render(<Probe />);
     expect(out()).toEqual({ h: null, l: false, s: 'acquiring' });
@@ -175,26 +351,27 @@ describe('native', () => {
 });
 
 describe('web', () => {
-  test('deviceorientationabsolute alpha becomes a clockwise-from-north heading', async () => {
+  test('deviceorientationabsolute on an upright phone becomes a clockwise camera heading', async () => {
     const web = setupWeb();
     try {
       render(<Probe />);
       await waitFor(() => expect(global.addEventListener)
         .toHaveBeenCalledWith('deviceorientationabsolute', expect.any(Function), true));
 
-      await web.fire('deviceorientationabsolute', { alpha: 90, absolute: true });
+      await web.fire('deviceorientationabsolute', { alpha: 90, beta: 90, gamma: 0, absolute: true });
       // alpha counts counter-clockwise: 90 → 270.
-      expect(out()).toEqual({ h: 270, l: false, s: 'ok' });
+      expect(out().h).toBeCloseTo(270, 6);
+      expect(out()).toMatchObject({ l: false, s: 'ok' });
     } finally { web.restore(); }
   });
 
-  test('the screen orientation angle is added to the heading', async () => {
+  test('the screen orientation angle does not move the camera heading', async () => {
     const web = setupWeb({ screenAngle: 90 });
     try {
       render(<Probe />);
       await waitFor(() => expect(global.addEventListener).toHaveBeenCalled());
-      await web.fire('deviceorientationabsolute', { alpha: 30, absolute: true });
-      expect(out().h).toBeCloseTo((360 - 30 + 90) % 360, 6);
+      await web.fire('deviceorientationabsolute', { alpha: 30, beta: 90, gamma: 0, absolute: true });
+      expect(out().h).toBeCloseTo(330, 6);
     } finally { web.restore(); }
   });
 
@@ -205,10 +382,10 @@ describe('web', () => {
       await waitFor(() => expect(global.addEventListener)
         .toHaveBeenCalledWith('deviceorientation', expect.any(Function), true));
 
-      await web.fire('deviceorientation', { alpha: 90, absolute: false });
+      await web.fire('deviceorientation', { alpha: 90, beta: 90, gamma: 0, absolute: false });
       expect(out()).toEqual({ h: null, l: false, s: 'acquiring' });
 
-      await web.fire('deviceorientation', { alpha: 90, absolute: true });
+      await web.fire('deviceorientation', { alpha: 90, beta: 90, gamma: 0, absolute: true });
       expect(out().h).toBeCloseTo(270, 6);
     } finally { web.restore(); }
   });
@@ -253,7 +430,7 @@ describe('web', () => {
     const web = setupWeb();
     try {
       render(<Probe />);
-      await web.fire('deviceorientationabsolute', { alpha: 0, absolute: true });
+      await web.fire('deviceorientationabsolute', { alpha: 0, beta: 90, gamma: 0, absolute: true });
       await act(async () => { jest.advanceTimersByTime(10000); });
       expect(out().s).toBe('ok');
     } finally {
