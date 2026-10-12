@@ -24,27 +24,24 @@ internal class PerfHint(context: Context, private val targetNs: Long) : AutoClos
   private val manager: PerformanceHintManager? =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) context.getSystemService(PerformanceHintManager::class.java) else null
   private var session: PerformanceHintManager.Session? = null
+  /** Threads in the session, or waiting for it until the first [report]. */
   private val tids = LinkedHashSet<Int>()
+  private var closed = false
 
-  /** Adds threads to the session (created on first use). Call from any thread. */
+  /**
+   * Adds threads. Before the first [report] they are only collected, so the session is created
+   * once with the full set (Android 12–13 can't change a session's threads); after it they
+   * join the session one at a time (Android 14+), since the system refuses the whole set for
+   * one thread it won't take (exited, or not this app's). Call from any thread.
+   */
   @Synchronized fun add(newTids: Collection<Int>) {
-    val m = manager ?: return
+    if (closed || manager == null) return
     val s = session
     if (s == null) {
       tids.addAll(newTids)
-      try {
-        session = m.createHintSession(tids.toIntArray(), targetNs)?.also {
-          if (Build.VERSION.SDK_INT >= 35) it.setPreferPowerEfficiency(false)
-        }
-      } catch (e: Throwable) {
-        Log.w(PoseAnalyzer.TAG, "hint session unavailable", e)
-      }
-      if (session == null) tids.clear()
       return
     }
     if (Build.VERSION.SDK_INT < 34) return
-    // one at a time: the system refuses the whole set for one thread it won't take (exited,
-    // or not this app's), so keep those it accepts
     val live = processTids()
     tids.retainAll(live)
     for (t in newTids) {
@@ -58,11 +55,33 @@ internal class PerfHint(context: Context, private val targetNs: Long) : AutoClos
     }
   }
 
+  /** One unit of work took [actualNs]; the first call creates the session. */
   @Synchronized fun report(actualNs: Long) {
+    if (closed) return
+    val s = session ?: create() ?: return
     try {
-      session?.reportActualWorkDuration(actualNs.coerceAtLeast(1))
+      s.reportActualWorkDuration(actualNs.coerceAtLeast(1))
     } catch (_: Throwable) {
     }
+  }
+
+  private fun create(): PerformanceHintManager.Session? {
+    val m = manager ?: return null
+    if (tids.isEmpty()) return null
+    tids.retainAll(processTids())
+    try {
+      session = m.createHintSession(tids.toIntArray(), targetNs)?.also {
+        if (Build.VERSION.SDK_INT >= 35) it.setPreferPowerEfficiency(false)
+      }
+    } catch (e: Throwable) {
+      Log.w(PoseAnalyzer.TAG, "hint session unavailable", e)
+    }
+    // no session: stop trying (one attempt per analysis)
+    if (session == null) {
+      tids.clear()
+      closed = true
+    }
+    return session
   }
 
   @Synchronized fun active() = session != null
@@ -70,6 +89,7 @@ internal class PerfHint(context: Context, private val targetNs: Long) : AutoClos
   @Synchronized fun threads() = tids.size
 
   @Synchronized override fun close() {
+    closed = true
     try {
       session?.close()
     } catch (_: Throwable) {

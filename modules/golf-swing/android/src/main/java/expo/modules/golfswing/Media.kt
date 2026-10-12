@@ -125,6 +125,9 @@ internal object Media {
     }
   }
 
+  /** How long [Feeder.finish] waits for the feeder to exit. */
+  private const val FINISH_MS = 5_000L
+
   /** No output for this long while frames are still owed = a stuck decoder (some OEM codecs never send EOS). */
   private const val STALL_NS = 10_000_000_000L
 
@@ -145,6 +148,8 @@ internal object Media {
     onFrame: (index: Int, ptsUs: Long, img: Image?, fullRange: Boolean) -> Boolean,
   ) {
     val ex = extractor(context, path)
+    // a feeder that didn't stop still uses the extractor and the codec: leak them, never free them under it
+    var feederStuck = false
     try {
       val track = videoTrack(ex)
       ex.selectTrack(track)
@@ -159,14 +164,18 @@ internal object Media {
           setInteger(MediaFormat.KEY_PRIORITY, 1)
           setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE.toInt())
         }
+        fun configureAndStart(f: MediaFormat) {
+          codec.configure(f, null, null, 0)
+          codec.start()
+        }
         try {
-          codec.configure(fast, null, null, 0)
+          configureAndStart(fast)
         } catch (e: Exception) {
+          // a codec that refuses the rate (at configure or at start): the plain format
           codec.reset()
-          codec.configure(fmt, null, null, 0)
+          configureAndStart(fmt)
         }
         android.util.Log.i(PoseAnalyzer.TAG, "decoder ${codec.name} hw=${if (android.os.Build.VERSION.SDK_INT >= 29) codec.codecInfo.isHardwareAccelerated else null}")
-        codec.start()
         feeder = Feeder(ex, codec).also { it.start() }
         val info = MediaCodec.BufferInfo()
         var n = 0
@@ -209,15 +218,19 @@ internal object Media {
           if (eos || !more) break
         }
       } finally {
-        feeder?.finish()
-        try {
-          codec.stop()
-        } catch (_: IllegalStateException) {
+        feederStuck = feeder?.finish() == false
+        if (feederStuck) {
+          android.util.Log.w(PoseAnalyzer.TAG, "decoder feeder did not stop; leaving the codec and extractor to it")
+        } else {
+          try {
+            codec.stop()
+          } catch (_: IllegalStateException) {
+          }
+          codec.release()
         }
-        codec.release()
       }
     } finally {
-      ex.release()
+      if (!feederStuck) ex.release()
     }
   }
 
@@ -225,7 +238,8 @@ internal object Media {
    * Feeds the decoder on its own thread, so reading samples from the file overlaps the
    * frame work on the decode thread and the codec always has input queued (sync-mode
    * MediaCodec takes input and output calls from different threads). The extractor is only
-   * touched here once started. [finish] must be called before the codec is stopped.
+   * touched here once started. [finish] must return true before the codec is stopped or
+   * released, or the extractor released.
    */
   private class Feeder(private val ex: MediaExtractor, private val codec: MediaCodec) : Thread("golf-swing-feed") {
     @Volatile var error: Throwable? = null
@@ -256,9 +270,14 @@ internal object Media {
       }
     }
 
-    fun finish() {
+    /**
+     * Stops feeding; true once the thread has exited. It blocks for at most one
+     * dequeueInputBuffer (5 ms) and one sample read, so the wait is short unless a read hangs.
+     */
+    fun finish(): Boolean {
       stopping = true
-      join(1_000)
+      join(FINISH_MS)
+      return !isAlive
     }
   }
 

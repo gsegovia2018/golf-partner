@@ -135,17 +135,17 @@ internal class PoseAnalyzer(
     ring = arrayOfNulls(ringSize)
     diffs = FloatArray(track.frameCount + 16)
 
-    val oldPriority = android.os.Process.getThreadPriority(android.os.Process.myTid())
-    PerfHint.raiseThisThread()
-    hint = PerfHint(context, HINT_TARGET_NS)
-    baseTids = PerfHint.processTids()
-    hint.add(listOf(android.os.Process.myTid()))
-    worker = PoseWorker(loadModel(), 4 * outW * outH)
-    worker.start()
-    bands = BandRunner(CONVERT_THREADS) { tid -> hint.add(listOf(tid)) }
     val total = track.frameCount
     val step = max(1, total / 50)
+    val oldPriority = android.os.Process.getThreadPriority(android.os.Process.myTid())
+    hint = PerfHint(context, HINT_TARGET_NS)
     try {
+      PerfHint.raiseThisThread()
+      baseTids = PerfHint.processTids()
+      hint.add(listOf(android.os.Process.myTid()))
+      worker = PoseWorker(loadModel(), 4 * outW * outH)
+      worker.start()
+      bands = BandRunner(CONVERT_THREADS) { tid -> hint.add(listOf(tid)) }
       Media.decode(context, path, 0, cancelled, prof) { n, ptsUs, img, full ->
         if (img == null) return@decode true
         cur = n
@@ -184,8 +184,8 @@ internal class PoseAnalyzer(
       }
       settle(block = true)
     } finally {
-      worker.stopAndJoin()
-      bands.shutdown()
+      if (::worker.isInitialized) worker.stopAndJoin()
+      if (::bands.isInitialized) bands.shutdown()
       hintThreads = if (hint.active()) hint.threads() else 0
       hint.close()
       try {
