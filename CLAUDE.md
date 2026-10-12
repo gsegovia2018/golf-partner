@@ -56,6 +56,22 @@ Core features:
   APK. Needed only when the **native** side changes: a new Expo plugin, a
   permission, an SDK or native dependency bump.
 
+Local dev builds (`GOLF_APP_VARIANT=dev`, e.g. `GOLF_APP_VARIANT=dev
+GOLF_ANDROID_BUILD_ARCHS=arm64-v8a npx expo prebuild -p android --clean`, then
+`./gradlew :app:assembleRelease`) install next to the real app: package
+`com.golfpartner.app.dev`, name "… Dev", URL scheme `golf-dev`, no https
+intent filters and no google-services (no push). Install them with
+`adb install --user 0` and never over `com.golfpartner.app`. **Never set
+`GOLF_APP_VARIANT` for `eas build` or `eas update`**: it changes the package,
+scheme and fingerprint, so an update would go to a runtime no installed APK has,
+and a build would ship an app that can't receive the real app's links or push.
+
+The universal `preview` profile has no `GOLF_ANDROID_BUILD_ARCHS` on purpose:
+it is the any-ABI fallback (MediaPipe ships all four ABIs, so the swing
+analyzer works on it), and it is its own runtime — the arm64 OTA command above
+never reaches it. It is much bigger than `preview-arm64`: MediaPipe alone adds
+~48 MB of native libraries for the three extra ABIs.
+
 `runtimeVersion` uses the `fingerprint` policy, so the two stay honest with
 each other — any native change alters the fingerprint, and an update built
 against it simply is not offered to binaries that cannot run it. Builds
