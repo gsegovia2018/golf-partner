@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * refuses to call a binary whose apiVersion is older than the one it was written for, so an
  * OTA bundle never calls a method the installed APK lacks.
  */
-const val API_VERSION = 1
+const val API_VERSION = 2
 
 private const val MIN_HEIGHT_CM = 120.0
 private const val MAX_HEIGHT_CM = 230.0
@@ -46,12 +46,32 @@ class AnalyzePoseOptions : Record {
 class CheckpointRequest : Record {
   @Field val key: String = ""
   @Field val i: Int = 0
+  /** The smoothed grip estimate at [i], normalised [x, y]. */
+  @Field val hands: List<Double>? = null
   @Field val neighbours: Int = 2
 }
 
-/** hands, ball and expectedShaftPx are accepted and unused until N2 (shaft/clubhead, address onset). */
+/** Normalised; r is a fraction of the frame width (analyzePose's ball). */
+class BallOption : Record {
+  @Field val x: Double = 0.0
+  @Field val y: Double = 0.0
+  @Field val r: Double = 0.0
+}
+
+/** The image-based address window (phases.js addressSearch), container frames. */
+class AddressSearchOption : Record {
+  @Field val run: List<Int> = emptyList()
+  @Field val latest: Int = 0
+  @Field val quiet: List<Int> = emptyList()
+  @Field val minRun: Int = 2
+}
+
 class ExtractCheckpointsOptions : Record {
   @Field val frames: List<CheckpointRequest> = emptyList()
+  @Field val ball: BallOption? = null
+  /** 105 cm × px/cm in display px (scale.js expectedShaftPx). */
+  @Field val expectedShaftPx: Double? = null
+  @Field val addressSearch: AddressSearchOption? = null
   @Field val outDir: String = ""
 }
 
@@ -136,17 +156,21 @@ class GolfSwingModule : Module() {
       jobs.forEach { it.set(true) }
     }
 
-    // N1 stub of the N2 contract: stills only. shaft stays empty and addressFrame null until
-    // N2 adds the clubhead search and the image-based address onset (plan §4.3, §5.1 P1).
+    // Pass 2 (plan §3, D16): stills, the clubhead at address and impact, the image-based address.
     AsyncFunction("extractCheckpoints") { path: String, options: ExtractCheckpointsOptions, promise: Promise ->
       val ctx = context
       job(promise, "ERR_STILLS", { cancelled ->
-        val wanted = options.frames.flatMap { c -> (c.i - c.neighbours)..(c.i + c.neighbours) }
-        val uris = Stills.extract(ctx, path, wanted, options.outDir, cancelled)
-        val stills = options.frames.associate { c ->
-          c.key to ((c.i - c.neighbours)..(c.i + c.neighbours)).mapNotNull { f -> uris[f]?.let { f.toString() to it } }.toMap()
-        }
-        mapOf("stills" to stills, "shaft" to emptyMap<String, Any?>(), "addressFrame" to null)
+        fun pt(p: List<Double>?) = p?.takeIf { it.size >= 2 && it[0].isFinite() && it[1].isFinite() }
+          ?.let { Pt(it[0].toFloat(), it[1].toFloat()) }
+        val s = options.addressSearch?.takeIf { it.run.size == 2 && it.quiet.size == 2 }
+        val req = Pass2Request(
+          checkpoints = options.frames.map { CheckpointSpec(it.key, it.i, pt(it.hands), it.neighbours.coerceIn(0, 10)) },
+          ball = options.ball?.let { pt(listOf(it.x, it.y)) },
+          expectedShaftPx = options.expectedShaftPx,
+          addressSearch = s?.let { AddressSearchSpec(it.run[0]..it.run[1], it.latest, it.quiet[0]..it.quiet[1], it.minRun) },
+          outDir = options.outDir,
+        )
+        Checkpoints(ctx, req, cancelled).run(path)
       })
     }
 

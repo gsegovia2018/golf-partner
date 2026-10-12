@@ -152,6 +152,7 @@ export function analyze(native, opts = {}) {
     scale: { pxPerCm: scale.pxPerCm, heightCm, approx: approxHeight },
     checkpoints: Object.fromEntries(CHECKPOINT_KEYS.map((k) => [k, checkpoints[k]])),
     internal: Object.fromEntries(Object.keys(ph.internal).map((k) => [k, frames[k] ?? ph.internal[k]])),
+    addressSearch: ph.addressSearch, // pass 2's image-based address window (runAnalysis)
     reference,
     clubMarks: Object.fromEntries(CLUB_KEYS.map((k) => [k, {
       hands: toNorm(resolved[k].hands, W, H),

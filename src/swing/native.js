@@ -9,7 +9,7 @@
 import { Platform } from 'react-native';
 import { requireOptionalNativeModule } from 'expo';
 
-export const REQUIRED_API_VERSION = 1;
+export const REQUIRED_API_VERSION = 2;
 
 export const UPDATE_APP_MESSAGE = 'Update the app to analyse your swing.';
 
@@ -90,10 +90,22 @@ export async function analyzePose(path, opts = {}) {
 }
 
 /**
- * Checkpoint stills (plan 3). N1 delivers the stills only: `shaft` is {} and
- * `addressFrame` null until N2 adds the clubhead search and the image-based address onset.
- * @param {{ frames: Array<{ key, i, hands?, neighbours?: number }>, ball?, expectedShaftPx?, outDir: string }} opts
- * @returns {Promise<{ stills: { [key]: { [frame]: string } }, shaft: object, addressFrame: number | null }>}
+ * Pass 2 (plan 3, D16): one sequential decode of the checkpoint span.
+ * - stills: every checkpoint ± neighbours (JPEG q85, display orientation, `<outDir>/<frame>.jpg`);
+ *   `address` lists the stills around the final address frame.
+ * - addressFrame: the image-based P1 (the last frame before the clubhead moves the ball patch),
+ *   searched inside `addressSearch` (phases.js); null without a ball, a window or an onset.
+ * - shaft: the clubhead proposal at address (at addressFrame when found) and impact only,
+ *   from a radial search seeded hands -> ball; head in display px, `source: 'edge'`. Every other
+ *   requested checkpoint frame is `{ head: null, hidden: false, conf: 0.1, source: 'prior' }`
+ *   (no shaft tracking in v1). No ball or expectedShaftPx: priors everywhere.
+ * - timings: { totalMs, decodeMs, addressDecodeMs, jpegWaitMs, onsetMs, shaftMs, decoded, stills }.
+ * @param {{ frames: Array<{ key, i, hands?: [x, y], neighbours?: number }>, ball?: { x, y, r } | null,
+ *   expectedShaftPx?: number, addressSearch?: { run: [a, b], latest, quiet: [a, b], minRun } | null,
+ *   outDir: string }} opts  hands and ball normalised; expectedShaftPx in display px
+ * @returns {Promise<{ stills: { [key]: { [frame]: string } },
+ *   shaft: { [frame]: { head: [x, y] | null, hidden, conf, source: 'edge'|'prior', angleDeg?, lengthPx? } },
+ *   addressFrame: number | null, timings: object }>}
  */
 export async function extractCheckpoints(path, opts) {
   return requireSupported().extractCheckpoints(path, opts);

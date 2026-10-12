@@ -52,6 +52,17 @@ describe.each(FIXTURES)('phases.js matches detect.py --variant d15 on the lab pa
     expect(r.sources).toEqual({ impact: 'ballGoneFrame', address: 'clubhead-onset' });
   });
 
+  test('the pass-2 address window is the one detect.py hands to clubhead_onset', () => {
+    const r = run();
+    const { motionStart, holdFrames, checkpoints } = lab.expected;
+    expect(r.addressSearch).toEqual({
+      run: [r.addressRun[0], motionStart + holdFrames],
+      latest: motionStart,
+      quiet: [checkpoints.leadArm, checkpoints.top],
+      minRun: 5, // ceil(0.02 s x 240 fps)
+    });
+  });
+
   test('scale from the address window matches the lab', () => {
     const r = run();
     const [a0, a1] = r.addressRun;

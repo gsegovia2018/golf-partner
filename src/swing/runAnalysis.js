@@ -115,9 +115,11 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
         })),
         ball: pose.ball ?? null,
         expectedShaftPx: expectedShaftPx(first.scale.pxPerCm),
+        addressSearch: first.addressSearch ?? null,
         outDir: dir.uri,
       });
       const p2 = { shaft: r?.shaft ?? {}, addressFrame: r?.addressFrame ?? null };
+      if (r?.timings) p2.timings = r.timings;
       const second = analyze(pose, { ...opts, pass2: p2 });
       if (!second.error) {
         final = second;

@@ -135,7 +135,7 @@ internal object Stills {
   }
 
   /** Straight from YUV to the Bitmap's colour ints (display orientation, decoded size). */
-  private fun writeJpeg(f: YuvFrame, file: File) {
+  internal fun writeJpeg(f: YuvFrame, file: File) {
     val w = f.dispW
     val h = f.dispH
     val px = IntArray(w * h)

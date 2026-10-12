@@ -98,10 +98,13 @@ extractCheckpoints(path, {
   trackRanges: [ [i0, i1, every] ],                        // v1 (D16): empty; clubhead only at address and impact
   ball: { x, y, r } | null,
   expectedShaftPx,                                         // from scale.js
+  addressSearch: { run: [a, b], latest, quiet: [a, b], minRun } | null,   // phases.js, detect.py clubhead_onset (N2, apiVersion 2)
   outDir
 }) → {
   stills: { [key]: { [i]: 'file://…/frames/556.jpg' } },   // checkpoint ±neighbours, full decode resolution, JPEG q85
-  shaft: { [i]: { angleDeg, lengthPx, head: [x, y] | null, hidden, conf, source: 'edge'|'prior' } }
+  shaft: { [i]: { angleDeg, lengthPx, head: [x, y] | null, hidden, conf, source: 'edge'|'prior' } },   // v1: 'edge' at address and impact only (D16)
+  addressFrame: number | null,                              // image-based P1 (onset in the ball patch − 1)
+  timings: { totalMs, scanMs, decodeMs, addressDecodeMs, jpegWaitMs, onsetMs, shaftMs, decoded, stills }
 }
 
 listRecordingModes() → [ { width, height, fps, highSpeed: bool } ]   // sorted by fps desc
