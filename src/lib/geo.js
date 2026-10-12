@@ -5,9 +5,11 @@ import seedGeometry from '../data/courseGeometry.json';
 import { normalizeText } from './courseLibrary';
 
 // Active geometry set. Seeded from the bundled JSON so GPS works offline and
-// before the first Supabase fetch; courseGeometryStore.hydrate() swaps in the
-// live table data via setCourseGeometry(). Same nested shape either way:
-// { key, name, matchTokens, mode, holes[] | greens[] }.
+// before the first Supabase fetch; courseGeometryStore merges in the live
+// course index at launch and each course's details on demand, via
+// mergeCourseGeometry(). Same nested shape either way:
+// { key, name, matchTokens, mode, holes[] | greens[] } — index-only entries
+// lack holes/greens until their details load.
 let COURSES = seedGeometry.courses;
 
 // Subscription so React re-renders when hydration swaps the geometry in — the
@@ -17,10 +19,42 @@ let COURSES = seedGeometry.courses;
 let version = 0;
 const listeners = new Set();
 
-// Replace the active geometry (called by courseGeometryStore after a fetch).
+// Replace the active geometry wholesale (tests; the store merges instead).
 // Falls back to the bundled seed when handed an empty/invalid set.
 export function setCourseGeometry(courses) {
   COURSES = Array.isArray(courses) && courses.length ? courses : seedGeometry.courses;
+  version += 1;
+  listeners.forEach((l) => l());
+}
+
+// A course is "detailed" once its holes/greens are loaded. The launch index
+// (courseGeometryStore) carries only name/matchTokens/mode; details arrive per
+// course via ensureCourseGeometry().
+export function hasCourseDetails(course) {
+  return Array.isArray(course?.holes) || Array.isArray(course?.greens);
+}
+
+// Merge courses into the active set by key, keeping everything already there.
+// A detailed course replaces its entry; a detail-less (index) entry is only
+// added when the key is unknown — it never downgrades a loaded course.
+export function mergeCourseGeometry(courses) {
+  if (!Array.isArray(courses) || !courses.length) return;
+  const next = COURSES.slice();
+  const at = new Map(next.map((c, i) => [c.key, i]));
+  let changed = false;
+  for (const c of courses) {
+    const i = at.get(c.key);
+    if (i == null) {
+      at.set(c.key, next.length);
+      next.push(c);
+      changed = true;
+    } else if (hasCourseDetails(c)) {
+      next[i] = c;
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  COURSES = next;
   version += 1;
   listeners.forEach((l) => l());
 }

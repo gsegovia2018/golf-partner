@@ -20,6 +20,7 @@ jest.mock('../../lib/geo', () => ({
   subscribeCourseGeometry: jest.fn(() => () => {}),
   getCourseGeometryVersion: jest.fn(() => 1),
 }));
+jest.mock('../../store/courseGeometryStore', () => ({ ensureCourseGeometry: jest.fn() }));
 jest.mock('../../lib/flyoverModel', () => ({
   resolveScorecardDistances: jest.fn(({ fix }) => (fix
     ? { distances: { center: 120 }, source: 'gps' }

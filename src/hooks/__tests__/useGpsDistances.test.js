@@ -20,6 +20,7 @@ jest.mock('../../lib/geo', () => ({
   subscribeCourseGeometry: jest.fn(() => () => {}),
   getCourseGeometryVersion: jest.fn(() => 1),
 }));
+jest.mock('../../store/courseGeometryStore', () => ({ ensureCourseGeometry: jest.fn() }));
 const defaultResolveScorecardDistances = ({ fix }) => (fix
   ? { distances: { center: 120 }, source: 'gps' }
   : { distances: { center: 340, front: 330, back: 350 }, source: 'tee' });

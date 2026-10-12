@@ -4,8 +4,9 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import {
-  holeFeatures, subscribeCourseGeometry, getCourseGeometryVersion, haversineMeters, pointInPolygon,
+  holeFeatures, haversineMeters, pointInPolygon,
 } from '../../lib/geo';
+import { useCourseGeometry } from '../../hooks/useCourseGeometry';
 import { anchorFor } from '../../lib/flyoverModel';
 import { hud } from '../../theme/tokens';
 import { courseKeyFor } from '../../store/tileCache';
@@ -27,12 +28,12 @@ export function HoleFlyover({
   position, visible, onClose, onEdit,
   roundId, roundIndex,
 }) {
-  const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
+  const geometry = useCourseGeometry(courseName);
   const appSettings = useAppSettings();
   const { units } = appSettings;
   const cond = usePlayConditions(courseName);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geomVersion]);
+  const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geometry]);
 
   // Logged shots for this hole, as plain {lat,lng,club} for the map layer.
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
