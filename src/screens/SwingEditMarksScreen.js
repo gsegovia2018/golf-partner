@@ -12,6 +12,7 @@ import SwingOverlay, { fitRect } from '../components/swing/SwingOverlay';
 import SwingTimeline from '../components/swing/SwingTimeline';
 import SwingCheckRow from '../components/swing/SwingCheckRow';
 import FrameScrubber from '../components/swing/FrameScrubber';
+import DragLoupe from '../components/swing/DragLoupe';
 import { useSwingTone } from '../components/swing/swingTone';
 import { useTheme } from '../theme/ThemeContext';
 import {
@@ -148,6 +149,7 @@ export function SwingEditMarksEditor({
 
   const lastDrag = useRef(0);
   const grab = useRef(null);
+  const loupe = useRef(null); // D20: the magnifier follows the finger without re-rendering the editor
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
@@ -163,19 +165,26 @@ export function SwingEditMarksEditor({
       if (hit) {
         setTarget(hit);
         const o = hit === 'hands' ? L.handsNow : hit === 'head' ? L.headNow : ball;
-        grab.current = { t: hit, o, started: false };
+        grab.current = { t: hit, o, started: false, f0: [x, y] };
+        loupe.current?.show({ finger: [x, y], mark: o });
       } else if (L.target === 'ball' && !L.ballOk) {
         setToast(T.ballOnlyAddress);
         grab.current = null;
       } else {
         // Not on a handle: the tap places the active target there.
         place(L.target, clampPt(norm), true);
-        grab.current = { t: L.target, o: clampPt(norm), started: true };
+        grab.current = { t: L.target, o: clampPt(norm), started: true, f0: [x, y] };
+        loupe.current?.show({ finger: [x, y], mark: clampPt(norm) });
       }
     },
     onPanResponderMove: (_e, g) => {
       const G = grab.current;
       if (!G) return;
+      const { rect: lr } = latest.current;
+      loupe.current?.update({
+        finger: [G.f0[0] + g.dx, G.f0[1] + g.dy],
+        mark: clampPt([G.o[0] + g.dx / lr.w, G.o[1] + g.dy / lr.h]),
+      });
       const now = Date.now();
       if (now - lastDrag.current < DRAG_FPS_MS) return;
       lastDrag.current = now;
@@ -190,9 +199,10 @@ export function SwingEditMarksEditor({
         place(G.t, clampPt([G.o[0] + g.dx / r.w, G.o[1] + g.dy / r.h]), !G.started);
       }
       grab.current = null;
+      loupe.current?.hide();
       setScrollOn(true);
     },
-    onPanResponderTerminate: () => { grab.current = null; setScrollOn(true); },
+    onPanResponderTerminate: () => { grab.current = null; loupe.current?.hide(); setScrollOn(true); },
   }), [place]);
 
   const lastNudge = useRef(0);
@@ -203,7 +213,10 @@ export function SwingEditMarksEditor({
     const now = Date.now();
     const push = now - lastNudge.current > NUDGE_COALESCE_MS;
     lastNudge.current = now;
-    place(L.target, clampPt([cur[0] + dx / video.width, cur[1] + dy / video.height]), push);
+    const moved = clampPt([cur[0] + dx / video.width, cur[1] + dy / video.height]);
+    place(L.target, moved, push);
+    loupe.current?.flash({ mark: moved }); // a 1-px move is invisible under the finger: show it magnified
+
   };
 
   const selectCp = (k) => {
@@ -287,6 +300,7 @@ export function SwingEditMarksEditor({
             label={`${name} still, frame ${shown.frame ?? view}`}
           >
             <View style={StyleSheet.absoluteFill} {...pan.panHandlers} testID="edit-touch-layer" />
+            <DragLoupe ref={loupe} rect={rect} uri={shown.uri} />
           </SwingOverlay>
           {pill ? (
             <View style={s.pill} pointerEvents="none" accessibilityLiveRegion="polite">
