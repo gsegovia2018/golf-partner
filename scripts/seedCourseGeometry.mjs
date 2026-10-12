@@ -1,9 +1,11 @@
 // Seed GPS course geometry into the golf_* Supabase tables.
 // Usage:
-//   node scripts/seedCourseGeometry.mjs [--dry-run] [extra1.json extra2.json ...]
-// Always seeds the bundled src/data/courseGeometry.json courses; any extra
-// files are single nested course objects (e.g. extractor / geojson output).
-// Idempotent: upserts the course row, replaces its child rows.
+//   node scripts/seedCourseGeometry.mjs [--dry-run] [--new-only] [extra1.json extra2.json ...]
+// Seeds the bundled src/data/courseGeometry.json courses plus any extra files
+// (single nested course objects, e.g. extractor / geojson output).
+// Idempotent: upserts the course row, replaces its child rows — which also
+// wipes in-app edits (pins, green front/back). --new-only seeds just the extra
+// files, and only courses whose id isn't in golf_course yet.
 import 'dotenv/config';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -14,7 +16,8 @@ import { flattenCourse } from '../src/lib/courseGeometryShape.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const DRY = process.argv.includes('--dry-run');
-const extraFiles = process.argv.slice(2).filter((a) => a !== '--dry-run');
+const NEW_ONLY = process.argv.includes('--new-only');
+const extraFiles = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 
 // Service-role key, not anon: since 20260728000007 the golf_* tables have RLS
 // on with no insert/delete policy, so only the service role can seed them.
@@ -28,7 +31,15 @@ const supabase = DRY ? null : createClient(url, key);
 
 const bundled = JSON.parse(readFileSync(resolve(root, 'src/data/courseGeometry.json'), 'utf8')).courses;
 const extras = extraFiles.map((f) => JSON.parse(readFileSync(resolve(process.cwd(), f), 'utf8')));
-const courses = [...bundled, ...extras];
+let courses = NEW_ONLY ? extras : [...bundled, ...extras];
+if (NEW_ONLY && supabase) {
+  const { data, error } = await supabase.from('golf_course').select('id');
+  if (error) throw new Error(`golf_course ids: ${error.message}`);
+  const existing = new Set(data.map((r) => r.id));
+  const skipped = courses.filter((c) => existing.has(c.key));
+  skipped.forEach((c) => console.log('SKIP', c.key, '(already seeded)'));
+  courses = courses.filter((c) => !existing.has(c.key));
+}
 
 async function seedOne(course) {
   const { course: row, holes, hazards, greens } = flattenCourse(course);

@@ -1,4 +1,7 @@
-import { bearingDeg, normalizeDeltaDeg, holeTargetPoint, setCourseGeometry } from '../geo';
+import {
+  bearingDeg, normalizeDeltaDeg, holeTargetPoint, setCourseGeometry,
+  mergeCourseGeometry, getCourseGeometry, getCourseGeometryVersion, findCourseGeometry,
+} from '../geo';
 
 // ~111,320 m per degree of latitude; latitude-only offsets make bearings
 // predictable without longitude scaling.
@@ -130,5 +133,39 @@ describe('holeTargetPoint', () => {
     const target = holeTargetPoint('Testville Golf', 1);
     const features = { greenCenter: GREEN, pin: at(50) };
     expect(target).toEqual(features.pin);
+  });
+});
+
+describe('mergeCourseGeometry', () => {
+  const DETAILED = {
+    key: 'a', name: 'Alpha', matchTokens: [['alpha']], mode: 'holes', holes: [{ number: 1 }],
+  };
+  const INDEX_A = { key: 'a', name: 'Alpha Renamed', matchTokens: [['alpha']], mode: 'holes' };
+  const INDEX_B = { key: 'b', name: 'Bravo', matchTokens: [['bravo']], mode: 'greens' };
+
+  beforeEach(() => setCourseGeometry([DETAILED]));
+  afterEach(() => setCourseGeometry([]));
+
+  it('adds unknown index entries without downgrading a detailed course', () => {
+    const v = getCourseGeometryVersion();
+    mergeCourseGeometry([INDEX_A, INDEX_B]);
+    expect(getCourseGeometry().find((c) => c.key === 'a')).toBe(DETAILED);
+    expect(findCourseGeometry('Bravo Golf')).toBe(INDEX_B);
+    expect(getCourseGeometryVersion()).toBe(v + 1);
+  });
+
+  it('lets details replace an index entry', () => {
+    mergeCourseGeometry([INDEX_B]);
+    const detailedB = { ...INDEX_B, greens: [[38.5, -0.1]] };
+    mergeCourseGeometry([detailedB]);
+    expect(findCourseGeometry('Bravo')).toBe(detailedB);
+    expect(getCourseGeometry()).toHaveLength(2);
+  });
+
+  it('does not bump the version when nothing changes', () => {
+    const v = getCourseGeometryVersion();
+    mergeCourseGeometry([INDEX_A]);
+    mergeCourseGeometry([]);
+    expect(getCourseGeometryVersion()).toBe(v);
   });
 });

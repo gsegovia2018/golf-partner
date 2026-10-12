@@ -1,9 +1,8 @@
 import React, { useMemo, useSyncExternalStore } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import {
-  holeFeatures, subscribeCourseGeometry, getCourseGeometryVersion,
-} from '../../lib/geo';
+import { holeFeatures } from '../../lib/geo';
+import { useCourseGeometry } from '../../hooks/useCourseGeometry';
 import { hud } from '../../theme/tokens';
 import { courseKeyFor } from '../../store/tileCache';
 import { useAppSettings } from '../../hooks/useAppSettings';
@@ -19,10 +18,10 @@ export function ShotReplaySheet({
   visible, onClose, courseName, holeNumber, par, strokeIndex,
   roundId, roundIndex, caption,
 }) {
-  const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
+  const geometry = useCourseGeometry(courseName);
   const { units } = useAppSettings();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geomVersion]);
+  const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geometry]);
 
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   const shots = useMemo(() => (roundId == null ? [] : shotsForHole(roundId, roundIndex, holeNumber)

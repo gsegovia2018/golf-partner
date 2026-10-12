@@ -135,6 +135,13 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   scorecard's single source of truth. Agreements are anchored to card
   versions, so an edit re-opens exactly the disputes it should. The plan is
   `docs/superpowers/plans/2026-09-04-scorecard-cards-engine.md`.
+- GPS course maps (`golf_*` tables) load in two tiers: the `golf_course`
+  index at launch, a course's holes/hazards/greens on demand
+  (`ensureCourseGeometry` / `hooks/useCourseGeometry.js`), cached per
+  course. Never fetch every course's rows at once — PostgREST caps at 1000.
+  Spanish maps come from OSM via `scripts/importOsmGeometry.mjs`; seed new
+  ones with `seedCourseGeometry.mjs --new-only` (a plain seed wipes in-app
+  pin/green edits).
 - Background GPS: `src/lib/roundTracking.js` runs an Android foreground
   location service (`expo-task-manager`) while a live scorecard is open,
   with a persistent notification driven by `hooks/useRoundTracking.js`;
