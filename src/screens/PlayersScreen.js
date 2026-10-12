@@ -383,8 +383,24 @@ export default function PlayersScreen({ navigation, route }) {
     }, 400);
   }, [editPlayers, rounds]);
 
+  // A saved round stamps every player's index into round.playerIndexes, so a
+  // round still playing off the old base must follow the new one — otherwise
+  // the tee editor keeps deriving the playing handicap from the stale index.
+  // A deliberate per-round override (≠ old base) and already-finished rounds
+  // (before currentRound) keep their index.
   function updateBaseHandicap(playerId, value) {
+    const parse = (v) => { const r = parseHandicapIndex(v); return r.ok ? r.value : 0; };
+    const prevPlayer = editPlayers.find((p) => p.id === playerId);
+    const oldBase = prevPlayer ? parse(prevPlayer.handicap) : null;
+    const newBase = parse(value);
+    const currentRound = tournament?.currentRound ?? 0;
     setEditPlayers((prev) => prev.map((p) => (p.id === playerId ? { ...p, handicap: value } : p)));
+    if (oldBase == null || oldBase === newBase) return;
+    setRounds((prev) => prev.map((r, ri) => {
+      const idx = r.playerIndexes?.[playerId];
+      if (ri < currentRound || idx == null || Number(idx) !== oldBase) return r;
+      return { ...r, playerIndexes: { ...r.playerIndexes, [playerId]: newBase } };
+    }));
   }
 
   // Open the friend chooser to link a local roster slot to an app account.
