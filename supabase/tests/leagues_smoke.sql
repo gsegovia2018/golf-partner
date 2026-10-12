@@ -1,5 +1,6 @@
 -- ============================================================================
--- Smoke test for 20261004000000_leagues.sql (+ 20261005000001_league_net_differential.sql)
+-- Smoke test for 20261004000000_leagues.sql (+ 20261005000001_league_net_differential.sql,
+-- 20261013000000_league_marker_request.sql)
 -- — the league RPCs under a
 -- simulated auth uid, their refusals, RLS, and the anon surface.
 --
@@ -123,7 +124,7 @@ INSERT INTO league_smoke (name, ok, detail)
 SELECT 'handicaps: A 18, B 18, C stays 20 (22 proposed), D clamped to cap 30',
        string_agg(right(user_id::text, 1) || '=' || league_handicap, ',' ORDER BY user_id) = 'a=18.0,b=18.0,c=20.0,d=30.0',
        string_agg(right(user_id::text, 1) || '=' || league_handicap, ',' ORDER BY user_id)
-  FROM public.league_members;
+  FROM public.league_members WHERE league_id::text = (SELECT v FROM league_ctx WHERE k='league');
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'create_league notifies each invited friend once with league_invite',
        count(*) = 3
@@ -135,11 +136,13 @@ SELECT 'create_league notifies each invited friend once with league_invite',
                       AND data->>'league_name' = 'Club del Mulligan'
                       AND data->>'inviter_name' = 'Marcos Test'),
        count(*)::text
-  FROM public.notifications WHERE type = 'league_invite';
+  FROM public.notifications WHERE type = 'league_invite'
+   AND data->>'league_id' = (SELECT v FROM league_ctx WHERE k='league');
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'join with a different handicap records one proposed event (C 20 -> 22)',
        count(*) = 1 AND min(old) = 20 AND min(new) = 22, count(*)::text
-  FROM public.league_handicap_events WHERE reason = 'proposed';
+  FROM public.league_handicap_events WHERE reason = 'proposed'
+   AND league_id::text = (SELECT v FROM league_ctx WHERE k='league');
 
 -- 3) admin-only RPCs refused for a member -----------------------------------------
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
@@ -239,10 +242,12 @@ SELECT 'announce notifies the 3 other members, not the actor, with push data',
                       AND data->>'course_name' = 'La Moraleja' AND data->>'card_id' IS NOT NULL
                       AND data->>'league_id' IS NOT NULL),
        count(*)::text
-  FROM public.notifications WHERE type = 'league_card_announced';
+  FROM public.notifications WHERE type = 'league_card_announced'
+   AND entity_id::text = (SELECT v FROM league_ctx WHERE k='cardA');
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'tee-off notifies 3 members once (idempotent)', count(*) = 3, count(*)::text
-  FROM public.notifications WHERE type = 'league_tee_off';
+  FROM public.notifications WHERE type = 'league_tee_off'
+   AND entity_id::text = (SELECT v FROM league_ctx WHERE k='cardA');
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'tee-off stamps first_shot_at with the server clock', first_shot_at = now(), first_shot_at::text
   FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardA');
@@ -446,12 +451,13 @@ BEGIN
   INSERT INTO league_smoke (name, ok, detail) VALUES ('anon get_marker_card returns only the whitelist',
     -- Compared as sets (<@ both ways) so collation order cannot matter.
     (SELECT array_agg(k) FROM jsonb_object_keys(r) k)
-      <@ ARRAY['course','date','differential','expires_at','gross','holes','net_differential','player_first_name',
-             'playing_handicap','points','rating','slope','tee']
+      <@ ARRAY['course','date','differential','expires_at','gross','holes','league_name','month','net_differential',
+             'player_first_name','playing_handicap','points','rating','slope','tee']
     AND (SELECT array_agg(k) FROM jsonb_object_keys(r) k)
-      @> ARRAY['course','date','differential','expires_at','gross','holes','net_differential','player_first_name',
-             'playing_handicap','points','rating','slope','tee']
+      @> ARRAY['course','date','differential','expires_at','gross','holes','league_name','month','net_differential',
+             'player_first_name','playing_handicap','points','rating','slope','tee']
     AND r->>'player_first_name' = 'Pablo' AND jsonb_array_length(r->'holes') = 18
+    AND r->>'league_name' = 'Club del Mulligan' AND r->>'month' = '2026-10-01'
     AND r->'holes'->0 = '{"n":1,"par":5,"si":3,"strokes":5}'::jsonb
     AND (SELECT array_agg(k) FROM jsonb_object_keys(r->'holes'->1) k) <@ ARRAY['n','par','si','strokes']
     AND (SELECT count(*) FROM jsonb_object_keys(r->'holes'->1)) = 4,
@@ -532,8 +538,8 @@ END $$;
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'returned card stays submitted with the note; owner alone notified',
        c.status = 'submitted' AND c.marker_note = 'Hole 7 was a 6'
-         AND (SELECT count(*) FROM public.notifications n WHERE n.type = 'league_marker_issue') = 1
-         AND (SELECT user_id FROM public.notifications n WHERE n.type = 'league_marker_issue')
+         AND (SELECT count(*) FROM public.notifications n WHERE n.type = 'league_marker_issue' AND n.entity_id = c.id) = 1
+         AND (SELECT user_id FROM public.notifications n WHERE n.type = 'league_marker_issue' AND n.entity_id = c.id)
              = 'a0000000-0000-4000-8000-00000000000c',
        c.status
   FROM public.league_cards c WHERE c.id = (SELECT v::uuid FROM league_ctx WHERE k='cardC');
@@ -598,7 +604,8 @@ SET LOCAL ROLE authenticated;
 DO $$
 DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league'); r jsonb; cid uuid;
 BEGIN
-  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"Golf Olivar","tee":"Yellow"}'::jsonb, '2026-10-20 10:00+02');
+  -- Tee time now: an off-app card can be posted only once it has passed (20261012000000).
+  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"Golf Olivar","tee":"Yellow"}'::jsonb, now());
   cid := (r->>'id')::uuid;
   INSERT INTO league_ctx VALUES ('cardD', cid::text);
   INSERT INTO league_smoke (name, ok, detail)
@@ -689,6 +696,19 @@ BEGIN
   INSERT INTO league_smoke (name, ok, detail) VALUES ('after a void the member can announce that month again',
     r->>'month' = '2026-11-01', r::text);
   INSERT INTO league_ctx VALUES ('cardB2', r->>'id');
+END $$;
+
+-- A November tee time is still ahead, and an off-app card is posted only once
+-- its tee time has passed (20261012000000): move it to just now, keeping the
+-- card's month.
+RESET ROLE;
+UPDATE public.league_cards SET tee_time = now() - interval '5 minutes'
+ WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardB2');
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE r jsonb := jsonb_build_object('id', (SELECT v FROM league_ctx WHERE k='cardB2'));
+BEGIN
   BEGIN
     PERFORM public.submit_league_card((r->>'id')::uuid,
               (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20, '2026-12-01');
@@ -738,23 +758,40 @@ BEGIN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses a date outside the season',
       SQLERRM = 'That date is outside the season (2026-01-01 to 2026-12-31).', SQLERRM);
   END;
-  -- Off-app card announced AFTER its tee time -> not announced.
-  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"Late"}'::jsonb, now() - interval '1 hour');
+  -- An off-app tee time already gone can't be announced (20261012000000);
+  -- a round already played goes in as an unannounced card instead.
+  BEGIN
+    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"Late"}'::jsonb, now() - interval '1 hour');
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses an off-app tee time already passed', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses an off-app tee time already passed',
+      SQLERRM = 'That tee time has passed. If you already played, add it as a card you didn''t announce.', SQLERRM);
+  END;
+  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"Late"}'::jsonb, now());
   INSERT INTO league_ctx VALUES ('cardBO', r->>'id');
   r := public.submit_league_card((r->>'id')::uuid, (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20, NULL);
-  INSERT INTO league_smoke (name, ok, detail) VALUES ('off-app tee time before the announcement -> not_announced',
-    (r->>'not_announced')::boolean, r::text);
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('off-app teeing off as announced -> announced',
+    NOT (r->>'not_announced')::boolean, r::text);
 END $$;
 
 -- App card with no tee-off stamp and no round startedAt -> not announced.
+-- An app card tees off on Start, so announce always makes it this month's
+-- (20261012000000), and A has October already: a November one is a fixture row.
+RESET ROLE;
+WITH x AS (
+  INSERT INTO public.league_cards (league_id, user_id, month, source, status, tournament_id, round_id, player_id,
+                                   course, tee_time, played_on, announced_at, league_handicap)
+  VALUES ((SELECT v::uuid FROM league_ctx WHERE k='league'), 'a0000000-0000-4000-8000-00000000000a', '2026-11-01',
+          'app', 'playing', 't_lg_n', 'r0', 'pA', '{"slope":130,"rating":71.4,"name":"Nowhere"}'::jsonb,
+          '2026-11-05 09:00+01', '2026-11-05', now(), 18)
+  RETURNING id)
+INSERT INTO league_ctx SELECT 'cardAN', id::text FROM x;
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
 DO $$
 DECLARE r jsonb;
 BEGIN
-  r := public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'app',
-         '{"slope":130,"rating":71.4,"name":"Nowhere"}'::jsonb, '2026-11-05 09:00+01', 't_lg_n', 'r0', 'pA');
-  INSERT INTO league_ctx VALUES ('cardAN', r->>'id');
-  r := public.submit_league_card((r->>'id')::uuid, (SELECT jsonb_object_agg(h::text, 4) FROM generate_series(1, 18) h), 72, 36, 20, NULL);
+  r := public.submit_league_card((SELECT v::uuid FROM league_ctx WHERE k='cardAN'), (SELECT jsonb_object_agg(h::text, 4) FROM generate_series(1, 18) h), 72, 36, 20, NULL);
   INSERT INTO league_smoke (name, ok, detail) VALUES ('app card with no first-shot stamp -> not_announced',
     (r->>'not_announced')::boolean AND r->>'first_shot_at' IS NULL, r::text);
 END $$;
@@ -800,8 +837,21 @@ BEGIN
   -- Unrated announced card: announce is allowed, submit is refused and leaves it announced.
   r := public.announce_league_card(lid, 'offapp', unr, '2026-11-20 10:00+01');
   INSERT INTO league_ctx VALUES ('cardCU', r->>'id');
+END $$;
+
+-- Posting waits for the tee time (20261012000000): move it to just now,
+-- keeping the card's month.
+RESET ROLE;
+UPDATE public.league_cards SET tee_time = now() - interval '5 minutes'
+ WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardCU');
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000c","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE h   jsonb := (SELECT v::jsonb FROM league_ctx WHERE k='hcng');
+        msg constant text := 'This tee has no slope and course rating, so it can''t count for the league.';
+BEGIN
   BEGIN
-    PERFORM public.submit_league_card((r->>'id')::uuid, h, 86, 33, 16, NULL);
+    PERFORM public.submit_league_card((SELECT v::uuid FROM league_ctx WHERE k='cardCU'), h, 86, 33, 16, NULL);
     INSERT INTO league_smoke (name, ok, detail) VALUES ('submit refuses an unrated tee', false, 'no error');
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('submit refuses an unrated tee',
@@ -1023,7 +1073,8 @@ SELECT 'vote opened notifies the 3 others', count(*) = 6 AND count(DISTINCT enti
   FROM public.notifications WHERE type = 'league_vote_opened';
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'confirmations notified the league (A, C, D cards x 3 members)', count(*) = 9, count(*)::text
-  FROM public.notifications WHERE type = 'league_card_confirmed';
+  FROM public.notifications WHERE type = 'league_card_confirmed'
+   AND data->>'league_id' = (SELECT v FROM league_ctx WHERE k='league');
 
 -- 11) Rules, final, leave ----------------------------------------------------------------
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
@@ -1247,6 +1298,391 @@ SELECT 'archived: members still read the league, cards and votes',
        AND (SELECT count(*) FROM public.league_handicap_votes) = 3,
        NULL;
 
+-- 14) Pick your marker (20261013000000_league_marker_request.sql) ----------------------------
+-- A second league (the first is archived): A, B, C. D plays the game but is
+-- not in this league; E plays but keeps no card. Game t_lg_m: B's card marks
+-- A on all 18 holes, D's on holes 1-10, C scored only his own ball.
+-- Unbound (QR) tokens go through the redefined get_marker_card /
+-- confirm_marker_card anonymously in section 7 (read, flag, used, confirm).
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := public.create_league('Marker league', '2026-01-01', '2026-12-31', NULL, 30, 0,
+         '[{"user_id":"a0000000-0000-4000-8000-00000000000a","handicap":18},
+           {"user_id":"a0000000-0000-4000-8000-00000000000b","handicap":18},
+           {"user_id":"a0000000-0000-4000-8000-00000000000c","handicap":20}]'::jsonb);
+  INSERT INTO league_ctx VALUES ('league2', r->>'id'), ('code2', r->>'invite_code');
+END $$;
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+SELECT public.join_league((SELECT v FROM league_ctx WHERE k='code2'), 18);
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000c","role":"authenticated"}', true);
+SELECT public.join_league((SELECT v FROM league_ctx WHERE k='code2'), 20);
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league2'), 'app',
+         '{"slope":130,"rating":71.4,"name":"Marker Links","tee":"Yellow","holes":[{"n":1,"par":4,"si":7}]}'::jsonb,
+         now(), 't_lg_m', 'r0', 'pA');
+  INSERT INTO league_ctx VALUES ('cardM', r->>'id');
+END $$;
+
+RESET ROLE;
+INSERT INTO public.tournaments (id, name) VALUES ('t_lg_m', 'League smoke marker');
+INSERT INTO public.game_rounds (id, tournament_id, round_index, body)
+VALUES ('r0', 't_lg_m', 0, jsonb_build_object('startedAt', to_char((now() + interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')));
+INSERT INTO public.game_players (tournament_id, player_id, user_id, body)
+VALUES ('t_lg_m', 'pA', 'a0000000-0000-4000-8000-00000000000a', '{}'::jsonb),
+       ('t_lg_m', 'pB', 'a0000000-0000-4000-8000-00000000000b', '{}'::jsonb),
+       ('t_lg_m', 'pC', 'a0000000-0000-4000-8000-00000000000c', '{}'::jsonb),
+       ('t_lg_m', 'pD', 'a0000000-0000-4000-8000-00000000000d', '{}'::jsonb),
+       ('t_lg_m', 'pE', 'a0000000-0000-4000-8000-00000000000e', '{}'::jsonb);
+-- Each card written as its scorer, so writer_uid is theirs.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+INSERT INTO public.scorer_cards (tournament_id, round_id, author_id, card)
+VALUES ('t_lg_m', 'r0', 'devA', jsonb_build_object(
+     'scorer', jsonb_build_object('playerId', 'pA', 'userId', 'a0000000-0000-4000-8000-00000000000a'),
+     'holes', (SELECT jsonb_object_agg(h::text, jsonb_build_object('v', 1, 'entries', jsonb_build_object('pA', 4)))
+                 FROM generate_series(1, 18) h)));
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+INSERT INTO public.scorer_cards (tournament_id, round_id, author_id, card)
+VALUES ('t_lg_m', 'r0', 'devB', jsonb_build_object(
+     'scorer', jsonb_build_object('playerId', 'pB', 'userId', 'a0000000-0000-4000-8000-00000000000b'),
+     'holes', (SELECT jsonb_object_agg(h::text, jsonb_build_object('v', 1, 'entries', jsonb_build_object('pA', 4, 'pB', 5)))
+                 FROM generate_series(1, 18) h)));
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000c","role":"authenticated"}', true);
+INSERT INTO public.scorer_cards (tournament_id, round_id, author_id, card)
+VALUES ('t_lg_m', 'r0', 'devC', jsonb_build_object(
+     'scorer', jsonb_build_object('playerId', 'pC', 'userId', 'a0000000-0000-4000-8000-00000000000c'),
+     'holes', (SELECT jsonb_object_agg(h::text, jsonb_build_object('v', 1, 'entries', jsonb_build_object('pC', 5)))
+                 FROM generate_series(1, 18) h)));
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000d","role":"authenticated"}', true);
+INSERT INTO public.scorer_cards (tournament_id, round_id, author_id, card)
+VALUES ('t_lg_m', 'r0', 'devD', jsonb_build_object(
+     'scorer', jsonb_build_object('playerId', 'pD', 'userId', 'a0000000-0000-4000-8000-00000000000d'),
+     'holes', (SELECT jsonb_object_agg(h::text, jsonb_build_object('v', 1, 'entries', jsonb_build_object('pA', 4)))
+                 FROM generate_series(1, 10) h)));
+
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE cid uuid := (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+        r jsonb;
+BEGIN
+  r := public.get_league_marker_candidates(cid);
+  INSERT INTO league_smoke (name, ok, detail) VALUES
+    ('marker candidates before submit: B 18, D 10 (not in league), C 0; never the owner or a non-scorer',
+     r->'pending' = 'null'::jsonb
+     AND (SELECT string_agg(right(e->>'user_id', 1) || ':' || (e->>'marked') || ':' || (e->>'in_league'), ',' ORDER BY o)
+            FROM jsonb_array_elements(r->'candidates') WITH ORDINALITY x(e, o)) = 'b:18:true,d:10:false,c:0:true'
+     AND r->'candidates'->0->>'name' = 'Javi Test',
+     r::text);
+  BEGIN
+    PERFORM public.request_league_marker(cid, 'a0000000-0000-4000-8000-00000000000b');
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('marker request before submit refused', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('marker request before submit refused',
+      SQLSTATE = 'P0001' AND SQLERRM = 'Submit the card first.', SQLERRM);
+  END;
+
+  PERFORM public.submit_league_card(cid, (SELECT jsonb_object_agg(h::text, 4) FROM generate_series(1, 18) h), 72, 36, 20, NULL);
+
+  BEGIN
+    PERFORM public.request_league_marker(cid, 'a0000000-0000-4000-8000-00000000000a');
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('owner cannot pick themselves as marker', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('owner cannot pick themselves as marker',
+      SQLERRM = 'You can''t mark your own card.', SQLERRM);
+  END;
+  BEGIN
+    PERFORM public.request_league_marker(cid, 'a0000000-0000-4000-8000-00000000000e');
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('a player who kept no card cannot be the marker', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('a player who kept no card cannot be the marker',
+      SQLERRM = 'Pick a player who kept a card in this game.', SQLERRM);
+  END;
+
+  r := public.request_league_marker(cid, 'a0000000-0000-4000-8000-00000000000b');
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('request_league_marker: marker, name, 7 days, no token',
+    r->>'marker_user_id' = 'a0000000-0000-4000-8000-00000000000b' AND r->>'marker_name' = 'Javi Test'
+      AND (r->>'expires_at')::timestamptz = now() + interval '7 days' AND NOT (r ? 'token'),
+    r::text);
+  r := public.get_league_marker_candidates(cid);
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('candidates show the pending request',
+    r->'pending'->>'user_id' = 'a0000000-0000-4000-8000-00000000000b' AND r->'pending'->>'name' = 'Javi Test'
+      AND (r->'pending'->>'expires_at')::timestamptz = now() + interval '7 days'
+      AND r->'pending'->'reminded_at' = 'null'::jsonb,
+    r::text);
+  BEGIN
+    PERFORM public.remind_league_marker(cid);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('remind refused within 20 h of the request', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('remind refused within 20 h of the request',
+      SQLERRM = 'You can remind once a day.', SQLERRM);
+  END;
+END $$;
+
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+DO $$
+DECLARE cid uuid := (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+BEGIN
+  BEGIN
+    PERFORM public.request_league_marker(cid, 'a0000000-0000-4000-8000-00000000000d');
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('non-owner cannot request a marker', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('non-owner cannot request a marker', SQLERRM = 'Card not found.', SQLERRM);
+  END;
+  BEGIN
+    PERFORM public.get_league_marker_candidates(cid);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('non-owner cannot list marker candidates', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('non-owner cannot list marker candidates', SQLERRM = 'Card not found.', SQLERRM);
+  END;
+  -- The marker reads the token from their own notification (RLS: own rows).
+  INSERT INTO league_ctx SELECT 'tokM1', data->>'token' FROM public.notifications
+   WHERE type = 'league_marker_request' AND entity_id = cid;
+END $$;
+
+RESET ROLE;
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'marker request: one notification to B from A with the push data; token bound to B',
+       count(*) = 1
+       AND bool_and(n.user_id = 'a0000000-0000-4000-8000-00000000000b' AND n.actor_id = 'a0000000-0000-4000-8000-00000000000a'
+                    AND n.data->>'card_id' = (SELECT v FROM league_ctx WHERE k='cardM')
+                    AND n.data->>'league_id' = (SELECT v FROM league_ctx WHERE k='league2')
+                    AND n.data->>'league_name' = 'Marker league' AND n.data->>'course_name' = 'Marker Links'
+                    AND n.data->>'month' = '2026-10-01' AND n.data->>'actor_name' = 'Marcos Test'
+                    AND (n.data->>'token') ~ '^[A-Za-z0-9_-]{43}$')
+       AND (SELECT t.marker_user_id = 'a0000000-0000-4000-8000-00000000000b'
+                   AND t.snapshot_hash = public.league_card_hash(c)
+              FROM public.league_marker_tokens t JOIN public.league_cards c ON c.id = t.card_id
+             WHERE t.token = (SELECT v FROM league_ctx WHERE k='tokM1')),
+       count(*)::text
+  FROM public.notifications n WHERE n.type = 'league_marker_request' AND n.entity_id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'card carries the open request',
+       marker_user_id = 'a0000000-0000-4000-8000-00000000000b' AND marker_name = 'Javi Test'
+       AND marker_requested_at = now() AND marker_reminded_at IS NULL,
+       COALESCE(marker_name, 'NULL')
+  FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+
+-- Anyone but the marker: 'invalid', as for an unknown token.
+DO $$
+DECLARE tok text := (SELECT v FROM league_ctx WHERE k='tokM1');
+        who text;
+        n_ok int := 0;
+BEGIN
+  FOREACH who IN ARRAY ARRAY['a0000000-0000-4000-8000-00000000000a', 'a0000000-0000-4000-8000-00000000000c'] LOOP
+    PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', who, 'role', 'authenticated')::text, true);
+    SET LOCAL ROLE authenticated;
+    BEGIN PERFORM public.get_marker_card(tok);
+    EXCEPTION WHEN others THEN IF SQLERRM = 'invalid' THEN n_ok := n_ok + 1; END IF; END;
+    BEGIN PERFORM public.confirm_marker_card(tok, 'Me', true, NULL);
+    EXCEPTION WHEN others THEN IF SQLERRM = 'invalid' THEN n_ok := n_ok + 1; END IF; END;
+  END LOOP;
+  PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
+  SET LOCAL ROLE anon;
+  BEGIN PERFORM public.get_marker_card(tok);
+  EXCEPTION WHEN others THEN IF SQLERRM = 'invalid' THEN n_ok := n_ok + 1; END IF; END;
+  BEGIN PERFORM public.confirm_marker_card(tok, 'Me', true, NULL);
+  EXCEPTION WHEN others THEN IF SQLERRM = 'invalid' THEN n_ok := n_ok + 1; END IF; END;
+  RESET ROLE;
+  INSERT INTO league_smoke (name, ok, detail) VALUES
+    ('a bound token is invalid for the owner, another player and anon (get + confirm)', n_ok = 6, n_ok::text);
+END $$;
+
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := public.get_marker_card((SELECT v FROM league_ctx WHERE k='tokM1'));
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('the marker reads the bound card, signed in as themselves',
+    (r->>'bound')::boolean AND r->>'signed_in_name' = 'Javi Test' AND r->>'player_first_name' = 'Marcos'
+      AND (r->>'gross')::int = 72 AND jsonb_array_length(r->'holes') = 18
+      AND r->>'league_name' = 'Marker league' AND r->>'month' = '2026-10-01',
+    r::text);
+END $$;
+
+-- Re-request (D, then B again): the old token dies, one notification remains.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SELECT public.request_league_marker((SELECT v::uuid FROM league_ctx WHERE k='cardM'), 'a0000000-0000-4000-8000-00000000000d');
+RESET ROLE;
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 're-request replaces the notification (now to D, outside the league)',
+       count(*) = 1 AND bool_and(user_id = 'a0000000-0000-4000-8000-00000000000d'), count(*)::text
+  FROM public.notifications WHERE type = 'league_marker_request' AND entity_id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+SELECT public.request_league_marker((SELECT v::uuid FROM league_ctx WHERE k='cardM'), 'a0000000-0000-4000-8000-00000000000b');
+RESET ROLE;
+INSERT INTO league_ctx SELECT 'tokM2', data->>'token' FROM public.notifications
+ WHERE type = 'league_marker_request' AND entity_id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  PERFORM public.get_marker_card((SELECT v FROM league_ctx WHERE k='tokM1'));
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('re-request expires the old token', false, 'no error');
+EXCEPTION WHEN others THEN
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('re-request expires the old token', SQLERRM = 'expired', SQLERRM);
+END $$;
+
+-- Remind: allowed once 20 h have passed, re-sends the same token, then refused again.
+RESET ROLE;
+UPDATE public.league_cards SET marker_requested_at = now() - interval '21 hours'
+ WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE cid uuid := (SELECT v::uuid FROM league_ctx WHERE k='cardM'); r jsonb;
+BEGIN
+  r := public.remind_league_marker(cid);
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('remind after 21 h returns reminded_at',
+    (r->>'reminded_at')::timestamptz = now(), r::text);
+  BEGIN
+    PERFORM public.remind_league_marker(cid);
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('a second remind the same day refused', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO league_smoke (name, ok, detail) VALUES ('a second remind the same day refused',
+      SQLERRM = 'You can remind once a day.', SQLERRM);
+  END;
+END $$;
+RESET ROLE;
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'remind re-sends one notification with the same token and stamps the card',
+       count(*) = 1 AND bool_and(n.data->>'token' = (SELECT v FROM league_ctx WHERE k='tokM2')
+                                 AND n.user_id = 'a0000000-0000-4000-8000-00000000000b')
+       AND (SELECT marker_reminded_at = now() FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardM')),
+       count(*)::text
+  FROM public.notifications n WHERE n.type = 'league_marker_request' AND n.entity_id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+
+-- Resubmit ends the request and kills the token.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+SELECT public.submit_league_card((SELECT v::uuid FROM league_ctx WHERE k='cardM'),
+         (SELECT jsonb_object_agg(h::text, 4) FROM generate_series(1, 18) h), 72, 36, 20, NULL);
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'resubmit clears the marker request',
+       marker_user_id IS NULL AND marker_name IS NULL AND marker_requested_at IS NULL AND marker_reminded_at IS NULL,
+       COALESCE(marker_name, 'NULL')
+  FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+DO $$
+BEGIN
+  PERFORM public.get_marker_card((SELECT v FROM league_ctx WHERE k='tokM2'));
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('resubmit expires the marker''s token', false, 'no error');
+EXCEPTION WHEN others THEN
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('resubmit expires the marker''s token', SQLERRM = 'expired', SQLERRM);
+END $$;
+
+-- Cancel: request again, then withdraw it.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SELECT public.request_league_marker((SELECT v::uuid FROM league_ctx WHERE k='cardM'), 'a0000000-0000-4000-8000-00000000000b');
+SELECT public.cancel_league_marker_request((SELECT v::uuid FROM league_ctx WHERE k='cardM'));
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'cancel clears the request, its notification and pending',
+       c.marker_user_id IS NULL AND c.marker_name IS NULL AND c.marker_requested_at IS NULL
+       AND public.get_league_marker_candidates(c.id)->'pending' = 'null'::jsonb,
+       COALESCE(c.marker_name, 'NULL')
+  FROM public.league_cards c WHERE c.id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+RESET ROLE;
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'cancel deletes the notification and expires the bound token',
+       NOT EXISTS (SELECT 1 FROM public.notifications WHERE type = 'league_marker_request' AND entity_id = (SELECT v::uuid FROM league_ctx WHERE k='cardM'))
+       AND NOT EXISTS (SELECT 1 FROM public.league_marker_tokens
+                        WHERE card_id = (SELECT v::uuid FROM league_ctx WHERE k='cardM')
+                          AND used_at IS NULL AND expires_at > now()),
+       NULL;
+
+-- Showing a QR replaces a pending in-app request.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+SELECT public.request_league_marker((SELECT v::uuid FROM league_ctx WHERE k='cardM'), 'a0000000-0000-4000-8000-00000000000b');
+SELECT public.create_marker_token((SELECT v::uuid FROM league_ctx WHERE k='cardM'));
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'a QR clears the pending marker request',
+       c.marker_user_id IS NULL AND c.marker_name IS NULL
+       AND public.get_league_marker_candidates(c.id)->'pending' = 'null'::jsonb,
+       COALESCE(c.marker_name, 'NULL')
+  FROM public.league_cards c WHERE c.id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+RESET ROLE;
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'a QR deletes the request notification',
+       NOT EXISTS (SELECT 1 FROM public.notifications WHERE type = 'league_marker_request' AND entity_id = (SELECT v::uuid FROM league_ctx WHERE k='cardM')),
+       NULL;
+
+-- Flag: the marker sends the card back.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+SELECT public.request_league_marker((SELECT v::uuid FROM league_ctx WHERE k='cardM'), 'a0000000-0000-4000-8000-00000000000b');
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+INSERT INTO league_ctx SELECT 'tokM4', data->>'token' FROM public.notifications
+ WHERE type = 'league_marker_request' AND entity_id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := public.confirm_marker_card((SELECT v FROM league_ctx WHERE k='tokM4'), 'Somebody Else', false, 'Hole 3 was a 5');
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('bound marker flags a hole -> returned', r->>'status' = 'returned', r::text);
+END $$;
+RESET ROLE;
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'flag: card stays submitted with the note and returned_at; request cleared',
+       status = 'submitted' AND marker_note = 'Hole 3 was a 5' AND returned_at = now()
+       AND marker_user_id IS NULL AND marker_name IS NULL AND marker_requested_at IS NULL,
+       status
+  FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'flag notifies the owner with the game, signed with the marker''s profile name',
+       count(*) = 1
+       AND bool_and(user_id = 'a0000000-0000-4000-8000-00000000000a' AND actor_id = 'a0000000-0000-4000-8000-00000000000b'
+                    AND data->>'tournament_id' = 't_lg_m' AND data->>'round_id' = 'r0'
+                    AND data->>'actor_name' = 'Javi Test' AND data->>'note' = 'Hole 3 was a 5'),
+       count(*)::text
+  FROM public.notifications
+ WHERE type = 'league_marker_issue' AND entity_id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+
+-- Confirm: the owner corrects, asks B again, B confirms.
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+SELECT public.submit_league_card((SELECT v::uuid FROM league_ctx WHERE k='cardM'),
+         (SELECT jsonb_object_agg(h::text, 4) FROM generate_series(1, 18) h), 72, 36, 20, NULL);
+SELECT public.request_league_marker((SELECT v::uuid FROM league_ctx WHERE k='cardM'), 'a0000000-0000-4000-8000-00000000000b');
+SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+INSERT INTO league_ctx SELECT 'tokM5', data->>'token' FROM public.notifications
+ WHERE type = 'league_marker_request' AND entity_id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := public.confirm_marker_card((SELECT v FROM league_ctx WHERE k='tokM5'), 'Somebody Else', true, NULL);
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('bound marker confirms', r->>'status' = 'confirmed', r::text);
+END $$;
+RESET ROLE;
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'card confirmed by the marker: confirmation marker, by B, request cleared',
+       status = 'confirmed' AND confirmation = 'marker'
+       AND confirmed_by_user = 'a0000000-0000-4000-8000-00000000000b' AND confirmed_by_name = 'Javi Test'
+       AND marker_user_id IS NULL AND marker_name IS NULL AND marker_requested_at IS NULL AND marker_reminded_at IS NULL,
+       status || '/' || COALESCE(confirmation, '-') || '/' || COALESCE(confirmed_by_name, '-')
+  FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'one league_marker_confirmed to the owner from the marker',
+       count(*) = 1
+       AND bool_and(user_id = 'a0000000-0000-4000-8000-00000000000a' AND actor_id = 'a0000000-0000-4000-8000-00000000000b'
+                    AND data->>'card_id' = (SELECT v FROM league_ctx WHERE k='cardM')
+                    AND data->>'league_name' = 'Marker league' AND data->>'course_name' = 'Marker Links'
+                    AND data->>'month' = '2026-10-01' AND data->>'actor_name' = 'Javi Test'),
+       count(*)::text
+  FROM public.notifications WHERE type = 'league_marker_confirmed' AND entity_id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'the confirmation reaches the league as confirmed by marker',
+       count(*) = 2 AND bool_and(data->>'confirmation' = 'marker' AND data->>'confirmed_by' = 'Javi Test'),
+       count(*)::text
+  FROM public.notifications
+ WHERE type = 'league_card_confirmed' AND entity_id = (SELECT v::uuid FROM league_ctx WHERE k='cardM');
+
 -- 12) Grants -------------------------------------------------------------------------------
 RESET ROLE;
 INSERT INTO league_smoke (name, ok, detail)
@@ -1266,7 +1702,9 @@ SELECT 'anon executes exactly get_marker_card + confirm_marker_card',
                      'attach_league_proof','create_marker_token','get_marker_card','confirm_marker_card',
                      'void_league_card','record_league_final',
                      'league_num','league_course_rated','league_card_differential',
-                     'league_net_differential','league_rated_course')
+                     'league_net_differential','league_rated_course',
+                     'league_marker_eligible','get_league_marker_candidates','request_league_marker',
+                     'remind_league_marker','cancel_league_marker_request')
    AND has_function_privilege('anon', p.oid, 'EXECUTE');
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'authenticated cannot execute internal helpers',
@@ -1278,7 +1716,15 @@ SELECT 'authenticated cannot execute internal helpers',
                      'league_canonical_holes','league_month_of','league_confirm_card',
                      'league_assert_open','league_settle_vote','league_is_member','league_is_admin',
                      'league_card_hash','league_num','league_course_rated','league_card_differential',
-                     'league_net_differential','league_rated_course');
+                     'league_net_differential','league_rated_course','league_marker_eligible');
+INSERT INTO league_smoke (name, ok, detail)
+SELECT 'authenticated executes the four marker-request RPCs',
+       count(*) = 4 AND bool_and(has_function_privilege('authenticated', p.oid, 'EXECUTE')),
+       string_agg(p.proname, ',')
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+ WHERE n.nspname = 'public'
+   AND p.proname IN ('get_league_marker_candidates','request_league_marker',
+                     'remind_league_marker','cancel_league_marker_request');
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'anon has no privilege on league tables; authenticated has SELECT only',
        NOT bool_or(has_table_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE,DELETE'))

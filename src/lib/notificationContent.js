@@ -105,9 +105,30 @@ export function renderNotification(type, data = {}) {
       return {
         icon: 'alert-circle',
         title: 'Marker sent your card back',
-        body: `${data.marker_name || data.actor_name || 'Your marker'} flagged your card`
-          + `${data.note ? `: ${data.note}` : ''}`,
+        // A request sent in the app carries the round ids and a note that
+        // already names the hole: "Javi: Hole 12: should be 5 (card says 4)".
+        body: data.note && data.tournament_id && data.round_id
+          ? `${data.marker_name || data.actor_name || 'Your marker'}: ${data.note}`
+          : `${data.marker_name || data.actor_name || 'Your marker'} flagged your card`
+            + `${data.note ? `: ${data.note}` : ''}`,
       };
+    case 'league_marker_request': {
+      const month = monthName(data.month);
+      return {
+        icon: 'edit-3',
+        title: `${actorName} asks you to confirm a card`,
+        body: `${month ? `${month} ` : ''}card${data.course_name ? ` at ${data.course_name}` : ''}`
+          + `${data.league_name ? ` in ${data.league_name}` : ''}`,
+      };
+    }
+    case 'league_marker_confirmed': {
+      const month = monthName(data.month);
+      return {
+        icon: 'check-circle',
+        title: `${actorName} confirmed your ${month ? `${month} ` : ''}card`,
+        body: `It counts in ${data.league_name || 'your league'} now`,
+      };
+    }
     case 'league_ranking_updated': {
       const month = monthName(data.month);
       return {
@@ -188,13 +209,18 @@ export function notificationLink(type, data = {}) {
             cardId: data.card_id,
             tournamentId: data.tournament_id,
             roundId: data.round_id,
+            submitted: true,
           },
         };
       }
       return { screen: 'LeagueBoard', params: { leagueId: data.league_id } };
+    case 'league_marker_request':
+      return data.token ? { screen: 'LeagueMarkerConfirm', params: { token: data.token } }
+        : { screen: 'Notifications' };
     case 'league_card_announced':
     case 'league_tee_off':
     case 'league_card_confirmed':
+    case 'league_marker_confirmed':
     case 'league_ranking_updated':
     case 'league_month_reminder':
     case 'league_post_reminder':

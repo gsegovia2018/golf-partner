@@ -158,11 +158,12 @@ export function viewableCards(members, cardsByMonth, month) {
 }
 
 const HOW_CONFIRMED = {
-  partner: 'app partner', qr: 'marker by QR', photo: 'signed card photo', official: 'official result',
+  partner: 'app partner', marker: 'marker in the app', qr: 'marker by QR', photo: 'signed card photo', official: 'official result',
 };
 
 // Why a submitted card is not counting yet.
 function waitingReason(card) {
+  if (card.markerName && card.source !== 'offapp') return `submitted · waiting for ${card.markerName}`;
   if (card.source === 'offapp') return card.proofPath ? 'waiting for the check' : 'needs the card photo';
   return "marker hasn't scanned the QR yet";
 }
@@ -255,6 +256,26 @@ export function handicapEventLine(event, members, meId) {
   return `${memberName(members, event.userId, meId)} ${move} · ${REASON_TEXT[event.reason] ?? event.reason}${day}`;
 }
 
+// 'Javi Ortega' -> 'Javi'.
+export function firstName(name) {
+  return String(name ?? '').trim().split(/\s+/)[0] ?? '';
+}
+
+// "Asked 2 min ago · until 19 Oct" for a pending marker request. No pronouns.
+export function markerAskedLine(requestedAt, expiresAt, now = new Date()) {
+  const parts = [];
+  const asked = new Date(requestedAt);
+  if (requestedAt && !Number.isNaN(asked.getTime())) {
+    const mins = Math.max(0, Math.floor((now.getTime() - asked.getTime()) / 60000));
+    const ago = mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago`
+      : mins < 1440 ? `${Math.floor(mins / 60)} h ago` : `${Math.floor(mins / 1440)} d ago`;
+    parts.push(`Asked ${ago}`);
+  }
+  const until = new Date(expiresAt);
+  if (expiresAt && !Number.isNaN(until.getTime())) parts.push(`until ${until.getDate()} ${MONTHS[until.getMonth()].slice(0, 3)}`);
+  return parts.join(' · ');
+}
+
 // The "Your <Month> card" block: what state my card is in and what it shows.
 // kind: 'none' | 'announced' | 'playing' | 'submitted' | 'confirmed'
 export function yourCardState(card) {
@@ -269,6 +290,8 @@ export function yourCardState(card) {
     net: hasNet ? formatNetDiff(card.netDifferential) : null,
     netTone: hasNet ? netDiffTone(card.netDifferential) : null,
     unrated: card.status === 'confirmed' && !hasNet,
+    // Asked a signed-in marker who hasn't answered yet (submitted app cards only).
+    waitingFor: card.status === 'submitted' && card.markerName && card.source !== 'offapp' ? firstName(card.markerName) : null,
     offApp: card.source === 'offapp',
     card,
   };

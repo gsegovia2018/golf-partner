@@ -161,6 +161,24 @@ describe('league notifications', () => {
     expect(r.body).toBe('Ana flagged your card: hole 4');
   });
 
+  test('marker issue sent in the app shows the actor and the note as the body', () => {
+    const r = renderNotification('league_marker_issue', {
+      ...base, actor_name: 'Javi', note: 'Hole 12: should be 5 (card says 4)', tournament_id: 'T1', round_id: 'R1',
+    });
+    expect(r.body).toBe('Javi: Hole 12: should be 5 (card says 4)');
+  });
+
+  test('marker request and confirmation copy', () => {
+    const req = renderNotification('league_marker_request', {
+      actor_name: 'Marcos', month: '2026-10-01', course_name: 'El Saler', league_name: 'Tour', token: 'tok',
+    });
+    expect(req).toMatchObject({ title: 'Marcos asks you to confirm a card', body: 'October card at El Saler in Tour' });
+    const done = renderNotification('league_marker_confirmed', {
+      actor_name: 'Javi', month: '2026-10-01', league_name: 'Tour',
+    });
+    expect(done).toMatchObject({ title: 'Javi confirmed your October card', body: 'It counts in Tour now' });
+  });
+
   test('vote opened shows the change', () => {
     const r = renderNotification('league_vote_opened', { ...base, subject_name: 'Ana', old: 12.4, proposed: 10.8 });
     expect(r.body).toBe("Vote on Ana's handicap, 12.4 to 10.8");
@@ -230,7 +248,15 @@ describe('league notifications', () => {
       league_id: 'L1', card_id: 'C1', tournament_id: 'T1', round_id: 'R1',
     })).toEqual({
       screen: 'LeagueValidate',
-      params: { leagueId: 'L1', cardId: 'C1', tournamentId: 'T1', roundId: 'R1' },
+      params: { leagueId: 'L1', cardId: 'C1', tournamentId: 'T1', roundId: 'R1', submitted: true },
     });
+  });
+
+  test('marker request opens the confirm screen with its token; confirmed goes to the board', () => {
+    expect(notificationLink('league_marker_request', { token: 'tok', league_id: 'L1' }))
+      .toEqual({ screen: 'LeagueMarkerConfirm', params: { token: 'tok' } });
+    expect(notificationLink('league_marker_request', { league_id: 'L1' })).toEqual({ screen: 'Notifications' });
+    expect(notificationLink('league_marker_confirmed', { league_id: 'L1', card_id: 'C1' }))
+      .toEqual({ screen: 'LeagueBoard', params: { leagueId: 'L1' } });
   });
 });
