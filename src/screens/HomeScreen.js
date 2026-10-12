@@ -978,6 +978,9 @@ export default function HomeScreen({ navigation, route }) {
   // Hoisted above the early returns (used by resolvedBoard/displayedBoard
   // below as well as the render further down).
   const isGame = tournament?.kind === 'game';
+  // Past = the History list's rule: marked finished, or every round fully
+  // scored. Past events show hole-by-hole scorecards, not running totals.
+  const isPast = isTournamentFinished(tournament);
   // Native mode board for the current scope (selected round, or whole
   // tournament). Casual games are always round-scoped (there's only one).
   const resolvedBoard = useMemo(() => {
@@ -1693,37 +1696,26 @@ export default function HomeScreen({ navigation, route }) {
 
       {/* A finished casual game has one round, and its ROUND SCORES card only
           repeats the leaderboard — show the read-only hole-by-hole card instead. */}
-      {isGame && tournament.finishedAt && tournament.rounds[0] && (() => {
-        const round = tournament.rounds[0];
-        const { mode, rowPlayers, rowHandicaps, effectiveMeId } = resolveScorecardRows({
-          round, settings: tournament.settings, players: tournament.players, meId: tournament.meId,
-        });
-        return (
-          <View style={s.card} testID="finished-game-scorecard">
-            <View style={s.cardTitleRow}>
-              <View style={s.cardTitleLeft}>
-                <Text style={s.cardTitle}>SCORECARD</Text>
-                {round.courseName && (
-                  <Text style={s.cardTitleCourse} numberOfLines={1}>{' · '}{round.courseName}</Text>
-                )}
-              </View>
+      {isGame && isPast && tournament.rounds[0] && (
+        <View style={s.card} testID="finished-game-scorecard">
+          <View style={s.cardTitleRow}>
+            <View style={s.cardTitleLeft}>
+              <Text style={s.cardTitle}>SCORECARD</Text>
+              {tournament.rounds[0].courseName && (
+                <Text style={s.cardTitleCourse} numberOfLines={1}>{' · '}{tournament.rounds[0].courseName}</Text>
+              )}
             </View>
-            <ScorecardTable
-              round={round}
-              players={rowPlayers}
-              scores={round.scores ?? {}}
-              onSetScore={() => {}}
-              editable={() => false}
-              mode={mode}
-              meId={effectiveMeId}
-              handicapsOverride={rowHandicaps}
-              showTotalsCard={false}
-            />
           </View>
-        );
-      })()}
+          <ReadOnlyScorecard
+            round={tournament.rounds[0]}
+            settings={tournament.settings}
+            players={tournament.players}
+            meId={tournament.meId}
+          />
+        </View>
+      )}
 
-      {tournament.rounds.length > 0 && !(isGame && tournament.finishedAt) && (
+      {tournament.rounds.length > 0 && !(isGame && isPast) && (
         <View style={s.card}>
           <View style={s.cardTitleRow}>
             <View style={s.cardTitleLeft}>
@@ -1873,6 +1865,7 @@ export default function HomeScreen({ navigation, route }) {
                     isSingleRound={tournament.rounds.length === 1}
                     showRunning={showRunning}
                     scoringMode={roundScoringMode(tournament, round)}
+                    scorecardSettings={isPast ? tournament.settings : null}
                   />
                 ))}
               </ScrollView>
@@ -2364,6 +2357,7 @@ const RoundPage = React.memo(function RoundPage({
   round, index, width, hasPrev, hasNext, revealed,
   players, meId, theme, s,
   onGoToRound, onOpenEdit, isSingleRound, showRunning = true, scoringMode = null,
+  scorecardSettings = null,
 }) {
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
   return (
@@ -2406,7 +2400,9 @@ const RoundPage = React.memo(function RoundPage({
           </TouchableOpacity>
         </View>
       )}
-      {hasScores || revealed ? (
+      {scorecardSettings && hasScores ? (
+        <ReadOnlyScorecard round={round} settings={scorecardSettings} players={players} meId={meId} />
+      ) : hasScores || revealed ? (
         <RoundScoreboard round={round} players={players} meId={meId} showRunning={showRunning} scoringMode={scoringMode} />
       ) : (
         <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
@@ -2414,6 +2410,29 @@ const RoundPage = React.memo(function RoundPage({
     </View>
   );
 });
+
+// Hole-by-hole card of a past round — no taps, no totals card (the
+// leaderboard above already carries them).
+function ReadOnlyScorecard({ round, settings, players, meId }) {
+  const { mode, rowPlayers, rowHandicaps, effectiveMeId } = resolveScorecardRows({
+    round, settings, players, meId,
+  });
+  return (
+    <View testID="past-round-scorecard">
+      <ScorecardTable
+        round={round}
+        players={rowPlayers}
+        scores={round.scores ?? {}}
+        onSetScore={() => {}}
+        editable={() => false}
+        mode={mode}
+        meId={effectiveMeId}
+        handicapsOverride={rowHandicaps}
+        showTotalsCard={false}
+      />
+    </View>
+  );
+}
 
 const makeStyles = (t) => StyleSheet.create({
   screen: { ...StyleSheet.absoluteFillObject, backgroundColor: t.bg.primary },
