@@ -5,52 +5,68 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * Pass-1 sampling policy (plan §4.2, D17): sparse before the swing, every frame from motion
- * start to impact, every 2nd frame after impact until grip and nose stop, sparse after that.
- * It never decides a phase; it only decides which frames get a pose inference. Pure: fed
- * pose observations, it answers [wants] per frame and reports transitions from [observe].
+ * Pass-1 sampling policy "sparse165" (plan §4.2, owner decision 2026-10-12: reach the time goal
+ * by inferring fewer frames). Strides:
+ *
+ *   STILL      every [sparseEvery] (16)  until the grip leaves its still reference (trigger)
+ *   BACKSWING  every [midEvery] (4)      motion start → the top is seen
+ *   DOWNSWING  every frame               from the top back-fill to impact + [margin] (6)
+ *   FOLLOW     every [followEvery] (2)   → the grip and the nose stop (the finish)
+ *   DONE       every [sparseEvery]
+ *
+ * The top is only known once the grip has come down from it, so the policy reports it late
+ * ([Event.Top], ~14 frames at 240 fps on the lab clip) with the frame to back-fill from:
+ * [topBack] (20) frames before the one it was seen at. The caller re-runs those frames from
+ * its ring of decoded frames. The trigger likewise back-fills the 16-stride gap at the 4-stride.
+ * Validated in the lab: tools/swing-lab/detect.py --sampling sparse165 mirrors this class
+ * (SparsePolicy) — keep the two in step.
+ *
+ * It never decides a phase; it only decides which frames get a pose inference. Pure: fed pose
+ * observations, it answers [wants] per frame and reports transitions from [observe].
  *
  * Time base: [fps] is the capture rate of one container frame step (captureFps, else 240 —
  * plan §4.2: a 30 fps slow-mo container samples like a 240 fps recording), used only to turn
- * the plan's seconds (0.5 s calibration, 0.15 s hold) into frames.
+ * the plan's seconds (0.5 s calibration, 0.15 s hold, 1.5 s / 3 s caps) into frames.
  *
  * Thresholds are per clip, from the pose jitter, never a fixed H/s constant (§4.2):
  * - σ (grip, nose) = jitter from consecutive differences over the first 0.5 s of the still
- *   run (PLAN-GAP: differences, not raw − smoothed, so a slow drift at address — the lab clip
- *   drifts ~5 px in its first 0.5 s — does not inflate σ or fire the trigger).
- * - moving = the grip is more than 3σ√2 (3σ of a difference of two noisy points) away from the
- *   median of the last 4 still samples (PLAN-GAP: a rolling reference for the same reason).
- * - stopped = the 0.15 s displacement is ≤ 3 × its 25th percentile over the still run
- *   (the lab's "stopped" statistic measured on the still samples), floored at 3σ√2.
+ *   run (PLAN-GAP: differences, not raw − smoothed, so a slow drift at address does not
+ *   inflate σ or fire the trigger).
+ * - moving = the grip is more than 3σ√2 away from the median of the last 4 still samples.
+ * - top = the grip has risen ≥ 0.2 H above its trigger height and then dropped more than 3σ√2
+ *   below its highest sample (H = landmark box height).
+ * - stopped = the 0.15 s displacement is ≤ 3 × its 25th percentile over the still run,
+ *   floored at 3σ√2.
  *
- * PLAN-GAPs (the plan's state machine is silent on these):
+ * PLAN-GAPs:
  * - A trigger with no rise afterwards (waggle, forward press) falls back to sparse once the
  *   grip has been stopped for 0.15 s, and the still run restarts there.
- * - Impact (end of the dense zone) = the grip has risen ≥ 0.2 H above its trigger height
- *   (H = landmark box height), then descended ≥ 0.2 H, then come back up by 0.02 H (the
- *   lab's descent segmentation tolerance). Late by a few frames at worst: only costs.
- * - The after-impact zone also ends after 1.5 s even if the golfer never holds still.
- * - The dense zone ends after 3 s of capture time even without an impact (a practice swing
- *   that never comes down, a walk-off, a pose lost mid-swing): every frame of a long clip at
- *   every-frame cost is the worst case for time. It continues as the after-impact zone, with
- *   [impactFrame] left unknown (-1).
+ * - Impact = the grip has descended ≥ 0.2 H from the top, then come back up by 0.02 H; the
+ *   frames to impact + [margin] stay dense.
+ * - FOLLOW also ends 1.5 s after impact; the swing zones end 3 s after the trigger even with
+ *   no impact ([Event.DenseCapped], [impactFrame] left −1).
+ * - DONE is final: only the first swing in a clip gets the dense pass.
  */
 internal class SamplingPolicy(
   fps: Double,
-  val sparseEvery: Int = 8,
-  val afterImpactEvery: Int = 2,
-  val denseEvery: Int = 1,
+  val sparseEvery: Int = 16,
+  val midEvery: Int = 4,
+  val followEvery: Int = 2,
+  val margin: Int = 6,
+  val topBack: Int = 20,
 ) {
-  enum class Zone { STILL, SWING, AFTER_IMPACT, DONE }
+  enum class Zone { STILL, BACKSWING, DOWNSWING, FOLLOW, DONE }
 
   sealed class Event {
     object None : Event()
-    /** Dense sampling starts after [frame]; frames before it lost to sparse sampling must be back-filled. */
-    data class Trigger(val frame: Int) : Event()
+    /** Motion started at [frame]; re-run [from] … [frame] at the [SamplingPolicy.midEvery] stride. */
+    data class Trigger(val frame: Int, val from: Int) : Event()
     /** The trigger was a waggle: back to sparse from [frame]. */
     data class Reset(val frame: Int) : Event()
+    /** The top was seen at [frame]; re-run every frame [from] … [frame]. */
+    data class Top(val frame: Int, val from: Int) : Event()
     data class Impact(val frame: Int) : Event()
-    /** The dense zone hit its 3 s cap at [frame] without an impact. */
+    /** The swing zones hit their 3 s cap at [frame] without an impact. */
     data class DenseCapped(val frame: Int) : Event()
     data class Done(val frame: Int) : Event()
   }
@@ -66,6 +82,8 @@ internal class SamplingPolicy(
   var zone = Zone.STILL
     private set
   private var origin = 0
+  /** FOLLOW: every frame up to here (impact + margin), then [followEvery]. */
+  private var denseUntil = -1
   private var lastFrame = -1
 
   private val still = ArrayList<Obs>()
@@ -87,16 +105,25 @@ internal class SamplingPolicy(
 
   var triggerFrame = -1
     private set
+  var topSeenFrame = -1
+    private set
   var impactFrame = -1
     private set
 
-  fun wants(frame: Int): Boolean {
-    val every = when (zone) {
+  /** The stride of the current zone. */
+  val every: Int
+    get() = when (zone) {
       Zone.STILL, Zone.DONE -> sparseEvery
-      Zone.SWING -> denseEvery
-      Zone.AFTER_IMPACT -> afterImpactEvery
+      Zone.BACKSWING -> midEvery
+      Zone.DOWNSWING -> 1
+      Zone.FOLLOW -> followEvery
     }
-    return frame >= origin && (frame - origin) % every == 0
+
+  fun wants(frame: Int): Boolean {
+    // FOLLOW starts at impact + margin, but the frames up to it stay dense
+    if (zone == Zone.FOLLOW && frame <= denseUntil) return true
+    if (frame < origin) return false
+    return (frame - origin) % every == 0
   }
 
   /** Feed observations in frame order; older or repeated frames are ignored. */
@@ -105,8 +132,9 @@ internal class SamplingPolicy(
     lastFrame = o.frame
     return when (zone) {
       Zone.STILL -> observeStill(o)
-      Zone.SWING -> observeSwing(o)
-      Zone.AFTER_IMPACT -> observeAfterImpact(o)
+      Zone.BACKSWING -> observeBackswing(o)
+      Zone.DOWNSWING -> observeDownswing(o)
+      Zone.FOLLOW -> observeFollow(o)
       Zone.DONE -> Event.None
     }
   }
@@ -116,37 +144,40 @@ internal class SamplingPolicy(
     if (calibrated && still.size >= 4) {
       val ref = rollingRef()
       if (o.grip.dist(ref) > moveRadius(sigmaGrip)) {
-        zone = Zone.SWING
+        zone = Zone.BACKSWING
         origin = o.frame
         triggerFrame = o.frame
         refY = ref.y
         topY = o.grip.y
-        bottomY = -Float.MAX_VALUE
         risen = false
         window.clear()
         window.addLast(o)
-        return Event.Trigger(o.frame)
+        return Event.Trigger(o.frame, o.frame - (sparseEvery - midEvery))
       }
     }
     still.add(o)
     return Event.None
   }
 
-  private fun observeSwing(o: Obs): Event {
+  private fun capped(o: Obs): Event? {
+    if (o.frame - triggerFrame <= denseMaxFrames) return null
+    zone = Zone.FOLLOW
+    origin = o.frame
+    afterFrom = o.frame
+    denseUntil = o.frame
+    window.clear()
+    return Event.DenseCapped(o.frame)
+  }
+
+  private fun observeBackswing(o: Obs): Event {
     push(o)
-    if (o.frame - triggerFrame > denseMaxFrames) {
-      zone = Zone.AFTER_IMPACT
-      origin = o.frame
-      afterFrom = o.frame
-      window.clear()
-      return Event.DenseCapped(o.frame)
-    }
+    capped(o)?.let { return it }
     val g = o.grip.y
     if (!risen) {
       topY = minOf(topY, g)
       if (refY - topY >= 0.2f * bodyH) {
         risen = true
-      } else if (stopped(window, grip = true, noseToo = false)) {
+      } else if (stopped(grip = true, noseToo = false)) {
         zone = Zone.STILL
         origin = o.frame
         still.clear()
@@ -158,6 +189,25 @@ internal class SamplingPolicy(
     }
     if (g < topY) {
       topY = g
+      return Event.None
+    }
+    if (g > topY + moveRadius(sigmaGrip)) {
+      zone = Zone.DOWNSWING
+      origin = o.frame
+      topSeenFrame = o.frame
+      bottomY = g
+      bottomFrame = o.frame
+      return Event.Top(o.frame, o.frame - topBack)
+    }
+    return Event.None
+  }
+
+  private fun observeDownswing(o: Obs): Event {
+    push(o)
+    capped(o)?.let { return it }
+    val g = o.grip.y
+    if (g < topY) {
+      topY = g
       bottomY = -Float.MAX_VALUE
       return Event.None
     }
@@ -166,19 +216,20 @@ internal class SamplingPolicy(
       bottomFrame = o.frame
     }
     if (bottomY - topY >= 0.2f * bodyH && g < bottomY - 0.02f * bodyH) {
-      zone = Zone.AFTER_IMPACT
-      origin = o.frame
       impactFrame = bottomFrame
       afterFrom = bottomFrame
+      denseUntil = max(o.frame, bottomFrame + margin)
+      zone = Zone.FOLLOW
+      origin = denseUntil
       window.clear()
       return Event.Impact(bottomFrame)
     }
     return Event.None
   }
 
-  private fun observeAfterImpact(o: Obs): Event {
+  private fun observeFollow(o: Obs): Event {
     push(o)
-    if (stopped(window, grip = true, noseToo = true) || o.frame - afterFrom > afterImpactMaxFrames) {
+    if ((o.frame > denseUntil && stopped(grip = true, noseToo = true)) || o.frame - afterFrom > afterImpactMaxFrames) {
       zone = Zone.DONE
       origin = o.frame
       return Event.Done(o.frame)
@@ -192,8 +243,9 @@ internal class SamplingPolicy(
   }
 
   /** The window covers the hold time and its two ends (median of 3) moved less than "stopped". */
-  private fun stopped(w: ArrayDeque<Obs>, grip: Boolean, noseToo: Boolean): Boolean {
-    if (w.size < 4 || w.last().frame - w.first().frame < holdFrames - sparseEvery.coerceAtMost(holdFrames / 2)) return false
+  private fun stopped(grip: Boolean, noseToo: Boolean): Boolean {
+    val w = window
+    if (w.size < 4 || w.last().frame - w.first().frame < holdFrames - midEvery) return false
     fun end(sel: (Obs) -> Pt, from: Int) = (from until from + 3).map { sel(w[it]) }.let { ps ->
       Pt(Stats.median(FloatArray(3) { ps[it].x }), Stats.median(FloatArray(3) { ps[it].y }))
     }

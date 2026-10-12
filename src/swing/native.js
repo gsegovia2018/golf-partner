@@ -72,7 +72,7 @@ export async function probeVideo(path) {
  * (video.width × video.height); ball.r is a fraction of the frame WIDTH; tMs is container
  * time (multiply by the slow-mo factor for captured time).
  * @param {string} path  file path, file:// or content:// URI
- * @param {{ model?: 'full'|'lite', sampling?: { sparseEvery?, afterImpactEvery?, denseEvery? },
+ * @param {{ model?: 'full'|'lite', sampling?: { sparseEvery?, midEvery?, followEvery? },
  *   handedness?: 'right'|'left', heightCm?: number, captureFps?: number }} [opts]
  *   handedness and heightCm only steer the native ball search (lead foot side, expected
  *   size; height clamped to 120-230 cm, default 176). captureFps is the sampling policy's

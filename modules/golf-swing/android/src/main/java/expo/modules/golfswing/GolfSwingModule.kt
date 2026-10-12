@@ -21,10 +21,11 @@ const val API_VERSION = 1
 private const val MIN_HEIGHT_CM = 120.0
 private const val MAX_HEIGHT_CM = 230.0
 
+/** Pass-1 strides (sparse165, [SamplingPolicy]): still / motion start → top / impact → finish. */
 class SamplingOptions : Record {
-  @Field val sparseEvery: Int = 8
-  @Field val afterImpactEvery: Int = 2
-  @Field val denseEvery: Int = 1
+  @Field val sparseEvery: Int = 16
+  @Field val midEvery: Int = 4
+  @Field val followEvery: Int = 2
 }
 
 class AnalyzePoseOptions : Record {
@@ -118,8 +119,8 @@ class GolfSwingModule : Module() {
         val opts = AnalyzeOptions(
           model = o.model,
           sparseEvery = o.sampling.sparseEvery.coerceAtLeast(1),
-          afterImpactEvery = o.sampling.afterImpactEvery.coerceAtLeast(1),
-          denseEvery = o.sampling.denseEvery.coerceAtLeast(1),
+          midEvery = o.sampling.midEvery.coerceAtLeast(1),
+          followEvery = o.sampling.followEvery.coerceAtLeast(1),
           rightHanded = o.handedness != "left",
           heightCm = (o.heightCm?.takeIf { it.isFinite() } ?: Ball.DEFAULT_HEIGHT_CM).coerceIn(MIN_HEIGHT_CM, MAX_HEIGHT_CM),
           captureFps = o.captureFps?.takeIf { it.isFinite() && it > 0 },

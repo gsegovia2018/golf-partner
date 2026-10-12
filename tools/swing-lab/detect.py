@@ -327,10 +327,10 @@ class SparsePolicy:
                 "downswing": 1, "follow": self.follow}[self.zone]
 
     def wants(self, f: int) -> bool:
+        if self.zone == "follow" and f <= self.dense_until:
+            return True   # FOLLOW starts at impact + margin, the frames up to it stay dense
         if f < self.origin:
             return False
-        if self.zone == "follow" and f <= self.dense_until:
-            return True
         return (f - self.origin) % self.every() == 0
 
     def move_radius(self, s: float) -> float:

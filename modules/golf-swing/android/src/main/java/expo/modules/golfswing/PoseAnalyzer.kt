@@ -26,8 +26,8 @@ import kotlin.math.roundToInt
 internal class AnalyzeOptions(
   val model: String,
   val sparseEvery: Int,
-  val afterImpactEvery: Int,
-  val denseEvery: Int,
+  val midEvery: Int,
+  val followEvery: Int,
   val rightHanded: Boolean,
   val heightCm: Double,
   /** The sampling policy's time base (§4.2); null = the file's capture-rate tag, else 240. */
@@ -38,19 +38,24 @@ internal class AnalyzeOptions(
  * analyzePose (plan §3, §4.1–4.3): one sequential decode; pose on the frames the
  * [SamplingPolicy] wants; the ball found once the club has left it; ballGoneFrame.
  *
- * Threads: this one decodes and copies frames into a ring of up to 24 (the back-fill source,
+ * Threads: this one decodes and copies frames into a ring of up to 32 (the back-fill source,
  * §4.2; 48 MB cap), converts wanted frames to RGBA (rows split over [CONVERT_THREADS]) and
- * queues them (bounded, 4) for the pose thread, so decoding overlaps inference. Before the
- * trigger (still zone) decoding runs ahead of the sparse samples by at most ring − 7 frames:
- * a trigger found at sample m must still find m − 7 … in the ring. Samples submitted ahead of
- * a trigger belong to the old epoch and their results are dropped (the spare re-runs them).
- * After the swing (sparse zone) only the sampled frames are copied out of the decoder.
+ * queues them (bounded, 4) for the pose thread, so decoding overlaps inference.
+ *
+ * Back-fill (sparse165, see [SamplingPolicy]): two transitions are only seen after the frames
+ * they concern — the trigger (motion start, seen on a 16-stride sample: re-run m − 12 … at the
+ * 4-stride) and the top (seen ~14 frames late: re-run every frame from m − 20). So while a
+ * back-fill can still come (still and backswing zones) every frame is copied into the ring and
+ * decoding runs ahead of the last settled sample by at most ring − lookback frames. Samples
+ * submitted ahead of a back-fill belong to the old epoch and their results are dropped (the
+ * spare re-runs them). From the downswing on, only the wanted frames are copied. A ring
+ * shorter than the lookback (1080p: 15 frames) back-fills what it holds.
  *
  * Back-fill vs VIDEO mode: MediaPipe's VIDEO mode needs increasing timestamps and tracks
- * between calls, so the frames before the trigger can't go through the instance that has
- * already seen the trigger frame. The trigger switches to a spare instance (built on its own
- * thread while the first one already infers) that runs the ring from trigger − 7 onwards,
- * the trigger frame again included.
+ * between calls, so earlier frames can't go through the instance that has already seen later
+ * ones. Each back-fill switches to a spare instance (built on its own thread while the current
+ * one infers) that runs the ring from the back-fill frame on, the transition frame included;
+ * the trigger asks for the next spare, for the top.
  */
 internal class PoseAnalyzer(
   private val context: Context,
@@ -62,7 +67,7 @@ internal class PoseAnalyzer(
     const val TAG = "GolfSwing"
     /** Memory budget of the back-fill ring (decoded YUV frames). */
     private const val RING_BYTES = 48 shl 20
-    private const val RING_MAX = 24
+    private const val RING_MAX = 32
     /** Long side fed to the pose model (its crops are 256 px; the lab clip goes in at 850). */
     private const val MAX_SIDE = 960
     /** Threads converting a model input frame (the decode thread is one of them). */
@@ -111,7 +116,7 @@ internal class PoseAnalyzer(
     val t0 = SystemClock.elapsedRealtimeNanos()
     track = Media.scan(context, path)
     val captureFps = opts.captureFps ?: Media.captureFps(context, path)
-    policy = SamplingPolicy(captureFps ?: 240.0, opts.sparseEvery, opts.afterImpactEvery, opts.denseEvery)
+    policy = SamplingPolicy(captureFps ?: 240.0, opts.sparseEvery, opts.midEvery, opts.followEvery)
     val scale = min(1.0, MAX_SIDE.toDouble() / max(track.dispW, track.dispH))
     outW = (track.dispW * scale).roundToInt()
     outH = (track.dispH * scale).roundToInt()
@@ -134,10 +139,9 @@ internal class PoseAnalyzer(
         if (img == null) return@decode true
         cur = n
         prof.time("dup") { duplicateDiff(img, full) }
-        // Frames that may be inferred or back-filled, or need a ball strip, are copied; in the
-        // sparse zone after the swing only the samples are (most of a clip, nothing to back-fill).
-        val z = policy.zone
-        val copied = if (z == SamplingPolicy.Zone.STILL || z == SamplingPolicy.Zone.SWING || stripRect != null || policy.wants(n)) {
+        // Frames that may be back-filled, or need a ball strip, are copied; from the downswing
+        // on only the wanted ones are (nothing is back-filled there).
+        val copied = if (lookback() >= 0 || stripRect != null || policy.wants(n)) {
           val (fw, fh) = Media.frameSize(img)
           val slot = n % ringSize
           val f = ring[slot]?.takeIf { it.codedW == fw && it.codedH == fh && it.fullRange == full }
@@ -154,10 +158,13 @@ internal class PoseAnalyzer(
         settle(block = false)
         // (a trigger handled just above has already re-submitted everything up to n)
         if (copied != null && policy.wants(n) && n > lastSubmitted) submit(copied, fresh = false)
-        // still zone: a trigger found at sample m re-runs m − 7 … from the ring, so no frame
-        // that could still be needed may be overwritten: settle the samples that old first
-        val keep = n + 1 - ringSize + (opts.sparseEvery - 1)
-        while (policy.zone == SamplingPolicy.Zone.STILL && inFlightFrames.isNotEmpty() && inFlightFrames.first() <= keep) settleOne()
+        // a back-fill found at sample m re-runs m − lookback … from the ring, so no frame that
+        // could still be needed may be overwritten: settle the samples that old first
+        while (true) {
+          val back = lookback()
+          if (back < 0 || inFlightFrames.isEmpty() || inFlightFrames.first() > n + 1 - ringSize + back) break
+          settleOne()
+        }
         if (n % step == 0) {
           progress("decode", n + 1, total)
           progress("pose", (samples.lastEntry()?.key ?: -1) + 1, total)
@@ -188,6 +195,7 @@ internal class PoseAnalyzer(
     Log.i(
       TAG,
       "analyzePose frames=$total inferences=${worker.inferences} withPose=${samples.size} trigger=${policy.triggerFrame} " +
+        "topSeen=${policy.topSeenFrame} " +
         "impact~${policy.impactFrame} sigma=${policy.sigmaGrip} bodyH=${policy.bodyH} createMs=${worker.createNs / 1_000_000} " +
         "ball=${ball.first} ballGone=${ball.second} timings=$timings",
     )
@@ -213,6 +221,13 @@ internal class PoseAnalyzer(
       "timings" to timings,
     )
   }
+
+  /** Frames a back-fill found now could reach behind its sample (−1: none can come). */
+  private fun lookback(): Int = when (policy.zone) {
+    SamplingPolicy.Zone.STILL -> policy.sparseEvery - policy.midEvery
+    SamplingPolicy.Zone.BACKSWING -> policy.topBack
+    else -> -1
+  }.let { if (it < 0) it else min(it, ringSize - policy.midEvery) }
 
   private fun round5(v: Float) = Math.round(v * 100000.0) / 100000.0
 
@@ -281,7 +296,17 @@ internal class PoseAnalyzer(
     while (true) {
       val e = events.removeFirstOrNull() ?: return mustDrain
       when (e) {
-        is SamplingPolicy.Event.Trigger -> onTrigger(e.frame)
+        is SamplingPolicy.Event.Trigger -> {
+          Log.i(TAG, "sampling trigger at ${e.frame} (decoded up to $cur)")
+          startStrips(e.frame)
+          backfill(e.frame, e.from, policy.midEvery)
+          // the next back-fill (the top) gets its own fresh instance
+          worker.put(Job.Spare) { blockedNs += it }
+        }
+        is SamplingPolicy.Event.Top -> {
+          Log.i(TAG, "top seen at ${e.frame} (decoded up to $cur), dense from ${e.from}")
+          backfill(e.frame, e.from, 1)
+        }
         is SamplingPolicy.Event.Reset -> {
           Log.i(TAG, "sampling reset at ${e.frame} (no swing after the trigger)")
           strips.clear()
@@ -319,16 +344,20 @@ internal class PoseAnalyzer(
     if (e != SamplingPolicy.Event.None) events.addLast(e)
   }
 
-  private fun onTrigger(m: Int) {
-    Log.i(TAG, "sampling trigger at $m (decoded up to $cur)")
+  /**
+   * Re-runs the ring from [want] (clamped to what it holds) to the decoder's position on a
+   * fresh instance: the frames on [m]'s [stride] grid. Ball strips are filled for every frame.
+   */
+  private fun backfill(m: Int, want: Int, stride: Int) {
     epoch++
-    startStrips(m)
-    val from = max(m - (opts.sparseEvery - 1), cur - (ringSize - 1)).coerceAtLeast(0)
+    val from = max(want, cur - (ringSize - 1)).coerceAtLeast(0)
+    if (from > want) Log.i(TAG, "back-fill wanted $want, the ring holds from $from")
     var first = true
     for (f in from..cur) {
       val yuv = ring[f % ringSize] ?: continue
       if (yuv.frame != f) continue
       stripRect?.let { if (f !in strips) strips[f] = yuv.grayStrip(it, stripStep) }
+      if (Math.floorMod(f - m, stride) != 0) continue
       submit(yuv, fresh = first)
       first = false
     }
