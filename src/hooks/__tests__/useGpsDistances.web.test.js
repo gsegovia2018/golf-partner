@@ -19,6 +19,7 @@ jest.mock('../../lib/geo', () => ({
   haversineMeters: jest.fn(() => 0),
   subscribeCourseGeometry: jest.fn(() => () => {}),
   getCourseGeometryVersion: jest.fn(() => 1),
+  hasCourseDetails: jest.fn(() => true),
 }));
 jest.mock('../../store/courseGeometryStore', () => ({ ensureCourseGeometry: jest.fn() }));
 jest.mock('../../lib/flyoverModel', () => ({

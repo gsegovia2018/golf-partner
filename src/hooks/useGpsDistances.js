@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Platform, AppState } from 'react-native';
 import * as Location from 'expo-location';
-import { holeFeatures, haversineMeters } from '../lib/geo';
+import { holeFeatures, haversineMeters, hasCourseDetails } from '../lib/geo';
 import { useCourseGeometry } from './useCourseGeometry';
 import { resolveScorecardDistances } from '../lib/flyoverModel';
 import { subscribeAppSettings, getAppSettings } from '../store/settingsStore';
@@ -59,7 +59,9 @@ const COARSE_FIX_GRACE_MS = 15000;
 
 export function useGpsDistances(courseName, holeNumber) {
   // Re-resolves when live geometry merges in (and loads this course's details).
-  const geometry = useCourseGeometry(courseName);
+  // An index-only entry (details not loaded yet) counts as no geometry.
+  const course = useCourseGeometry(courseName);
+  const geometry = hasCourseDetails(course) ? course : null;
   const appSettings = useSyncExternalStore(subscribeAppSettings, getAppSettings, getAppSettings);
   const gpsEnabled = appSettings.gpsEnabled !== false;
   const [denied, setDenied] = useState(false);
