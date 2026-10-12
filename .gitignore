@@ -51,3 +51,6 @@ yarn-error.*
 # git worktrees
 .claude/worktrees/
 .worktrees/
+
+# bulk OSM geometry import (cache + per-course output); manifest/report are committed
+/scripts/data/osm-geometry/
