@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, Image, StyleSheet } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import SwingEditMarksScreen from '../SwingEditMarksScreen';
@@ -7,6 +7,7 @@ import * as store from '../../store/swingStore';
 import { getStill, ensureStills } from '../../swing/frames';
 import { analyze } from '../../swing/analyze';
 import { fitRect } from '../../components/swing/SwingOverlay';
+import { LOUPE_SIZE, loupePlacement, loupeImage } from '../../swing/loupe';
 import { SWING_STRINGS } from '../../swing/strings';
 import { fixtureNative, TRUTH, W, H } from '../../swing/__tests__/helpers';
 
@@ -360,5 +361,145 @@ describe('SwingEditMarksScreen: saving and leaving', () => {
     await act(async () => { fireEvent.press(getByLabelText(E.save)); });
     expect(Alert.alert).toHaveBeenCalledWith(E.saveFailed);
     expect(navigation.goBack).not.toHaveBeenCalled();
+  });
+});
+
+// --- The drag loupe (D20) -------------------------------------------------------------------------
+// Raw responder events: `touch()` above does grant, moves and release in one go, but the loupe is
+// only there between them.
+const nativeEvent = (x, y) => ({ locationX: x, locationY: y, pageX: x, pageY: y, touches: [], changedTouches: [] });
+const grant = (layer, [x, y]) => fireEvent(layer, 'responderGrant', { nativeEvent: nativeEvent(x, y), touchHistory: history(x, y) });
+const move = (layer, [x, y], [x0, y0], t = 5) => fireEvent(layer, 'responderMove', { nativeEvent: nativeEvent(x, y), touchHistory: history(x, y, x0, y0, t) });
+const release = (layer, [x, y], [x0, y0] = [x, y]) => fireEvent(layer, 'responderRelease', { nativeEvent: nativeEvent(x, y), touchHistory: history(x, y, x0, y0, 9) });
+// The loupe is hidden from the accessibility tree on purpose, so queries must opt in to see it.
+const opt = { includeHiddenElements: true };
+const loupeEl = (u) => u.getByTestId('edit-loupe', opt);
+const maybeLoupe = (u) => u.queryByTestId('edit-loupe', opt);
+const loupeStyle = (utils) => StyleSheet.flatten(loupeEl(utils).props.style);
+const loupeImg = (utils) => StyleSheet.flatten(loupeEl(utils).findByType(Image).props.style);
+
+describe('SwingEditMarksScreen: the drag loupe (D20)', () => {
+  test('is not there until a mark is grabbed, shows while it is dragged, and goes on release', async () => {
+    const utils = await open({ checkpoint: 'impact' });
+    const { layer } = utils;
+    expect(maybeLoupe(utils)).toBeNull();
+    const [x, y] = px(FIRST.clubMarks.impact.hands);
+    await act(async () => { grant(layer, [x, y]); });
+    expect(loupeEl(utils)).toBeTruthy();
+    await act(async () => { move(layer, [x + 20, y + 10], [x, y]); });
+    expect(loupeEl(utils)).toBeTruthy();
+    await act(async () => { release(layer, [x + 20, y + 10], [x, y]); });
+    expect(maybeLoupe(utils)).toBeNull();
+  });
+
+  test('is 120 px across, above the finger (not covering it) and follows it while dragging', async () => {
+    const utils = await open({ checkpoint: 'impact' });
+    const [x, y] = px(FIRST.clubMarks.impact.hands);
+    await act(async () => { grant(utils.layer, [x, y]); });
+    const first = loupeStyle(utils);
+    expect([first.width, first.height, first.borderRadius]).toEqual([LOUPE_SIZE, LOUPE_SIZE, LOUPE_SIZE / 2]);
+    const at = loupePlacement([x, y], RECT);
+    expect(at.placement).toBe('above');
+    expect(first.top + LOUPE_SIZE).toBeLessThan(y); // the finger is below the whole circle
+    await act(async () => { move(utils.layer, [x + 30, y - 25], [x, y]); });
+    const moved = loupeStyle(utils);
+    expect(moved.top).toBeLessThan(first.top); // it rose with the finger
+    await act(async () => { release(utils.layer, [x + 30, y - 25], [x, y]); });
+  });
+
+  test('flips below the finger when there is no room above (near the top edge of the still)', async () => {
+    const utils = await open({ checkpoint: 'leadArm' });
+    fireEvent.press(utils.getByLabelText(E.clubhead));
+    const finger = [RECT.w / 2, 24];
+    await act(async () => { grant(utils.layer, finger); });
+    const style = loupeStyle(utils);
+    expect(loupePlacement(finger, RECT).placement).toBe('below');
+    expect(style.top).toBeGreaterThan(finger[1]); // entirely below the fingertip
+    await act(async () => { release(utils.layer, finger); });
+  });
+
+  test('stays inside the still horizontally when the finger is at the left or right edge', async () => {
+    const utils = await open({ checkpoint: 'leadArm' });
+    fireEvent.press(utils.getByLabelText(E.clubhead));
+    await act(async () => { grant(utils.layer, [2, 300]); });
+    expect(loupeStyle(utils).left).toBe(0);
+    await act(async () => { release(utils.layer, [2, 300]); });
+    await act(async () => { grant(utils.layer, [RECT.w - 2, 300]); });
+    expect(loupeStyle(utils).left).toBe(RECT.w - LOUPE_SIZE);
+    await act(async () => { release(utils.layer, [RECT.w - 2, 300]); });
+  });
+
+  test('shows the same still at 3x with the marked point at the centre, and the mark moves under it', async () => {
+    const utils = await open({ checkpoint: 'impact' });
+    const [x, y] = px(FIRST.clubMarks.impact.hands);
+    await act(async () => { grant(utils.layer, [x, y]); });
+    const img = loupeImg(utils);
+    expect(loupeEl(utils).findByType(Image).props.source).toEqual({ uri: 'file:///doc/swings/s1/frames/x.jpg' });
+    const want = loupeImage(FIRST.clubMarks.impact.hands, RECT);
+    expect([img.width, img.height, img.left, img.top]).toEqual([want.width, want.height, want.left, want.top]);
+    expect(img.width).toBe(RECT.w * 3);
+    await act(async () => { move(utils.layer, [x + 10, y], [x, y]); });
+    expect(loupeImg(utils).left).toBeCloseTo(img.left - 30, 6); // 10 px of drag = 30 px of magnified image
+    await act(async () => { release(utils.layer, [x + 10, y], [x, y]); });
+  });
+
+  test('is decorative: hidden from screen readers and never takes a touch', async () => {
+    const utils = await open({ checkpoint: 'impact' });
+    const [x, y] = px(FIRST.clubMarks.impact.hands);
+    await act(async () => { grant(utils.layer, [x, y]); });
+    const loupe = loupeEl(utils);
+    expect(loupe.props.accessibilityElementsHidden).toBe(true);
+    expect(loupe.props.importantForAccessibility).toBe('no-hide-descendants');
+    expect(loupe.props.pointerEvents).toBe('none');
+    await act(async () => { release(utils.layer, [x, y]); });
+  });
+
+  test('a cancelled gesture hides it too', async () => {
+    const utils = await open({ checkpoint: 'impact' });
+    const [x, y] = px(FIRST.clubMarks.impact.hands);
+    await act(async () => { grant(utils.layer, [x, y]); });
+    await act(async () => { fireEvent(utils.layer, 'responderTerminate', { nativeEvent: nativeEvent(x, y), touchHistory: history(x, y) }); });
+    expect(maybeLoupe(utils)).toBeNull();
+  });
+
+  describe('arrow nudges', () => {
+    beforeEach(() => { jest.useFakeTimers(); });
+    afterEach(() => { jest.useRealTimers(); });
+
+    test('show it for about 600 ms so a 1-px move is visible, and each nudge restarts the clock', async () => {
+      const utils = await open({ checkpoint: 'impact' });
+      jest.useFakeTimers();
+      expect(maybeLoupe(utils)).toBeNull();
+      fireEvent.press(utils.getByLabelText(E.nudge.right));
+      expect(loupeEl(utils)).toBeTruthy();
+      act(() => { jest.advanceTimersByTime(400); });
+      fireEvent.press(utils.getByLabelText(E.nudge.right)); // restarts
+      act(() => { jest.advanceTimersByTime(400); });
+      expect(loupeEl(utils)).toBeTruthy(); // 800 ms after the first, 400 after the second
+      act(() => { jest.advanceTimersByTime(200); });
+      expect(maybeLoupe(utils)).toBeNull();
+    });
+
+    test('centres on the nudged mark: one video pixel moves the magnified still by 3 view px', async () => {
+      const utils = await open({ checkpoint: 'impact' });
+      jest.useFakeTimers();
+      fireEvent.press(utils.getByLabelText(E.nudge.right));
+      const a = loupeImg(utils);
+      fireEvent.press(utils.getByLabelText(E.nudge.right));
+      const b = loupeImg(utils);
+      expect(a.left - b.left).toBeCloseTo((3 * RECT.w) / W, 6);
+    });
+
+    test('a drag takes over from a nudge, and release hides it at once', async () => {
+      const utils = await open({ checkpoint: 'impact' });
+      jest.useFakeTimers();
+      fireEvent.press(utils.getByLabelText(E.nudge.right));
+      const [x, y] = px(FIRST.clubMarks.impact.hands);
+      await act(async () => { grant(utils.layer, [x, y]); });
+      act(() => { jest.advanceTimersByTime(700); });
+      expect(loupeEl(utils)).toBeTruthy(); // the nudge timer must not cut a live drag
+      await act(async () => { release(utils.layer, [x, y]); });
+      expect(maybeLoupe(utils)).toBeNull();
+    });
   });
 });
