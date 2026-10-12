@@ -6,7 +6,9 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -15,6 +17,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * OTA bundle never calls a method the installed APK lacks.
  */
 const val API_VERSION = 1
+
+private const val MIN_HEIGHT_CM = 120.0
+private const val MAX_HEIGHT_CM = 230.0
 
 class SamplingOptions : Record {
   @Field val sparseEvery: Int = 8
@@ -25,10 +30,16 @@ class SamplingOptions : Record {
 class AnalyzePoseOptions : Record {
   @Field val model: String = "full"
   @Field val sampling: SamplingOptions = SamplingOptions()
-  /** Mirrors the ball search and the lead/trail sides (plan D6). */
-  @Field val handedness: String = "right"
-  /** Only sizes the expected ball blob (§4.6); the JS keeps the authoritative scale. */
-  @Field val heightCm: Double = Ball.DEFAULT_HEIGHT_CM
+  /** Mirrors the ball search and the lead/trail sides (plan D6). null/unknown = right. */
+  @Field val handedness: String? = null
+  /** Only sizes the expected ball blob (§4.6); the JS keeps the authoritative scale. null = 176. */
+  @Field val heightCm: Double? = null
+  /**
+   * Capture rate of one container frame step (the sampling policy's time base, §4.2): the
+   * JS passes the probe's captureFps or its fps model. null = the file's capture-rate tag,
+   * else 240 (a 30 fps slow-mo container samples like a 240 fps recording).
+   */
+  @Field val captureFps: Double? = null
 }
 
 class CheckpointRequest : Record {
@@ -51,9 +62,36 @@ class ExtractFramesOptions : Record {
 class GolfSwingModule : Module() {
   // Long-running work gets its own thread: Expo's shared async queue would stall every
   // other module's async calls for the seconds an analysis takes.
-  private val executor = Executors.newSingleThreadExecutor { Thread(it, "golf-swing") }
+  private val executor = Executors.newSingleThreadExecutor { Thread(it, "golf-swing").apply { isDaemon = true } }
   private val busy = AtomicBoolean(false)
-  @Volatile private var cancelRequested = false
+  /** One token per running or queued job: cancelAnalysis stops those, never a later call. */
+  private val jobs = ConcurrentHashMap.newKeySet<AtomicBoolean>()
+
+  private fun <T> job(promise: Promise, code: String, work: (cancelled: () -> Boolean) -> T, done: () -> Unit = {}) {
+    val token = AtomicBoolean(false)
+    jobs.add(token)
+    try {
+      executor.execute {
+        try {
+          if (token.get()) throw CancelledException()
+          promise.resolve(work { token.get() })
+        } catch (e: CancelledException) {
+          promise.reject("ERR_CANCELLED", "cancelled", e)
+        } catch (e: UnsupportedVideoException) {
+          promise.reject("ERR_UNSUPPORTED_VIDEO", e.message ?: "unsupported video", e)
+        } catch (e: Throwable) {
+          promise.reject(code, e.message ?: e.toString(), e)
+        } finally {
+          jobs.remove(token)
+          done()
+        }
+      }
+    } catch (e: RejectedExecutionException) {
+      jobs.remove(token)
+      done()
+      promise.reject(code, "the module is shutting down", e)
+    }
+  }
 
   private val context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
 
@@ -66,13 +104,7 @@ class GolfSwingModule : Module() {
 
     AsyncFunction("probeVideo") { path: String, promise: Promise ->
       val ctx = context
-      executor.execute {
-        try {
-          promise.resolve(Probe.run(ctx, path))
-        } catch (e: Throwable) {
-          promise.reject("ERR_PROBE", e.message ?: e.toString(), e)
-        }
-      }
+      job(promise, "ERR_PROBE", { Probe.run(ctx, path) })
     }
 
     AsyncFunction("analyzePose") { path: String, options: AnalyzePoseOptions?, promise: Promise ->
@@ -82,74 +114,51 @@ class GolfSwingModule : Module() {
       }
       val o = options ?: AnalyzePoseOptions()
       val ctx = context
-      cancelRequested = false
-      executor.execute {
-        try {
-          val opts = AnalyzeOptions(
-            model = o.model,
-            sparseEvery = o.sampling.sparseEvery.coerceAtLeast(1),
-            afterImpactEvery = o.sampling.afterImpactEvery.coerceAtLeast(1),
-            denseEvery = o.sampling.denseEvery.coerceAtLeast(1),
-            rightHanded = o.handedness != "left",
-            heightCm = o.heightCm,
-          )
-          val result = PoseAnalyzer(ctx, opts, { cancelRequested }) { stage, done, total ->
-            sendEvent("progress", mapOf("stage" to stage, "done" to done, "total" to total))
-          }.run(path)
-          promise.resolve(result)
-        } catch (e: CancelledException) {
-          promise.reject("ERR_CANCELLED", "analysis cancelled", e)
-        } catch (e: Throwable) {
-          promise.reject("ERR_ANALYZE", e.message ?: e.toString(), e)
-        } finally {
-          busy.set(false)
-        }
-      }
+      job(promise, "ERR_ANALYZE", { cancelled ->
+        val opts = AnalyzeOptions(
+          model = o.model,
+          sparseEvery = o.sampling.sparseEvery.coerceAtLeast(1),
+          afterImpactEvery = o.sampling.afterImpactEvery.coerceAtLeast(1),
+          denseEvery = o.sampling.denseEvery.coerceAtLeast(1),
+          rightHanded = o.handedness != "left",
+          heightCm = (o.heightCm?.takeIf { it.isFinite() } ?: Ball.DEFAULT_HEIGHT_CM).coerceIn(MIN_HEIGHT_CM, MAX_HEIGHT_CM),
+          captureFps = o.captureFps?.takeIf { it.isFinite() && it > 0 },
+        )
+        PoseAnalyzer(ctx, opts, cancelled) { stage, done, total ->
+          sendEvent("progress", mapOf("stage" to stage, "done" to done, "total" to total))
+        }.run(path)
+      }, done = { busy.set(false) })
     }
 
     /** Stops a running analyzePose or still extraction at the next frame (rejects with ERR_CANCELLED). */
     Function("cancelAnalysis") {
-      cancelRequested = true
+      jobs.forEach { it.set(true) }
     }
 
     // N1 stub of the N2 contract: stills only. shaft stays empty and addressFrame null until
     // N2 adds the clubhead search and the image-based address onset (plan §4.3, §5.1 P1).
     AsyncFunction("extractCheckpoints") { path: String, options: ExtractCheckpointsOptions, promise: Promise ->
       val ctx = context
-      cancelRequested = false
-      executor.execute {
-        try {
-          val wanted = options.frames.flatMap { c -> (c.i - c.neighbours)..(c.i + c.neighbours) }
-          val uris = Stills.extract(ctx, path, wanted, options.outDir) { cancelRequested }
-          val stills = options.frames.associate { c ->
-            c.key to ((c.i - c.neighbours)..(c.i + c.neighbours)).mapNotNull { f -> uris[f]?.let { f.toString() to it } }.toMap()
-          }
-          promise.resolve(mapOf("stills" to stills, "shaft" to emptyMap<String, Any?>(), "addressFrame" to null))
-        } catch (e: CancelledException) {
-          promise.reject("ERR_CANCELLED", "cancelled", e)
-        } catch (e: Throwable) {
-          promise.reject("ERR_STILLS", e.message ?: e.toString(), e)
+      job(promise, "ERR_STILLS", { cancelled ->
+        val wanted = options.frames.flatMap { c -> (c.i - c.neighbours)..(c.i + c.neighbours) }
+        val uris = Stills.extract(ctx, path, wanted, options.outDir, cancelled)
+        val stills = options.frames.associate { c ->
+          c.key to ((c.i - c.neighbours)..(c.i + c.neighbours)).mapNotNull { f -> uris[f]?.let { f.toString() to it } }.toMap()
         }
-      }
+        mapOf("stills" to stills, "shaft" to emptyMap<String, Any?>(), "addressFrame" to null)
+      })
     }
 
     /** Edit-marks scrubber: JPEGs of arbitrary frames, `<outDir>/<frame>.jpg` → { [frame]: uri }. */
     AsyncFunction("extractFrames") { path: String, options: ExtractFramesOptions, promise: Promise ->
       val ctx = context
-      cancelRequested = false
-      executor.execute {
-        try {
-          val uris = Stills.extract(ctx, path, options.frames, options.outDir) { cancelRequested }
-          promise.resolve(uris.mapKeys { it.key.toString() })
-        } catch (e: CancelledException) {
-          promise.reject("ERR_CANCELLED", "cancelled", e)
-        } catch (e: Throwable) {
-          promise.reject("ERR_STILLS", e.message ?: e.toString(), e)
-        }
-      }
+      job(promise, "ERR_STILLS", { cancelled ->
+        Stills.extract(ctx, path, options.frames, options.outDir, cancelled).mapKeys { it.key.toString() }
+      })
     }
 
     OnDestroy {
+      jobs.forEach { it.set(true) }
       executor.shutdownNow()
     }
   }

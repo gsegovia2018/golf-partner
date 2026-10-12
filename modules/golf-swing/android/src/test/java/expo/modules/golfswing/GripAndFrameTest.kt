@@ -62,7 +62,7 @@ class GripAndFrameTest {
     assertEquals(1, f.gray(0, 0))
     assertEquals(0, f.gray(1, 0))
     assertEquals(31, f.gray(0, 3))
-    val strip = f.grayStrip(Rect(0, 0, 2, 4), half = false)
+    val strip = f.grayStrip(Rect(0, 0, 2, 4), step = 1)
     assertEquals(31, strip.at(0, 3))
   }
 
@@ -77,5 +77,35 @@ class GripAndFrameTest {
     f.toRgb(2, 2, buf)
     // (126 - 16) × 255 / 219 = 128; each 6-byte row is padded to 8
     for (row in 0 until 2) for (i in 0 until 6) assertEquals(128, buf.get(row * 8 + i).toInt() and 0xFF)
+  }
+
+  /** RGB, banded RGBA and ARGB agree pixel for pixel on a varied frame (rotation 90, limited range). */
+  @Test
+  fun rgbaInBandsAndArgbMatchRgb() {
+    val f = YuvFrame(6, 4, 90, fullRange = false)
+    for (i in f.y.indices) f.y[i] = (16 + 37 * i % 220).toByte()
+    for (i in f.u.indices) f.u[i] = (40 + 53 * i % 180).toByte()
+    for (i in f.v.indices) f.v[i] = (200 - 41 * i % 170).toByte()
+    val w = f.dispW
+    val h = f.dispH
+    val rgb = ByteBuffer.allocateDirect(rgbRowBytes(w) * h)
+    f.toRgb(w, h, rgb)
+    val rgba = ByteBuffer.allocateDirect(4 * w * h)
+    val bands = BandRunner(3)
+    try {
+      f.toRgba(w, h, rgba, bands)
+    } finally {
+      bands.shutdown()
+    }
+    val argb = IntArray(w * h)
+    f.toArgb(w, h, argb)
+    for (y in 0 until h) for (x in 0 until w) {
+      for (c in 0 until 3) {
+        val ref = rgb.get(y * rgbRowBytes(w) + 3 * x + c).toInt() and 0xFF
+        assertEquals(ref, rgba.get(4 * (y * w + x) + c).toInt() and 0xFF)
+        assertEquals(ref, (argb[y * w + x] shr (16 - 8 * c)) and 0xFF)
+      }
+      assertEquals(255, rgba.get(4 * (y * w + x) + 3).toInt() and 0xFF)
+    }
   }
 }

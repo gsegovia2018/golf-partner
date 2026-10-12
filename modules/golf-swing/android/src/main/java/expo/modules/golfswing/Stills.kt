@@ -8,7 +8,6 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import java.io.File
 import java.io.FileOutputStream
-import java.nio.ByteBuffer
 
 /**
  * Frame stills as JPEG (plan §3 extractCheckpoints' stills, D4; extractFrames for the
@@ -18,6 +17,7 @@ import java.nio.ByteBuffer
  */
 internal object Stills {
   private const val JPEG_QUALITY = 85
+  private const val STALL_NS = 10_000_000_000L
 
   /** Writes `<outDir>/<frame>.jpg` for every requested frame; returns frame → file:// URI. */
   fun extract(context: Context, path: String, frames: Collection<Int>, outDir: String, cancelled: () -> Boolean): Map<Int, String> {
@@ -43,6 +43,7 @@ internal object Stills {
         var next = 0
         var lastOut = Long.MIN_VALUE
         var inputDone = false
+        var lastProgress = System.nanoTime()
         fun seekIfWorth() {
           val target = pts[wanted[next]]
           val sync = syncs.lastOrNull { it <= target } ?: return
@@ -72,13 +73,17 @@ internal object Stills {
             }
           }
           val o = codec.dequeueOutputBuffer(info, 2_000)
-          if (o < 0) continue
+          if (o < 0) {
+            if (System.nanoTime() - lastProgress > STALL_NS) throw IllegalStateException("decoder stalled")
+            continue
+          }
+          lastProgress = System.nanoTime()
           val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
           val frame = byPts[info.presentationTimeUs]
           if (info.size > 0) lastOut = info.presentationTimeUs
           if (frame != null && info.size > 0 && frame !in out) {
             codec.getOutputImage(o)?.use { img ->
-              val (w, h) = Media.cropSize(img)
+              val (w, h) = Media.frameSize(img)
               val of = codec.outputFormat
               val full = of.containsKey(MediaFormat.KEY_COLOR_RANGE) && of.getInteger(MediaFormat.KEY_COLOR_RANGE) == MediaFormat.COLOR_RANGE_FULL
               val f = YuvFrame(w, h, track.rotation, full)
@@ -129,18 +134,12 @@ internal object Stills {
     }
   }
 
+  /** Straight from YUV to the Bitmap's colour ints (display orientation, decoded size). */
   private fun writeJpeg(f: YuvFrame, file: File) {
     val w = f.dispW
     val h = f.dispH
-    val stride = rgbRowBytes(w)
-    val rgb = ByteBuffer.allocateDirect(stride * h)
-    f.toRgb(w, h, rgb)
     val px = IntArray(w * h)
-    for (y in 0 until h) for (x in 0 until w) {
-      val k = y * stride + 3 * x
-      px[y * w + x] = (0xFF shl 24) or ((rgb.get(k).toInt() and 0xFF) shl 16) or
-        ((rgb.get(k + 1).toInt() and 0xFF) shl 8) or (rgb.get(k + 2).toInt() and 0xFF)
-    }
+    f.toArgb(w, h, px)
     val bmp = Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
     try {
       FileOutputStream(file).use { bmp.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }

@@ -30,6 +30,10 @@ import kotlin.math.sqrt
  *   (H = landmark box height), then descended ≥ 0.2 H, then come back up by 0.02 H (the
  *   lab's descent segmentation tolerance). Late by a few frames at worst: only costs.
  * - The after-impact zone also ends after 1.5 s even if the golfer never holds still.
+ * - The dense zone ends after 3 s of capture time even without an impact (a practice swing
+ *   that never comes down, a walk-off, a pose lost mid-swing): every frame of a long clip at
+ *   every-frame cost is the worst case for time. It continues as the after-impact zone, with
+ *   [impactFrame] left unknown (-1).
  */
 internal class SamplingPolicy(
   fps: Double,
@@ -46,6 +50,8 @@ internal class SamplingPolicy(
     /** The trigger was a waggle: back to sparse from [frame]. */
     data class Reset(val frame: Int) : Event()
     data class Impact(val frame: Int) : Event()
+    /** The dense zone hit its 3 s cap at [frame] without an impact. */
+    data class DenseCapped(val frame: Int) : Event()
     data class Done(val frame: Int) : Event()
   }
 
@@ -54,6 +60,8 @@ internal class SamplingPolicy(
   val holdFrames = max(2, ceil(0.15 * fps).toInt())
   private val calibFrames = ceil(0.5 * fps).toInt()
   private val afterImpactMaxFrames = ceil(1.5 * fps).toInt()
+  private val denseMaxFrames = ceil(3.0 * fps).toInt()
+  private var afterFrom = -1
 
   var zone = Zone.STILL
     private set
@@ -126,6 +134,13 @@ internal class SamplingPolicy(
 
   private fun observeSwing(o: Obs): Event {
     push(o)
+    if (o.frame - triggerFrame > denseMaxFrames) {
+      zone = Zone.AFTER_IMPACT
+      origin = o.frame
+      afterFrom = o.frame
+      window.clear()
+      return Event.DenseCapped(o.frame)
+    }
     val g = o.grip.y
     if (!risen) {
       topY = minOf(topY, g)
@@ -154,6 +169,7 @@ internal class SamplingPolicy(
       zone = Zone.AFTER_IMPACT
       origin = o.frame
       impactFrame = bottomFrame
+      afterFrom = bottomFrame
       window.clear()
       return Event.Impact(bottomFrame)
     }
@@ -162,7 +178,7 @@ internal class SamplingPolicy(
 
   private fun observeAfterImpact(o: Obs): Event {
     push(o)
-    if (stopped(window, grip = true, noseToo = true) || o.frame - impactFrame > afterImpactMaxFrames) {
+    if (stopped(window, grip = true, noseToo = true) || o.frame - afterFrom > afterImpactMaxFrames) {
       zone = Zone.DONE
       origin = o.frame
       return Event.Done(o.frame)

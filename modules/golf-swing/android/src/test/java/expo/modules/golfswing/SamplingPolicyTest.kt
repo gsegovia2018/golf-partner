@@ -77,4 +77,17 @@ class SamplingPolicyTest {
     val events = run(p, 390) { i -> 300f + 5f * minOf(i, 120) / 120 to 600f }
     assertTrue(events.toString(), events.isEmpty())
   }
+
+  @Test
+  fun theDenseZoneIsCappedAtThreeSecondsWithoutAnImpact() {
+    val p = SamplingPolicy(240.0)
+    // backswing to the top at 480, then the hands stay up for good (no downswing)
+    val events = run(p, 2000) { i -> if (i < 400) 300f to 600f else 300f to 600f - minOf(i - 400, 80) * 150f / 80 }
+    val trigger = events.first { it.second is SamplingPolicy.Event.Trigger }.first
+    val capped = events.first { it.second is SamplingPolicy.Event.DenseCapped }.first
+    assertEquals(trigger + 721, capped)
+    assertEquals(-1, p.impactFrame)
+    assertFalse(events.any { it.second is SamplingPolicy.Event.Impact })
+    assertTrue(p.zone == SamplingPolicy.Zone.AFTER_IMPACT || p.zone == SamplingPolicy.Zone.DONE)
+  }
 }

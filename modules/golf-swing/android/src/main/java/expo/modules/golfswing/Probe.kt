@@ -2,31 +2,17 @@ package expo.modules.golfswing
 
 import android.content.Context
 import kotlin.math.abs
-import kotlin.math.max
 
-/** probeVideo (plan §3). */
+/**
+ * probeVideo (plan §3): container facts only, no decoding, so the processing screen can show
+ * the clip line at once. The duplicate-frame check needs decoded frames and moved into
+ * analyzePose (which decodes every frame anyway): probeVideo reports duplicateFrameRatio null.
+ */
 internal object Probe {
-  /** Frames decoded around the middle of the clip for the duplicate check (the swing is there). */
-  private const val PROBE_FRAMES = 120
   private const val WINDOW = 60
 
   fun run(context: Context, path: String): Map<String, Any?> {
     val t = Media.scan(context, path)
-    val start = max(0, t.frameCount / 2 - PROBE_FRAMES / 2)
-    val startUs = t.firstPtsUs + (start * 1_000_000.0 / t.containerFps).toLong()
-    val diffs = ArrayList<Float>()
-    var prev: FloatArray? = null
-    var seen = 0
-    Media.decode(context, path, startUs) { _, ptsUs, img, full ->
-      if (ptsUs < startUs) return@decode true
-      val (w, h) = Media.cropSize(img)
-      val f = YuvFrame(w, h, 0, full)
-      Media.copy(img, f)
-      val small = quarter(f)
-      prev?.let { p -> diffs.add(meanAbsDiff(small, p)) }
-      prev = small
-      ++seen < PROBE_FRAMES
-    }
     return mapOf(
       "width" to t.dispW,
       "height" to t.dispH,
@@ -35,24 +21,12 @@ internal object Probe {
       "containerFps" to t.containerFps,
       "captureFps" to Media.captureFps(context, path),
       "rotationDeg" to t.rotation,
-      "duplicateFrameRatio" to duplicateRatio(diffs.toFloatArray()),
+      "hdr" to t.hdr,
+      "duplicateFrameRatio" to null,
     )
   }
 
-  /** 4 × 4 block means of the grey image (the lab diffs a quarter-size grey frame). */
-  private fun quarter(f: YuvFrame): FloatArray {
-    val w = f.codedW / 4
-    val h = f.codedH / 4
-    val out = FloatArray(w * h)
-    for (by in 0 until h) for (bx in 0 until w) {
-      var s = 0
-      for (yy in 0 until 4) for (xx in 0 until 4) s += f.gray(bx * 4 + xx, by * 4 + yy)
-      out[by * w + bx] = s / 16f
-    }
-    return out
-  }
-
-  private fun meanAbsDiff(a: FloatArray, b: FloatArray): Float {
+  fun meanAbsDiff(a: FloatArray, b: FloatArray): Float {
     var s = 0.0
     for (i in a.indices) s += abs(a[i] - b[i])
     return (s / a.size).toFloat()

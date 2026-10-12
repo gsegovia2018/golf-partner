@@ -13,6 +13,9 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.TreeMap
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
@@ -27,21 +30,27 @@ internal class AnalyzeOptions(
   val denseEvery: Int,
   val rightHanded: Boolean,
   val heightCm: Double,
+  /** The sampling policy's time base (§4.2); null = the file's capture-rate tag, else 240. */
+  val captureFps: Double? = null,
 )
 
 /**
  * analyzePose (plan §3, §4.1–4.3): one sequential decode; pose on the frames the
  * [SamplingPolicy] wants; the ball found once the club has left it; ballGoneFrame.
  *
- * Threads: this one decodes, copies each frame into an 8-frame ring (the back-fill source,
- * §4.2), converts wanted frames to RGB and queues them (bounded, 4) for the pose thread, so
- * decoding overlaps inference inside the swing. Before the trigger (still zone) each sparse
- * sample is waited for: the trigger must be known before the next frame leaves the ring.
+ * Threads: this one decodes and copies frames into a ring of up to 24 (the back-fill source,
+ * §4.2; 48 MB cap), converts wanted frames to RGBA (rows split over [CONVERT_THREADS]) and
+ * queues them (bounded, 4) for the pose thread, so decoding overlaps inference. Before the
+ * trigger (still zone) decoding runs ahead of the sparse samples by at most ring − 7 frames:
+ * a trigger found at sample m must still find m − 7 … in the ring. Samples submitted ahead of
+ * a trigger belong to the old epoch and their results are dropped (the spare re-runs them).
+ * After the swing (sparse zone) only the sampled frames are copied out of the decoder.
  *
  * Back-fill vs VIDEO mode: MediaPipe's VIDEO mode needs increasing timestamps and tracks
  * between calls, so the frames before the trigger can't go through the instance that has
- * already seen the trigger frame. The trigger switches to a spare instance (created up front)
- * that runs the ring from trigger − 7 onwards, the trigger frame again included.
+ * already seen the trigger frame. The trigger switches to a spare instance (built on its own
+ * thread while the first one already infers) that runs the ring from trigger − 7 onwards,
+ * the trigger frame again included.
  */
 internal class PoseAnalyzer(
   private val context: Context,
@@ -51,20 +60,35 @@ internal class PoseAnalyzer(
 ) {
   companion object {
     const val TAG = "GolfSwing"
-    private const val RING = 8
-    private const val QUEUE = 4
-    /** Long side fed to the pose model; the lab clip (850) goes in at full size. */
+    /** Memory budget of the back-fill ring (decoded YUV frames). */
+    private const val RING_BYTES = 48 shl 20
+    private const val RING_MAX = 24
+    /** Long side fed to the pose model (its crops are 256 px; the lab clip goes in at 850). */
     private const val MAX_SIDE = 960
+    /** Threads converting a model input frame (the decode thread is one of them). */
+    private const val CONVERT_THREADS = 3
+    private const val QUEUE = 4
     private const val SEARCH_MARGIN_CM = 8.0
   }
 
-  private class Result(val frame: Int, val ptsUs: Long, val norm: FloatArray?, val error: Throwable? = null)
+  private class Result(val frame: Int, val ptsUs: Long, val norm: FloatArray?, val epoch: Int, val error: Throwable? = null)
 
   private lateinit var track: TrackInfo
   private lateinit var policy: SamplingPolicy
   private lateinit var worker: PoseWorker
-  private val ring = arrayOfNulls<YuvFrame>(RING)
+  private lateinit var bands: BandRunner
+  private var ringSize = 8
+  private lateinit var ring: Array<YuvFrame?>
   private var cur = -1
+  private var lastSubmitted = -1
+  val prof = Prof()
+  /** Bumped at each trigger: results still in flight from before it are stale. */
+  private var epoch = 0
+  private val inFlightFrames = ArrayDeque<Int>()
+  private var prevQuarter: FloatArray? = null
+  private var quarterBuf: FloatArray? = null
+  private var diffs = FloatArray(0)
+  private var nDiffs = 0
   private var outW = 0
   private var outH = 0
   private val samples = TreeMap<Int, PoseSample>()
@@ -77,7 +101,7 @@ internal class PoseAnalyzer(
   // ball search state (fixed at the trigger, from the still address samples)
   private val strips = HashMap<Int, Gray>()
   private var stripRect: Rect? = null
-  private var halfScale = false
+  private var stripStep = 1
   private var ws = 1.0
   private var addressHands: Pt? = null
   private var addressRoi: Rect? = null
@@ -86,36 +110,54 @@ internal class PoseAnalyzer(
   fun run(path: String): Map<String, Any?> {
     val t0 = SystemClock.elapsedRealtimeNanos()
     track = Media.scan(context, path)
-    val captureFps = Media.captureFps(context, path)
+    val captureFps = opts.captureFps ?: Media.captureFps(context, path)
     policy = SamplingPolicy(captureFps ?: 240.0, opts.sparseEvery, opts.afterImpactEvery, opts.denseEvery)
     val scale = min(1.0, MAX_SIDE.toDouble() / max(track.dispW, track.dispH))
     outW = (track.dispW * scale).roundToInt()
     outH = (track.dispH * scale).roundToInt()
-    ws = if (min(track.dispW, track.dispH) >= 720) 0.5 else 1.0
-    halfScale = ws == 0.5
+    val decim = Media.decimation(track.dispW, track.dispH)
+    // work scale (§4.3): half resolution from 720p up, and never finer than the kept frame
+    ws = min(if (min(track.dispW, track.dispH) >= 720) 0.5 else 1.0, 1.0 / decim)
+    stripStep = (1.0 / (ws * decim)).roundToInt()
+    val frameBytes = track.dispW / decim * (track.dispH / decim) * 3 / 2
+    ringSize = max(opts.sparseEvery, min(RING_MAX, RING_BYTES / max(1, frameBytes)))
+    ring = arrayOfNulls(ringSize)
+    diffs = FloatArray(track.frameCount + 16)
 
-    worker = PoseWorker(loadModel(), rgbRowBytes(outW) * outH)
+    worker = PoseWorker(loadModel(), 4 * outW * outH)
     worker.start()
+    bands = BandRunner(CONVERT_THREADS)
     val total = track.frameCount
     val step = max(1, total / 50)
     try {
-      Media.decode(context, path, 0) { n, ptsUs, img, full ->
-        if (cancelled()) throw CancelledException()
-        val slot = n % RING
-        val f = ring[slot]?.takeIf { it.codedW == Media.cropSize(img).first && it.codedH == Media.cropSize(img).second }
-          ?: Media.cropSize(img).let { (w, h) -> YuvFrame(w, h, track.rotation, full) }
-        ring[slot] = f
-        Media.copy(img, f)
-        f.frame = n
-        f.ptsUs = ptsUs
+      Media.decode(context, path, 0, cancelled, prof) { n, ptsUs, img, full ->
+        if (img == null) return@decode true
         cur = n
-        stripRect?.let { strips[n] = f.grayStrip(it, halfScale) }
-        settle(block = false)
-        if (policy.wants(n)) {
-          submit(f, fresh = false)
-          // still zone: wait, so a trigger at n is known while n − 7 … n are in the ring
-          if (policy.zone == SamplingPolicy.Zone.STILL) settle(block = true)
+        prof.time("dup") { duplicateDiff(img, full) }
+        // Frames that may be inferred or back-filled, or need a ball strip, are copied; in the
+        // sparse zone after the swing only the samples are (most of a clip, nothing to back-fill).
+        val z = policy.zone
+        val copied = if (z == SamplingPolicy.Zone.STILL || z == SamplingPolicy.Zone.SWING || stripRect != null || policy.wants(n)) {
+          val (fw, fh) = Media.frameSize(img)
+          val slot = n % ringSize
+          val f = ring[slot]?.takeIf { it.codedW == fw && it.codedH == fh && it.fullRange == full }
+            ?: YuvFrame(fw, fh, track.rotation, full)
+          ring[slot] = f
+          prof.time("copy") { Media.copy(img, f) }
+          f.frame = n
+          f.ptsUs = ptsUs
+          stripRect?.let { r -> prof.time("strips") { strips[n] = f.grayStrip(r, stripStep) } }
+          f
+        } else {
+          null
         }
+        settle(block = false)
+        // (a trigger handled just above has already re-submitted everything up to n)
+        if (copied != null && policy.wants(n) && n > lastSubmitted) submit(copied, fresh = false)
+        // still zone: a trigger found at sample m re-runs m − 7 … from the ring, so no frame
+        // that could still be needed may be overwritten: settle the samples that old first
+        val keep = n + 1 - ringSize + (opts.sparseEvery - 1)
+        while (policy.zone == SamplingPolicy.Zone.STILL && inFlightFrames.isNotEmpty() && inFlightFrames.first() <= keep) settleOne()
         if (n % step == 0) {
           progress("decode", n + 1, total)
           progress("pose", (samples.lastEntry()?.key ?: -1) + 1, total)
@@ -125,6 +167,7 @@ internal class PoseAnalyzer(
       settle(block = true)
     } finally {
       worker.stopAndJoin()
+      bands.shutdown()
     }
     val totalNs = SystemClock.elapsedRealtimeNanos() - t0
     progress("pose", total, total)
@@ -137,6 +180,10 @@ internal class PoseAnalyzer(
       "totalMs" to (totalNs / 1e6).roundToInt(),
       "inferences" to worker.inferences,
       "delegate" to worker.delegate,
+      "createMs" to (worker.createNs / 1e6).roundToInt(),
+      "stagesMs" to prof.ms() + worker.prof.ms(),
+      "ring" to ringSize,
+      "inputSize" to "${outW}x$outH",
     )
     Log.i(
       TAG,
@@ -162,6 +209,7 @@ internal class PoseAnalyzer(
       },
       "ball" to ball.first,
       "ballGoneFrame" to ball.second,
+      "duplicateFrameRatio" to Probe.duplicateRatio(diffs.copyOf(nDiffs)),
       "timings" to timings,
     )
   }
@@ -181,24 +229,57 @@ internal class PoseAnalyzer(
     }
   }
 
+  /** Consecutive-frame difference of the quarter-size grey (detect.py duplicate_frame_ratio input). */
+  private fun duplicateDiff(img: android.media.Image, full: Boolean) {
+    val q = Media.quarterGray(img, full, quarterBuf)
+    val p = prevQuarter
+    if (p != null && p.size == q.size && nDiffs < diffs.size) diffs[nDiffs++] = Probe.meanAbsDiff(q, p)
+    quarterBuf = p
+    prevQuarter = q
+  }
+
   private fun submit(f: YuvFrame, fresh: Boolean) {
     val buf = worker.takeBuffer { blockedNs += it }
-    f.toRgb(outW, outH, buf)
-    worker.put(Job.Frame(f.frame, f.ptsUs, buf, fresh)) { blockedNs += it }
+    prof.time("convert") {
+      f.toRgba(outW, outH, buf, bands)
+    }
+    worker.put(Job.Frame(f.frame, f.ptsUs, buf, fresh, epoch)) { blockedNs += it }
+    lastSubmitted = f.frame
     inFlight++
+    inFlightFrames.addLast(f.frame)
+  }
+
+  /** Waits for and consumes the oldest result in flight, then acts on the transitions. */
+  private fun settleOne() {
+    if (inFlight == 0) return
+    take(worker.awaitResult { blockedNs += it })
+    handleEvents()
+  }
+
+  private fun take(r: Result) {
+    inFlight--
+    inFlightFrames.removeFirstOrNull()
+    consume(r)
   }
 
   /** Consumes pose results (all in flight when [block]) and acts on the policy's transitions. */
   private fun settle(block: Boolean) {
-    var mustDrain = block
     while (true) {
-      while (true) {
-        val r = if (mustDrain && inFlight > 0) worker.awaitResult { blockedNs += it } else worker.pollResult() ?: break
-        inFlight--
-        consume(r)
-        if (mustDrain && inFlight == 0) break
+      val r = if (block && inFlight > 0) worker.awaitResult { blockedNs += it } else worker.pollResult() ?: break
+      take(r)
+      if (handleEvents()) {
+        // a Reset re-creates the spare: drain so the switch happens between known frames
+        while (inFlight > 0) take(worker.awaitResult { blockedNs += it }).also { handleEvents() }
       }
-      val e = events.removeFirstOrNull() ?: return
+      if (inFlight == 0 && block) break
+    }
+  }
+
+  /** Runs queued transitions; true when the caller must drain what is in flight. */
+  private fun handleEvents(): Boolean {
+    var mustDrain = false
+    while (true) {
+      val e = events.removeFirstOrNull() ?: return mustDrain
       when (e) {
         is SamplingPolicy.Event.Trigger -> onTrigger(e.frame)
         is SamplingPolicy.Event.Reset -> {
@@ -210,6 +291,7 @@ internal class PoseAnalyzer(
           mustDrain = true
         }
         is SamplingPolicy.Event.Impact -> Log.i(TAG, "dense zone ends, impact ~${e.frame}")
+        is SamplingPolicy.Event.DenseCapped -> Log.i(TAG, "dense zone capped at ${e.frame}, no impact seen")
         is SamplingPolicy.Event.Done -> {
           Log.i(TAG, "after-impact zone ends at ${e.frame}")
           stripRect = null
@@ -221,6 +303,8 @@ internal class PoseAnalyzer(
 
   private fun consume(r: Result) {
     r.error?.let { throw it }
+    // sparse samples decoded ahead of a trigger: the fresh instance re-runs them in order
+    if (r.epoch != epoch) return
     val lm = r.norm ?: return
     val px = FloatArray(lm.size)
     for (j in 0 until Lm.COUNT) {
@@ -237,13 +321,14 @@ internal class PoseAnalyzer(
 
   private fun onTrigger(m: Int) {
     Log.i(TAG, "sampling trigger at $m (decoded up to $cur)")
+    epoch++
     startStrips(m)
-    val from = max(m - (opts.sparseEvery - 1), cur - (RING - 1)).coerceAtLeast(0)
+    val from = max(m - (opts.sparseEvery - 1), cur - (ringSize - 1)).coerceAtLeast(0)
     var first = true
     for (f in from..cur) {
-      val yuv = ring[f % RING] ?: continue
+      val yuv = ring[f % ringSize] ?: continue
       if (yuv.frame != f) continue
-      stripRect?.let { if (f !in strips) strips[f] = yuv.grayStrip(it, halfScale) }
+      stripRect?.let { if (f !in strips) strips[f] = yuv.grayStrip(it, stripStep) }
       submit(yuv, fresh = first)
       first = false
     }
@@ -305,15 +390,44 @@ internal class PoseAnalyzer(
     }
     @Volatile private var failure: Throwable? = null
     @Volatile var delegate = "gpu"
+    val prof = Prof()
     @Volatile var inferNs = 0L
     @Volatile var inferences = 0
     @Volatile var createNs = 0L
     private var current: PoseLandmarker? = null
-    private var spare: PoseLandmarker? = null
+    /** The back-fill instance, built on its own thread while this one already infers. */
+    private var spare: Future<PoseLandmarker>? = null
+    private val spareThread = Executors.newSingleThreadExecutor { Thread(it, "golf-swing-spare").apply { isDaemon = true } }
     private var lastTs = Long.MIN_VALUE
 
-    private fun create(): PoseLandmarker {
+    private fun startSpare() {
+      if (spare == null) spare = spareThread.submit<PoseLandmarker> { create() }
+    }
+
+    /** The spare (waiting for it if still building), or a new instance. */
+    private fun takeSpare(): PoseLandmarker {
       val t = SystemClock.elapsedRealtimeNanos()
+      val f = spare
+      spare = null
+      val lm = try {
+        f?.get()
+      } catch (e: ExecutionException) {
+        throw e.cause ?: e
+      } ?: create()
+      createNs += SystemClock.elapsedRealtimeNanos() - t
+      return lm
+    }
+
+    private fun closeSpare() {
+      val f = spare ?: return
+      spare = null
+      try {
+        f.get()?.close()
+      } catch (_: Throwable) {
+      }
+    }
+
+    private fun create(): PoseLandmarker {
       fun build(d: Delegate) = PoseLandmarker.createFromOptions(
         context,
         PoseLandmarker.PoseLandmarkerOptions.builder()
@@ -333,40 +447,46 @@ internal class PoseAnalyzer(
       } else {
         build(Delegate.CPU)
       }
-      createNs += SystemClock.elapsedRealtimeNanos() - t
       return lm
     }
 
     override fun run() {
       try {
+        val t = SystemClock.elapsedRealtimeNanos()
         current = create()
-        spare = create()
+        createNs += SystemClock.elapsedRealtimeNanos() - t
+        startSpare()
         while (true) {
           when (val j = jobs.take()) {
             is Job.Frame -> runFrame(j)
-            Job.Spare -> if (spare == null) spare = create()
+            Job.Spare -> startSpare()
             Job.Stop -> break
           }
         }
+      } catch (_: InterruptedException) {
+        // shutdown (stopAndJoin / module destroyed)
       } catch (e: Throwable) {
         failure = e
-        results.put(Result(-1, 0, null, e))
+        results.put(Result(-1, 0, null, -1, e))
       } finally {
         current?.close()
-        spare?.close()
+        closeSpare()
+        spareThread.shutdownNow()
       }
     }
 
     private fun runFrame(j: Job.Frame) {
       if (j.fresh) {
         current?.close()
-        current = spare ?: create()
-        spare = null
+        current = null
+        current = takeSpare()
         lastTs = Long.MIN_VALUE
       }
       val ts = max(Math.round(j.ptsUs / 1000.0), lastTs + 1)
       lastTs = ts
-      val img = ByteBufferImageBuilder(j.rgb, outW, outH, MPImage.IMAGE_FORMAT_RGB).build()
+      val img = prof.time("mpImage") {
+        ByteBufferImageBuilder(j.rgba, outW, outH, MPImage.IMAGE_FORMAT_RGBA).build()
+      }
       val t = SystemClock.elapsedRealtimeNanos()
       val res = try {
         current!!.detectForVideo(img, ts)
@@ -376,15 +496,15 @@ internal class PoseAnalyzer(
         Log.w(TAG, "GPU inference failed, switching to CPU", e)
         delegate = "cpu"
         current?.close()
-        spare?.close()
-        spare = null
+        current = null
+        closeSpare()
         current = create()
         lastTs = ts
         current!!.detectForVideo(img, ts)
       }
       inferNs += SystemClock.elapsedRealtimeNanos() - t
       inferences++
-      pool.put(j.rgb)
+      pool.put(j.rgba)
       val pose = res.landmarks().firstOrNull()
       val out = pose?.let { p ->
         FloatArray(Lm.COUNT * 3).also { a ->
@@ -396,7 +516,7 @@ internal class PoseAnalyzer(
           }
         }
       }
-      results.put(Result(j.frame, j.ptsUs, out))
+      results.put(Result(j.frame, j.ptsUs, out, j.epoch))
     }
 
     fun put(job: Job, blocked: (Long) -> Unit) = waitFor(blocked) { jobs.offer(job, 50, TimeUnit.MILLISECONDS).takeIf { it } }
@@ -417,19 +537,25 @@ internal class PoseAnalyzer(
       }
     }
 
+    init {
+      // never keeps the process alive; interrupted if it does not stop in time
+      isDaemon = true
+    }
+
     fun stopAndJoin() {
+      if (!isAlive) return
+      jobs.clear()
+      if (!jobs.offer(Job.Stop)) interrupt()
+      join(5_000)
       if (isAlive) {
-        try {
-          put(Job.Stop) {}
-        } catch (_: Throwable) {
-        }
-        join(5_000)
+        interrupt()
+        join(1_000)
       }
     }
   }
 
   private sealed class Job {
-    class Frame(val frame: Int, val ptsUs: Long, val rgb: ByteBuffer, val fresh: Boolean) : Job()
+    class Frame(val frame: Int, val ptsUs: Long, val rgba: ByteBuffer, val fresh: Boolean, val epoch: Int) : Job()
     object Spare : Job()
     object Stop : Job()
   }

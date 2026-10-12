@@ -8,6 +8,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
 
@@ -20,6 +21,8 @@ internal class TrackInfo(
   val frameCount: Int,
   val containerFps: Double,
   val firstPtsUs: Long,
+  /** PQ or HLG transfer, or a 10-bit HEVC/VP9/AV1 profile (iPhone/Pixel "HDR video"). */
+  val hdr: Boolean = false,
 ) {
   val dispW get() = if (rotation == 90 || rotation == 270) codedH else codedW
   val dispH get() = if (rotation == 90 || rotation == 270) codedW else codedH
@@ -77,9 +80,25 @@ internal object Media {
         else -> 30.0
       }
       val dur = if (f.containsKey(MediaFormat.KEY_DURATION)) f.getLong(MediaFormat.KEY_DURATION) else max(0L, hi - lo)
-      return TrackInfo(w, h, ((rotation % 360) + 360) % 360, dur, n, fps, if (n > 0) lo else 0L)
+      return TrackInfo(w, h, ((rotation % 360) + 360) % 360, dur, n, fps, if (n > 0) lo else 0L, isHdr(f))
     } finally {
       ex.release()
+    }
+  }
+
+  private fun isHdr(f: MediaFormat): Boolean {
+    val transfer = intOr(f, MediaFormat.KEY_COLOR_TRANSFER, 0)
+    if (transfer == MediaFormat.COLOR_TRANSFER_ST2084 || transfer == MediaFormat.COLOR_TRANSFER_HLG) return true
+    val profile = intOr(f, MediaFormat.KEY_PROFILE, 0)
+    return when (f.getString(MediaFormat.KEY_MIME)) {
+      MediaFormat.MIMETYPE_VIDEO_HEVC -> profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 ||
+        profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10 ||
+        profile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10Plus
+      MediaFormat.MIMETYPE_VIDEO_VP9 -> profile >= MediaCodecInfo.CodecProfileLevel.VP9Profile2
+      MediaFormat.MIMETYPE_VIDEO_AV1 -> profile == MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10 ||
+        profile == MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10HDR10 ||
+        profile == MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10HDR10Plus
+      else -> false
     }
   }
 
@@ -106,13 +125,25 @@ internal object Media {
     }
   }
 
+  /** No output for this long while frames are still owed = a stuck decoder (some OEM codecs never send EOS). */
+  private const val STALL_NS = 10_000_000_000L
+
   /**
    * Sequential hardware decode to flexible YUV, frames handed over in presentation order with
    * a running index (= the frame number the lab's OpenCV read gives). [onFrame] returns false
-   * to stop. The Image is only valid during the call. [seekUs] > 0 starts at the sync frame
-   * before it (indices then count from there).
+   * to stop. The Image is only valid during the call; it is null for an output buffer the
+   * codec can't expose as an Image (the index still advances, so later frames keep their
+   * numbers). [seekUs] > 0 starts at the sync frame before it (indices then count from there).
+   * [cancelled] is polled on every loop turn, not only per frame.
    */
-  fun decode(context: Context, path: String, seekUs: Long, onFrame: (index: Int, ptsUs: Long, img: Image, fullRange: Boolean) -> Boolean) {
+  fun decode(
+    context: Context,
+    path: String,
+    seekUs: Long,
+    cancelled: () -> Boolean = { false },
+    prof: Prof? = null,
+    onFrame: (index: Int, ptsUs: Long, img: Image?, fullRange: Boolean) -> Boolean,
+  ) {
     val ex = extractor(context, path)
     try {
       val track = videoTrack(ex)
@@ -127,9 +158,13 @@ internal object Media {
         val info = MediaCodec.BufferInfo()
         var inputDone = false
         var n = 0
+        var full: Boolean? = null
+        var nullImages = 0
+        var lastProgress = System.nanoTime()
         while (true) {
+          if (cancelled()) throw CancelledException()
           if (!inputDone) {
-            val i = codec.dequeueInputBuffer(2_000)
+            val i = codec.dequeueInputBuffer(if (n == 0) 2_000 else 0)
             if (i >= 0) {
               val size = ex.readSampleData(codec.getInputBuffer(i)!!, 0)
               if (size < 0) {
@@ -139,22 +174,36 @@ internal object Media {
                 codec.queueInputBuffer(i, 0, size, ex.sampleTime, 0)
                 ex.advance()
               }
+              lastProgress = System.nanoTime()
             }
           }
+          val t = System.nanoTime()
           val o = codec.dequeueOutputBuffer(info, 2_000)
-          if (o < 0) continue
+          prof?.add("codecWait", System.nanoTime() - t)
+          if (o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+            val of = codec.outputFormat
+            full = of.containsKey(MediaFormat.KEY_COLOR_RANGE) && of.getInteger(MediaFormat.KEY_COLOR_RANGE) == MediaFormat.COLOR_RANGE_FULL
+          }
+          if (o < 0) {
+            if (System.nanoTime() - lastProgress > STALL_NS) throw IllegalStateException("decoder stalled after $n frames")
+            continue
+          }
+          lastProgress = System.nanoTime()
           val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
           var more = true
           if (info.size > 0) {
             val img = codec.getOutputImage(o)
-            if (img != null) {
-              try {
-                val of = codec.outputFormat
-                val full = of.containsKey(MediaFormat.KEY_COLOR_RANGE) && of.getInteger(MediaFormat.KEY_COLOR_RANGE) == MediaFormat.COLOR_RANGE_FULL
-                more = onFrame(n++, info.presentationTimeUs, img, full)
-              } finally {
-                img.close()
-              }
+            if (img == null && ++nullImages >= 5 && nullImages == n + 1) {
+              throw UnsupportedVideoException("the decoder gives no readable frames for this video")
+            }
+            val range = full ?: codec.outputFormat.let { of ->
+              (of.containsKey(MediaFormat.KEY_COLOR_RANGE) && of.getInteger(MediaFormat.KEY_COLOR_RANGE) == MediaFormat.COLOR_RANGE_FULL)
+                .also { full = it }
+            }
+            try {
+              more = onFrame(n++, info.presentationTimeUs, img, range)
+            } finally {
+              img?.close()
             }
           }
           codec.releaseOutputBuffer(o, false)
@@ -172,35 +221,93 @@ internal object Media {
     }
   }
 
-  /** Copies the Image (crop applied) into [f], which must match the crop size. */
+  /** Long side above which frames are kept at half size (4K → 1080p class): memory and time. */
+  const val DECIMATE_ABOVE = 1920
+
+  /** 1, or 2 for frames whose long side is over [DECIMATE_ABOVE]. */
+  fun decimation(w: Int, h: Int) = if (max(w, h) > DECIMATE_ABOVE) 2 else 1
+
+  /** YUV420 with 16-bit samples (P010: 10 bits in the high bits, little-endian). */
+  private const val YCBCR_P010 = 0x36
+
+  /**
+   * Copies the Image (crop applied; every 2nd pixel and row above [DECIMATE_ABOVE]) into
+   * [f], which must be [frameSize]. 10-bit frames (P010) keep the high byte of each sample, i.e. the top 8 bits.
+   */
   fun copy(img: Image, f: YuvFrame) {
     val c = img.cropRect
+    val step = decimation(c.width(), c.height())
     val p = img.planes
-    plane(p[0], c.left, c.top, f.codedW, f.codedH, f.y)
-    plane(p[1], c.left / 2, c.top / 2, f.cw, f.ch, f.u)
-    plane(p[2], c.left / 2, c.top / 2, f.cw, f.ch, f.v)
+    val hi = if (img.format == YCBCR_P010 || p[0].pixelStride == 2) 1 else 0
+    plane(p[0].buffer, p[0].rowStride, p[0].pixelStride, hi, c.left, c.top, f.codedW, f.codedH, step, f.y)
+    plane(p[1].buffer, p[1].rowStride, p[1].pixelStride, hi, c.left / 2, c.top / 2, f.cw, f.ch, step, f.u)
+    plane(p[2].buffer, p[2].rowStride, p[2].pixelStride, hi, c.left / 2, c.top / 2, f.cw, f.ch, step, f.v)
   }
 
-  private fun plane(p: Image.Plane, x0: Int, y0: Int, w: Int, h: Int, dst: ByteArray) {
-    val buf = p.buffer
-    val rs = p.rowStride
-    val ps = p.pixelStride
+  /**
+   * One plane into a packed [w] × [h] array: sample (x, y) of the output is the byte at
+   * ((y0 + y·step)·rowStride + (x0 + x·step)·pixelStride + [hiByte]). Pure JVM for tests.
+   * The last row of a plane may be shorter than rowStride (Image buffers end at the last
+   * pixel), so reads never go past what that row holds.
+   */
+  internal fun plane(buf: ByteBuffer, rowStride: Int, pixelStride: Int, hiByte: Int, x0: Int, y0: Int, w: Int, h: Int, step: Int, dst: ByteArray) {
+    val ps = pixelStride * step
     if (ps == 1) {
       for (row in 0 until h) {
-        buf.position((y0 + row) * rs + x0)
+        buf.position((y0 + row * step) * rowStride + x0)
         buf.get(dst, row * w, w)
       }
       return
     }
-    val tmp = ByteArray((w - 1) * ps + 1)
+    val span = (w - 1) * ps + 1 + hiByte
+    val tmp = ByteArray(span)
     for (row in 0 until h) {
-      val pos = (y0 + row) * rs + x0 * ps
+      val pos = (y0 + row * step) * rowStride + x0 * pixelStride
       buf.position(pos)
-      buf.get(tmp, 0, min(tmp.size, buf.limit() - pos))
-      for (c in 0 until w) dst[row * w + c] = tmp[c * ps]
+      buf.get(tmp, 0, min(span, buf.limit() - pos))
+      var k = hiByte
+      val o = row * w
+      for (c in 0 until w) {
+        dst[o + c] = tmp[k]
+        k += ps
+      }
     }
   }
 
-  /** The crop size of a decoder Image (what [YuvFrame] stores). */
-  fun cropSize(img: Image) = Pair(img.cropRect.width(), img.cropRect.height())
+  /**
+   * Quarter-size grey for the duplicate-frame check, read straight from the Image: per 4 × 4
+   * block, the mean of the 4 pixels of its second row (a quarter of the luma reads of a full
+   * block mean; a repeated frame still differs by ~0, which is all the check needs).
+   */
+  fun quarterGray(img: Image, fullRange: Boolean, out: FloatArray?): FloatArray {
+    val c = img.cropRect
+    val p = img.planes[0]
+    val hi = if (img.format == YCBCR_P010 || p.pixelStride == 2) 1 else 0
+    val w = c.width() / 4
+    val h = c.height() / 4
+    val dst = out?.takeIf { it.size == w * h } ?: FloatArray(w * h)
+    val row = ByteArray(4 * w)
+    val scale = if (fullRange) 1f / 4 else 255f / 219 / 4
+    for (by in 0 until h) {
+      plane(p.buffer, p.rowStride, p.pixelStride, hi, c.left, c.top + 4 * by + 1, 4 * w, 1, 1, row)
+      var k = 0
+      for (bx in 0 until w) {
+        val s = (row[k].toInt() and 0xFF) + (row[k + 1].toInt() and 0xFF) + (row[k + 2].toInt() and 0xFF) + (row[k + 3].toInt() and 0xFF)
+        dst[by * w + bx] = s * scale
+        k += 4
+      }
+    }
+    return dst
+  }
+
+  /** The size [copy] writes for this Image: the crop, halved when decimated. */
+  fun frameSize(img: Image): Pair<Int, Int> {
+    val w = img.cropRect.width()
+    val h = img.cropRect.height()
+    val d = decimation(w, h)
+    return Pair(w / d, h / d)
+  }
 }
+
+/** The clip can't be analysed on this phone (e.g. no readable frames from its decoder). */
+internal class UnsupportedVideoException(msg: String) : RuntimeException(msg)
