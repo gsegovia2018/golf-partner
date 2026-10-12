@@ -196,10 +196,17 @@ internal class Colour private constructor(full: Boolean) {
   }
 }
 
-/** Splits rows [0, n) into bands run in parallel (the calling thread takes one). */
-internal class BandRunner(private val threads: Int) {
+/**
+ * Splits rows [0, n) into bands run in parallel (the calling thread takes one). [onThread]
+ * gets each pool thread's id as it starts (at raised priority).
+ */
+internal class BandRunner(private val threads: Int, private val onThread: (Int) -> Unit = {}) {
   private val pool = java.util.concurrent.Executors.newFixedThreadPool(max(1, threads - 1)) { r ->
-    Thread(r, "golf-swing-convert").apply { isDaemon = true }
+    Thread({
+      PerfHint.raiseThisThread()
+      PerfHint.myTid()?.let(onThread)
+      r.run()
+    }, "golf-swing-convert").apply { isDaemon = true }
   }
 
   fun run(n: Int, work: (Int, Int) -> Unit) {

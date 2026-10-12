@@ -74,6 +74,8 @@ internal class PoseAnalyzer(
     private const val CONVERT_THREADS = 3
     private const val QUEUE = 4
     private const val SEARCH_MARGIN_CM = 8.0
+    /** Hint-session target per inference: below what it takes, so the clocks stay up (see [PerfHint]). */
+    private const val HINT_TARGET_NS = 12_000_000L
   }
 
   private class Result(val frame: Int, val ptsUs: Long, val norm: FloatArray?, val epoch: Int, val error: Throwable? = null)
@@ -82,6 +84,10 @@ internal class PoseAnalyzer(
   private lateinit var policy: SamplingPolicy
   private lateinit var worker: PoseWorker
   private lateinit var bands: BandRunner
+  private lateinit var hint: PerfHint
+  /** Threads of the process before the analysis: everything newer is ours or MediaPipe's. */
+  private var baseTids: Set<Int> = emptySet()
+  private var hintThreads = 0
   private var ringSize = 8
   private lateinit var ring: Array<YuvFrame?>
   private var cur = -1
@@ -129,9 +135,14 @@ internal class PoseAnalyzer(
     ring = arrayOfNulls(ringSize)
     diffs = FloatArray(track.frameCount + 16)
 
+    val oldPriority = android.os.Process.getThreadPriority(android.os.Process.myTid())
+    PerfHint.raiseThisThread()
+    hint = PerfHint(context, HINT_TARGET_NS)
+    baseTids = PerfHint.processTids()
+    hint.add(listOf(android.os.Process.myTid()))
     worker = PoseWorker(loadModel(), 4 * outW * outH)
     worker.start()
-    bands = BandRunner(CONVERT_THREADS)
+    bands = BandRunner(CONVERT_THREADS) { tid -> hint.add(listOf(tid)) }
     val total = track.frameCount
     val step = max(1, total / 50)
     try {
@@ -175,6 +186,12 @@ internal class PoseAnalyzer(
     } finally {
       worker.stopAndJoin()
       bands.shutdown()
+      hintThreads = if (hint.active()) hint.threads() else 0
+      hint.close()
+      try {
+        android.os.Process.setThreadPriority(oldPriority)
+      } catch (_: Throwable) {
+      }
     }
     val totalNs = SystemClock.elapsedRealtimeNanos() - t0
     progress("pose", total, total)
@@ -191,6 +208,7 @@ internal class PoseAnalyzer(
       "stagesMs" to prof.ms() + worker.prof.ms(),
       "ring" to ringSize,
       "inputSize" to "${outW}x$outH",
+      "hintThreads" to hintThreads,
     )
     Log.i(
       TAG,
@@ -481,6 +499,7 @@ internal class PoseAnalyzer(
 
     override fun run() {
       try {
+        PerfHint.raiseThisThread()
         val t = SystemClock.elapsedRealtimeNanos()
         current = create()
         createNs += SystemClock.elapsedRealtimeNanos() - t
@@ -531,7 +550,11 @@ internal class PoseAnalyzer(
         lastTs = ts
         current!!.detectForVideo(img, ts)
       }
-      inferNs += SystemClock.elapsedRealtimeNanos() - t
+      val dt = SystemClock.elapsedRealtimeNanos() - t
+      inferNs += dt
+      // MediaPipe's graph and GL threads exist once an instance has run: add them to the session
+      if (inferences == 0 || j.fresh) hint.add(PerfHint.processTids() - baseTids)
+      hint.report(dt)
       inferences++
       pool.put(j.rgba)
       val pose = res.landmarks().firstOrNull()
