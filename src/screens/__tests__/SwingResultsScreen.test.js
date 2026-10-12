@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import SwingResultsScreen from '../SwingResultsScreen';
 import * as store from '../../store/swingStore';
@@ -65,16 +65,20 @@ const OWNER_MARKS = [...Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, c.
     i, checkpoint: k, hands: { proposed: null, final: norm(hands), placed: true }, head: { proposed: null, final: norm(head), finalHidden: hidden },
   })), emptyMarks({ swingId: 's1' }));
 
-const ROW = { id: 's1', name: 'Sat 11 Oct · 18:42', createdAt: '2026-10-11T16:42:00.000Z', status: 'ready', club: null, source: 'import' };
+const ROW = {
+  id: 's1', name: 'Sat 11 Oct · 18:42', createdAt: '2026-10-11T16:42:00.000Z', status: 'ready', club: null, source: 'import', marked: { state: 'done', count: 6 },
+};
 
-function setup({ row = ROW, analysis = MARKED } = {}) {
+function setup({ row = ROW, analysis = MARKED, marks = OWNER_MARKS } = {}) {
   store.getSwing.mockReturnValue(row);
   store.readAnalysis.mockResolvedValue(analysis);
   store.readPose.mockResolvedValue({ ...pose, pass2: base.pass2 });
   store.readProbe.mockResolvedValue(null);
-  store.readMarks.mockResolvedValue(OWNER_MARKS);
+  store.readMarks.mockResolvedValue(marks);
   store.saveAnalysis.mockImplementation(async (_id, a) => { store.readAnalysis.mockResolvedValue(a); });
-  const navigation = { navigate: jest.fn(), goBack: jest.fn(), addListener: jest.fn(() => () => {}) };
+  const navigation = {
+    navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn(), addListener: jest.fn(() => () => {}),
+  };
   const utils = render(<ThemeProvider><SwingResultsScreen navigation={navigation} route={{ params: { swingId: 's1' } }} /></ThemeProvider>);
   return { ...utils, navigation };
 }
@@ -112,11 +116,11 @@ describe('SwingResultsScreen: a stored swing', () => {
   test('tapping a timeline step shows that checkpoint and resets the nudge', async () => {
     const { findByText, getByLabelText, getByText } = setup();
     await findByText(VERDICT);
-    fireEvent.press(getByLabelText(/^Address/));
+    fireEvent.press(getByLabelText(/^Address(,|$)/));
     expect(getByText(T.atCheckpoint('Address'))).toBeTruthy();
     fireEvent.press(getByLabelText(T.nextFrame));
     expect(getByText(/\(\+1\)/)).toBeTruthy();
-    fireEvent.press(getByLabelText(/^Top/));
+    fireEvent.press(getByLabelText(/^Top(,|$)/));
     expect(getByText(T.atCheckpoint('Top'))).toBeTruthy();
     expect(() => getByText(/\(\+1\)/)).toThrow();
   });
@@ -148,7 +152,7 @@ describe('SwingResultsScreen: a stored swing', () => {
   test('a row in "All checks" jumps to its checkpoint', async () => {
     const { findByText, getByLabelText, getAllByLabelText, getByText } = setup();
     await findByText(VERDICT);
-    fireEvent.press(getByLabelText(/^Address/));
+    fireEvent.press(getByLabelText(/^Address(,|$)/));
     const rows = getAllByLabelText(/^Hands height at impact/);
     fireEvent.press(rows[rows.length - 1]);
     expect(getByText(T.atCheckpoint('Impact'))).toBeTruthy();
@@ -319,46 +323,68 @@ describe('SwingResultsScreen: the club chip (D19)', () => {
     await act(async () => { fireEvent.press(getByLabelText('Iron')); });
     expect(store.saveAnalysis).not.toHaveBeenCalled();
   });
+});
 
-  test('is locked while the second pass is still running (it would overwrite the choice)', async () => {
-    let onPartial;
-    runAnalysis.mockImplementation((id, o) => { ({ onPartial } = o); return new Promise(() => {}); });
-    const { findByText, getByLabelText } = setup({ row: { ...ROW, status: 'pending' }, analysis: UNMARKED });
-    await waitFor(() => expect(onPartial).toBeDefined());
-    await act(async () => { await onPartial(UNMARKED); });
+describe('SwingResultsScreen: after the marking pass (D26)', () => {
+  test('never shows results for a swing whose pass is not done: it resumes the marking canvas', async () => {
+    const { queryByText, navigation } = setup({ row: { ...ROW, marked: { state: 'partial', count: 3 } } });
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', mode: 'pass' }));
+    expect(queryByText(VERDICT)).toBeNull();
+    expect(store.readAnalysis).not.toHaveBeenCalled();
+  });
+
+  test('a row from before the flow is judged by its marks.json: P8 was never marked, so the pass resumes', async () => {
+    const { navigation } = setup({ row: { ...ROW, marked: undefined } }); // OWNER_MARKS: five of the six corrected
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', mode: 'pass' }));
+  });
+
+  test('a chip says how many positions are not confirmed; none when all six are', async () => {
+    const { findByText, getByTestId } = setup({ row: { ...ROW, marked: { state: 'done', count: 4 } } });
     await findByText(VERDICT);
-    expect(getByLabelText('Driver').props.accessibilityState.disabled).toBe(true);
-    await act(async () => { fireEvent.press(getByLabelText('Driver')); });
-    expect(store.saveAnalysis).not.toHaveBeenCalled();
+    expect(getByTestId('results-unconfirmed')).toBeTruthy();
+    expect(getByTestId('results-unconfirmed').props.children.props.children).toBe(T.unconfirmedChip(2));
+    const all = setup();
+    await all.findAllByText(VERDICT);
+    expect(all.queryByTestId('results-unconfirmed')).toBeNull();
+  });
+
+  test('the marks card shows the six chapters with their status; a chapter opens the canvas there in edit mode', async () => {
+    const u = setup({ marks: { ...OWNER_MARKS, pass: { state: 'done', skipped: ['shaftThrough'] } } });
+    await u.findByText(VERDICT);
+    const card = u.getByTestId('results-marks');
+    expect(within(card).getByText(SWING_STRINGS.mark.counts(0, 1, 5))).toBeTruthy(); // OWNER_MARKS predate the confirmed flag
+    fireEvent.press(within(card).getByTestId('chapter-top'));
+    expect(u.navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'top' });
+  });
+
+  test('"Finish frame looks wrong? Fix it" opens the canvas at the automatic finish', async () => {
+    const u = setup();
+    await u.findByText(VERDICT);
+    fireEvent.press(u.getByTestId('results-fix-finish'));
+    expect(u.navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'finish' });
   });
 });
 
 describe('SwingResultsScreen: a swing still to analyse', () => {
   const PENDING = { ...ROW, status: 'pending' };
 
-  test('processing shows the stages inside the results shell, then the results with pass 2 pending, then the final state', async () => {
-    let onProgress; let onPartial; let finish;
-    runAnalysis.mockImplementation((id, o) => { ({ onProgress, onPartial } = o); return new Promise((r) => { finish = r; }); });
-    const { findByText, getByText, getAllByText, queryByText, getAllByLabelText } = setup({ row: PENDING, analysis: UNMARKED });
+  test('processing shows the stages, then hands over to the marking pass: no results before it', async () => {
+    let onProgress; let finish;
+    runAnalysis.mockImplementation((id, o) => { ({ onProgress } = o); return new Promise((r) => { finish = r; }); });
+    const { findByText, getByText, queryByText, navigation } = setup({ row: PENDING, analysis: UNMARKED });
 
     expect(await findByText(T.stages.reading)).toBeTruthy();
     expect(getByText(T.stages.pose)).toBeTruthy();
     expect(getByText(T.stages.planes)).toBeTruthy();
-    expect(getByText('reading…')).toBeTruthy(); // hero skeleton
+    expect(getByText(T.nextMarking)).toBeTruthy();
     await act(async () => { onProgress({ stage: 'pose', done: 120, total: 300, probe: { height: 720, containerFps: 30, captureFps: 240, durationMs: 4100 } }); });
     expect(getByText('120 / 300')).toBeTruthy();
     expect(getByText(/720p · 240 fps · 4\.1 s/)).toBeTruthy();
     expect(getByText(T.notUploaded, { exact: false })).toBeTruthy();
 
-    await act(async () => { await onPartial(UNMARKED); });
-    expect(await findByText(VERDICT)).toBeTruthy();
-    expect(queryByText(T.stages.reading)).toBeNull();
-    // pass 2 pending: the clubhead rows are "calculating", not asking the user yet
-    expect(getAllByText(T.calculating).length).toBeGreaterThan(0);
-    expect(() => getAllByLabelText(/^Place clubhead/)).toThrow();
-
     await act(async () => { finish({ analysis: UNMARKED, pass2: 'done' }); });
-    await waitFor(() => expect(getAllByLabelText(/^Place clubhead/).length).toBeGreaterThan(0));
+    expect(navigation.replace).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', mode: 'pass' });
+    expect(queryByText(VERDICT)).toBeNull();
   });
 
   test('D12: no_pose says "No golfer found" and offers to record again', async () => {

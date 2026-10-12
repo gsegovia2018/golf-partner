@@ -1,9 +1,8 @@
 // The analysis pipeline for one stored swing (plan 4.1): probe -> pose (pass 1) -> analyze()
 // -> first save -> stills and club seeds (pass 2) -> analyze() again -> final save.
 //
-// The result screen opens after the first save with the club-dependent checks still
-// unknown ("calculating"), exactly as the plan's budget table has it; pass 2 then fills in
-// the stills and the address / impact clubhead seeds (D16). Everything native goes through
+// The first save makes the swing usable; pass 2 then fills in the stills and the address /
+// impact clubhead seeds (D16). The marking pass (D26) starts once both are in. Everything native goes through
 // frames.nativeApi(); see the contract at the top of frames.js.
 //
 // Never throws. Resolves to

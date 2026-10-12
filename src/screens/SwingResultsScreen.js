@@ -15,6 +15,8 @@ import SwingTimeline from '../components/swing/SwingTimeline';
 import SwingCheckRow from '../components/swing/SwingCheckRow';
 import { useSwingTone } from '../components/swing/swingTone';
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
+import { withAlpha } from '../theme/alpha';
 import {
   subscribeSwings, getSwingsVersion, getSwing, hydrateSwings, renameSwing, readAnalysis, readPose,
   markSwingFailed, swingVideoUri, readProbe, readMarks, saveAnalysis, getSwingProfile, setPracticeOpen,
@@ -22,6 +24,10 @@ import {
 import { runAnalysis } from '../swing/runAnalysis';
 import { reanalyzeForClub } from '../swing/reanalyze';
 import ClubPicker from '../components/swing/ClubPicker';
+import MarkChapters from '../components/swing/MarkChapters';
+import {
+  MARK_TOTAL, statusFromMarks, markedFromMarks, passDone,
+} from '../swing/markPass';
 import { shareSwingExport } from '../swing/shareExport';
 import { nativeApi, getStill, ensureStills } from '../swing/frames';
 import { poseAtFrame } from '../swing/poseAt';
@@ -39,7 +45,7 @@ const MAX_NUDGE = 2; // stills exist for the checkpoint frame +-2 (D4)
 // --- Sections --------------------------------------------------------------------------------
 
 function Hero({
-  s, analysis, row, loading, onClubChange, clubLocked,
+  s, analysis, row, loading, onClubChange, unconfirmed = 0,
 }) {
   const main = analysis?.main;
   const c = analysis?.counts;
@@ -63,13 +69,14 @@ function Hero({
             <View style={s.chip}><Text style={s.chipText}>{T.fix(c.red)}</Text></View>
             <View style={s.chip}><Text style={s.chipText}>{T.fpsChip(analysis.fps.effective)}</Text></View>
             {analysis.approximate ? <View style={s.chip}><Text style={s.chipText}>{T.approxChip}</Text></View> : null}
+            {unconfirmed ? <View style={[s.chip, s.chipWarn]} testID="results-unconfirmed"><Text style={s.chipText}>{T.unconfirmedChip(unconfirmed)}</Text></View> : null}
             <View style={s.chip}><Text style={s.chipText}>{row.name}</Text></View>
           </>
         )}
       </View>
       {loading ? null : (
         <View style={s.clubLine}>
-          <ClubPicker value={analysis.club} onChange={onClubChange} disabled={clubLocked} onDark compact testID="results-club-picker" />
+          <ClubPicker value={analysis.club} onChange={onClubChange} onDark compact testID="results-club-picker" />
         </View>
       )}
     </View>
@@ -168,6 +175,7 @@ function Processing({ s, tone, progress, width }) {
         {progress?.probe ? `${T.clipLine(progress.probe)}\n` : ''}
         {T.notUploaded}
       </Text>
+      <Text style={s.procMeta}>{T.nextMarking}</Text>
     </View>
   );
 }
@@ -217,7 +225,7 @@ function PlayerBody({ uri, onClose, s }) {
 // --- The view (props in, pixels out) ----------------------------------------------------------
 
 export function SwingResultsView({
-  row, phase, analysis, pose, progress, error, pass2Pending = false, stillTick = 0, stillFor,
+  row, phase, analysis, pose, progress, error, stillTick = 0, stillFor, markStatus = {},
   onBack, onCancel, onRetry, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport, onClubChange,
   practiceOpen = false, onPracticeToggle,
 }) {
@@ -307,7 +315,7 @@ export function SwingResultsView({
 
         {ready ? (
           <>
-            <Hero s={s} analysis={analysis} row={row} onClubChange={onClubChange} clubLocked={pass2Pending} />
+            <Hero s={s} analysis={analysis} row={row} onClubChange={onClubChange} unconfirmed={MARK_TOTAL - (row?.marked?.count ?? MARK_TOTAL)} />
             {analysis.approximate ? (
               <View style={s.banner}>
                 <Feather name="alert-triangle" size={16} color={tone.yellow} />
@@ -355,7 +363,6 @@ export function SwingResultsView({
                   onPress={() => setSelKey(CHECK_KEY(c))}
                   onPlace={openEdit}
                   placeAt={unplacedCheckpoint(c, analysis.clubMarks)}
-                  pending={pass2Pending}
                 />
               )) : <Text style={s.hint}>{T.noChecksAt}</Text>}
             </View>
@@ -392,9 +399,20 @@ export function SwingResultsView({
                   onPress={jumpToCheck}
                   onPlace={openEdit}
                   placeAt={unplacedCheckpoint(c, analysis.clubMarks)}
-                  pending={pass2Pending}
                 />
               ))}
+            </View>
+
+            <View style={s.card} testID="results-marks">
+              <Text style={s.overlineDark}>{T.marksTitle}</Text>
+              <MarkChapters themed status={markStatus} onSelect={openEdit} testID="results-chapters" />
+              <Text style={[s.hint, s.marksHint]}>{T.marksHint}</Text>
+              <View style={s.finishRow}>
+                <Text style={[s.hint, s.flex]}>{T.finishAuto}</Text>
+                <PressableScale onPress={() => openEdit('finish')} style={s.fixLink} accessibilityRole="button" accessibilityLabel={SWING_STRINGS.mark.fixFinish} testID="results-fix-finish">
+                  <Text style={s.fixText}>{SWING_STRINGS.mark.fixFinish}</Text>
+                </PressableScale>
+              </View>
             </View>
 
             <View style={s.btnRow}>
@@ -469,10 +487,9 @@ export default function SwingResultsScreen({ navigation, route }) {
   const row = getSwing(swingId);
 
   const [phase, setPhase] = useState('loading'); // loading | processing | ready | error
-  const [data, setData] = useState({ analysis: null, pose: null });
+  const [data, setData] = useState({ analysis: null, pose: null, marks: null });
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
-  const [pass2Pending, setPass2Pending] = useState(false);
   const [stillTick, setStillTick] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [practiceOpen, setPracticeOpenState] = useState(() => !!getSwingProfile()?.practiceOpen);
@@ -485,9 +502,13 @@ export default function SwingResultsScreen({ navigation, route }) {
     const analysis = await readAnalysis(swingId);
     if (!analysis) return false;
     if (!poseRef.current) poseRef.current = await readPose(swingId);
-    if (alive.current) setData({ analysis, pose: poseRef.current });
+    const marks = await readMarks(swingId);
+    if (alive.current) setData({ analysis, pose: poseRef.current, marks });
     return true;
   }, [swingId]);
+
+  // D26: Results come after the marking pass, never before. An unfinished pass resumes there.
+  const toMarking = useCallback(() => navigation.replace('SwingEditMarks', { swingId, mode: 'pass' }), [navigation, swingId]);
 
   const start = useCallback(async () => {
     if (started.current) return;
@@ -498,10 +519,6 @@ export default function SwingResultsScreen({ navigation, route }) {
     setPhase('processing');
     const res = await runAnalysis(swingId, {
       onProgress: (p) => { if (alive.current) setProgress(p); },
-      onPartial: async () => {
-        if (!(await load())) return;
-        if (alive.current) { setPass2Pending(true); setPhase('ready'); }
-      },
       isCancelled: () => cancelled.current,
     });
     started.current = false;
@@ -510,12 +527,10 @@ export default function SwingResultsScreen({ navigation, route }) {
       if (alive.current) { setError('cancelled'); setPhase('error'); }
     } else if (res.error) {
       if (alive.current) { setError(res.error); setPhase('error'); }
-    } else {
-      poseRef.current = null; // pass 2 saved pose.json again (it carries the club seeds)
-      await load();
-      if (alive.current) { setPass2Pending(false); setPhase('ready'); setStillTick((t) => t + 1); }
+    } else if (alive.current) {
+      toMarking(); // the stills and the address / impact seeds are in: the golfer marks next
     }
-  }, [swingId, load]);
+  }, [swingId, toMarking]);
 
   useEffect(() => {
     alive.current = true;
@@ -524,6 +539,7 @@ export default function SwingResultsScreen({ navigation, route }) {
       const r = getSwing(swingId);
       if (!r) { setError('failed'); setPhase('error'); return; }
       if (r.status === 'ready') {
+        if (!passDone(r.marked ?? markedFromMarks(await readMarks(swingId)))) { if (alive.current) toMarking(); return; }
         if (await load()) { if (alive.current) setPhase('ready'); } else { setError('failed'); setPhase('error'); }
       } else if (r.status === 'error') {
         setError(r.error || 'failed');
@@ -586,8 +602,8 @@ export default function SwingResultsScreen({ navigation, route }) {
         pose={data.pose}
         progress={progress}
         error={error}
-        pass2Pending={pass2Pending}
         stillTick={stillTick}
+        markStatus={statusFromMarks(data.marks)}
         onBack={() => navigation.goBack()}
         onCancel={onCancel}
         onRetry={onRetry}
@@ -632,6 +648,7 @@ const makeStyles = (theme) => StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   clubLine: { marginTop: 8 },
   chip: { backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  chipWarn: { backgroundColor: withAlpha(semantic.warning.dark, 0.3) }, // the amber of a skipped chapter, on the green hero
   chipText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, color: '#ffffff' },
 
   banner: {
@@ -667,6 +684,13 @@ const makeStyles = (theme) => StyleSheet.create({
   practiceRow: { flexDirection: 'row', gap: 12, paddingVertical: 8, paddingHorizontal: 4 },
   practiceTime: { width: 64, fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.text.secondary, fontVariant: ['tabular-nums'], paddingTop: 2 },
   link: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.accent.primary, paddingVertical: 12, paddingHorizontal: 4 },
+  marksHint: { paddingHorizontal: 4, paddingTop: 6 },
+  finishRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4, marginTop: 6, paddingTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border.subtle,
+  },
+  fixLink: { minHeight: 44, justifyContent: 'center', maxWidth: '55%' },
+  fixText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12.5, color: theme.accent.primary },
 
   btnRow: { flexDirection: 'row', gap: 10 },
   btn: { minHeight: 48, borderRadius: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
