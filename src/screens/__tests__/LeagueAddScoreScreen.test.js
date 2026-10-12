@@ -95,9 +95,9 @@ describe('LeagueAddScoreScreen', () => {
     expect(utils.getByLabelText('Previous month').props.accessibilityState.disabled).toBe(true);
   });
 
-  test('unannounced mode shows "Not announced in the app" and asks for a course', async () => {
+  test('unannounced mode says an admin must approve it and asks for a course', async () => {
     const utils = render(wrap(<LeagueAddScoreScreen navigation={nav()} route={{ params: { leagueId: 'L1' } }} />));
-    await waitFor(() => utils.getByText('Not announced in the app'));
+    await waitFor(() => utils.getByText("You didn't announce this round, so it won't count until an admin approves it."));
     expect(utils.getByText('Pick the course')).toBeTruthy();
     expect(utils.queryByLabelText('Strokes for You on hole 1')).toBeNull();
   });

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
@@ -7,6 +7,8 @@ import CourseTeePicker from '../components/league/CourseTeePicker';
 import { makeOffAppStyles } from '../components/league/offAppStyles';
 import { useTheme } from '../theme/ThemeContext';
 import { announceLeagueCard } from '../store/leagueStore';
+import { POST_WINDOW_HOURS, postByFor } from '../store/leagueRules';
+import { clockWithDay } from '../components/league/DeadlineLine';
 import {
   courseSnapshot, courseProblem, buildTeeTime, localDateText, localTimeText,
 } from '../store/leagueOffApp';
@@ -27,6 +29,18 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
   const [error, setError] = useState(null);
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
+
+  // The post-by time for the tee time picked so far (null until it is valid).
+  // A tee time already gone (beyond the server's 15 minutes of slack) can't be
+  // announced, so it gets the way out instead of a deadline.
+  const deadlineText = useMemo(() => {
+    const tee = buildTeeTime(dateText, timeText);
+    const postBy = postByFor(tee);
+    if (!postBy) return null;
+    if (new Date(tee).getTime() < Date.now() - 15 * 60000) return 'past';
+    const sameDay = postBy.toDateString() === new Date(tee).toDateString();
+    return clockWithDay(postBy, sameDay ? postBy : new Date());
+  }, [dateText, timeText]);
 
   async function announce() {
     const problem = courseProblem(pick.course, pick.tee ?? pick.course);
@@ -67,11 +81,19 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
         <DateField
           label="Date and tee time"
           value={dateText}
-          onChange={setDateText}
+          onChange={(v) => { setDateText(v); setError(null); }}
           time={timeText}
-          onTimeChange={setTimeText}
+          onTimeChange={(v) => { setTimeText(v); setError(null); }}
           min={localDateText()}
         />
+
+        {!!deadlineText && (
+          <Text style={[s.text, { marginTop: 8 }]}>
+            {deadlineText === 'past'
+              ? "That tee time has passed. If you already played, add it as a card you didn't announce."
+              : `You'll have until ${deadlineText} to post your score — ${POST_WINDOW_HOURS} hours after tee time.`}
+          </Text>
+        )}
 
         {!!error && <Text style={s.errorText} accessibilityRole="alert">{error}</Text>}
 

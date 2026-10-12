@@ -122,6 +122,27 @@ export function renderNotification(type, data = {}) {
         title: '3 days left',
         body: `You have no card yet in ${data.league_name || 'your league'} this month`,
       };
+    case 'league_post_reminder': {
+      let time = '';
+      if (data.post_by) {
+        try {
+          const d = new Date(data.post_by);
+          if (!Number.isNaN(d.getTime())) {
+            time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+          }
+        } catch (_e) {
+          // Unparseable — omit time
+        }
+      }
+      const timeStr = time ? ` by ${time}` : '';
+      const coursePhrase = data.course_name ? `your ${data.course_name} card` : 'your card';
+      const league = data.league_name || 'your league';
+      return {
+        icon: 'clock',
+        title: '2 hours left to post',
+        body: `Post ${coursePhrase}${timeStr} or it won't count for ${league}`,
+      };
+    }
     case 'league_vote_opened':
       return {
         icon: 'check-square',
@@ -176,6 +197,7 @@ export function notificationLink(type, data = {}) {
     case 'league_card_confirmed':
     case 'league_ranking_updated':
     case 'league_month_reminder':
+    case 'league_post_reminder':
     case 'league_vote_opened':
       return { screen: 'LeagueBoard', params: { leagueId: data.league_id } };
     default:

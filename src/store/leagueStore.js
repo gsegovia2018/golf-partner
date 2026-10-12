@@ -112,7 +112,9 @@ export function rowToMember(r, leagueId = null) {
 }
 
 // Shape consumed by leagueStandings.js / leagueRules.js: `userId`, `status`,
-// `points`, `netDifferential`, `month` ('YYYY-MM-01'), `announcedAt`, `firstShotAt`. `monthKey`
+// `points`, `netDifferential`, `month` ('YYYY-MM-01'), `announcedAt`, `firstShotAt`,
+// `postBy` (post deadline, null on cards from before it existed), `approvedBy` /
+// `approvedAt` (an admin's approval of a not-announced card). `monthKey`
 // ('YYYY-MM') is the key for seasonTable's cardsByMonth.
 export function rowToCard(r) {
   const month = r.month ?? null;
@@ -133,6 +135,9 @@ export function rowToCard(r) {
     announcedAt: r.announced_at ?? null,
     firstShotAt: r.first_shot_at ?? null,
     notAnnounced: !!r.not_announced,
+    postBy: r.post_by ?? null,
+    approvedBy: r.approved_by ?? null,
+    approvedAt: r.approved_at ?? null,
     leagueHandicap: num(r.league_handicap),
     playingHandicap: r.playing_handicap ?? null,
     holes: r.holes ?? null,
@@ -498,6 +503,29 @@ export async function addUnannouncedLeagueCard({
     p_playing_handicap: playingHandicap,
   });
   return { id: d.id, month: d.month, status: d.status, notAnnounced: !!d.not_announced };
+}
+
+// Owner. An off-app card's tee time can move until the original passes, within
+// the same month and season; the post deadline moves with it. Server hints:
+// 'tee_time_passed', 'month_change', 'outside_season', 'not_offapp', 'not_open'.
+// Returns { id, teeTime, postBy }.
+export async function rescheduleLeagueCard(cardId, teeTime) {
+  const d = await rpc('reschedule_league_card', { p_card: cardId, p_tee_time: teeTime });
+  return { id: d.id, teeTime: d.tee_time, postBy: d.post_by ?? null };
+}
+
+// Admin, not on their own card (hint 'own_card'). A missed card goes back to
+// announced/playing with a fresh 8 hours (hint 'not_missed'). Returns { id, status, postBy }.
+export async function reopenLeagueCard(cardId) {
+  const d = await rpc('reopen_league_card', { p_card: cardId });
+  return { id: d.id, status: d.status, postBy: d.post_by ?? null };
+}
+
+// Admin, not on their own card (hint 'own_card'). Lets a not-announced card
+// score (hint 'not_needed' when it doesn't need it). Returns { id, approvedAt }.
+export async function approveLeagueCard(cardId) {
+  const d = await rpc('approve_league_card', { p_card: cardId });
+  return { id: d.id, approvedAt: d.approved_at };
 }
 
 // Partner check, server side. A failed check is not an error: `confirmed` is

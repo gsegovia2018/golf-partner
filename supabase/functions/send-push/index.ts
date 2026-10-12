@@ -155,6 +155,31 @@ Object.assign(RENDERERS, {
     body: `You have no card yet in ${d.league_name ?? 'your league'} this month`,
     deepLink: leagueBoard(d),
   }),
+  league_post_reminder: (d: Record<string, unknown>) => {
+    let time = '';
+    if (d.post_by) {
+      try {
+        const dateObj = new Date(String(d.post_by));
+        if (!Number.isNaN(dateObj.getTime())) {
+          time = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Europe/Madrid',
+            hour: '2-digit',
+            minute: '2-digit',
+          }).format(dateObj);
+        }
+      } catch (e) {
+        // Unparseable — omit time
+      }
+    }
+    const timeStr = time ? ` by ${time}` : '';
+    const coursePhrase = d.course_name ? `your ${d.course_name} card` : 'your card';
+    const league = d.league_name ?? 'your league';
+    return {
+      title: '2 hours left to post',
+      body: `Post ${coursePhrase}${timeStr} or it won't count for ${league}`,
+      deepLink: leagueBoard(d),
+    };
+  },
   league_vote_opened: (d: Record<string, unknown>) => ({
     title: 'Handicap vote',
     body: `Vote on ${d.subject_name ?? 'a member'}'s handicap`
@@ -182,6 +207,7 @@ const CATEGORY_BY_TYPE: Record<string, 'scores' | 'invites' | 'media' | 'league'
   league_marker_issue: 'league',
   league_ranking_updated: 'league',
   league_month_reminder: 'league',
+  league_post_reminder: 'league',
   league_vote_opened: 'league',
 };
 
