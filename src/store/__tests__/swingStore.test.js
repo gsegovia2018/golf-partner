@@ -183,18 +183,28 @@ describe('rename and delete', () => {
 });
 
 describe('profile (D5, D6)', () => {
+  it('D24: remembers whether the practice card is open', async () => {
+    store._resetForTests();
+    expect(store.getSwingProfile().practiceOpen).toBe(false);
+    await store.setPracticeOpen(true);
+    store._resetForTests();
+    await store.hydrateSwings();
+    expect(store.getSwingProfile()).toMatchObject({ practiceOpen: true, asked: false });
+    await store.setPracticeOpen(false);
+  });
+
   it('defaults to right-handed with no height, persists, and hydrates back', async () => {
     expect(store.getSwingProfile()).toEqual({
-      heightCm: null, handedness: 'right', asked: false, lastClub: 'iron',
+      heightCm: null, handedness: 'right', asked: false, lastClub: 'iron', practiceOpen: false,
     });
     await store.setSwingProfile({ heightCm: 176, handedness: 'left' });
     expect(store.getSwingProfile()).toEqual({
-      heightCm: 176, handedness: 'left', asked: true, lastClub: 'iron',
+      heightCm: 176, handedness: 'left', asked: true, lastClub: 'iron', practiceOpen: false,
     });
     store._resetForTests();
     await store.hydrateSwings();
     expect(store.getSwingProfile()).toEqual({
-      heightCm: 176, handedness: 'left', asked: true, lastClub: 'iron',
+      heightCm: 176, handedness: 'left', asked: true, lastClub: 'iron', practiceOpen: false,
     });
   });
 

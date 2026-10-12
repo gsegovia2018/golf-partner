@@ -1,9 +1,45 @@
 // Drill catalogue for the swing faults (plan 5.6). Original English text, same shape as
 // store/coachDrills.js: every drill has a measurable pass target. `also` lists other faults
-// the drill serves (after that fault's own drills). The ids are stable keys
+// the drill serves (after that fault's own drills); `checks` lists the checks it targets, so
+// the drill leads when one of them is the main fault's evidence (D24). Every drill shows the
+// same progression line under it (PROGRESSION). The ids are stable keys
 // stored in analysis.json, so they are not translated.
 
+export const PROGRESSION = 'Start slow with a 7-iron and film it from behind. Speed up only once the position holds on video, and build to full swings over a few sessions.';
+
 export const DRILLS = [
+  {
+    id: 'su-brazos', fault: 'posture', checks: ['hands_under_shoulders'], title: 'Let the arms hang',
+    instruction: 'Stand tall with the club held out in front, then tilt from the hips until the clubhead touches the ground. Let your arms hang loose and take your grip wherever the hands fall: straight below your shoulders, not pushed out toward the ball or pulled in to your legs.',
+    passTarget: '10 setups with the hands under the shoulders on video',
+  },
+  {
+    id: 'su-bisagra', fault: 'posture', checks: ['waist_bend'], title: 'Hinge, do not slump',
+    instruction: 'Put your hands in the creases at the top of your thighs and push your hips back until your chest points at the ball, with a small flex in the knees. The bend comes from the hip joints, not from curling the back.',
+    passTarget: '10 setups with the hip angle in the green band',
+  },
+  {
+    id: 'su-palo-espalda', fault: 'posture', checks: ['back_line'], title: 'Club along the spine',
+    instruction: 'Hold a club down your back so it touches the back of your head, between the shoulder blades and your tailbone. Tilt into your address keeping all three touching: head, upper back and hips stay in one straight line.',
+    passTarget: '10 tilts keeping all three contacts',
+  },
+  {
+    id: 'su-palmo', fault: 'posture', checks: ['hand_gap'], title: 'One hand of space',
+    instruction: 'At address, spread your trail hand and fit it between the butt of the club and your lead thigh: thumb on the grip, little finger on the leg. Less is crowded, more is reaching.',
+    passTarget: 'the hand fits before 10 balls in a row',
+  },
+  {
+    id: 'pl-vidrio', fault: 'top_position', checks: ['lead_arm_shoulder_plane', 'hands_over_heels'], also: ['steep_backswing', 'across_the_line'],
+    title: "Pane of glass (Hogan's image)",
+    instruction: 'Rest an alignment stick (or picture a sheet of glass) on a line from the ball to about 5 cm above your trail shoulder. Swing to the top and stop: your hands, arms and club should all sit just under it, with the hands over the trail heel, never poking through.',
+    passTarget: '8 of 10 tops under the stick',
+  },
+  {
+    id: 'pl-palo-atras', fault: 'over_the_top', checks: ['shaft_down_shallow', 'downswing_path'], also: ['flat_backswing', 'flip'],
+    title: 'Stick behind you',
+    instruction: 'Push an alignment stick into the ground 60 to 90 cm behind you, angled so that from down the line it covers your hands at address. Going back, the hands travel inside the stick while the clubhead stays outside it; from the top, let the club drop under the stick on the way down.',
+    passTarget: '8 of 10 swings without touching the stick',
+  },
   {
     id: 'ee-silla', fault: 'early_extension', title: 'The chair',
     instruction: 'Place a chair (or your bag) so it touches your glutes at address. Swing at about 70 % speed and keep your glutes in contact with it until the ball is gone.',
@@ -85,6 +121,15 @@ export const DRILLS = [
     passTarget: '10 repetitions',
   },
 ];
+
+/** The main fault's drills: those aimed at its evidence checks first, then the fault's own (D24). */
+export function drillsForMain(main) {
+  if (!main) return [];
+  const ev = new Set((main.evidence || []).map((c) => c.id));
+  const all = drillsForFault(main.fault);
+  const aimed = DRILLS.filter((d) => d.checks?.some((id) => ev.has(id)));
+  return [...new Set([...aimed, ...all])];
+}
 
 export const DRILL_FAULTS = [...new Set(DRILLS.flatMap((d) => [d.fault, ...(d.also || [])]))];
 

@@ -17,7 +17,7 @@ import { useSwingTone } from '../components/swing/swingTone';
 import { useTheme } from '../theme/ThemeContext';
 import {
   subscribeSwings, getSwingsVersion, getSwing, hydrateSwings, renameSwing, readAnalysis, readPose,
-  markSwingFailed, swingVideoUri, readProbe, readMarks, saveAnalysis,
+  markSwingFailed, swingVideoUri, readProbe, readMarks, saveAnalysis, getSwingProfile, setPracticeOpen,
 } from '../store/swingStore';
 import { runAnalysis } from '../swing/runAnalysis';
 import { reanalyzeForClub } from '../swing/reanalyze';
@@ -30,7 +30,7 @@ import {
   checksAt, worstByCheckpoint, unplacedCheckpoint, CHECK_KEY, homeOf, frameOfKey,
 } from '../swing/checkpointChecks';
 import { CHECKPOINT_KEYS } from '../swing/phases';
-import { drillsForFault } from '../swing/drills';
+import { drillsForMain, PROGRESSION } from '../swing/drills';
 import { SWING_STRINGS } from '../swing/strings';
 
 const T = SWING_STRINGS.results;
@@ -103,6 +103,37 @@ function SwingPattern({ s, tone, checks, onPick }) {
           );
         })}
       </View>
+    </View>
+  );
+}
+
+/** D24: a 60-minute range session, collapsible; the main fault's first drill fills the Block slot. */
+function PracticeCard({
+  s, theme, open, onToggle, drill,
+}) {
+  const P = T.practice;
+  return (
+    <View style={s.card} testID="results-practice">
+      <PressableScale
+        style={s.practiceHead}
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityLabel={open ? P.hide : P.show}
+        accessibilityState={{ expanded: open }}
+      >
+        <Text style={[s.overlineDark, s.flex]}>{P.title}</Text>
+        <Feather name={open ? 'chevron-up' : 'chevron-down'} size={18} color={theme.text.secondary} />
+      </PressableScale>
+      {open ? P.blocks.map((b) => (
+        <View key={b.key} style={s.practiceRow}>
+          <Text style={s.practiceTime}>{b.time}</Text>
+          <View style={s.flex}>
+            <Text style={s.drillTitle}>{b.name}</Text>
+            <Text style={s.drillBody}>{b.body}</Text>
+            {b.key === 'block' ? <Text style={s.drillPass}>{drill ? P.drillIn(drill.title) : P.noDrill}</Text> : null}
+          </View>
+        </View>
+      )) : null}
     </View>
   );
 }
@@ -188,6 +219,7 @@ function PlayerBody({ uri, onClose, s }) {
 export function SwingResultsView({
   row, phase, analysis, pose, progress, error, pass2Pending = false, stillTick = 0, stillFor,
   onBack, onCancel, onRetry, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport, onClubChange,
+  practiceOpen = false, onPracticeToggle,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
@@ -227,7 +259,7 @@ export function SwingResultsView({
   const pickCp = useCallback((k) => { setCp(k); setOff(0); setSelKey(null); }, []);
   const jumpToCheck = (c) => { pickCp(homeOf(c)); setSelKey(CHECK_KEY(c)); scroll.current?.scrollTo?.({ y: 0, animated: true }); };
   const tSec = ready ? (frame / analysis.fps.capture).toFixed(3) : '';
-  const drills = ready && analysis.main ? drillsForFault(analysis.main.fault) : [];
+  const drills = ready && analysis.main ? drillsForMain(analysis.main) : [];
   const shownDrills = allDrills ? drills : drills.slice(0, 2);
   const openEdit = (k) => onEditMarks?.(k);
 
@@ -338,6 +370,7 @@ export function SwingResultsView({
                     <Text style={s.drillTitle}>{d.title}</Text>
                     <Text style={s.drillBody}>{d.instruction}</Text>
                     <Text style={s.drillPass}>{T.passTarget(d.passTarget)}</Text>
+                    <Text style={s.drillProgress}>{PROGRESSION}</Text>
                   </View>
                 ))}
                 {drills.length > 2 ? (
@@ -347,6 +380,8 @@ export function SwingResultsView({
                 ) : null}
               </View>
             ) : null}
+
+            <PracticeCard s={s} theme={theme} open={practiceOpen} onToggle={onPracticeToggle} drill={drills[0] ?? null} />
 
             <View style={s.card}>
               <Text style={s.overlineDark}>{T.allChecks}</Text>
@@ -440,6 +475,7 @@ export default function SwingResultsScreen({ navigation, route }) {
   const [pass2Pending, setPass2Pending] = useState(false);
   const [stillTick, setStillTick] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [practiceOpen, setPracticeOpenState] = useState(() => !!getSwingProfile()?.practiceOpen);
   const alive = useRef(true);
   const cancelled = useRef(false);
   const started = useRef(false);
@@ -562,6 +598,8 @@ export default function SwingResultsScreen({ navigation, route }) {
         onClubChange={onClubChange}
         onPlay={() => setPlaying(true)}
         onNeedStills={onNeedStills}
+        practiceOpen={practiceOpen}
+        onPracticeToggle={() => { const next = !practiceOpen; setPracticeOpenState(next); setPracticeOpen(next); }}
       />
       <PlayerHost visible={playing} uri={swingVideoUri(swingId)} onClose={() => setPlaying(false)} />
     </>
@@ -624,6 +662,10 @@ const makeStyles = (theme) => StyleSheet.create({
   drillTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.text.primary },
   drillBody: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12.5, lineHeight: 18, color: theme.text.secondary },
   drillPass: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, color: theme.accent.primary },
+  drillProgress: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11.5, lineHeight: 16, color: theme.text.secondary, fontStyle: 'italic' },
+  practiceHead: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingRight: 4 },
+  practiceRow: { flexDirection: 'row', gap: 12, paddingVertical: 8, paddingHorizontal: 4 },
+  practiceTime: { width: 64, fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.text.secondary, fontVariant: ['tabular-nums'], paddingTop: 2 },
   link: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.accent.primary, paddingVertical: 12, paddingHorizontal: 4 },
 
   btnRow: { flexDirection: 'row', gap: 10 },

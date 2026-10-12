@@ -21,7 +21,7 @@ export const SWING_STRINGS = {
     import: 'Import',
     back: 'Back',
     emptyTitle: 'Film your first swing',
-    emptyBody: 'Down the line works best: phone at hip height behind the ball, aimed at the hands, whole body in frame, room above the head. The app records at the fastest rate your phone offers (240 fps on most recent phones).',
+    emptyBody: 'Down the line works best: from behind, phone on your toe line, at hand height, aimed at your hands, whole body in frame, room above the head. The app records at the fastest rate your phone offers (240 fps on most recent phones).',
     emptyHint: 'Have a slow-motion clip already? Import it below.',
     updateTitle: 'Update the app to analyse swings',
     updateBody: "This version of Golf Partner can't record or analyse yet. Your saved swings are still here.",
@@ -184,6 +184,20 @@ export const SWING_STRINGS = {
     moreDrills: (n) => `${n} more drill${n === 1 ? '' : 's'}`,
     lessDrills: 'Show fewer',
     passTarget: (t) => `Pass: ${t}`,
+    // D24: a 60-minute range session around the main fault's drill.
+    practice: {
+      title: 'Practice plan · 60 minutes',
+      show: 'Show the practice plan',
+      hide: 'Hide the practice plan',
+      blocks: [
+        { key: 'program', time: '0–5 min', name: 'Program', body: 'Slow swings, filmed. Check each position on the video before you speed anything up.' },
+        { key: 'block', time: '5–25 min', name: 'Block', body: 'One drill station, the same club every ball. Only the positions count here: ignore where the ball goes.' },
+        { key: 'random', time: '25–45 min', name: 'Random', body: 'Your full routine on every shot, and a new club and target each time. Now the ball flight matters.' },
+        { key: 'compete', time: '45–60 min', name: 'Compete', body: 'Put something on the line: a score to beat, a bet with a friend, or a target you must hit to finish.' },
+      ],
+      drillIn: (title) => `Drill: ${title}`,
+      noDrill: 'Drill: the position you most want to own.',
+    },
     allChecks: 'All checks',
     calculating: 'calculating…',
     placeClubhead: 'Place clubhead',
@@ -209,7 +223,7 @@ export const SWING_STRINGS = {
     recordAgain: 'Record again',
     backToSwings: 'Back to my swings',
     errorBody: {
-      no_pose: 'Keep your whole body in frame, from the shoes to the clubhead at the top, and film from hip height.',
+      no_pose: 'Keep your whole body in frame, from the shoes to the clubhead at the top. Film from behind with the phone on your toe line, at hand height, aimed at your hands.',
       partial_pose: 'Film again from behind with your whole body in frame.',
       too_long: 'Trim the video to the swing and import it again.',
       failed: 'Try again. If it keeps happening, record or import another clip.',
