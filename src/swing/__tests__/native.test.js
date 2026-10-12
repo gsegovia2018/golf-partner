@@ -122,20 +122,20 @@ describe('swing native bridge', () => {
       expect(requireNativeView).toHaveBeenCalledWith('GolfSwingCamera');
     });
 
-    it('an apiVersion 1 binary keeps analysing but never touches the camera', async () => {
+    it('an apiVersion 1 binary (N1 only) never touches the camera', async () => {
       const cam = camera();
       const { native, requireNativeView } = loadCapture({ apiVersion: 1, camera: cam });
-      expect(native.swingSupport().supported).toBe(true);
-      expect(native.captureSupport()).toMatchObject({ supported: false, reason: 'update_app', message: native.UPDATE_CAPTURE_MESSAGE });
+      expect(native.captureSupport()).toMatchObject({ supported: false, reason: 'update_app' });
       expect(native.getCameraView()).toBeNull();
       await expect(native.listRecordingModes()).rejects.toMatchObject({ code: 'ERR_UPDATE_APP' });
       expect(cam.listRecordingModes).not.toHaveBeenCalled();
       expect(requireNativeView).not.toHaveBeenCalled();
     });
 
-    it('a binary without the camera module asks for an update', () => {
+    it('a binary that analyses but lacks the camera module keeps analysing and offers the import', () => {
       const { native } = loadCapture({ apiVersion: 2, camera: null });
-      expect(native.captureSupport()).toMatchObject({ supported: false, reason: 'update_app' });
+      expect(native.swingSupport().supported).toBe(true);
+      expect(native.captureSupport()).toMatchObject({ supported: false, reason: 'update_app', message: native.UPDATE_CAPTURE_MESSAGE });
     });
   });
 });
