@@ -56,6 +56,17 @@ Core features:
   `strokeIndex`, and optional `distance`; courses also carry tee sets.
 - `src/store/` holds domain logic (scoring, stats, sync, official mode);
   `src/screens/` holds UI. Keep domain logic in stores, not screens.
+- Swing analyzer: local Expo module `modules/golf-swing` (Kotlin: MediaCodec
+  decode, MediaPipe pose, pass-2 `extractCheckpoints`, Camera2 high-speed
+  capture); pure JS analysis in `src/swing/`; screens `Swing*Screen.js`.
+  Plan: `docs/superpowers/plans/2026-10-11-swing-analyzer.md`.
+- Swing `apiVersion` gate: native `API_VERSION` (`GolfSwingModule.kt`) vs JS
+  `REQUIRED_API_VERSION` (`src/swing/native.js`), currently 2. Bump both on any
+  contract change.
+- Swing native change ⇒ new APK (`preview-arm64`); JS-only ⇒ OTA. Dev build
+  `GOLF_APP_VARIANT=dev` (`com.golfpartner.app.dev`, scheme `golf-dev`) must
+  never be set for `eas build` or `eas update`.
+- Swing videos and analysis never leave the phone.
 - Some screens are large monoliths (`ScorecardScreen`, `StatsScreen`) —
   prefer extracting components/hooks over growing them further.
 - Plans and design specs are tracked under `docs/superpowers/`.

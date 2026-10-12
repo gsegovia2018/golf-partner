@@ -132,6 +132,18 @@ than a day-old bundle.
   with a persistent notification driven by `hooks/useRoundTracking.js`;
   `useGpsDistances` seeds from its feed. Native change — needs an APK
   build. Spec: `docs/superpowers/specs/2026-09-11-background-gps-tracking-design.md`.
+- Swing analyzer: local Expo module `modules/golf-swing` (Kotlin: MediaCodec
+  decode, MediaPipe pose in `PoseAnalyzer.kt`, pass-2 `extractCheckpoints` in
+  `Checkpoints.kt`, Camera2 high-speed capture in `camera/`); pure JS analysis
+  in `src/swing/`; screens `Swing*Screen.js`. Plan: `docs/superpowers/plans/2026-10-11-swing-analyzer.md`.
+- Swing `apiVersion` gate: native `API_VERSION` (`GolfSwingModule.kt`) vs JS
+  `REQUIRED_API_VERSION` (`src/swing/native.js`), currently 2. Bump both on any
+  contract change; an older binary shows "Update the app" instead of crashing.
+- Swing native change ⇒ new APK (`preview-arm64`); JS-only ⇒ OTA. Dev build
+  `GOLF_APP_VARIANT=dev` (`com.golfpartner.app.dev`, scheme `golf-dev`) is
+  never set for `eas build`/`eas update` (see "Shipping to Android").
+- Swing videos and analysis never leave the phone; the only planned exit is
+  the explicit training-data export (plan §7.3).
 - Some screens are large monoliths (`ScorecardScreen`, `StatsScreen`) —
   prefer extracting components/hooks over growing them further.
 - Plans and design specs are tracked under `docs/superpowers/`.
