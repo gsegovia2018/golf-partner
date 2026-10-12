@@ -154,6 +154,10 @@ export const SWING_STRINGS = {
     mainTitle: 'Main thing to fix',
     noFaultTitle: 'No clear fault',
     noFaultWhy: 'Nothing stands out. Check the list below for what to watch.',
+    // D21: the main fault is the earliest one; later significant faults are likely its knock-on effects.
+    alsoCausing: (labels) => `Likely also causing: ${labels.length > 2
+      ? `${labels.slice(0, 2).join(', ').toLowerCase()} and ${labels.length - 2} more`
+      : labels.join(' and ').toLowerCase()}`,
     good: (n) => `${n} good`,
     watch: (n) => `${n} watch`,
     fix: (n) => `${n} fix`,
@@ -224,6 +228,12 @@ export const SWING_STRINGS = {
 
   checkLabel: {
     posture_address: 'Posture at address',
+    hands_under_shoulders: 'Hands under the shoulders',
+    waist_bend: 'Bend from the hips',
+    back_line: 'Straight back and neck',
+    hand_gap: 'Hands to lead thigh',
+    hands_over_heels: 'Hands over the heels at the top',
+    lead_arm_shoulder_plane: 'Lead arm on the shoulder plane',
     hands_between_planes: 'Hands between the planes',
     butt_extension: 'Butt end points at the ball',
     top_direction: 'Shaft direction at the top',
@@ -251,6 +261,7 @@ export const SWING_STRINGS = {
     tempo_slow: 'Slow tempo',
     balance: 'Finish balance',
     posture: 'Posture at address',
+    top_position: 'Top position',
   },
 
   // Reasons a check has no verdict ('unknown'), shown instead of a value.
@@ -263,6 +274,23 @@ export const SWING_STRINGS = {
 
   checkText: {
     posture_address: (t, lo = 25, hi = 40) => `Spine tilt ${r0(t)}° from vertical (${lo}–${hi}° is good)`,
+    hands_under_shoulders_ok: 'Arms hang straight down from the shoulders',
+    hands_under_shoulders_out: (cm) => `Hands ${r0(cm)} cm out past the shoulders (reaching for the ball)`,
+    hands_under_shoulders_in: (cm) => `Hands ${r0(cm)} cm inside the shoulders (crowding your body)`,
+    waist_bend: (deg, dir) => `Hip angle ${r0(deg)}° (125–145° is good${dir === 'over' ? '; bent over too far' : dir === 'tall' ? '; standing too tall' : ''})`,
+    back_line_ok: 'Head, shoulders and hips form one line',
+    back_line: (deg, dir) => (dir === 'dropped'
+      ? `Head and upper back drop ${r0(deg)}° below the spine line (rounded)`
+      : `Head lifted ${r0(deg)}° off the spine line`),
+    hand_gap_ok: (cm) => `Hands ${r0(cm)} cm from the lead thigh (10–20 cm is good)`,
+    hand_gap_close: (cm) => `Hands only ${r0(cm)} cm from the lead thigh (too close)`,
+    hand_gap_far: (cm) => `Hands ${r0(cm)} cm from the lead thigh (reaching)`,
+    hands_over_heels_ok: 'Hands sit over the trail heel at the top',
+    hands_over_heels_deep: (cm) => `Hands ${r0(cm)} cm behind the trail heel (too deep)`,
+    hands_over_heels_shallow: (cm) => `Hands ${r0(cm)} cm in front of the trail heel (not enough depth)`,
+    lead_arm_shoulder_plane_ok: 'Lead arm matches the shoulder plane at the top',
+    lead_arm_shoulder_plane_above: (deg) => `Lead arm ${r0(deg)}° above the shoulder plane (too upright)`,
+    lead_arm_shoulder_plane_below: (deg) => `Lead arm ${r0(deg)}° below the shoulder plane (too flat)`,
     hands_between_planes_ok: 'Hands travel between shaft and shoulder planes',
     hands_between_planes: (cm, dir, where) =>
       `Hands ${r0(cm)} cm ${dir === 'steep' ? 'outside the shoulder plane (steep)' : 'inside the shaft plane (flat)'} at ${where}`,

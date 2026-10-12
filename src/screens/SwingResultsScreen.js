@@ -50,6 +50,9 @@ function Hero({
         <>
           <Text style={s.verdict}>{main ? `${main.label}.` : `${T.noFaultTitle}.`}</Text>
           <Text style={s.why}>{main ? main.evidence.slice(0, 2).map((e) => e.text).join(' · ') : T.noFaultWhy}</Text>
+          {main?.consequences?.length ? (
+            <Text style={s.also} testID="results-also-causing">{T.alsoCausing(main.consequences.map((f) => SWING_STRINGS.fault[f] ?? f))}</Text>
+          ) : null}
         </>
       )}
       <View style={s.chips}>
@@ -553,6 +556,7 @@ const makeStyles = (theme) => StyleSheet.create({
   overline: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)' },
   verdict: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 26, lineHeight: 32, color: '#ffffff' },
   why: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12.5, lineHeight: 18, color: 'rgba(255,255,255,0.88)' },
+  also: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12.5, lineHeight: 18, color: '#ffffff', marginTop: 2 },
   skelHero: { height: 26, width: '60%', borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.18)', marginVertical: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   clubLine: { marginTop: 8 },

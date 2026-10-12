@@ -6,7 +6,7 @@
 // A check never fails the swing for a clubhead nobody has placed: it returns 'unknown'.
 
 import {
-  LM, angleAboveHorizontal, sideOfLine, extendToY, spineTiltDeg, mid, trailShoulder,
+  LM, angleAboveHorizontal, angleBetween, sideOfLine, extendToY, spineTiltDeg, mid, trailShoulder,
 } from './geometry';
 import { SWING_STRINGS as T } from './strings';
 
@@ -21,6 +21,16 @@ const FINISH_QUIET_S = 0.4;
 // real driver swings. Each `band: [green, yellow]` is "<= green is green, <= yellow is yellow,
 // else red". Every check not listed here is the same for both clubs.
 export const CLUBS = ['iron', 'driver'];
+// The setup and top-position checks (D21). PROVISIONAL 2026-10-12: the same values for both
+// clubs until real swings say otherwise.
+const SETUP_TOP = {
+  handsUnderShoulders: [4, 8], // cm, |grip x - shoulder-midpoint x|
+  waistBend: { green: [125, 145], yellow: [115, 155] }, // degrees at the hip, torso vs thigh
+  backLine: [10, 20], // degrees between ear->shoulder and shoulder->hip
+  handGap: { green: [10, 20], yellow: [6, 25] }, // cm, grip to the lead thigh line
+  handsOverHeels: [6, 12], // cm, |grip x - trail heel x| at the top
+  leadArmPlane: [10, 20], // degrees between the lead arm and the address shoulder plane
+};
 export const DEFAULT_CLUB = 'iron';
 export const THRESHOLDS = {
   iron: {
@@ -31,6 +41,7 @@ export const THRESHOLDS = {
     clubheadPlane: { green: 4, yellow: 8 }, // cm; yellow also below -green
     buttYellowCm: 15,
     headDrift: [5, 10], // cm
+    ...SETUP_TOP,
   },
   driver: {
     posture: { green: [20, 35], yellow: [15, 40] },
@@ -40,6 +51,7 @@ export const THRESHOLDS = {
     clubheadPlane: { green: 6, yellow: 10 },
     buttYellowCm: 20,
     headDrift: [6, 12],
+    ...SETUP_TOP,
   },
 };
 
@@ -137,6 +149,85 @@ export function runChecks(input) {
     }
   }
 
+  // Setup (D21): four pose readings at address, all in mirrored px (ball on +x).
+  const midLm = (k, a, b) => {
+    const p = lm(k, a);
+    const q = lm(k, b);
+    return p && q ? mid(p, q) : null;
+  };
+  const sym = (v, [g, y]) => band(Math.abs(v), g, y);
+  const range = (v, { green: [gLo, gHi], yellow: [yLo, yHi] }) => (v >= gLo && v <= gHi ? 'green' : v >= yLo && v <= yHi ? 'yellow' : 'red');
+  const leadHipIdx = handedness === 'left' ? LM.rHip : LM.lHip;
+  const leadKneeIdx = handedness === 'left' ? LM.rKnee : LM.lKnee;
+  const trailHeelIdx = handedness === 'left' ? LM.lHeel : LM.rHeel;
+  const trailShIdx = handedness === 'left' ? LM.lSh : LM.rSh;
+  const leadShIdx = handedness === 'left' ? LM.rSh : LM.lSh;
+  const leadWrIdx = handedness === 'left' ? LM.rWr : LM.lWr;
+
+  // hands_under_shoulders: grip vs the shoulder midpoint along the target-line normal (+ = out toward the ball)
+  {
+    const m = M('hands_under_shoulders', 'setup', ['address']);
+    const sh = midLm('address', LM.lSh, LM.rSh);
+    const a = C.address;
+    if (!sh || !a) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame')));
+    else {
+      const d = (a.hands.x - sh.x) * cm;
+      const s = sym(d, TH.handsUnderShoulders);
+      push(m, s, round(d, 0), 'cm', s === 'green' ? T.checkText.hands_under_shoulders_ok : d > 0 ? T.checkText.hands_under_shoulders_out(d) : T.checkText.hands_under_shoulders_in(-d),
+        { dir: d > 0 ? 'out' : 'in' });
+    }
+  }
+
+  // waist_bend: the angle at the hip between the torso (hip -> shoulder) and the thigh (hip -> knee)
+  {
+    const m = M('waist_bend', 'setup', ['address']);
+    const hip = midLm('address', LM.lHip, LM.rHip);
+    const sh = midLm('address', LM.lSh, LM.rSh);
+    const knee = midLm('address', LM.lKnee, LM.rKnee);
+    const ang = hip && sh && knee ? angleBetween({ x: sh.x - hip.x, y: sh.y - hip.y }, { x: knee.x - hip.x, y: knee.y - hip.y }) : null;
+    if (ang === null) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame')));
+    else {
+      const s = range(ang, TH.waistBend);
+      // A smaller angle is more bend: 'over' = bent over too far, 'tall' = too upright.
+      const dir = s === 'green' ? null : ang < (TH.waistBend.green[0] + TH.waistBend.green[1]) / 2 ? 'over' : 'tall';
+      push(m, s, round(ang, 0), '°', T.checkText.waist_bend(ang, dir), { dir });
+    }
+  }
+
+  // back_line: ear -> shoulder against shoulder -> hip; 0 = one straight line from the hips to the head
+  {
+    const m = M('back_line', 'setup', ['address']);
+    const ear = midLm('address', LM.lEar, LM.rEar);
+    const sh = midLm('address', LM.lSh, LM.rSh);
+    const hip = midLm('address', LM.lHip, LM.rHip);
+    if (!ear || !sh || !hip) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame')));
+    else {
+      const ang = angleBetween({ x: sh.x - hip.x, y: sh.y - hip.y }, { x: ear.x - sh.x, y: ear.y - sh.y });
+      // Which side of the hip -> shoulder line the ear sits: + = toward the ball / down (head dropped).
+      const side = (sh.x - hip.x) * (ear.y - sh.y) - (sh.y - hip.y) * (ear.x - sh.x);
+      const dir = side > 0 ? 'dropped' : 'up';
+      const s = band(ang, ...TH.backLine);
+      push(m, s, round(ang, 0), '°', s === 'green' ? T.checkText.back_line_ok : T.checkText.back_line(ang, dir), { dir });
+    }
+  }
+
+  // hand_gap: grip to the lead thigh line (hip -> knee, extended to the grip's height), toward the ball
+  {
+    const m = M('hand_gap', 'setup', ['address']);
+    const hip = lm('address', leadHipIdx);
+    const knee = lm('address', leadKneeIdx);
+    const a = C.address;
+    const x = a && hip && knee ? extendToY(hip, knee, a.hands.y) : null;
+    if (x === null) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame')));
+    else {
+      const d = (a.hands.x - x) * cm;
+      const s = range(d, TH.handGap);
+      const close = d < (TH.handGap.green[0] + TH.handGap.green[1]) / 2;
+      push(m, s, round(d, 0), 'cm', s === 'green' ? T.checkText.hand_gap_ok(d) : close ? T.checkText.hand_gap_close(d) : T.checkText.hand_gap_far(d),
+        { dir: s === 'green' ? null : close ? 'close' : 'far' });
+    }
+  }
+
   // hands_between_planes (worst of leadArm, top)
   {
     const m = M('hands_between_planes', 'backswing', ['leadArm', 'top']);
@@ -207,6 +298,43 @@ export function runChecks(input) {
       push(m, s, round(dx, 2), 'H',
         s === 'green' ? T.checkText.top_direction_ok : dx > 0 ? T.checkText.top_direction_across : T.checkText.top_direction_laid_off,
         { dir: dx > 0 ? 'across' : 'laid_off' });
+    }
+  }
+
+  // hands_over_heels (D21): grip x vs the trail heel at the top (+ = toward the ball)
+  {
+    const m = M('hands_over_heels', 'backswing', ['top']);
+    const c = C.top;
+    const heel = lm('top', trailHeelIdx);
+    if (!c) rows.push(unknown(m, 'nodata', T.reason.nodata('No top mark')));
+    else if (!heel) rows.push(unknown(m, 'nopose', T.reason.nopose('the top')));
+    else {
+      const d = (c.hands.x - heel.x) * cm;
+      const s = sym(d, TH.handsOverHeels);
+      push(m, s, round(d, 0), 'cm', s === 'green' ? T.checkText.hands_over_heels_ok : d < 0 ? T.checkText.hands_over_heels_deep(-d) : T.checkText.hands_over_heels_shallow(d),
+        { dir: d < 0 ? 'deep' : 'shallow' });
+    }
+  }
+
+  // lead_arm_shoulder_plane (D21): the lead arm (shoulder -> wrist) at the top against the
+  // address shoulder plane (ball -> trail shoulder), both as lines in the 2D down-the-line image.
+  {
+    const m = M('lead_arm_shoulder_plane', 'backswing', ['top']);
+    const sh = lm('top', leadShIdx);
+    const wr = lm('top', leadWrIdx);
+    const trail = lm('address', trailShIdx);
+    if (!ball || !trail) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame (shoulder plane)')));
+    else if (!sh || !wr) rows.push(unknown(m, 'nopose', T.reason.nopose('the top')));
+    else {
+      // Angles of the two lines measured from the -x axis (away from the ball), counter-clockwise
+      // in the image (y up), so "more" means a more upright line.
+      const up = (p, q) => (Math.atan2(-(q.y - p.y), -(q.x - p.x)) * 180) / Math.PI;
+      const plane = up({ x: mx(ball.x), y: ball.y }, trail);
+      const arm = up(sh, wr);
+      const d = arm - plane; // + = above the plane (more upright)
+      const s = sym(d, TH.leadArmPlane);
+      push(m, s, round(d, 0), '°', s === 'green' ? T.checkText.lead_arm_shoulder_plane_ok : d > 0 ? T.checkText.lead_arm_shoulder_plane_above(d) : T.checkText.lead_arm_shoulder_plane_below(-d),
+        { dir: d > 0 ? 'above' : 'below' });
     }
   }
 

@@ -78,6 +78,7 @@ function setup({ row = ROW, analysis = MARKED } = {}) {
 }
 
 const labelOf = (id) => SWING_STRINGS.checkLabel[id];
+const VERDICT = `${MARKED.main.label}.`; // D21: 'Posture at address.' on the owner swing
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -88,7 +89,7 @@ beforeEach(() => {
 describe('SwingResultsScreen: a stored swing', () => {
   test('shows the verdict, counts, the nine-step timeline and the checks at the opening checkpoint', async () => {
     const { findByText, getByLabelText, getAllByText } = setup();
-    expect(await findByText('Early extension.')).toBeTruthy();
+    expect(await findByText(VERDICT)).toBeTruthy();
     expect(getAllByText(new RegExp(`^${MARKED.counts.red} fix$`)).length).toBeGreaterThan(0);
     expect(getAllByText(/^\d+ fps$/).length).toBeGreaterThan(0);
     ['Address', 'Takeaway', 'Lead arm', 'Top', 'Transition', 'Shaft down', 'Impact', 'Trail arm', 'Finish']
@@ -108,7 +109,7 @@ describe('SwingResultsScreen: a stored swing', () => {
 
   test('tapping a timeline step shows that checkpoint and resets the nudge', async () => {
     const { findByText, getByLabelText, getByText } = setup();
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     fireEvent.press(getByLabelText(/^Address/));
     expect(getByText(T.atCheckpoint('Address'))).toBeTruthy();
     fireEvent.press(getByLabelText(T.nextFrame));
@@ -120,7 +121,7 @@ describe('SwingResultsScreen: a stored swing', () => {
 
   test('the frame nudge stops at +-2 (stills exist only there)', async () => {
     const { findByText, getByLabelText, getByText } = setup();
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     for (let i = 0; i < 4; i += 1) fireEvent.press(getByLabelText(T.nextFrame));
     expect(getByText(/\(\+2\)/)).toBeTruthy();
     for (let i = 0; i < 6; i += 1) fireEvent.press(getByLabelText(T.prevFrame));
@@ -129,14 +130,14 @@ describe('SwingResultsScreen: a stored swing', () => {
 
   test('a checkpoint with no checks says so', async () => {
     const { findByText, getByLabelText, getByText } = setup();
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     fireEvent.press(getByLabelText(/^Takeaway/));
     expect(getByText(T.noChecksAt)).toBeTruthy();
   });
 
   test('tapping a check selects it', async () => {
     const { findByText, getAllByLabelText } = setup();
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     const spine = getAllByLabelText(/^Spine angle kept/)[0];
     fireEvent.press(spine);
     expect(getAllByLabelText(/^Spine angle kept/)[0].props.accessibilityState.selected).toBe(true);
@@ -144,15 +145,30 @@ describe('SwingResultsScreen: a stored swing', () => {
 
   test('a row in "All checks" jumps to its checkpoint', async () => {
     const { findByText, getByLabelText, getAllByLabelText, getByText } = setup();
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     fireEvent.press(getByLabelText(/^Address/));
     const rows = getAllByLabelText(/^Hands height at impact/);
     fireEvent.press(rows[rows.length - 1]);
     expect(getByText(T.atCheckpoint('Impact'))).toBeTruthy();
   });
 
+  test('D21: the hero names what the main fault is likely also causing, in one line', async () => {
+    const { findByText, getByTestId } = setup();
+    await findByText(VERDICT);
+    expect(MARKED.main.consequences).toContain('early_extension');
+    expect(getByTestId('results-also-causing').props.children).toBe('Likely also causing: flat backswing, top position and 3 more');
+  });
+
+  test('no consequence line when nothing later is significant', async () => {
+    const lone = { ...MARKED, main: { ...MARKED.main, consequences: [] } };
+    const { findByText, queryByTestId } = setup({ analysis: lone });
+    await findByText(VERDICT);
+    expect(queryByTestId('results-also-causing')).toBeNull();
+  });
+
   test('shows the drills for the main fault and expands the rest', async () => {
-    const { findByText, getByText, queryByText, getByLabelText } = setup();
+    const ee = { ...MARKED, main: { ...MARKED.main, fault: 'early_extension', label: 'Early extension', consequences: [] } };
+    const { findByText, getByText, queryByText, getByLabelText } = setup({ analysis: ee });
     await findByText('Early extension.');
     expect(getByText(T.drillsTitle('Early extension'))).toBeTruthy();
     expect(getByText('The chair')).toBeTruthy();
@@ -163,7 +179,7 @@ describe('SwingResultsScreen: a stored swing', () => {
 
   test('D16: club checks with no clubhead placed offer "Place clubhead", which opens Edit marks on that checkpoint', async () => {
     const { findByText, getAllByLabelText, navigation } = setup({ analysis: UNMARKED });
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     const cta = getAllByLabelText(/^Place clubhead: Butt end/);
     fireEvent.press(cta[cta.length - 1]);
     expect(navigation.navigate).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'leadArm' });
@@ -176,7 +192,7 @@ describe('SwingResultsScreen: a stored swing', () => {
         ? { ...c, status: 'unknown', reason: 'hidden', value: null, text: 'Clubhead hidden at shaft down' } : c)),
     };
     const { findByText, queryByLabelText, getAllByText } = setup({ analysis: hiddenOnly });
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     expect(getAllByText('Hidden').length).toBeGreaterThan(0);
     expect(queryByLabelText(/^Place clubhead: Downswing path/)).toBeNull();
   });
@@ -184,7 +200,7 @@ describe('SwingResultsScreen: a stored swing', () => {
   test('approximate clips say so in the hero and the banner, and flag cm values', async () => {
     const approx = { ...MARKED, approximate: true, checks: MARKED.checks.map((c) => (c.unit === 'cm' ? { ...c, approximate: true } : c)) };
     const { findByText, getByText, getAllByText } = setup({ analysis: approx });
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     expect(getAllByText(T.approxChip).length).toBeGreaterThan(1); // the hero chip and the cm values
     expect(getByText(T.approxBanner)).toBeTruthy();
     expect(getAllByText(/approx\./).length).toBeGreaterThan(2);
@@ -192,7 +208,7 @@ describe('SwingResultsScreen: a stored swing', () => {
 
   test('Edit marks from the header menu and from the button both open on the current checkpoint; Rename saves', async () => {
     const { findByText, getByLabelText, getByPlaceholderText, navigation } = setup();
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     fireEvent.press(getByLabelText(T.editMarks));
     expect(navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'impact' });
     fireEvent.press(getByLabelText(T.menu));
@@ -205,7 +221,7 @@ describe('SwingResultsScreen: a stored swing', () => {
   test('Export swing in the header menu builds the zip and opens the share sheet; a failure says so', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const { findByText, getByLabelText } = setup();
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     fireEvent.press(getByLabelText(T.menu));
     await act(async () => { fireEvent.press(getByLabelText(SWING_STRINGS.exportSwing.menu)); });
     expect(shareSwingExport).toHaveBeenCalledWith('s1');
@@ -219,7 +235,7 @@ describe('SwingResultsScreen: a stored swing', () => {
   test('asks for the stills it is missing and redraws when they arrive', async () => {
     ensureStills.mockImplementation(async () => { getStill.mockReturnValue('file:///doc/swings/s1/frames/556.jpg'); return { 556: 'file:///x.jpg' }; });
     const { findByText, getByLabelText } = setup();
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     await waitFor(() => expect(ensureStills).toHaveBeenCalled());
     const frame = MARKED.checkpoints.impact.i;
     expect(ensureStills).toHaveBeenCalledWith('s1', [frame - 2, frame - 1, frame, frame + 1, frame + 2]);
@@ -228,7 +244,7 @@ describe('SwingResultsScreen: a stored swing', () => {
 
   test('reloads the analysis when it comes back into focus (after Edit marks)', async () => {
     const { findByText, navigation } = setup();
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     const focus = navigation.addListener.mock.calls.filter(([n]) => n === 'focus').pop()[1];
     store.readAnalysis.mockClear();
     await act(async () => { focus(); });
@@ -239,7 +255,7 @@ describe('SwingResultsScreen: a stored swing', () => {
 describe('SwingResultsScreen: the club chip (D19)', () => {
   test('shows Iron for a swing from before the picker, with Driver one tap away', async () => {
     const { findByText, getByLabelText } = setup();
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     expect(MARKED.club).toBe('iron');
     expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(true);
     expect(getByLabelText('Driver').props.accessibilityState.selected).toBe(false);
@@ -247,7 +263,7 @@ describe('SwingResultsScreen: the club chip (D19)', () => {
 
   test('changing it re-scores from the stored pose and marks (no native run), saves, and redraws the verdict', async () => {
     const { findByText, getByLabelText, getAllByText } = setup();
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     const redBefore = MARKED.counts.red;
     expect(getAllByText(T.fix(redBefore)).length).toBeGreaterThan(0);
     store.readAnalysis.mockClear();
@@ -265,7 +281,7 @@ describe('SwingResultsScreen: the club chip (D19)', () => {
 
   test('pressing the club already selected does nothing', async () => {
     const { findByText, getByLabelText } = setup();
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     await act(async () => { fireEvent.press(getByLabelText('Iron')); });
     expect(store.saveAnalysis).not.toHaveBeenCalled();
   });
@@ -276,7 +292,7 @@ describe('SwingResultsScreen: the club chip (D19)', () => {
     const { findByText, getByLabelText } = setup({ row: { ...ROW, status: 'pending' }, analysis: UNMARKED });
     await waitFor(() => expect(onPartial).toBeDefined());
     await act(async () => { await onPartial(UNMARKED); });
-    await findByText('Early extension.');
+    await findByText(VERDICT);
     expect(getByLabelText('Driver').props.accessibilityState.disabled).toBe(true);
     await act(async () => { fireEvent.press(getByLabelText('Driver')); });
     expect(store.saveAnalysis).not.toHaveBeenCalled();
@@ -301,7 +317,7 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
     expect(getByText(T.notUploaded, { exact: false })).toBeTruthy();
 
     await act(async () => { await onPartial(UNMARKED); });
-    expect(await findByText('Early extension.')).toBeTruthy();
+    expect(await findByText(VERDICT)).toBeTruthy();
     expect(queryByText(T.stages.reading)).toBeNull();
     // pass 2 pending: the clubhead rows are "calculating", not asking the user yet
     expect(getAllByText(T.calculating).length).toBeGreaterThan(0);

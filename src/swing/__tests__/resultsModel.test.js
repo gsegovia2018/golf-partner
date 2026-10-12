@@ -26,7 +26,7 @@ const row = (a, id, cp) => a.checks.find((c) => c.id === id && (!cp || c.cp === 
 
 describe('checkpointChecks', () => {
   test('every check has a home among the nine checkpoints, and clubhead_vs_plane rows live at impact', () => {
-    expect(unmarked.checks).toHaveLength(15);
+    expect(unmarked.checks).toHaveLength(21);
     unmarked.checks.forEach((c) => expect(checksAt(unmarked.checks, homeOf(c))).toContain(c));
     expect(checksAt(unmarked.checks, 'impact').filter((c) => c.id === 'clubhead_vs_plane')).toHaveLength(2);
     expect(checksAt(unmarked.checks, 'takeaway')).toHaveLength(0);

@@ -32,9 +32,9 @@ const byId = (checks, id, cp) => checks.find((c) => c.id === id && (!cp || c.cp 
 describe('golden checks on the owner marks', () => {
   const { checks } = runChecks(input());
 
-  test('all 15 rows produce a status (14 ids, clubhead_vs_plane twice)', () => {
-    expect(checks).toHaveLength(15);
-    expect(new Set(checks.map((c) => c.id)).size).toBe(14);
+  test('all 21 rows produce a status (20 ids, clubhead_vs_plane twice)', () => {
+    expect(checks).toHaveLength(21);
+    expect(new Set(checks.map((c) => c.id)).size).toBe(20);
     checks.forEach((c) => expect(['green', 'yellow', 'red', 'unknown']).toContain(c.status));
     expect(checks.filter((c) => c.id === 'clubhead_vs_plane').map((c) => c.cp)).toEqual(['preImpact', 'impact']);
   });
@@ -67,6 +67,17 @@ describe('golden checks on the owner marks', () => {
     expect(top.status).toBe('yellow');
     expect(top.dir).toBe('across');
     expect(byId(checks, 'clubhead_vs_plane', 'impact').status).toBe('green');
+  });
+
+  test('D21 setup and top checks on the owner swing (provisional limits, read honestly)', () => {
+    const v = (id) => [byId(checks, id).status, byId(checks, id).value, byId(checks, id).dir];
+    expect(v('hands_under_shoulders')).toEqual(['red', 8, 'out']);
+    expect(v('waist_bend')).toEqual(['green', 134, null]);
+    expect(v('back_line')).toEqual(['red', 38, 'dropped']);
+    expect(v('hand_gap')).toEqual(['red', 29, 'far']);
+    expect(v('hands_over_heels')).toEqual(['red', 16, 'shallow']);
+    expect(v('lead_arm_shoulder_plane')).toEqual(['yellow', -16, 'below']);
+    ['hands_under_shoulders', 'waist_bend', 'back_line', 'hand_gap'].forEach((id) => expect(byId(checks, id).phase).toBe('setup'));
   });
 
   test('posture and the other pose checks have measured values', () => {
@@ -103,12 +114,14 @@ describe('club-dependent checks stay unknown until the clubhead is placed (D16)'
     expect(checks.filter((c) => c.id === 'clubhead_vs_plane').every((c) => c.status === 'unknown')).toBe(true);
     expect(byId(checks, 'spine_loss').status).toBe('red');
     expect(byId(checks, 'hands_out_impact').status).toBe('red');
-    expect(checks).toHaveLength(15);
+    expect(checks).toHaveLength(21);
   });
 
   test('missing ball or pose degrades to unknown, not an exception', () => {
     const { checks } = runChecks(input({ ball: null, pose: () => null }));
-    expect(checks).toHaveLength(15);
+    expect(checks).toHaveLength(21);
+    ['hands_under_shoulders', 'waist_bend', 'back_line', 'hand_gap', 'hands_over_heels', 'lead_arm_shoulder_plane']
+      .forEach((id) => expect(byId(checks, id).status).toBe('unknown'));
     expect(byId(checks, 'posture_address').status).toBe('unknown');
     expect(byId(checks, 'hands_between_planes').status).toBe('unknown');
     expect(byId(checks, 'clubhead_vs_plane', 'impact').status).toBe('unknown');
@@ -143,7 +156,7 @@ describe('thresholds and flags', () => {
     const mirrorPt = (p) => (p ? { x: W - p.x, y: p.y } : p);
     const swap = (lm) => {
       const out = lm.map(([x, y, v]) => [W - x, y, v]);
-      [[11, 12], [13, 14], [15, 16], [23, 24], [25, 26], [27, 28], [31, 32]].forEach(([a, b]) => {
+      [[7, 8], [11, 12], [13, 14], [15, 16], [23, 24], [25, 26], [27, 28], [29, 30], [31, 32]].forEach(([a, b]) => {
         [out[a], out[b]] = [out[b], out[a]];
       });
       return out;

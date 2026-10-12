@@ -60,7 +60,7 @@ probeVideo(path)       → fps, capture fps,       fpsModel.js  slow-mo factor, 
 analyzePose(path,opts) → sampled landmarks,      phases.js    12 checkpoints           Results / EditMarks /
                          ball candidate, timings scale.js     px → cm                  Compare
 extractCheckpoints(…)  → stills (jpg) + shaft    club.js      marks ⊕ candidates
-                         candidates per frame    checks.js    15 checks (14 ids; clubhead_vs_plane is evaluated at pre-impact and impact), traffic light
+                         candidates per frame    checks.js    21 checks (20 ids; clubhead_vs_plane is evaluated at pre-impact and impact), traffic light
 GolfSwingCameraView    → high-speed preview      priority.js  the one main fault
 startRecording/stop    → mp4 in app storage      drills.js    catalogue (English)
 listRecordingModes()   → fps the device offers   labels.js    training-data export
@@ -247,9 +247,15 @@ Every check returns `{ id, phase, status: 'green'|'yellow'|'red'|'unknown', valu
 | id | Where | Measure | green | yellow | red |
 |---|---|---|---|---|---|
 | `posture_address` | address | spine tilt from vertical [32°] | 25–40 | 20–25 / 40–45 | else |
+| `hands_under_shoulders` (D21) | address | grip x − shoulder-midpoint x along the target-line normal, cm; + = out toward the ball [+8, red] | \|d\| ≤ 4 | ≤ 8 | > 8 ("too far out" / "too close") |
+| `waist_bend` (D21) | address | angle at the mid-hip between torso (→ mid-shoulder) and thigh (→ mid-knee), ideal ~135° [134°] | 125–145 | 115–125 / 145–155 | else ("bent over" / "too tall") |
+| `back_line` (D21) | address | angle between ear→shoulder and shoulder→hip (mid-points); side says "head dropped / rounded" or "head lifted" [38°, dropped] | ≤ 10° | ≤ 20° | > 20° |
+| `hand_gap` (D21) | address | grip x − the lead thigh line (hip→knee, extended to the grip's height), cm [29, red] | 10–20 | 6–10 / 20–25 | else ("too close" / "reaching") |
 | `hands_between_planes` | leadArmParallel, lateBackswing, top | hands side vs shaft plane (+) and shoulder plane (−) | between | ≤ 4 cm outside either | > 4 cm outside |
 | `butt_extension` | leadArmParallel | butt-end line hits ground between toes and ball | between (10 % margin) | beyond ball ≤ 15 cm (flat) / inside toes ≤ 15 cm (steep) | further |
 | `top_direction` | top | clubhead x − hands x, in H units; foreshortened | \|dx\| ≤ 0.08 H | > 0.08 H ("crossed" if +, "laid off" if −) | never red |
+| `hands_over_heels` (D21) | top | grip x − trail heel x (pose heel landmark), cm; − = behind the heel [+16, red] | \|d\| ≤ 6 | ≤ 12 | > 12 ("too deep" if −, "not enough depth" if +) |
+| `lead_arm_shoulder_plane` (D21) | top | 2D angle of the lead arm (shoulder→wrist) minus the address shoulder plane (ball→trail shoulder); + = above (more upright) [−16°, yellow] | \|d\| ≤ 10° | ≤ 20° | > 20° ("above" / "below the plane") |
 | `downswing_path` | shaftParallelDown | hands x vs the backswing hand path interpolated at the same y | ≤ 3 cm inside/under (shallower) or ±3 | 3–6 cm outside | > 6 cm outside (over the top) |
 | `clubhead_vs_plane` | preImpact, impact | clubhead side vs shaft plane | −4…+4 cm | +4…+8 (steep) / < −4 (under) | > +8 cm |
 | `hands_height_impact` | impact vs address | Δy of hands [≈ +10 cm high] | ≤ 5 | 5–8 | > 8 |
@@ -263,6 +269,8 @@ Every check returns `{ id, phase, status: 'green'|'yellow'|'red'|'unknown', valu
 
 Impact-dependent checks inherit `approximate` from `fpsModel` (effective fps < 100 or interpolated).
 
+The six D21 rows are pose-only (no clubhead needed). Their limits are **provisional (2026-10-12)** and identical for iron and driver (`SETUP_TOP` in `THRESHOLDS`) until real swings calibrate them. Bracketed values are the owner swing with the owner marks.
+
 **Per club (D19).** The table above is the **iron** column (the default, and the reading for every swing saved before the picker). Exactly one more club, **driver**, changes seven rows; every other row is identical for both. The values live in one constant, `THRESHOLDS[club]` in `checks.js`. **The driver values are provisional starting points (2026-10-12), to be calibrated on real driver swings.**
 
 | id | iron green | iron yellow | driver green | driver yellow | red (either club) |
@@ -275,22 +283,23 @@ Impact-dependent checks inherit `approximate` from `fpsModel` (effective fps < 1
 | `spine_loss` | ≤ 3 | 3–6 | ≤ 4 | 4–7 | beyond yellow |
 | `head_drift` | ≤ 5 | 5–10 | ≤ 6 | 6–12 | beyond yellow |
 
-### 5.5 Priority (`priority.js`)
+### 5.5 Priority (`priority.js`) — earliest fault first (D21)
 
-Faults are clusters of checks with a weight (impact-affecting first) and a confidence that rises with agreeing signals:
+Faults are clusters of checks, each with a swing phase and a weight:
 
-| fault | checks | weight |
-|---|---|---|
-| `early_extension` | spine_loss, hip_drift, hands_height_impact, hands_out_impact, shaft_angle_impact | 1.0 |
-| `over_the_top` | downswing_path (outside), clubhead_vs_plane (steep) | 0.95 |
-| `steep_backswing` / `flat_backswing` | hands_between_planes, butt_extension | 0.8 |
-| `across_the_line` / `laid_off` | top_direction | 0.5 (never main on its own) |
-| `head_sway` | head_drift | 0.7 |
-| `tempo_fast` / `tempo_slow` | tempo | 0.6 |
-| `balance` | finish_balance | 0.5 |
-| `posture` | posture_address | 0.7 |
+| fault | phase | checks | weight |
+|---|---|---|---|
+| `posture` | setup | posture_address, hands_under_shoulders, waist_bend, back_line, hand_gap | 0.7 |
+| `steep_backswing` / `flat_backswing` | backswing | hands_between_planes, butt_extension | 0.8 |
+| `top_position` | backswing | hands_over_heels, lead_arm_shoulder_plane | 0.8 |
+| `across_the_line` / `laid_off` | — | top_direction | never main (no cluster) |
+| `tempo_fast` / `tempo_slow` | transition | tempo | 0.6 |
+| `over_the_top` | transition | downswing_path (outside), clubhead_vs_plane (steep) | 0.95 |
+| `early_extension` | impact | spine_loss, hip_drift, hands_height_impact, hands_out_impact, shaft_angle_impact | 1.0 |
+| `head_sway` | impact | head_drift | 0.7 |
+| `balance` | finish | finish_balance | 0.5 |
 
-score = weight × (red: 1, yellow: 0.5) summed over the cluster's checks, × (1 + 0.25 × (agreeing signals − 1)). The main fault is the highest score; ties go to the earliest in the causal chain (setup → backswing → transition → impact → finish). Fixture: early extension = 1.0 × (1 + 1 + 1 + 0.5…) × 1.75 — wins over tempo (0.6). Output: `{ fault, evidence: [checks], drills: [ids] }`.
+A fault is **significant** when its cluster has ≥ 1 red or ≥ 2 yellows (a single yellow is a "watch"). The **main fault is the significant fault of the earliest phase** (setup → backswing → transition/downswing → impact → finish): an early fault usually causes what shows up later, so it is the one to fix first. Within one phase the weighted score decides — score = weight × (red: 1, yellow: 0.5) summed over the cluster, × (1 + 0.25 × (agreeing signals − 1)) — and an exact tie goes to the table order. With no significant fault there is no main fault (the old weighted rule never promoted a lone yellow either). The significant faults of **later** phases are returned as `consequences`; the Results hero shows them as one line, "Likely also causing: …" (the first two by phase, then "and N more"). Output: `{ fault, label, phase, score, evidence: [checks], drills: [ids], consequences: [faultIds] }`.
 
 ### 5.6 Drills (`drills.js`) — original English text, same shape as `store/coachDrills.js`
 
@@ -312,7 +321,7 @@ score = weight × (red: 1, yellow: 0.5) summed over the cluster's checks, × (1 
 | balance | `bal-tres-seg` | Three seconds | End every swing and hold the finish three seconds on your lead leg. | 10 of 10 still |
 | posture | `po-espejo` | Address in the mirror | Address side-on to a mirror: tilt from the hips 30°, soft knees, arms hanging. | 10 reps |
 
-`drillsForFault(fault)` returns the catalogue rows in order; the results card shows the first two.
+`drillsForFault(fault)` returns the catalogue rows in order, then drills borrowed from a neighbouring fault (`also`: `top_position` borrows `fb-codo` and `atl-objetivo` until it has drills of its own); the results card shows the first two. `posture` (now five setup checks, D21) keeps `po-espejo`.
 
 ### 5.7 Strings (`strings.js`)
 
@@ -397,13 +406,13 @@ Same shape as `shotStore.js` (module state, `useSyncExternalStore`, AsyncStorage
 - `phases.test.js` — **golden** against the owner-labelled frames of `tools/swing-lab/out/marcos-2026-10-10/truth.json` (the same tolerances as `eval.py`, in 240 fps-equivalent frames): address 300\* ±3, takeaway 414 ±6, leadArm 434 ±6, top 495 ±3, transition 536\* ±6, shaftDown 544 ±6, impact 556 ±3, trailArm 576 ±6, finish 640 ±6 (\* = disputed, under owner review: assert the final label once confirmed); `motionStart` stays a loose internal range [375, 395]. Plus synthetic series (no quiet start → confidence low, clip ends before finish, a 1-frame keyframe jump in the ball patch is ignored, a pose glitch inside the hold window does not end the finish).
 - `scale.test.js`: fixture with 176 cm → `pxPerCm` within ±10 % of the prototype's implied scale (hands 10 cm ≈ the 20 px measured at impact → ~2 px/cm).
 - `geometry.test.js`: ports the numbers from `plane.py` (shaft plane 52° ± 2, shoulder plane 67° ± 2, butt-end x at lead-arm parallel between toes and ball, impact hands side ≈ 0).
-- `checks.test.js` — **golden** with the prototype's manual club marks as `userMark`s: `spine_loss` red (7° ± 2), `hands_height_impact` red (10 ± 3 cm), `hands_out_impact` red or yellow (≈ 9 cm; verify against the fixture), `shaft_angle_impact` yellow/red (+8° ± 3), `tempo` yellow (≈ 1.8), `top_direction` yellow (crossed), `clubhead_vs_plane` green at impact, `hidden` at transition → `unknown`.
-- `priority.test.js` — **golden**: main fault `early_extension`; synthetic: over-the-top beats tempo; single yellow never becomes main.
+- `checks.test.js` — **golden** with the prototype's manual club marks as `userMark`s: `spine_loss` red (7° ± 2), `hands_height_impact` red (10 ± 3 cm), `hands_out_impact` red or yellow (≈ 9 cm; verify against the fixture), `shaft_angle_impact` yellow/red (+8° ± 3), `tempo` yellow (≈ 1.8), `top_direction` yellow (crossed), `clubhead_vs_plane` green at impact, `hidden` at transition → `unknown`. D21 rows on the same marks: `hands_under_shoulders` red (+8 cm, out), `waist_bend` green (134°), `back_line` red (38°, dropped), `hand_gap` red (29 cm, reaching), `hands_over_heels` red (+16 cm, not enough depth), `lead_arm_shoulder_plane` yellow (−16°, below).
+- `priority.test.js` — **golden (D21)**: main fault `posture` (setup: hands under the shoulders, back line, hand gap), `consequences` = `flat_backswing`, `top_position`, `over_the_top`, `early_extension` (the pre-D21 verdict, still significant). Through `analyze()` with detected frames, `tempo_fast` joins the consequences (top detected at 483 → 1.2:1, red). Synthetic: the earliest significant phase beats a bigger later score; same-phase faults are not consequences; a lone early yellow never leads; over-the-top beats tempo; single yellow never becomes main.
 - `drills.test.js`: every fault has ≥ 1 drill; ids unique; all strings non-empty English.
 - `club.test.js`: user mark wins; low-confidence candidate → prior; hidden propagation.
 - `labels.test.js`: marks.json round-trip, `corrected` flags, normalised coordinates.
 - `swingStore.test.js`: index CRUD with the AsyncStorage mock; delete removes files (expo-file-system `File`/`Directory` mocked, as in `mediaUpload.test.js`).
-- Screens: `SwingHomeScreen.test.js` (empty state, list, Android-only gating), `SwingResultsScreen.test.js` (renders a fixture analysis: main fault, 15 checks (14 ids; clubhead_vs_plane is evaluated at pre-impact and impact), stepper), `SwingEditMarksScreen.test.js` (drag updates marks and recomputes the clubhead check). `src/swing/native.js` mocked via `moduleNameMapper` entry `^.*/swing/native$`.
+- Screens: `SwingHomeScreen.test.js` (empty state, list, Android-only gating), `SwingResultsScreen.test.js` (renders a fixture analysis: main fault, 21 checks (20 ids; clubhead_vs_plane is evaluated at pre-impact and impact), stepper), `SwingEditMarksScreen.test.js` (drag updates marks and recomputes the clubhead check). `src/swing/native.js` mocked via `moduleNameMapper` entry `^.*/swing/native$`.
 
 ### 8.3 Kotlin (local, not CI)
 
@@ -515,6 +524,7 @@ S1–S3 and N1 run in parallel from day one. **APK 1** (`preview-arm64`) after N
 | D18 | Ship before the 10-clip gate | Owner decision 2026-10-11: build and ship v1 now; accuracy improves from real use. The §8.5 gate becomes a tracking target, not a merge blocker. Consequence: S8's "Export swing" is required in v1 — one explicit share action producing a zip (original clip + `analysis.json` + `marks.json` with the user's corrected frames/marks) that `tools/swing-lab/import_export.py` unpacks into `clips/` + `out/<clip>/truth.json`, so every corrected swing becomes a lab test case. Nothing is sent automatically. |
 | D19 | Club | Club: `iron` \| `driver`, per-club thresholds table in `checks.js` `THRESHOLDS` (§5.4); driver values provisional (2026-10-12), to be calibrated on real swings; picker on Home (remembers the last choice) and on Results (re-scores the stored pose and marks, no native call); default iron, also for swings saved before the picker. Supersedes the "optional club class chip" of D13. Carried in `swing.json` and `truth.json` as `club`. |
 | D20 | Drag loupe | Drag loupe in Edit marks, 3×, above finger, flips below at top edge. A ~120 px circle shows the same still at 3× around the mark being dragged (hands, clubhead or ball), a crosshair at the exact mark, ~80 px above the fingertip, clamped inside the still; arrow nudges show it for ~600 ms; hidden on release; no fade under reduced motion; decorative for screen readers (`src/swing/loupe.js`, `DragLoupe`). |
+| D21 | Earliest fault first; setup and top checks | Owner-approved 2026-10-12, from a coaching guide the owner shared (all wording our own). **Priority (§5.5):** the main fault is the significant fault (≥ 1 red or ≥ 2 yellows) of the earliest phase, setup → backswing → transition → impact → finish, weights break ties within a phase; later significant faults are `consequences`, shown in the hero as "Likely also causing: …". **Six pose-only checks (§5.4):** `hands_under_shoulders`, `waist_bend`, `back_line`, `hand_gap` at address (posture cluster) and `hands_over_heels`, `lead_arm_shoulder_plane` at the top (new `top_position` cluster). Limits provisional (2026-10-12), the same for iron and driver. Consequence on the golden swing: the main fault moves from early extension to posture at address, with early extension a consequence (§8.2). Calibration caveat: MediaPipe's shoulder landmark is the shoulder joint, not the base of the neck, and the lead hip is partly hidden down the line, so `back_line` and `hand_gap` read high on the one labelled clip; recalibrate on more clips before trusting their reds. |
 
 
 ## 12. Out of scope

@@ -45,6 +45,10 @@ export function highlightFor(check, ctx) {
   };
   const trailHip = analysis.handedness === 'left' ? LM.lHip : LM.rHip;
   const leadAnkle = analysis.handedness === 'left' ? LM.rAnk : LM.lAnk;
+  const left = analysis.handedness === 'left';
+  const [leadHip, leadKnee, leadSh, leadWr, trailHeel] = left
+    ? [LM.rHip, LM.rKnee, LM.rSh, LM.rWr, LM.lHeel]
+    : [LM.lHip, LM.lKnee, LM.lSh, LM.lWr, LM.rHeel];
   const hands = (k) => (club[k] && ok(club[k].hands) ? club[k].hands : null);
   const head = (k) => (club[k] && ok(club[k].head) ? club[k].head : null);
   const text = (at, t) => (ok(at) && t ? [{ t: 'label', at: [at[0] + 0.03, at[1]], text: t }] : []);
@@ -65,6 +69,52 @@ export function highlightFor(check, ctx) {
         if (ah && as) out.push({ t: 'line', a: hip, b: [hip[0] + as[0] - ah[0], hip[1] + as[1] - ah[1]], dash: true });
       }
       return out.concat(text(sh, check.id === 'spine_loss' ? `${check.value}° lost` : valueText(check)));
+    }
+    case 'hands_under_shoulders': {
+      const sh = midLm('address', LM.lSh, LM.rSh);
+      const g = hands('address');
+      if (!sh || !g) return [];
+      return [
+        { t: 'line', a: sh, b: [sh[0], g[1]], dash: true },
+        { t: 'line', a: [sh[0], g[1]], b: g },
+        ...text(g, signed(check)),
+      ];
+    }
+    case 'waist_bend': {
+      const sh = midLm('address', LM.lSh, LM.rSh);
+      const hip = midLm('address', LM.lHip, LM.rHip);
+      const knee = midLm('address', LM.lKnee, LM.rKnee);
+      return sh && hip && knee ? [{ t: 'poly', pts: [sh, hip, knee] }, ...text(hip, valueText(check))] : [];
+    }
+    case 'back_line': {
+      const ear = midLm('address', LM.lEar, LM.rEar);
+      const sh = midLm('address', LM.lSh, LM.rSh);
+      const hip = midLm('address', LM.lHip, LM.rHip);
+      if (!ear || !sh || !hip) return [];
+      const ext = [sh[0] + (sh[0] - hip[0]) * 0.6, sh[1] + (sh[1] - hip[1]) * 0.6];
+      return [{ t: 'line', a: sh, b: ext, dash: true }, { t: 'poly', pts: [hip, sh, ear] }, ...text(ear, valueText(check))];
+    }
+    case 'hand_gap': {
+      const hip = lm('address', leadHip);
+      const knee = lm('address', leadKnee);
+      const g = hands('address');
+      if (!hip || !knee || !g || knee[1] === hip[1]) return [];
+      const x = hip[0] + ((knee[0] - hip[0]) * (g[1] - hip[1])) / (knee[1] - hip[1]);
+      return [{ t: 'line', a: hip, b: [x, g[1]], dash: true }, { t: 'line', a: [x, g[1]], b: g }, ...text(g, valueText(check))];
+    }
+    case 'hands_over_heels': {
+      const heel = lm('top', trailHeel);
+      const g = hands('top');
+      if (!heel || !g) return [];
+      return [{ t: 'line', a: heel, b: [heel[0], g[1]], dash: true }, { t: 'rect', c: g, half: 0.018 }, ...text(g, signed(check))];
+    }
+    case 'lead_arm_shoulder_plane': {
+      const ball = analysis.reference?.ball;
+      const ts = analysis.reference?.trailShoulder;
+      const sh = lm('top', leadSh);
+      const wr = lm('top', leadWr);
+      if (!ball || !ts || !sh || !wr) return [];
+      return [{ t: 'line', a: ball, b: ts, dash: true }, { t: 'line', a: sh, b: wr }, ...text(wr, signed(check))];
     }
     case 'hands_height_impact': {
       const a = hands('address');

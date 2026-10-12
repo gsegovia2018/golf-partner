@@ -32,6 +32,16 @@ const at = (frame, hands, head = null) => ({
   frame, hands, head, hidden: false, source: 'user',
 });
 
+// D21: the setup and top-position limits, provisional and the same for both clubs.
+const SETUP_TOP = {
+  handsUnderShoulders: [4, 8],
+  waistBend: { green: [125, 145], yellow: [115, 155] },
+  backLine: [10, 20],
+  handGap: { green: [10, 20], yellow: [6, 25] },
+  handsOverHeels: [6, 12],
+  leadArmPlane: [10, 20],
+};
+
 describe('THRESHOLDS table (D19)', () => {
   test('two clubs, iron the default, anything unknown reads as iron', () => {
     expect(CLUBS).toEqual(['iron', 'driver']);
@@ -50,6 +60,7 @@ describe('THRESHOLDS table (D19)', () => {
       clubheadPlane: { green: 4, yellow: 8 },
       buttYellowCm: 15,
       headDrift: [5, 10],
+      ...SETUP_TOP,
     });
     expect(THRESHOLDS.driver).toEqual({
       posture: { green: [20, 35], yellow: [15, 40] },
@@ -59,6 +70,7 @@ describe('THRESHOLDS table (D19)', () => {
       clubheadPlane: { green: 6, yellow: 10 },
       buttYellowCm: 20,
       headDrift: [6, 12],
+      ...SETUP_TOP,
     });
   });
 });

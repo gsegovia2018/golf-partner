@@ -25,6 +25,11 @@ describe('drills catalogue (plan 5.6)', () => {
     });
   });
 
+  test('a fault can borrow a neighbour\'s drill (also), after its own', () => {
+    expect(drillsForFault('top_position').map((d) => d.id)).toEqual(['fb-codo', 'atl-objetivo']);
+    expect(drillsForFault('flat_backswing')[0].id).toBe('fb-codo');
+  });
+
   test('unknown fault yields no drills', () => {
     expect(drillsForFault('nope')).toEqual([]);
   });
