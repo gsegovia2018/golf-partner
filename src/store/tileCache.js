@@ -5,6 +5,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { findCourseGeometry } from '../lib/geo';
+import { ensureCourseGeometry } from './courseGeometryStore';
 import { holeBbox, tilesForBbox } from '../lib/tileMath';
 
 export const TILE_URL = (z, x, y) =>
@@ -181,6 +182,7 @@ const prefetchedThisSession = new Set(); // courseKey — auto trigger fires onc
 // only session-marked once every tile actually succeeds — a fully/partially
 // failed (offline) run stays retryable.
 export async function prefetchCourseTiles(courseName, { force = false } = {}) {
+  await ensureCourseGeometry(courseName); // holes load on demand
   const geometry = findCourseGeometry(courseName);
   if (!geometry?.holes?.length) return null;
   const courseKey = courseKeyFor(courseName);
