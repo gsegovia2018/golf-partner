@@ -22,22 +22,22 @@ describe('getSwingAvailability', () => {
   });
 
   test('Android with a compatible apiVersion is supported', () => {
-    jest.doMock('../native', () => ({ apiVersion: 1 }), { virtual: true });
+    jest.doMock('../native', () => ({ REQUIRED_API_VERSION: 1, apiVersion: 1 }), { virtual: true });
     expect(getSwingAvailability()).toEqual({ supported: true });
   });
 
   test('accepts a default export and a function apiVersion', () => {
-    jest.doMock('../native', () => ({ default: { apiVersion: () => 2 } }), { virtual: true });
+    jest.doMock('../native', () => ({ default: { REQUIRED_API_VERSION: 1, apiVersion: () => 2 } }), { virtual: true });
     expect(getSwingAvailability()).toEqual({ supported: true });
   });
 
   test('an older apiVersion says update', () => {
-    jest.doMock('../native', () => ({ apiVersion: 0 }), { virtual: true });
+    jest.doMock('../native', () => ({ REQUIRED_API_VERSION: 1, apiVersion: 0 }), { virtual: true });
     expect(getSwingAvailability()).toEqual({ supported: false, reason: 'update' });
   });
 
   test('a module without apiVersion says update', () => {
-    jest.doMock('../native', () => ({}), { virtual: true });
+    jest.doMock('../native', () => ({ REQUIRED_API_VERSION: 1 }), { virtual: true });
     expect(getSwingAvailability()).toEqual({ supported: false, reason: 'update' });
   });
 });

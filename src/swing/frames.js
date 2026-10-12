@@ -8,11 +8,12 @@
 // says "px" (pixels of the decoded frame).
 //
 //   probeVideo(videoPath) -> { width, height, durationMs, frameCount, containerFps,
-//                              captureFps | null, rotationDeg, duplicateFrameRatio }
-//   analyzePose(videoPath, { model: 'full' | 'lite' })
+//                              captureFps | null, rotationDeg, hdr, duplicateFrameRatio: null }
+//   analyzePose(videoPath, { model: 'full' | 'lite', handedness, heightCm, captureFps })
 //                         -> { video: { width, height, containerFps, frameCount },
 //                              frames: [{ i, tMs, lm: [[x, y, vis] x 33] }],
-//                              ball: { x, y, r } | null, ballGoneFrame: number | null, timings }
+//                              ball: { x, y, r } | null, ballGoneFrame: number | null,
+//                              duplicateFrameRatio, timings }
 //       emits 'progress' { stage: 'decode' | 'pose', done, total } through
 //       module.addListener('progress', cb) -> { remove() }
 //   extractCheckpoints(videoPath, { frames: [{ key, i, hands: [x, y], neighbours: 2 }],
