@@ -162,7 +162,6 @@ jest.mock('../../store/tournamentStore', () => ({
       return ps && round.holes.every((h) => ps[h.number] != null);
     });
   }),
-  isTournamentFinished: jest.fn(() => false),
   lastTeeForPlayerOnCourse: jest.fn(),
   loadAllTournaments: jest.fn(() => Promise.resolve([])),
   loadAllTournamentsWithFallback: jest.fn(),
@@ -426,13 +425,51 @@ test('a finished casual game shows the read-only scorecard instead of ROUND SCOR
   expect(view.getByText('SCORECARD')).toBeTruthy();
 });
 
-test('a casual game still in play keeps the ROUND SCORES card', async () => {
+test('a casual game with every hole scored counts as past without a finish stamp', async () => {
+  // History lists it as finished, so opening it must show the scorecard too.
   useSnapshot(makeGame({ finished: false }));
+  const view = renderTournamentHome();
+
+  await waitFor(() => expect(view.getByTestId('finished-game-scorecard')).toBeTruthy());
+  expect(view.queryByText('ROUND SCORES')).toBeNull();
+});
+
+test('a casual game still in play keeps the ROUND SCORES card', async () => {
+  const game = makeGame({ finished: false });
+  game.rounds = [{ ...game.rounds[0], scores: { p1: { 1: 4 }, p2: { 1: 4 } } }];
+  useSnapshot(game);
   const view = renderTournamentHome();
 
   await waitFor(() => expect(view.getByText('ROUND SCORES')).toBeTruthy());
   expect(view.queryByTestId('finished-game-scorecard')).toBeNull();
+  expect(view.queryAllByTestId('past-round-scorecard')).toHaveLength(0);
 });
+
+test('a finished tournament shows each scored round as a hole-by-hole scorecard', async () => {
+  useSnapshot({ ...makeTournament(), finishedAt: '2026-06-01T18:00:00.000Z' });
+  const view = renderTournamentHome();
+
+  await waitFor(() => expect(view.getByText('ROUND SCORES')).toBeTruthy());
+  layOutPager(view);
+  // Only R1 has scores; the empty rounds keep their placeholder.
+  await waitFor(() => expect(view.queryAllByTestId('past-round-scorecard')).toHaveLength(1));
+});
+
+test('a tournament in progress keeps the per-player round summaries', async () => {
+  useSnapshot(makeTournament());
+  const view = renderTournamentHome();
+
+  await waitFor(() => expect(view.getByText('ROUND SCORES')).toBeTruthy());
+  layOutPager(view);
+  await waitFor(() => expect(view.getByText('ROUND 1 · Old Course')).toBeTruthy());
+  expect(view.queryAllByTestId('past-round-scorecard')).toHaveLength(0);
+});
+
+function layOutPager(view) {
+  fireEvent(view.getByTestId('round-pager-wrap'), 'layout', {
+    nativeEvent: { layout: { width: 320, height: 400 } },
+  });
+}
 
 describe('chooseInitialRound', () => {
   const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
