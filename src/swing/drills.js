@@ -1,5 +1,6 @@
 // Drill catalogue for the swing faults (plan 5.6). Original English text, same shape as
-// store/coachDrills.js: every drill has a measurable pass target. The ids are stable keys
+// store/coachDrills.js: every drill has a measurable pass target. `also` lists other faults
+// the drill serves (after that fault's own drills). The ids are stable keys
 // stored in analysis.json, so they are not translated.
 
 export const DRILLS = [
@@ -39,12 +40,12 @@ export const DRILLS = [
     passTarget: '8 of 10 parallel',
   },
   {
-    id: 'fb-codo', fault: 'flat_backswing', title: 'Trail elbow up',
+    id: 'fb-codo', fault: 'flat_backswing', also: ['top_position'], title: 'Trail elbow up',
     instruction: 'Swing back to lead arm parallel with your trail elbow pointing at the ground and your hands in front of your chest.',
     passTarget: '8 of 10',
   },
   {
-    id: 'atl-objetivo', fault: 'across_the_line', title: 'Shaft at the target',
+    id: 'atl-objetivo', fault: 'across_the_line', also: ['top_position'], title: 'Shaft at the target',
     instruction: 'At the top, pause and look: the shaft should point at the flag. Make short swings with a mirror behind you.',
     passTarget: '8 of 10',
   },
@@ -80,7 +81,13 @@ export const DRILLS = [
   },
 ];
 
-export const DRILL_FAULTS = [...new Set(DRILLS.map((d) => d.fault))];
+export const DRILL_FAULTS = [...new Set(DRILLS.flatMap((d) => [d.fault, ...(d.also || [])]))];
 
-/** The catalogue rows for a fault, in order. The results card shows the first two. */
-export const drillsForFault = (fault) => DRILLS.filter((d) => d.fault === fault);
+/**
+ * The catalogue rows for a fault: its own drills in order, then the ones it borrows from a
+ * neighbouring fault (`also`). The results card shows the first two.
+ */
+export const drillsForFault = (fault) => [
+  ...DRILLS.filter((d) => d.fault === fault),
+  ...DRILLS.filter((d) => d.fault !== fault && d.also?.includes(fault)),
+];

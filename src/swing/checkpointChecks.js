@@ -9,9 +9,15 @@ import { CHECKPOINT_KEYS } from './phases';
 // preImpact is an internal frame (D10).
 const HOME = {
   posture_address: ['address'],
+  hands_under_shoulders: ['address'],
+  waist_bend: ['address'],
+  back_line: ['address'],
+  hand_gap: ['address'],
   hands_between_planes: ['leadArm', 'top'],
   butt_extension: ['leadArm'],
   top_direction: ['top'],
+  hands_over_heels: ['top'],
+  lead_arm_shoulder_plane: ['top'],
   downswing_path: ['shaftDown'],
   clubhead_vs_plane: ['impact'],
   hands_height_impact: ['impact'],

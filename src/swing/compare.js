@@ -10,11 +10,17 @@ const RANK = { green: 0, yellow: 1, red: 2 };
 const TEMPO_TARGET = 3; // 3:1 backswing to downswing
 
 // Every numeric check is the size of a deviation (a loss, a drift, a distance), so smaller is
-// better, with two exceptions. Tempo is best at 3:1 (judge the distance from it). Finish
+// better, with the exceptions below. Tempo is best at 3:1 (judge the distance from it). Finish
 // balance counts how many of two things held (more is better). Below `eps` it is noise.
 const SCORE = {
   tempo: { of: (v) => Math.abs(v - TEMPO_TARGET), eps: 0.1 },
   finish_balance: { of: (v) => -v, eps: 0.5 },
+  // Signed readings (D21): the size of the miss either way, or the distance from the middle of the band.
+  hands_under_shoulders: { of: Math.abs, eps: 1 },
+  hands_over_heels: { of: Math.abs, eps: 1 },
+  lead_arm_shoulder_plane: { of: Math.abs, eps: 1 },
+  waist_bend: { of: (v) => Math.abs(v - 135), eps: 1 },
+  hand_gap: { of: (v) => Math.abs(v - 15), eps: 1 },
 };
 const DEFAULT_SCORE = { of: (v) => v, eps: 1 };
 // Posture tilt and the shaft direction at the top are angles with no better direction,

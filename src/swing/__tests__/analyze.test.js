@@ -33,11 +33,11 @@ describe('analyze: the whole pipeline on the fixture', () => {
     expect(Math.abs(a.reference.shaftPlaneDeg - 52)).toBeLessThanOrEqual(6);
   });
 
-  test('all 15 rows produce a status; counts add up', () => {
-    expect(a.checks).toHaveLength(15);
+  test('all 21 rows produce a status; counts add up', () => {
+    expect(a.checks).toHaveLength(21);
     a.checks.forEach((c) => expect(['green', 'yellow', 'red', 'unknown']).toContain(c.status));
     const c = a.counts;
-    expect(c.green + c.yellow + c.red + c.unknown).toBe(15);
+    expect(c.green + c.yellow + c.red + c.unknown).toBe(21);
   });
 
   test('D16: without placed marks the club-dependent checks are unknown, the rest are measured', () => {
@@ -49,19 +49,21 @@ describe('analyze: the whole pipeline on the fixture', () => {
     expect(a.clubMarks.top.priorHead).toBeUndefined();
   });
 
-  test('main fault is early extension with evidence and drills', () => {
-    expect(a.main.fault).toBe('early_extension');
+  test('main fault (D21): the setup is the earliest significant fault; early extension is a consequence', () => {
+    expect(a.main.fault).toBe('posture');
     expect(a.main.evidence.length).toBeGreaterThanOrEqual(2);
-    expect(a.main.drills).toEqual(['ee-silla', 'ee-pared', 'ee-palo-talones']);
+    expect(a.main.drills[0]).toBe('po-espejo');
+    expect(a.main.consequences).toEqual(expect.arrayContaining(['over_the_top', 'early_extension']));
   });
 });
 
 describe('analyze with the owner marks as user marks (golden)', () => {
   const a = analyze(native(), { pass2, marks: ownerMarks(), heightCm: 176 });
 
-  test('every club check has a verdict and the early-extension story holds', () => {
+  test('every club check has a verdict; setup leads and the early-extension story follows (D21)', () => {
     expect(a.checks.filter((c) => c.status === 'unknown').map((c) => c.id)).toEqual([]);
-    expect(a.main.fault).toBe('early_extension');
+    expect(a.main.fault).toBe('posture');
+    expect(a.main.consequences).toContain('early_extension');
     expect(a.clubMarks.impact.source).toBe('user');
     expect(byId(a, 'hands_out_impact').status).toBe('red');
     expect(byId(a, 'clubhead_vs_plane', 'impact').status).toBe('green');

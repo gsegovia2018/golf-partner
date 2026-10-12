@@ -4,10 +4,10 @@
 
 // MediaPipe Pose landmark indices.
 export const LM = {
-  nose: 0,
+  nose: 0, lEar: 7, rEar: 8,
   lSh: 11, rSh: 12, lEl: 13, rEl: 14, lWr: 15, rWr: 16,
   lHip: 23, rHip: 24, lKnee: 25, rKnee: 26, lAnk: 27, rAnk: 28,
-  lToe: 31, rToe: 32,
+  lHeel: 29, rHeel: 30, lToe: 31, rToe: 32,
 };
 
 const rad2deg = (r) => (r * 180) / Math.PI;
@@ -43,6 +43,13 @@ export function sideOfLine(p, a, b) {
 export function extendToY(p, q, y) {
   if (q.y === p.y) return null;
   return p.x + ((q.x - p.x) * (y - p.y)) / (q.y - p.y);
+}
+
+/** Angle between the directions u and v (vectors {x, y}), degrees in [0, 180]. */
+export function angleBetween(u, v) {
+  const n = Math.hypot(u.x, u.y) * Math.hypot(v.x, v.y);
+  if (!n) return null;
+  return rad2deg(Math.acos(Math.max(-1, Math.min(1, (u.x * v.x + u.y * v.y) / n))));
 }
 
 /** Spine tilt from vertical, degrees: mid-hip -> mid-shoulder. */

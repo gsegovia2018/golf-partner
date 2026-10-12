@@ -52,7 +52,8 @@ describe('runAnalysis', () => {
     const res = await runAnalysis('s1', { onProgress: (p) => stages.push(p.stage), onPartial: partial });
 
     expect(res.pass2).toBe('done');
-    expect(res.analysis.main.fault).toBe('early_extension');
+    expect(res.analysis.main.fault).toBe('posture'); // D21: the setup comes first
+    expect(res.analysis.main.consequences).toContain('early_extension');
     expect([...new Set(stages)]).toEqual(['reading', 'pose', 'planes']);
     expect(api.analyzePose).toHaveBeenCalledWith('file:///doc/swings/s1/video.mp4', { model: 'full' });
     // The result opens after the first save, before pass 2 finishes.
