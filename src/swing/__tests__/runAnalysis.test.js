@@ -1,4 +1,4 @@
-import { runAnalysis } from '../runAnalysis';
+import { runAnalysis, poseOptions } from '../runAnalysis';
 import { fixtureNative, TRUTH, W, H } from './helpers';
 import * as frames from '../frames';
 import * as store from '../../store/swingStore';
@@ -55,7 +55,7 @@ describe('runAnalysis', () => {
     expect(res.analysis.main.fault).toBe('posture'); // D21: the setup comes first
     expect(res.analysis.main.consequences).toContain('early_extension');
     expect([...new Set(stages)]).toEqual(['reading', 'pose', 'planes']);
-    expect(api.analyzePose).toHaveBeenCalledWith('file:///doc/swings/s1/video.mp4', { model: 'full' });
+    expect(api.analyzePose).toHaveBeenCalledWith('file:///doc/swings/s1/video.mp4', { model: 'full', handedness: 'right', heightCm: 176 });
     // The result opens after the first save, before pass 2 finishes.
     expect(store.saveAnalysis).toHaveBeenCalledTimes(2);
     expect(partial).toHaveBeenCalledTimes(1);
@@ -65,6 +65,21 @@ describe('runAnalysis', () => {
     const [, , o2] = store.saveAnalysis.mock.calls[1];
     expect(o2.pose.pass2).toEqual({ shaft: {}, addressFrame: lab.expected.addressFrame });
     expect(o2.thumb).toMatch(/556\.jpg$/);
+  });
+
+  test('the swing profile reaches native: a left-handed, 162 cm golfer', async () => {
+    store.getSwingProfile.mockReturnValueOnce({ heightCm: 162, handedness: 'left', asked: true });
+    const api = makeApi();
+    frames.nativeApi.mockReturnValue(api);
+    await runAnalysis('s1');
+    expect(api.analyzePose).toHaveBeenCalledWith('file:///doc/swings/s1/video.mp4', { model: 'full', handedness: 'left', heightCm: 162 });
+  });
+
+  test('poseOptions leaves an unknown height to the native default and only sends right or left', () => {
+    expect(poseOptions({ heightCm: null, handedness: 'right', asked: false })).toEqual({ model: 'full', handedness: 'right' });
+    expect(poseOptions({ heightCm: 0, handedness: 'weird' })).toEqual({ model: 'full', handedness: 'right' });
+    expect(poseOptions(undefined)).toEqual({ model: 'full', handedness: 'right' });
+    expect(poseOptions({ heightCm: '181', handedness: 'left' })).toEqual({ model: 'full', handedness: 'left', heightCm: 181 });
   });
 
   test('pass 2 asks native for the thirteen checkpoint frames with their grip estimate', async () => {

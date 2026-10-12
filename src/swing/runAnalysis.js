@@ -28,6 +28,15 @@ const PASS2_KEYS = [
   'lateBackswing', 'preImpact', 'postImpact',
 ];
 
+// The swing profile drives the native ball search side and the expected ball size. A
+// missing height is left out (not sent as null): native then uses its own default, 176 cm.
+export function poseOptions(profile) {
+  const opts = { model: 'full', handedness: profile?.handedness === 'left' ? 'left' : 'right' };
+  const h = Number(profile?.heightCm);
+  if (profile?.heightCm != null && Number.isFinite(h) && h > 0) opts.heightCm = h;
+  return opts;
+}
+
 export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = () => {}, isCancelled = () => false } = {}) {
   const api = nativeApi();
   if (!api) return { error: 'update' };
@@ -62,7 +71,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
     });
     let pose;
     try {
-      pose = await api.analyzePose(path, { model: 'full' });
+      pose = await api.analyzePose(path, poseOptions(profile));
     } finally {
       sub?.remove?.();
     }
