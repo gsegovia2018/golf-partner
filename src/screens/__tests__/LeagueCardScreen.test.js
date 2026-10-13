@@ -124,6 +124,15 @@ describe('LeagueCardScreen', () => {
     expect(store.getLeagueProofUrl).toHaveBeenCalledWith('L1/c-javi.jpg');
   });
 
+  test('an app card with a proof photo shows it too', async () => {
+    store.getLeague.mockResolvedValue(snapshot([
+      card('javi', 'confirmed', 33, { source: 'app', proofPath: 'L1/c-javi.jpg', confirmation: 'photo' }),
+    ]));
+    store.getLeagueProofUrl.mockResolvedValue('https://example.test/proof.jpg');
+    const { getByLabelText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
+    await waitFor(() => expect(getByLabelText('Signed card photo').props.source).toEqual({ uri: 'https://example.test/proof.jpg' }));
+  });
+
   test('photo failure offers Try again', async () => {
     store.getLeague.mockResolvedValue(snapshot([
       card('javi', 'confirmed', 33, { source: 'offapp', proofPath: 'L1/c-javi.jpg', confirmation: 'official' }),

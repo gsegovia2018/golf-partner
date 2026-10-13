@@ -13,7 +13,7 @@ import { fetchTournament } from '../store/tournamentRepo';
 import { readLocal } from '../store/tournamentStore';
 import {
   submitLeagueCard, confirmLeagueCardByPartner, getLeagueMarkerCandidates, requestLeagueMarker,
-  remindLeagueMarker, cancelLeagueMarkerRequest,
+  remindLeagueMarker, cancelLeagueMarkerRequest, getLeagueCard,
 } from '../store/leagueStore';
 import { scoreCard, cardMonth } from '../store/leagueRules';
 import {
@@ -147,6 +147,20 @@ export default function LeagueValidateScreen({ navigation, route }) {
         setPending(m?.pending ?? null);
       } catch { /* no picker: Someone else is the only chip */ }
       if (alive) setMarkersLoaded(true);
+    })();
+    return () => { alive = false; };
+  }, [cardId]);
+
+  // The note a marker left when they sent the card back (it was only in the
+  // push). A failed read just means no note.
+  const [returnNote, setReturnNote] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const c = await getLeagueCard(cardId);
+        if (alive && c?.status === 'submitted' && c.markerNote) setReturnNote(c.markerNote);
+      } catch { /* no note shown */ }
     })();
     return () => { alive = false; };
   }, [cardId]);
@@ -285,6 +299,18 @@ export default function LeagueValidateScreen({ navigation, route }) {
   const netTone = netDiffTone(netDifferential);
   const netColor = netTone === 'better' ? theme.scoreColor('excellent') : netTone === 'worse' ? theme.destructive : theme.text.primary;
 
+  // Fix a hole in the game's own scorecard, then come back and Check again.
+  const editInScorecard = (
+    <TouchableOpacity
+      style={s.secondaryBtn}
+      onPress={() => navigation.navigate('Scorecard', { tournamentId, roundIndex: roundNumber - 1 })}
+      accessibilityRole="button"
+      activeOpacity={0.8}
+    >
+      <Text style={s.secondaryText}>Edit in scorecard</Text>
+    </TouchableOpacity>
+  );
+
   const fallback = (icon, title, sub, routeName, params) => (
     <TouchableOpacity
       key={routeName + title}
@@ -403,6 +429,19 @@ export default function LeagueValidateScreen({ navigation, route }) {
           </>
         )}
 
+        {!!returnNote && !confirmed && (
+          <>
+            <View style={[s.statusCard, s.statusWarn]}>
+              <Feather name="message-circle" size={18} color={theme.text.secondary} style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.statusTitle}>Your marker sent the card back</Text>
+                <Text style={s.statusSub}>{returnNote}</Text>
+              </View>
+            </View>
+            {editInScorecard}
+          </>
+        )}
+
         {notConfirmed && !waiting && (
           <View style={[s.statusCard, s.statusWarn]}>
             <Feather name="alert-circle" size={18} color={theme.text.secondary} style={{ marginRight: 12 }} />
@@ -458,6 +497,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
             {`Every hole needs a score before the card can be submitted. Missing: ${missing.join(', ')}.`}
           </Text>
         )}
+        {missing.length > 0 && !result && !alreadySubmitted && editInScorecard}
         {!!error && <Text style={s.errorText}>{error}</Text>}
 
         {(notConfirmed || waiting) && (
@@ -509,7 +549,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
             {picker}
             {picked
               ? <Text style={s.footnote}>{`If ${firstName(picked.name)} scored your holes too, it counts straight away.`}</Text>
-              : !result && <Text style={s.footnote}>Once you submit, the card counts straight away.</Text>}
+              : !result && <Text style={s.footnote}>Submitting checks your holes against what others scored in this game. If nobody else scored all 18, the card is submitted but not confirmed until a marker confirms it.</Text>}
             <TouchableOpacity
               style={[s.primaryBtn, (busy || missing.length > 0 || unrated) && s.disabled]}
               onPress={submitAndConfirm}

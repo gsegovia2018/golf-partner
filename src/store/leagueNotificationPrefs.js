@@ -8,7 +8,7 @@
 // Order and wording follow the League settings design. `type` is the
 // notifications.type value the server inserts.
 export const LEAGUE_NOTIFICATION_ROWS = [
-  { type: 'league_card_announced', label: 'Someone declares a card' },
+  { type: 'league_card_announced', label: 'Someone announces a card' },
   { type: 'league_tee_off', label: 'Someone tees off' },
   { type: 'league_card_confirmed', label: 'A card is confirmed' },
   { type: 'league_ranking_updated', label: 'Ranking updated' },

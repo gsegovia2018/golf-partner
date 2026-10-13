@@ -363,12 +363,20 @@ export default function LeagueBoardScreen({ navigation, route }) {
       badge = mine.kind === 'playing' ? 'Playing' : 'Announced';
       body = (
         <>
-          <Text style={s.cardText}>
+          {/* An app card: the line opens the game's scorecard (the league
+              round is the game's first round). */}
+          <Text
+            style={s.cardText}
+            {...(!mine.offApp && mine.card.tournamentId ? {
+              onPress: () => navigation.navigate('Scorecard', { tournamentId: mine.card.tournamentId, roundIndex: 0 }),
+              accessibilityRole: 'link',
+            } : {})}
+          >
             {mine.offApp && mine.kind === 'announced'
               ? [`Announced ${timeLabel(mine.card.announcedAt)}`, mine.course,
                 [dayLabel(mine.card.teeTime), timeLabel(mine.card.teeTime)].filter(Boolean).join(' ')]
                 .filter(Boolean).join(' · ') + ' — playing without the app'
-              : `${mine.offApp ? 'Playing without the app' : 'Playing with the app'}${mine.course ? ` · ${mine.course}` : ''}`}
+              : `${mine.offApp ? 'Playing without the app' : 'Playing with the app'}${mine.course ? ` · ${mine.course}` : ''}${!mine.offApp && mine.card.tournamentId ? ' · Open scorecard ›' : ''}`}
           </Text>
           {mine.kind === 'announced' && mine.offApp && (
             <TouchableOpacity
@@ -401,6 +409,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
               mine.card.confirmedByName ? `confirmed by ${mine.card.confirmedByName}` : null]
               .filter(Boolean).join(' · ')}
           </Text>
+          {mine.kind === 'submitted' && !!mine.card.markerNote && (
+            <Text style={s.cardText}>{`Your marker sent it back: “${mine.card.markerNote}”`}</Text>
+          )}
           {mine.kind === 'submitted' && mine.offApp && (
             <TouchableOpacity
               style={s.primaryBtn}

@@ -161,7 +161,7 @@ export default function LeagueCardScreen({ navigation, route }) {
           </>
         )}
 
-        {offApp && !!card.proofPath && (
+        {!!card.proofPath && (
           <ProofPhoto key={card.proofPath} path={card.proofPath} official={card.confirmation === 'official'} theme={theme} />
         )}
       </ScrollView>

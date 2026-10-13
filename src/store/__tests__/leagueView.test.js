@@ -72,7 +72,7 @@ describe('card status', () => {
   });
   test('announced shows the time', () => {
     const iso = new Date(2026, 9, 4, 10, 10).toISOString();
-    expect(cardStatus({ status: 'announced', announcedAt: iso }, NOW).text).toBe('Declared · today 10:10');
+    expect(cardStatus({ status: 'announced', announcedAt: iso }, NOW).text).toBe('Announced · today 10:10');
   });
 });
 
@@ -109,7 +109,7 @@ describe('card status: post deadline', () => {
 
   test('a live card carries its deadline, text unchanged', () => {
     const s = cardStatus({ status: 'announced', postBy, announcedAt: '2026-10-10T09:00:00Z' }, before);
-    expect(s.text).toMatch(/^Declared/);
+    expect(s.text).toMatch(/^Announced/);
     expect(s.deadline).toMatchObject({ msLeft: 3 * 3600000, urgent: false });
     expect(cardStatus({ status: 'playing', postBy }, before).deadline.postBy).toEqual(new Date(postBy));
     expect(cardStatus({ status: 'playing' }, before).deadline).toBeNull();

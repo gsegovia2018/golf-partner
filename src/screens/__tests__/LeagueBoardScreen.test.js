@@ -158,6 +158,33 @@ describe('LeagueBoardScreen', () => {
     });
   });
 
+  test('"Playing with the app" opens the game scorecard', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'playing', null, {
+          id: 'c5', course: { name: 'Centro Nacional' }, tournamentId: 't1', roundId: 't1-r0',
+        })],
+      },
+    }));
+    const nav = makeNav();
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText(/Playing with the app/));
+    fireEvent.press(getByText(/Playing with the app/));
+    expect(nav.navigate).toHaveBeenCalledWith('Scorecard', { tournamentId: 't1', roundIndex: 0 });
+  });
+
+  test('a card the marker sent back shows the marker note', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'submitted', 36, {
+          id: 'c5', tournamentId: 't1', roundId: 't1-r0', markerNote: 'Hole 7 was a 6',
+        })],
+      },
+    }));
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText(/Hole 7 was a 6/));
+  });
+
   test('a submitted card with a marker asked reads "Waiting for <first>"', async () => {
     store.getLeague.mockResolvedValue(snapshot({
       cardsByMonth: {

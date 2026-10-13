@@ -129,7 +129,7 @@ export function cardStatus(card, now = new Date()) {
       return { text: 'Playing now', tone: 'live', flag, deadline: deadlineInfo(card, now) };
     case 'announced':
       return {
-        text: `Declared · ${clock(card.announcedAt, now)}`.trim(), tone: 'live', flag, deadline: deadlineInfo(card, now),
+        text: `Announced · ${clock(card.announcedAt, now)}`.trim(), tone: 'live', flag, deadline: deadlineInfo(card, now),
       };
     default:
       return { text: 'No card yet', tone: 'muted', flag: null };
