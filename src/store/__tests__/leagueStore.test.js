@@ -8,6 +8,8 @@ import {
   rowToLeague,
   rescheduleLeagueCard, reopenLeagueCard, approveLeagueCard,
   getLeagueMarkerCandidates, requestLeagueMarker, remindLeagueMarker, cancelLeagueMarkerRequest,
+  withdrawLeagueCard, getLeagueCardEvents, getLeagueGameStatus, removeLeagueMember, rotateLeagueInviteCode,
+  releaseLeagueInvitee, getLeagueMemberEvents, getMyLeagueCardsForRound,
 } from '../leagueStore';
 
 // mockState is read inside the jest.mock factories; the `mock` prefix is what
@@ -273,11 +275,23 @@ describe('RPC params', () => {
     });
     expect(res).toEqual({
       id: 'C1', month: '2026-10-01', announcedAt: '2026-10-04T10:00:00Z', leagueHandicap: 18,
+      postBy: null, status: null, existing: false,
     });
     expect(lastRpc()).toEqual(['announce_league_card', {
       p_league: 'L1', p_source: 'app', p_course: { name: 'El Saler', tee: 'Yellow' },
       p_tee_time: '2026-10-04T11:00:00Z', p_tournament_id: 't1', p_round_id: 'r1', p_player_id: 'p1',
     }]);
+  });
+
+  test('announceLeagueCard maps post_by, status and an existing card (R16)', async () => {
+    ok({
+      id: 'C1', month: '2026-10-01', announced_at: 'x', league_handicap: null,
+      post_by: null, status: 'playing', existing: true,
+    });
+    const res = await announceLeagueCard({
+      leagueId: 'L1', source: 'app', course: { name: 'X' }, tournamentId: 't1', roundId: 'r1', playerId: 'p1',
+    });
+    expect(res).toMatchObject({ postBy: null, status: 'playing', existing: true });
   });
 
   test('announceLeagueCard sends the scoring mode only when given', async () => {
@@ -420,6 +434,77 @@ describe('post deadline RPCs', () => {
   });
 });
 
+describe('integrity RPCs (20261016000000)', () => {
+  test('withdrawLeagueCard sends the card and maps the result', async () => {
+    ok({ id: 'C1', status: 'void', void_kind: 'withdrawn' });
+    expect(await withdrawLeagueCard('C1')).toEqual({ id: 'C1', status: 'void', voidKind: 'withdrawn' });
+    expect(lastRpc()).toEqual(['withdraw_league_card', { p_card: 'C1' }]);
+  });
+
+  test('getLeagueCardEvents maps the timeline; [] for no data', async () => {
+    ok([{
+      id: 7, card_id: 'C1', kind: 'confirmed', actor_user_id: null, actor_name: 'Lucía', how: 'qr',
+      note: null, data: { proof: false }, created_at: '2026-10-13T12:00:00Z',
+    }, {
+      id: 8, card_id: 'C1', kind: 'missed', actor_user_id: null, actor_name: null, how: null,
+      note: null, data: null, created_at: '2026-10-13T13:00:00Z',
+    }]);
+    expect(await getLeagueCardEvents('C1')).toEqual([
+      {
+        id: 7, cardId: 'C1', kind: 'confirmed', actorUserId: null, actorName: 'Lucía', how: 'qr',
+        note: null, data: { proof: false }, at: '2026-10-13T12:00:00Z',
+      },
+      {
+        id: 8, cardId: 'C1', kind: 'missed', actorUserId: null, actorName: null, how: null,
+        note: null, data: {}, at: '2026-10-13T13:00:00Z',
+      },
+    ]);
+    expect(lastRpc()).toEqual(['get_league_card_events', { p_card: 'C1' }]);
+    ok(null);
+    expect(await getLeagueCardEvents('C1')).toEqual([]);
+  });
+
+  test('getLeagueGameStatus sends the game round and maps each member', async () => {
+    ok([{
+      player_id: 'pA', user_id: 'u1', name: 'Ana', is_me: true, league_handicap: '18.0', month: '2026-10-01',
+      has_card: true, card_id: 'C1', card_status: 'playing', card_source: 'app', this_round: true,
+    }, {
+      player_id: 'pB', user_id: 'u2', name: 'Bea', is_me: false, league_handicap: null, month: '2026-10-01',
+      has_card: false, card_id: null, card_status: null, card_source: null, this_round: false,
+    }]);
+    expect(await getLeagueGameStatus('L1', 't1', 'r1')).toEqual([
+      {
+        playerId: 'pA', userId: 'u1', name: 'Ana', isMe: true, leagueHandicap: 18, month: '2026-10-01',
+        hasCard: true, cardId: 'C1', cardStatus: 'playing', cardSource: 'app', thisRound: true,
+      },
+      {
+        playerId: 'pB', userId: 'u2', name: 'Bea', isMe: false, leagueHandicap: null, month: '2026-10-01',
+        hasCard: false, cardId: null, cardStatus: null, cardSource: null, thisRound: false,
+      },
+    ]);
+    expect(lastRpc()).toEqual(['get_league_game_status', { p_league: 'L1', p_tournament: 't1', p_round: 'r1' }]);
+  });
+
+  test('member admin RPCs send their arguments', async () => {
+    await removeLeagueMember('L1', 'u2');
+    expect(lastRpc()).toEqual(['remove_league_member', { p_league: 'L1', p_user: 'u2' }]);
+    ok({ invite_code: 'NEWCODE2' });
+    expect(await rotateLeagueInviteCode('L1')).toEqual({ inviteCode: 'NEWCODE2' });
+    expect(lastRpc()).toEqual(['rotate_league_invite_code', { p_league: 'L1' }]);
+    ok(null);
+    await releaseLeagueInvitee('L1', 'i1');
+    expect(lastRpc()).toEqual(['release_league_invitee', { p_league: 'L1', p_invitee: 'i1' }]);
+  });
+
+  test('the server hints come through on the error', async () => {
+    mockState.rpcResult = {
+      data: null,
+      error: { code: 'P0001', message: 'October is closed: its cards can\'t change any more.', hint: 'month_closed' },
+    };
+    await expect(withdrawLeagueCard('C1')).rejects.toMatchObject({ hint: 'month_closed', offline: false });
+  });
+});
+
 describe('errors', () => {
   test('a server refusal keeps the postgres message, code and hint', async () => {
     mockState.rpcResult = {
@@ -497,17 +582,61 @@ describe('reads and cache', () => {
     expect(await getMyLeagues()).toEqual([]);
   });
 
-  test("getMyCardsForMonth reads my live cards for that month", async () => {
+  test('getMyCardsForMonth reads my cards for that month that take it (an admin void does, R15b)', async () => {
     mockState.tables.league_cards = {
-      data: [{ id: 'c1', league_id: 'L1', user_id: 'me', month: '2026-10-01', status: 'playing' }],
+      data: [
+        { id: 'c1', league_id: 'L1', user_id: 'me', month: '2026-10-01', status: 'playing' },
+        { id: 'c2', league_id: 'L2', user_id: 'me', month: '2026-10-01', status: 'void', void_kind: 'admin' },
+        { id: 'c3', league_id: 'L3', user_id: 'me', month: '2026-10-01', status: 'void', void_kind: 'withdrawn' },
+        { id: 'c4', league_id: 'L4', user_id: 'me', month: '2026-10-01', status: 'void' },
+      ],
       error: null,
     };
     const res = await getMyCardsForMonth('2026-10');
-    expect(res).toEqual([expect.objectContaining({ id: 'c1', leagueId: 'L1', monthKey: '2026-10' })]);
+    expect(res.map((c) => c.id)).toEqual(['c1', 'c2']);
+    expect(res[0]).toEqual(expect.objectContaining({ id: 'c1', leagueId: 'L1', monthKey: '2026-10' }));
     const ops = mockState.queries[0].ops;
     expect(ops).toContainEqual(['eq', 'user_id', 'me']);
     expect(ops).toContainEqual(['eq', 'month', '2026-10-01']);
-    expect(ops).toContainEqual(['neq', 'status', 'void']);
+  });
+
+  test('getMyLeagueCardsForRound reads my cards of that game round that take the month', async () => {
+    mockState.tables.league_cards = {
+      data: [
+        { id: 'c1', league_id: 'L1', user_id: 'me', month: '2026-10-01', status: 'playing', tournament_id: 't1', round_id: 'r1' },
+        { id: 'c2', league_id: 'L2', user_id: 'me', month: '2026-10-01', status: 'void', void_kind: 'withdrawn' },
+      ],
+      error: null,
+    };
+    const res = await getMyLeagueCardsForRound('t1', 'r1');
+    expect(res.map((c) => c.id)).toEqual(['c1']);
+    const ops = mockState.queries[0].ops;
+    expect(ops).toContainEqual(['eq', 'user_id', 'me']);
+    expect(ops).toContainEqual(['eq', 'tournament_id', 't1']);
+    expect(ops).toContainEqual(['eq', 'round_id', 'r1']);
+    expect(await getMyLeagueCardsForRound(null, 'r1')).toEqual([]);
+  });
+
+  test('rowToCard maps void_kind, null when absent', () => {
+    expect(rowToCard({ id: 'c', status: 'void', void_kind: 'admin' }).voidKind).toBe('admin');
+    expect(rowToCard({ id: 'c', status: 'void' }).voidKind).toBeNull();
+  });
+
+  test('getLeagueMemberEvents reads the membership log, oldest first', async () => {
+    mockState.tables.league_member_events = {
+      data: [{
+        id: 1, league_id: 'L1', kind: 'removed', user_id: 'u2', invitee_id: null, actor_user_id: 'u1',
+        data: { name: 'Pablo' }, created_at: '2026-10-13T10:00:00Z',
+      }],
+      error: null,
+    };
+    expect(await getLeagueMemberEvents('L1')).toEqual([{
+      id: 1, leagueId: 'L1', kind: 'removed', userId: 'u2', inviteeId: null, actorUserId: 'u1',
+      data: { name: 'Pablo' }, at: '2026-10-13T10:00:00Z',
+    }]);
+    const ops = mockState.queries[0].ops;
+    expect(ops).toContainEqual(['eq', 'league_id', 'L1']);
+    expect(ops).toContainEqual(['order', 'created_at', { ascending: true }]);
   });
 
   test('getLeagueCard reads one card by id', async () => {

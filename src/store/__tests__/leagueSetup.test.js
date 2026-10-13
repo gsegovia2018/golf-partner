@@ -1,6 +1,6 @@
 import {
   eligibleLeagues, leagueStrokes, applyLeagueHandicap, leagueCourse, leagueCardOf, isLeagueLength, madridDate,
-  isLeagueRated,
+  isLeagueRated, leagueCardsOf, leagueCardKey, leagueCardsPatch,
 } from '../leagueSetup';
 import { getPlayingHandicap } from '../scoring';
 
@@ -104,4 +104,54 @@ test("leagueCardOf: only the card owner's player, from the top level or props", 
   expect(leagueCardOf({ props: { league: lg } }, 'p1')).toBe(lg);
   expect(leagueCardOf({ league: lg }, 'p2')).toBeNull();
   expect(leagueCardOf({}, 'p1')).toBeNull();
+});
+
+describe('several league cards per game (R16, R17)', () => {
+  const legacy = { leagueId: 'L1', cardId: 'c1', playerId: 'p1' };
+  const t = {
+    rounds: [{ id: 'r0' }, { id: 'r1' }],
+    league: legacy,
+    props: {},
+    leagueCards: {
+      'r0:p2': { leagueId: 'L1', cardId: 'c2', playerId: 'p2', roundId: 'r0' },
+      'r1:p1': { leagueId: 'L2', cardId: 'c3', playerId: 'p1', roundId: 'r1' },
+    },
+  };
+
+  test('leagueCardsOf lists the legacy link (as round 0) and every entry once', () => {
+    expect(leagueCardsOf(t).map((e) => [e.cardId, e.roundId])).toEqual([['c1', 'r0'], ['c2', 'r0'], ['c3', 'r1']]);
+    expect(leagueCardsOf({ ...t, leagueCards: { x: { ...legacy, roundId: 'r0' } } })).toHaveLength(1);
+    expect(leagueCardsOf({})).toEqual([]);
+  });
+
+  test('leagueCardOf finds my card, per round when asked', () => {
+    expect(leagueCardOf(t, 'p2')?.cardId).toBe('c2');
+    expect(leagueCardOf(t, 'p1', 'r0')?.cardId).toBe('c1');
+    expect(leagueCardOf(t, 'p1', 'r1')?.cardId).toBe('c3');
+    expect(leagueCardOf(t, 'p2', 'r1')).toBeNull();
+    expect(leagueCardOf(t, 'p9')).toBeNull();
+    // Entries can live under props too (get_game_tournament spreads them back).
+    expect(leagueCardOf({ props: { leagueCards: t.leagueCards } }, 'p2')?.cardId).toBe('c2');
+  });
+
+  test('leagueCardOf with only the legacy link behaves as before', () => {
+    expect(leagueCardOf({ league: legacy, rounds: [{ id: 'r0' }] }, 'p1', 'r0')).toBe(legacy);
+    expect(leagueCardOf({ league: legacy, rounds: [{ id: 'r0' }] }, 'p1', 'r1')).toBeNull();
+  });
+
+  test('leagueCardsPatch keys my entry by round and player (merged one level deep)', () => {
+    expect(leagueCardKey('r1', 'p1')).toBe('r1:p1');
+    expect(leagueCardsPatch({ leagueId: 'L1', cardId: 'c9', playerId: 'p1', roundId: 'r1' })).toEqual({
+      leagueCards: { 'r1:p1': { leagueId: 'L1', cardId: 'c9', playerId: 'p1', roundId: 'r1' } },
+    });
+  });
+
+  test('eligibleLeagues: an admin-voided card this month keeps the league off the switch (R15b)', () => {
+    const lg = { id: 'L1', name: 'Tour', seasonStart: '2026-01-01', seasonEnd: '2026-12-31', archivedAt: null };
+    const now = new Date('2026-10-15T10:00:00Z');
+    const card = { leagueId: 'L1', userId: 'me', month: '2026-10-01', status: 'void', voidKind: 'admin' };
+    expect(eligibleLeagues({ leagues: [lg], cards: [card], userId: 'me', now })).toEqual([]);
+    expect(eligibleLeagues({ leagues: [lg], cards: [{ ...card, voidKind: 'withdrawn' }], userId: 'me', now }))
+      .toEqual([lg]);
+  });
 });

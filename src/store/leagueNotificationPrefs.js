@@ -15,7 +15,29 @@ export const LEAGUE_NOTIFICATION_ROWS = [
   { type: 'league_month_reminder', label: '3 days left, no card yet' },
   { type: 'league_post_reminder', label: '2 hours left to post' },
   { type: 'league_vote_opened', label: 'A handicap vote opens' },
+  // 20261016000000 (R10, R15).
+  { type: 'league_card_voided', label: 'An admin voids, reopens or approves a card' },
+  { type: 'league_handicap_changed', label: 'A league handicap changes' },
+  { type: 'league_spot_claimed', label: 'Members are removed or spots claimed' },
 ];
+
+// Types with no switch of their own share a row's: the row's choice applies
+// to them too. send-push/index.ts mirrors this map (LEAGUE_PUSH_PREF_OF).
+export const LEAGUE_PREF_OF = {
+  league_card_rescheduled: 'league_card_announced',
+  league_card_withdrawn: 'league_card_announced',
+  league_card_auto_withdrawn: 'league_post_reminder',
+  league_card_reopened: 'league_card_voided',
+  league_card_approved: 'league_card_voided',
+  league_member_removed: 'league_spot_claimed',
+  league_spot_released: 'league_spot_claimed',
+};
+
+// The preference key (a LEAGUE_NOTIFICATION_ROWS type) a notification type is
+// switched by.
+export function leaguePrefKey(type) {
+  return LEAGUE_PREF_OF[type] ?? type;
+}
 
 // Push on, email off: nobody gets email they did not ask for.
 export const DEFAULT_LEAGUE_NOTIFICATIONS = {

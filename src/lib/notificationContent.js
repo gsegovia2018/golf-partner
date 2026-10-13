@@ -21,6 +21,32 @@ function pointsResult(points) {
   return ` \u00b7 ${n} pts`;
 }
 
+// 'October card at Golf Olivar' / 'card'.
+function cardPhrase(data) {
+  const month = monthName(data.month);
+  return `${month ? `${month} ` : ''}card${data.course_name ? ` at ${data.course_name}` : ''}`;
+}
+
+// "Pablo's" — the card owner (league_card_notice in 20261016000000).
+function ownerPossessive(data) {
+  return data.owner_name ? `${data.owner_name}'s` : 'a';
+}
+
+// 'Sat 25 Oct, 09:00' in Europe/Madrid, like send-push; '' when unparseable.
+function teeTimeText(t) {
+  if (!t) return '';
+  try {
+    const d = new Date(t);
+    if (Number.isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Madrid', weekday: 'short', day: 'numeric', month: 'short',
+      hour: '2-digit', minute: '2-digit',
+    }).format(d);
+  } catch (_e) {
+    return '';
+  }
+}
+
 // notification type + data -> { icon, title, body } for the in-app inbox.
 // `icon` values are Feather icon names.
 export function renderNotification(type, data = {}) {
@@ -167,6 +193,85 @@ export function renderNotification(type, data = {}) {
         body: `Vote on ${data.subject_name || 'a member'}'s handicap`
           + `${data.old != null && data.proposed != null ? `, ${data.old} to ${data.proposed}` : ''}`,
       };
+    // 20261016000000 (league integrity). Copy mirrors send-push.
+    case 'league_card_rescheduled': {
+      const when = teeTimeText(data.tee_time);
+      return {
+        icon: 'calendar',
+        title: 'Card rescheduled',
+        body: `${actorName} moved their ${cardPhrase(data)}${when ? ` to ${when}` : ''}`,
+      };
+    }
+    case 'league_card_withdrawn':
+      return {
+        icon: 'x-circle',
+        title: 'Card withdrawn',
+        body: `${actorName} withdrew their ${cardPhrase(data)}`,
+      };
+    case 'league_card_auto_withdrawn':
+      return {
+        icon: 'x-circle',
+        title: 'Card withdrawn',
+        body: `Your ${cardPhrase(data)} was withdrawn: no shot was played within 24 hours of Start. `
+          + 'You can play another one this month.',
+      };
+    case 'league_card_voided':
+      return {
+        icon: 'slash',
+        title: 'Card voided',
+        body: `${data.actor_name || 'An admin'} voided ${ownerPossessive(data)} ${cardPhrase(data)}`
+          + `${data.reason ? `: ${data.reason}` : ''}`,
+      };
+    case 'league_card_reopened':
+      return {
+        icon: 'rotate-ccw',
+        title: 'Card reopened',
+        body: `${data.actor_name || 'An admin'} reopened ${ownerPossessive(data)} ${cardPhrase(data)}: 8 hours to post it`,
+      };
+    case 'league_card_approved':
+      return {
+        icon: 'check-circle',
+        title: 'Card approved',
+        body: `${data.actor_name || 'An admin'} approved ${ownerPossessive(data)} ${cardPhrase(data)}`,
+      };
+    case 'league_handicap_changed':
+      return {
+        icon: 'sliders',
+        title: 'League handicap changed',
+        body: `${data.actor_name || 'An admin'} set ${data.subject_name || 'a member'}'s league handicap`
+          + `${data.old != null ? ` from ${data.old}` : ''}${data.new != null ? ` to ${data.new}` : ''}`,
+      };
+    case 'league_member_removed':
+      return data.you
+        ? {
+          icon: 'user-x',
+          title: 'Removed from a league',
+          body: `${data.actor_name || 'An admin'} removed you from ${data.league_name || 'the league'}`,
+        }
+        : {
+          icon: 'user-x',
+          title: 'Member removed',
+          body: `${data.actor_name || 'An admin'} removed ${data.subject_name || 'a member'} from ${data.league_name || 'the league'}`,
+        };
+    case 'league_spot_claimed':
+      return {
+        icon: 'user-plus',
+        title: 'Spot claimed',
+        body: `${data.actor_name || 'Someone'} joined ${data.league_name || 'the league'} as ${data.spot_name || 'a reserved spot'}`,
+      };
+    case 'league_spot_released':
+      return data.you
+        ? {
+          icon: 'user-x',
+          title: 'Spot released',
+          body: `${data.actor_name || 'An admin'} released your spot in ${data.league_name || 'the league'}`,
+        }
+        : {
+          icon: 'user-x',
+          title: 'Spot released',
+          body: `${data.actor_name || 'An admin'} released ${data.spot_name ? `the spot ${data.spot_name}` : 'a spot'}`
+            + ` in ${data.league_name || 'the league'}`,
+        };
     default:
       return { icon: 'bell', title: 'Notification', body: '' };
   }
@@ -221,7 +326,19 @@ export function notificationLink(type, data = {}) {
     case 'league_month_reminder':
     case 'league_post_reminder':
     case 'league_vote_opened':
+    case 'league_card_rescheduled':
+    case 'league_card_withdrawn':
+    case 'league_card_auto_withdrawn':
+    case 'league_card_voided':
+    case 'league_card_reopened':
+    case 'league_card_approved':
+    case 'league_handicap_changed':
+    case 'league_spot_claimed':
       return { screen: 'LeagueBoard', params: { leagueId: data.league_id } };
+    // The removed / released member can't open the board any more.
+    case 'league_member_removed':
+    case 'league_spot_released':
+      return data.you ? { screen: 'Notifications' } : { screen: 'LeagueBoard', params: { leagueId: data.league_id } };
     default:
       return { screen: 'Notifications' };
   }
