@@ -88,7 +88,7 @@ function drop(job) {
 
 function dropRunning(lanes) {
   const r = queue.running;
-  if (!r || !lanes.includes(r.lane)) return;
+  if (!r || r.dropped || !lanes.includes(r.lane)) return;
   drop(r);
   try { nativeApi()?.cancelAnalysis?.(); } catch { /* the job just runs to its end */ }
 }
