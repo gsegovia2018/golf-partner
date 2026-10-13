@@ -33,7 +33,8 @@ export default function LeagueFinalScreen({ navigation, route }) {
   const view = useMemo(() => {
     if (!data) return null;
     const active = data.members.filter((m) => !m.leftAt);
-    return { active, table: seasonTable(active, data.cardsByMonth, data.league.pointsTable) };
+    return { active, table: seasonTable(active, data.cardsByMonth, data.league.pointsTable,
+      { participationPoints: data.league.participationPoints }) };
   }, [data]);
 
   // Seed once from the standings; later refreshes never overwrite admin edits.

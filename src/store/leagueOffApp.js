@@ -10,9 +10,12 @@ import { isRatedTee } from './handicapIndex';
 
 export const HOLES_PER_CARD = 18;
 
-// The jsonb the server keeps on the card: { name, tee, slope, rating, holes:[{n,par,si}] }.
+// The jsonb the server keeps on the card: { course_id, name, tee, slope,
+// rating, holes:[{n,par,si}] }. course_id is the library course (null for a
+// course typed in by hand): the server then takes the tee from the library.
 export function courseSnapshot(course, tee) {
   return {
+    course_id: course.id ?? null,
     name: course.name,
     tee: tee?.label ?? null,
     slope: tee?.slope ?? course.slope ?? null,

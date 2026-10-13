@@ -5,6 +5,7 @@ import {
   notifyLeagueTeeOff, submitLeagueCard, addUnannouncedLeagueCard, confirmLeagueCardByPartner,
   attachLeagueProof, createMarkerToken, voidLeagueCard, recordLeagueFinal, getMyLeagues, getMyCardsForMonth,
   getLeagueCard, setLeagueRole, archiveLeague, deleteLeague, getLeague, getLeagueCached, setLeagueCache, uploadLeagueProof, rowToCard,
+  rowToLeague,
   rescheduleLeagueCard, reopenLeagueCard, approveLeagueCard,
   getLeagueMarkerCandidates, requestLeagueMarker, remindLeagueMarker, cancelLeagueMarkerRequest,
 } from '../leagueStore';
@@ -119,6 +120,15 @@ describe('RPC params', () => {
       p_points_table: null, p_cap: 30, p_fee_cents: 2000,
       p_members: [{ user_id: 'u2', handicap: 18 }, { user_id: 'u3', handicap: null }],
     }]);
+  });
+
+  test('createLeague sends participation points only when given', async () => {
+    ok({ id: 'L1', invite_code: 'ABC123' });
+    await createLeague({ name: 'Tour', seasonStart: '2026-01-01', seasonEnd: '2026-12-31', participationPoints: 0 });
+    expect(lastRpc()[1]).toMatchObject({ p_participation_points: 0 });
+    ok({ id: 'L1', invite_code: 'ABC123' });
+    await createLeague({ name: 'Tour', seasonStart: '2026-01-01', seasonEnd: '2026-12-31' });
+    expect(lastRpc()[1]).not.toHaveProperty('p_participation_points');
   });
 
   test('getLeagueByCode maps the summary, null for unknown code', async () => {
@@ -239,6 +249,13 @@ describe('RPC params', () => {
     }]);
   });
 
+  test('updateLeagueRules sends participation points only when given', async () => {
+    await updateLeagueRules('L1', { participationPoints: 15 });
+    expect(lastRpc()[1]).toMatchObject({ p_league: 'L1', p_participation_points: 15, p_name: null });
+    await updateLeagueRules('L1', { name: 'New' });
+    expect(lastRpc()[1]).not.toHaveProperty('p_participation_points');
+  });
+
   test('handicap votes', async () => {
     ok('V1');
     expect(await openHandicapVote('L1', 'u2', 27)).toBe('V1');
@@ -282,8 +299,10 @@ describe('RPC params', () => {
     const res = await submitLeagueCard({
       cardId: 'C1', holes: { 1: 5 }, gross: 5, points: 1, playingHandicap: 20, playedOn: '2026-10-04',
     });
+    // An older server returns no score: the new fields read null.
     expect(res).toEqual({
       id: 'C1', status: 'submitted', notAnnounced: true, firstShotAt: '2026-10-04T09:00:00Z',
+      points: null, playingHandicap: null, teeVerified: null,
     });
     expect(lastRpc()).toEqual(['submit_league_card', {
       p_card: 'C1', p_holes: { 1: 5 }, p_gross: 5, p_points: 1, p_playing_handicap: 20,
@@ -524,6 +543,18 @@ describe('reads and cache', () => {
     expect(rowToCard(cardRow())).toMatchObject({
       markerUserId: null, markerName: null, markerRequestedAt: null, markerRemindedAt: null,
     });
+  });
+
+  test('rowToCard maps tee_verified, null when absent', () => {
+    expect(rowToCard({ ...cardRow(), tee_verified: true })).toMatchObject({ teeVerified: true });
+    expect(rowToCard({ ...cardRow(), tee_verified: false })).toMatchObject({ teeVerified: false });
+    expect(rowToCard(cardRow())).toMatchObject({ teeVerified: null });
+  });
+
+  test('rowToLeague maps participation points; a server without the column means 0', () => {
+    expect(rowToLeague({ id: 'L1', participation_points: 10 })).toMatchObject({ participationPoints: 10 });
+    expect(rowToLeague({ id: 'L1', participation_points: 0 })).toMatchObject({ participationPoints: 0 });
+    expect(rowToLeague({ id: 'L1' })).toMatchObject({ participationPoints: 0 });
   });
 
   test('rowToCard maps the server net differential (numeric comes back as a string) and keeps null', () => {

@@ -79,7 +79,7 @@ describe('LeagueStatsScreen', () => {
     fireEvent.press(getByText('Aug'));
     expect(getByText('August honours')).toBeTruthy();
     expect(getByText('CARD OF THE MONTH')).toBeTruthy();
-    expect(getByText('Nacho, 1.0 better at Los Arqueros')).toBeTruthy();
+    expect(getByText('Nacho, 37 pts at Los Arqueros')).toBeTruthy();
     expect(getByText('HOLE OF THE MONTH')).toBeTruthy();
   });
 
@@ -114,10 +114,10 @@ describe('LeagueStatsScreen', () => {
     // vs Javi: lost Jul, won Aug, won Sep -> 2-1 over 3 months.
     expect(getByText('2–1')).toBeTruthy();
     expect(getByText('3 months')).toBeTruthy();
-    expect(queryByText('You 0.0')).toBeNull();
+    expect(queryByText('You 36 pts')).toBeNull();
     fireEvent.press(getByText('Javi'));
-    expect(getByText('You 0.0')).toBeTruthy();
-    expect(getByText('Javi +6.0')).toBeTruthy();
+    expect(getByText('You 36 pts')).toBeTruthy();
+    expect(getByText('Javi 30 pts')).toBeTruthy();
   });
 
   test('no cards yet: friendly empty state', async () => {

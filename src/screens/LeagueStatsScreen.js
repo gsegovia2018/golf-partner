@@ -54,7 +54,7 @@ export default function LeagueStatsScreen({ navigation, route }) {
     if (!data) return null;
     const { league, members, cardsByMonth } = data;
     const active = members.filter((m) => !m.leftAt);
-    const table = seasonTable(active, cardsByMonth, league.pointsTable);
+    const table = seasonTable(active, cardsByMonth, league.pointsTable, { participationPoints: league.participationPoints });
     const scored = Object.keys(cardsByMonth)
       .filter((m) => cardsByMonth[m].some((c) => c.status === 'confirmed' && !needsApproval(c))).sort();
     return { league, members, active, cardsByMonth, table, scored };
@@ -226,7 +226,8 @@ export default function LeagueStatsScreen({ navigation, route }) {
                       accessibilityLabel={c.cardId == null ? undefined : `${nameOf(row.userId)}, ${monthName(c.month)}: ${cellLabel(c)}`}
                     >
                       <Text style={[s.cellText, high(c) && s.cellTextHigh, (c.cardId == null || c.unrated) && s.muted]}>
-                        {c.cardId == null ? '–' : c.unrated ? 'NR' : formatNetDiffSigned(c.netDifferential)}
+                        {c.cardId == null ? '–' : c.unrated ? 'NR'
+                          : c.netDifferential == null ? '—' : formatNetDiffSigned(c.netDifferential)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -280,8 +281,8 @@ export default function LeagueStatsScreen({ navigation, route }) {
               {open && rivalMonths(cardsByMonth, meId, r.userId).map((m) => (
                 <View key={m.month} style={s.monthRow}>
                   <Text style={s.monthRowMonth}>{monthName(m.month, true)}</Text>
-                  <Text style={[s.monthRowText, m.a < m.b && s.winner]}>{`You ${formatNetDiffSigned(m.a)}`}</Text>
-                  <Text style={[s.monthRowText, m.b < m.a && s.winner]}>{`${nameOf(r.userId)} ${formatNetDiffSigned(m.b)}`}</Text>
+                  <Text style={[s.monthRowText, m.a > m.b && s.winner]}>{`You ${m.a} pts`}</Text>
+                  <Text style={[s.monthRowText, m.b > m.a && s.winner]}>{`${nameOf(r.userId)} ${m.b} pts`}</Text>
                 </View>
               ))}
             </View>

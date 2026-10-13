@@ -54,18 +54,19 @@ describe('card status', () => {
   test('each state', () => {
     expect(cardStatus(null, NOW).text).toBe('No card yet');
     expect(cardStatus({ status: 'confirmed', points: 38, netDifferential: -2.4 }, NOW))
-      .toMatchObject({ text: '2.4 better · confirmed', tone: 'done', lead: '2.4 better', leadTone: 'better' });
+      .toMatchObject({ text: '38 pts · confirmed', tone: 'done', lead: '38 pts', leadTone: null });
     expect(cardStatus({ status: 'confirmed', points: 31, netDifferential: 4.3 }, NOW))
-      .toMatchObject({ text: '4.3 worse · confirmed', leadTone: 'worse' });
+      .toMatchObject({ text: '31 pts · confirmed', leadTone: null });
     expect(cardStatus({ status: 'playing' }, NOW)).toMatchObject({ text: 'Playing now', tone: 'live' });
     expect(cardStatus({ status: 'submitted', points: 36, netDifferential: 0.04, source: 'offapp' }, NOW).text)
-      .toBe('level · added after the round');
-  });
-  test('an unrated confirmed card is listed, not ranked; a submitted one without a value falls back to points', () => {
-    expect(cardStatus({ status: 'confirmed', points: 30, netDifferential: null }, NOW))
-      .toMatchObject({ text: 'unrated · not ranked', tone: 'muted', leadTone: null });
-    expect(cardStatus({ status: 'submitted', points: 36, netDifferential: null, source: 'offapp' }, NOW).text)
       .toBe('36 pts · added after the round');
+  });
+  test('the lead is the points, with or without a net differential; a card without points is not ranked', () => {
+    expect(cardStatus({ status: 'confirmed', points: 30, netDifferential: null }, NOW))
+      .toMatchObject({ text: '30 pts · confirmed', tone: 'done', lead: '30 pts' });
+    expect(cardStatus({ status: 'confirmed', points: null, netDifferential: -1 }, NOW))
+      .toMatchObject({ text: 'unrated · not ranked', tone: 'muted', leadTone: null });
+    expect(cardStatus({ status: 'submitted', points: null, source: 'app' }, NOW).text).toBe('submitted');
   });
   test('flags a card that was not announced', () => {
     expect(cardStatus({ status: 'submitted', points: 30, netDifferential: 1, notAnnounced: true, approvedAt: '2026-10-05T00:00:00Z' }, NOW).flag).toBe('Not announced in the app');
@@ -76,14 +77,14 @@ describe('card status', () => {
   });
 });
 
-test('monthRows sorts confirmed by net differential (unrated last), then in-progress, then nobody; skips void and left', () => {
+test('monthRows sorts confirmed by points (most first, unscored last), then in-progress, then nobody; skips void and left', () => {
   const members = [{ userId: 'a' }, { userId: 'b' }, { userId: 'c' }, { userId: 'd' }, { userId: 'e', leftAt: 'x' },
     { userId: 'f' }];
   const cardsByMonth = {
     '2026-10': [
       { userId: 'a', status: 'confirmed', points: 38, netDifferential: 3.2 },
-      { userId: 'f', status: 'confirmed', points: 44, netDifferential: null },
-      { userId: 'b', status: 'confirmed', points: 30, netDifferential: -1.4 },
+      { userId: 'f', status: 'confirmed', points: null, netDifferential: null },
+      { userId: 'b', status: 'confirmed', points: 44, netDifferential: -1.4 },
       { userId: 'c', status: 'playing' },
     ],
   };
@@ -178,6 +179,13 @@ test('leagueSummary ranks members from the cached snapshot', () => {
   };
   expect(leagueSummary(snapshot, 'a').position).toBe('2nd of 2 · 300 pts');
   expect(leagueSummary({ ...snapshot, cardsByMonth: {} }, 'a').position).toBeNull();
+  // The league's participation points lift a place beyond the table.
+  const three = {
+    league: { pointsTable: [500], participationPoints: 10 },
+    members: [{ userId: 'a' }, { userId: 'b' }],
+    cardsByMonth: snapshot.cardsByMonth,
+  };
+  expect(leagueSummary(three, 'a').position).toBe('2nd of 2 · 10 pts');
 });
 
 test('viewableCards: scored cards only, in monthRows order, no void or left members', () => {
@@ -204,8 +212,8 @@ describe('monthBoard', () => {
   const cards = {
     '2026-10': [
       card('a', 'confirmed', 36, { confirmation: 'qr', netDifferential: 1.2 }),
-      card('b', 'confirmed', 33, { confirmation: 'partner', netDifferential: -2.4 }),
-      card('c', 'confirmed', 38, { confirmation: 'photo', netDifferential: 1.2 }),
+      card('b', 'confirmed', 40, { confirmation: 'partner', netDifferential: 2.4 }),
+      card('c', 'confirmed', 36, { confirmation: 'photo', netDifferential: -1.2 }),
       card('d', 'submitted', 40),
       card('e', 'submitted', 30, { source: 'offapp' }),
       card('f', 'announced', null),
@@ -235,22 +243,30 @@ describe('monthBoard', () => {
     expect(board.waiting.map((r) => r.reason)).toEqual(['sent back by the marker']);
   });
 
-  test('confirmed ranks by net differential; an unrated confirmed card is listed after, not ranked', () => {
+  test('confirmed ranks by points (best card each); an unscored confirmed card is listed after, not ranked', () => {
     const board = monthBoard(members, {
       '2026-10': [
-        card('a', 'confirmed', 40, { netDifferential: null }),
+        card('a', 'confirmed', null, { netDifferential: null }),
         card('b', 'confirmed', 30, { netDifferential: 3.1 }),
         card('c', 'confirmed', 33, { netDifferential: -0.5 }),
         card('c', 'confirmed', 36, { netDifferential: 0.8 }),
       ],
     }, '2026-10', table);
-    expect(board.confirmed.map((r) => [r.member.userId, r.place, r.unrated, r.netDifferential, r.seasonPoints])).toEqual([
-      ['c', 1, false, -0.5, 500],
-      ['b', 2, false, 3.1, 300],
-      ['a', null, true, null, 0],
+    expect(board.confirmed.map((r) => [r.member.userId, r.place, r.unrated, r.cardPoints, r.netDifferential, r.seasonPoints])).toEqual([
+      ['c', 1, false, 36, 0.8, 500],
+      ['b', 2, false, 30, 3.1, 300],
+      ['a', null, true, null, null, 0],
     ]);
-    expect(board.confirmed[0].card.netDifferential).toBe(-0.5);
+    expect(board.confirmed[0].card.points).toBe(36);
     expect(board.noCard.map((x) => x.userId)).not.toContain('a');
+  });
+
+  test('participation points lift places past the table', () => {
+    const board = monthBoard(members, {
+      '2026-10': [card('a', 'confirmed', 36), card('b', 'confirmed', 30), card('c', 'confirmed', 20),
+        card('d', 'confirmed', 10)],
+    }, '2026-10', table, NOW, { participationPoints: 25 });
+    expect(board.confirmed.map((r) => r.seasonPoints)).toEqual([500, 300, 190, 25]);
   });
 
   test('playing sorts before announced; an off-app card with proof is waiting for the check', () => {
@@ -316,11 +332,13 @@ describe('net differential words', () => {
     expect(netDiffTone(0)).toBeNull();
     expect(netDiffTone(null)).toBeNull();
   });
-  test('your card state carries the spoken value, or flags an unrated confirmed card', () => {
+  test('your card state carries the points and the spoken net, or flags an unscored confirmed card', () => {
     expect(yourCardState({ status: 'confirmed', points: 36, netDifferential: -0.6 }))
-      .toMatchObject({ net: '0.6 better', netTone: 'better', unrated: false });
+      .toMatchObject({ pts: '36 pts', net: '0.6 better', netTone: 'better', unrated: false });
     expect(yourCardState({ status: 'confirmed', points: 30, netDifferential: null }))
-      .toMatchObject({ net: null, unrated: true });
+      .toMatchObject({ pts: '30 pts', net: null, unrated: false });
+    expect(yourCardState({ status: 'confirmed', points: null, netDifferential: null }))
+      .toMatchObject({ pts: null, unrated: true });
   });
 });
 

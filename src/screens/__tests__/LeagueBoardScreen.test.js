@@ -342,12 +342,12 @@ describe('LeagueBoardScreen', () => {
     expect(queryByText('Set up the Final')).toBeNull();
   });
 
-  test('this month: an unrated confirmed card is listed with the confirmed, not ranked', async () => {
+  test('this month: an unscored confirmed card is listed with the confirmed, not ranked', async () => {
     store.getLeague.mockResolvedValue(snapshot({
       cardsByMonth: {
         [THIS_MONTH]: [
           card('javi', 'confirmed', 38, { netDifferential: -2.4 }),
-          card('nacho', 'confirmed', 33, { netDifferential: null }),
+          card('nacho', 'confirmed', null, { netDifferential: null }),
         ],
       },
     }));
@@ -431,13 +431,13 @@ describe('LeagueBoardScreen', () => {
   });
 
 
-  test("a month's results speak the net differential; an unrated card is listed, not ranked", async () => {
+  test("a month's results rank by points and still speak the net differential; an unscored card is listed, not ranked", async () => {
     store.getLeague.mockResolvedValue(snapshot({
       cardsByMonth: {
         [PAST_MONTH]: [
           card('javi', 'confirmed', 38, { netDifferential: -2.4 }),
           card('nacho', 'confirmed', 30, { netDifferential: 3.1 }),
-          card('me', 'confirmed', 33, { netDifferential: null }),
+          card('me', 'confirmed', null, { netDifferential: null }),
         ],
       },
     }));

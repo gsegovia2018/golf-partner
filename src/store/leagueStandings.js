@@ -1,15 +1,22 @@
 // League standings: pure functions of the league's cards (no I/O).
-// Plan: docs/superpowers/plans/2026-10-04-league.md (section 4.1).
+// Plan: docs/superpowers/plans/2026-10-04-league.md (section 4.1); ranked by
+// Stableford since docs/superpowers/plans/2026-10-13-league-review-followups.md (R1, R2).
 import { assignPlacements } from './leaderboardPlacement';
 import { needsApproval } from './leagueRules';
 
 export const DEFAULT_POINTS_TABLE = [500, 300, 190, 135, 110, 90, 75, 60, 45, 35, 25, 15];
 
-// Lower net differential is better; equal to one decimal is a tie.
-const byNetDiffAsc = (a, b) => a.netDifferential - b.netDifferential;
+// More Stableford points is better; equal points are a tie (no tie-break).
+const byPointsDesc = (a, b) => b.cardPoints - a.cardPoints;
 const byTotalDesc = (a, b) => b.total - a.total;
 
 const memberId = (m) => (typeof m === 'string' ? m : m?.userId);
+
+const pointsOf = (card) => {
+  if (card?.points == null || card.points === '') return null;
+  const n = Number(card.points);
+  return Number.isFinite(n) ? n : null;
+};
 
 const netDiffOf = (card) => {
   if (card?.netDifferential == null || card.netDifferential === '') return null;
@@ -25,34 +32,35 @@ function sharedPoints(table, place, size) {
   return sum / size;
 }
 
-// One month's results, ranked by net differential (lowest first). `members`
-// are user ids or `{userId}`. Only confirmed cards count (a not-announced one
-// only once an admin approved it); a member's best card
-// is the lowest net differential. A confirmed card with no net differential
-// (its tee has no slope/rating) is not ranked: { place: null, unrated: true,
-// seasonPoints: 0 }. Members without a confirmed card get place null and 0
-// points. Unranked rows follow the ranked ones. A confirmed card from someone
-// no longer in `members` (a member who left keeps past cards) still ranks.
-// Rows carry `netDifferential` and the card's Stableford `cardPoints`
-// (secondary information).
-export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE) {
+// One month's results, ranked by the card's net Stableford points, highest
+// first (the server scores every card). `members` are user ids or `{userId}`.
+// Only confirmed cards count (a not-announced one only once an admin approved
+// it); a member's best card is the one with the most points. Season points =
+// the place's table share, but at least `participationPoints` for every ranked
+// card (R2; no card = 0). A confirmed card without points (never scored) is
+// not ranked: { place: null, unrated: true, seasonPoints: 0 }. Members without
+// a confirmed card get place null and 0 points. Unranked rows follow the
+// ranked ones. A confirmed card from someone no longer in `members` (a member
+// who left keeps past cards) still ranks. Rows carry the ranking value
+// `cardPoints` and the card's `netDifferential` (secondary information).
+export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE, { participationPoints = 0 } = {}) {
+  const floor = Math.max(0, Number(participationPoints) || 0);
   const best = new Map();
-  const unrated = new Map();
+  const unrated = new Set();
   for (const c of cards ?? []) {
     if (c?.status !== 'confirmed' || needsApproval(c)) continue;
-    const nd = netDiffOf(c);
-    const cardPoints = Number(c.points) || 0;
-    if (nd == null) {
-      if (!unrated.has(c.userId) || cardPoints > unrated.get(c.userId)) unrated.set(c.userId, cardPoints);
+    const cardPoints = pointsOf(c);
+    if (cardPoints == null) {
+      unrated.add(c.userId);
       continue;
     }
-    if (!best.has(c.userId) || nd < best.get(c.userId).netDifferential) {
-      best.set(c.userId, { netDifferential: nd, cardPoints });
+    if (!best.has(c.userId) || cardPoints > best.get(c.userId).cardPoints) {
+      best.set(c.userId, { cardPoints, netDifferential: netDiffOf(c) });
     }
   }
 
-  const ranked = [...best].map(([userId, b]) => ({ userId, ...b })).sort(byNetDiffAsc);
-  const placed = assignPlacements(ranked, byNetDiffAsc);
+  const ranked = [...best].map(([userId, b]) => ({ userId, ...b })).sort(byPointsDesc);
+  const placed = assignPlacements(ranked, byPointsDesc);
   const sizes = {};
   placed.forEach((r) => { sizes[r.place] = (sizes[r.place] ?? 0) + 1; });
 
@@ -62,15 +70,15 @@ export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE)
     isTie: r.isTie,
     netDifferential: r.netDifferential,
     cardPoints: r.cardPoints,
-    seasonPoints: sharedPoints(pointsTable, r.place, sizes[r.place]),
+    seasonPoints: Math.max(sharedPoints(pointsTable, r.place, sizes[r.place]), floor),
   }));
 
   const seen = new Set(best.keys());
-  for (const [userId, cardPoints] of unrated) {
+  for (const userId of unrated) {
     if (seen.has(userId)) continue;
     seen.add(userId);
     rows.push({
-      userId, place: null, isTie: false, unrated: true, netDifferential: null, cardPoints, seasonPoints: 0,
+      userId, place: null, isTie: false, unrated: true, netDifferential: null, cardPoints: null, seasonPoints: 0,
     });
   }
   for (const m of members ?? []) {
@@ -84,12 +92,13 @@ export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE)
   return rows;
 }
 
-// Season table over `cardsByMonth` ({ 'YYYY-MM': cards[] }).
+// Season table over `cardsByMonth` ({ 'YYYY-MM': cards[] }). `options` are
+// monthResults' ({ participationPoints }).
 // lastMonthDelta = season points earned in the most recent month that has any
 // confirmed card (0 when there is none).
-export function seasonTable(members, cardsByMonth, pointsTable = DEFAULT_POINTS_TABLE) {
+export function seasonTable(members, cardsByMonth, pointsTable = DEFAULT_POINTS_TABLE, options = {}) {
   const months = Object.keys(cardsByMonth ?? {}).sort();
-  const perMonth = months.map((month) => [month, monthResults(cardsByMonth[month], members, pointsTable)]);
+  const perMonth = months.map((month) => [month, monthResults(cardsByMonth[month], members, pointsTable, options)]);
   const lastMonth = [...perMonth].reverse()
     .find(([, rows]) => rows.some((r) => r.place != null))?.[0];
 

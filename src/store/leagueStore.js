@@ -92,6 +92,9 @@ export function rowToLeague(r) {
     entryFeeCents: r.entry_fee_cents ?? 0,
     inviteCode: r.invite_code,
     archivedAt: r.archived_at ?? null,
+    // Season points every counting card earns at least (R2). A server without
+    // the column (before 20261015000000) has no such rule: 0.
+    participationPoints: r.participation_points == null ? 0 : Number(r.participation_points),
   };
 }
 
@@ -117,7 +120,9 @@ export function rowToMember(r, leagueId = null) {
 }
 
 // Shape consumed by leagueStandings.js / leagueRules.js: `userId`, `status`,
-// `points`, `netDifferential`, `month` ('YYYY-MM-01'), `announcedAt`, `firstShotAt`,
+// `points` (the ranking value, scored by the server), `netDifferential`
+// (secondary), `teeVerified` (the tee came from the course library; false =
+// entered by hand, null = not scored yet), `month` ('YYYY-MM-01'), `announcedAt`, `firstShotAt`,
 // `postBy` (post deadline, null on cards from before it existed), `approvedBy` /
 // `approvedAt` (an admin's approval of a not-announced card). `monthKey`
 // ('YYYY-MM') is the key for seasonTable's cardsByMonth.
@@ -147,11 +152,13 @@ export function rowToCard(r) {
     playingHandicap: r.playing_handicap ?? null,
     holes: r.holes ?? null,
     gross: r.gross ?? null,
+    // Ranking value (more is better): Stableford points, computed by the server.
     points: r.points ?? null,
-    // Ranking value (lower is better), computed by the server. null = the
-    // card's tee has no slope/rating, so it isn't ranked.
+    // Secondary information, also computed by the server. null = the card's
+    // tee had no slope/rating (cards from before rated tees were required).
     differential: num(r.differential),
     netDifferential: num(r.net_differential),
+    teeVerified: r.tee_verified ?? null,
     confirmation: r.confirmation ?? null,
     confirmedByUser: r.confirmed_by_user ?? null,
     confirmedByName: r.confirmed_by_name ?? null,
@@ -346,11 +353,16 @@ export async function getLeague(leagueId) {
 
 // members: [{ userId, handicap }] or, for someone not in the app yet,
 // [{ name, handicap }] (a reserved spot they claim from the invite link).
-// Returns { id, inviteCode }.
+// participationPoints: season points every counting card earns at least;
+// omitted = the server default (10). Returns { id, inviteCode }.
 export async function createLeague({
   name, seasonStart, seasonEnd, pointsTable = null, cap = null, feeCents = 0, members = [],
+  participationPoints = null,
 }) {
+  // Sent only when set, so the call still matches a server without the argument.
+  const extra = participationPoints == null ? {} : { p_participation_points: participationPoints };
   const d = await rpc('create_league', {
+    ...extra,
     p_name: name,
     p_season_start: seasonStart,
     p_season_end: seasonEnd,
@@ -426,9 +438,12 @@ export async function setLeagueFeePaid(leagueId, userId, paid) {
 
 // Admin. Omitted fields keep their current value.
 export async function updateLeagueRules(leagueId, {
-  name, seasonStart, seasonEnd, pointsTable, cap, feeCents,
+  name, seasonStart, seasonEnd, pointsTable, cap, feeCents, participationPoints,
 } = {}) {
+  // Sent only when set, so the call still matches a server without the argument.
+  const extra = participationPoints == null ? {} : { p_participation_points: participationPoints };
   await rpc('update_league_rules', {
+    ...extra,
     p_league: leagueId,
     p_name: name ?? null,
     p_season_start: seasonStart ?? null,
@@ -519,7 +534,11 @@ export async function notifyLeagueTeeOff(cardId) {
 }
 
 // Freezes the snapshot of an announced/playing card. `holes` = { '1': 5, ... }.
-// Returns { id, status, notAnnounced, firstShotAt }.
+// The server scores the card itself: gross, points and playingHandicap are
+// still sent for older servers but ignored (20261015000000). Server hints
+// include 'incomplete_card', 'holes_mismatch' (an app card that differs from
+// the game) and 'unrated_tee'. Returns { id, status, notAnnounced, firstShotAt,
+// points, playingHandicap, teeVerified } (the last three null from an older server).
 export async function submitLeagueCard({
   cardId, holes, gross, points, playingHandicap, playedOn = null,
 }) {
@@ -531,11 +550,20 @@ export async function submitLeagueCard({
     p_playing_handicap: playingHandicap,
     p_played_on: playedOn,
   });
-  return { id: d.id, status: d.status, notAnnounced: !!d.not_announced, firstShotAt: d.first_shot_at ?? null };
+  return {
+    id: d.id,
+    status: d.status,
+    notAnnounced: !!d.not_announced,
+    firstShotAt: d.first_shot_at ?? null,
+    points: d.points ?? null,
+    playingHandicap: d.playing_handicap ?? null,
+    teeVerified: d.tee_verified ?? null,
+  };
 }
 
 // Off-app card with no announcement: created already submitted and labelled
-// "Not announced in the app". Returns { id, month, status, notAnnounced }.
+// "Not announced in the app". Scored by the server like submitLeagueCard.
+// Returns { id, month, status, notAnnounced }.
 export async function addUnannouncedLeagueCard({
   leagueId, course, teeTime = null, playedOn = null, holes, gross, points, playingHandicap,
 }) {

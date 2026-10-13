@@ -13,15 +13,12 @@ function monthName(month) {
   return (m && MONTHS[Number(m[1]) - 1]) || '';
 }
 
-// ' \u00b7 2.4 better than handicap' / ' \u00b7 level with handicap'; null means the
-// card's tee has no rating, so it is not ranked. No pronouns: the wording
-// holds for any member.
-function netResult(netDifferential) {
-  const n = Number(netDifferential);
-  if (netDifferential == null || netDifferential === '' || !Number.isFinite(n)) return ' \u00b7 unrated tee, not ranked';
-  const v = Math.round(n * 10) / 10;
-  if (v === 0) return ' \u00b7 level with handicap';
-  return ` \u00b7 ${Math.abs(v).toFixed(1)} ${v < 0 ? 'better' : 'worse'} than handicap`;
+// ' \u00b7 38 pts': the Stableford points the league ranks by; '' when the
+// payload has none. No pronouns: the wording holds for any member.
+function pointsResult(points) {
+  const n = Number(points);
+  if (points == null || points === '' || !Number.isFinite(n)) return '';
+  return ` \u00b7 ${n} pts`;
 }
 
 // notification type + data -> { icon, title, body } for the in-app inbox.
@@ -92,9 +89,8 @@ export function renderNotification(type, data = {}) {
       };
     case 'league_card_confirmed': {
       const month = monthName(data.month);
-      // The league ranks by net differential; older payloads only carry points.
-      const result = data.net_differential !== undefined ? netResult(data.net_differential)
-        : data.points != null ? `, ${data.points} pts` : '';
+      // The league ranks by Stableford points (the server scores the card).
+      const result = pointsResult(data.points);
       return {
         icon: 'check-circle',
         title: 'Card confirmed',

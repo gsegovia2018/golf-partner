@@ -90,12 +90,14 @@ export function applyLeagueHandicap(round, playerId, leagueHandicap) {
 }
 
 // The course snapshot announce_league_card stores:
-// {name, tee, slope, rating, par, holes:[{n,par,si}]}. slope/rating are what
-// the server's net differential is computed from.
+// {course_id, name, tee, slope, rating, par, holes:[{n,par,si}]}. The server
+// scores the card from it; with a library course_id it takes the tee's
+// slope/rating/par/holes from the library instead (tee_verified).
 export function leagueCourse(round, playerId) {
   const tee = round?.playerTees?.[playerId] ?? setupPlayerTee(round, playerId);
   const { slope, rating } = tee ?? resolveRoundTee(round, playerId);
   return {
+    course_id: round?.courseId ?? null,
     name: String(round?.courseName ?? '').trim(),
     tee: tee?.label ?? null,
     slope: slope ?? null,
