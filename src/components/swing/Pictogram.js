@@ -24,7 +24,7 @@ const SHAPES = {
     head: [176, 150], sh: [194, 186], hip: [248, 268], knee: [242, 340], ank: [240, 400], elb: [220, 188], hands: [250, 188], club: [291, 120], seg: 'arm', level: 'sh', ball: false,
   },
   top: {
-    head: [178, 152], sh: [198, 188], hip: [250, 268], knee: [244, 340], ank: [240, 400], elb: [236, 168], hands: [262, 150], club: [268, 122], seg: 'club', ball: false,
+    head: [178, 152], sh: [198, 188], hip: [250, 268], knee: [244, 340], ank: [240, 400], elb: [236, 168], hands: [262, 150], club: [334, 116], seg: 'club', ball: false,
   },
   shaftDown: {
     head: [178, 152], sh: [194, 184], hip: [240, 262], knee: [240, 340], ank: [240, 400], elb: [214, 236], hands: [232, 266], club: [302, 266], seg: 'club', level: 'hands', ball: false,
