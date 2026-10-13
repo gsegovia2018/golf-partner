@@ -548,10 +548,10 @@ describe('the whole-clip scrub (D28)', () => {
     expect(ensureStills).not.toHaveBeenCalled(); // nothing is decoded while the finger is down
     await act(async () => { g.onFinalize(ev(atFrame(target)), true); });
     expect(u.getByLabelText(M.primary.useFrame(target))).toBeTruthy();
-    await waitFor(() => expect(ensureStills).toHaveBeenCalledWith('s1', [target]));
+    await waitFor(() => expect(ensureStills).toHaveBeenCalledWith('s1', [target], 'target'));
     await waitFor(() => expect(picture(u)).toBe(`file:///still/${target}.jpg`));
     expect(within(u.getByTestId('mark-frame-tag')).getByText(M.frameTag(target))).toBeTruthy();
-    await waitFor(() => expect(ensureStills).toHaveBeenCalledWith('s1', expect.arrayContaining([target - 4, target - 1, target + 1, target + 4])));
+    await waitFor(() => expect(ensureStills).toHaveBeenCalledWith('s1', expect.arrayContaining([target - 4, target - 1, target + 1, target + 4]), 'neighbours'));
   });
 
   test('apiVersion 2 binary (or a swing from before D28): no proxies, so the last still stays while dragging and fills on release', async () => {

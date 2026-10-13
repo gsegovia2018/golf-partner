@@ -288,7 +288,7 @@ export function SwingMarkCanvas({
     const have = stillFor(view);
     if (have) { setShown({ frame: view, uri: have }); return undefined; }
     const t = setTimeout(async () => {
-      await needStills([view]);
+      await needStills([view], 'target');
       // No still even after extracting: say so on the picture instead of waiting forever.
       if (alive) setShown({ frame: view, uri: stillFor(view) });
     }, 90);
@@ -302,7 +302,7 @@ export function SwingMarkCanvas({
     const want = [];
     for (let f = view - ZOOM_REACH; f <= view + ZOOM_REACH; f += 1) if (f >= 0 && f <= maxFrame && !stillFor(f)) want.push(f);
     if (!want.length) return undefined;
-    const t = setTimeout(() => { needStills(want); }, 200);
+    const t = setTimeout(() => { needStills(want, 'neighbours'); }, 200);
     return () => clearTimeout(t);
   }, [phase, step, arrived, view, maxFrame, stillFor, needStills]);
   // The picture is still the previous frame until the new still arrives: nothing is placed on it meanwhile.
@@ -836,8 +836,8 @@ export default function SwingEditMarksScreen({ navigation, route }) {
   }, [swingId]);
   const proxies = data && data !== 'missing' ? data.pose?.pass2?.proxies ?? null : null;
   const proxyFor = useCallback((f) => getProxy(swingId, f, proxies), [swingId, proxies]);
-  const needStills = useCallback(async (frames) => {
-    const got = await ensureStills(swingId, frames);
+  const needStills = useCallback(async (frames, lane) => {
+    const got = await ensureStills(swingId, frames, lane);
     frames.forEach((f) => known.current.delete(Math.round(f)));
     setTick((t) => t + 1);
     return got;

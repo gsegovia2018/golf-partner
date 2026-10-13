@@ -82,3 +82,92 @@ describe('scrub proxies (D28): the swing window, every 4th frame, no I/O per fra
     expect(getProxy('s1', 205, undefined)).toBeNull();
   });
 });
+
+describe('ensureStills lanes (target first, neighbours after, superseded work dropped)', () => {
+  // Each extractFrames call is a deferred the test settles by hand; calls are logged in start order.
+  function setup() {
+    const calls = [];
+    const extractFrames = jest.fn((_p, { frames }) => new Promise((resolve, reject) => {
+      calls.push({ frames, finish: () => { frames.forEach((f) => mockExists.add(`swings/s1/frames/${f}.jpg`)); resolve(Object.fromEntries(frames.map((f) => [f, `file:///doc/swings/s1/frames/${f}.jpg`]))); }, fail: reject });
+    }));
+    const cancelAnalysis = jest.fn(() => { const c = calls[calls.length - 1]; c.fail(new Error('ERR_CANCELLED')); });
+    jest.doMock('../native', () => ({ REQUIRED_API_VERSION: 1, apiVersion: 1, analyzePose: jest.fn(), extractFrames, cancelAnalysis }), { virtual: true });
+    return { calls, extractFrames, cancelAnalysis, ...require('../frames') };
+  }
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  test('a target runs ahead of waiting neighbours and cancels the running prefetch', async () => {
+    const { calls, cancelAnalysis, ensureStills } = setup();
+    const near = ensureStills('s1', [11, 12, 13], 'neighbours');
+    await tick();
+    expect(calls.map((c) => c.frames)).toEqual([[11, 12, 13]]);
+    const target = ensureStills('s1', [500], 'target');
+    expect(cancelAnalysis).toHaveBeenCalledTimes(1);
+    expect(await near).toEqual({ 11: null, 12: null, 13: null }); // dropped: resolves at once from disk
+    await tick();
+    expect(calls.map((c) => c.frames)).toEqual([[11, 12, 13], [500]]);
+    calls[1].finish();
+    expect(await target).toEqual({ 500: 'file:///doc/swings/s1/frames/500.jpg' });
+  });
+
+  test('a newer target supersedes a waiting one and a stale running one; never two jobs queue behind each other', async () => {
+    const { calls, cancelAnalysis, ensureStills } = setup();
+    const a = ensureStills('s1', [100], 'target');
+    await tick();
+    const b = ensureStills('s1', [200], 'target'); // a is running: cancelled
+    const c = ensureStills('s1', [300], 'target'); // b waits: dropped
+    expect(cancelAnalysis).toHaveBeenCalledTimes(1);
+    expect(await a).toEqual({ 100: null });
+    expect(await b).toEqual({ 200: null });
+    await tick();
+    expect(calls.map((x) => x.frames)).toEqual([[100], [300]]);
+    calls[1].finish();
+    expect((await c)[300]).toBe('file:///doc/swings/s1/frames/300.jpg');
+    expect(calls).toHaveLength(2);
+  });
+
+  test('neighbours wait behind the target and a newer prefetch replaces an older one', async () => {
+    const { calls, cancelAnalysis, ensureStills } = setup();
+    const t = ensureStills('s1', [50], 'target');
+    const n1 = ensureStills('s1', [49, 51], 'neighbours');
+    const n2 = ensureStills('s1', [48, 49, 51, 52], 'neighbours');
+    await tick();
+    expect(cancelAnalysis).not.toHaveBeenCalled();
+    expect(await n1).toEqual({ 49: null, 51: null });
+    expect(calls.map((x) => x.frames)).toEqual([[50]]);
+    calls[0].finish();
+    await t;
+    await tick();
+    expect(calls.map((x) => x.frames)).toEqual([[50], [48, 49, 51, 52]]);
+    calls[1].finish();
+    expect(Object.values(await n2).every(Boolean)).toBe(true);
+  });
+
+  test('asking again for what the lane is already extracting shares the job', async () => {
+    const { extractFrames, cancelAnalysis, ensureStills } = setup();
+    const a = ensureStills('s1', [7], 'target');
+    const b = ensureStills('s1', [7], 'target');
+    await tick();
+    expect(extractFrames).toHaveBeenCalledTimes(1);
+    expect(cancelAnalysis).not.toHaveBeenCalled();
+    expect(a).toBe(b);
+  });
+
+  test('lane-less callers stay FIFO and are never cancelled or dropped', async () => {
+    const { calls, cancelAnalysis, ensureStills } = setup();
+    const r1 = ensureStills('s1', [1]);
+    const r2 = ensureStills('s1', [2]);
+    await tick();
+    const t = ensureStills('s1', [900], 'target'); // may not cancel a running lane-less job
+    expect(cancelAnalysis).not.toHaveBeenCalled();
+    calls[0].finish();
+    await r1;
+    await tick();
+    expect(calls.map((x) => x.frames)).toEqual([[1], [900]]); // target jumps ahead of the waiting lane-less job
+    calls[1].finish();
+    await t;
+    await tick();
+    calls[2].finish();
+    expect((await r2)[2]).toBeTruthy();
+  });
+});
