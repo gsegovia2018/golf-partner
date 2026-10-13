@@ -36,6 +36,7 @@ jest.mock('../../store/swingStore', () => ({
   getSwingProfile: jest.fn(() => ({ practiceOpen: false })),
   setPracticeOpen: jest.fn(() => Promise.resolve(true)),
   markSwingFailed: jest.fn(() => Promise.resolve()),
+  deleteSwing: jest.fn(() => Promise.resolve()),
   swingVideoUri: jest.fn(() => 'file:///doc/swings/s1/video.mp4'),
 }));
 jest.mock('../../swing/shareExport', () => ({ shareSwingExport: jest.fn(() => Promise.resolve('shared')) }));
@@ -365,6 +366,36 @@ describe('SwingResultsScreen: after the marking pass (D26)', () => {
   });
 });
 
+describe('SwingResultsScreen: delete', () => {
+  test('More > Delete swing confirms, deletes the swing and goes back to the list', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const { findByLabelText, getByLabelText, navigation } = setup();
+    fireEvent.press(await findByLabelText(T.menu));
+    fireEvent.press(getByLabelText(T.deleteSwing));
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    const [title, body, buttons] = alertSpy.mock.calls[0];
+    expect(title).toBe(SWING_STRINGS.home.deleteTitle);
+    expect(body).toBe(SWING_STRINGS.home.deleteBody);
+    expect(store.deleteSwing).not.toHaveBeenCalled();
+    await act(async () => { await buttons.find((b) => b.style === 'destructive').onPress(); });
+    expect(store.deleteSwing).toHaveBeenCalledWith('s1');
+    expect(navigation.goBack).toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+
+  test('cancelling the confirm keeps the swing', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const { findByLabelText, getByLabelText, navigation } = setup();
+    fireEvent.press(await findByLabelText(T.menu));
+    fireEvent.press(getByLabelText(T.deleteSwing));
+    const buttons = alertSpy.mock.calls[0][2];
+    expect(buttons.find((b) => b.style === 'cancel').onPress).toBeUndefined();
+    expect(store.deleteSwing).not.toHaveBeenCalled();
+    expect(navigation.goBack).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+});
+
 describe('SwingResultsScreen: a swing still to analyse', () => {
   const PENDING = { ...ROW, status: 'pending' };
 
@@ -376,15 +407,58 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
     expect(await findByText(T.stages.reading)).toBeTruthy();
     expect(getByText(T.stages.pose)).toBeTruthy();
     expect(getByText(T.stages.planes)).toBeTruthy();
-    expect(getByText(T.nextMarking)).toBeTruthy();
+    expect(getByText(T.processingTitle)).toBeTruthy();
     await act(async () => { onProgress({ stage: 'pose', done: 120, total: 300, probe: { height: 720, containerFps: 30, captureFps: 240, durationMs: 4100 } }); });
     expect(getByText('120 / 300')).toBeTruthy();
     expect(getByText(/720p · 240 fps · 4\.1 s/)).toBeTruthy();
-    expect(getByText(T.notUploaded, { exact: false })).toBeTruthy();
+    expect(getByText(SWING_STRINGS.privacy)).toBeTruthy();
 
     await act(async () => { finish({ analysis: UNMARKED, pass2: 'done' }); });
     expect(navigation.replace).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', mode: 'pass' });
     expect(queryByText(VERDICT)).toBeNull();
+  });
+
+  test('processing shows only the stages: no verdict, timeline, checks, club picker or marks', async () => {
+    runAnalysis.mockReturnValue(new Promise(() => {}));
+    const { findByText, queryByText, queryByTestId, queryAllByText } = setup({ row: PENDING, analysis: MARKED });
+    await findByText(T.stages.reading);
+    expect(queryByText(T.mainTitle)).toBeNull();
+    expect(queryAllByText(SWING_STRINGS.checkpoint.impact)).toHaveLength(0);
+    expect(queryByText(T.allChecks)).toBeNull();
+    expect(queryByText(T.marksTitle)).toBeNull();
+    expect(queryByText(T.nextMarking)).toBeNull();
+    expect(queryByTestId('results-club-picker')).toBeNull();
+    expect(queryByTestId('results-marks')).toBeNull();
+  });
+
+  test('a stored swing being read shows a neutral loader, not the results chrome', async () => {
+    store.readAnalysis.mockReturnValue(new Promise(() => {}));
+    const { getByTestId, queryByText } = setup();
+    expect(getByTestId('results-loading')).toBeTruthy();
+    expect(queryByText(T.mainTitle)).toBeNull();
+  });
+
+  test('deleting mid-analysis cancels JS and pass 2 first, then deletes and goes back', async () => {
+    const cancel = jest.fn();
+    nativeApi.mockReturnValue({ cancelAnalysis: cancel });
+    let opts;
+    runAnalysis.mockImplementation((id, o) => { opts = o; return new Promise(() => {}); });
+    const order = [];
+    cancel.mockImplementation(() => order.push('cancel'));
+    store.deleteSwing.mockImplementation(async () => { order.push('delete'); });
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const { findByTestId, navigation } = setup({ row: PENDING });
+    fireEvent.press(await findByTestId('results-delete-link'));
+    const [title, body, buttons] = alertSpy.mock.calls[0];
+    expect(title).toBe(SWING_STRINGS.home.deleteTitle);
+    expect(body).toBe(SWING_STRINGS.home.deleteBody);
+    expect(opts.isCancelled()).toBe(false); // declining the confirm leaves the run alone
+    await act(async () => { await buttons.find((b) => b.style === 'destructive').onPress(); });
+    expect(opts.isCancelled()).toBe(true);
+    expect(order).toEqual(['cancel', 'delete']);
+    expect(store.deleteSwing).toHaveBeenCalledWith('s1');
+    expect(navigation.goBack).toHaveBeenCalled();
+    alertSpy.mockRestore();
   });
 
   test('review (D26): leaving while the analysis runs cancels native too, so pass 2 never saves late', async () => {
