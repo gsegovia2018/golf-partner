@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Smoke test for 20261004000000_leagues.sql (+ 20261005000001_league_net_differential.sql,
--- 20261013000000_league_marker_request.sql)
+-- 20261013000000_league_marker_request.sql, 20261015000000_league_server_scoring.sql)
 -- — the league RPCs under a
 -- simulated auth uid, their refusals, RLS, and the anon surface.
 --
@@ -209,7 +209,7 @@ DO $$
 DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league'); r jsonb;
 BEGIN
   r := public.announce_league_card(lid, 'app',
-         '{"name":"La Moraleja","tee":"Yellow","holes":[{"n":1,"par":4,"si":7},{"n":2,"par":3,"si":15}]}'::jsonb,
+         '{"name":"La Moraleja","tee":"Yellow","holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}]}'::jsonb,
          '2026-10-10 08:00+02', 't_lg_a', 'r0', 'pA');
   INSERT INTO league_ctx VALUES ('cardA', r->>'id');
   INSERT INTO league_smoke (name, ok, detail) VALUES ('announce app card: month October, league hcp copied',
@@ -224,7 +224,7 @@ SELECT 'app card starts as playing with announced_at = now()',
 DO $$
 DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league');
 BEGIN
-  PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"Somewhere"}'::jsonb, '2026-10-25 09:00+02');
+  PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"Somewhere"}'::jsonb, '2026-10-25 09:00+02');
   INSERT INTO league_smoke (name, ok, detail) VALUES ('second October card refused', false, 'no error');
 EXCEPTION WHEN others THEN
   INSERT INTO league_smoke (name, ok, detail) VALUES ('second October card refused',
@@ -297,12 +297,12 @@ BEGIN
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('submit with 17 holes refused', SQLSTATE = 'P0001', SQLERRM);
   END;
-  BEGIN
-    PERFORM public.submit_league_card(cid, h18, 70, 36, 20, '2026-10-10');
-    INSERT INTO league_smoke (name, ok, detail) VALUES ('submit with wrong gross refused', false, 'no error');
-  EXCEPTION WHEN others THEN
-    INSERT INTO league_smoke (name, ok, detail) VALUES ('submit with wrong gross refused', SQLSTATE = 'P0001', SQLERRM);
-  END;
+  -- The server scores the card (20261015000000): a forged gross, points and
+  -- playing handicap are ignored. A 18 off Yellow 125/72, par 72 -> playing
+  -- handicap 20; all 4s -> 18 x 3 + 2 = 56 points.
+  r := public.submit_league_card(cid, h18, 70, 99, -54, '2026-10-10');
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('submit ignores the client''s gross, points and playing handicap',
+    (r->>'gross')::int = 72 AND (r->>'points')::int = 56 AND (r->>'playing_handicap')::int = 20, r::text);
 
   r := public.submit_league_card(cid, h18, 72, 36, 20, '2026-10-10');
   INSERT INTO league_smoke (name, ok, detail) VALUES ('submit app card: announced before first shot',
@@ -351,7 +351,8 @@ END $$;
 
 INSERT INTO league_smoke (name, ok, detail)
 SELECT 'card A confirmed by partner, frozen snapshot',
-       status = 'confirmed' AND confirmation = 'partner' AND gross = 72 AND points = 36
+       status = 'confirmed' AND confirmation = 'partner' AND gross = 72 AND points = 56
+         AND playing_handicap = 20 AND tee_verified = false
          AND confirmed_by_user = 'a0000000-0000-4000-8000-00000000000b',
        status || '/' || COALESCE(confirmation, '-')
   FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardA');
@@ -382,7 +383,7 @@ DO $$
 DECLARE r jsonb;
 BEGIN
   r := public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'app',
-         '{"slope":130,"rating":71.4,"name":"El Encín","tee":"White","holes":[{"n":1,"par":5,"si":3}]}'::jsonb,
+         '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"El Encín","tee":"White","holes":[{"n":1,"par":5,"si":3},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":1},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}]}'::jsonb,
          '2026-10-11 09:00+02', 't_lg_c', 'r0', 'pC');
   INSERT INTO league_ctx VALUES ('cardC', r->>'id');
 END $$;
@@ -476,7 +477,7 @@ BEGIN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('unknown token -> invalid', SQLERRM = 'invalid', SQLERRM);
   END;
   BEGIN
-    PERFORM public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'offapp', '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, now());
+    PERFORM public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"x"}'::jsonb, now());
     INSERT INTO league_smoke (name, ok, detail) VALUES ('anon cannot call announce_league_card', false, 'no error');
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('anon cannot call announce_league_card', SQLSTATE = '42501', SQLERRM);
@@ -490,6 +491,10 @@ BEGIN
 END $$;
 
 -- C re-submits a different snapshot (hole 1 = 6): tok2 now reads 'changed'.
+-- An app card must match the game (20261015000000), so the game says 6 too.
+RESET ROLE;
+UPDATE public.game_scores SET strokes = 6
+ WHERE tournament_id = 't_lg_c' AND round_id = 'r0' AND player_id = 'pC' AND hole = 1;
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000c","role":"authenticated"}', true);
 SET LOCAL ROLE authenticated;
 SELECT public.submit_league_card((SELECT v::uuid FROM league_ctx WHERE k='cardC'),
@@ -605,7 +610,7 @@ DO $$
 DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league'); r jsonb; cid uuid;
 BEGIN
   -- Tee time now: an off-app card can be posted only once it has passed (20261012000000).
-  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"Golf Olivar","tee":"Yellow"}'::jsonb, now());
+  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"Golf Olivar","tee":"Yellow"}'::jsonb, now());
   cid := (r->>'id')::uuid;
   INSERT INTO league_ctx VALUES ('cardD', cid::text);
   INSERT INTO league_smoke (name, ok, detail)
@@ -664,14 +669,14 @@ SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-0000000
 DO $$
 DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league'); r jsonb;
 BEGIN
-  r := public.add_unannounced_league_card(lid, '{"slope":130,"rating":71.4,"name":"RACE"}'::jsonb, NULL, '2026-11-02',
+  r := public.add_unannounced_league_card(lid, '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"RACE"}'::jsonb, NULL, '2026-11-02',
          (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20);
   INSERT INTO league_ctx VALUES ('cardB', r->>'id');
   INSERT INTO league_smoke (name, ok, detail) VALUES ('unannounced card: November, not_announced, submitted',
     r->>'month' = '2026-11-01' AND (r->>'not_announced')::boolean AND r->>'status' = 'submitted', r::text);
   BEGIN
     -- 23:30 UTC on 31 Oct is 00:30 on 1 Nov in Madrid: a November card.
-    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, '2026-10-31 23:30+00');
+    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"x"}'::jsonb, '2026-10-31 23:30+00');
     INSERT INTO league_smoke (name, ok, detail) VALUES ('month boundary is Europe/Madrid', false, 'no error');
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('month boundary is Europe/Madrid',
@@ -692,7 +697,7 @@ DO $$
 DECLARE r jsonb;
 BEGIN
   r := public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'offapp',
-         '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, '2026-10-31 23:30+00');
+         '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"x"}'::jsonb, '2026-10-31 23:30+00');
   INSERT INTO league_smoke (name, ok, detail) VALUES ('after a void the member can announce that month again',
     r->>'month' = '2026-11-01', r::text);
   INSERT INTO league_ctx VALUES ('cardB2', r->>'id');
@@ -719,7 +724,7 @@ BEGIN
   END;
   BEGIN
     PERFORM public.add_unannounced_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'),
-              '{"slope":130,"rating":71.4,"name":"RACE"}'::jsonb, '2026-12-05 10:00+01', '2026-11-30',
+              '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"RACE"}'::jsonb, '2026-12-05 10:00+01', '2026-11-30',
               (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20);
     INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses tee time and date in different months', false, 'no error');
   EXCEPTION WHEN others THEN
@@ -737,21 +742,21 @@ DO $$
 DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league'); r jsonb;
 BEGIN
   BEGIN
-    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, '2026-09-15 10:00+02');
+    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"x"}'::jsonb, '2026-09-15 10:00+02');
     INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses a past month', false, 'no error');
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses a past month',
       SQLERRM = 'That month is over. Announce a card for this month or later.', SQLERRM);
   END;
   BEGIN
-    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, '2027-01-10 10:00+01');
+    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"x"}'::jsonb, '2027-01-10 10:00+01');
     INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses a date outside the season', false, 'no error');
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses a date outside the season',
       SQLERRM = 'That date is outside the season (2026-01-01 to 2026-12-31).', SQLERRM);
   END;
   BEGIN
-    PERFORM public.add_unannounced_league_card(lid, '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, NULL, '2027-02-01',
+    PERFORM public.add_unannounced_league_card(lid, '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"x"}'::jsonb, NULL, '2027-02-01',
               (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20);
     INSERT INTO league_smoke (name, ok, detail) VALUES ('add-unannounced refuses a date outside the season', false, 'no error');
   EXCEPTION WHEN others THEN
@@ -761,13 +766,13 @@ BEGIN
   -- An off-app tee time already gone can't be announced (20261012000000);
   -- a round already played goes in as an unannounced card instead.
   BEGIN
-    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"Late"}'::jsonb, now() - interval '1 hour');
+    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"Late"}'::jsonb, now() - interval '1 hour');
     INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses an off-app tee time already passed', false, 'no error');
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses an off-app tee time already passed',
       SQLERRM = 'That tee time has passed. If you already played, add it as a card you didn''t announce.', SQLERRM);
   END;
-  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"Late"}'::jsonb, now());
+  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"Late"}'::jsonb, now());
   INSERT INTO league_ctx VALUES ('cardBO', r->>'id');
   r := public.submit_league_card((r->>'id')::uuid, (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20, NULL);
   INSERT INTO league_smoke (name, ok, detail) VALUES ('off-app teeing off as announced -> announced',
@@ -778,11 +783,16 @@ END $$;
 -- An app card tees off on Start, so announce always makes it this month's
 -- (20261012000000), and A has October already: a November one is a fixture row.
 RESET ROLE;
+-- Its game: no startedAt, and A's settled 4s (an app card must match the game).
+INSERT INTO public.tournaments (id, name) VALUES ('t_lg_n', 'League smoke N');
+INSERT INTO public.game_rounds (id, tournament_id, round_index, body) VALUES ('r0', 't_lg_n', 0, '{}'::jsonb);
+INSERT INTO public.game_scores (tournament_id, round_id, player_id, hole, strokes)
+SELECT 't_lg_n', 'r0', 'pA', h, 4 FROM generate_series(1, 18) h;
 WITH x AS (
   INSERT INTO public.league_cards (league_id, user_id, month, source, status, tournament_id, round_id, player_id,
                                    course, tee_time, played_on, announced_at, league_handicap)
   VALUES ((SELECT v::uuid FROM league_ctx WHERE k='league'), 'a0000000-0000-4000-8000-00000000000a', '2026-11-01',
-          'app', 'playing', 't_lg_n', 'r0', 'pA', '{"slope":130,"rating":71.4,"name":"Nowhere"}'::jsonb,
+          'app', 'playing', 't_lg_n', 'r0', 'pA', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"Nowhere"}'::jsonb,
           '2026-11-05 09:00+01', '2026-11-05', now(), 18)
   RETURNING id)
 INSERT INTO league_ctx SELECT 'cardAN', id::text FROM x;
@@ -802,7 +812,7 @@ SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-0000000
 -- hole 4 (par 5, SI 1) a 9 capped to 8 at playing handicap 16 -> adjusted 85
 -- -> differential 11.8; league handicap 14.2 -> net -2.4.
 INSERT INTO league_ctx VALUES
-  ('cng',  '{"slope":130,"rating":71.4,"name":"Centro Nacional de Golf","tee":"Amarillas","holes":[{"n":1,"par":4,"si":3},{"n":2,"par":4,"si":5},{"n":3,"par":3,"si":7},{"n":4,"par":5,"si":1},{"n":5,"par":4,"si":9},{"n":6,"par":4,"si":11},{"n":7,"par":3,"si":13},{"n":8,"par":4,"si":15},{"n":9,"par":5,"si":17},{"n":10,"par":4,"si":4},{"n":11,"par":3,"si":6},{"n":12,"par":5,"si":2},{"n":13,"par":4,"si":8},{"n":14,"par":4,"si":10},{"n":15,"par":4,"si":12},{"n":16,"par":3,"si":14},{"n":17,"par":5,"si":16},{"n":18,"par":4,"si":18}]}'),
+  ('cng',  '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"Centro Nacional de Golf","tee":"Amarillas","holes":[{"n":1,"par":4,"si":3},{"n":2,"par":4,"si":5},{"n":3,"par":3,"si":7},{"n":4,"par":5,"si":1},{"n":5,"par":4,"si":9},{"n":6,"par":4,"si":11},{"n":7,"par":3,"si":13},{"n":8,"par":4,"si":15},{"n":9,"par":5,"si":17},{"n":10,"par":4,"si":4},{"n":11,"par":3,"si":6},{"n":12,"par":5,"si":2},{"n":13,"par":4,"si":8},{"n":14,"par":4,"si":10},{"n":15,"par":4,"si":12},{"n":16,"par":3,"si":14},{"n":17,"par":5,"si":16},{"n":18,"par":4,"si":18}]}'),
   ('unr',  '{"name":"Pitch and Putt","tee":"Red","holes":[{"n":1,"par":4,"si":3},{"n":2,"par":4,"si":5},{"n":3,"par":3,"si":7},{"n":4,"par":5,"si":1},{"n":5,"par":4,"si":9},{"n":6,"par":4,"si":11},{"n":7,"par":3,"si":13},{"n":8,"par":4,"si":15},{"n":9,"par":5,"si":17},{"n":10,"par":4,"si":4},{"n":11,"par":3,"si":6},{"n":12,"par":5,"si":2},{"n":13,"par":4,"si":8},{"n":14,"par":4,"si":10},{"n":15,"par":4,"si":12},{"n":16,"par":3,"si":14},{"n":17,"par":5,"si":16},{"n":18,"par":4,"si":18}]}'),
   ('hcng', '{"1":5,"2":5,"3":3,"4":9,"5":5,"6":5,"7":3,"8":5,"9":6,"10":5,"11":3,"12":6,"13":5,"14":4,"15":5,"16":3,"17":5,"18":4}'),
   ('hwild','{"1":9,"2":2,"3":7,"4":12,"5":3,"6":8,"7":6,"8":4,"9":11,"10":5,"11":9,"12":3,"13":10,"14":4,"15":7,"16":6,"17":8,"18":5}');
@@ -868,10 +878,14 @@ SELECT 'worked example: differential 11.8, net -2.4 at league handicap 14.2',
   FROM league_ctx h, league_ctx c WHERE h.k = 'hcng' AND c.k = 'cng';
 
 INSERT INTO league_smoke (name, ok, detail)
-SELECT 'add-unannounced stores differential 11.8 and net = round1(11.8 - league handicap)',
-       differential = 11.8 AND net_differential = public.league_net_differential(11.8, league_handicap)
-       AND net_differential IS NOT NULL AND points = 33,
-       differential || ' / ' || net_differential || ' / hcp ' || league_handicap
+-- The server's playing handicap (20261015000000): C 20 off 130/71.4 par 72
+-- -> 22, so the cap on hole 4 is 9 (adjusted 86) -> differential 12.7, and
+-- 44 Stableford points. The client sent 33 points off 16.
+SELECT 'add-unannounced stores the server score: ph 22, 44 pts, differential 12.7, net = round1(12.7 - league handicap)',
+       playing_handicap = 22 AND points = 44 AND gross = 86
+       AND differential = 12.7 AND net_differential = public.league_net_differential(12.7, league_handicap)
+       AND net_differential IS NOT NULL AND tee_verified = false,
+       playing_handicap || ' / ' || points || ' / ' || differential || ' / ' || net_differential || ' / hcp ' || league_handicap
   FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardCN');
 
 INSERT INTO league_smoke (name, ok, detail)
@@ -1190,7 +1204,7 @@ DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league');
         msg constant text := 'This league has been archived. You can still look at it, but not change it.';
 BEGIN
   BEGIN
-    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"name":"x"}'::jsonb, '2026-12-10 10:00+01');
+    PERFORM public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"x"}'::jsonb, '2026-12-10 10:00+01');
     INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: announce refused', false, 'no error');
   EXCEPTION WHEN others THEN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: announce refused', SQLERRM = msg, SQLERRM);
@@ -1203,7 +1217,7 @@ BEGIN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: submit refused', SQLERRM = msg, SQLERRM);
   END;
   BEGIN
-    PERFORM public.add_unannounced_league_card(lid, '{"slope":130,"rating":71.4,"name":"RACE"}'::jsonb, NULL, '2026-12-02',
+    PERFORM public.add_unannounced_league_card(lid, '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"RACE"}'::jsonb, NULL, '2026-12-02',
               (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20);
     INSERT INTO league_smoke (name, ok, detail) VALUES ('archived: add-unannounced refused', false, 'no error');
   EXCEPTION WHEN others THEN
@@ -1324,7 +1338,7 @@ DO $$
 DECLARE r jsonb;
 BEGIN
   r := public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league2'), 'app',
-         '{"slope":130,"rating":71.4,"name":"Marker Links","tee":"Yellow","holes":[{"n":1,"par":4,"si":7}]}'::jsonb,
+         '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"Marker Links","tee":"Yellow"}'::jsonb,
          now(), 't_lg_m', 'r0', 'pA');
   INSERT INTO league_ctx VALUES ('cardM', r->>'id');
 END $$;
