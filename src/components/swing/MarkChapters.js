@@ -1,12 +1,12 @@
 import React, { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
-import { hud } from '../../theme/tokens';
+import { hud, semantic } from '../../theme/tokens';
+import { withAlpha } from '../../theme/alpha';
 import { MARKED_KEYS, positionStatus, passCounts } from '../../swing/markPass';
 import { SWING_STRINGS } from '../../swing/strings';
 
 const T = SWING_STRINGS.mark;
-const HUD_WARN = '#e0b24d';
 
 /**
  * The six positions of the marking pass (D25) as a filmstrip of chapters, each with its name
@@ -62,10 +62,10 @@ const CP_P = {
 const makeStyles = (theme, themed) => {
   const c = themed ? {
     tile: theme.bg.secondary, tileBorder: theme.border.default, onBorder: theme.accent.primary, onFill: theme.accent.light,
-    text: theme.text.secondary, textOn: theme.text.primary, ring: theme.text.muted, done: theme.accent.primary, skip: theme.isDark ? HUD_WARN : '#b8791a',
+    text: theme.text.secondary, textOn: theme.text.primary, ring: theme.text.muted, done: theme.accent.primary, skip: theme.isDark ? semantic.warning.dark : semantic.warning.light,
   } : {
-    tile: hud.fill, tileBorder: 'transparent', onBorder: hud.text, onFill: 'rgba(255,255,255,0.14)',
-    text: hud.textMuted, textOn: hud.text, ring: hud.textMuted, done: hud.accent, skip: HUD_WARN,
+    tile: hud.fill, tileBorder: 'transparent', onBorder: hud.text, onFill: withAlpha(hud.text, 0.14),
+    text: hud.textMuted, textOn: hud.text, ring: hud.textMuted, done: hud.accent, skip: semantic.warning.dark,
   };
   return StyleSheet.create({
     wrap: { gap: 6 },

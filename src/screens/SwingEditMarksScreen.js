@@ -12,7 +12,8 @@ import MarkChapters from '../components/swing/MarkChapters';
 import {
   MarkLayer, MarkDock, StopLine, FineStrip, Swatch, MARK_COLOR, FINE_REACH,
 } from '../components/swing/MarkCanvasParts';
-import { hud } from '../theme/tokens';
+import { hud, semantic } from '../theme/tokens';
+import { withAlpha } from '../theme/alpha';
 import {
   readAnalysis, readPose, readProbe, readMarks, saveAnalysis, saveMarks, getSwing, getSwingProfile,
   setSwingClub, setLastSwingClub,
@@ -39,7 +40,7 @@ import { SWING_STRINGS } from '../swing/strings';
 const T = SWING_STRINGS.mark;
 const DRAG_FPS_MS = 50; // the live recompute follows a drag at ~20 Hz; the release always flushes
 const NUDGE_COALESCE_MS = 700;
-const HUD_WARN = '#e0b24d';
+const HUD_WARN = semantic.warning.dark; // the HUD amber, as on the capture screen
 
 function histReducer(state, a) {
   switch (a.type) {
@@ -516,7 +517,7 @@ export function SwingMarkCanvas({
             }}
           />
           <View style={StyleSheet.absoluteFill} {...pan.panHandlers} testID="edit-touch-layer" accessibilityLabel={T.line.missing(T.names[active])} />
-          <DragLoupe ref={loupe} rect={rect} uri={shown.uri} label={T.placing(T.names[active])} color={active === 'head' ? '#ffffff' : MARK_COLOR[active]} />
+          <DragLoupe ref={loupe} rect={rect} uri={shown.uri} label={T.placing(T.names[active])} color={MARK_COLOR[active]} />
         </SwingOverlay>
         <MarkDock style={s.dock} active={active} statuses={statuses} ballOff={cp !== 'address'} onSelect={selectMark} />
       </View>
@@ -725,8 +726,8 @@ const s = StyleSheet.create({
     fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9.5, letterSpacing: 0.6, textTransform: 'uppercase', color: hud.textSoft,
     borderWidth: 1, borderColor: hud.line, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, overflow: 'hidden',
   },
-  stcOk: { color: hud.accent, borderColor: 'rgba(79,174,138,0.4)' },
-  stcSkip: { color: HUD_WARN, borderColor: 'rgba(224,178,77,0.4)' },
+  stcOk: { color: hud.accent, borderColor: withAlpha(hud.accent, 0.4) },
+  stcSkip: { color: HUD_WARN, borderColor: withAlpha(HUD_WARN, 0.4) },
   autoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: hud.line },
   fixLink: { minHeight: 44, justifyContent: 'center', maxWidth: '50%' },
   fixText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: hud.accent },

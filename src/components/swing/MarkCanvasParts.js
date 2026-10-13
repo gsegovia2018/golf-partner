@@ -6,16 +6,20 @@ import { Feather } from '@expo/vector-icons';
 import Svg, {
   Rect, Circle, Polyline, Text as SvgText, G,
 } from 'react-native-svg';
-import { hud } from '../../theme/tokens';
+import { hud, semantic } from '../../theme/tokens';
+import { withAlpha } from '../../theme/alpha';
 import { SWING_STRINGS } from '../../swing/strings';
 
 // The pieces of the marking canvas (D26, design C with V2 stop guidance). Fixed HUD palette:
 // the canvas is a video being annotated, the same case as the capture viewfinder.
 
 const T = SWING_STRINGS.mark;
-const HUD_WARN = '#e0b24d';
-export const MARK_COLOR = { hands: '#4fae8a', head: '#ffffff', ball: '#8fb0d6' };
-const INK = '#0a0d10';
+const HUD_WARN = semantic.warning.dark; // the HUD amber, as on the capture screen
+export const MARK_COLOR = { hands: hud.accent, head: hud.text, ball: semantic.info.dark };
+const INK = hud.onAccent;
+const DIM = withAlpha(hud.bg, 0.78); // an inactive chip on the picture
+const OUTLINE = withAlpha(hud.text, 0.35);
+const HANDS_FILL = withAlpha(hud.accent, 0.35);
 export const FINE_REACH = 8; // the fine strip holds the proposal +-8 frames, +-4 in view
 
 // --- The marks on the picture ------------------------------------------------------------------
@@ -50,7 +54,7 @@ export function MarkLayer({ rect, marks, active }) {
     const C = MARK_COLOR[m];
     const name = T.names[m].toUpperCase();
     const label = (text, lx, ly) => (
-      <Chip x={lx} y={ly} text={text} w={rect.w} fill={on ? C : 'rgba(10,13,16,0.78)'} ink={on ? INK : C} stroke={on ? null : 'rgba(255,255,255,0.35)'} />
+      <Chip x={lx} y={ly} text={text} w={rect.w} fill={on ? C : DIM} ink={on ? INK : C} stroke={on ? null : OUTLINE} />
     );
     if (mk.status === 'hidden') {
       return handsPx ? <G key={m}>{label(`${name} · ${T.status.hidden.toUpperCase()}`, handsPx[0] + 18, handsPx[1] + 24)}</G> : null;
@@ -58,7 +62,7 @@ export function MarkLayer({ rect, marks, active }) {
     const at = mk.pt ?? (mk.status === 'missing' ? mk.prior : null);
     if (!at) return null;
     const [x, y] = X(at);
-    const halo = on ? <Circle cx={x} cy={y} r={24} fill="none" stroke="#ffffff" strokeWidth={1.5} strokeDasharray="4 3" /> : null;
+    const halo = on ? <Circle cx={x} cy={y} r={24} fill="none" stroke={hud.text} strokeWidth={1.5} strokeDasharray="4 3" /> : null;
     const ly = y < 40 ? y + 20 : y - 32;
     if (mk.status === 'missing') {
       return (
@@ -73,10 +77,10 @@ export function MarkLayer({ rect, marks, active }) {
     let shape;
     if (m === 'hands') {
       const h = on ? 14 : 9;
-      shape = <Rect x={x - h} y={y - h} width={2 * h} height={2 * h} fill="rgba(79,174,138,0.35)" stroke={C} strokeWidth={on ? 3 : 2} strokeDasharray={dash} />;
+      shape = <Rect x={x - h} y={y - h} width={2 * h} height={2 * h} fill={HANDS_FILL} stroke={C} strokeWidth={on ? 3 : 2} strokeDasharray={dash} />;
     } else if (m === 'head') {
       const proposed = mk.status === 'proposed';
-      shape = <Circle cx={x} cy={y} r={on ? 10 : 7} fill={proposed ? 'rgba(255,255,255,0.3)' : '#ffffff'} stroke={proposed ? '#ffffff' : INK} strokeWidth={on ? 2.5 : 1.5} strokeDasharray={dash} />;
+      shape = <Circle cx={x} cy={y} r={on ? 10 : 7} fill={proposed ? withAlpha(hud.text, 0.3) : hud.text} stroke={proposed ? hud.text : INK} strokeWidth={on ? 2.5 : 1.5} strokeDasharray={dash} />;
     } else {
       shape = <Circle cx={x} cy={y} r={12} fill="none" stroke={C} strokeWidth={on ? 3 : 2} strokeDasharray={dash} />;
     }
@@ -116,7 +120,7 @@ export function MarkDock({
         return (
           <Pressable
             key={m}
-            style={[styles.dk, on && styles.dkOn, on && { backgroundColor: m === 'head' ? '#ffffff' : MARK_COLOR[m], borderColor: m === 'head' ? '#ffffff' : MARK_COLOR[m] }, off && styles.dkOff]}
+            style={[styles.dk, on && styles.dkOn, on && { backgroundColor: MARK_COLOR[m], borderColor: MARK_COLOR[m] }, off && styles.dkOff]}
             onPress={() => onSelect(m)}
             accessibilityRole="radio"
             accessibilityState={{ selected: on, disabled: off }}
@@ -135,8 +139,8 @@ export function MarkDock({
 
 export function Swatch({ mark, on = false, size = 16 }) {
   const ink = on ? INK : null;
-  if (mark === 'hands') return <View style={{ width: size, height: size, borderRadius: 2, borderWidth: 2.5, borderColor: ink ?? MARK_COLOR.hands, backgroundColor: on ? 'rgba(10,13,16,0.2)' : 'rgba(79,174,138,0.35)' }} />;
-  if (mark === 'head') return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: ink ?? '#ffffff', backgroundColor: on ? 'transparent' : '#ffffff' }} />;
+  if (mark === 'hands') return <View style={{ width: size, height: size, borderRadius: 2, borderWidth: 2.5, borderColor: ink ?? MARK_COLOR.hands, backgroundColor: on ? withAlpha(INK, 0.2) : HANDS_FILL }} />;
+  if (mark === 'head') return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: ink ?? MARK_COLOR.head, backgroundColor: on ? 'transparent' : MARK_COLOR.head }} />;
   return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2.5, borderColor: ink ?? MARK_COLOR.ball }} />;
 }
 
@@ -250,7 +254,7 @@ const styles = StyleSheet.create({
     width: 62, minHeight: 60, borderRadius: 16, backgroundColor: hud.scrim, borderWidth: 1.5, borderColor: hud.line,
     alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 6, paddingHorizontal: 2,
   },
-  dkOn: { backgroundColor: '#ffffff', borderColor: '#ffffff' },
+  dkOn: { backgroundColor: hud.text, borderColor: hud.text },
   dkOff: { opacity: 0.4 },
   dkName: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, letterSpacing: 0.5, textTransform: 'uppercase', color: hud.textSoft },
   dkWord: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 8, color: hud.textSoft, opacity: 0.9 },
@@ -282,9 +286,9 @@ const styles = StyleSheet.create({
   flagText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: hud.text, fontVariant: ['tabular-nums'] },
   flagTextOff: { color: HUD_WARN },
   thumb: { alignItems: 'center', gap: 2, minHeight: 44 },
-  ft: { borderRadius: 5, overflow: 'hidden', backgroundColor: '#1b2420', borderWidth: 1.5, borderColor: 'transparent', opacity: 0.75 },
+  ft: { borderRadius: 5, overflow: 'hidden', backgroundColor: hud.inset, borderWidth: 1.5, borderColor: 'transparent', opacity: 0.75 },
   ftProp: { opacity: 1, borderColor: hud.accent },
-  ftOn: { opacity: 1, borderColor: '#ffffff' },
+  ftOn: { opacity: 1, borderColor: hud.text },
   ftSide: { opacity: 0.55 },
   pf: {
     position: 'absolute', top: -1, alignSelf: 'center', width: 0, height: 0,
@@ -292,5 +296,5 @@ const styles = StyleSheet.create({
   },
   fn: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 8, color: hud.textMuted, fontVariant: ['tabular-nums'] },
   fnProp: { color: hud.accent },
-  fnOn: { color: '#ffffff' },
+  fnOn: { color: hud.text },
 });

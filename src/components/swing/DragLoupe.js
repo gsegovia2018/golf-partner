@@ -5,6 +5,7 @@ import { View, Image, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, Easing, useReducedMotion,
 } from 'react-native-reanimated';
+import { hud } from '../../theme/tokens';
 import {
   LOUPE_SIZE, LOUPE_FLASH_MS, loupePlacement, loupeImage,
 } from '../../swing/loupe';
@@ -74,7 +75,7 @@ function LoupeView({
  * ref.flash({ mark }) for an arrow nudge (no finger: it is placed off the mark itself).
  */
 export default function DragLoupe({
-  rect, uri, ref, size = LOUPE_SIZE, flashMs = LOUPE_FLASH_MS, label = null, color = '#ffffff', testID = 'edit-loupe',
+  rect, uri, ref, size = LOUPE_SIZE, flashMs = LOUPE_FLASH_MS, label = null, color = hud.text, testID = 'edit-loupe',
 }) {
   const [state, setState] = useState(null);
   const timer = useRef(null);
@@ -104,5 +105,5 @@ const styles = StyleSheet.create({
   img: { position: 'absolute' },
   line: { position: 'absolute', backgroundColor: '#ffd98a' },
   chip: { position: 'absolute', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-  chipText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, letterSpacing: 0.6, color: '#0a0d10' },
+  chipText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, letterSpacing: 0.6, color: hud.onAccent },
 });
