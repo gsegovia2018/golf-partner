@@ -1,7 +1,7 @@
 import {
   monthName, ordinal, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel,
   positionText, cardStatus, monthRows, leagueSummary, viewableCards, monthBoard, collapseSeasonRows,
-  formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, markerAskedLine, firstName, cardBreakdown, leagueNameMatches,
+  formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, markerAskedLine, firstName, initials, cardBreakdown, leagueNameMatches,
 } from '../leagueView';
 
 const NOW = new Date(2026, 9, 4, 12, 0);
@@ -380,4 +380,11 @@ describe('pick your marker', () => {
     expect(markerAskedLine('2026-10-13T07:00:00', '2026-10-19T10:00:00', now)).toBe('Asked 3 h ago · until 19 Oct');
     expect(firstName('Javi Ortega')).toBe('Javi');
   });
+});
+
+test('initials', () => {
+  expect(initials('Nacho Pérez')).toBe('NP');
+  expect(initials('María Fernanda de la Torre-Villalobos')).toBe('MT');
+  expect(initials('  javi ')).toBe('J');
+  expect(initials('')).toBe('?');
 });

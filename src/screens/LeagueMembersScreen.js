@@ -11,13 +11,14 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import {
-  castHandicapBallot, openHandicapVote, setLeagueHandicap,
+  castHandicapBallot, openHandicapVote, setLeagueHandicap, removeLeagueInvitee,
 } from '../store/leagueStore';
 import { parseMemberHandicap, leagueJoinLink } from '../store/leagueDraft';
 import {
   formatEuros, potCents, memberLabel, memberName, handicapEventLine, voteThreshold,
 } from '../store/leagueView';
 import { shareOrigin } from '../lib/shareOrigin';
+import InitialsAvatar from '../components/league/InitialsAvatar';
 
 function fail(e) {
   Alert.alert('Error', e?.message || 'Something went wrong');
@@ -69,6 +70,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
   }
 
   const { league, members, votes, handicapEvents } = data;
+  const invitees = data.invitees ?? []; // absent in a cache written before invitees existed
   const active = members.filter((m) => !m.leftAt);
   const me = active.find((m) => m.userId === meId);
   const isAdmin = me?.role === 'admin';
@@ -110,6 +112,21 @@ export default function LeagueMembersScreen({ navigation, route }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function confirmRemoveInvitee(invitee) {
+    Alert.alert(
+      `Remove ${invitee.name}?`,
+      'Their spot and handicap are deleted. They can still join from the link with "I\'m not on the list".',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => run(() => removeLeagueInvitee(leagueId, invitee.id)),
+        },
+      ],
+    );
   }
 
   async function shareLink() {
@@ -198,6 +215,35 @@ export default function LeagueMembersScreen({ navigation, route }) {
             );
           })}
         </View>
+
+        {invitees.length > 0 && (
+          <>
+            <Text style={s.sectionLabel}>INVITED</Text>
+            <View style={s.card}>
+              {invitees.map((i, idx) => (
+                <View key={i.id} style={[s.memberRow, s.invitedRow, idx < invitees.length - 1 && s.rowDivider]}>
+                  <InitialsAvatar name={i.name} muted />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.memberName} numberOfLines={1}>{i.name}</Text>
+                    <Text style={s.memberSub}>Not joined yet</Text>
+                  </View>
+                  <Text style={s.memberSub}>{i.handicap == null ? '' : i.handicap.toFixed(1)}</Text>
+                  {isAdmin && !archived && (
+                    <TouchableOpacity
+                      style={s.removeBtn}
+                      onPress={() => confirmRemoveInvitee(i)}
+                      disabled={busy}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${i.name}`}
+                    >
+                      <Feather name="x" size={18} color={theme.text.muted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+            </View>
+          </>
+        )}
 
         {history.length > 0 && (
           <>
@@ -289,6 +335,8 @@ function makeStyles(theme) {
     memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 8 },
     memberName: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14 },
     memberSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
+    invitedRow: { opacity: 0.7 },
+    removeBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
     fee: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
     badge: { backgroundColor: theme.accent.light, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 8 },
     badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 10 },

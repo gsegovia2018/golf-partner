@@ -22,6 +22,7 @@ import {
 } from '../store/leagueDraft';
 import { formatEuros } from '../store/leagueView';
 import { shareOrigin } from '../lib/shareOrigin';
+import { NAME_MAX } from '../components/league/GuestIdentityFields';
 
 function showError(message) {
   const msg = message || 'Something went wrong';
@@ -61,6 +62,10 @@ export default function LeagueCreateScreen({ navigation }) {
   // userId -> handicap text, for each friend picked.
   const [picked, setPicked] = useState({});
   const [myHcpText, setMyHcpText] = useState('');
+  // People not in the app yet: reserved spots they claim from the invite link.
+  const [invitees, setInvitees] = useState([]); // [{ key, name, hcpText }]
+  const [newName, setNewName] = useState('');
+  const nextKeyRef = useRef(0);
   const [rawStep, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   // Set once the RPC succeeds: swaps the wizard for the done view, so a
@@ -106,7 +111,16 @@ export default function LeagueCreateScreen({ navigation }) {
   }
 
   const effectiveCap = Number.isFinite(cap) ? cap : DEFAULT_HANDICAP_CAP;
-  const memberCount = 1 + Object.keys(picked).length;
+  const memberCount = 1 + Object.keys(picked).length + invitees.length;
+  const friendCount = Object.keys(picked).length;
+
+  function addInvitee() {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    nextKeyRef.current += 1;
+    setInvitees((prev) => [...prev, { key: nextKeyRef.current, name: trimmed, hcpText: '' }]);
+    setNewName('');
+  }
 
   async function handleCreate() {
     if (busy || creatingRef.current || created) return;
@@ -118,6 +132,7 @@ export default function LeagueCreateScreen({ navigation }) {
         ...Object.entries(picked).map(([userId, text]) => ({
           userId, handicap: parseMemberHandicap(text, effectiveCap),
         })),
+        ...invitees.map((i) => ({ name: i.name, handicap: parseMemberHandicap(i.hcpText, effectiveCap) })),
       ];
       const result = await createLeague(buildCreateArgs({
         name, seasonStart: startIso, seasonEnd: endIso, pointsTable, cap: effectiveCap,
@@ -310,6 +325,59 @@ export default function LeagueCreateScreen({ navigation }) {
           </View>
         );
       })}
+
+      <Text style={[s.stepOverline, { marginTop: 14 }]}>NOT IN THE APP</Text>
+      {invitees.map((i) => (
+        <View key={i.key} style={s.memberCard}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.memberName} numberOfLines={1}>{i.name}</Text>
+            <Text style={s.memberSub}>Joins from the link</Text>
+          </View>
+          <TextInput
+            style={s.hcpInput}
+            value={i.hcpText}
+            onChangeText={(text) => setInvitees((prev) => prev.map((p) => (p.key === i.key ? { ...p, hcpText: text } : p)))}
+            placeholder="HCP"
+            placeholderTextColor={theme.text.muted}
+            keyboardType="decimal-pad"
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            accessibilityLabel={`${i.name} league handicap`}
+          />
+          <TouchableOpacity
+            style={s.removeBtn}
+            onPress={() => setInvitees((prev) => prev.filter((p) => p.key !== i.key))}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove ${i.name}`}
+          >
+            <Feather name="x" size={18} color={theme.text.muted} />
+          </TouchableOpacity>
+        </View>
+      ))}
+      <View style={s.addRow}>
+        <TextInput
+          style={[s.input, s.addInput]}
+          value={newName}
+          onChangeText={setNewName}
+          onSubmitEditing={addInvitee}
+          placeholder="Name, e.g. Nacho Pérez"
+          placeholderTextColor={theme.text.muted}
+          autoCapitalize="words"
+          returnKeyType="done"
+          maxLength={NAME_MAX}
+          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+          selectionColor={theme.accent.primary}
+          accessibilityLabel="Name of someone not in the app"
+        />
+        <TouchableOpacity
+          style={[s.addBtn, !newName.trim() && { opacity: 0.5 }]}
+          onPress={addInvitee}
+          disabled={!newName.trim()}
+          accessibilityRole="button"
+          accessibilityLabel="Add to the league"
+        >
+          <Feather name="plus" size={20} color={theme.text.inverse} />
+        </TouchableOpacity>
+      </View>
     </>
   );
 
@@ -357,7 +425,10 @@ export default function LeagueCreateScreen({ navigation }) {
           <View style={{ flex: 1 }}>
             <Text style={s.ruleTitle}>Members</Text>
             <Text style={s.ruleSub}>
-              {memberCount === 1 ? 'Just you for now' : `You and ${memberCount - 1} friend${memberCount === 2 ? '' : 's'}`}
+              {friendCount === 0
+                ? (invitees.length > 0 ? 'You' : 'Just you for now')
+                : `You and ${friendCount} friend${friendCount === 1 ? '' : 's'}`}
+              {invitees.length > 0 && ` · ${invitees.length} not in the app yet`}
             </Text>
           </View>
           <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -512,6 +583,13 @@ function makeStyles(theme) {
       width: 64, textAlign: 'center', color: theme.text.primary, borderRadius: 10, borderWidth: 1,
       borderColor: theme.border.default, backgroundColor: theme.bg.secondary, paddingVertical: 8,
       fontSize: 14, fontFamily: 'PlusJakartaSans-Bold', marginLeft: 8,
+    },
+    removeBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
+    addRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+    addInput: { flex: 1 },
+    addBtn: {
+      width: 48, height: 48, borderRadius: 10, backgroundColor: theme.accent.primary,
+      alignItems: 'center', justifyContent: 'center',
     },
     emptyHint: {
       flexDirection: 'row', alignItems: 'center', backgroundColor: theme.bg.secondary, borderRadius: 12,
