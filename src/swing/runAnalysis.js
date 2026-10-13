@@ -14,7 +14,9 @@
 
 import { Paths, Directory } from 'expo-file-system';
 import { analyze } from './analyze';
-import { nativeApi, getStill } from './frames';
+import {
+  nativeApi, getStill, proxyDir, PROXY_EVERY,
+} from './frames';
 import { expectedShaftPx } from './scale';
 import { marksForAnalyze } from './labels';
 import { frameOfKey } from './checkpointChecks';
@@ -118,6 +120,8 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
     try {
       const dir = new Directory(Paths.document, 'swings', swingId, 'frames');
       if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
+      // D28: an apiVersion 3 binary also writes the scrub proxies; an older one is not asked
+      const proxies = api.proxySupport?.() ? { proxyEvery: PROXY_EVERY, proxyDir: proxyDir(swingId).uri } : {};
       const r = await api.extractCheckpoints(path, {
         frames: PASS2_KEYS.map((key) => ({
           key, i: frameOfKey(first, key), hands: first.clubMarks[key].hands, neighbours: 2,
@@ -126,6 +130,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
         expectedShaftPx: expectedShaftPx(first.scale.pxPerCm),
         addressSearch: first.addressSearch ?? null,
         outDir: dir.uri,
+        ...proxies,
       });
       if (isCancelled()) return { cancelled: true };
       const p2 = { shaft: r?.shaft ?? {}, addressFrame: r?.addressFrame ?? null };

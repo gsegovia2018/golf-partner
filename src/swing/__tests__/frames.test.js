@@ -57,3 +57,16 @@ describe('ensureStills', () => {
     expect(await ensureStills('s1', [1])).toEqual({ 1: null });
   });
 });
+
+describe('getProxy (D28 scrub proxies, every 4th frame)', () => {
+  test('the nearest proxy on disk; the tail of the clip rounds down; null when the swing has none', () => {
+    ['0', '4', '8', '956'].forEach((f) => mockExists.add(`swings/s1/proxy/${f}.jpg`));
+    const { getProxy, proxyFrames } = require('../frames');
+    expect(proxyFrames(5)).toEqual([4]);
+    expect(proxyFrames(6)).toEqual([8, 4]);
+    expect(getProxy('s1', 5)).toBe('file:///doc/swings/s1/proxy/4.jpg');
+    expect(getProxy('s1', 7)).toBe('file:///doc/swings/s1/proxy/8.jpg');
+    expect(getProxy('s1', 959)).toBe('file:///doc/swings/s1/proxy/956.jpg'); // 960 is past the end
+    expect(getProxy('s2', 5)).toBeNull(); // analysed by an apiVersion 2 binary: no proxies
+  });
+});

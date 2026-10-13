@@ -31,6 +31,11 @@
 // Stills always live in <swing dir>/frames/<frame>.jpg, so getStill() finds them without
 // native (Results on a saved swing, a web preview) and ensureStills() only calls native for
 // the frames that are missing.
+//
+// Scrub proxies (D28, apiVersion 3) live in <swing dir>/proxy/<frame>.jpg, one every
+// PROXY_EVERY frames of the whole clip, written by pass 2 (extractCheckpoints' proxyEvery).
+// They go with the swing folder. A swing analysed by an older binary has none: getProxy()
+// returns null and the canvas keeps the last full-resolution still while scrubbing.
 
 import { Paths, File, Directory } from 'expo-file-system';
 import { getSwingAvailability } from './availability';
@@ -47,7 +52,10 @@ export function nativeApi() {
   }
 }
 
+export const PROXY_EVERY = 4;
+
 const framesDir = (swingId) => new Directory(Paths.document, 'swings', swingId, 'frames');
+export const proxyDir = (swingId) => new Directory(Paths.document, 'swings', swingId, 'proxy');
 const stillFile = (swingId, frame) => new File(Paths.document, 'swings', swingId, 'frames', `${Math.round(frame)}.jpg`);
 
 /** URI of the saved still for a frame, or null when it was never extracted. Synchronous. */
@@ -84,4 +92,23 @@ export async function ensureStills(swingId, frames) {
     missing.forEach((f) => { out[f] = got?.[f] ?? getStill(swingId, f); });
   } catch { /* leave them null */ }
   return out;
+}
+
+/** The proxy frames nearest to `frame`, best first (rounded, then rounded down: the clip's tail). */
+export function proxyFrames(frame, every = PROXY_EVERY) {
+  const f = Math.max(0, Math.round(frame));
+  const near = Math.round(f / every) * every;
+  const down = Math.floor(f / every) * every;
+  return near === down ? [near] : [near, down];
+}
+
+/** URI of the scrub proxy nearest to a frame, or null (none written for this swing). Synchronous. */
+export function getProxy(swingId, frame) {
+  try {
+    for (const f of proxyFrames(frame)) {
+      const file = new File(Paths.document, 'swings', swingId, 'proxy', `${f}.jpg`);
+      if (file.exists) return file.uri;
+    }
+  } catch { /* none */ }
+  return null;
 }

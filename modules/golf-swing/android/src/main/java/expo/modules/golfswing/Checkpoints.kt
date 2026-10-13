@@ -35,6 +35,9 @@ internal class Pass2Request(
   val expectedShaftPx: Double?,
   val addressSearch: AddressSearchSpec?,
   val outDir: String,
+  /** Scrub proxies (D28): every [proxyEvery]-th frame of the clip into [proxyDir]; 0 or no dir = none. */
+  val proxyEvery: Int = 0,
+  val proxyDir: String? = null,
 )
 
 /**
@@ -121,6 +124,27 @@ internal class Checkpoints(
     val shaftNs = AtomicLong()
     val pool = Executors.newFixedThreadPool(JPEG_THREADS) { Thread(it, "golf-swing-jpeg").apply { isDaemon = true } }
     val slots = Semaphore(JPEG_IN_FLIGHT)
+    // D28: the scrub proxies ride on this decode. Downscaled on the decoder thread (a small
+    // nearest-neighbour copy, so the frame can be a reused scratch one), encoded on the pool.
+    val proxyDir = req.proxyDir?.takeIf { req.proxyEvery > 0 && it.isNotEmpty() }?.let { File(Media.localPath(it)).apply { mkdirs() } }
+    val proxyFrames = if (proxyDir != null) Proxies.frames(n, req.proxyEvery).toSet() else emptySet()
+    val proxiesWritten = AtomicInteger()
+    val proxyNs = AtomicLong()
+    fun proxy(f: Int, y: YuvFrame) {
+      val s = System.nanoTime()
+      val (px, w, h) = Proxies.pixels(y)
+      proxyNs.addAndGet(System.nanoTime() - s)
+      slots.acquire()
+      val job = pool.submit {
+        try {
+          Proxies.write(px, w, h, File(proxyDir, "$f.jpg"))
+          proxiesWritten.incrementAndGet()
+        } finally {
+          slots.release()
+        }
+      }
+      synchronized(jobs) { jobs += job }
+    }
     fun encode(f: Int, y: YuvFrame) {
       slots.acquire()
       val job = pool.submit {
@@ -142,7 +166,7 @@ internal class Checkpoints(
     var onset: Int? = null
     var addressShaft: ShaftFound? = null
     try {
-      val wanted = stills + onsetFrames + listOfNotNull(addr?.frame, imp?.frame)
+      val wanted = stills + onsetFrames + listOfNotNull(addr?.frame, imp?.frame) + proxyFrames
       var t = SystemClock.elapsedRealtime()
       decodeSplit(path, wanted, keep = { it in stills }) { f, y ->
         if (f in onsetFrames) patches[f] = y.grayStrip(onsetRect!!, 1)
@@ -152,6 +176,7 @@ internal class Checkpoints(
           impactShaft.set(seeded(y.grayStrip(impRoi!!, step), imp.hands!!, ball!!, exp, ballD))
           shaftNs.addAndGet(System.nanoTime() - s)
         }
+        if (f in proxyFrames) proxy(f, y)
         if (f in stills) encode(f, y)
       }
       mainMs = SystemClock.elapsedRealtime() - t
@@ -214,12 +239,15 @@ internal class Checkpoints(
       "shaftMs" to (shaftNs.get() / 1_000_000).toInt(),
       "decoded" to decoded.get(),
       "stills" to written.size,
+      "proxies" to proxiesWritten.get(),
+      "proxyMs" to (proxyNs.get() / 1_000_000).toInt(),
     )
     Log.i(
       PoseAnalyzer.TAG,
       "pass2 address=${addr?.frame}->${addressFrame} addrShaft=$addressShaft impact=${imp?.frame} impShaft=${impactShaft.get()} timings=$timings",
     )
-    return mapOf("stills" to stillsOut, "shaft" to shaft, "addressFrame" to addressFrame, "timings" to timings)
+    val proxies = proxyDir?.let { mapOf("every" to req.proxyEvery, "count" to proxiesWritten.get()) }
+    return mapOf("stills" to stillsOut, "shaft" to shaft, "addressFrame" to addressFrame, "proxies" to proxies, "timings" to timings)
   }
 
   /**
