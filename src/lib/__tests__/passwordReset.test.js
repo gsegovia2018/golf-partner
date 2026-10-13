@@ -9,21 +9,21 @@ describe('validateNewPassword', () => {
   it('rejects an empty password', () => {
     expect(validateNewPassword('', '')).toEqual({
       valid: false,
-      error: 'Enter a new password',
+      error: { key: 'auth.newPassword.required' },
     });
   });
 
   it('rejects a password shorter than 8 characters', () => {
     expect(validateNewPassword('short1', 'short1')).toEqual({
       valid: false,
-      error: 'Password must be at least 8 characters',
+      error: { key: 'auth.password.tooShort', params: { min: 8 } },
     });
   });
 
   it('rejects mismatched confirmation', () => {
     expect(validateNewPassword('longenough1', 'longenough2')).toEqual({
       valid: false,
-      error: 'Passwords do not match',
+      error: { key: 'auth.newPassword.mismatch' },
     });
   });
 
@@ -37,7 +37,7 @@ describe('validateNewPassword', () => {
   it('treats an empty confirmation as a mismatch, not a length error', () => {
     expect(validateNewPassword('longenough1', '')).toEqual({
       valid: false,
-      error: 'Passwords do not match',
+      error: { key: 'auth.newPassword.mismatch' },
     });
   });
 });

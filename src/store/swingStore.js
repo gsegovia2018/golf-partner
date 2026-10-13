@@ -255,16 +255,24 @@ export async function setSwingClub(id, club) {
   return next;
 }
 
+// A pass 2 cancelled by a delete can still be finishing a still or proxy write: native waits up to
+// 2 s for its encoders after a cancel, so the folder is swept once more after that.
+export const DELETE_RESWEEP_MS = 2500;
+
 /** Remove the row and the whole directory (video included). */
 export async function deleteSwing(id) {
   if (!getSwing(id)) return;
   SWINGS = SWINGS.filter((s) => s.id !== id);
   emit();
   await persistIndex();
-  try {
-    const dir = swingDir(id);
-    if (dir.exists) dir.delete();
-  } catch { /* the row is gone; an orphaned folder is swept by pruneOrphanSwingDirs */ }
+  const sweep = () => {
+    try {
+      const dir = swingDir(id);
+      if (dir.exists) dir.delete();
+    } catch { /* the row is gone; an orphaned folder is swept by pruneOrphanSwingDirs */ }
+  };
+  sweep();
+  setTimeout(sweep, DELETE_RESWEEP_MS);
 }
 
 /** Delete folders that have no index row (a crash between copy and index write). */

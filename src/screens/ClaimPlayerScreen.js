@@ -17,12 +17,14 @@ import { loadProfile } from '../store/profileStore';
 import { mutate } from '../store/mutate';
 import { useAuth } from '../context/AuthContext';
 import { parseHandicapIndex } from '../lib/handicap';
+import { useT, t as translate, formatNumber } from '../i18n';
 
 // Shown right after an editor joins via an invite code. They pick which
 // existing player they are (links their account to that player) or add
 // themselves as a new player. Skippable — claiming is optional.
 export default function ClaimPlayerScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const tournamentId = route?.params?.tournamentId;
   const { user } = useAuth();
@@ -50,7 +52,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
         setNewName(p?.displayName || (p?.email ? p.email.split('@')[0] : ''));
         setNewHcp(p?.handicap != null ? String(p.handicap) : '');
       } catch (err) {
-        if (!cancelled) Alert.alert('Error', err.message ?? 'Could not load');
+        if (!cancelled) Alert.alert(translate('common.error'), err.message ?? translate('claim.loadFailed'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -83,10 +85,10 @@ export default function ClaimPlayerScreen({ navigation, route }) {
           const fresh = await refreshTournamentFromRemote(tournament.id);
           if (fresh) setTournament(fresh);
         } catch (_) { /* keep the stale roster; the alert is enough */ }
-        Alert.alert('Already taken',
-          'Someone else just claimed that player. Pick another.');
+        Alert.alert(translate('claim.alreadyTaken.title'),
+          translate('claim.alreadyTaken.body'));
       } else {
-        Alert.alert('Error', err.message ?? 'Could not link you to that player');
+        Alert.alert(translate('common.error'), err.message ?? translate('claim.linkFailed'));
       }
       setSaving(false);
       setClaimingId(null);
@@ -97,7 +99,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
     if (saving || !tournament || !profile) return;
     const name = newName.trim();
     if (!name) {
-      Alert.alert('Name required', 'Enter a name to add yourself.');
+      Alert.alert(translate('claim.nameRequired.title'), translate('claim.nameRequired.body'));
       return;
     }
     setSaving(true);
@@ -123,8 +125,8 @@ export default function ClaimPlayerScreen({ navigation, route }) {
             const fresh = await refreshTournamentFromRemote(tournament.id);
             if (fresh) setTournament(fresh);
           } catch (_) { /* keep the stale roster; the alert is enough */ }
-          Alert.alert('Roster full',
-            `This ${noun} already has the maximum number of players.`);
+          Alert.alert(translate('claim.rosterFull.title'),
+            translate(`claim.rosterFull.alert.${noun}`));
           setSaving(false);
           return;
         }
@@ -137,7 +139,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
       await mutate(t, { type: 'tournament.setMe', meId: playerId });
       done();
     } catch (err) {
-      Alert.alert('Error', err.message ?? 'Could not add you as a player');
+      Alert.alert(translate('common.error'), err.message ?? translate('claim.addFailed'));
       setSaving(false);
     }
   }
@@ -158,9 +160,9 @@ export default function ClaimPlayerScreen({ navigation, route }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={done} />
-        <Text style={s.headerTitle}>Which player are you?</Text>
+        <Text style={s.headerTitle}>{t('claim.title')}</Text>
         <TouchableOpacity onPress={done} activeOpacity={0.7}>
-          <Text style={s.skipText}>Skip</Text>
+          <Text style={s.skipText}>{t('claim.skip')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -170,14 +172,11 @@ export default function ClaimPlayerScreen({ navigation, route }) {
         </View>
       ) : (
         <ScrollView style={s.scroll} contentContainerStyle={s.content}>
-          <Text style={s.subtitle}>
-            You joined this {noun} as an editor. Pick which player is you, or
-            add yourself below.
-          </Text>
+          <Text style={s.subtitle}>{t(`claim.subtitle.${noun}`)}</Text>
 
           {players.length > 0 && (
             <View style={s.section}>
-              <Text style={s.sectionLabel}>Players in this {noun}</Text>
+              <Text style={s.sectionLabel}>{t(`claim.playersIn.${noun}`)}</Text>
               {players.map((p) => {
                 const linkedToOther = p.user_id && p.user_id !== profile?.userId;
                 const linkedToMe = p.user_id && p.user_id === profile?.userId;
@@ -198,9 +197,9 @@ export default function ClaimPlayerScreen({ navigation, route }) {
                     <View style={{ flex: 1 }}>
                       <Text style={s.playerName}>{p.name}</Text>
                       <Text style={s.playerMeta}>
-                        {`Hcp ${p.handicap ?? 0}`}
-                        {linkedToOther ? ' · Taken' : ''}
-                        {linkedToMe ? ' · You' : ''}
+                        {t('claim.hcp', { hcp: formatNumber(p.handicap ?? 0) })}
+                        {linkedToOther ? ` · ${t('claim.linked')}` : ''}
+                        {linkedToMe ? ` · ${t('claim.you')}` : ''}
                       </Text>
                     </View>
                     {isClaiming
@@ -216,8 +215,8 @@ export default function ClaimPlayerScreen({ navigation, route }) {
                   <Feather name="info" size={14} color={theme.accent.primary} style={{ marginRight: 8, marginTop: 1 }} />
                   <Text style={s.noticeText}>
                     {rosterFull
-                      ? `Every player is already linked to another account and this ${noun} is full. You can still follow along — tap Skip to continue as a viewer.`
-                      : `Every existing player is already claimed. Add yourself as a new player below, or tap Skip to follow along as a viewer.`}
+                      ? t(`claim.allTaken.full.${noun}`)
+                      : t('claim.allTaken.open')}
                   </Text>
                 </View>
               )}
@@ -225,17 +224,16 @@ export default function ClaimPlayerScreen({ navigation, route }) {
           )}
 
           <View style={s.section}>
-            <Text style={s.sectionLabel}>Not listed? Add yourself</Text>
+            <Text style={s.sectionLabel}>{t('claim.addSection')}</Text>
             {rosterFull ? (
               <Text style={s.fullNote}>
-                This {noun} already has {maxPlayers} players — claim one above
-                or skip.
+                {t(`claim.fullNote.${noun}`, { maxPlayers: formatNumber(maxPlayers) })}
               </Text>
             ) : adding ? (
               <View style={s.addForm}>
                 <TextInput
                   style={s.input}
-                  placeholder="Your name"
+                  placeholder={t('account.namePlaceholder')}
                   placeholderTextColor={theme.text.muted}
                   value={newName}
                   onChangeText={setNewName}
@@ -272,7 +270,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
                 activeOpacity={0.7}
               >
                 <Feather name="user-plus" size={14} color={theme.accent.primary} />
-                <Text style={s.addRowText}>I'm not listed — add me</Text>
+                <Text style={s.addRowText}>{t('claim.addMe')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -285,8 +283,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
             >
               <Feather name="bookmark" size={16} color={theme.text.muted} style={{ marginRight: 10 }} />
               <Text style={s.saveAccountText}>
-                You're playing as a guest. Add an email in your profile so you
-                keep this {noun} if you switch devices.
+                {t(`claim.guest.${noun}`)}
               </Text>
             </TouchableOpacity>
           )}

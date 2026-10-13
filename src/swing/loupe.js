@@ -56,3 +56,35 @@ export function loupeImage(mark, rect, size = LOUPE_SIZE, zoom = LOUPE_ZOOM) {
   const height = rect.h * zoom;
   return { width, height, left: size / 2 - mark[0] * width, top: size / 2 - mark[1] * height };
 }
+
+// --- D28: the loupe in the corner opposite the mark ---------------------------------------------
+// On the marking canvas the loupe no longer rides above the finger: it sits in a right-hand corner
+// of the picture (the dock is on the left, the ball bottom-left), the one away from the mark, and
+// stays there for the whole drag unless the mark itself comes near it.
+
+export const LOUPE_MARGIN = 8; // px from the picture's edges
+export const LOUPE_TAG_CLEAR = 36; // px kept free at the bottom for the frame tag (VIDEO · n)
+export const LOUPE_CLEAR = 24; // px: the mark this close to the ring's edge sends it to the other corner
+
+/** Top-left of the loupe in corner `side` (0 = top-right, 1 = bottom-right), rect px. */
+export function loupeCorner(side, rect, size = LOUPE_SIZE, margin = LOUPE_MARGIN) {
+  'worklet';
+  return {
+    left: Math.max(0, rect.w - size - margin),
+    top: side === 1 ? Math.max(0, rect.h - size - margin - LOUPE_TAG_CLEAR) : Math.min(margin, Math.max(0, rect.h - size)),
+  };
+}
+
+/**
+ * The corner for a mark at `mark` (rect px): the one away from it (a mark in the top half gets the
+ * bottom-right corner, and the other way round); with `prev` (the corner already in use) it stays
+ * put until the mark comes within LOUPE_CLEAR of the ring.
+ */
+export function loupeSide(mark, rect, size = LOUPE_SIZE, prev = -1) {
+  'worklet';
+  const want = mark[1] < rect.h / 2 ? 1 : 0;
+  if (prev !== 0 && prev !== 1) return want;
+  const at = loupeCorner(prev, rect, size);
+  const d = Math.hypot(mark[0] - (at.left + size / 2), mark[1] - (at.top + size / 2));
+  return d < size / 2 + LOUPE_CLEAR ? 1 - prev : prev;
+}

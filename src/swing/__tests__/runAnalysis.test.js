@@ -10,7 +10,13 @@ jest.mock('expo-file-system', () => ({
   Directory: class { constructor() { this.exists = true; this.uri = 'file:///doc/swings/s1/frames'; } create() {} },
   File: class {},
 }));
-jest.mock('../frames', () => ({ nativeApi: jest.fn(), getStill: jest.fn(() => 'file:///doc/swings/s1/frames/556.jpg') }));
+jest.mock('../frames', () => ({
+  nativeApi: jest.fn(),
+  getStill: jest.fn(() => 'file:///doc/swings/s1/frames/556.jpg'),
+  proxyDir: jest.fn(() => ({ uri: 'file:///doc/swings/s1/proxy' })),
+  proxyWindow: jest.requireActual('../frames').proxyWindow,
+  PROXY_EVERY: 4,
+}));
 jest.mock('../../store/swingStore', () => ({
   getSwing: jest.fn(),
   getSwingProfile: jest.fn(() => ({ heightCm: 176, handedness: 'right', asked: true })),
@@ -100,6 +106,21 @@ describe('runAnalysis', () => {
     opts.frames.forEach((f) => { expect(f.neighbours).toBe(2); expect(f.hands).toHaveLength(2); });
     expect(opts.expectedShaftPx).toBeGreaterThan(100);
     expect(opts.ball).toEqual(expect.objectContaining({ x: ball.x }));
+  });
+
+  test('D28: an apiVersion 3 binary is asked for the scrub proxies (every 4th frame), an apiVersion 2 one is not', async () => {
+    const v3 = makeApi({ proxySupport: () => true });
+    frames.nativeApi.mockReturnValue(v3);
+    await runAnalysis('s1');
+    expect(v3.extractCheckpoints.mock.calls[0][1]).toMatchObject({ proxyEvery: 4, proxyDir: 'file:///doc/swings/s1/proxy' });
+    const [lo, hi] = v3.extractCheckpoints.mock.calls[0][1].proxyRange; // the swing window, not the whole clip
+    expect(lo).toBeGreaterThan(0);
+    expect(hi).toBeLessThan(probe.frameCount - 1);
+    const v2 = makeApi({ proxySupport: () => false });
+    frames.nativeApi.mockReturnValue(v2);
+    await runAnalysis('s1');
+    expect(v2.extractCheckpoints.mock.calls[0][1]).not.toHaveProperty('proxyEvery');
+    expect(v2.extractCheckpoints.mock.calls[0][1]).not.toHaveProperty('proxyDir');
   });
 
   test('pass 2 gets the address window of the first analysis (detect.py clubhead_onset)', async () => {

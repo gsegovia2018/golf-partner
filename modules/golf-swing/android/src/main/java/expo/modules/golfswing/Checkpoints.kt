@@ -13,6 +13,7 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.Semaphore
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -35,6 +36,14 @@ internal class Pass2Request(
   val expectedShaftPx: Double?,
   val addressSearch: AddressSearchSpec?,
   val outDir: String,
+  /**
+   * Scrub proxies (D28): every [proxyEvery]-th frame (multiples of it) inside [proxyRange] into
+   * [proxyDir]; 0 or no dir = none. The range is the swing window the JS asks for, so the decode
+   * span stays close to the checkpoint span; null = the whole clip.
+   */
+  val proxyEvery: Int = 0,
+  val proxyDir: String? = null,
+  val proxyRange: IntRange? = null,
 )
 
 /**
@@ -121,6 +130,42 @@ internal class Checkpoints(
     val shaftNs = AtomicLong()
     val pool = Executors.newFixedThreadPool(JPEG_THREADS) { Thread(it, "golf-swing-jpeg").apply { isDaemon = true } }
     val slots = Semaphore(JPEG_IN_FLIGHT)
+    // D28: the scrub proxies ride on this decode. Downscaled on the decoder thread (a small
+    // nearest-neighbour copy, so the frame can be a reused scratch one), encoded on the pool.
+    val proxyDir = req.proxyDir?.takeIf { req.proxyEvery > 0 && it.isNotEmpty() }?.let { File(Media.localPath(it)).apply { mkdirs() } }
+    val proxyFrames = if (proxyDir != null) Proxies.frames(n, req.proxyEvery, req.proxyRange).toSet() else emptySet()
+    val proxiesWritten = AtomicInteger()
+    val proxyFailures = AtomicInteger()
+    val proxyNs = AtomicLong()
+    // A proxy is a convenience: one that fails is counted and skipped, never fails pass 2. After a
+    // cancel (the swing is being deleted) nothing more is written into its folder.
+    fun proxy(f: Int, y: YuvFrame) {
+      if (cancelled()) return
+      val px: Triple<IntArray, Int, Int>
+      val s = System.nanoTime()
+      try {
+        px = Proxies.pixels(y)
+      } catch (e: Exception) {
+        proxyFailures.incrementAndGet()
+        return
+      } finally {
+        proxyNs.addAndGet(System.nanoTime() - s)
+      }
+      slots.acquire()
+      val job = pool.submit {
+        try {
+          if (!cancelled()) {
+            Proxies.write(px.first, px.second, px.third, File(proxyDir, "$f.jpg"))
+            proxiesWritten.incrementAndGet()
+          }
+        } catch (e: Exception) {
+          proxyFailures.incrementAndGet()
+        } finally {
+          slots.release()
+        }
+      }
+      synchronized(jobs) { jobs += job }
+    }
     fun encode(f: Int, y: YuvFrame) {
       slots.acquire()
       val job = pool.submit {
@@ -142,7 +187,7 @@ internal class Checkpoints(
     var onset: Int? = null
     var addressShaft: ShaftFound? = null
     try {
-      val wanted = stills + onsetFrames + listOfNotNull(addr?.frame, imp?.frame)
+      val wanted = stills + onsetFrames + listOfNotNull(addr?.frame, imp?.frame) + proxyFrames
       var t = SystemClock.elapsedRealtime()
       decodeSplit(path, wanted, keep = { it in stills }) { f, y ->
         if (f in onsetFrames) patches[f] = y.grayStrip(onsetRect!!, 1)
@@ -152,6 +197,7 @@ internal class Checkpoints(
           impactShaft.set(seeded(y.grayStrip(impRoi!!, step), imp.hands!!, ball!!, exp, ballD))
           shaftNs.addAndGet(System.nanoTime() - s)
         }
+        if (f in proxyFrames) proxy(f, y)
         if (f in stills) encode(f, y)
       }
       mainMs = SystemClock.elapsedRealtime() - t
@@ -188,6 +234,8 @@ internal class Checkpoints(
       waitMs = SystemClock.elapsedRealtime() - t
     } finally {
       pool.shutdownNow()
+      // a cancel (the swing being deleted) must not leave a write landing after the folder is gone
+      pool.awaitTermination(2, TimeUnit.SECONDS)
     }
 
     val addressFrame = onset
@@ -214,12 +262,24 @@ internal class Checkpoints(
       "shaftMs" to (shaftNs.get() / 1_000_000).toInt(),
       "decoded" to decoded.get(),
       "stills" to written.size,
+      "proxies" to proxiesWritten.get(),
+      "proxyMs" to (proxyNs.get() / 1_000_000).toInt(),
+      "proxyFailures" to proxyFailures.get(),
     )
     Log.i(
       PoseAnalyzer.TAG,
       "pass2 address=${addr?.frame}->${addressFrame} addrShaft=$addressShaft impact=${imp?.frame} impShaft=${impactShaft.get()} timings=$timings",
     )
-    return mapOf("stills" to stillsOut, "shaft" to shaft, "addressFrame" to addressFrame, "timings" to timings)
+    val proxies = proxyDir?.let {
+      mapOf(
+        "every" to req.proxyEvery,
+        "from" to (proxyFrames.minOrNull() ?: 0),
+        "to" to (proxyFrames.maxOrNull() ?: -1),
+        "count" to proxiesWritten.get(),
+        "failed" to proxyFailures.get(),
+      )
+    }
+    return mapOf("stills" to stillsOut, "shaft" to shaft, "addressFrame" to addressFrame, "proxies" to proxies, "timings" to timings)
   }
 
   /**

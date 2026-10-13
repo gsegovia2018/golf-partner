@@ -18,10 +18,11 @@ import { seasonTable, monthResults } from '../store/leagueStandings';
 import {
   monthName, formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard, rankNotes, placeLabel,
   leaguePointsText, monthStanding,
-  daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, myRoundScored, viewableCards, monthRows,
+  daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, myMonthCard, voidedNote, myRoundScored, viewableCards, monthRows,
 } from '../store/leagueView';
 import { useT, tr, formatNumber } from '../i18n';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
+import { splitVoidReason } from '../store/leagueTimeline';
 import { getTournamentSnapshot } from '../store/tournamentStore';
 import { leagueRoundIndex } from '../store/leagueGameCards';
 
@@ -117,9 +118,12 @@ export default function LeagueBoardScreen({ navigation, route }) {
   if (monthScope) {
     const left = daysLeftInMonth(now);
     boardTitle = `${curMonth.toUpperCase()} SO FAR · ${left === 0 ? 'LAST DAY' : `${left} ${left === 1 ? 'DAY' : 'DAYS'} LEFT`}`;
-    const board = monthBoard(members, cardsByMonth, curKey, league.pointsTable, now, { participationPoints: league.participationPoints });
-    // Any card this month opens: live and missed ones show their status.
-    const canOpen = new Set(monthRows(members, cardsByMonth, curKey, now).filter((r) => r.card).map((r) => r.member.userId));
+    const board = monthBoard(members, cardsByMonth, curKey, league.pointsTable, now, { participationPoints: league.participationPoints, voidCards: data?.cards });
+    // Any card this month opens: live, missed and voided ones show their status.
+    const canOpen = new Set([
+      ...monthRows(members, cardsByMonth, curKey, now).filter((r) => r.card).map((r) => r.member.userId),
+      ...board.voided.map((r) => r.member.userId),
+    ]);
     const rowOf = (member) => ({
       key: member.userId,
       name: nameOf(member.userId),
@@ -217,6 +221,23 @@ export default function LeagueBoardScreen({ navigation, route }) {
           points: '—',
           detail: detailOf(r.card, 'Not posted in time', r.card.course?.name),
         })),
+      },
+      board.voided.length > 0 && {
+        key: 'voided',
+        label: `Voided · ${board.voided.length}`,
+        icon: 'slash',
+        rows: board.voided.map((r) => {
+          const { reason } = splitVoidReason(r.card.voidedReason);
+          const why = reason ?? (r.card.voidKind === 'withdrawn_after_play' ? 'played after withdrawing' : null);
+          return {
+            ...rowOf(r.member),
+            place: null,
+            unranked: true,
+            muted: true,
+            points: '—',
+            detail: why ? `Voided · ${why}` : 'Voided',
+          };
+        }),
       },
       noCard.length > 0 && {
         key: 'nocard',
@@ -328,7 +349,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
 
   // ---- My card -------------------------------------------------------------
 
-  const myCard = (cardsByMonth[curKey] ?? []).find((c) => c.userId === meId) ?? null;
+  // A card an admin voided (or one played after a withdrawal) still takes the
+  // month: it shows here instead of the announce buttons.
+  const myCard = myMonthCard(cardsByMonth, data?.cards, curKey, meId);
   const mine = yourCardState(myCard);
   // Where my counting card stands in the open month (confirmed, counted).
   const standing = mine.kind === 'confirmed' && !needsApproval(mine.card)
@@ -390,6 +413,21 @@ export default function LeagueBoardScreen({ navigation, route }) {
               <Text style={s.secondaryText}>Add a card I played</Text>
             </TouchableOpacity>
           </View>
+        </>
+      );
+    } else if (mine.kind === 'voided') {
+      badge = t('league.void.badge');
+      body = (
+        <>
+          <Text style={s.cardText}>{tr(voidedNote(mine.card, { isOwner: true, who: '' }))}</Text>
+          <TouchableOpacity
+            style={s.secondaryBtn}
+            onPress={() => navigation.navigate('LeagueCard', { leagueId, month: curKey, userId: meId })}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+          >
+            <Text style={s.secondaryText}>{t('league.void.openCard')}</Text>
+          </TouchableOpacity>
         </>
       );
     } else if (isMissed(mine.card, now)) {

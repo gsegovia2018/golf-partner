@@ -17,17 +17,19 @@ export const RESET_PASSWORD_PATH = 'reset-password';
  *
  * @param {string} password
  * @param {string} confirm
- * @returns {{ valid: boolean, error: string|null }}
+ * `error` is a message descriptor ({ key, params }) for tr(), or null.
+ *
+ * @returns {{ valid: boolean, error: { key: string, params?: object } | null }}
  */
 export function validateNewPassword(password, confirm) {
   if (!password) {
-    return { valid: false, error: 'Enter a new password' };
+    return { valid: false, error: { key: 'auth.newPassword.required' } };
   }
   if (password.length < MIN_LENGTH) {
-    return { valid: false, error: `Password must be at least ${MIN_LENGTH} characters` };
+    return { valid: false, error: { key: 'auth.password.tooShort', params: { min: MIN_LENGTH } } };
   }
   if (password !== confirm) {
-    return { valid: false, error: 'Passwords do not match' };
+    return { valid: false, error: { key: 'auth.newPassword.mismatch' } };
   }
   return { valid: true, error: null };
 }

@@ -3,11 +3,13 @@ import {
   View, Text, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import AuthForm from '../components/AuthForm';
+import { useT } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 
 export default function AuthScreen() {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const [mode, setMode] = useState('signin');
@@ -16,7 +18,7 @@ export default function AuthScreen() {
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={s.inner}>
         <Text style={s.logo}>Golf Partner</Text>
-        <Text style={s.tagline}>Track your round</Text>
+        <Text style={s.tagline}>{t('auth.tagline')}</Text>
 
         <View style={s.card}>
           <View style={s.modeRow}>
@@ -25,14 +27,14 @@ export default function AuthScreen() {
               onPress={() => setMode('signin')}
               activeOpacity={0.7}
             >
-              <Text style={[s.modeBtnText, mode === 'signin' && s.modeBtnTextActive]}>Sign In</Text>
+              <Text style={[s.modeBtnText, mode === 'signin' && s.modeBtnTextActive]}>{t('auth.signIn')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.modeBtn, mode === 'signup' && s.modeBtnActive]}
               onPress={() => setMode('signup')}
               activeOpacity={0.7}
             >
-              <Text style={[s.modeBtnText, mode === 'signup' && s.modeBtnTextActive]}>Sign Up</Text>
+              <Text style={[s.modeBtnText, mode === 'signup' && s.modeBtnTextActive]}>{t('auth.signUp')}</Text>
             </TouchableOpacity>
           </View>
 

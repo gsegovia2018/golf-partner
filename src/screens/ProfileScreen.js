@@ -19,6 +19,7 @@ import { loadProfile, upsertProfile, uploadAvatar, isUsernameAvailable } from '.
 import { clearFeedSnapshot } from '../store/feedStore';
 import { parseHandicapIndex, normalizeHandicapInput } from '../lib/handicap';
 import { haptic } from '../lib/haptics';
+import { useT, t as translate } from '../i18n';
 
 // Stagger step between section reveals on mount.
 const REVEAL_STEP = 40;
@@ -42,6 +43,7 @@ function Field({ theme, s, style, ...rest }) {
 
 export default function ProfileScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const isTabPresentation = route?.params?.presentation === 'tab';
 
@@ -72,7 +74,7 @@ export default function ProfileScreen({ navigation, route }) {
       setGender(p?.gender ?? null);
       setDirty(false);
     } catch (err) {
-      Alert.alert('Error', err.message ?? 'Could not load profile');
+      Alert.alert(translate('common.error'), err.message ?? translate('profile.loadFailed'));
     } finally {
       hasLoadedOnceRef.current = true;
       setLoading(false);
@@ -89,13 +91,13 @@ export default function ProfileScreen({ navigation, route }) {
       e.preventDefault();
       const confirmLeave = () => navigation.dispatch(e.data.action);
       if (Platform.OS === 'web') {
-        if (window.confirm('You have unsaved changes. Leave without saving?')) confirmLeave();
+        if (window.confirm(translate('profile.unsaved.body'))) confirmLeave();
         return;
       }
       Alert.alert(
-        'Unsaved changes', 'You have unsaved changes. Leave without saving?',
-        [{ text: 'Stay', style: 'cancel' },
-         { text: 'Discard', style: 'destructive', onPress: confirmLeave }],
+        translate('profile.unsaved.title'), translate('profile.unsaved.body'),
+        [{ text: translate('profile.unsaved.stay'), style: 'cancel' },
+         { text: translate('profile.unsaved.discard'), style: 'destructive', onPress: confirmLeave }],
       );
     });
     return sub;
@@ -107,8 +109,8 @@ export default function ProfileScreen({ navigation, route }) {
     const trimmedUsername = username.trim().toLowerCase();
     if (trimmedUsername && !/^[a-z0-9_]{3,20}$/.test(trimmedUsername)) {
       Alert.alert(
-        'Invalid username',
-        'Username must be 3–20 characters: lowercase letters, digits or underscores.',
+        translate('profile.usernameInvalid.title'),
+        translate('profile.usernameInvalid.body'),
       );
       return;
     }
@@ -120,7 +122,7 @@ export default function ProfileScreen({ navigation, route }) {
     if (normalizedHandicap.trim() !== '') {
       const parsed = parseHandicapIndex(normalizedHandicap);
       if (!parsed.ok) {
-        Alert.alert('Invalid handicap', 'Handicap must be between 0 and 54, with up to one decimal place.');
+        Alert.alert(translate('profile.handicapInvalid.title'), translate('profile.handicapInvalid.body'));
         return;
       }
     }
@@ -131,7 +133,7 @@ export default function ProfileScreen({ navigation, route }) {
     if (normalizedTargetHandicap.trim() !== '') {
       const t = parseHandicapIndex(normalizedTargetHandicap);
       if (!t.ok || t.value > 36) {
-        Alert.alert('Invalid target handicap', 'Target handicap must be between 0 and 36, with up to one decimal place.');
+        Alert.alert(translate('profile.targetInvalid.title'), translate('profile.targetInvalid.body'));
         return;
       }
     }
@@ -140,7 +142,7 @@ export default function ProfileScreen({ navigation, route }) {
     // no gender at all — existing users were backfilled in the DB, so this
     // only ever gates new signups.
     if (gender !== 'male' && gender !== 'female') {
-      Alert.alert('Select gender', 'Choose Male or Female — it sets which tee rating (men\'s or women\'s) your handicap uses.');
+      Alert.alert(translate('profile.genderRequired.title'), translate('profile.genderRequired.body'));
       return;
     }
 
@@ -151,7 +153,7 @@ export default function ProfileScreen({ navigation, route }) {
       if (trimmedUsername && trimmedUsername !== (profile?.username ?? '')) {
         const available = await isUsernameAvailable(trimmedUsername);
         if (!available) {
-          Alert.alert('Username taken', 'That username is already taken. Pick another one.');
+          Alert.alert(translate('account.usernameTaken.title'), translate('account.usernameTaken.body'));
           return;
         }
       }
@@ -165,12 +167,12 @@ export default function ProfileScreen({ navigation, route }) {
       });
       await load();
     } catch (err) {
-      const msg = err?.message ?? 'Could not save profile';
+      const msg = err?.message ?? translate('account.saveFailed');
       // Unique-constraint violation on (lower(username)) surfaces as 23505.
       if (err?.code === '23505' || /duplicate|unique/i.test(msg)) {
-        Alert.alert('Username taken', 'Pick another username.');
+        Alert.alert(translate('account.usernameTaken.title'), translate('profile.usernameTaken.body'));
       } else {
-        Alert.alert('Error', msg);
+        Alert.alert(translate('common.error'), msg);
       }
     } finally {
       setSaving(false);
@@ -181,7 +183,7 @@ export default function ProfileScreen({ navigation, route }) {
     if (Platform.OS !== 'web') {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Permission needed', 'Allow photo library access to change your avatar.');
+        Alert.alert(translate('profile.photoPermission.title'), translate('profile.photoPermission.body'));
         return;
       }
     }
@@ -212,7 +214,7 @@ export default function ProfileScreen({ navigation, route }) {
       await upsertProfile({ avatarUrl: publicUrl });
       setAvatarUrl(publicUrl);
     } catch (err) {
-      Alert.alert('Error', err.message ?? 'Could not upload avatar');
+      Alert.alert(translate('common.error'), err.message ?? translate('profile.avatarFailed'));
     } finally {
       setUploadingAvatar(false);
     }
@@ -220,11 +222,11 @@ export default function ProfileScreen({ navigation, route }) {
 
   async function signOut() {
     const confirmed = Platform.OS === 'web'
-      ? window.confirm('Sign out?')
+      ? window.confirm(translate('auth.signOutConfirm'))
       : await new Promise((resolve) => Alert.alert(
-          'Sign out', 'Are you sure?',
-          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-           { text: 'Sign out', style: 'destructive', onPress: () => resolve(true) }],
+          translate('auth.signOut'), translate('auth.signOutBody'),
+          [{ text: translate('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+           { text: translate('auth.signOut'), style: 'destructive', onPress: () => resolve(true) }],
         ));
     if (!confirmed) return;
     // The feed's cold-start snapshot is this user's content sitting on disk.
@@ -247,7 +249,7 @@ export default function ProfileScreen({ navigation, route }) {
   // where the back chevron owns the left.
   const headerSave = dirty ? (
     <TouchableOpacity
-      accessibilityLabel="Save profile"
+      accessibilityLabel={t('profile.saveLabel')}
       onPress={save}
       disabled={saving}
       style={s.headerSaveBtn}
@@ -255,7 +257,7 @@ export default function ProfileScreen({ navigation, route }) {
     >
       {saving
         ? <ActivityIndicator size="small" color={theme.accent.primary} />
-        : <Text style={s.headerSaveText}>Save</Text>}
+        : <Text style={s.headerSaveText}>{t('common.save')}</Text>}
     </TouchableOpacity>
   ) : (
     <View style={s.backBtn} />
@@ -269,11 +271,11 @@ export default function ProfileScreen({ navigation, route }) {
         ) : (
           <IconButton
             icon="chevron-left"
-            accessibilityLabel="Back"
+            accessibilityLabel={t('common.back')}
             onPress={handleBack}
           />
         )}
-        <Text style={s.headerTitle}>Profile</Text>
+        <Text style={s.headerTitle}>{t('profile.title')}</Text>
         {isTabPresentation ? <View style={s.backBtn} /> : headerSave}
       </View>
 
@@ -290,7 +292,7 @@ export default function ProfileScreen({ navigation, route }) {
                 onPress={pickAvatar}
                 activeOpacity={0.8}
                 disabled={uploadingAvatar}
-                accessibilityLabel="Change profile photo"
+                accessibilityLabel={t('profile.changePhoto')}
               >
                 {avatarUrl
                   ? <Image source={{ uri: avatarUrl }} style={{ width: '100%', height: '100%' }} />
@@ -322,24 +324,24 @@ export default function ProfileScreen({ navigation, route }) {
                 style={s.linkRow}
                 onPress={() => navigation.navigate('Friends')}
                 accessibilityRole="button"
-                accessibilityLabel="Friends"
+                accessibilityLabel={t('profile.link.friends')}
               >
                 <View style={s.linkIconDisc}>
                   <Feather name="users" size={15} color={theme.accent.primary} />
                 </View>
-                <Text style={s.linkRowText}>Friends</Text>
+                <Text style={s.linkRowText}>{t('profile.link.friends')}</Text>
                 <Feather name="chevron-right" size={18} color={theme.text.muted} />
               </PressableScale>
               <PressableScale
                 style={[s.linkRow, s.linkRowDivider]}
                 onPress={() => navigation.navigate('Bag')}
                 accessibilityRole="button"
-                accessibilityLabel="Your bag"
+                accessibilityLabel={t('profile.link.bagA11y')}
               >
                 <View style={s.linkIconDisc}>
                   <Feather name="briefcase" size={15} color={theme.accent.primary} />
                 </View>
-                <Text style={s.linkRowText}>Your Bag</Text>
+                <Text style={s.linkRowText}>{t('profile.link.bag')}</Text>
                 <Feather name="chevron-right" size={18} color={theme.text.muted} />
               </PressableScale>
               {/* Swing analyzer needs the Android-only native module: no row on web or iOS. */}
@@ -348,12 +350,12 @@ export default function ProfileScreen({ navigation, route }) {
                   style={[s.linkRow, s.linkRowDivider]}
                   onPress={() => navigation.navigate('SwingHome')}
                   accessibilityRole="button"
-                  accessibilityLabel="My swing"
+                  accessibilityLabel={t('profile.link.swing')}
                 >
                   <View style={s.linkIconDisc}>
                     <Feather name="activity" size={15} color={theme.accent.primary} />
                   </View>
-                  <Text style={s.linkRowText}>My swing</Text>
+                  <Text style={s.linkRowText}>{t('profile.link.swing')}</Text>
                   <Feather name="chevron-right" size={18} color={theme.text.muted} />
                 </PressableScale>
               )}
@@ -361,57 +363,57 @@ export default function ProfileScreen({ navigation, route }) {
                 style={[s.linkRow, s.linkRowDivider]}
                 onPress={() => navigation.navigate('Settings')}
                 accessibilityRole="button"
-                accessibilityLabel="Settings"
+                accessibilityLabel={t('settings.title')}
               >
                 <View style={s.linkIconDisc}>
                   <Feather name="settings" size={15} color={theme.accent.primary} />
                 </View>
-                <Text style={s.linkRowText}>Settings</Text>
+                <Text style={s.linkRowText}>{t('settings.title')}</Text>
                 <Feather name="chevron-right" size={18} color={theme.text.muted} />
               </PressableScale>
             </View>
           </Reveal>
 
           <Reveal delay={REVEAL_STEP * 2}>
-            <Text style={s.sectionLabel}>ACCOUNT</Text>
+            <Text style={s.sectionLabel}>{t('profile.section.account')}</Text>
             <View style={s.formCard}>
               <View style={s.fieldGroup}>
-                <Text style={s.fieldLabel}>Username</Text>
+                <Text style={s.fieldLabel}>{t('account.username')}</Text>
                 <Field
                   theme={theme} s={s}
-                  placeholder="shorthandle"
+                  placeholder={t('account.usernamePlaceholder')}
                   value={username}
                   onChangeText={(v) => { setUsername(v.toLowerCase()); setDirty(true); }}
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
                 <Text style={s.fieldHint}>
-                  Unique, lowercase. 3–20 letters, digits or underscores. Used in links.
+                  {t('profile.hint.username')}
                 </Text>
               </View>
 
               <View style={[s.fieldGroup, s.fieldGroupLast]}>
-                <Text style={s.fieldLabel}>Display name</Text>
+                <Text style={s.fieldLabel}>{t('account.displayName')}</Text>
                 <Field
                   theme={theme} s={s}
-                  placeholder="How should we call you?"
+                  placeholder={t('profile.displayNamePlaceholder')}
                   value={displayName}
                   onChangeText={(v) => { setDisplayName(v); setDirty(true); }}
                   autoCapitalize="words"
                 />
                 <Text style={s.fieldHint}>
-                  Shown in tournaments and on the leaderboard.
+                  {t('profile.hint.displayName')}
                 </Text>
               </View>
             </View>
           </Reveal>
 
           <Reveal delay={REVEAL_STEP * 3}>
-            <Text style={s.sectionLabel}>GOLF GAME</Text>
+            <Text style={s.sectionLabel}>{t('profile.section.golf')}</Text>
             <View style={s.formCard}>
               <View style={[s.fieldGroup, { flexDirection: 'row', gap: 16 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.fieldLabel}>Handicap</Text>
+                  <Text style={s.fieldLabel}>{t('account.handicap')}</Text>
                   <Field
                     theme={theme} s={s}
                     placeholder="—"
@@ -422,7 +424,7 @@ export default function ProfileScreen({ navigation, route }) {
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.fieldLabel}>Target handicap</Text>
+                  <Text style={s.fieldLabel}>{t('profile.field.targetHandicap')}</Text>
                   <Field
                     theme={theme} s={s}
                     placeholder="—"
@@ -435,23 +437,23 @@ export default function ProfileScreen({ navigation, route }) {
               </View>
 
               <View style={[s.fieldGroup, s.fieldGroupLast]}>
-                <Text style={s.fieldLabel}>Gender</Text>
+                <Text style={s.fieldLabel}>{t('account.gender')}</Text>
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                  {[['male', 'Male'], ['female', 'Female']].map(([value, label]) => (
+                  {[['male', 'common.male'], ['female', 'common.female']].map(([value, label]) => (
                     <PressableScale
                       key={value}
                       onPress={() => { haptic('selection'); setGender(value); setDirty(true); }}
                       style={[s.genderPill, gender === value && s.genderPillActive]}
                       accessibilityRole="button"
-                      accessibilityLabel={label}
+                      accessibilityLabel={t(label)}
                       accessibilityState={{ selected: gender === value }}
                     >
-                      <Text style={[s.genderPillText, gender === value && s.genderPillTextActive]}>{label}</Text>
+                      <Text style={[s.genderPillText, gender === value && s.genderPillTextActive]}>{t(label)}</Text>
                     </PressableScale>
                   ))}
                 </View>
                 <Text style={s.fieldHint}>
-                  Sets which tee rating (men&apos;s or women&apos;s) your handicap uses.
+                  {t('account.genderHint')}
                 </Text>
               </View>
             </View>
@@ -463,10 +465,10 @@ export default function ProfileScreen({ navigation, route }) {
               onPress={signOut}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel="Sign out"
+              accessibilityLabel={t('auth.signOut')}
             >
               <Feather name="log-out" size={16} color={theme.destructive} />
-              <Text style={s.signOutText}>Sign out</Text>
+              <Text style={s.signOutText}>{t('auth.signOut')}</Text>
             </TouchableOpacity>
           </Reveal>
         </ScrollView>
