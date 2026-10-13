@@ -52,6 +52,21 @@ jest.mock('../../store/mutate', () => ({
   mutate: jest.fn(),
 }));
 
+jest.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}));
+
+let mockRoundLeague = { mode: 'hidden' };
+jest.mock('../../hooks/useRoundLeague', () => ({
+  useRoundLeague: () => mockRoundLeague,
+}));
+
+jest.mock('../../lib/leagueOptIn', () => ({
+  announceRoundCard: jest.fn(),
+  confirmStartWithoutLeague: jest.fn(() => Promise.resolve(false)),
+  dismissLeagueOptIn: jest.fn(() => Promise.resolve()),
+}));
+
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
 const navigation = {
@@ -159,5 +174,88 @@ describe('NextRoundScreen confirm/reshuffle error handling (Task 3.7)', () => {
     fireEvent.press(getByText('Re-shuffle'));
 
     await waitFor(() => expect(mutate).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('NextRoundScreen league card for the round (D5 B)', () => {
+  const league = { id: 'L1', name: 'Mulligan', leagueHandicap: null };
+  const cardsState = (on) => ({
+    mode: 'cards', state: 'ready', league, meId: 'p1', rated: true, on, setOn: jest.fn(), retry: jest.fn(),
+    rows: [{ playerId: 'p1', kind: 'me', name: 'Noé' }, { playerId: 'p2', kind: 'asked', name: 'Alex' }],
+  });
+
+  const roundTwo = () => {
+    const t = makeTournament();
+    t.rounds[1] = { ...t.rounds[1], pairs: mockPairs };
+    return t;
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const { loadTournament, pairsForNextRound } = require('../../store/tournamentStore');
+    loadTournament.mockImplementation(() => Promise.resolve(roundTwo()));
+    pairsForNextRound.mockImplementation(() => mockPairs);
+    const { mutate } = require('../../store/mutate');
+    mutate.mockImplementation((current) => Promise.resolve(current));
+  });
+
+  afterEach(() => {
+    Alert.alert.mockRestore();
+    mockRoundLeague = { mode: 'hidden' };
+  });
+
+  async function reachPlay(getByText, getByLabelText) {
+    await waitFor(() => expect(getByText('Reveal Teams')).toBeTruthy());
+    fireEvent.press(getByLabelText('Skip the reveal animation'));
+    await waitFor(() => expect(getByText("Let's Play!")).toBeTruthy());
+  }
+
+  test('shows the round list; switched on, my card is announced before the reveal', async () => {
+    mockRoundLeague = cardsState(true);
+    const announced = { ...roundTwo(), announced: true };
+    const { announceRoundCard } = require('../../lib/leagueOptIn');
+    announceRoundCard.mockResolvedValue({ tournament: announced });
+    const { mutate } = require('../../store/mutate');
+
+    const route = { params: { revealOnly: true, roundIndex: 1 } };
+    const { getByText, getByLabelText } = render(wrap(<NextRoundScreen navigation={navigation} route={route} />));
+    await reachPlay(getByText, getByLabelText);
+    expect(getByText('Round 2 for Mulligan')).toBeTruthy();
+    expect(getByText(/Only round 2 counts\. Round 1 stays a tournament round\./)).toBeTruthy();
+
+    fireEvent.press(getByText("Let's Play!"));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Home'));
+    expect(announceRoundCard).toHaveBeenCalledWith(expect.objectContaining({ roundId: 'r1', meId: 'p1', league }));
+    expect(mutate.mock.calls[0][0]).toBe(announced);
+  });
+
+  test('switched off: the opt-in is dismissed and nothing is announced', async () => {
+    mockRoundLeague = cardsState(false);
+    const { announceRoundCard, dismissLeagueOptIn } = require('../../lib/leagueOptIn');
+
+    const route = { params: { revealOnly: true, roundIndex: 1 } };
+    const { getByText, getByLabelText } = render(wrap(<NextRoundScreen navigation={navigation} route={route} />));
+    await reachPlay(getByText, getByLabelText);
+    fireEvent.press(getByText("Let's Play!"));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Home'));
+    expect(dismissLeagueOptIn).toHaveBeenCalledWith('t1', 'r1');
+    expect(announceRoundCard).not.toHaveBeenCalled();
+  });
+
+  test('announce fails and I cancel: no reveal, no navigation', async () => {
+    mockRoundLeague = cardsState(true);
+    const { announceRoundCard, confirmStartWithoutLeague } = require('../../lib/leagueOptIn');
+    announceRoundCard.mockRejectedValue(new Error('offline'));
+    confirmStartWithoutLeague.mockResolvedValue(false);
+    const { mutate } = require('../../store/mutate');
+
+    const route = { params: { revealOnly: true, roundIndex: 1 } };
+    const { getByText, getByLabelText } = render(wrap(<NextRoundScreen navigation={navigation} route={route} />));
+    await reachPlay(getByText, getByLabelText);
+    fireEvent.press(getByText("Let's Play!"));
+    await waitFor(() => expect(confirmStartWithoutLeague).toHaveBeenCalledWith('Mulligan', 'offline'));
+    expect(mutate).not.toHaveBeenCalled();
+    expect(navigation.replace).not.toHaveBeenCalled();
   });
 });

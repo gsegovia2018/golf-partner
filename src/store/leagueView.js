@@ -505,13 +505,16 @@ export function autoWithdrawNote(card, when = (d) => d.toISOString()) {
 // Has my league round every hole scored? true / false, or null when this
 // device can't tell (game not loaded, no player of mine in it): callers then
 // treat the card as ready, since Validate guards an incomplete card itself.
-export function myRoundScored(tournament, roundId, userId) {
+// `playerId` is the card's own player (R16: any member's card, any round);
+// without it, my linked player, then the legacy single link's.
+export function myRoundScored(tournament, roundId, userId, playerId = null) {
   const round = tournament?.rounds?.find((r) => r.id === roundId);
   if (!round || !round.holes?.length) return null;
   const players = tournament.players ?? [];
   const lg = tournament.league ?? tournament.props?.league ?? null;
-  const me = players.find((p) => p.id === lg?.playerId)
-    ?? players.find((p) => p.user_id && p.user_id === userId);
+  const me = (playerId ? players.find((p) => p.id === playerId) : null)
+    ?? players.find((p) => p.user_id && p.user_id === userId)
+    ?? players.find((p) => p.id === lg?.playerId);
   if (!me) return null;
   return round.holes.every((h) => {
     const v = round.scores?.[me.id]?.[h.number];

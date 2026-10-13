@@ -24,6 +24,7 @@ import { useT, tr, formatNumber } from '../i18n';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
 import { splitVoidReason } from '../store/leagueTimeline';
 import { getTournamentSnapshot } from '../store/tournamentStore';
+import { leagueRoundIndex } from '../store/leagueGameCards';
 
 // The league's home: my own card, then this month's board (or the season / a past month).
 // Cache first, then live; pull to refresh.
@@ -361,7 +362,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
   // While holes are still unscored the card is simply being played: the
   // "Playing with the app" link to the scorecard is the way back, not Validate.
   const stillPlaying = !mine.offApp && mine.kind === 'playing'
-    && myRoundScored(getTournamentSnapshot(mine.card.tournamentId), mine.card.roundId, meId) === false;
+    && myRoundScored(getTournamentSnapshot(mine.card.tournamentId), mine.card.roundId, meId, mine.card.playerId) === false;
   const finishValidating = !mine.offApp && !stillPlaying && (mine.kind === 'playing' || mine.kind === 'submitted') ? (
     <TouchableOpacity
       style={s.primaryBtn}
@@ -440,12 +441,15 @@ export default function LeagueBoardScreen({ navigation, route }) {
       badge = mine.kind === 'playing' ? 'Playing' : 'Announced';
       body = (
         <>
-          {/* An app card: the line opens the game's scorecard (the league
-              round is the game's first round). */}
+          {/* An app card: the line opens the game's scorecard on the
+              card's own round (any round of a tournament, R17). */}
           <Text
             style={s.cardText}
             {...(!mine.offApp && mine.card.tournamentId ? {
-              onPress: () => navigation.navigate('Scorecard', { tournamentId: mine.card.tournamentId, roundIndex: 0 }),
+              onPress: () => navigation.navigate('Scorecard', {
+                tournamentId: mine.card.tournamentId,
+                roundIndex: leagueRoundIndex(getTournamentSnapshot(mine.card.tournamentId), mine.card.roundId),
+              }),
               accessibilityRole: 'link',
             } : {})}
           >

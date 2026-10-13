@@ -21,12 +21,22 @@ import { scoringModeUsesTeams, needsManualTeamSetup } from '../components/scorin
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
+import { useAuth } from '../context/AuthContext';
+import { useRoundLeague } from '../hooks/useRoundLeague';
+import { announceRoundCard, confirmStartWithoutLeague, dismissLeagueOptIn } from '../lib/leagueOptIn';
+import { leagueStrokes } from '../store/leagueSetup';
+import { listText } from '../store/leagueGameCards';
+import { cardMonth } from '../store/leagueRules';
+import LeagueCardsList from '../components/league/LeagueCardsList';
+import { useT, formatNumber } from '../i18n';
 
 export default function NextRoundScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
   const { revealOnly = false, roundIndex: paramRoundIndex } = route?.params ?? {};
+  const { user } = useAuth();
+  const t = useT();
 
   const [tournament, setTournament] = useState(null);
   const [nextPairs, setNextPairs] = useState(null);
@@ -47,6 +57,11 @@ export default function NextRoundScreen({ navigation, route }) {
   const pairAnimsRef = useRef([]);
   const actionsOpacity = useRef(new Animated.Value(0)).current;
   const actionsTranslateY = useRef(new Animated.Value(20)).current;
+
+  // League card for this round (R17, D5 B): hooks run before the early returns.
+  const leagueRoundIndex = tournament ? (revealOnly ? paramRoundIndex : tournament.currentRound + 1) : null;
+  const leagueRound = tournament?.rounds?.[leagueRoundIndex] ?? null;
+  const roundLeague = useRoundLeague({ tournament, round: leagueRound, userId: user?.id ?? null });
 
   function ensurePairAnims(count) {
     while (pairAnimsRef.current.length < count) {
@@ -184,6 +199,54 @@ export default function NextRoundScreen({ navigation, route }) {
     tournament?.settings?.manualTeams,
   ) && !tournament?.settings?.fixedTeams && !round?.revealed;
 
+  // "Round N for <league>": the league cards list for this round, or my row
+  // alone when nobody else in the game is in the league.
+  function renderRoundLeague() {
+    const { mode, league } = roundLeague;
+    if (mode === 'hidden') return null;
+    const n = roundIndex + 1;
+    const course = round.courseName ?? '';
+    const title = t('league.cards.roundTitle', { round: n, league: league.name });
+    if (mode === 'nineHoles') {
+      return <LeagueCardsList title={title} rows={[]} footer={t('league.cards.nineHoles', { round: n, course })} />;
+    }
+    const hcp = league.leagueHandicap;
+    const { meId } = roundLeague;
+    let sub;
+    if (!roundLeague.rated) sub = t('league.cards.meUnrated');
+    else if (hcp == null) sub = t('league.cards.meRoundSubNoHcp', { round: n, course });
+    else {
+      sub = t('league.cards.meRoundSub', {
+        round: n, course, strokes: leagueStrokes(round, meId, hcp), hcp: formatNumber(hcp, { decimals: 1 }),
+      });
+    }
+    const others = tournament.rounds.map((_, i) => i + 1).filter((x) => x !== n);
+    const footer = others.length > 0
+      ? t('league.cards.onlyRound', {
+        count: others.length, round: n,
+        rounds: listText(others.map((x) => ({ name: String(x) })), { and: t('league.cards.and') }),
+      })
+      : null;
+    return (
+      <LeagueCardsList
+        title={title}
+        state={roundLeague.state}
+        rows={roundLeague.rows}
+        monthKey={cardMonth(new Date())}
+        short
+        onRetry={roundLeague.retry}
+        footer={roundLeague.state === 'ready' ? footer : null}
+        me={{
+          sub,
+          value: roundLeague.on,
+          onChange: roundLeague.setOn,
+          disabled: !roundLeague.rated,
+          label: t('league.cards.switchLabel', { league: league.name }),
+        }}
+      />
+    );
+  }
+
   function startReveal() {
     setPhase('countdown');
     runCountdown(3);
@@ -296,7 +359,24 @@ export default function NextRoundScreen({ navigation, route }) {
     if (busy) return;
     setBusy(true);
     try {
-      const updated = await mutate(tournament, {
+      let base = tournament;
+      // My league card for this round is announced before anyone can score
+      // it; left off, the scorecard won't ask me again.
+      if (roundLeague.mode === 'cards' && roundLeague.state === 'ready') {
+        if (roundLeague.on) {
+          try {
+            ({ tournament: base } = await announceRoundCard({
+              tournament, roundId: round.id, meId: roundLeague.meId, league: roundLeague.league,
+            }));
+          } catch (err) {
+            const ok = await confirmStartWithoutLeague(roundLeague.league.name, err?.message ?? t('league.cards.offline'));
+            if (!ok) return;
+          }
+        } else {
+          await dismissLeagueOptIn(tournament.id, round.id);
+        }
+      }
+      const updated = await mutate(base, {
         type: 'round.reveal', roundId: tournament.rounds[roundIndex].id, pairs: nextPairs,
       });
       if (!revealOnly) {
@@ -396,6 +476,7 @@ export default function NextRoundScreen({ navigation, route }) {
             },
           ]}
         >
+          {renderRoundLeague()}
           {canReshuffle && (
             <TouchableOpacity style={s.btnSecondary} onPress={reshuffle} disabled={busy}>
               <Feather name="shuffle" size={14} color={theme.accent.primary} style={{ marginRight: 8 }} />

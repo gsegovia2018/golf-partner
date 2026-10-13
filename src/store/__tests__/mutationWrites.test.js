@@ -192,6 +192,25 @@ describe('index.set', () => {
   });
 });
 
+describe('handicap.setLeague', () => {
+  test('patches index, playing handicap and the non-manual flag for one player', async () => {
+    const mutation = {
+      type: 'handicap.setLeague', roundId: 'r1', playerId: 'p1', index: 18, handicap: 20,
+    };
+    const local = baseTournament();
+    local.rounds[0].playerIndexes = { p1: 18, p2: 9 };
+    local.rounds[0].playerHandicaps = { p1: 20, p2: 8 };
+    local.rounds[0].manualHandicaps = { p1: false };
+    await executeMutation(entry(mutation), local);
+    expect(repo.patchRound).toHaveBeenCalledTimes(1);
+    expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', {
+      playerIndexes: { p1: 18 },
+      playerHandicaps: { p1: 20 },
+      manualHandicaps: { p1: false },
+    });
+  });
+});
+
 describe('round.remove', () => {
   test('deletes the round via repo.deleteRound', async () => {
     const mutation = { type: 'round.remove', roundId: 'r1' };

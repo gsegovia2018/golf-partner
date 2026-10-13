@@ -20,6 +20,7 @@ import {
   monthName, formatNetDiffSigned, firstName, markerAskedLine,
 } from '../store/leagueView';
 import { UNRATED_TEE_PROBLEM } from '../store/leagueOffApp';
+import { leagueCardsOf } from '../store/leagueSetup';
 
 // Plain words for confirm_league_card_by_partner's refusals.
 export const PARTNER_REASONS = {
@@ -94,9 +95,13 @@ export default function LeagueValidateScreen({ navigation, route }) {
     const round = tournament?.rounds?.find((r) => r.id === roundId);
     if (!round) return null;
     const players = tournament.players ?? [];
-    const lg = tournament.league ?? tournament.props?.league ?? null;
-    const player = players.find((p) => p.id === lg?.playerId)
+    // This card's player (R16: every member has their own card, any round),
+    // then my linked player, then the legacy single link of older games.
+    const entry = leagueCardsOf(tournament).find((e) => e.cardId === cardId) ?? null;
+    const legacy = tournament.league ?? tournament.props?.league ?? null;
+    const player = (entry?.playerId ? players.find((p) => p.id === entry.playerId) : null)
       ?? players.find((p) => p.user_id && p.user_id === user?.id)
+      ?? players.find((p) => p.id === legacy?.playerId)
       ?? null;
     if (!player) return null;
     const strokes = round.scores?.[player.id] ?? {};
@@ -123,7 +128,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
       round, roundNumber, player, strokes, gross, points, playingHandicap, snapshot, missing,
       rated, adjustedGross, differential, netDifferential, leagueHandicap: Number(leagueHandicap) || 0,
     };
-  }, [tournament, roundId, user?.id]);
+  }, [tournament, roundId, cardId, user?.id]);
 
   const checkPartner = useCallback(async () => {
     setBusy(true);

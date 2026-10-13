@@ -325,6 +325,28 @@ test('background store-change reload keeps the round the user selected', async (
   expect(activeTabLabel(view)).toBe('R1');
 });
 
+test('a store-change reload reads the cache only (no background fetch); focus still refreshes', async () => {
+  shouldHandleStoreChange.mockReturnValue(true);
+  let storeChangeCallback = null;
+  subscribeTournamentChanges.mockImplementation((cb) => {
+    storeChangeCallback = cb;
+    return jest.fn();
+  });
+  const view = renderTournamentHome();
+  await waitFor(() => expect(activeTabLabel(view)).toBe('R2'));
+
+  getTournament.mockClear();
+  await act(async () => { await storeChangeCallback(); });
+  expect(getTournament).toHaveBeenCalledTimes(1);
+  expect(getTournament).toHaveBeenCalledWith('t1', { refreshRemote: false });
+
+  getTournament.mockClear();
+  const focusHandlers = view.navigation.addListener.mock.calls
+    .filter(([name]) => name === 'focus').map(([, fn]) => fn);
+  await act(async () => { await Promise.all(focusHandlers.map((fn) => fn({ type: 'focus' }))); });
+  expect(getTournament).toHaveBeenCalledWith('t1', { refreshRemote: true });
+});
+
 test('pager still follows play when currentRound advances after a manual pick', async () => {
   shouldHandleStoreChange.mockReturnValue(true);
   let storeChangeCallback = null;

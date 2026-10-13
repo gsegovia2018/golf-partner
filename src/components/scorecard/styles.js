@@ -1627,6 +1627,17 @@ export function makeScorecardStyles(theme) {
       color: theme.accent.primary, backgroundColor: theme.accent.light,
       borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
     },
+    // LEAGUE chip (D5): this player's card counts for a league. Rank gold
+    // outline with winner-gold text (colour set inline per theme).
+    leagueChip: {
+      fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, letterSpacing: 0.8,
+      borderWidth: 1, borderColor: semantic.rank.gold,
+      borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1, overflow: 'hidden',
+    },
+    leagueToast: {
+      fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, textAlign: 'center',
+      color: theme.accent.primary, marginHorizontal: 16, marginBottom: 8,
+    },
 
     // Team chip on the unified PlayerCard — small pill showing "PAIR A" /
     // "PAIR B" in the team colour on a low-alpha tinted background. The

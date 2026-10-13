@@ -30,6 +30,10 @@ export function metaPathFor(m) {
     // Per-round handicap INDEX override (recomputes the playing handicap for
     // non-manual entries). Scoped to one round, one player.
     case 'index.set': return `rounds.${m.roundId}.playerIndexes.${m.playerId}`;
+    // My league handicap on a round I count for the league before it starts
+    // (Start Round N): index + derived playing handicap, NOT a manual override.
+    case 'handicap.setLeague':
+      return [`rounds.${m.roundId}.playerIndexes.${m.playerId}`, `rounds.${m.roundId}.playerHandicaps.${m.playerId}`];
     // Structural round deletion. The path itself is no longer consumed by
     // any merge/reconcile logic (deletion now flows through repo.deleteRound
     // + the row-based read path) — it survives purely as the queue entry's
@@ -180,6 +184,15 @@ export function applyToTournament(t, m) {
       if (!round) return;
       round.playerHandicaps = { ...(round.playerHandicaps ?? {}), [m.playerId]: m.handicap };
       round.manualHandicaps = { ...(round.manualHandicaps ?? {}), [m.playerId]: true };
+      break;
+    }
+    case 'handicap.setLeague': {
+      const round = t.rounds.find((r) => r.id === m.roundId);
+      if (!round) return;
+      // Like an auto-computed entry: a later tee change still recomputes it.
+      round.playerIndexes = { ...(round.playerIndexes ?? {}), [m.playerId]: m.index };
+      round.playerHandicaps = { ...(round.playerHandicaps ?? {}), [m.playerId]: m.handicap };
+      round.manualHandicaps = { ...(round.manualHandicaps ?? {}), [m.playerId]: false };
       break;
     }
     case 'index.set': {

@@ -64,7 +64,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   }
 }
 
-export function HoleView({ round, roundIndex, players, scores, myScores = null, ghostAuthors = null, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled, conflictHoles = new Set(), conflictCells = new Set(), conflictRows = EMPTY_CONFLICT_ROWS, localAuthorIds }) {
+export function HoleView({ leaguePlayers = '', round, roundIndex, players, scores, myScores = null, ghostAuthors = null, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled, conflictHoles = new Set(), conflictCells = new Set(), conflictRows = EMPTY_CONFLICT_ROWS, localAuthorIds }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
@@ -370,6 +370,7 @@ export function HoleView({ round, roundIndex, players, scores, myScores = null, 
                   onToggleShotDetail={toggleShotDetail}
                   totalsMap={scorecardTotals}
                   conflictCells={conflictCells}
+                  leaguePlayers={leaguePlayers}
                   gps={gps}
                   onOpenFlyover={openFlyover}
                 />

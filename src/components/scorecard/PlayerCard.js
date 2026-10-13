@@ -10,6 +10,7 @@ import { teamColor } from './teamModel';
 import { ShotDetailSection } from './ShotDetailSection';
 import PressableScale from '../ui/PressableScale';
 import { haptic } from '../../lib/haptics';
+import { useT } from '../../i18n';
 
 // Unified per-player score card. Every game mode renders this exact card —
 // solo, Stableford, Match Play, Sindicato and Best Ball. It is the former
@@ -42,7 +43,7 @@ import { haptic } from '../../lib/haptics';
 export const PlayerCard = React.memo(function PlayerCard({
   player, hole, strokes, points,
   handicap, extraShots, pickup, isPickup, teeLabel,
-  team,
+  team, league = false,
   isMe, canEdit, showRunning, totals,
   getScoreAnim,
   onStep, onSetScore,
@@ -53,6 +54,7 @@ export const PlayerCard = React.memo(function PlayerCard({
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
+  const tx = useT();
 
   const ptsColor = points == null ? theme.text.muted
     : points >= 3 ? theme.scoreColor('excellent')
@@ -138,6 +140,15 @@ export const PlayerCard = React.memo(function PlayerCard({
                 ]}
               >
                 {(team.label ?? '').toUpperCase()}
+              </Text>
+            ) : null}
+            {/* LEAGUE chip: this player's card counts for a league (D5). */}
+            {league ? (
+              <Text
+                style={[s.leagueChip, { color: theme.isDark ? semantic.winner.dark : semantic.winner.light }]}
+                accessibilityLabel={tx('league.strip.chipLabel')}
+              >
+                {tx('league.strip.chip')}
               </Text>
             ) : null}
             {/* Official discrepancy badge: green check (agreed), grey clock
