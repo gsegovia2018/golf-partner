@@ -196,8 +196,10 @@ export function chooseFrame(draft, base, key, frame) {
   if (d.frame === frame) return { draft: d.frameOk ? draft : patchCheckpoint(draft, key, { frameOk: true }), reset: false };
   const p = base.cps[key];
   const atProposal = frame === p.frame;
+  // a position confirmed on the old frame is no longer confirmed: it goes back to "to do"
+  const { [key]: _was, ...status } = draft.status ?? {};
   return {
-    draft: patchCheckpoint(draft, key, {
+    draft: patchCheckpoint({ ...draft, status }, key, {
       frame,
       hands: null,
       head: atProposal ? p.head : null,
@@ -207,6 +209,18 @@ export function chooseFrame(draft, base, key, frame) {
     }),
     reset: true,
   };
+}
+
+/**
+ * Would choosing another frame throw something away (D28)? The golfer placed the hands, confirmed a
+ * mark or the position, moved or hid the clubhead, or had already chosen a frame other than the
+ * proposal. Drives the "· marks reset" warning on the step 1 button and the toast.
+ */
+export function hasMarks(draft, base, key) {
+  const d = draft.cps[key];
+  const p = base.cps[key];
+  const ok = okOf(d);
+  return !!d.hands || ok.hands || ok.head || d.frame !== p.frame || headChanged(d, p) || draft.status?.[key] === 'confirmed';
 }
 
 /** Put a mark at a normalised point; a moved mark needs confirming again. */

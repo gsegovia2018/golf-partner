@@ -134,6 +134,9 @@ describe('review fixes', () => {
     expect(markStatus(moved.draft, c.base, 'impact', 'hands')).toBe('proposed'); // the tracked grip at f + 2
     expect(markStatus(moved.draft, c.base, 'impact', 'head')).toBe('missing');
     expect(moved.draft.ball).toEqual(ok.ball);
+    expect(ok.status.impact).toBe('confirmed');
+    expect(moved.draft.status.impact).toBeUndefined(); // confirmed on the old frame: to do again
+    expect(same.draft.status.impact).toBe('confirmed');
     // back on the proposed frame the clubhead proposal returns
     const back = chooseFrame(moved.draft, c.base, 'impact', c.base.cps.impact.frame);
     expect(back.draft.cps.impact.head).toEqual(c.base.cps.impact.head);

@@ -437,6 +437,33 @@ describe('changing the frame resets that position\'s marks (D28)', () => {
     expect(savedAnalysis().checkpoints.impact.i).toBe(f + 2);
   });
 
+  test('review: a resumed position with saved marks warns before another frame wipes them; an untouched one does not', async () => {
+    const first = await open({ mode: 'pass', marks: PARTIAL });
+    await press(first.getByTestId('mark-use-frame'));
+    await press(first.getByTestId('mark-primary')); // address
+    await press(first.getByTestId('mark-use-frame'));
+    await press(dock(first, 'head'));
+    await touch(px([0.24, 0.32]));
+    await press(first.getByTestId('mark-close'));
+    await press(first.getByLabelText(M.confirmLeave)); // the clubhead confirmed, the position still to do
+    const saved = savedMarks();
+    first.unmount();
+    const u = await open({ mode: 'pass', marks: saved });
+    const f = FIRST.checkpoints.leadArm.i;
+    expect(u.getByTestId('chapter-leadArm').props.accessibilityState.selected).toBe(true);
+    expect(step(u)).toBe(1);
+    await press(u.getByTestId(`zoom-${f + 1}`));
+    expect(u.getByLabelText(M.primary.useReset(f + 1))).toBeTruthy();
+    await press(u.getByTestId('mark-use-frame'));
+    expect(u.getByText(M.framesReset)).toBeTruthy();
+    expect(dockLabel(u, 'head')).toBe(M.dockLabel('Clubhead', 'Missing'));
+    await press(u.getByTestId('chapter-top')); // untouched: no warning, no toast
+    await press(u.getByTestId(`zoom-${FIRST.checkpoints.top.i + 1}`));
+    expect(u.getByLabelText(M.primary.useFrame(FIRST.checkpoints.top.i + 1))).toBeTruthy();
+    await press(u.getByTestId('mark-use-frame'));
+    expect(u.queryByText(M.framesReset)).toBeNull();
+  });
+
   test('back on the proposed frame the clubhead proposal returns; the ball (one per swing) stays where it was', async () => {
     const u = await open({ checkpoint: 'address', seeded: true });
     const f = SEEDED.checkpoints.address.i;
@@ -687,22 +714,40 @@ describe('step 2: placing the marks', () => {
     expect(within(again.getByTestId('mark-frame-tag')).getByText(M.frameTag(f - 1))).toBeTruthy();
   });
 
-  test('review: nothing is placed on a still that is not on screen yet', async () => {
+  test('review: step 1 cannot take a frame it is not showing; "Use frame N" waits for that exact still', async () => {
     const f = FIRST.checkpoints.leadArm.i;
     let arrive;
     getStill.mockImplementation((_id, fr) => (fr === f + 2 ? null : STILL));
+    getProxy.mockImplementation((_id, fr) => `file:///proxy/${fr}.jpg`);
     ensureStills.mockImplementation(() => new Promise((r) => { arrive = r; }));
     const u = await open({ checkpoint: 'leadArm' });
     await press(u.getByTestId('mark-change-frame'));
     await press(u.getByTestId(`zoom-${f + 2}`));
+    expect(picture(u)).toBe(`file:///proxy/${f + 2}.jpg`); // not the frame itself yet
+    expect(within(u.getByTestId('mark-frame-tag')).getByText(`${M.frameTag(f + 2)} · ${M.loadingTag}`)).toBeTruthy();
+    expect(u.getByTestId('mark-use-frame').props.accessibilityState.disabled).toBe(true);
     await press(u.getByTestId('mark-use-frame'));
+    expect(step(u)).toBe(1);
+    await act(async () => { await new Promise((r) => setTimeout(r, 120)); }); // past the 90 ms debounce
+    getStill.mockReturnValue(STILL);
+    await act(async () => { arrive({}); });
+    expect(within(u.getByTestId('mark-frame-tag')).getByText(M.frameTag(f + 2))).toBeTruthy();
+    expect(u.getByTestId('mark-use-frame').props.accessibilityState.disabled).toBe(false);
+  });
+
+  test('review: nothing is placed on a still that is not on screen yet (step 2 opened on a frame still being extracted)', async () => {
+    const f = FIRST.checkpoints.leadArm.i;
+    let arrive;
+    getStill.mockImplementation((_id, fr) => (fr === f ? null : STILL));
+    ensureStills.mockImplementation(() => new Promise((r) => { arrive = r; }));
+    const u = await open({ checkpoint: 'leadArm', settle: false });
     await act(async () => { await new Promise((r) => setTimeout(r, 120)); }); // past the 90 ms debounce
     expect(u.getByTestId('mark-loading')).toBeTruthy();
     expect(u.getByTestId('mark-primary').props.accessibilityState.disabled).toBe(true);
     await press(dock(u, 'head'));
     await touch(px([0.24, 0.32]));
     expect(dockLabel(u, 'head')).toBe(M.dockLabel('Clubhead', 'Missing')); // the tap was refused
-    expect(u.getAllByText(M.loadingFrame(f + 2)).length).toBe(2); // the pill on the still and the toast
+    expect(u.getAllByText(M.loadingFrame(f)).length).toBe(2); // the pill on the still and the toast
     getStill.mockReturnValue(STILL);
     await act(async () => { arrive({}); });
     expect(u.queryByTestId('mark-loading')).toBeNull();
@@ -825,6 +870,18 @@ describe('dragging a mark does not touch React or the analysis until release', (
     expect(chips().some((c) => c.startsWith(M.names.hands.toUpperCase()))).toBe(true);
   });
 
+  test('review: a drag whose position changed under it (a chapter tap mid-drag) commits nothing anywhere', async () => {
+    const u = await open({ checkpoint: 'impact' });
+    const [x, y] = px(FIRST.clubMarks.impact.hands);
+    await grant([x, y]);
+    await move([x + 40, y]);
+    await press(u.getByTestId('chapter-top'));
+    await release([x + 40, y]);
+    expect(dockLabel(u, 'hands')).toBe(M.dockLabel('Hands', 'Proposed')); // not dropped on Top
+    await press(u.getByTestId('chapter-impact'));
+    expect(dockLabel(u, 'hands')).toBe(M.dockLabel('Hands', 'Proposed')); // nor on Impact
+  });
+
   test('a touch on a mark that does not move commits nothing; a tap off the marks places the active one once, on release', async () => {
     const u = await open({ checkpoint: 'impact' });
     const [x, y] = px(FIRST.clubMarks.impact.hands);
@@ -844,16 +901,20 @@ describe('dragging a mark does not touch React or the analysis until release', (
     expect(head[1]).toBeCloseTo(0.3, 2);
   });
 
-  test('a drag cut short by the system keeps the point it reached; nudge and confirm still work after it', async () => {
+  test('a drag the system cancels commits nothing and clears the overlay; nudge and confirm still work after it', async () => {
     const u = await open({ checkpoint: 'impact' });
     const [x, y] = px(FIRST.clubMarks.impact.hands);
+    analyze.mockClear();
     await act(async () => {
       const g = markPan().handlers;
       g.onBegin(ev(x, y));
       g.onUpdate(ev(x + 12, y));
       g.onFinalize(ev(x + 12, y), false); // cancelled
     });
-    expect(dockLabel(u, 'hands')).toBe(M.dockLabel('Hands', 'Moved'));
+    expect(analyze).not.toHaveBeenCalled();
+    expect(dockLabel(u, 'hands')).toBe(M.dockLabel('Hands', 'Proposed'));
+    expect(loupeShown(u)).toBe(false);
+    expect(dragged(u).opacity).toBe(0);
     await press(u.getByLabelText(M.nudge.right));
     await press(u.getByTestId('mark-confirm'));
     expect(dockLabel(u, 'hands')).toBe(M.dockLabel('Hands', 'Confirmed'));

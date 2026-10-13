@@ -50,16 +50,21 @@ function FrameScrubberImpl({
   const down = useSharedValue(0);
   const x0 = useSharedValue(0);
   const last = useSharedValue(-1);
+  const committed = useSharedValue(view);
 
   const targetKey = [...ticks.map((t) => t.frame), proposed].join(',');
   useEffect(() => { max.value = maxFrame; }, [maxFrame, max]);
   useEffect(() => { targets.value = targetKey.split(',').map(Number); }, [targetKey, targets]);
   useEffect(() => { tw.value = w; }, [w, tw]);
   // the committed frame moves the playhead (a tap on a thumb, ‹ ›, a new position); a drag moves it itself
-  useEffect(() => { if (!down.value) ph.value = trackX(view, w, maxFrame); }, [view, w, maxFrame, down, ph]);
+  useEffect(() => {
+    committed.value = view;
+    if (!down.value) ph.value = trackX(view, w, maxFrame);
+  }, [view, w, maxFrame, down, ph, committed]);
 
   const setScrub = scrub.set;
   const release = useCallback((f) => { scrub.set(null); onPick(f); }, [scrub, onPick]);
+  const abandon = useCallback(() => { scrub.set(null); }, [scrub]);
   const pan = useMemo(() => Gesture.Pan()
     .minDistance(0)
     .maxPointers(1)
@@ -84,10 +89,16 @@ function FrameScrubberImpl({
         runOnJS(setScrub)(f);
       }
     })
-    .onFinalize((e) => {
+    .onFinalize((e, success) => {
       'worklet';
       if (!down.value) return;
       down.value = 0;
+      if (!success) {
+        // cancelled by the system: back to the committed frame, nothing picked
+        ph.value = trackX(committed.value, tw.value, max.value);
+        runOnJS(abandon)();
+        return;
+      }
       const x = clampX(e.x, tw.value);
       const f = Math.abs(e.x - x0.value) < TAP_PX
         ? snapFrame(x, tw.value, max.value, targets.value)
@@ -95,7 +106,7 @@ function FrameScrubberImpl({
       ph.value = trackX(f, tw.value, max.value);
       runOnJS(release)(f);
     })
-    .withTestId('scrub-track'), [setScrub, release, down, x0, tw, ph, max, last, targets]);
+    .withTestId('scrub-track'), [setScrub, release, abandon, down, x0, tw, ph, max, last, targets, committed]);
   const head = useAnimatedStyle(() => ({ transform: [{ translateX: ph.value - 1.5 }] }));
 
   const off = cursor - proposed;

@@ -1,5 +1,5 @@
 import React, {
-  memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore,
+  memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore,
 } from 'react';
 import {
   View, Text, StyleSheet, Pressable, Alert, ScrollView, StatusBar, useWindowDimensions,
@@ -25,7 +25,7 @@ import {
 import { getStill, ensureStills, getProxy } from '../swing/frames';
 import { cueFor } from '../swing/checkpoints';
 import {
-  buildDraft, recompute, draftToMarks, isDirty, hitTest, clampPt,
+  buildDraft, recompute, draftToMarks, isDirty, hitTest, clampPt, hasMarks,
   markStatus, placeMark, setHidden, confirmMark, chooseFrame, confirmPosition, confirmMoves, restorePosition, skipPosition,
   pendingMoves, primaryAction,
 } from '../swing/editMarks';
@@ -105,12 +105,13 @@ const ScrubPicture = memo(function ScrubPicture({
   const src = scrubSource({
     frame, dragging: drag != null, still: stillFor(frame), proxy: proxyFor(frame), last: shown,
   });
-  const scrubbing = drag != null && src.kind !== 'still';
+  // not the exact frame yet: SCRUBBING under the finger, LOADING after the release until the still lands
+  const note = src.exact ? '' : drag != null ? T.scrubbing : T.loadingTag;
   return (
     <>
-      <SwingOverlay width={box.w} height={box.h} video={video} uri={src.uri} showPlanes={false} label={`${name} still, frame ${frame}`} />
+      <SwingOverlay width={box.w} height={box.h} video={video} uri={src.uri} showPlanes={false} resizeMethod="scale" label={`${name} still, frame ${frame}`} />
       <View style={s.tag} pointerEvents="none">
-        <Text style={s.tagText} testID="mark-frame-tag">{`${T.frameTag(frame)}${scrubbing ? ` · ${T.scrubbing}` : ''}`}</Text>
+        <Text style={s.tagText} testID="mark-frame-tag">{`${T.frameTag(frame)}${note ? ` · ${note}` : ''}`}</Text>
       </View>
     </>
   );
@@ -179,13 +180,15 @@ function useMarkPan({
       lv.side.value = loupeSide([p[0] * c.w, p[1] * c.h], c, LOUPE_SIZE, lv.side.value);
       if (e.x !== x0.value || e.y !== y0.value) moved.value = 1;
     })
-    .onFinalize(() => {
+    .onFinalize((_e, success) => {
       'worklet';
       const k = kind.value;
       if (!k) return;
       kind.value = 0;
       lv.opacity.value = 0;
-      runOnJS(onDrop)(k, lv.mx.value, lv.my.value, moved.value);
+      // a drag the system cancelled (another gesture, the app backgrounded) commits nothing
+      if (success) runOnJS(onDrop)(k, lv.mx.value, lv.my.value, moved.value);
+      else runOnJS(onDrop)(k, 0, 0, 0);
     })
     .withTestId('mark-pan'), [ctx, lv, onGrab, onRefuse, onDrop, kind, ox, oy, x0, y0, moved]);
 }
@@ -231,7 +234,6 @@ export function SwingMarkCanvas({
   const [area, setArea] = useState(null);
   const [dragging, setDragging] = useState(null); // the mark under the finger: DragLoupe draws it, the SVG layer skips it
   const snap = useRef(startDraft); // the draft when the golfer arrived at this position
-  const visited2 = useRef(step === 2); // step 2 was open on this visit: a new frame now resets placed marks
   const scrub = useRef(null);
   if (!scrub.current) scrub.current = createScrub();
 
@@ -312,24 +314,34 @@ export function SwingMarkCanvas({
   const loupe = useRef(null); // D20: the magnifier, drawn from shared values
   const lv = useLoupeValues();
   const ctx = useSharedValue(null);
-  // what the drag worklet reads on touch-down: written after every render, never during a drag
-  useEffect(() => {
+  // what the drag worklet reads on touch-down: written as each render commits (before any touch can
+  // reach the new tree), never during a drag
+  useLayoutEffect(() => {
     ctx.value = {
       w: rect.w, h: rect.h, loading, active, ballOk: cp === 'address', reduced, hands: handsNow, head: headNow, ball: ballNow ? [ballNow[0], ballNow[1]] : null,
     };
   });
+  const grabbed = useRef(null); // the position and frame a drag started on
   const onGrab = useStable((k, hit) => {
+    grabbed.current = { cp: latest.current.cp, view: latest.current.view };
     setToast('');
     if (hit) setActive(KIND_NAMES[k]);
     setDragging(KIND_NAMES[k]);
   });
   const onRefuse = useStable((why) => setToast(why === 'loading' ? T.loadingFrame(latest.current.view) : T.ballOnlyAddress));
   const onDrop = useStable((k, x, y, moved) => {
-    // one commit per gesture; a touch that did not move a grabbed mark commits nothing
-    if (moved) place(KIND_NAMES[k], clampPt([x, y]));
+    // one commit per gesture; a touch that did not move a grabbed mark commits nothing, and neither
+    // does one whose frame went away under it (loading, or another position or frame meanwhile)
+    const L = latest.current;
+    const G = grabbed.current;
+    grabbed.current = null;
+    const same = !!G && G.cp === L.cp && G.view === L.view;
+    if (moved && same && !L.loading) place(KIND_NAMES[k], clampPt([x, y]));
     setDragging(null); // the committed mark is drawn by the SVG layer from here; the effect below drops the overlay
+    setDrops((n) => n + 1); // a grab and a drop in one batch leave `dragging` unchanged: this still runs the effect
   });
-  useEffect(() => { if (!dragging) lv.kind.value = 0; }, [dragging, lv]);
+  const [drops, setDrops] = useState(0);
+  useEffect(() => { if (!dragging) lv.kind.value = 0; }, [dragging, drops, lv]);
   const markPan = useMarkPan({
     ctx, lv, onGrab, onRefuse, onDrop,
   });
@@ -366,10 +378,10 @@ export function SwingMarkCanvas({
   }, [maxFrame]);
   /** "Proposed frame looks right" / "Use frame N": the position takes the cursor's frame (D28). */
   const takeFrame = () => {
+    if (loading) return;
     const { draft: next, reset } = chooseFrame(draft, base, cp, view);
     commit(next);
-    setToast(reset && visited2.current ? T.framesReset : '');
-    visited2.current = true;
+    setToast(reset && hasMarks(draft, base, cp) ? T.framesReset : '');
     setActive('hands');
     setCueOpen(false);
     setStep(2);
@@ -416,7 +428,6 @@ export function SwingMarkCanvas({
   // --- moving between positions --------------------------------------------------------------------
   const enter = (key, from, st = stepFor(key, from.status)) => {
     snap.current = from;
-    visited2.current = st === 2;
     setCp(key);
     setStep(st);
     setView(from.cps[key].frame);
@@ -520,7 +531,7 @@ export function SwingMarkCanvas({
   const willChange = useMemo(() => isDirty(confirmPosition(draft, base, cp), startDraft), [draft, base, cp, startDraft]);
   const primaryLabel = editLike ? (willChange || fixFrom ? T.primary.editSave : T.primary.editDone) : T.primary[action];
   const proposed = base.cps[cp].frame;
-  const resets = visited2.current && view !== d.frame;
+  const resets = view !== d.frame && hasMarks(draft, base, cp);
   const frameLabel = resets ? T.primary.useReset(view) : view === proposed ? T.primary.proposedOk : T.primary.useFrame(view);
   const countMain = !chapter ? T.auto : pass && !fixFrom ? T.position(idx + 1, MARK_TOTAL) : T.edit;
   const bg = stillFor(draft.cps.address.frame);
@@ -666,7 +677,7 @@ export function SwingMarkCanvas({
             </>
           ) : (
             <>
-              <SwingOverlay width={box.w} height={box.h} video={video} uri={shown.uri} showPlanes={false} label={`${cue?.name ?? cp} still, frame ${shown.frame ?? view}`}>
+              <SwingOverlay width={box.w} height={box.h} video={video} uri={shown.uri} showPlanes={false} resizeMethod="scale" label={`${cue?.name ?? cp} still, frame ${shown.frame ?? view}`}>
                 <MarkLayer rect={rect} active={active} marks={marksNow} hidden={dragging} />
                 <GestureDetector gesture={markPan}>
                   <View style={StyleSheet.absoluteFill} testID="edit-touch-layer" accessible accessibilityLabel={`${T.names[active]} · ${markLine}`} accessibilityHint={T.touchHint} />
@@ -722,7 +733,8 @@ export function SwingMarkCanvas({
                 ) : (
                   <HudButton ghost label={T.cancel} onPress={onCancel} disabled={saving} style={s.btnSide} testID="mark-cancel" />
                 )}
-                <HudButton iconRight="chevron-right" label={frameLabel} onPress={onUseFrame} disabled={saving} style={s.flex} testID="mark-use-frame" />
+                {/* off until the picture is this exact frame: "Use frame N" must take what the golfer sees */}
+                <HudButton iconRight="chevron-right" label={frameLabel} onPress={onUseFrame} disabled={saving || loading} style={s.flex} testID="mark-use-frame" />
               </View>
             </>
           ) : (
@@ -805,10 +817,21 @@ export default function SwingEditMarksScreen({ navigation, route }) {
     closeRef.current(() => { leaving.current = true; navigation.dispatch(e.data.action); });
   }), [navigation]);
 
-  const stillFor = useCallback((f) => getStill(swingId, f), [swingId]);
-  const proxyFor = useCallback((f) => getProxy(swingId, f), [swingId]);
+  // Which stills are on disk, per frame, asked once (a scrub reads it for every frame under the finger):
+  // an extraction drops what it asked for so those frames are looked at again. Proxies need no disk at
+  // all: pass 2 recorded which it wrote (pose.pass2.proxies).
+  const known = useRef(new Map());
+  useEffect(() => { known.current = new Map(); }, [swingId]);
+  const stillFor = useCallback((f) => {
+    const k = Math.round(f);
+    if (!known.current.has(k)) known.current.set(k, getStill(swingId, k));
+    return known.current.get(k);
+  }, [swingId]);
+  const proxies = data && data !== 'missing' ? data.pose?.pass2?.proxies ?? null : null;
+  const proxyFor = useCallback((f) => getProxy(swingId, f, proxies), [swingId, proxies]);
   const needStills = useCallback(async (frames) => {
     const got = await ensureStills(swingId, frames);
+    frames.forEach((f) => known.current.delete(Math.round(f)));
     setTick((t) => t + 1);
     return got;
   }, [swingId]);

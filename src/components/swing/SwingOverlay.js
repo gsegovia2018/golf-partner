@@ -64,7 +64,7 @@ function PlaneLabel({ p, X, Y, w, text, color }) {
 
 export default function SwingOverlay({
   width, height, video, uri = null, pose = null, club = null, ball = null, reference = null,
-  highlight = [], showPlanes = true, edit = false, label, style, children,
+  highlight = [], showPlanes = true, edit = false, label, style, children, resizeMethod,
 }) {
   const r = fitRect(width, height, video?.width, video?.height);
   const X = (x) => x * r.w;
@@ -93,9 +93,9 @@ export default function SwingOverlay({
     <View style={[styles.box, { width, height }, style]}>
       <View style={[styles.frame, { left: r.x, top: r.y, width: r.w, height: r.h }]}>
         {uri ? (
-          // resizeMethod "scale": decoded once at full size and scaled by the GPU, so the marking
-          // canvas's loupe (DragLoupe, same uri) reuses this bitmap instead of decoding it again
-          <Image source={{ uri }} style={{ width: r.w, height: r.h }} resizeMode="stretch" resizeMethod="scale" accessibilityLabel={label} accessibilityIgnoresInvertColors />
+          // the marking canvas passes resizeMethod "scale": decoded once at full size and scaled by the
+          // GPU, so its loupe (DragLoupe, same uri) reuses this bitmap instead of decoding it again
+          <Image source={{ uri }} style={{ width: r.w, height: r.h }} resizeMode="stretch" resizeMethod={resizeMethod} accessibilityLabel={label} accessibilityIgnoresInvertColors />
         ) : (
           <View style={[styles.none, { width: r.w, height: r.h }]} accessibilityLabel={label}>
             <Text style={styles.noneText}>{SWING_STRINGS.results.noStill}</Text>

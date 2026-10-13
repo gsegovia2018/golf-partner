@@ -210,6 +210,7 @@ export const SWING_STRINGS = {
     onProposal: 'on the proposed frame',
     frameTag: (f) => `VIDEO · ${f}`,
     scrubbing: 'SCRUBBING',
+    loadingTag: 'LOADING',
     posPill: (p, name, f, chosen) => `${p ? `${p} · ` : ''}${name} · frame ${f}${chosen ? ' (chosen)' : ''}`,
     changeFrame: 'Frame',
     changeFrameA11y: 'Change the frame',
