@@ -8,7 +8,7 @@ import { validateNewPassword } from '../lib/passwordReset';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
-import { useT, t as translate } from '../i18n';
+import { useT, t as translate, tr } from '../i18n';
 
 // Shown when AuthContext detects a password-recovery link (web query params
 // or the native `golf://reset-password` deep link) — see AuthContext's
@@ -96,7 +96,7 @@ export default function SetNewPasswordScreen() {
             onBlur={() => setTouched(true)}
             onSubmitEditing={submit}
           />
-          {fieldError && <Text style={s.fieldError}>{fieldError}</Text>}
+          {fieldError && <Text style={s.fieldError}>{tr(fieldError)}</Text>}
 
           <TouchableOpacity
             style={[s.btn, loading && { opacity: 0.5 }]}

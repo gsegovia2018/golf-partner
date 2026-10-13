@@ -5,7 +5,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import useAuthSignIn from '../hooks/useAuthSignIn';
-import { useT } from '../i18n';
+import { useT, tr } from '../i18n';
 
 // Email + password fields, "Forgot password?", the submit button and
 // "Continue with Google". Used by AuthScreen (sign in / sign up) and by the
@@ -36,7 +36,7 @@ export default function AuthForm({ mode = 'signin', onSignedUp }) {
         onChangeText={setEmail}
         onBlur={() => setTouched((t) => ({ ...t, email: true }))}
       />
-      {emailError && <Text style={s.fieldError}>{emailError}</Text>}
+      {emailError && <Text style={s.fieldError}>{tr(emailError)}</Text>}
 
       <View style={[s.passwordRow, passwordError && s.inputError]}>
         <TextInput
@@ -65,7 +65,7 @@ export default function AuthForm({ mode = 'signin', onSignedUp }) {
           />
         </TouchableOpacity>
       </View>
-      {passwordError && <Text style={s.fieldError}>{passwordError}</Text>}
+      {passwordError && <Text style={s.fieldError}>{tr(passwordError)}</Text>}
 
       {mode === 'signin' && (
         <TouchableOpacity

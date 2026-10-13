@@ -317,4 +317,17 @@ export default {
   "tour.overline": "RECORRIDO · {index} DE {total}",
   "tour.nextStop": "{title} — siguiente parada",
   "tour.skip": "Saltar recorrido",
+
+  // Sign-in hook and password validation
+  "auth.email.invalid": "Escribe un correo electrónico válido",
+  "auth.password.tooShort": "La contraseña debe tener al menos {min} caracteres",
+  "auth.signInFailed": "No se ha podido iniciar sesión",
+  "auth.signInFallback": "No se ha podido iniciar sesión. Inténtalo de nuevo.",
+  "auth.checkEmail.title": "Revisa tu correo",
+  "auth.confirmAccount.body": "Confirma tu cuenta y luego inicia sesión.",
+  "auth.emailNeeded.title": "Falta el correo",
+  "auth.emailNeeded.body": "Escribe el correo de tu cuenta arriba y pulsa de nuevo \"¿Olvidaste la contraseña?\".",
+  "auth.resetSent.body": "Te hemos enviado a tu correo un enlace para restablecer la contraseña.",
+  "auth.newPassword.required": "Escribe una contraseña nueva",
+  "auth.newPassword.mismatch": "Las contraseñas no coinciden",
 };

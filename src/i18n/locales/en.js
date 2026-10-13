@@ -317,4 +317,17 @@ export default {
   "tour.overline": "TOUR · {index} OF {total}",
   "tour.nextStop": "{title} — next tour stop",
   "tour.skip": "Skip tour",
+
+  // Sign-in hook and password validation
+  "auth.email.invalid": "Enter a valid email address",
+  "auth.password.tooShort": "Password must be at least {min} characters",
+  "auth.signInFailed": "Sign-in failed",
+  "auth.signInFallback": "Could not sign in. Please try again.",
+  "auth.checkEmail.title": "Check your email",
+  "auth.confirmAccount.body": "Confirm your account then sign in.",
+  "auth.emailNeeded.title": "Email needed",
+  "auth.emailNeeded.body": "Enter your account email above, then tap \"Forgot password?\" again.",
+  "auth.resetSent.body": "We sent a password reset link to your email.",
+  "auth.newPassword.required": "Enter a new password",
+  "auth.newPassword.mismatch": "Passwords do not match",
 };
