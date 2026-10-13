@@ -90,7 +90,8 @@ export function MarkLayer({ rect, marks, active }) {
             <Polyline points={`${x + 10},${y - 13} ${x + 12.3},${y - 10.7} ${x + 16},${y - 15.3}`} fill="none" stroke={INK} strokeWidth={1.6} />
           </G>
         ) : null}
-        {label(`${name} · ${T.status[mk.status].toUpperCase()}`, m === 'ball' ? x - 60 : x + 16, ly)}
+        {/* the ball sits under the clubhead at address: its chip goes below it, clear of the others */}
+        {label(`${name} · ${T.status[mk.status].toUpperCase()}`, m === 'ball' ? x - 30 : x + 16, m === 'ball' ? y + 16 : ly)}
       </G>
     );
   };

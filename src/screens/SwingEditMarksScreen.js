@@ -111,7 +111,6 @@ export function SwingMarkCanvas({
   const [area, setArea] = useState(null);
   const [, setTick] = useState(0);
   const snap = useRef(startDraft); // the draft when the golfer arrived at this position
-  const saved = useRef(startDraft); // the draft last written to disk
 
   const video = pose.video;
   const maxFrame = Math.max(1, (video.frameCount ?? 1) - 1);
@@ -275,25 +274,33 @@ export function SwingMarkCanvas({
 
   // --- saving ---------------------------------------------------------------------------------------
   const passStateNow = useRef(markedFromMarks(marks).state);
-  const persist = async (next, passState = passStateNow.current) => {
+  const write = async (next, passState) => {
     const a = recompute({ pose, probe, analysis: scored, draft: next, base });
     if (a.error) return false;
     const m = draftToMarks({
       draft: next, base, live: a, swingId: analysis.swingId, video: { width: video.width, height: video.height, fps: video.containerFps },
       handedness, editedAt: new Date().toISOString(), passState,
     });
-    setSaving(true);
     try {
       await onSave({ analysis: a, marks: m });
-      saved.current = next;
       passStateNow.current = passState;
       return true;
     } catch {
       setToast(T.saveFailed);
       return false;
-    } finally {
-      setSaving(false);
     }
+  };
+  // Saves run one after another in the background, so a pass step moves on at once (the canvas
+  // must not keep taking touches for a position the golfer has already left).
+  const queue = useRef(Promise.resolve(true));
+  const persist = (next, passState = passStateNow.current) => {
+    queue.current = queue.current.then(() => write(next, passState));
+    return queue.current;
+  };
+  /** A save the next screen depends on: wait for it, with the buttons off meanwhile. */
+  const persistNow = async (next, passState) => {
+    setSaving(true);
+    try { return await persist(next, passState); } finally { setSaving(false); }
   };
 
   // --- moving between positions --------------------------------------------------------------------
@@ -329,20 +336,24 @@ export function SwingMarkCanvas({
     const next = confirmPosition(adopt(draft, cp, view), base, cp);
     commit(next);
     if (pass && !fixFrom) {
-      if (await persist(next, 'partial')) advance(next);
+      advance(next);
+      persist(next, 'partial');
       return;
     }
     if (fixFrom) {
-      if (await persist(next)) { setFixFrom(null); setPhase('finish'); }
+      setFixFrom(null);
+      setPhase('finish');
+      persist(next);
       return;
     }
     if (!isDirty(next, startDraft) && club === normClub(analysis.club)) { onClose(); return; }
-    if (await persist(next)) onClose();
+    if (await persistNow(next)) onClose();
   };
-  const skip = async () => {
+  const skip = () => {
     const next = skipPosition(draft, snap.current, cp);
     commit(next);
-    if (await persist(next, 'partial')) advance(next);
+    advance(next);
+    persist(next, 'partial');
   };
 
   /** Close, Cancel and the hardware back. The pass keeps its progress; edit asks before dropping changes. */
@@ -352,7 +363,7 @@ export function SwingMarkCanvas({
       if (phase === 'club') { proceed(); return; }
       if (fixFrom) { guard(() => { setFixFrom(null); setPhase('finish'); }); return; }
       guard(async (dr) => {
-        if (dr === saved.current || (await persist(dr))) proceed();
+        if (await persistNow(dr)) proceed();
       });
       return;
     }
@@ -367,10 +378,10 @@ export function SwingMarkCanvas({
   // --- the club sheet and the finish sheet (the pass) ----------------------------------------------
   const startMarking = async () => {
     onClub?.(club);
-    if (await persist(draft, 'partial')) enter(resumeKey(draft.status) ?? MARKED_KEYS[0], draft);
+    if (await persistNow(draft, 'partial')) enter(resumeKey(draft.status) ?? MARKED_KEYS[0], draft);
   };
   const seeResults = async () => {
-    if (await persist(draft, 'done')) onResults();
+    if (await persistNow(draft, 'done')) onResults();
   };
   const fixFinish = () => { setFixFrom('finish'); enter('finish', draft); };
 

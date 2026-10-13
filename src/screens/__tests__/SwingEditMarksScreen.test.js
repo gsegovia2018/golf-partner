@@ -399,6 +399,20 @@ describe('the marking pass (D26 flow: club sheet → six positions → finish sh
     expect(u.navigation.replace).toHaveBeenCalledWith('SwingResults', { swingId: 's1' });
   });
 
+  test('a step moves on at once while its save runs, so the next touch never lands on the position just left', async () => {
+    const u = await open({ mode: 'pass', marks: { ...FRESH, pass: { state: 'partial', skipped: [] } } });
+    let release;
+    store.saveMarks.mockImplementationOnce(() => new Promise((r) => { release = r; }));
+    await press(u.getByTestId('mark-primary')); // address
+    expect(u.getByText('P3 · Lead arm parallel')).toBeTruthy(); // before the save has finished
+    await press(u.getByTestId('mark-skip')); // lead arm, queued behind the first save
+    expect(u.getByText('P4 · Top of backswing')).toBeTruthy();
+    const before = store.saveMarks.mock.calls.length;
+    await act(async () => { release(); });
+    expect(store.saveMarks.mock.calls.length).toBe(before + 1);
+    expect(savedMarks().pass.skipped).toEqual(['leadArm']); // the later step was written last
+  });
+
   test('a finish-sheet row reopens that position; the next step goes back to the sheet', async () => {
     const st = (keys) => ({ ...FRESH, pass: { state: 'partial', skipped: keys } });
     const u = await open({ mode: 'pass', marks: st(['address', 'leadArm', 'top', 'shaftDown', 'impact', 'shaftThrough']), at: 'mark-finish-sheet' });
