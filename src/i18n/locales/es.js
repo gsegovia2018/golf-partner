@@ -156,7 +156,6 @@ export default {
     other: 'Solo cuenta la vuelta {round}. Las vueltas {rounds} siguen siendo del torneo.',
   },
   'league.cards.and': 'y',
-  'league.cards.youLower': 'tú',
   'league.cards.failTitle': 'No se pudo anunciar tu tarjeta',
   'league.cards.failMessage': '{reason}\n\n¿Empezarla como una vuelta normal? No contará para {league}.',
   'league.cards.failStart': 'Empezar vuelta normal',
@@ -175,12 +174,7 @@ export default {
   'league.optIn.announcedHcp': 'Anunciada. Es tu tarjeta de {month}, calculada con tu hándicap de liga {hcp}.',
   'league.optIn.scoredFrom': 'Tu tarjeta de liga se calcula con tu hándicap de liga {hcp}. La partida mantiene sus propios hándicaps.',
 
-  'league.strip.cards': { one: '{count} tarjeta de liga', other: '{count} tarjetas de liga' },
-  'league.strip.inGame': '{cards} en esta partida: {names}',
-  'league.strip.postBy': 'envíala antes de las {time}',
-  'league.strip.others': { one: 'La tarjeta de {names} cuenta para la liga.', other: 'Las tarjetas de {names} cuentan para la liga.' },
-  'league.strip.countMine': 'Que cuente la mía',
-  'league.strip.tooLate': 'Ya has empezado esta vuelta, así que no puede ser tu tarjeta de {month}.',
+  'league.header.countMine': 'Que esta vuelta cuente para {league}',
   'league.strip.chip': 'LIGA',
   'league.strip.chipLabel': 'Cuenta para la liga',
 };

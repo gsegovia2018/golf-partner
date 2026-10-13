@@ -174,3 +174,16 @@ describe('PlayerCard pickup toggle', () => {
     expect(onSetScore).toHaveBeenCalledWith('p1', 1, null);
   });
 });
+
+describe('PlayerCard LEAGUE chip (the only on-hole league signal)', () => {
+  test('shows on a counting player', () => {
+    const { getByLabelText, getByText } = renderPlayerCard({ league: true });
+    expect(getByLabelText('Counts for the league')).toBeTruthy();
+    expect(getByText('LEAGUE')).toBeTruthy();
+  });
+
+  test('absent otherwise', () => {
+    const { queryByText } = renderPlayerCard();
+    expect(queryByText('LEAGUE')).toBeNull();
+  });
+});

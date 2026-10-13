@@ -156,7 +156,6 @@ export default {
     other: 'Only round {round} counts. Rounds {rounds} stay tournament rounds.',
   },
   'league.cards.and': 'and',
-  'league.cards.youLower': 'you',
   'league.cards.failTitle': "Couldn't announce your card",
   'league.cards.failMessage': "{reason}\n\nStart it as a normal round? It won't count for {league}.",
   'league.cards.failStart': 'Start normal round',
@@ -175,12 +174,7 @@ export default {
   'league.optIn.announcedHcp': "Announced. It's your {month} card, scored from your league handicap {hcp}.",
   'league.optIn.scoredFrom': 'Your league card is scored from your league handicap {hcp}. The game keeps its own handicaps.',
 
-  'league.strip.cards': { one: '{count} league card', other: '{count} league cards' },
-  'league.strip.inGame': '{cards} in this game: {names}',
-  'league.strip.postBy': 'post by {time}',
-  'league.strip.others': { one: "{names}'s card counts for the league.", other: "{names}'s cards count for the league." },
-  'league.strip.countMine': 'Count mine',
-  'league.strip.tooLate': "You've already started this round, so it can't be your {month} card.",
+  'league.header.countMine': 'Count this round for {league}',
   'league.strip.chip': 'LEAGUE',
   'league.strip.chipLabel': 'Counts for the league',
 };

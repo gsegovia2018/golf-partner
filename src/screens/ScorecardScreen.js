@@ -54,7 +54,6 @@ import { leagueCardOf } from '../store/leagueSetup';
 import { useScorecardLeague } from '../hooks/useScorecardLeague';
 import { recordRoundCard } from '../lib/leagueOptIn';
 import { ensureRealtimeForTournament } from '../store/realtimeSync';
-import LeagueStrip from '../components/scorecard/LeagueStrip';
 import LeagueOptInSheet from '../components/league/LeagueOptInSheet';
 import { useT, formatDate, formatNumber } from '../i18n';
 import { requestLeagueTeeOff, retryLeagueTeeOff } from '../lib/leagueTeeOff';
@@ -2043,6 +2042,13 @@ export default function ScorecardScreen({ navigation, route }) {
               accessibilityLabel="Find the flag"
             />
           )}
+          {leagueLayer.canCountMine && (
+            <IconButton
+              icon="award"
+              onPress={leagueLayer.countMine}
+              accessibilityLabel={tl('league.header.countMine', { league: leagueLayer.optIn.league.name })}
+            />
+          )}
           <IconButton
             icon="camera"
             onPress={openCapturePicker}
@@ -2129,7 +2135,6 @@ export default function ScorecardScreen({ navigation, route }) {
         onCancel={() => setReopenPrompt(false)}
       />
 
-      <LeagueStrip strip={leagueLayer.strip} postBy={leagueLayer.postBy} onCountMine={leagueLayer.countMine} />
       {leagueLayer.toast ? (
         <Text style={s.leagueToast} accessibilityRole="alert">
           {tl(leagueLayer.toast.key, {

@@ -109,8 +109,9 @@ jest.mock('../../components/scorecard/HoleView', () => {
   const React = require('react');
   const { Text, TouchableOpacity, View } = require('react-native');
   return {
-    HoleView: ({ onSetScore, onNext, onGoToHole, onFinish, currentHole }) => (
+    HoleView: ({ onSetScore, onNext, onGoToHole, onFinish, currentHole, leaguePlayers }) => (
       <View>
+        <Text accessibilityLabel="League players">{leaguePlayers}</Text>
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Score plus"
@@ -237,6 +238,22 @@ jest.mock('../../store/leagueStore', () => ({
   getLeagueGameStatus: jest.fn(() => Promise.resolve([])),
 }));
 
+// The league layer is configurable per test; by default it says nothing.
+const mockLeagueLayerDefault = () => ({
+  optIn: { kind: 'none', league: null },
+  strip: null,
+  sheet: { visible: false, league: null, busy: false, error: null },
+  canCountMine: false,
+  toast: null,
+  countIt: jest.fn(),
+  notThisRound: jest.fn(),
+  countMine: jest.fn(),
+});
+let mockLeagueLayer = mockLeagueLayerDefault();
+jest.mock('../../hooks/useScorecardLeague', () => ({
+  useScorecardLeague: () => mockLeagueLayer,
+}));
+
 jest.mock('../../lib/mediaCapture', () => ({
   pickMedia: jest.fn(() => Promise.resolve(null)),
   attachMedia: jest.fn(() => Promise.resolve()),
@@ -308,3 +325,72 @@ describe('ScorecardScreen on a league round', () => {
     }, { timeout: 3000 });
   });
 });
+
+describe('ScorecardScreen league signals (no strip on the holes)', () => {
+  const navigation = {
+    canGoBack: jest.fn(() => true),
+    goBack: jest.fn(),
+    navigate: jest.fn(),
+    dispatch: jest.fn(),
+    addListener: jest.fn(() => jest.fn()),
+  };
+  const route = { params: { roundIndex: 0 } };
+  const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
+  const league = { id: 'L1', name: 'QA League' };
+  const STRIP_TEXT = /league cards?\b|in this game|counts? for the league|post by|already started this round|Count mine/i;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    require('@react-native-async-storage/async-storage').clear();
+    mockTournament.league = { leagueId: 'L1', cardId: 'card-1', playerId: 'p1' };
+    mockOfficialRoundState = {
+      loading: false, error: null, round: null, members: [], scores: [], myRosterId: null,
+      refresh: jest.fn(), setScore: jest.fn(), hasAttested: false, editableSource: jest.fn(() => null),
+    };
+    mockLeagueLayer = mockLeagueLayerDefault();
+  });
+
+  afterEach(() => { mockLeagueLayer = mockLeagueLayerDefault(); });
+
+  test('two counting cards: no strip text on any hole, the chips get both players', async () => {
+    mockLeagueLayer = {
+      ...mockLeagueLayerDefault(),
+      optIn: { kind: 'none', league },
+      strip: { kind: 'cards', count: 2, playerIds: ['p1', 'p2'], names: [{ me: true }, { name: 'B' }], mine: true },
+    };
+    const { findByLabelText, getByLabelText, queryByText } = render(wrap(
+      <ScorecardScreen navigation={navigation} route={route} />,
+    ));
+    expect((await findByLabelText('League players')).props.children).toBe('p1,p2');
+    expect(queryByText(STRIP_TEXT)).toBeNull();
+    fireEvent.press(getByLabelText('Swipe to hole 2'));
+    await flush();
+    expect(queryByText(STRIP_TEXT)).toBeNull();
+    expect(getByLabelText('League players').props.children).toBe('p1,p2');
+  });
+
+  test('"Not this round" said: the header offers "Count this round", which reopens the sheet', async () => {
+    const countMine = jest.fn();
+    mockLeagueLayer = {
+      ...mockLeagueLayerDefault(), optIn: { kind: 'dismissed', league }, canCountMine: true, countMine,
+    };
+    const { findByLabelText, queryByText } = render(wrap(<ScorecardScreen navigation={navigation} route={route} />));
+    fireEvent.press(await findByLabelText('Count this round for QA League'));
+    expect(countMine).toHaveBeenCalledTimes(1);
+    expect(queryByText(STRIP_TEXT)).toBeNull();
+  });
+
+  test('too late (I already scored) or nothing to offer: no header entry', async () => {
+    for (const optIn of [{ kind: 'tooLate', league }, { kind: 'none', league: null }, { kind: 'offer', league }]) {
+      mockLeagueLayer = { ...mockLeagueLayerDefault(), optIn, canCountMine: false };
+      const { findByLabelText, queryByLabelText, queryByText, unmount } = render(wrap(
+        <ScorecardScreen navigation={navigation} route={route} />,
+      ));
+      await findByLabelText('Attach a memory');
+      expect(queryByLabelText('Count this round for QA League')).toBeNull();
+      expect(queryByText(STRIP_TEXT)).toBeNull();
+      unmount();
+    }
+  });
+});
+

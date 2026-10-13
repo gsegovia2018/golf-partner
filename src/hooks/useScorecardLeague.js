@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSetupLeagues } from './useSetupLeagues';
-import { getLeagueCard, getLeagueGameStatus, getMyLeagueCardsForRound } from '../store/leagueStore';
+import { getLeagueGameStatus, getMyLeagueCardsForRound } from '../store/leagueStore';
 import { leagueCardOf } from '../store/leagueSetup';
 import {
-  hasScoreIn, leagueOptInState, leagueStripState, roundCanCount, roundLeagueCards,
+  leagueOptInState, leagueStripState, roundCanCount, roundLeagueCards,
 } from '../store/leagueGameCards';
 import {
   announceMyRoundCard, dismissLeagueOptIn, isLeagueOptInDismissed,
 } from '../lib/leagueOptIn';
 
 // The scorecard's league layer (D5 B): the one-time "Count this round?" sheet
-// on a member's phone, the strip ("2 league cards in this game: you and
-// Javier · post by 17:02") and the LEAGUE chips. Reads are online and best
-// effort: offline the sheet simply doesn't open (announcing needs the server
-// anyway) and the strip/chips come from the cards recorded on the tournament.
+// on a member's phone, the header's "Count this round" action after "Not this
+// round", and the LEAGUE chips on counting players' cards (`strip.playerIds`;
+// there is no strip on the holes). Reads are online and best effort: offline
+// the sheet simply doesn't open (announcing needs the server anyway) and the
+// chips come from the cards recorded on the tournament.
 //
 // `record(card)` writes the announced card onto the tournament; the screen
 // passes it so the write goes through its own save queue.
@@ -37,7 +38,6 @@ export function useScorecardLeague({
   const [error, setError] = useState(null);
   const [lateHint, setLateHint] = useState(false);
   const [toast, setToast] = useState(null);
-  const [myCard, setMyCard] = useState(null);
 
   // My leagues with a free month (the sheet) plus the leagues already carrying
   // a card on this round (the strip: my month may be taken by this very card).
@@ -68,7 +68,6 @@ export function useScorecardLeague({
     return () => { cancelled = true; };
   }, [tid, roundId]);
 
-  const scored = hasScoreIn(scores, meId);
   const optIn = useMemo(() => {
     const state = leagueOptInState({
       tournament, round, meId, official, leagues, statusByLeague, scores, dismissed: !!dismissed,
@@ -82,14 +81,8 @@ export function useScorecardLeague({
     if (optIn.kind === 'none' || optIn.kind === 'tooLate') setSheetOpen(false);
   }, [dismissed, optIn.kind]);
 
-  // My card's post deadline: null until the first shot starts its 8 hours.
+  // My card for this round, as linked on the tournament.
   const myCardId = meId && roundId ? leagueCardOf(tournament, meId, roundId)?.cardId ?? null : null;
-  useEffect(() => {
-    if (!myCardId) { setMyCard(null); return undefined; }
-    let cancelled = false;
-    getLeagueCard(myCardId).then((c) => { if (!cancelled) setMyCard(c); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [myCardId, scored]);
 
   // Repair: the server has my card for this round but the game has no link
   // for it (the record write was lost, or another phone of mine announced).
@@ -183,7 +176,9 @@ export function useScorecardLeague({
       busy,
       error,
     },
-    postBy: myCard?.postBy ?? null,
+    // "Count this round for <league>" in the scorecard header: only while I
+    // said "Not this round" and can still opt in (gone once I've scored).
+    canCountMine: optIn.kind === 'dismissed' && !!optIn.league,
     toast,
     countIt,
     notThisRound,
