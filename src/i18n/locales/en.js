@@ -1,0 +1,63 @@
+// English catalogue. Flat keys, 'area.screen.what'. See docs/i18n.md.
+// A plural entry is { one, other } and reads {count}.
+export default {
+  'settings.language.title': 'Language',
+  'settings.language.system': 'System',
+  'settings.language.es': 'Español',
+  'settings.language.en': 'English',
+
+  'marker.topBar.brand': 'Golf Partner',
+  'marker.topBar.sub': 'Marker confirmation',
+  'marker.defaultPlayer': 'Player',
+
+  'marker.meta.tee': '{tee} tees',
+  'marker.meta.slopeRating': 'slope {slope} · CR {rating}',
+  'marker.meta.playingHandicap': 'Playing handicap {handicap}',
+
+  'marker.invalid.title': "This code isn't valid",
+  'marker.invalid.body': 'Check that the whole link came through, or ask the player to show their code again.',
+  'marker.expired.title': 'This code has expired',
+  'marker.expired.body': 'Marker codes last 2 hours and work once. Ask the player to show a new one from their card. It takes a second.',
+  'marker.used.title': 'This code was already used.',
+  'marker.used.body': "Codes work once. If you confirmed this card, you're done, thank you.",
+  'marker.changed.title': 'The card changed — ask for a new code',
+  'marker.changed.body': 'The player edited the card after showing this code, so it no longer matches what you would sign.',
+
+  'marker.error.title': "Couldn't load this card",
+  'marker.error.body': 'Check your connection and try again.',
+  'marker.error.retry': 'Try again',
+  'marker.submit.failed': 'Something went wrong. Try again.',
+
+  'marker.confirmed.title': 'Thank you',
+  'marker.confirmed.bodyNamed': "{name}'s card is confirmed with your name. You can close this page.",
+  'marker.confirmed.body': 'The card is confirmed with your name. You can close this page.',
+  'marker.returned.title': 'Note sent',
+  'marker.returned.body': 'The card went back to {name} with your note. They can fix it and show you a new code.',
+  'marker.returned.bodyAnon': 'The card went back to the player with your note. They can fix it and show you a new code.',
+
+  'marker.confirm.title': "Confirm {name}'s card",
+  'marker.name.label': 'Your name',
+  'marker.name.placeholder': 'First and last name',
+  'marker.note.label': "What's wrong?",
+  'marker.note.placeholder': 'e.g. Hole 7 was a 6, not a 5',
+  'marker.sendBack': 'Send back to {name}',
+  'marker.cancel': 'Cancel',
+  'marker.confirm.button': 'Confirm card',
+  'marker.wrong': "Something's wrong",
+  'marker.footnote.named': "You're confirming the strokes shown; {name}'s league result is worked out from them once you do. No account needed. This code works once.",
+  'marker.footnote.anon': "You're confirming the strokes shown; the league result is worked out from them once you do. No account needed. This code works once.",
+
+  'scorecard.grid.strokes': 'Strokes',
+  'scorecard.grid.points': 'Points',
+  'scorecard.grid.frontNine': 'FRONT NINE',
+  'scorecard.grid.backNine': 'BACK NINE',
+  'scorecard.grid.hole': 'Hole',
+  'scorecard.grid.par': 'Par',
+  'scorecard.grid.si': 'SI',
+  'scorecard.grid.out': 'OUT',
+  'scorecard.grid.in': 'IN',
+  'scorecard.grid.parTotal': 'PAR',
+  'scorecard.grid.strokesTotal': 'STROKES',
+  'scorecard.grid.pointsTotal': 'POINTS',
+  'scorecard.grid.vsPar': 'vs PAR',
+};
