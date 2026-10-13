@@ -1,5 +1,5 @@
 import React, {
-  useCallback, useEffect, useMemo, useReducer, useRef, useState,
+  memo, useCallback, useEffect, useMemo, useReducer, useRef, useState,
 } from 'react';
 import {
   View, Text, StyleSheet, Pressable, Alert, PanResponder, ScrollView, StatusBar, useWindowDimensions,
@@ -38,7 +38,6 @@ import { SWING_STRINGS } from '../swing/strings';
 // with an "auto" pill and no chapter.
 
 const T = SWING_STRINGS.mark;
-const DRAG_FPS_MS = 50; // the live recompute follows a drag at ~20 Hz; the release always flushes
 const NUDGE_COALESCE_MS = 700;
 const HUD_WARN = semantic.warning.dark; // the HUD amber, as on the capture screen
 
@@ -57,7 +56,7 @@ function histReducer(state, a) {
   }
 }
 
-function HudButton({
+const HudButton = memo(function HudButton({
   label, onPress, ghost, plain, icon, disabled, style, testID,
 }) {
   return (
@@ -74,6 +73,13 @@ function HudButton({
       <Text style={[s.btnText, (ghost || plain) && s.btnGhostText]} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
+});
+
+/** A callback with a stable identity that always runs the latest closure: memoised children never see it change. */
+function useStable(fn) {
+  const ref = useRef(fn);
+  ref.current = fn;
+  return useCallback((...args) => ref.current(...args), []);
 }
 
 // --- The canvas (props in) --------------------------------------------------------------------------
@@ -111,6 +117,7 @@ export function SwingMarkCanvas({
   const [fixFrom, setFixFrom] = useState(null); // 'finish': the finish frame opened from the finish sheet
   const [saving, setSaving] = useState(false);
   const [area, setArea] = useState(null);
+  const [dragging, setDragging] = useState(null); // the mark under the finger: DragLoupe draws it, the SVG layer skips it
   const [, setTick] = useState(0);
   const snap = useRef(startDraft); // the draft when the golfer arrived at this position
 
@@ -120,6 +127,8 @@ export function SwingMarkCanvas({
   const scored = useMemo(() => ({ ...analysis, club }), [analysis, club]);
 
   // --- the live analysis (hands follow the grip on a moved frame; saved with the marks) ----------
+  // `draft` only changes when a gesture ends (release, nudge, confirm, undo...): a drag keeps its point
+  // in `grab` and DragLoupe, so the analysis runs once per drag, on release, never per move.
   const lastGood = useRef(null);
   const live = useMemo(() => {
     const a = recompute({ pose, probe, analysis: scored, draft, base });
@@ -133,9 +142,12 @@ export function SwingMarkCanvas({
 
   const d = draft.cps[cp];
   const chapter = isMarkedKey(cp);
-  const cue = cueFor(cp, handedness);
-  const statusOf = (m) => markStatus(draft, base, cp, m);
-  const statuses = { hands: statusOf('hands'), head: statusOf('head'), ball: cp === 'address' ? statusOf('ball') : null };
+  const cue = useMemo(() => cueFor(cp, handedness), [cp, handedness]);
+  const statuses = useMemo(() => ({
+    hands: markStatus(draft, base, cp, 'hands'),
+    head: markStatus(draft, base, cp, 'head'),
+    ball: cp === 'address' ? markStatus(draft, base, cp, 'ball') : null,
+  }), [draft, base, cp]);
   const handsNow = d.hands ?? live.clubMarks[cp].hands;
   const headNow = d.hidden ? null : d.head;
   const ballNow = cp === 'address' ? draft.ball : null;
@@ -143,7 +155,7 @@ export function SwingMarkCanvas({
   // --- layout: the video takes what the strip leaves ----------------------------------------------
   const fallback = { w: Math.min(winW, 480), h: Math.round(winH * 0.42) };
   const box = area ?? fallback;
-  const rect = fitRect(box.w, box.h, video.width, video.height);
+  const rect = useMemo(() => fitRect(box.w, box.h, video.width, video.height), [box.w, box.h, video.width, video.height]);
 
   // --- stills: the shown frame and the fine strip around the position ----------------------------
   const center = snap.current.cps[cp]?.frame ?? d.frame;
@@ -195,9 +207,17 @@ export function SwingMarkCanvas({
     commit(placeMark(from, L.cp, m, pt), push);
   }, [commit]);
 
-  const lastDrag = useRef(0);
+  // A drag is outside React: `grab` holds the point, DragLoupe (shared values) draws the loupe and the
+  // dragged mark, and the draft is committed once on release, which is also the one analysis.
   const grab = useRef(null);
   const loupe = useRef(null); // D20: the magnifier follows the finger without re-rendering the canvas
+  const settle = useCallback((G) => {
+    // one commit per gesture (so one undo step); a touch that did not move a grabbed mark commits nothing
+    if (G.moved) place(G.t, G.pt, true);
+    loupe.current?.hide();
+    setDragging(null); // the committed mark is drawn by the SVG layer from here; the effect below drops the overlay
+  }, [place]);
+  useEffect(() => { if (!dragging) loupe.current?.clearMark(); }, [dragging]);
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
@@ -213,41 +233,44 @@ export function SwingMarkCanvas({
       if (hit) {
         setActive(hit);
         const o = hit === 'hands' ? L.handsNow : hit === 'head' ? L.headNow : L.ballNow;
-        grab.current = { t: hit, o, started: false, f0: [x, y] };
-        loupe.current?.show({ finger: [x, y], mark: o });
+        grab.current = { t: hit, o, pt: o, moved: false, f0: [x, y] };
       } else if (L.active === 'ball' && L.cp !== 'address') {
         setToast(T.ballOnlyAddress);
         grab.current = null;
+        return;
       } else {
-        // Not on a mark: the tap places the active one there.
-        place(L.active, norm, true);
-        grab.current = { t: L.active, o: norm, started: true, f0: [x, y] };
-        loupe.current?.show({ finger: [x, y], mark: norm });
+        // Not on a mark: the tap places the active one there (on release, like a drag).
+        grab.current = { t: L.active, o: norm, pt: norm, moved: true, f0: [x, y] };
       }
+      const G = grab.current;
+      loupe.current?.show({ finger: [x, y], mark: G.pt, kind: G.t });
+      setDragging(G.t);
     },
     onPanResponderMove: (_e, g) => {
       const G = grab.current;
       if (!G) return;
       const { rect: r } = latest.current;
-      const pt = clampPt([G.o[0] + g.dx / r.w, G.o[1] + g.dy / r.h]);
-      loupe.current?.update({ finger: [G.f0[0] + g.dx, G.f0[1] + g.dy], mark: pt });
-      const now = Date.now();
-      if (now - lastDrag.current < DRAG_FPS_MS) return;
-      lastDrag.current = now;
-      place(G.t, pt, !G.started);
-      G.started = true;
+      G.pt = clampPt([G.o[0] + g.dx / r.w, G.o[1] + g.dy / r.h]);
+      G.moved = true;
+      loupe.current?.update({ finger: [G.f0[0] + g.dx, G.f0[1] + g.dy], mark: G.pt });
     },
     onPanResponderRelease: (_e, g) => {
       const G = grab.current;
-      if (G && (Math.abs(g.dx) > 0 || Math.abs(g.dy) > 0)) {
-        const { rect: r } = latest.current;
-        place(G.t, clampPt([G.o[0] + g.dx / r.w, G.o[1] + g.dy / r.h]), !G.started);
-      }
       grab.current = null;
-      loupe.current?.hide();
+      if (!G) return;
+      if (Math.abs(g.dx) > 0 || Math.abs(g.dy) > 0) {
+        const { rect: r } = latest.current;
+        G.pt = clampPt([G.o[0] + g.dx / r.w, G.o[1] + g.dy / r.h]);
+        G.moved = true;
+      }
+      settle(G);
     },
-    onPanResponderTerminate: () => { grab.current = null; loupe.current?.hide(); },
-  }), [place]);
+    onPanResponderTerminate: () => {
+      const G = grab.current;
+      grab.current = null;
+      if (G) settle(G);
+    },
+  }), [settle]);
 
   const lastNudge = useRef(0);
   const nudge = (dx, dy) => {
@@ -263,11 +286,11 @@ export function SwingMarkCanvas({
     loupe.current?.flash({ mark: moved }); // a 1-px move is invisible under the finger: show it magnified
   };
 
-  const selectMark = (m) => {
+  const selectMark = useStable((m) => {
     if (m === 'ball' && cp !== 'address') { setToast(T.ballOnlyAddress); return; }
     setActive(m);
     setToast('');
-  };
+  });
   const confirmActive = () => {
     commit(confirmMark(adoptFrame(draft, cp, view), base, cp, active));
     setToast(T.confirmed(T.names[active], view));
@@ -277,7 +300,7 @@ export function SwingMarkCanvas({
     commit(setHidden(adoptFrame(draft, cp, view), cp, on));
     if (!on && !d.head) { setActive('head'); setToast(T.placeHead); } else setToast(on ? T.hiddenToast : '');
   };
-  const preview = (f) => setView(Math.min(maxFrame, Math.max(0, Math.round(f))));
+  const preview = useCallback((f) => setView(Math.min(maxFrame, Math.max(0, Math.round(f)))), [maxFrame]);
   const undo = () => {
     const prev = hist.undo[hist.undo.length - 1];
     if (!prev) return;
@@ -334,7 +357,7 @@ export function SwingMarkCanvas({
     if (phase === 'canvas' && pendingMoves(draft, base, snap.current, cp)) setDialog({ then });
     else then(draft);
   };
-  const goto = (key) => { if (key !== cp || fixFrom || !chapter) guard((dr) => { setFixFrom(null); enter(key, dr); }); };
+  const goto = useStable((key) => { if (key !== cp || fixFrom || !chapter) guard((dr) => { setFixFrom(null); enter(key, dr); }); });
   const answer = (choice) => {
     const { then } = dialog;
     setDialog(null);
@@ -347,7 +370,7 @@ export function SwingMarkCanvas({
   // One press, one step: a second tap before the canvas has moved on is ignored.
   const busy = useRef(false);
   useEffect(() => { busy.current = false; }, [cp, phase, draft]);
-  const once = (fn) => () => {
+  const once = (fn) => {
     if (busy.current) return;
     busy.current = true;
     fn();
@@ -420,8 +443,11 @@ export function SwingMarkCanvas({
   const counts = passCounts(draft.status);
   const idx = MARKED_KEYS.indexOf(cp);
   const editLike = !pass || !!fixFrom;
-  const action = primaryAction(draft, base, cp, view);
-  const willChange = isDirty(confirmPosition(adoptFrame(draft, cp, view), base, cp), startDraft);
+  const action = useMemo(() => primaryAction(draft, base, cp, view), [draft, base, cp, view]);
+  const willChange = useMemo(
+    () => isDirty(confirmPosition(adoptFrame(draft, cp, view), base, cp), startDraft),
+    [draft, base, cp, view, startDraft],
+  );
   const primaryLabel = editLike ? (willChange || fixFrom ? T.primary.editSave : T.primary.editDone)
     : action === 'use' ? T.primary.use(view) : T.primary[action];
   const pillSmall = !chapter ? T.auto : pass && !fixFrom ? `${idx + 1}/${MARK_TOTAL}` : T.edit;
@@ -429,6 +455,23 @@ export function SwingMarkCanvas({
   const bg = stillFor(draft.cps.address.frame);
   const markLine = statuses[active] === 'missing' ? T.line.missing(T.names[active]) : T.line[statuses[active]];
   const canConfirm = ['proposed', 'moved'].includes(statuses[active]);
+
+  // Hooks below stay above the sheets' early returns. Handlers have a stable identity (useStable) so the
+  // memoised chrome (dock, stop line, strip, chapters, buttons) does not re-render with every canvas render.
+  const onPrimary = useStable(() => once(primary));
+  const onSkip = useStable(() => once(skip));
+  const onCancel = useStable(() => requestClose(onClose));
+  const toggleCue = useCallback(() => setCueOpen((v) => !v), []);
+  const priorHead = live.clubMarks[cp].priorHead;
+  const ballPt = cp === 'address' ? draft.ball : null;
+  const marksNow = useMemo(() => ({
+    hands: { pt: handsNow, status: statuses.hands },
+    head: { pt: headNow, status: statuses.head, prior: priorHead },
+    ball: ballPt ? { pt: ballPt, status: statuses.ball } : null,
+  }), [handsNow, headNow, priorHead, ballPt, statuses]);
+  // the fine strip's stills: `stillFor` is stable, so the strip is told when one of its frames has arrived
+  const loaded = [];
+  for (let f = center - FINE_REACH; f <= center + FINE_REACH; f += 1) loaded.push(stillFor(f) ? 1 : 0);
 
   const sheetStill = (
     <View style={StyleSheet.absoluteFill}>
@@ -537,11 +580,8 @@ export function SwingMarkCanvas({
             <MarkLayer
               rect={rect}
               active={active}
-              marks={{
-                hands: { pt: handsNow, status: statuses.hands },
-                head: { pt: headNow, status: statuses.head, prior: live.clubMarks[cp].priorHead },
-                ball: cp === 'address' && draft.ball ? { pt: draft.ball, status: statuses.ball } : null,
-              }}
+              marks={marksNow}
+              hidden={dragging}
             />
             <View style={StyleSheet.absoluteFill} {...pan.panHandlers} testID="edit-touch-layer" accessible accessibilityLabel={`${T.names[active]} · ${markLine}`} accessibilityHint={T.touchHint} />
             <DragLoupe ref={loupe} rect={rect} uri={shown.uri} label={T.placing(T.names[active])} color={MARK_COLOR[active]} />
@@ -555,7 +595,7 @@ export function SwingMarkCanvas({
         </View>
 
         <View style={[s.strip, { paddingBottom: 12 + insets.bottom }]}>
-          <StopLine cue={cue} open={cueOpen} onToggle={() => setCueOpen((v) => !v)} mirror={handedness === 'left'} />
+          <StopLine cue={cue} open={cueOpen} onToggle={toggleCue} mirror={handedness === 'left'} />
           {!cueOpen ? (
             <FineStrip
               center={center}
@@ -568,6 +608,7 @@ export function SwingMarkCanvas({
               before={cue?.stop?.before ?? ''}
               after={cue?.stop?.after ?? ''}
               width={stripW}
+              loaded={loaded.join('')}
             />
           ) : null}
           <View style={s.markRow} testID="mark-row">
@@ -597,11 +638,11 @@ export function SwingMarkCanvas({
           <MarkChapters mirror={handedness === 'left'} status={draft.status} current={chapter && !fixFrom ? cp : null} onSelect={goto} right={countRight} />
           <View style={s.row}>
             {pass && !fixFrom ? (
-              <HudButton ghost label={T.skip} onPress={once(skip)} disabled={saving} style={s.btnSide} testID="mark-skip" />
+              <HudButton ghost label={T.skip} onPress={onSkip} disabled={saving} style={s.btnSide} testID="mark-skip" />
             ) : (
-              <HudButton ghost label={T.cancel} onPress={() => requestClose(onClose)} disabled={saving} style={s.btnSide} testID="mark-cancel" />
+              <HudButton ghost label={T.cancel} onPress={onCancel} disabled={saving} style={s.btnSide} testID="mark-cancel" />
             )}
-            <HudButton icon="check" label={saving ? T.saving : primaryLabel} onPress={once(primary)} disabled={saving || loading} style={s.flex} testID="mark-primary" />
+            <HudButton icon="check" label={saving ? T.saving : primaryLabel} onPress={onPrimary} disabled={saving || loading} style={s.flex} testID="mark-primary" />
           </View>
         </View>
       </View>

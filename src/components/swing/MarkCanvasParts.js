@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { memo, useEffect, useRef } from 'react';
 import {
   View, Text, Image, Pressable, ScrollView, StyleSheet,
 } from 'react-native';
@@ -21,7 +21,9 @@ const INK = hud.onAccent;
 const PICT_SIZE = 52; // the reference pictogram beside the stop line (V3)
 const DIM = withAlpha(hud.bg, 0.78); // an inactive chip on the picture
 const OUTLINE = withAlpha(hud.text, 0.35);
-const HANDS_FILL = withAlpha(hud.accent, 0.35);
+export const HANDS_FILL = withAlpha(hud.accent, 0.35);
+const HEAD_PROPOSED_FILL = withAlpha(hud.text, 0.3);
+const SWATCH_ON_FILL = withAlpha(INK, 0.2);
 export const FINE_REACH = 8; // the fine strip holds the proposal +-8 frames, +-4 in view
 
 // --- The marks on the picture ------------------------------------------------------------------
@@ -73,8 +75,11 @@ export function placeLabels(items, shapes, w, h) {
  * when missing, a chip when the clubhead is hidden. The active mark is larger, haloed and its
  * label filled. Decorative: the dock and the mark row carry the meaning for screen readers.
  * `marks`: { hands: { pt, status }, head: { pt, status, prior }, ball: { pt, status } | null }.
+ * `hidden`: the mark under the finger, left out here (DragLoupe draws it outside React meanwhile).
  */
-export function MarkLayer({ rect, marks, active }) {
+function MarkLayerImpl({
+  rect, marks, active, hidden = null,
+}) {
   if (!rect?.w) return null;
   const X = (p) => [p[0] * rect.w, p[1] * rect.h];
   const order = ['ball', 'head', 'hands'].filter((m) => m !== active).concat(active);
@@ -99,7 +104,7 @@ export function MarkLayer({ rect, marks, active }) {
   const draw = (m) => {
     const mk = marks[m];
     const at = where(m);
-    if (!mk || !at) return null;
+    if (!mk || !at || m === hidden) return null; // `hidden`: being dragged, drawn above by DragLoupe
     const on = m === active;
     const C = MARK_COLOR[m];
     const it = items.find((x) => x.m === m);
@@ -125,7 +130,7 @@ export function MarkLayer({ rect, marks, active }) {
       shape = <Rect x={x - hh} y={y - hh} width={2 * hh} height={2 * hh} fill={HANDS_FILL} stroke={C} strokeWidth={on ? 3 : 2} strokeDasharray={dash} />;
     } else if (m === 'head') {
       const proposed = mk.status === 'proposed';
-      shape = <Circle cx={x} cy={y} r={on ? 10 : 7} fill={proposed ? withAlpha(hud.text, 0.3) : hud.text} stroke={proposed ? hud.text : INK} strokeWidth={on ? 2.5 : 1.5} strokeDasharray={dash} />;
+      shape = <Circle cx={x} cy={y} r={on ? 10 : 7} fill={proposed ? HEAD_PROPOSED_FILL : hud.text} stroke={proposed ? hud.text : INK} strokeWidth={on ? 2.5 : 1.5} strokeDasharray={dash} />;
     } else {
       shape = <Circle cx={x} cy={y} r={12} fill="none" stroke={C} strokeWidth={on ? 3 : 2} strokeDasharray={dash} />;
     }
@@ -151,9 +156,11 @@ export function MarkLayer({ rect, marks, active }) {
   );
 }
 
+export const MarkLayer = memo(MarkLayerImpl);
+
 // --- The dock: what you are moving (selector and legend in one) -------------------------------
 
-export function MarkDock({
+function MarkDockImpl({
   active, statuses, ballOff, onSelect, style,
 }) {
   return (
@@ -182,16 +189,18 @@ export function MarkDock({
   );
 }
 
+export const MarkDock = memo(MarkDockImpl);
+
 export function Swatch({ mark, on = false, size = 16 }) {
   const ink = on ? INK : null;
-  if (mark === 'hands') return <View style={{ width: size, height: size, borderRadius: 2, borderWidth: 2.5, borderColor: ink ?? MARK_COLOR.hands, backgroundColor: on ? withAlpha(INK, 0.2) : HANDS_FILL }} />;
+  if (mark === 'hands') return <View style={{ width: size, height: size, borderRadius: 2, borderWidth: 2.5, borderColor: ink ?? MARK_COLOR.hands, backgroundColor: on ? SWATCH_ON_FILL : HANDS_FILL }} />;
   if (mark === 'head') return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: ink ?? MARK_COLOR.head, backgroundColor: on ? 'transparent' : MARK_COLOR.head }} />;
   return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2.5, borderColor: ink ?? MARK_COLOR.ball }} />;
 }
 
 // --- The stop line (V1, always visible) and its cue panel ---------------------------------------
 
-export function StopLine({ cue, open, onToggle, mirror = false }) {
+function StopLineImpl({ cue, open, onToggle, mirror = false }) {
   if (!cue) return null;
   const stop = cue.stop;
   return (
@@ -232,6 +241,8 @@ export function StopLine({ cue, open, onToggle, mirror = false }) {
   );
 }
 
+export const StopLine = memo(StopLineImpl);
+
 // --- The fine strip (V2): the neighbours of the position's frame --------------------------------
 
 /**
@@ -239,7 +250,7 @@ export function StopLine({ cue, open, onToggle, mirror = false }) {
  * as before / after captions at the ends, a tap previews a frame, ‹ › step one frame.
  * `frame` is the position's frame now (it moves when the golfer adopts another one).
  */
-export function FineStrip({
+function FineStripImpl({
   center, proposed, frame, view, maxFrame, stillFor, onPreview, before, after, width,
 }) {
   const scroll = useRef(null);
@@ -298,6 +309,9 @@ export function FineStrip({
     </View>
   );
 }
+
+/** `stillFor` is stable, so a still that has just arrived is flagged through `loaded` (the strip's own props otherwise stand). */
+export const FineStrip = memo(FineStripImpl);
 
 const styles = StyleSheet.create({
   bold: { fontFamily: 'PlusJakartaSans-ExtraBold' },

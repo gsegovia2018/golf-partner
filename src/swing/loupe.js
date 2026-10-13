@@ -12,7 +12,11 @@ export const LOUPE_ZOOM = 3;
 export const LOUPE_OFFSET = 80; // finger to loupe centre, px: clear of the fingertip
 export const LOUPE_FLASH_MS = 600; // an arrow nudge keeps the loupe up this long
 
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+// 'worklet': the loupe is placed on the UI thread while dragging (DragLoupe), never through React.
+function clamp(v, lo, hi) {
+  'worklet';
+  return Math.min(hi, Math.max(lo, v));
+}
 
 /**
  * Where the loupe sits, as its top-left corner inside the picture (rect px).
@@ -25,6 +29,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
  * @returns {{ left:number, top:number, cx:number, cy:number, placement:'above'|'below' }}
  */
 export function loupePlacement(finger, rect, size = LOUPE_SIZE, offset = LOUPE_OFFSET) {
+  'worklet';
   const r = size / 2;
   const fits = (cy) => cy - r >= 0 && cy + r <= rect.h;
   const above = finger[1] - offset;
@@ -46,6 +51,7 @@ export function loupePlacement(finger, rect, size = LOUPE_SIZE, offset = LOUPE_O
  *   absolutely positioned inside the circle
  */
 export function loupeImage(mark, rect, size = LOUPE_SIZE, zoom = LOUPE_ZOOM) {
+  'worklet';
   const width = rect.w * zoom;
   const height = rect.h * zoom;
   return { width, height, left: size / 2 - mark[0] * width, top: size / 2 - mark[1] * height };

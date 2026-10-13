@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View } from 'react-native';
 import Svg, { Line, Circle, G } from 'react-native-svg';
 
@@ -45,7 +45,7 @@ const flip = (p) => [MIRROR_AXIS - p[0], p[1]];
  * `swingKey` is one of the six marked positions. `color` draws the quiet parts, `accent` the part
  * the rule is about (and the level line and ball). `mirror` flips it for a left-handed golfer.
  */
-export default function Pictogram({
+function Pictogram({
   swingKey, size = 40, color, accent, mirror = false, testID,
 }) {
   const sh = SHAPES[swingKey];
@@ -93,3 +93,5 @@ export default function Pictogram({
     </View>
   );
 }
+
+export default memo(Pictogram);

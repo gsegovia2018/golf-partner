@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { hud, semantic } from '../../theme/tokens';
@@ -16,7 +16,7 @@ const T = SWING_STRINGS.mark;
  * `current` is the open chapter (none for an automatic frame); `right` fills the count line's
  * right end ("3 of 6", "editing from Results").
  */
-export default function MarkChapters({
+function MarkChapters({
   status, current = null, onSelect, themed = false, right = null, mirror = false, testID = 'mark-chapters',
 }) {
   const { theme } = useTheme();
@@ -56,6 +56,8 @@ export default function MarkChapters({
     </View>
   );
 }
+
+export default memo(MarkChapters);
 
 const ICON = 40; // the pictogram icon (V3); the tile is a little wider than the old P-number chip
 
