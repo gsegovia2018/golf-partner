@@ -51,28 +51,43 @@ export async function announceMyRoundCard({ tournament, roundId, meId, league })
   });
 }
 
-// Records an announced card on the tournament under my own leagueCards key
-// and puts my league handicap on that round. Returns the updated tournament.
-export async function recordRoundCard({ tournament, roundId, meId, league, card }) {
+// Records an announced card on the tournament under my own leagueCards key.
+// Returns the updated tournament.
+//
+// `applyHandicap` (pre-round only: Start Round N) also puts my league handicap
+// on that round as an auto entry (handicap.setLeague, never manual, so a tee
+// change still recomputes it). The scorecard sheet leaves it false: the server
+// scores the league card from the frozen league handicap, and changing a
+// casual round mid-play would shift team results for everyone.
+export async function recordRoundCard({
+  tournament, roundId, meId, league, card, applyHandicap = false,
+}) {
   let next = await mutate(tournament, {
     type: 'tournament.updateProfile',
     patch: leagueCardsPatch({ leagueId: league.id, cardId: card.id, playerId: meId, roundId }),
   });
   const hcp = card.leagueHandicap ?? league.leagueHandicap;
   const r = next.rounds.find((x) => x.id === roundId);
-  if (hcp != null && r) {
+  if (applyHandicap && hcp != null && r) {
     const withHcp = applyLeagueHandicap(r, meId, hcp);
-    next = await mutate(next, { type: 'index.set', roundId, playerId: meId, index: withHcp.playerIndexes[meId] });
-    next = await mutate(next, { type: 'handicap.set', roundId, playerId: meId, handicap: withHcp.playerHandicaps[meId] });
+    next = await mutate(next, {
+      type: 'handicap.setLeague',
+      roundId,
+      playerId: meId,
+      index: withHcp.playerIndexes[meId],
+      handicap: withHcp.playerHandicaps[meId],
+    });
   }
   return next;
 }
 
-// Both, for Start Round N. Nothing is written when the announce fails.
-// Returns { tournament, card }.
+// Both, for Start Round N (before the round starts, so my league handicap is
+// applied). Nothing is written when the announce fails. Returns { tournament, card }.
 export async function announceRoundCard({ tournament, roundId, meId, league }) {
   const card = await announceMyRoundCard({ tournament, roundId, meId, league });
-  const next = await recordRoundCard({ tournament, roundId, meId, league, card });
+  const next = await recordRoundCard({
+    tournament, roundId, meId, league, card, applyHandicap: true,
+  });
   return { tournament: next, card };
 }
 

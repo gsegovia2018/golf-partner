@@ -166,6 +166,18 @@ export async function executeMutation(entry, localTournament) {
       return NO_CONFLICT;
     }
 
+    case 'handicap.setLeague': {
+      const round = findRound(localTournament, m.roundId);
+      if (!round) return NO_CONFLICT;
+      // The three keys applyToTournament set, one-level merged.
+      await repo.patchRound(id, m.roundId, {
+        playerIndexes: { [m.playerId]: round.playerIndexes?.[m.playerId] ?? null },
+        playerHandicaps: { [m.playerId]: round.playerHandicaps?.[m.playerId] ?? null },
+        manualHandicaps: { [m.playerId]: round.manualHandicaps?.[m.playerId] ?? null },
+      });
+      return NO_CONFLICT;
+    }
+
     case 'index.set': {
       const round = findRound(localTournament, m.roundId);
       if (!round) return NO_CONFLICT;

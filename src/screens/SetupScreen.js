@@ -168,9 +168,11 @@ export default function SetupScreen({ navigation, route }) {
   const leagueRows = leagueCardRows({
     players, userId: user?.id ?? null, members: leagueStatus.members, round: rounds[0],
   });
-  const leagueListMode = leagueOffered && otherLinked
-    && (leagueStatus.loading || leagueStatus.error || showsLeagueList(leagueRows));
-  const leagueListBlocked = leagueListMode && (leagueStatus.loading || leagueStatus.error);
+  // The members' status read failed: fall back to the single switch for my
+  // own card (it doesn't need that read) rather than starting a normal game.
+  const leagueListMode = leagueOffered && otherLinked && !leagueStatus.error
+    && (leagueStatus.loading || showsLeagueList(leagueRows));
+  const leagueListBlocked = leagueListMode && leagueStatus.loading;
   const leagueActive = leagueOffered && leagueOn && leagueEligibleRound && leagueRated && !leagueListBlocked;
   // A switch already on (the board's "Play with the app") waits for the list.
   const leagueChecking = leagueCheckingLeagues || (leagueListMode && leagueOn && leagueStatus.loading);
@@ -621,7 +623,10 @@ export default function SetupScreen({ navigation, route }) {
     try {
       await mutate(tournament, { type: 'tournament.create', tournament });
       // I saw my league switch and left it off: the scorecard won't ask again.
-      if (leagueOffered && !leagueActive && meId) await dismissLeagueOptIn(tournament.id, tournament.rounds[0].id);
+      // Not while the list was still blocked: I never got to decide.
+      if (leagueOffered && !leagueActive && !leagueListBlocked && meId) {
+        await dismissLeagueOptIn(tournament.id, tournament.rounds[0].id);
+      }
 
       if (leagueFinal) {
         // The create is only queued for sync, so the tournaments row may not

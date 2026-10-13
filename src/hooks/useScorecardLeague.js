@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSetupLeagues } from './useSetupLeagues';
-import { getLeagueCard, getLeagueGameStatus } from '../store/leagueStore';
+import { getLeagueCard, getLeagueGameStatus, getMyLeagueCardsForRound } from '../store/leagueStore';
 import { leagueCardOf } from '../store/leagueSetup';
 import {
   hasScoreIn, leagueOptInState, leagueStripState, roundCanCount,
@@ -83,6 +83,33 @@ export function useScorecardLeague({
     return () => { cancelled = true; };
   }, [myCardId, scored]);
 
+  // Repair: the server has my card for this round but the game has no link
+  // for it (the record write was lost, or another phone of mine announced).
+  // Announcing again returns the same card (existing: true); record it so the
+  // strip, chips and Validate see it. Once per round on this screen.
+  const hasLink = !!myCardId;
+  const repairedRef = useRef(null);
+  useEffect(() => {
+    if (!canCount || hasLink || !tid || !roundId || !meId) return undefined;
+    const key = `${tid}:${roundId}`;
+    if (repairedRef.current === key) return undefined;
+    repairedRef.current = key;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [mine] = await getMyLeagueCardsForRound(tid, roundId);
+        if (!mine || cancelled) return;
+        const league = { id: mine.leagueId };
+        const card = await announceMyRoundCard({ tournament, roundId, meId, league });
+        if (!cancelled) await record({ league, card });
+      } catch {
+        // Offline: try again the next time the scorecard opens.
+        repairedRef.current = null;
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [canCount, hasLink, tid, roundId, meId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // "Announced. It's your October card." for a few seconds.
   useEffect(() => {
     if (!toast) return undefined;
@@ -104,7 +131,8 @@ export function useScorecardLeague({
       const card = await announceMyRoundCard({ tournament, roundId, meId, league });
       await record({ league, card });
       setSheetOpen(false);
-      setToast({ key: 'league.optIn.announced', month: card.month });
+      const hcp = card.leagueHandicap ?? league.leagueHandicap ?? null;
+      setToast({ key: hcp == null ? 'league.optIn.announced' : 'league.optIn.announcedHcp', month: card.month, hcp });
     } catch (err) {
       if (err?.hint === 'round_started') {
         setLateHint(true);

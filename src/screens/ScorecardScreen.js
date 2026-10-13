@@ -55,7 +55,7 @@ import { useScorecardLeague } from '../hooks/useScorecardLeague';
 import { recordRoundCard } from '../lib/leagueOptIn';
 import LeagueStrip from '../components/scorecard/LeagueStrip';
 import LeagueOptInSheet from '../components/league/LeagueOptInSheet';
-import { useT, formatDate } from '../i18n';
+import { useT, formatDate, formatNumber } from '../i18n';
 import { requestLeagueTeeOff, retryLeagueTeeOff } from '../lib/leagueTeeOff';
 import { normalizeRoundNotes } from '../store/roundNotes';
 import {
@@ -766,13 +766,16 @@ export default function ScorecardScreen({ navigation, route }) {
 
   // League cards in this round (D5 B): the one-time "Count this round?" sheet
   // for a member whose phone hasn't announced, the strip and LEAGUE chips.
-  // The announced card is written through the save queue like any edit.
+  // The announced card is written through the save queue like any edit. It
+  // records the card link only: the round's handicaps stay as they are (the
+  // server scores the league card from the frozen league handicap).
   const recordLeagueCard = useCallback(({ league, card }) => enqueueSave(async () => {
     const base = tournamentRef.current;
     const r = base?.rounds?.[roundIndex];
     if (!base || !r) return null;
     const next = await recordRoundCard({ tournament: base, roundId: r.id, meId, league, card });
     tournamentRef.current = next;
+    localSetupEditRef.current = Date.now(); // my own write, not a peer's setup change
     setTournament(next);
     return next;
   }), [enqueueSave, roundIndex, meId]);
@@ -2106,7 +2109,10 @@ export default function ScorecardScreen({ navigation, route }) {
       <LeagueStrip strip={leagueLayer.strip} postBy={leagueLayer.postBy} onCountMine={leagueLayer.countMine} />
       {leagueLayer.toast ? (
         <Text style={s.leagueToast} accessibilityRole="alert">
-          {tl(leagueLayer.toast.key, { month: formatDate(leagueLayer.toast.month, 'monthName') })}
+          {tl(leagueLayer.toast.key, {
+            month: formatDate(leagueLayer.toast.month, 'monthName'),
+            hcp: leagueLayer.toast.hcp == null ? '' : formatNumber(leagueLayer.toast.hcp, { decimals: 1 }),
+          })}
         </Text>
       ) : null}
       {view === 'hole' ? (

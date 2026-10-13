@@ -293,3 +293,17 @@ describe('applyPendingMutations', () => {
     expect(result).toEqual(fetched);
   });
 });
+
+describe('handicap.setLeague mutation', () => {
+  test('sets index and playing handicap as an auto entry, clearing a manual flag', () => {
+    const t = {
+      rounds: [{
+        id: 'r1', playerIndexes: { p2: 9 }, playerHandicaps: { p1: 5, p2: 8 }, manualHandicaps: { p1: true, p2: true },
+      }],
+    };
+    applyToTournament(t, { type: 'handicap.setLeague', roundId: 'r1', playerId: 'p1', index: 18, handicap: 20 });
+    expect(t.rounds[0].playerIndexes).toEqual({ p2: 9, p1: 18 });
+    expect(t.rounds[0].playerHandicaps).toEqual({ p1: 20, p2: 8 });
+    expect(t.rounds[0].manualHandicaps).toEqual({ p1: false, p2: true });
+  });
+});

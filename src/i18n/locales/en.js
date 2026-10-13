@@ -172,6 +172,8 @@ export default {
   'league.optIn.notThisRound': 'Not this round',
   'league.optIn.offline': 'Not counted: no connection. Try again before your first shot.',
   'league.optIn.announced': "Announced. It's your {month} card.",
+  'league.optIn.announcedHcp': "Announced. It's your {month} card, scored from your league handicap {hcp}.",
+  'league.optIn.scoredFrom': 'Your league card is scored from your league handicap {hcp}. The game keeps its own handicaps.',
 
   'league.strip.cards': { one: '{count} league card', other: '{count} league cards' },
   'league.strip.inGame': '{cards} in this game: {names}',

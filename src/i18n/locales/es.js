@@ -172,6 +172,8 @@ export default {
   'league.optIn.notThisRound': 'Esta vuelta no',
   'league.optIn.offline': 'No cuenta: sin conexión. Vuelve a intentarlo antes de tu primer golpe.',
   'league.optIn.announced': 'Anunciada. Es tu tarjeta de {month}.',
+  'league.optIn.announcedHcp': 'Anunciada. Es tu tarjeta de {month}, calculada con tu hándicap de liga {hcp}.',
+  'league.optIn.scoredFrom': 'Tu tarjeta de liga se calcula con tu hándicap de liga {hcp}. La partida mantiene sus propios hándicaps.',
 
   'league.strip.cards': { one: '{count} tarjeta de liga', other: '{count} tarjetas de liga' },
   'league.strip.inGame': '{cards} en esta partida: {names}',

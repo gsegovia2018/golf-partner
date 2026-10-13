@@ -42,6 +42,9 @@ export default function LeagueOptInSheet({
       </Text>
       <View style={s.cons}>
         {!!lines && <Text style={s.consMain}>{lines}</Text>}
+        {hcp != null ? (
+          <Text style={s.consSub}>{t('league.optIn.scoredFrom', { hcp: formatNumber(hcp, { decimals: 1 }) })}</Text>
+        ) : null}
         <Text style={s.consSub}>{t('league.optIn.rule')}</Text>
       </View>
       {errorText ? <Text style={s.error} accessibilityRole="alert">{errorText}</Text> : null}
