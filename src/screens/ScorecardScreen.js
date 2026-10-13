@@ -53,6 +53,7 @@ import { notifyRoundFinished } from '../store/notificationStore';
 import { leagueCardOf } from '../store/leagueSetup';
 import { useScorecardLeague } from '../hooks/useScorecardLeague';
 import { recordRoundCard } from '../lib/leagueOptIn';
+import { ensureRealtimeForTournament } from '../store/realtimeSync';
 import LeagueStrip from '../components/scorecard/LeagueStrip';
 import LeagueOptInSheet from '../components/league/LeagueOptInSheet';
 import { useT, formatDate, formatNumber } from '../i18n';
@@ -779,8 +780,25 @@ export default function ScorecardScreen({ navigation, route }) {
     setTournament(next);
     return next;
   }), [enqueueSave, roundIndex, meId]);
+  // Re-read the league members' status on focus and every minute while the
+  // round is live (another member's opt-in on their own phone).
+  const [leagueRefreshKey, setLeagueRefreshKey] = useState(0);
+  const leagueLive = !official && !!round?.id && !round?.finishedAt && !tournament?.finishedAt;
+  useFocusEffect(useCallback(() => {
+    if (!leagueLive) return undefined;
+    setLeagueRefreshKey((n) => n + 1);
+    const id = setInterval(() => setLeagueRefreshKey((n) => n + 1), 60000);
+    return () => clearInterval(id);
+  }, [leagueLive]));
   const leagueLayer = useScorecardLeague({
-    tournament, round, meId, userId: user?.id ?? null, official, scores, record: recordLeagueCard,
+    tournament,
+    round,
+    meId,
+    userId: user?.id ?? null,
+    official,
+    scores,
+    record: recordLeagueCard,
+    refreshKey: leagueRefreshKey,
   });
   const leaguePlayers = (leagueLayer.strip?.playerIds ?? []).join(',');
   const tl = useT();
@@ -989,6 +1007,11 @@ export default function ScorecardScreen({ navigation, route }) {
     useCallback(() => {
       if (official || !tid || !round?.id) return undefined;
       openLive(tid);
+      // The setup channel (realtimeSync) is a single channel Home points at its
+      // own tournament; a scorecard opened without that Home underneath (a deep
+      // link, another active game) would get no setup rows (league links,
+      // roster, teams) until the next focus. Point it at this game.
+      ensureRealtimeForTournament(tid).catch(() => {});
       const pullNow = () => { if (isOnline()) pull(tid, round.id).catch(() => {}); };
       pullNow();
       const interval = setInterval(pullNow, 20000);

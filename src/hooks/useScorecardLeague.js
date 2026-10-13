@@ -3,7 +3,7 @@ import { useSetupLeagues } from './useSetupLeagues';
 import { getLeagueCard, getLeagueGameStatus, getMyLeagueCardsForRound } from '../store/leagueStore';
 import { leagueCardOf } from '../store/leagueSetup';
 import {
-  hasScoreIn, leagueOptInState, leagueStripState, roundCanCount,
+  hasScoreIn, leagueOptInState, leagueStripState, roundCanCount, roundLeagueCards,
 } from '../store/leagueGameCards';
 import {
   announceMyRoundCard, dismissLeagueOptIn, isLeagueOptInDismissed,
@@ -17,8 +17,12 @@ import {
 //
 // `record(card)` writes the announced card onto the tournament; the screen
 // passes it so the write goes through its own save queue.
+//
+// `refreshKey` re-reads the members' status: the screen bumps it on focus and
+// every minute while the round is live, so another member's opt-in shows here
+// even when the tournament's leagueCards link has not reached this phone yet.
 export function useScorecardLeague({
-  tournament, round, meId, userId, official, scores, record,
+  tournament, round, meId, userId, official, scores, record, refreshKey = 0,
 }) {
   const tid = tournament?.id ?? null;
   const roundId = round?.id ?? null;
@@ -35,7 +39,10 @@ export function useScorecardLeague({
   const [toast, setToast] = useState(null);
   const [myCard, setMyCard] = useState(null);
 
-  const leagueIds = leagues.map((l) => l.id).join(',');
+  // My leagues with a free month (the sheet) plus the leagues already carrying
+  // a card on this round (the strip: my month may be taken by this very card).
+  const recordedIds = roundLeagueCards(tournament, roundId).map((e) => e.leagueId).filter(Boolean);
+  const leagueIds = [...new Set([...leagues.map((l) => l.id), ...recordedIds])].sort().join(',');
   useEffect(() => {
     if (!canCount || !tid || !roundId || !leagueIds) return undefined;
     let cancelled = false;
@@ -48,10 +55,11 @@ export function useScorecardLeague({
           // Offline or refused: no sheet for that league.
         }
       }
-      if (!cancelled) setStatusByLeague(out);
+      // A failed re-read keeps what the last one said.
+      if (!cancelled) setStatusByLeague((prev) => ({ ...prev, ...out }));
     })();
     return () => { cancelled = true; };
-  }, [canCount, tid, roundId, leagueIds]);
+  }, [canCount, tid, roundId, leagueIds, refreshKey]);
 
   useEffect(() => {
     if (!tid || !roundId) return undefined;
@@ -117,9 +125,16 @@ export function useScorecardLeague({
     return () => clearTimeout(id);
   }, [toast]);
 
+  const serverPlayerIds = useMemo(() => {
+    const ids = [];
+    for (const rows of Object.values(statusByLeague)) {
+      for (const r of rows ?? []) if (r?.thisRound && r.playerId && !ids.includes(r.playerId)) ids.push(r.playerId);
+    }
+    return ids;
+  }, [statusByLeague]);
   const strip = useMemo(
-    () => leagueStripState({ tournament, round, meId, optIn }),
-    [tournament, round, meId, optIn],
+    () => leagueStripState({ tournament, round, meId, optIn, serverPlayerIds }),
+    [tournament, round, meId, optIn, serverPlayerIds],
   );
 
   const countIt = useCallback(async () => {

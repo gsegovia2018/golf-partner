@@ -86,3 +86,66 @@ describe('useScorecardLeague repair (D5)', () => {
     expect(record).not.toHaveBeenCalled();
   });
 });
+
+describe('useScorecardLeague strip freshness (D5)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    store.getMyLeagueCardsForRound.mockResolvedValue([]);
+  });
+
+  const mine = leagueCardsPatch({ leagueId: 'L1', cardId: 'card-a', playerId: 'p1', roundId: 'r1' });
+  const both = {
+    leagueCards: {
+      ...mine.leagueCards,
+      ...leagueCardsPatch({ leagueId: 'L1', cardId: 'card-b', playerId: 'p2', roundId: 'r1' }).leagueCards,
+    },
+  };
+  const props = (t, refreshKey = 0) => ({
+    tournament: t, round: t.rounds[0], meId: 'p1', userId: 'u1', official: false, scores: {}, record: jest.fn(), refreshKey,
+  });
+
+  test('a props-only leagueCards change (realtime / sync pull) updates the strip and chips', async () => {
+    const { result, rerender } = renderHook((p) => useScorecardLeague(p), { initialProps: props(tournament(mine)) });
+    await flush();
+    expect(result.current.strip).toMatchObject({ kind: 'cards', count: 1, playerIds: ['p1'] });
+
+    rerender(props(tournament(both)));
+    expect(result.current.strip).toMatchObject({ kind: 'cards', count: 2, playerIds: ['p1', 'p2'] });
+  });
+
+  test("the refresh re-reads my recorded league's status: a member's new card shows before its link", async () => {
+    const t = tournament(mine);
+    store.getLeagueGameStatus.mockResolvedValue([
+      { playerId: 'p1', isMe: true, hasCard: true, thisRound: true },
+      { playerId: 'p2', isMe: false, hasCard: false, thisRound: false },
+    ]);
+    const { result, rerender } = renderHook((p) => useScorecardLeague(p), { initialProps: props(t, 0) });
+    await waitFor(() => expect(store.getLeagueGameStatus).toHaveBeenCalledWith('L1', 't1', 'r1'));
+    expect(result.current.strip.count).toBe(1);
+
+    // B opts in on B's phone; A's tournament still has no link for B.
+    store.getLeagueGameStatus.mockResolvedValue([
+      { playerId: 'p1', isMe: true, hasCard: true, thisRound: true },
+      { playerId: 'p2', isMe: false, hasCard: true, thisRound: true },
+    ]);
+    rerender(props(t, 1));
+    await waitFor(() => expect(result.current.strip.count).toBe(2));
+    expect(store.getLeagueGameStatus).toHaveBeenCalledTimes(2);
+    expect(result.current.strip.playerIds).toEqual(['p1', 'p2']);
+  });
+
+  test('a failed re-read keeps the last status', async () => {
+    const t = tournament(mine);
+    store.getLeagueGameStatus.mockResolvedValueOnce([
+      { playerId: 'p1', isMe: true, hasCard: true, thisRound: true },
+      { playerId: 'p2', isMe: false, hasCard: true, thisRound: true },
+    ]);
+    const { result, rerender } = renderHook((p) => useScorecardLeague(p), { initialProps: props(t, 0) });
+    await waitFor(() => expect(result.current.strip.count).toBe(2));
+    store.getLeagueGameStatus.mockRejectedValueOnce(new Error('offline'));
+    rerender(props(t, 1));
+    await waitFor(() => expect(store.getLeagueGameStatus).toHaveBeenCalledTimes(2));
+    await flush();
+    expect(result.current.strip.count).toBe(2);
+  });
+});

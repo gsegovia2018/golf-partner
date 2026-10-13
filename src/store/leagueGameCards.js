@@ -122,11 +122,19 @@ export function leagueOptInState({
 //   'othersOnly'      "Marcos's card counts for the league." (+ Count mine)
 //   'tooLate'         "You've already started this round…"
 // `names` lists the counting players, "you" first as { me: true }.
-export function leagueStripState({ tournament, round, meId, optIn = null }) {
+// `serverPlayerIds` adds the players whose card get_league_game_status says is
+// this round's, so another member's opt-in shows before the tournament's own
+// leagueCards link reaches this phone.
+export function leagueStripState({
+  tournament, round, meId, optIn = null, serverPlayerIds = [],
+}) {
   const cards = roundLeagueCards(tournament, round?.id);
   const players = tournament?.players ?? [];
   const ids = [];
   for (const e of cards) if (e.playerId && !ids.includes(e.playerId)) ids.push(e.playerId);
+  for (const id of serverPlayerIds ?? []) {
+    if (id && !ids.includes(id) && players.some((p) => p.id === id)) ids.push(id);
+  }
   const mine = !!meId && ids.includes(meId);
   const names = [
     ...(mine ? [{ me: true }] : []),

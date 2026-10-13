@@ -131,6 +131,18 @@ describe('leagueOptInState (Javier opens Marcos’s game)', () => {
   });
 });
 
+describe('leagueStripState server cards', () => {
+  test('adds players the game status says count this round, ignoring ids outside the game', () => {
+    const t = {
+      players: [{ id: 'p1', name: 'Marcos' }, { id: 'p2', name: 'Javier' }],
+      rounds: [{ id: 'r1' }],
+      leagueCards: { 'r1:p1': { leagueId: 'L1', cardId: 'c1', playerId: 'p1', roundId: 'r1' } },
+    };
+    const st = leagueStripState({ tournament: t, round: t.rounds[0], meId: 'p1', serverPlayerIds: ['p2', 'p1', 'zz'] });
+    expect(st).toMatchObject({ kind: 'cards', count: 2, playerIds: ['p1', 'p2'] });
+  });
+});
+
 describe('leagueStripState', () => {
   const two = game({
     league: { leagueId: 'L1', cardId: 'c1', playerId: 'p1' },
