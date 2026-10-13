@@ -1,7 +1,7 @@
 import {
   monthName, ordinal, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel,
   positionText, cardStatus, monthRows, leagueSummary, viewableCards, monthBoard, collapseSeasonRows,
-  formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, cardBreakdown, leagueNameMatches,
+  formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, markerAskedLine, firstName, cardBreakdown, leagueNameMatches,
 } from '../leagueView';
 
 const NOW = new Date(2026, 9, 4, 12, 0);
@@ -228,6 +228,13 @@ describe('monthBoard', () => {
     expect(board.noCard.map((x) => x.userId)).toEqual(['g']);
   });
 
+  test('a card the marker sent back says so instead of waiting for a QR scan', () => {
+    const board = monthBoard(members, {
+      '2026-10': [card('d', 'submitted', 30, { returnedAt: '2026-10-13T10:00:00Z' })],
+    }, '2026-10', table);
+    expect(board.waiting.map((r) => r.reason)).toEqual(['sent back by the marker']);
+  });
+
   test('confirmed ranks by net differential; an unrated confirmed card is listed after, not ranked', () => {
     const board = monthBoard(members, {
       '2026-10': [
@@ -340,5 +347,37 @@ describe('card breakdown', () => {
       course: { ...course, slope: null, rating: null }, holes: strokes, playingHandicap: 0, netDifferential: null,
     });
     expect(b.rated).toBe(false);
+  });
+});
+
+describe('pick your marker', () => {
+  test('a submitted app card with a marker is waiting for them', () => {
+    const card = { status: 'submitted', source: 'app', markerName: 'Javi Ortega', points: 36 };
+    expect(yourCardState(card).waitingFor).toBe('Javi');
+    expect(yourCardState({ ...card, markerName: null }).waitingFor).toBeNull();
+    expect(yourCardState({ ...card, status: 'confirmed' }).waitingFor).toBeNull();
+  });
+
+  test('the month board says who a submitted card waits for', () => {
+    const members = [{ userId: 'a', displayName: 'Ana' }];
+    const cards = { '2026-10': [{ id: 'c', userId: 'a', status: 'submitted', source: 'app', markerName: 'Javi Ortega', points: 30 }] };
+    const board = monthBoard(members, cards, '2026-10', [500]);
+    expect(board.waiting[0].reason).toBe('submitted · waiting for Javi Ortega');
+  });
+
+  test('confirmed by a marker in the app reads as such', () => {
+    const members = [{ userId: 'a', displayName: 'Ana' }];
+    const cards = { '2026-10': [{
+      id: 'c', userId: 'a', status: 'confirmed', source: 'app', confirmation: 'marker', netDifferential: -1, points: 30,
+    }] };
+    expect(monthBoard(members, cards, '2026-10', [500]).confirmed[0].how).toBe('marker in the app');
+  });
+
+  test('markerAskedLine: relative time and expiry date, no pronouns', () => {
+    const now = new Date('2026-10-13T10:00:00');
+    expect(markerAskedLine('2026-10-13T09:58:00', '2026-10-19T10:00:00', now)).toBe('Asked 2 min ago · until 19 Oct');
+    expect(markerAskedLine('2026-10-13T10:00:00', null, now)).toBe('Asked just now');
+    expect(markerAskedLine('2026-10-13T07:00:00', '2026-10-19T10:00:00', now)).toBe('Asked 3 h ago · until 19 Oct');
+    expect(firstName('Javi Ortega')).toBe('Javi');
   });
 });

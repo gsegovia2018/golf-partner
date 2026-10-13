@@ -158,6 +158,17 @@ describe('LeagueBoardScreen', () => {
     });
   });
 
+  test('a submitted card with a marker asked reads "Waiting for <first>"', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'submitted', 36, { id: 'c5', tournamentId: 't1', roundId: 't1-r0', markerName: 'Javi Ortega' })],
+      },
+    }));
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('Waiting for Javi'));
+    expect(queryByText('Submitted')).toBeNull();
+  });
+
   test('a submitted app card reopens Validate straight at the partner check', async () => {
     store.getLeague.mockResolvedValue(snapshot({
       cardsByMonth: {

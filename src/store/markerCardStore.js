@@ -39,6 +39,7 @@ async function rpc(fn, args) {
  *   slope:number|null, rating:number|null, date:string|null,
  *   playingHandicap:number|null, gross:number|null, points:number|null,
  *   differential:number|null, netDifferential:number|null, expiresAt:string,
+ *   bound:boolean, signedInName:string|null, leagueName:string|null, month:string|null,
  *   holes:Array<{n:number, par:number, si:number, strokes:number|null}>}>}
  */
 export async function getMarkerCard(token) {
@@ -56,6 +57,12 @@ export async function getMarkerCard(token) {
     differential: d.differential == null ? null : Number(d.differential),
     netDifferential: d.net_differential == null ? null : Number(d.net_differential),
     expiresAt: d.expires_at,
+    // Bound tokens (a request sent to a signed-in member) also carry who is
+    // signed in and the league/month; public QR tokens have neither.
+    bound: !!d.bound,
+    signedInName: d.signed_in_name ?? null,
+    leagueName: d.league_name ?? null,
+    month: d.month ?? null,
     holes: (d.holes ?? []).map((h) => ({ n: h.n, par: h.par, si: h.si, strokes: h.strokes ?? null })),
   };
 }
