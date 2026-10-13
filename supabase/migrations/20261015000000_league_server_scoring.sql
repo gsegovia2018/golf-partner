@@ -1153,16 +1153,19 @@ END $$;
    Smoke test (BEGIN … ROLLBACK): supabase/tests/league_server_scoring_smoke.sql
    (and leagues_smoke.sql, league_invitees_smoke.sql still pass).
 
-   -- Cards whose points (or playing handicap) the backfill changed:
+   -- Cards whose points (or playing handicap) the backfill changed, and
+   -- hand-entered tees now waiting for an admin's approval:
    SELECT c.id, c.league_id, c.user_id, c.month, c.status,
           b.points AS old_points, c.points AS new_points,
           b.playing_handicap AS old_ph, c.playing_handicap AS new_ph,
-          c.league_handicap, c.course ->> 'name' AS course, c.tee_verified
+          c.league_handicap, c.course ->> 'name' AS course, c.tee_verified,
+          (c.tee_verified IS FALSE AND c.approved_at IS NULL) AS now_awaiting_approval
      FROM public.league_cards_scoring_backup b
      JOIN public.league_cards c ON c.id = b.id
     WHERE b.points IS DISTINCT FROM c.points
        OR b.playing_handicap IS DISTINCT FROM c.playing_handicap
-    ORDER BY c.month, c.league_id, c.points DESC;
+       OR (c.tee_verified IS FALSE AND c.approved_at IS NULL)
+    ORDER BY c.month, c.league_id, c.points DESC NULLS LAST;
 
    -- Invariant (expect none): a scored card whose stored points differ from
    -- what its frozen data gives.
