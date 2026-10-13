@@ -153,6 +153,7 @@ export function rowToCard(r) {
     confirmedAt: r.confirmed_at ?? null,
     proofPath: r.proof_path ?? null,
     markerNote: r.marker_note ?? null,
+    returnedAt: r.returned_at ?? null,
     // "Pick your marker": who I asked to confirm this card (markerName is null
     // once the request is cancelled or answered).
     markerUserId: r.marker_user_id ?? null,

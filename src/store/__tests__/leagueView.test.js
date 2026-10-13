@@ -228,6 +228,13 @@ describe('monthBoard', () => {
     expect(board.noCard.map((x) => x.userId)).toEqual(['g']);
   });
 
+  test('a card the marker sent back says so instead of waiting for a QR scan', () => {
+    const board = monthBoard(members, {
+      '2026-10': [card('d', 'submitted', 30, { returnedAt: '2026-10-13T10:00:00Z' })],
+    }, '2026-10', table);
+    expect(board.waiting.map((r) => r.reason)).toEqual(['sent back by the marker']);
+  });
+
   test('confirmed ranks by net differential; an unrated confirmed card is listed after, not ranked', () => {
     const board = monthBoard(members, {
       '2026-10': [

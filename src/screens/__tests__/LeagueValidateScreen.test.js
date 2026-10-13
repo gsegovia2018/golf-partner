@@ -341,6 +341,16 @@ describe('LeagueValidateScreen: pick your marker', () => {
     expect(await findByText('You can remind once a day.')).toBeTruthy();
   });
 
+  test('reopened after a send-back (no pending request): the chips and Ask come back', async () => {
+    store.getLeagueMarkerCandidates.mockResolvedValue({ pending: null, candidates: [javi] });
+    const { findByText, getByText } = mount({ submitted: true });
+    expect(await findByText(PARTNER_REASONS.no_partner)).toBeTruthy();
+    expect(getByText('WHO MARKED YOU?')).toBeTruthy();
+    fireEvent.press(getByText('Ask Javi'));
+    await waitFor(() => expect(store.requestLeagueMarker).toHaveBeenCalledWith('card-1', 'user-2'));
+    expect(await findByText('Waiting for Javi to confirm')).toBeTruthy();
+  });
+
   test('Ask someone else: cancels, then the chips come back above the fallbacks', async () => {
     store.getLeagueMarkerCandidates.mockResolvedValue({
       pending: { userId: 'user-2', name: 'Javi Ortega', requestedAt: new Date().toISOString(), remindedAt: null, expiresAt: '2026-10-19T10:00:00Z' },

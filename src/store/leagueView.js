@@ -165,7 +165,7 @@ const HOW_CONFIRMED = {
 function waitingReason(card) {
   if (card.markerName && card.source !== 'offapp') return `submitted · waiting for ${card.markerName}`;
   if (card.source === 'offapp') return card.proofPath ? 'waiting for the check' : 'needs the card photo';
-  return "marker hasn't scanned the QR yet";
+  return card.returnedAt ? 'sent back by the marker' : "marker hasn't scanned the QR yet";
 }
 
 // The month board, grouped for the board's month view. Only the confirmed

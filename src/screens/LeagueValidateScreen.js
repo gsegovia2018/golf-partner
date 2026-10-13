@@ -78,7 +78,6 @@ export default function LeagueValidateScreen({ navigation, route }) {
   const [pending, setPending] = useState(null);
   const [selected, setSelected] = useState(undefined);
   // After "Ask someone else": the picker shows again inside the fallbacks.
-  const [asking, setAsking] = useState(false);
   const [markerNote, setMarkerNote] = useState(null);
   const autoChecked = useRef(false);
 
@@ -171,11 +170,9 @@ export default function LeagueValidateScreen({ navigation, route }) {
       setPending({
         userId, name: r?.markerName ?? name, requestedAt: new Date().toISOString(), expiresAt: r?.expiresAt ?? null,
       });
-      setAsking(false);
       return true;
     } catch {
       setPending({ userId, name, requestedAt: null, expiresAt: null, failed: true });
-      setAsking(false);
       return false;
     }
   }
@@ -207,7 +204,6 @@ export default function LeagueValidateScreen({ navigation, route }) {
       if (!pending.failed) await cancelLeagueMarkerRequest(cardId);
       setSelected(defaultPick(candidates.filter((c) => c.userId !== pending.userId)));
       setPending(null);
-      setAsking(true);
       // Reopened without a check result: show the not-confirmed state.
       setResult((r) => r ?? { confirmed: false, reason: 'no_partner', settled: 18 });
     } catch (e) {
@@ -471,7 +467,8 @@ export default function LeagueValidateScreen({ navigation, route }) {
                 <Text style={s.secondaryText}>Check again</Text>
               </TouchableOpacity>
             )}
-            {asking && !waiting && (
+            {/* Nobody asked, or the last ask was sent back or expired: pick again. */}
+            {!waiting && !RESUBMIT_REASONS.includes(result.reason) && candidates.length > 0 && (
               <>
                 {picker}
                 {picked && (
