@@ -12,7 +12,16 @@ jest.mock('@react-navigation/native', () => ({
 jest.mock('../../lib/selectionBridge', () => ({
   consumePendingCourses: jest.fn(),
 }));
-jest.mock('../../store/leagueStore', () => ({ announceLeagueCard: jest.fn() }));
+jest.mock('../../store/leagueStore', () => ({
+  announceLeagueCard: jest.fn(),
+  getLeague: jest.fn(() => Promise.resolve({
+    league: { id: 'L1', name: 'El Club', pointsTable: [500, 300], participationPoints: 10 },
+    members: [], cards: [], cardsByMonth: {},
+  })),
+  getLeagueCached: jest.fn(() => Promise.resolve(null)),
+  getLeagueShareLink: jest.fn(() => Promise.resolve('tok12345678901234567890')),
+}));
+jest.mock('../../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me' } }) }));
 
 const bridge = require('../../lib/selectionBridge');
 const store = require('../../store/leagueStore');
@@ -47,8 +56,8 @@ describe('LeagueAnnounceScreen', () => {
     expect(getByText("You'll have until 04:00 tomorrow to post your score — 8 hours after tee time.")).toBeTruthy();
   });
 
-  test('announces with source offapp, the course snapshot and the tee time, then goes back', async () => {
-    store.announceLeagueCard.mockResolvedValue({ id: 'c1' });
+  test('announces with source offapp, the course snapshot and the tee time, then offers the group chat', async () => {
+    store.announceLeagueCard.mockResolvedValue({ id: 'c1', month: '2025-10-01', postBy: null });
     const navigation = nav();
     const { getByText, getByLabelText } = render(wrap(<LeagueAnnounceScreen navigation={navigation} route={route} />));
     expect(getByText(/Announce before your first shot\. Your group is notified now; you'll add the score after the round\./)).toBeTruthy();
@@ -59,7 +68,16 @@ describe('LeagueAnnounceScreen', () => {
     fireEvent.press(getByLabelText('Done'));
     fireEvent.press(getByText('Announce card'));
 
-    await waitFor(() => expect(navigation.goBack).toHaveBeenCalled());
+    await waitFor(() => getByText('Announced. Your group has been notified in the app.'));
+    expect(navigation.goBack).not.toHaveBeenCalled();
+    // "Tell the group chat" opens the share sheet preset with the announcement.
+    fireEvent.press(getByText('Tell the group chat'));
+    await waitFor(() => expect(getByLabelText('Message preview').props.children).toBe(
+      "I'm playing my October card for El Club: Sat 4 Oct 9:30 am at Golf Olivar, without the app. Score in by 5:30 pm."
+      + '\nhttps://golf-partner.vercel.app/league-board/tok12345678901234567890',
+    ));
+    fireEvent.press(getByText('Done'));
+    expect(navigation.goBack).toHaveBeenCalled();
     const arg = store.announceLeagueCard.mock.calls[0][0];
     expect(arg.leagueId).toBe('L1');
     expect(arg.source).toBe('offapp');

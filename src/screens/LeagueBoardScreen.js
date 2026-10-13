@@ -8,19 +8,20 @@ import IconButton from '../components/ui/IconButton';
 import PullToRefresh from '../components/PullToRefresh';
 import LeaderboardCard from '../components/LeaderboardCard';
 import DeadlineLine, { countdownText } from '../components/league/DeadlineLine';
+import LeagueShareSheet from '../components/league/LeagueShareSheet';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { useMinuteClock } from '../hooks/useMinuteClock';
-import { isMissed, needsApproval, deadlineInfo } from '../store/leagueRules';
+import { isMissed, needsApproval, deadlineInfo, isMonthClosed, monthClosesAt } from '../store/leagueRules';
 import { seasonTable, monthResults } from '../store/leagueStandings';
 import {
   monthName, formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard, rankNotes, placeLabel,
   leaguePointsText, monthStanding,
   daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, myMonthCard, voidedNote, myRoundScored, viewableCards, monthRows,
 } from '../store/leagueView';
-import { useT, tr, formatNumber } from '../i18n';
+import { useT, tr, formatNumber, formatDate } from '../i18n';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
 import { splitVoidReason } from '../store/leagueTimeline';
 import { getTournamentSnapshot } from '../store/tournamentStore';
@@ -37,6 +38,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const { data, stale, loading, refreshing, error, reload, refresh } = useLeague(navigation, leagueId);
   const [scope, setScope] = useState(null); // null = this month (the season when archived)
   const [showAllSeason, setShowAllSeason] = useState(false);
+  // The share sheet: null = closed; { mode: 'board' } follows the board's
+  // chip; { mode: 'results', resultsMonth } is the month-end preset.
+  const [share, setShare] = useState(null);
   const now = useMinuteClock();
   const t = useT();
 
@@ -61,6 +65,13 @@ export default function LeagueBoardScreen({ navigation, route }) {
         <Text style={s.headerTitle} numberOfLines={1}>{title}</Text>
       </View>
       <View style={s.headerRight}>
+        {!!view && (
+          <IconButton
+            icon="share-2"
+            onPress={() => setShare({ mode: 'board' })}
+            accessibilityLabel={t('league.share.boardButton')}
+          />
+        )}
         <IconButton
           icon="bar-chart-2"
           onPress={() => navigation.navigate('LeagueStats', { leagueId })}
@@ -347,6 +358,23 @@ export default function LeagueBoardScreen({ navigation, route }) {
     </ScrollView>
   ) : null;
 
+  // ---- Sharing -------------------------------------------------------------
+
+  // Month end: the previous month is final (closed on day 4) for two weeks, or
+  // the "Ranking updated" push says which month. Only when it ranked someone.
+  const [cy, cm] = curKey.split('-').map(Number);
+  const prevKey = `${cm === 1 ? cy - 1 : cy}-${String(cm === 1 ? 12 : cm - 1).padStart(2, '0')}`;
+  const finalKey = route?.params?.finalMonth ?? (
+    isMonthClosed(prevKey, now) && now.getTime() - monthClosesAt(prevKey).getTime() < 14 * 86400000 ? prevKey : null);
+  const finalMonth = !archived && finalKey && monthResults(cardsByMonth[finalKey] ?? [], active, league.pointsTable,
+    { participationPoints: league.participationPoints }).some((r) => r.place != null) ? finalKey : null;
+  // The header's share icon follows the board: the month so far, the season,
+  // or a past month's results.
+  const sheetMode = share?.mode === 'board'
+    ? (monthScope ? { mode: 'month' } : pastScopes.includes(activeScope)
+      ? { mode: 'results', resultsMonth: activeScope } : { mode: 'season' })
+    : share;
+
   // ---- My card -------------------------------------------------------------
 
   // A card an admin voided (or one played after a withdrawal) still takes the
@@ -540,6 +568,28 @@ export default function LeagueBoardScreen({ navigation, route }) {
           </View>
         )}
 
+        {!!finalMonth && (
+          <View style={s.finalBanner}>
+            <View style={s.finalHead}>
+              <Feather name="award" size={18} color={theme.accent.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.finalTitle}>
+                  {t('league.share.finalBanner', { month: cap(formatDate(`${finalMonth}-01`, 'monthName')) })}
+                </Text>
+                <Text style={s.finalSub}>{t('league.share.finalSub')}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={s.secondaryBtn}
+              onPress={() => setShare({ mode: 'results', resultsMonth: finalMonth })}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+            >
+              <Text style={s.secondaryText}>{t('league.share.shareResults')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {!archived && renderYourCard()}
 
         <LeaderboardCard
@@ -556,9 +606,21 @@ export default function LeagueBoardScreen({ navigation, route }) {
           </Text>
         )}
       </PullToRefresh>
+      <LeagueShareSheet
+        visible={!!share}
+        onClose={() => setShare(null)}
+        leagueId={leagueId}
+        snapshot={data}
+        meId={meId}
+        mode={sheetMode?.mode ?? 'month'}
+        resultsMonth={sheetMode?.resultsMonth ?? null}
+        now={now}
+      />
     </ScreenContainer>
   );
 }
+
+const cap = (x) => (x ? x.charAt(0).toUpperCase() + x.slice(1) : x);
 
 function makeStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
@@ -627,6 +689,14 @@ function makeStyles(theme) {
       flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1,
       borderColor: theme.border.default, paddingVertical: 10, paddingHorizontal: 8,
     },
+
+    finalBanner: {
+      backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1, borderColor: theme.accent.primary,
+      padding: 14, marginBottom: 14, gap: 12,
+    },
+    finalHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+    finalTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15 },
+    finalSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, marginTop: 2 },
 
     noCardText: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 20, paddingVertical: 6 },
     noCardMe: { fontFamily: 'PlusJakartaSans-Bold', color: '#ffffff' },

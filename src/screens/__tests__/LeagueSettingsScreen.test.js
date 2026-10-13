@@ -17,6 +17,9 @@ jest.mock('../../store/leagueStore', () => ({
   setLeagueRole: jest.fn(() => Promise.resolve()),
   archiveLeague: jest.fn(() => Promise.resolve()),
   leaveLeague: jest.fn(() => Promise.resolve()),
+  getLeagueShareLink: jest.fn(() => Promise.resolve('tokAAAAAAAAAAAAAAAAAAAAA')),
+  setLeaguePublicBoard: jest.fn((id, enabled) => Promise.resolve({ enabled, token: enabled ? 'tokAAAAAAAAAAAAAAAAAAAAA' : null })),
+  rotateLeaguePublicBoard: jest.fn(() => Promise.resolve({ enabled: true, token: 'tokBBBBBBBBBBBBBBBBBBBBB' })),
 }));
 jest.mock('../../store/settingsStore', () => ({
   updateAppSettings: jest.fn(() => Promise.resolve()),
@@ -184,6 +187,29 @@ describe('LeagueSettingsScreen', () => {
     expect(store.archiveLeague).not.toHaveBeenCalled();
     pressAlertButton(alertSpy, 'Archive');
     await waitFor(() => expect(store.archiveLeague).toHaveBeenCalledWith('L1'));
+  });
+
+  test('sharing (admin): the public board switch, the link and a new link', async () => {
+    store.getLeague.mockResolvedValue(snapshot());
+    const { getByText, getByLabelText, queryByText, findByText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    expect(await findByText('https://golf-partner.vercel.app/league-board/tokAAAAAAAAAAAAAAAAAAAAA')).toBeTruthy();
+    expect(getByText('SHARING')).toBeTruthy();
+    fireEvent.press(getByText('Make a new link'));
+    expect(await findByText('https://golf-partner.vercel.app/league-board/tokBBBBBBBBBBBBBBBBBBBBB')).toBeTruthy();
+    expect(getByText('New link made. The old one no longer works.')).toBeTruthy();
+    expect(store.rotateLeaguePublicBoard).toHaveBeenCalledWith('L1');
+    fireEvent(getByLabelText('Public board link'), 'valueChange', false);
+    await waitFor(() => expect(store.setLeaguePublicBoard).toHaveBeenCalledWith('L1', false));
+    await waitFor(() => expect(queryByText(/league-board/)).toBeNull());
+    expect(queryByText('Make a new link')).toBeNull();
+  });
+
+  test('sharing is admin only', async () => {
+    store.getLeague.mockResolvedValue(snapshot({ admin: false }));
+    const { getByText, queryByText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByText('Leave league'));
+    expect(queryByText('SHARING')).toBeNull();
+    expect(store.getLeagueShareLink).not.toHaveBeenCalled();
   });
 
   test('leave asks first, leaves and goes back to the main tabs', async () => {

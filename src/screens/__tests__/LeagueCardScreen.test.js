@@ -16,6 +16,7 @@ jest.mock('../../store/leagueStore', () => ({
   withdrawLeagueCard: jest.fn(),
   voidLeagueCard: jest.fn(),
   getLeagueCardEvents: jest.fn(),
+  getLeagueShareLink: jest.fn(() => Promise.resolve(null)),
 }));
 
 const store = require('../../store/leagueStore');
@@ -280,6 +281,32 @@ describe('LeagueCardScreen', () => {
     fireEvent.press(other.getByLabelText('Card actions'));
     expect(other.getByText('Approve card')).toBeTruthy();
     expect(other.getByText('Void card')).toBeTruthy();
+  });
+
+  test('"Share card" in Card actions opens the share sheet on my card', async () => {
+    openMonth();
+    store.getLeague.mockResolvedValue(snapshot([
+      card('me', 'confirmed', 38, { confirmedByName: 'Javi Ortega' }), card('javi', 'confirmed', 30),
+    ]));
+    const { getByLabelText, getByText, findByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('me')} />));
+    await waitFor(() => getByLabelText('Card actions'));
+    fireEvent.press(getByLabelText('Card actions'));
+    expect(getByText('Send your card to the group chat')).toBeTruthy();
+    fireEvent.press(getByText('Share card'));
+    expect(await findByText('Share to the group')).toBeTruthy();
+    // The admin switched the public board off: no link, and the sheet says why.
+    expect(await findByText('An admin has switched the public board off.')).toBeTruthy();
+    expect(getByLabelText('Message preview').props.children)
+      .toBe('My October card for El Club: 38 pts at Golf Olivar, confirmed by Javi. 1st so far.');
+  });
+
+  test("no Share card on someone else's card", async () => {
+    openMonth();
+    mockMe = 'nacho';
+    store.getLeague.mockResolvedValue(snapshot([card('javi', 'confirmed', 38)]));
+    const { getByText, queryByLabelText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
+    await waitFor(() => getByText('Javi · October card'));
+    expect(queryByLabelText('Card actions')).toBeNull();
   });
 
   test('the only admin can void their own card', async () => {
