@@ -7,17 +7,21 @@ import { makeOffAppStyles } from '../components/league/offAppStyles';
 import CardHoleGrid from '../components/league/CardHoleGrid';
 import DeadlineLine from '../components/league/DeadlineLine';
 import LeagueCardActions from '../components/league/LeagueCardActions';
+import CardTimeline from '../components/league/CardTimeline';
+import { stamp } from '../components/league/stamp';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { useMinuteClock } from '../hooks/useMinuteClock';
+import { useCardEvents } from '../hooks/useCardEvents';
 import { useT, tr, formatNumber } from '../i18n';
 import { semantic } from '../theme/tokens';
 import { getLeagueProofUrl } from '../store/leagueStore';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
-import { isMissed, needsApproval } from '../store/leagueRules';
+import { isMissed, needsApproval, isMonthClosed } from '../store/leagueRules';
 import {
-  monthName, netDiffTone, memberName, monthRows, cardBreakdown, monthStanding, standingCells, currentMonthKey,
+  monthName, netDiffTone, memberName, cardBreakdown, monthStanding, standingCells, currentMonthKey,
+  monthCardsView, cardActions, voidedNote,
 } from '../store/leagueView';
 
 // A member's card, read-only, with ‹ › to flick through that month's cards
@@ -33,22 +37,51 @@ export default function LeagueCardScreen({ navigation, route }) {
   const { leagueId, month, userId } = route?.params ?? {};
   const { data, loading, error, reload } = useLeague(navigation, leagueId);
   const [shownUser, setShownUser] = useState(userId);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [version, setVersion] = useState(0);
+  const [notice, setNotice] = useState(null);
 
   const cards = useMemo(
-    () => (data ? monthRows(data.members, data.cardsByMonth, month).map((r) => r.card).filter(Boolean) : []),
-    [data, month],
+    () => (data ? monthCardsView(data, month, meId, now) : []),
+    [data, month, meId, now],
   );
   const idx = cards.findIndex((c) => c.userId === shownUser);
   const card = idx >= 0 ? cards[idx] : null;
   const monthLabel = monthName(month);
   const who = memberName(data?.members, shownUser, meId);
+  const timeline = useCardEvents(card?.id, version);
+
+  const isOwner = !!card && card.userId === meId;
+  const isAdmin = !!data?.members.find((m) => m.userId === meId && !m.leftAt && m.role === 'admin');
+  const otherAdmin = !!data?.members.some((m) => m.userId !== meId && !m.leftAt && m.role === 'admin');
+  const items = useMemo(
+    () => cardActions(card, { isOwner, isAdmin, otherAdmin }, data?.league, now, { when: stamp, clock: timeLabel }),
+    [card, isOwner, isAdmin, otherAdmin, data?.league, now],
+  );
 
   const header = (
     <View style={s.header}>
       <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel="Back" />
-      <Text style={s.headerTitle} numberOfLines={1}>{data ? `${who} · ${monthLabel} card` : `${monthLabel} card`}</Text>
+      <Text style={[s.headerTitle, { flex: 1 }]} numberOfLines={1}>{data ? `${who} · ${monthLabel} card` : `${monthLabel} card`}</Text>
+      {items.length > 0 && (
+        <IconButton
+          icon="more-vertical"
+          size={22}
+          color={theme.text.primary}
+          onPress={() => setMenuOpen(true)}
+          accessibilityLabel={t('league.actions.menu')}
+        />
+      )}
     </View>
   );
+
+  // A flick to another card closes anything open for this one.
+  const flickTo = (step) => { setMenuOpen(false); setNotice(null); setShownUser(cards[idx + step].userId); };
+  const afterAction = async (kind) => {
+    setNotice(kind === 'withdraw' || kind === 'void' ? `league.actions.${kind}.done` : null);
+    setVersion((v) => v + 1);
+    await reload();
+  };
 
   if (!card) {
     return (
@@ -71,9 +104,9 @@ export default function LeagueCardScreen({ navigation, route }) {
   const scored = !!card.holes && (card.status === 'confirmed' || card.status === 'submitted');
   const missed = isMissed(card);
   const awaiting = needsApproval(card);
-  const isOwner = card.userId === meId;
-  const isAdmin = !!data.members.find((m) => m.userId === meId && !m.leftAt && m.role === 'admin');
-  const badge = missed ? 'Not posted' : awaiting ? 'Awaiting approval' : card.status === 'playing' ? 'Playing' : card.status === 'announced' ? 'Announced' : card.status === 'confirmed' ? 'Confirmed' : offApp ? 'Added after the round' : 'Submitted';
+  const voided = card.status === 'void';
+  const withdrawn = voided && (card.voidKind === 'withdrawn' || card.voidKind === 'auto_withdrawn');
+  const badge = voided ? (withdrawn ? t('league.void.badgeWithdrawn') : t('league.void.badge')) : missed ? 'Not posted' : awaiting ? 'Awaiting approval' : card.status === 'playing' ? 'Playing' : card.status === 'announced' ? 'Announced' : card.status === 'confirmed' ? 'Confirmed' : offApp ? 'Added after the round' : 'Submitted';
   const course = card.course;
   const played = card.playedOn ? dayLabel(card.playedOn) : null;
   const breakdown = cardBreakdown(card);
@@ -95,7 +128,7 @@ export default function LeagueCardScreen({ navigation, route }) {
       { value: diffValue, handicap: formatNumber(card.leagueHandicap, { decimals: 1 }) || '—' });
   const atStart = idx === 0;
   const atEnd = idx === cards.length - 1;
-  const go = (step) => setShownUser(cards[idx + step].userId);
+  const go = flickTo;
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -120,7 +153,39 @@ export default function LeagueCardScreen({ navigation, route }) {
         />
       </View>
       <ScrollView contentContainerStyle={s.content}>
-        {scored ? (
+        {!!notice && (
+          <View style={s.note} accessibilityRole="alert">
+            <Feather name="check-circle" size={14} color={theme.accent.primary} />
+            <Text style={s.noteText}>{t(notice)}</Text>
+          </View>
+        )}
+        {voided ? (
+          <View style={s.card}>
+            <View style={l.headRow}>
+              <View style={l.valueRow}>
+                {card.points != null ? (
+                  <>
+                    <Text style={[l.value, { color: theme.text.muted }]}>{formatNumber(card.points)}</Text>
+                    <Text style={l.valueKey}>{t('league.void.notCounted')}</Text>
+                  </>
+                ) : <Text style={s.cardTitle}>{badge}</Text>}
+              </View>
+              <View style={l.badgeBad}><Text style={l.badgeBadText}>{badge}</Text></View>
+            </View>
+            {!!subline && <Text style={s.text}>{subline}</Text>}
+            <Text style={s.text}>{tr(voidedNote(card, { isOwner, who }))}</Text>
+            {isOwner && withdrawn && month === currentMonthKey(now) && !isMonthClosed(month, now) && (
+              <TouchableOpacity
+                style={s.primaryBtn}
+                onPress={() => navigation.navigate('LeagueBoard', { leagueId })}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+              >
+                <Text style={s.primaryText}>{t('league.void.announceAnother')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : scored ? (
           <View style={s.card}>
             <View style={l.headRow}>
               <View style={l.valueRow}>
@@ -175,8 +240,19 @@ export default function LeagueCardScreen({ navigation, route }) {
           who={who}
           monthLabel={monthLabel}
           isOwner={isOwner}
-          isAdmin={isAdmin}
-          onDone={reload}
+          items={items}
+          menuOpen={menuOpen}
+          onMenuClose={() => setMenuOpen(false)}
+          onDone={afterAction}
+        />
+
+        <CardTimeline
+          events={timeline.events}
+          loading={timeline.loading}
+          error={timeline.error}
+          onRetry={timeline.reload}
+          meId={meId}
+          monthKey={card.monthKey}
         />
 
         {scored && !!course?.holes && (
@@ -256,6 +332,8 @@ function makeStyles(theme) {
     valueKey: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 13 },
     badge: { backgroundColor: theme.bg.secondary, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
     badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 11 },
+    badgeBad: { backgroundColor: theme.bg.secondary, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+    badgeBadText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.destructive, fontSize: 11 },
     badgeWarn: { backgroundColor: theme.isDark ? 'rgba(224,178,77,0.18)' : 'rgba(184,121,26,0.14)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
     badgeWarnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.isDark ? semantic.warning.dark : semantic.warning.light, fontSize: 11 },
     strip: { flexDirection: 'row', gap: 8, marginTop: 10 },

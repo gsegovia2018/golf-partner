@@ -18,7 +18,7 @@ import { seasonTable, monthResults } from '../store/leagueStandings';
 import {
   monthName, formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard, rankNotes, placeLabel,
   leaguePointsText, monthStanding,
-  daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, myRoundScored, viewableCards, monthRows,
+  daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, myMonthCard, voidedNote, myRoundScored, viewableCards, monthRows,
 } from '../store/leagueView';
 import { useT, tr, formatNumber } from '../i18n';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
@@ -327,7 +327,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
 
   // ---- My card -------------------------------------------------------------
 
-  const myCard = (cardsByMonth[curKey] ?? []).find((c) => c.userId === meId) ?? null;
+  // A card an admin voided (or one played after a withdrawal) still takes the
+  // month: it shows here instead of the announce buttons.
+  const myCard = myMonthCard(cardsByMonth, data?.cards, curKey, meId);
   const mine = yourCardState(myCard);
   // Where my counting card stands in the open month (confirmed, counted).
   const standing = mine.kind === 'confirmed' && !needsApproval(mine.card)
@@ -389,6 +391,21 @@ export default function LeagueBoardScreen({ navigation, route }) {
               <Text style={s.secondaryText}>Add a card I played</Text>
             </TouchableOpacity>
           </View>
+        </>
+      );
+    } else if (mine.kind === 'voided') {
+      badge = t('league.void.badge');
+      body = (
+        <>
+          <Text style={s.cardText}>{tr(voidedNote(mine.card, { isOwner: true, who: '' }))}</Text>
+          <TouchableOpacity
+            style={s.secondaryBtn}
+            onPress={() => navigation.navigate('LeagueCard', { leagueId, month: curKey, userId: meId })}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+          >
+            <Text style={s.secondaryText}>{t('league.void.openCard')}</Text>
+          </TouchableOpacity>
         </>
       );
     } else if (isMissed(mine.card, now)) {

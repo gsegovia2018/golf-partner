@@ -101,6 +101,27 @@ describe('LeagueBoardScreen', () => {
     expect(nav.navigate).toHaveBeenCalledWith('LeagueAddScore', { leagueId: 'L1' });
   });
 
+  test('an admin-voided card takes the month: the board shows it, not the announce buttons', async () => {
+    const snap = snapshot();
+    snap.cards = [card('me', 'void', 41, { voidKind: 'admin', voidedReason: 'Wrong tee: sheet says yellow', monthKey: THIS_MONTH, month: `${THIS_MONTH}-01` })];
+    store.getLeague.mockResolvedValue(snap);
+    const nav = makeNav();
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText(/^Voided by an admin: Wrong tee\. .* stays used\.$/));
+    expect(queryByText('Playing without the app')).toBeNull();
+    expect(queryByText('Play with the app')).toBeNull();
+    fireEvent.press(getByText('Open the card'));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueCard', { leagueId: 'L1', month: THIS_MONTH, userId: 'me' });
+  });
+
+  test('a withdrawn card frees the month: the announce buttons are back', async () => {
+    const snap = snapshot();
+    snap.cards = [card('me', 'void', null, { voidKind: 'withdrawn', monthKey: THIS_MONTH, month: `${THIS_MONTH}-01` })];
+    store.getLeague.mockResolvedValue(snap);
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('Playing without the app'));
+  });
+
   test('announced off-app: shows the announcement and "Add your score" opens LeagueAddScore', async () => {
     const teeTime = new Date(2025, 9, 4, 9, 30).toISOString();
     const announcedAt = new Date(2025, 9, 4, 9, 12).toISOString();

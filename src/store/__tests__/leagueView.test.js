@@ -2,7 +2,8 @@ import {
   monthName, ordinal, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel,
   positionMessage, cardStatus, monthRows, leagueSummary, viewableCards, monthBoard, collapseSeasonRows,
   tiePlaces, rankNotes, monthStanding, standingCells, monthLine, payoutPreview, stepParticipation,
-  formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, myRoundScored, markerAskedLine, firstName, initials, cardBreakdown, leagueNameMatches,
+  yourCardState, myMonthCard, monthCardsView, cardActions, voidedNote, voidReasonText, autoWithdrawNote,
+  formatNetDiff, formatNetDiffSigned, netDiffTone, myRoundScored, markerAskedLine, firstName, initials, cardBreakdown, leagueNameMatches,
 } from '../leagueView';
 
 const NOW = new Date(2026, 9, 4, 12, 0);
@@ -533,5 +534,156 @@ describe('payoutPreview and the stepper', () => {
     expect(stepParticipation(10, -1)).toBe(5);
     expect(stepParticipation(0, -1)).toBe(0);
     expect(stepParticipation(3, -1)).toBe(0);
+  });
+});
+
+describe('card actions menu', () => {
+  const NOW_A = new Date('2026-10-13T08:00:00Z');
+  const base = {
+    id: 'c1', userId: 'me', status: 'announced', source: 'offapp', month: '2026-10-01', monthKey: '2026-10',
+    teeTime: '2026-10-17T07:20:00Z', reschedules: 0,
+  };
+  const owner = { isOwner: true, isAdmin: false, otherAdmin: false };
+  const admin = { isOwner: false, isAdmin: true, otherAdmin: true };
+  const kinds = (items) => items.map((i) => i.kind);
+  const by = (items, kind) => items.find((i) => i.kind === kind);
+  const when = (d) => `@${d.toISOString().slice(0, 16)}`;
+
+  test('owner of an announced off-app card: change tee time (with its deadline) and withdraw', () => {
+    const items = cardActions(base, owner, {}, NOW_A, { when });
+    expect(kinds(items)).toEqual(['reschedule', 'withdraw']);
+    expect(by(items, 'reschedule')).toMatchObject({
+      enabled: true,
+      sub: { key: 'league.actions.reschedule.until', params: { until: '@2026-10-17T05:20', hours: 2, count: 2 } },
+    });
+    expect(by(items, 'withdraw')).toMatchObject({
+      enabled: true, tone: 'danger', sub: { key: 'league.actions.withdraw.sub', params: { monthKey: '2026-10' } },
+    });
+  });
+
+  test('one change left after a reschedule', () => {
+    expect(by(cardActions({ ...base, reschedules: 1 }, owner, {}, NOW_A, { when }), 'reschedule').sub.params.count).toBe(1);
+  });
+
+  test('after the tee time both are disabled and say why', () => {
+    const items = cardActions(base, owner, {}, new Date('2026-10-17T09:00:00Z'), { when });
+    expect(by(items, 'reschedule')).toMatchObject({ enabled: false, sub: { key: 'league.actions.reschedule.passed' } });
+    expect(by(items, 'withdraw')).toMatchObject({ enabled: false, sub: { key: 'league.actions.withdraw.teePassed' } });
+  });
+
+  test('inside the 2 h notice the reschedule is off but the card can still be withdrawn', () => {
+    const items = cardActions(base, owner, {}, new Date('2026-10-17T06:00:00Z'), { when });
+    expect(by(items, 'reschedule')).toMatchObject({ enabled: false, sub: { key: 'league.actions.reschedule.tooClose' } });
+    expect(by(items, 'withdraw').enabled).toBe(true);
+  });
+
+  test('the reschedule limit disables it', () => {
+    expect(by(cardActions({ ...base, reschedules: 2 }, owner, {}, NOW_A), 'reschedule'))
+      .toMatchObject({ enabled: false, sub: { key: 'league.actions.reschedule.limit' } });
+  });
+
+  test('an app card can be withdrawn before its first shot, not after', () => {
+    const app = { ...base, source: 'app', teeTime: null, status: 'playing' };
+    expect(kinds(cardActions(app, owner, {}, NOW_A))).toEqual(['withdraw']);
+    expect(by(cardActions(app, owner, {}, NOW_A), 'withdraw').enabled).toBe(true);
+    const started = cardActions({ ...app, firstShotAt: '2026-10-13T07:00:00Z', postBy: '2026-10-13T15:00:00Z' }, owner, {}, NOW_A);
+    expect(by(started, 'withdraw')).toMatchObject({ enabled: false, sub: { key: 'league.actions.withdraw.started' } });
+  });
+
+  test('a closed month disables every item with the month-closed reason', () => {
+    const items = cardActions({ ...base, month: '2026-09-01', monthKey: '2026-09' }, { ...owner, isAdmin: true }, {}, NOW_A);
+    expect(items.length).toBeGreaterThan(0);
+    items.forEach((i) => {
+      expect(i.enabled).toBe(false);
+      expect(i.sub.key).toBe('league.actions.monthClosed');
+    });
+  });
+
+  test('a submitted card gives its owner nothing; a member sees no menu at all', () => {
+    expect(cardActions({ ...base, status: 'submitted' }, owner, {}, NOW_A)).toEqual([]);
+    expect(cardActions(base, { isOwner: false, isAdmin: false }, {}, NOW_A)).toEqual([]);
+  });
+
+  test("admin on someone else's card: void, reopen (disabled unless missed), approve only when needed", () => {
+    const confirmed = { ...base, userId: 'javi', status: 'confirmed', source: 'app' };
+    const items = cardActions(confirmed, admin, {}, NOW_A);
+    expect(kinds(items)).toEqual(['void', 'reopen']);
+    expect(by(items, 'void')).toMatchObject({ enabled: true, tone: 'danger', sub: { key: 'league.actions.void.sub' } });
+    expect(by(items, 'reopen')).toMatchObject({ enabled: false, sub: { key: 'league.actions.reopen.notMissed' } });
+    const missed = cardActions({ ...confirmed, status: 'missed' }, admin, {}, NOW_A);
+    expect(by(missed, 'reopen').enabled).toBe(true);
+    const unannounced = cardActions({ ...confirmed, status: 'submitted', notAnnounced: true }, admin, {}, NOW_A);
+    expect(kinds(unannounced)).toEqual(['void', 'reopen', 'approve']);
+  });
+
+  test('an admin on their own card: nothing with another admin, void/reopen/approve as the only admin', () => {
+    const mine = { ...base, status: 'submitted', notAnnounced: true };
+    expect(cardActions(mine, { isOwner: true, isAdmin: true, otherAdmin: true }, {}, NOW_A)).toEqual([]);
+    expect(kinds(cardActions(mine, { isOwner: true, isAdmin: true, otherAdmin: false }, {}, NOW_A))).toEqual(['void', 'reopen', 'approve']);
+  });
+
+  test('a void card, an archived league and no card have no menu', () => {
+    expect(cardActions({ ...base, status: 'void', voidKind: 'admin' }, { ...admin }, {}, NOW_A)).toEqual([]);
+    expect(cardActions(base, owner, { archivedAt: '2026-10-01' }, NOW_A)).toEqual([]);
+    expect(cardActions(null, owner, {}, NOW_A)).toEqual([]);
+  });
+
+  test('autoWithdrawNote only for an app card with no first shot', () => {
+    const app = { source: 'app', status: 'playing', announcedAt: '2026-10-13T08:00:00Z', firstShotAt: null, postBy: null };
+    expect(autoWithdrawNote(app, when)).toEqual({ key: 'league.actions.withdraw.auto', params: { at: '@2026-10-14T08:00' } });
+    expect(autoWithdrawNote({ ...app, firstShotAt: '2026-10-13T09:00:00Z' })).toBeNull();
+  });
+});
+
+describe('cards that take the month (R15b) on the board and card screen', () => {
+  const voided = (extra) => ({
+    id: 'v1', userId: 'me', status: 'void', month: '2026-10-01', monthKey: '2026-10', points: 41, course: { name: 'RCG Sotogrande' }, ...extra,
+  });
+  const live = { id: 'l1', userId: 'javi', status: 'confirmed', month: '2026-10-01', monthKey: '2026-10', points: 38 };
+  const members = [{ userId: 'me', leftAt: null }, { userId: 'javi', leftAt: null }];
+
+  test('yourCardState: an admin void or a played-after-withdraw card is "voided", a withdrawal frees the month', () => {
+    expect(yourCardState(voided({ voidKind: 'admin', voidedReason: 'Wrong tee' })))
+      .toMatchObject({ kind: 'voided', voidKind: 'admin', pts: '41 pts', course: 'RCG Sotogrande' });
+    expect(yourCardState(voided({ voidKind: 'withdrawn_after_play' })).kind).toBe('voided');
+    expect(yourCardState(voided({ voidKind: 'withdrawn' }))).toEqual({ kind: 'none' });
+    expect(yourCardState(voided({ voidKind: 'auto_withdrawn' }))).toEqual({ kind: 'none' });
+    expect(yourCardState(voided({ voidKind: null }))).toEqual({ kind: 'none' });
+  });
+
+  test('myMonthCard prefers the live card, then a month-taking void card', () => {
+    const cardsByMonth = { '2026-10': [live] };
+    const cards = [voided({ voidKind: 'admin' }), live];
+    expect(myMonthCard(cardsByMonth, cards, '2026-10', 'me').id).toBe('v1');
+    expect(myMonthCard(cardsByMonth, cards, '2026-10', 'javi').id).toBe('l1');
+    expect(myMonthCard(cardsByMonth, [voided({ voidKind: 'withdrawn' })], '2026-10', 'me')).toBeNull();
+    expect(myMonthCard(cardsByMonth, [voided({ voidKind: 'admin' })], '2026-09', 'me')).toBeNull();
+  });
+
+  test('monthCardsView adds admin-voided cards for everyone and withdrawn ones only for their owner', () => {
+    const snap = { members, cardsByMonth: { '2026-10': [live] }, cards: [live, voided({ voidKind: 'admin' })] };
+    expect(monthCardsView(snap, '2026-10', 'javi').map((c) => c.id)).toEqual(['l1', 'v1']);
+    const withdrawn = { ...snap, cards: [live, voided({ voidKind: 'withdrawn' })] };
+    expect(monthCardsView(withdrawn, '2026-10', 'me').map((c) => c.id)).toEqual(['l1', 'v1']);
+    expect(monthCardsView(withdrawn, '2026-10', 'javi').map((c) => c.id)).toEqual(['l1']);
+  });
+
+  test('a member with a live card hides their void ones', () => {
+    const snap = { members, cardsByMonth: { '2026-10': [{ ...live, userId: 'me', id: 'l2' }] }, cards: [voided({ voidKind: 'admin' })] };
+    expect(monthCardsView(snap, '2026-10', 'me').map((c) => c.id)).toEqual(['l2']);
+  });
+
+  test('voidedNote says who and why', () => {
+    expect(voidedNote(voided({ voidKind: 'withdrawn' }), { isOwner: true, who: 'You' }).key).toBe('league.void.withdrawnYou');
+    expect(voidedNote(voided({ voidKind: 'withdrawn' }), { isOwner: false, who: 'Javi' }).key).toBe('league.void.withdrawnOther');
+    expect(voidedNote(voided({ voidKind: 'admin', voidedReason: 'Wrong tee: sheet says yellow' }), { isOwner: false, who: 'Javi' }))
+      .toMatchObject({ key: 'league.void.adminReason', params: { reason: 'Wrong tee', monthKey: '2026-10' } });
+    expect(voidedNote(voided({ voidKind: 'admin' }), { isOwner: false, who: 'Javi' }).key).toBe('league.void.admin');
+    expect(voidedNote(voided({ voidKind: 'withdrawn_after_play' }), { isOwner: true, who: 'You' }).key).toBe('league.void.afterPlay');
+  });
+
+  test('voidReasonText joins the reason and the note', () => {
+    expect(voidReasonText('Wrong tee', '  yellows ')).toBe('Wrong tee: yellows');
+    expect(voidReasonText('Other', '')).toBe('Other');
   });
 });

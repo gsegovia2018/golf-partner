@@ -1,10 +1,14 @@
 // League screens: presentational helpers (no I/O). Wording and number
 // formats live here so the Play tab, board and members screens agree.
-import { cardMonth, isMissed, needsApproval, deadlineInfo } from './leagueRules';
+import {
+  cardMonth, isMissed, needsApproval, deadlineInfo, takesMonth, canReschedule, canWithdraw, autoWithdrawAt,
+  isMonthClosed, OFFAPP_NOTICE_HOURS, MAX_RESCHEDULES, POST_WINDOW_HOURS,
+} from './leagueRules';
 import { seasonTable, monthResults } from './leagueStandings';
 import { isRatedTee, netDoubleBogeyCap } from './handicapIndex';
 import { calcExtraShots, calcStablefordPoints } from './scoring';
 import { formatNumber, formatOrdinal } from '../i18n';
+import { splitVoidReason } from './leagueTimeline';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -316,9 +320,23 @@ export function markerAskedLine(requestedAt, expiresAt, now = new Date()) {
 }
 
 // The "Your <Month> card" block: what state my card is in and what it shows.
-// kind: 'none' | 'announced' | 'playing' | 'submitted' | 'confirmed'
+// kind: 'none' | 'announced' | 'playing' | 'submitted' | 'confirmed' | 'voided'
+// A withdrawn card (or a void from before voidKind) is 'none': the month is
+// free. An admin's void, or a withdrawn card that was played anyway, keeps the
+// month taken (R15b), so the board shows that card instead of offering Announce.
 export function yourCardState(card) {
-  if (!card || card.status === 'void') return { kind: 'none' };
+  if (!card) return { kind: 'none' };
+  if (card.status === 'void') {
+    if (!takesMonth(card)) return { kind: 'none' };
+    return {
+      kind: 'voided',
+      voidKind: card.voidKind,
+      course: card.course?.name ?? null,
+      pts: card.points != null ? `${formatPoints(card.points)} pts` : null,
+      reason: card.voidedReason ?? null,
+      card,
+    };
+  }
   const course = card.course?.name ?? null;
   const pts = card.points != null ? `${formatPoints(card.points)} pts` : null;
   const hasNet = card.netDifferential != null;
@@ -335,6 +353,143 @@ export function yourCardState(card) {
     offApp: card.source === 'offapp',
     card,
   };
+}
+
+// My card of a month for the board: the live one, else a void one that still
+// takes the month (so the board shows it and does not offer Announce).
+export function myMonthCard(cardsByMonth, cards, month, userId) {
+  const live = (cardsByMonth?.[month] ?? []).find((c) => c.userId === userId);
+  if (live) return live;
+  return (cards ?? []).find((c) => c.userId === userId && c.monthKey === month && c.status === 'void' && takesMonth(c)) ?? null;
+}
+
+// The cards the card screen flicks through for a month: the board's live cards
+// (same order), then void cards that still take the month (admin voids and
+// withdrawn-after-play), then the viewer's own withdrawn card (so they see the
+// outcome and "Announce another card"). One card per member: a live card hides
+// that member's void ones.
+export function monthCardsView(snapshot, month, viewerId, now = new Date()) {
+  const { members, cardsByMonth, cards } = snapshot ?? {};
+  const live = monthRows(members, cardsByMonth, month, now).map((r) => r.card).filter(Boolean);
+  const seen = new Set(live.map((c) => c.userId));
+  const active = new Set((members ?? []).filter((m) => !m.leftAt).map((m) => m.userId));
+  const extra = [];
+  for (const c of cards ?? []) {
+    if (c.status !== 'void' || c.monthKey !== month || seen.has(c.userId) || !active.has(c.userId)) continue;
+    const own = c.userId === viewerId && (c.voidKind === 'withdrawn' || c.voidKind === 'auto_withdrawn');
+    if (!takesMonth(c) && !own) continue;
+    seen.add(c.userId);
+    extra.push(c);
+  }
+  return [...live, ...extra];
+}
+
+// Why a void card is void, as a message for the card screen and the board.
+export function voidedNote(card, { isOwner, who }) {
+  const { reason, note } = splitVoidReason(card.voidedReason);
+  const params = { monthKey: card.monthKey ?? String(card.month ?? '').slice(0, 7), name: who, reason: reason ?? note };
+  switch (card.voidKind) {
+    case 'withdrawn':
+      return { key: isOwner ? 'league.void.withdrawnYou' : 'league.void.withdrawnOther', params };
+    case 'auto_withdrawn':
+      return { key: isOwner ? 'league.void.autoYou' : 'league.void.autoOther', params };
+    case 'withdrawn_after_play':
+      return { key: 'league.void.afterPlay', params };
+    default:
+      return { key: params.reason ? 'league.void.adminReason' : 'league.void.admin', params };
+  }
+}
+
+// The reasons an admin can pick when voiding a card.
+export const VOID_REASONS = [
+  { id: 'wrongTee', key: 'league.void.reason.wrongTee' },
+  { id: 'scoreMismatch', key: 'league.void.reason.scoreMismatch' },
+  { id: 'notEighteen', key: 'league.void.reason.notEighteen' },
+  { id: 'notConfirmed', key: 'league.void.reason.notConfirmed' },
+  { id: 'other', key: 'league.void.reason.other' },
+];
+
+// What goes to void_league_card: the reason's text, plus ": <note>" when the
+// admin wrote one. The timeline splits it again (leagueTimeline).
+export function voidReasonText(reasonLabel, note) {
+  const n = String(note ?? '').trim();
+  return n ? `${reasonLabel}: ${n}` : reasonLabel;
+}
+
+// The ⋯ "Card actions" menu of a card screen. viewer = { isOwner, isAdmin,
+// otherAdmin } (otherAdmin: another active admin exists; an admin acts on their
+// own card only without one: R10). Each item says its deadline or consequence;
+// a disabled one says why. `when(date)` formats an instant for the text (the
+// screen passes a localised one) and `clock(date)` an instant's time of day. Returns [] when there is nothing to offer,
+// so the screen hides the button.
+export function cardActions(card, viewer, league, now = new Date(), { when = (d) => d.toISOString(), clock = (d) => d.toISOString().slice(11, 16) } = {}) {
+  if (!card || card.status === 'void' || league?.archivedAt) return [];
+  const { isOwner, isAdmin, otherAdmin } = viewer ?? {};
+  const monthKey = String(card.monthKey ?? card.month ?? '').slice(0, 7);
+  const closed = monthKey ? isMonthClosed(monthKey, now) : false;
+  const closedMsg = { key: 'league.actions.monthClosed', params: { monthKey } };
+  const items = [];
+  const nowMs = new Date(now).getTime();
+  const teeMs = card.teeTime ? new Date(card.teeTime).getTime() : NaN;
+  const live = card.status === 'announced' || card.status === 'playing';
+
+  if (isOwner && card.source === 'offapp' && card.status === 'announced') {
+    const enabled = canReschedule(card, now) && !closed;
+    let sub;
+    if (closed) sub = closedMsg;
+    else if (nowMs >= teeMs) sub = { key: 'league.actions.reschedule.passed' };
+    else if ((card.reschedules ?? 0) >= MAX_RESCHEDULES) sub = { key: 'league.actions.reschedule.limit', params: { count: MAX_RESCHEDULES } };
+    else if (!enabled) sub = { key: 'league.actions.reschedule.tooClose', params: { hours: OFFAPP_NOTICE_HOURS } };
+    else {
+      sub = {
+        key: 'league.actions.reschedule.until',
+        params: {
+          until: when(new Date(teeMs - OFFAPP_NOTICE_HOURS * 3600000)),
+          hours: OFFAPP_NOTICE_HOURS,
+          count: MAX_RESCHEDULES - (card.reschedules ?? 0),
+        },
+      };
+    }
+    items.push({ kind: 'reschedule', icon: 'edit-2', title: { key: 'league.actions.reschedule.title' }, sub, enabled });
+  }
+
+  if (isOwner && live) {
+    const can = canWithdraw(card, now) && !closed;
+    let sub;
+    if (closed) sub = closedMsg;
+    else if (can) sub = { key: 'league.actions.withdraw.sub', params: { monthKey } };
+    else if (card.source === 'offapp') sub = { key: 'league.actions.withdraw.teePassed', params: { time: clock(new Date(card.teeTime)) } };
+    else sub = { key: 'league.actions.withdraw.started' };
+    items.push({ kind: 'withdraw', icon: 'log-out', title: { key: 'league.actions.withdraw.title' }, sub, enabled: can, tone: 'danger' });
+  }
+
+  // Admins: their own card only while they are the only admin.
+  if (isAdmin && (!isOwner || !otherAdmin)) {
+    items.push({
+      kind: 'void', icon: 'slash', title: { key: 'league.actions.void.title' },
+      sub: closed ? closedMsg : { key: 'league.actions.void.sub' }, enabled: !closed, tone: 'danger',
+    });
+    const missed = isMissed(card, now);
+    items.push({
+      kind: 'reopen', icon: 'rotate-ccw', title: { key: 'league.actions.reopen.title' },
+      sub: closed ? closedMsg : missed ? { key: 'league.actions.reopen.sub', params: { hours: POST_WINDOW_HOURS } } : { key: 'league.actions.reopen.notMissed' },
+      enabled: missed && !closed,
+    });
+    if (needsApproval(card)) {
+      items.push({
+        kind: 'approve', icon: 'user-check', title: { key: 'league.actions.approve.title' },
+        sub: closed ? closedMsg : { key: 'league.actions.approve.sub', params: { monthKey } }, enabled: !closed,
+      });
+    }
+  }
+  return items;
+}
+
+// An app card with no first shot is withdrawn automatically; the withdraw
+// sheet says when. null for any other card.
+export function autoWithdrawNote(card, when = (d) => d.toISOString()) {
+  const at = autoWithdrawAt(card);
+  return at ? { key: 'league.actions.withdraw.auto', params: { at: when(at) } } : null;
 }
 
 // Has my league round every hole scored? true / false, or null when this
