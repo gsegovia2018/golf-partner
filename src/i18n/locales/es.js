@@ -46,4 +46,18 @@ export default {
   'marker.wrong': 'Hay algo mal',
   'marker.footnote.named': 'Confirmas los golpes que ves; con ellos se calcula el resultado de {name} en la liga. No necesitas cuenta. Este código solo vale una vez.',
   'marker.footnote.anon': 'Confirmas los golpes que ves; con ellos se calcula el resultado en la liga. No necesitas cuenta. Este código solo vale una vez.',
+
+  'scorecard.grid.strokes': 'Golpes',
+  'scorecard.grid.points': 'Puntos',
+  'scorecard.grid.frontNine': 'IDA',
+  'scorecard.grid.backNine': 'VUELTA',
+  'scorecard.grid.hole': 'Hoyo',
+  'scorecard.grid.par': 'PAR',
+  'scorecard.grid.si': 'HCP',
+  'scorecard.grid.out': 'IDA',
+  'scorecard.grid.in': 'VUELTA',
+  'scorecard.grid.parTotal': 'PAR',
+  'scorecard.grid.strokesTotal': 'GOLPES',
+  'scorecard.grid.pointsTotal': 'PUNTOS',
+  'scorecard.grid.vsPar': 'vs PAR',
 };

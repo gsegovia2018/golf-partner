@@ -46,4 +46,18 @@ export default {
   'marker.wrong': "Something's wrong",
   'marker.footnote.named': "You're confirming the strokes shown; {name}'s league result is worked out from them once you do. No account needed. This code works once.",
   'marker.footnote.anon': "You're confirming the strokes shown; the league result is worked out from them once you do. No account needed. This code works once.",
+
+  'scorecard.grid.strokes': 'Strokes',
+  'scorecard.grid.points': 'Points',
+  'scorecard.grid.frontNine': 'FRONT NINE',
+  'scorecard.grid.backNine': 'BACK NINE',
+  'scorecard.grid.hole': 'Hole',
+  'scorecard.grid.par': 'Par',
+  'scorecard.grid.si': 'SI',
+  'scorecard.grid.out': 'OUT',
+  'scorecard.grid.in': 'IN',
+  'scorecard.grid.parTotal': 'PAR',
+  'scorecard.grid.strokesTotal': 'STROKES',
+  'scorecard.grid.pointsTotal': 'POINTS',
+  'scorecard.grid.vsPar': 'vs PAR',
 };
