@@ -136,3 +136,29 @@ describe('DragLoupe', () => {
     expect(queryByTestId('edit-loupe', opts)).toBeNull();
   });
 });
+
+describe('DragLoupe placement "corner" (D28)', () => {
+  const { loupeCorner } = require('../../../swing/loupe');
+  test('sits in the right-hand corner away from the mark, whatever the finger', () => {
+    const { ref, ring, at } = mount({ placement: 'corner' });
+    act(() => ref.current.show({ finger: [10, 10], mark: [0.4, 0.8] }));
+    expect(at(ring())).toEqual(loupeCorner(0, RECT));
+    act(() => ref.current.show({ finger: [10, 10], mark: [0.4, 0.2] }));
+    expect(at(ring())).toEqual(loupeCorner(1, RECT));
+  });
+
+  test('takes shared values from its parent (a UI-thread gesture writes them)', () => {
+    const Parent = () => {
+      const v = require('../DragLoupe').useLoupeValues();
+      Parent.v = v;
+      return <DragLoupe values={v} placement="corner" rect={RECT} uri="file:///still.jpg" />;
+    };
+    const u = render(<Parent />);
+    const flat = (el) => StyleSheet.flatten(el.props.style);
+    act(() => { Parent.v.side.value = 1; Parent.v.opacity.value = 1; Parent.v.mx.value = 0.5; Parent.v.my.value = 0.3; });
+    const r = u.getByTestId('edit-loupe', opts);
+    expect(flat(r).opacity).toBe(1);
+    expect(flat(r).transform).toEqual([{ translateX: loupeCorner(1, RECT).left }, { translateY: loupeCorner(1, RECT).top }]);
+    expect(flat(r.findByType(Image).parent).transform).toEqual([{ translateX: loupeImage([0.5, 0.3], RECT).left }, { translateY: loupeImage([0.5, 0.3], RECT).top }]);
+  });
+});

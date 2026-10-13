@@ -6,7 +6,7 @@ import {
 } from '../markPass';
 import {
   buildDraft, recompute, draftToMarks, markStatus, placeMark, setHidden, confirmMark, confirmPosition, confirmMoves,
-  restorePosition, skipPosition, pendingMoves, primaryAction, adoptFrame, analyzeMarks,
+  restorePosition, skipPosition, pendingMoves, primaryAction, chooseFrame, analyzeMarks,
 } from '../editMarks';
 import { placeLabels, chipWidth } from '../../components/swing/MarkCanvasParts';
 import { emptyMarks, frameLabel, withFrame, marksForAnalyze, parseMarks } from '../labels';
@@ -94,13 +94,11 @@ describe('the canvas draft (D26)', () => {
     expect(a.ballConfirmed).toBe(true);
   });
 
-  test('the primary button says what it saves', () => {
+  test('the step-2 primary button says what it saves', () => {
     const c = ctx();
-    const f = c.draft.cps.top.frame;
-    expect(primaryAction(c.draft, c.base, 'top', f + 2)).toBe('use');
-    expect(primaryAction(c.draft, c.base, 'top', f)).toBe('noHead');
-    expect(primaryAction(placeMark(c.draft, 'top', 'head', [0.3, 0.2]), c.base, 'top', f)).toBe('save');
-    expect(primaryAction(setHidden(c.draft, 'top', true), c.base, 'top', f)).toBe('looks');
+    expect(primaryAction(c.draft, c.base, 'top')).toBe('noHead');
+    expect(primaryAction(placeMark(c.draft, 'top', 'head', [0.3, 0.2]), c.base, 'top')).toBe('save');
+    expect(primaryAction(setHidden(c.draft, 'top', true), c.base, 'top')).toBe('looks');
   });
 
   test('skip and discard put the position back as it was on arrival; confirm-and-leave keeps the move', () => {
@@ -120,20 +118,30 @@ describe('the canvas draft (D26)', () => {
 });
 
 describe('review fixes', () => {
-  test('adopting a frame asks for the marks to be confirmed again and analyses the clubhead as shown', () => {
+  test('D28: choosing another frame resets that position\'s marks; the same frame keeps them; the ball stays', () => {
     const c = ctx();
-    const ok = confirmPosition(placeMark(c.draft, 'impact', 'head', [0.6, 0.6]), c.base, 'impact');
+    const placed = placeMark(placeMark(c.draft, 'impact', 'hands', [0.4, 0.5]), 'impact', 'head', [0.6, 0.6]);
+    const ok = confirmPosition(placeMark(placed, 'address', 'ball', [0.5, 0.8]), c.base, 'impact');
     const f = ok.cps.impact.frame;
-    const moved = adoptFrame(ok, 'impact', f + 2);
-    expect(moved.cps.impact.frame).toBe(f + 2);
-    expect(markStatus(moved, c.base, 'impact', 'hands')).toBe('proposed');
-    expect(moved.cps.impact.confirmed.head).toBe(false);
-    expect(adoptFrame(ok, 'impact', f)).toBe(ok);
-    // an unmoved proposal on a moved frame is still sent to analyze(), never re-read at the old frame
-    const prop = { ...c.draft, cps: { ...c.draft.cps, impact: { ...c.draft.cps.impact, head: [0.5, 0.7] } } };
-    const base = { ...c.base, cps: { ...c.base.cps, impact: { ...c.base.cps.impact, head: [0.5, 0.7] } } };
-    expect(analyzeMarks(adoptFrame(prop, 'impact', f + 1), base).impact).toEqual({ frame: f + 1, head: [0.5, 0.7] });
-    expect(analyzeMarks(prop, base).impact).toBeUndefined();
+    const same = chooseFrame(ok, c.base, 'impact', f);
+    expect(same.reset).toBe(false);
+    expect(same.draft.cps.impact).toMatchObject({ hands: [0.4, 0.5], head: [0.6, 0.6], frameOk: true });
+    const moved = chooseFrame(ok, c.base, 'impact', f + 2);
+    expect(moved.reset).toBe(true);
+    expect(moved.draft.cps.impact).toMatchObject({
+      frame: f + 2, hands: null, head: null, hidden: false, confirmed: { hands: false, head: false }, frameOk: true,
+    });
+    expect(markStatus(moved.draft, c.base, 'impact', 'hands')).toBe('proposed'); // the tracked grip at f + 2
+    expect(markStatus(moved.draft, c.base, 'impact', 'head')).toBe('missing');
+    expect(moved.draft.ball).toEqual(ok.ball);
+    expect(ok.status.impact).toBe('confirmed');
+    expect(moved.draft.status.impact).toBeUndefined(); // confirmed on the old frame: to do again
+    expect(same.draft.status.impact).toBe('confirmed');
+    // back on the proposed frame the clubhead proposal returns
+    const back = chooseFrame(moved.draft, c.base, 'impact', c.base.cps.impact.frame);
+    expect(back.draft.cps.impact.head).toEqual(c.base.cps.impact.head);
+    // the chosen frame is analysed there, with no clubhead read again from the old frame
+    expect(analyzeMarks(moved.draft, c.base).impact).toEqual({ frame: f + 2 });
   });
 
   test('chips at address never overlap each other or another mark; the active one always gets its chip', () => {

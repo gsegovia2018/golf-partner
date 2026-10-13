@@ -112,3 +112,26 @@ describe('loupeImage', () => {
     expect(img.top).toBeCloseTo(R - 0.5 * rect.h * 3, 9);
   });
 });
+
+describe('D28: the loupe in the corner opposite the mark', () => {
+  const { loupeCorner, loupeSide, LOUPE_MARGIN, LOUPE_TAG_CLEAR } = require('../loupe');
+  const rect = { w: 320, h: 570 };
+
+  test('right-hand corners, inside the picture', () => {
+    expect(loupeCorner(0, rect)).toEqual({ left: 320 - LOUPE_SIZE - LOUPE_MARGIN, top: LOUPE_MARGIN });
+    expect(loupeCorner(1, rect)).toEqual({ left: 320 - LOUPE_SIZE - LOUPE_MARGIN, top: 570 - LOUPE_SIZE - LOUPE_MARGIN - LOUPE_TAG_CLEAR }); // clear of the frame tag
+  });
+
+  test('a mark in the top half gets the bottom corner (clubhead at Top), one in the bottom half the top corner (ball, clubhead at impact)', () => {
+    expect(loupeSide([240, 120], rect)).toBe(1);
+    expect(loupeSide([110, 480], rect)).toBe(0);
+  });
+
+  test('it stays put during a drag until the mark comes near the ring', () => {
+    expect(loupeSide([110, 200], rect, LOUPE_SIZE, 0)).toBe(0); // top half, far from the top-right ring
+    const at = loupeCorner(0, rect);
+    expect(loupeSide([at.left + 60, at.top + 60], rect, LOUPE_SIZE, 0)).toBe(1);
+    expect(loupeSide([at.left - 20, at.top + 60], rect, LOUPE_SIZE, 0)).toBe(1); // 80 px from the centre: within ring + clearance (84)
+    expect(loupeSide([at.left - 30, at.top + 60], rect, LOUPE_SIZE, 0)).toBe(0);
+  });
+});

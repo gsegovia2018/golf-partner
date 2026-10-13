@@ -5,13 +5,36 @@ import Animated, {
 } from 'react-native-reanimated';
 import { hud } from '../../theme/tokens';
 import {
-  LOUPE_SIZE, LOUPE_FLASH_MS, loupePlacement, loupeImage,
+  LOUPE_SIZE, LOUPE_FLASH_MS, loupePlacement, loupeImage, loupeCorner, loupeSide,
 } from '../../swing/loupe';
 import { MARK_COLOR, HANDS_FILL } from './MarkCanvasParts';
 
-const FADE_MS = 90;
+export const LOUPE_FADE_MS = 90;
 const GAP = 7; // crosshair: the centre stays open so the marked pixel itself is visible
-const KIND = { hands: 1, head: 2, ball: 3 };
+export const LOUPE_KIND = { hands: 1, head: 2, ball: 3 }; // the dragged mark in `kind`; 0 = none
+export const KIND_NAMES = [null, 'hands', 'head', 'ball'];
+
+/**
+ * The loupe's shared values, for a parent that drives it from a UI-thread gesture (D28): the finger
+ * (fx, fy, rect px), the mark (mx, my, normalised), the ring's opacity and the dragged mark's kind.
+ */
+export function useLoupeValues() {
+  return {
+    fx: useSharedValue(0),
+    fy: useSharedValue(0),
+    mx: useSharedValue(0.5),
+    my: useSharedValue(0.5),
+    opacity: useSharedValue(0),
+    kind: useSharedValue(0),
+    side: useSharedValue(-1), // placement 'corner': 0 top-right, 1 bottom-right, -1 not chosen yet
+  };
+}
+
+/** Where the ring is: above the finger (D20), or in the corner opposite the mark (D28). */
+function ringAt(corner, side, finger, rect, size) {
+  'worklet';
+  return corner ? loupeCorner(side, rect, size) : loupePlacement(finger, rect, size);
+}
 
 function Cross({ size }) {
   const arm = size / 2 - GAP;
@@ -39,17 +62,23 @@ function Cross({ size }) {
  * that mark under the loupe), ref.update({ finger, mark }), ref.hide() (the loupe goes, the dragged
  * mark stays until ref.clearMark(), so it never vanishes before the committed one is drawn),
  * ref.flash({ mark }) for an arrow nudge (no finger: it is placed off the mark itself).
+ * `values` (useLoupeValues()) hands the shared values to a parent whose gesture writes them on the
+ * UI thread (the marking canvas); without it the loupe keeps its own. `placement` 'corner' (D28)
+ * puts the ring in the right-hand corner away from the mark instead of above the finger.
+ *
+ * The image is the canvas's own still, at the same uri and the same resizeMethod ("scale"), so the
+ * image cache serves the one decoded bitmap to both: the 3x picture is that bitmap drawn larger and
+ * moved by a transform, never a second decode or a crop per drag.
  */
 function DragLoupe({
-  rect, uri, ref, size = LOUPE_SIZE, flashMs = LOUPE_FLASH_MS, label = null, color = hud.text, testID = 'edit-loupe',
+  rect, uri, ref, values = null, placement = 'finger', size = LOUPE_SIZE, flashMs = LOUPE_FLASH_MS, label = null, color = hud.text, testID = 'edit-loupe',
 }) {
   const reduced = useReducedMotion();
-  const fx = useSharedValue(0); // the finger, rect px
-  const fy = useSharedValue(0);
-  const mx = useSharedValue(0.5); // the mark, normalised
-  const my = useSharedValue(0.5);
-  const opacity = useSharedValue(0); // the loupe
-  const kind = useSharedValue(0); // the dragged mark: 0 none
+  const own = useLoupeValues();
+  const {
+    fx, fy, mx, my, opacity, kind, side,
+  } = values ?? own;
+  const corner = placement === 'corner';
   const timer = useRef(null);
   const geo = useRef(rect);
   geo.current = rect;
@@ -57,32 +86,33 @@ function DragLoupe({
 
   const fadeIn = () => {
     if (reduced) { opacity.value = 1; return; }
-    if (opacity.value < 1) opacity.value = withTiming(1, { duration: FADE_MS, easing: Easing.out(Easing.quad) });
+    if (opacity.value < 1) opacity.value = withTiming(1, { duration: LOUPE_FADE_MS, easing: Easing.out(Easing.quad) });
   };
-  const put = ({ finger, mark }) => {
+  const put = ({ finger, mark }, fresh = false) => {
     fx.value = finger[0]; fy.value = finger[1];
     mx.value = mark[0]; my.value = mark[1];
+    if (corner) side.value = loupeSide([mark[0] * geo.current.w, mark[1] * geo.current.h], geo.current, size, fresh ? -1 : side.value);
   };
 
   useImperativeHandle(ref, () => ({
-    show: (s) => { stop(); put(s); kind.value = KIND[s.kind] ?? 0; fadeIn(); },
+    show: (s) => { stop(); put(s, true); kind.value = LOUPE_KIND[s.kind] ?? 0; fadeIn(); },
     update: (s) => put(s),
     hide: () => { stop(); opacity.value = 0; },
     clearMark: () => { kind.value = 0; },
     flash: ({ mark }) => {
       stop();
       const g = geo.current;
-      put({ finger: [mark[0] * g.w, mark[1] * g.h], mark });
+      put({ finger: [mark[0] * g.w, mark[1] * g.h], mark }, true);
       fadeIn();
       timer.current = setTimeout(() => { timer.current = null; opacity.value = 0; }, flashMs);
     },
-  }), [flashMs, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [flashMs, reduced, corner]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => stop, []);
 
   const rw = rect?.w ?? 0;
   const rh = rect?.h ?? 0;
   const ring = useAnimatedStyle(() => {
-    const at = loupePlacement([fx.value, fy.value], { w: rw, h: rh }, size);
+    const at = ringAt(corner, side.value, [fx.value, fy.value], { w: rw, h: rh }, size);
     return { opacity: opacity.value, transform: [{ translateX: at.left }, { translateY: at.top }] };
   });
   const photo = useAnimatedStyle(() => {
@@ -90,7 +120,7 @@ function DragLoupe({
     return { transform: [{ translateX: img.left }, { translateY: img.top }] };
   });
   const chip = useAnimatedStyle(() => {
-    const at = loupePlacement([fx.value, fy.value], { w: rw, h: rh }, size);
+    const at = ringAt(corner, side.value, [fx.value, fy.value], { w: rw, h: rh }, size);
     // a chip just above the ring, below it near the top
     const top = at.top >= 24 ? at.top - 24 : at.top + size + 4;
     return { opacity: opacity.value, transform: [{ translateX: at.left }, { translateY: top }] };
@@ -119,7 +149,7 @@ function DragLoupe({
         style={[styles.ring, { width: size, height: size, borderRadius: size / 2 }, ring]}
       >
         <Animated.View style={[styles.photo, { width: rw * 3, height: rh * 3 }, photo]}>
-          {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="stretch" /> : null}
+          {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="stretch" resizeMethod="scale" /> : null}
         </Animated.View>
         <Cross size={size} />
       </Animated.View>
