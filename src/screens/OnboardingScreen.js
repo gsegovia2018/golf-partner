@@ -8,6 +8,7 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import { upsertProfile, isUsernameAvailable } from '../store/profileStore';
+import { useT, t as translate } from '../i18n';
 
 // Blocking first-run step for fresh sign-ups (AppNavigator gates on a
 // missing username; existing accounts sign in straight through). Username
@@ -18,6 +19,7 @@ import { upsertProfile, isUsernameAvailable } from '../store/profileStore';
 // the gate can drop.
 export default function OnboardingScreen({ profile, onDone }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   // Suggest the email local-part, squeezed into the allowed charset — same
@@ -65,18 +67,18 @@ export default function OnboardingScreen({ profile, onDone }) {
     try {
       const available = await isUsernameAvailable(trimmedUsername);
       if (!available) {
-        Alert.alert('Username taken', 'That username is already taken. Pick another one.');
+        Alert.alert(translate('account.usernameTaken.title'), translate('account.usernameTaken.body'));
         return;
       }
       await upsertProfile({ username: trimmedUsername, displayName: trimmedDisplayName, gender });
       onDone();
     } catch (err) {
-      const msg = err?.message ?? 'Could not save profile';
+      const msg = err?.message ?? translate('account.saveFailed');
       // Race backstop: unique(lower(username)) surfaces as 23505.
       if (err?.code === '23505' || /duplicate|unique/i.test(msg)) {
-        Alert.alert('Username taken', 'That username is already taken. Pick another one.');
+        Alert.alert(translate('account.usernameTaken.title'), translate('account.usernameTaken.body'));
       } else {
-        Alert.alert('Error', msg);
+        Alert.alert(translate('common.error'), msg);
       }
     } finally {
       setSaving(false);
@@ -90,16 +92,16 @@ export default function OnboardingScreen({ profile, onDone }) {
           <View style={s.heroIcon}>
             <Feather name="flag" size={26} color={theme.accent.primary} />
           </View>
-          <Text style={s.title}>Welcome to Golf Partner</Text>
-          <Text style={s.subtitle}>Three quick things before you tee off.</Text>
+          <Text style={s.title}>{t('onboarding.title')}</Text>
+          <Text style={s.subtitle}>{t('onboarding.subtitle')}</Text>
         </View>
 
         <View style={s.fieldGroup}>
-          <Text style={s.fieldLabel}>Username</Text>
+          <Text style={s.fieldLabel}>{t('account.username')}</Text>
           <TextInput
             style={s.input}
-            accessibilityLabel="Username"
-            placeholder="shorthandle"
+            accessibilityLabel={t('account.username')}
+            placeholder={t('account.usernamePlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -115,21 +117,21 @@ export default function OnboardingScreen({ profile, onDone }) {
             availability === 'taken' && { color: theme.destructive ?? '#c8102e' },
           ]}>
             {username.length > 0 && !usernameValid
-              ? 'Must be 3–20 characters: lowercase letters, digits or underscores.'
+              ? t('onboarding.username.invalid')
               : availability === 'taken'
-                ? 'That username is already taken. Pick another one.'
+                ? t('account.usernameTaken.body')
                 : availability === 'available'
-                  ? `✓ Available — friends find you as @${trimmedUsername}`
-                  : 'Unique handle friends use to find you. You can change it later.'}
+                  ? t('onboarding.username.available', { username: trimmedUsername })
+                  : t('onboarding.username.hint')}
           </Text>
         </View>
 
         <View style={s.fieldGroup}>
-          <Text style={s.fieldLabel}>Display name</Text>
+          <Text style={s.fieldLabel}>{t('account.displayName')}</Text>
           <TextInput
             style={s.input}
-            accessibilityLabel="Display name"
-            placeholder="Your name"
+            accessibilityLabel={t('account.displayName')}
+            placeholder={t('account.namePlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -137,33 +139,33 @@ export default function OnboardingScreen({ profile, onDone }) {
             onChangeText={setDisplayName}
             maxLength={40}
           />
-          <Text style={s.fieldHint}>How you appear on scorecards and leaderboards.</Text>
+          <Text style={s.fieldHint}>{t('onboarding.displayName.hint')}</Text>
         </View>
 
         <View style={s.fieldGroup}>
-          <Text style={s.fieldLabel}>Gender</Text>
+          <Text style={s.fieldLabel}>{t('account.gender')}</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-            {[['male', 'Male'], ['female', 'Female']].map(([value, label]) => (
+            {[['male', 'common.male'], ['female', 'common.female']].map(([value, label]) => (
               <TouchableOpacity
                 key={value}
                 onPress={() => setGender(value)}
                 style={[s.genderPill, gender === value && s.genderPillActive]}
                 accessibilityRole="button"
-                accessibilityLabel={label}
+                accessibilityLabel={t(label)}
                 accessibilityState={{ selected: gender === value }}
                 activeOpacity={0.7}
               >
-                <Text style={[s.genderPillText, gender === value && s.genderPillTextActive]}>{label}</Text>
+                <Text style={[s.genderPillText, gender === value && s.genderPillTextActive]}>{t(label)}</Text>
               </TouchableOpacity>
             ))}
           </View>
           <Text style={s.fieldHint}>
-            Sets which tee rating (men&apos;s or women&apos;s) your handicap uses.
+            {t('account.genderHint')}
           </Text>
         </View>
 
         <TouchableOpacity
-          accessibilityLabel="Continue"
+          accessibilityLabel={t('onboarding.continue')}
           style={[s.continueBtn, !canContinue && { opacity: 0.5 }]}
           onPress={submit}
           disabled={!canContinue}
@@ -171,7 +173,7 @@ export default function OnboardingScreen({ profile, onDone }) {
         >
           {saving
             ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-            : <Text style={s.continueBtnText}>Continue</Text>}
+            : <Text style={s.continueBtnText}>{t('onboarding.continue')}</Text>}
         </TouchableOpacity>
       </ScrollView>
     </ScreenContainer>

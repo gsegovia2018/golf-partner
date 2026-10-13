@@ -8,6 +8,7 @@ import { validateNewPassword } from '../lib/passwordReset';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
+import { useT, t as translate, tr } from '../i18n';
 
 // Shown when AuthContext detects a password-recovery link (web query params
 // or the native `golf://reset-password` deep link) — see AuthContext's
@@ -15,6 +16,7 @@ import { semantic } from '../theme/tokens';
 // the normal signed-in/signed-out screens while it's true.
 export default function SetNewPasswordScreen() {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const { clearPasswordRecovery } = useAuth();
 
@@ -33,10 +35,10 @@ export default function SetNewPasswordScreen() {
     try {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {
-        Alert.alert('Error', updateError.message);
+        Alert.alert(translate('common.error'), updateError.message);
         return;
       }
-      Alert.alert('Password updated', 'You can now use your new password to sign in.');
+      Alert.alert(translate('auth.passwordUpdated.title'), translate('auth.passwordUpdated.body'));
       clearPasswordRecovery();
     } finally {
       setLoading(false);
@@ -63,12 +65,12 @@ export default function SetNewPasswordScreen() {
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={s.inner}>
         <Text style={s.logo}>Golf Partner</Text>
-        <Text style={s.tagline}>Set a new password</Text>
+        <Text style={s.tagline}>{t('auth.setNewPassword.tagline')}</Text>
 
         <View style={s.card}>
           <TextInput
             style={[s.input, fieldError && s.inputError]}
-            placeholder="New password"
+            placeholder={t('auth.newPassword')}
             placeholderTextColor={theme.text.muted}
             secureTextEntry
             autoCapitalize="none"
@@ -82,7 +84,7 @@ export default function SetNewPasswordScreen() {
 
           <TextInput
             style={[s.input, fieldError && s.inputError]}
-            placeholder="Confirm new password"
+            placeholder={t('auth.confirmPassword')}
             placeholderTextColor={theme.text.muted}
             secureTextEntry
             autoCapitalize="none"
@@ -94,7 +96,7 @@ export default function SetNewPasswordScreen() {
             onBlur={() => setTouched(true)}
             onSubmitEditing={submit}
           />
-          {fieldError && <Text style={s.fieldError}>{fieldError}</Text>}
+          {fieldError && <Text style={s.fieldError}>{tr(fieldError)}</Text>}
 
           <TouchableOpacity
             style={[s.btn, loading && { opacity: 0.5 }]}
@@ -104,7 +106,7 @@ export default function SetNewPasswordScreen() {
           >
             {loading
               ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-              : <Text style={s.btnText}>Set new password</Text>}
+              : <Text style={s.btnText}>{t('auth.setNewPassword.button')}</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -113,7 +115,7 @@ export default function SetNewPasswordScreen() {
             disabled={loading}
             activeOpacity={0.7}
           >
-            <Text style={s.cancelText}>Back to sign in</Text>
+            <Text style={s.cancelText}>{t('auth.backToSignIn')}</Text>
           </TouchableOpacity>
         </View>
       </View>

@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet, useWindowDimensions, Modal } from 'r
 import { useTheme } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
 import { measureTourTarget } from './tourTargets';
+import { useT, formatNumber } from '../../i18n';
 
 const SCRIM = 'rgba(10, 20, 15, 0.62)';
 const RING_PAD = 6;
@@ -23,6 +24,7 @@ const delay = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 // must never point at the wrong place or trap the user.
 export default function CoachMarks({ steps, onDone, onSkip }) {
   const { theme } = useTheme();
+  const t = useT();
   const { width: winW, height: winH } = useWindowDimensions();
   const [current, setCurrent] = useState(null); // { index, rect } | null
   const alive = useRef(true);
@@ -109,20 +111,20 @@ export default function CoachMarks({ steps, onDone, onSkip }) {
         <Pressable
           testID="coachmarks-target-press"
           accessibilityRole="button"
-          accessibilityLabel={`${step.title} — next tour stop`}
+          accessibilityLabel={t('tour.nextStop', { title: t(step.title) })}
           onPress={next}
           style={[s.targetPress, ring]}
         />
         <View style={[s.card, cardPos]}>
-          <Text style={s.overline}>{`TOUR · ${index + 1} OF ${steps.length}`}</Text>
-          <Text style={s.title}>{step.title}</Text>
-          <Text style={s.body}>{step.body}</Text>
+          <Text style={s.overline}>{t('tour.overline', { index: formatNumber(index + 1), total: formatNumber(steps.length) })}</Text>
+          <Text style={s.title}>{t(step.title)}</Text>
+          <Text style={s.body}>{t(step.body)}</Text>
           <View style={s.row}>
             <Pressable accessibilityRole="button" onPress={() => onSkipRef.current()} hitSlop={10} style={s.skipBtn}>
-              <Text style={s.skip}>Skip tour</Text>
+              <Text style={s.skip}>{t('tour.skip')}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={next} style={s.nextBtn}>
-              <Text style={s.nextText}>{isLast ? 'Done' : 'Next'}</Text>
+              <Text style={s.nextText}>{isLast ? t('common.done') : t('common.next')}</Text>
             </Pressable>
           </View>
         </View>

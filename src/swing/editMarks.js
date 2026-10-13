@@ -8,6 +8,7 @@
 //   head    [x, y] | null  the clubhead; null with hidden=false means "not placed yet" (D16)
 //   hidden  the clubhead is end-on or out of frame
 //   confirmed { hands, head }  the golfer confirmed that mark (D26); moving it clears the flag
+//   frameOk the golfer chose this frame in step 1 ("Find the frame", D28)
 // plus the ball ([x, y, r], one for the swing, markable at address) with `ballConfirmed`, and
 // `status` { [key]: 'confirmed' | 'skipped' } for the positions of the marking pass (markPass.js).
 // `base` keeps what analyze() proposed, so every label stores proposed and final side by side
@@ -44,7 +45,7 @@ export function buildDraft(analysis, pose, marks) {
     const placed = label && handsPlaced(label) ? label.hands.final : null;
     const ok = (m) => !!label && (legacy ? !!label.corrected : !!label[m]?.confirmed);
     cps[k] = {
-      frame, hands: placed, head: cm.head ?? null, hidden: !!cm.hidden, confirmed: { hands: ok('hands'), head: ok('head') },
+      frame, hands: placed, head: cm.head ?? null, hidden: !!cm.hidden, confirmed: { hands: ok('hands'), head: ok('head') }, frameOk: !!label?.confirmedFrame,
     };
     proposed[k] = label
       ? {
@@ -141,6 +142,7 @@ export function draftToMarks({
         confirmed: !!ok.head,
       },
       confirmed,
+      confirmedFrame: !!d.frameOk,
       editedAt,
     });
     if (label.corrected || confirmed || ok.hands || ok.head) m = withFrame(m, label);
@@ -183,14 +185,42 @@ export function markStatus(draft, base, key, mark) {
 }
 
 /**
- * The position moves to another frame (a mark placed, or confirmed, on a previewed frame). Its
- * marks were confirmed on the old frame, so they need confirming again on this one; the clubhead
- * stays where it is drawn and is saved and analysed as shown (analyzeMarks).
+ * Step 1's "Use frame N" / "Proposed frame looks right" (D28): the position takes `frame`. On a
+ * different frame its marks start again, because a hand placed on frame 495 is wrong on 497: the
+ * hands follow the tracked grip at the new frame, the clubhead goes back to the proposal on the
+ * proposed frame and to Missing anywhere else, nothing is confirmed. The ball (one per swing) stays.
+ * @returns {{ draft: object, reset: boolean }}  reset = the frame changed, so the marks did
  */
-export function adoptFrame(draft, key, frame) {
+export function chooseFrame(draft, base, key, frame) {
   const d = draft.cps[key];
-  if (d.frame === frame) return draft;
-  return patchCheckpoint(draft, key, { frame, confirmed: { hands: false, head: d.hidden && !!okOf(d).head } });
+  if (d.frame === frame) return { draft: d.frameOk ? draft : patchCheckpoint(draft, key, { frameOk: true }), reset: false };
+  const p = base.cps[key];
+  const atProposal = frame === p.frame;
+  // a position confirmed on the old frame is no longer confirmed: it goes back to "to do"
+  const { [key]: _was, ...status } = draft.status ?? {};
+  return {
+    draft: patchCheckpoint({ ...draft, status }, key, {
+      frame,
+      hands: null,
+      head: atProposal ? p.head : null,
+      hidden: atProposal ? p.hidden : false,
+      confirmed: { hands: false, head: atProposal && p.hidden },
+      frameOk: true,
+    }),
+    reset: true,
+  };
+}
+
+/**
+ * Would choosing another frame throw something away (D28)? The golfer placed the hands, confirmed a
+ * mark or the position, moved or hid the clubhead, or had already chosen a frame other than the
+ * proposal. Drives the "· marks reset" warning on the step 1 button and the toast.
+ */
+export function hasMarks(draft, base, key) {
+  const d = draft.cps[key];
+  const p = base.cps[key];
+  const ok = okOf(d);
+  return !!d.hands || ok.hands || ok.head || d.frame !== p.frame || headChanged(d, p) || draft.status?.[key] === 'confirmed';
 }
 
 /** Put a mark at a normalised point; a moved mark needs confirming again. */
@@ -249,30 +279,38 @@ export function pendingMoves(draft, base, snapshot, key) {
 }
 
 /**
- * What the primary button does, so it can say so (D26):
- * 'use' (adopt the previewed frame) | 'save' (something moved) | 'noHead' | 'looks'.
+ * What step 2's primary button does, so it can say so (D26):
+ * 'save' (something moved) | 'noHead' | 'looks'.
  */
-export function primaryAction(draft, base, key, view) {
-  if (view !== draft.cps[key].frame) return 'use';
+export function primaryAction(draft, base, key) {
   if (MARKS_AT(key).some((m) => markStatus(draft, base, key, m) === 'moved')) return 'save';
   if (markStatus(draft, base, key, 'head') === 'missing') return 'noHead';
   return 'looks';
 }
 
-/** Clamp a normalised point into the frame. */
-export const clampPt = (p) => [Math.min(1, Math.max(0, p[0])), Math.min(1, Math.max(0, p[1]))];
+/** Clamp a normalised point into the frame. A worklet: the mark drag runs on the UI thread (D28). */
+export function clampPt(p) {
+  'worklet';
+  return [Math.min(1, Math.max(0, p[0])), Math.min(1, Math.max(0, p[1]))];
+}
 
 /**
  * Which handle a touch grabs. `pt` and the handles are in view px (inside the picture's
  * rect); the nearest handle within HIT_RADIUS_PX wins, ties go to `prefer`.
  * @returns {'hands'|'head'|'ball'|null}
  */
-export function hitTest(pt, { hands, head, ball }, prefer = 'hands', radius = HIT_RADIUS_PX) {
+export function hitTest(pt, handles, prefer = 'hands', radius = HIT_RADIUS_PX) {
+  'worklet'; // read on the UI thread when a drag starts (D28)
+  const names = ['hands', 'head', 'ball'];
   let best = null;
-  [['hands', hands], ['head', head], ['ball', ball]].forEach(([t, p]) => {
-    if (!p) return;
-    const d = Math.hypot(p[0] - pt[0], p[1] - pt[1]);
-    if (d <= radius && (!best || d < best.d || (d === best.d && t === prefer))) best = { t, d };
-  });
-  return best ? best.t : null;
+  let bestD = 0;
+  for (let k = 0; k < names.length; k += 1) {
+    const t = names[k];
+    const p = handles[t];
+    if (p) {
+      const d = Math.hypot(p[0] - pt[0], p[1] - pt[1]);
+      if (d <= radius && (best === null || d < bestD || (d === bestD && t === prefer))) { best = t; bestD = d; }
+    }
+  }
+  return best;
 }

@@ -5,12 +5,14 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import useAuthSignIn from '../hooks/useAuthSignIn';
+import { useT, tr } from '../i18n';
 
 // Email + password fields, "Forgot password?", the submit button and
 // "Continue with Google". Used by AuthScreen (sign in / sign up) and by the
 // league invite screen's "I have an account" tab (sign in only).
 export default function AuthForm({ mode = 'signin', onSignedUp }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const {
     email, setEmail, password, setPassword,
@@ -23,7 +25,7 @@ export default function AuthForm({ mode = 'signin', onSignedUp }) {
     <>
       <TextInput
         style={[s.input, emailError && s.inputError]}
-        placeholder="Email"
+        placeholder={t('auth.emailPlaceholder')}
         placeholderTextColor={theme.text.muted}
         keyboardType="email-address"
         autoCapitalize="none"
@@ -34,12 +36,12 @@ export default function AuthForm({ mode = 'signin', onSignedUp }) {
         onChangeText={setEmail}
         onBlur={() => setTouched((t) => ({ ...t, email: true }))}
       />
-      {emailError && <Text style={s.fieldError}>{emailError}</Text>}
+      {emailError && <Text style={s.fieldError}>{tr(emailError)}</Text>}
 
       <View style={[s.passwordRow, passwordError && s.inputError]}>
         <TextInput
           style={s.passwordInput}
-          placeholder="Password"
+          placeholder={t('auth.passwordPlaceholder')}
           placeholderTextColor={theme.text.muted}
           secureTextEntry={!showPassword}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
@@ -53,7 +55,7 @@ export default function AuthForm({ mode = 'signin', onSignedUp }) {
           style={s.eyeBtn}
           onPress={() => setShowPassword((v) => !v)}
           activeOpacity={0.7}
-          accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+          accessibilityLabel={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Feather
@@ -63,7 +65,7 @@ export default function AuthForm({ mode = 'signin', onSignedUp }) {
           />
         </TouchableOpacity>
       </View>
-      {passwordError && <Text style={s.fieldError}>{passwordError}</Text>}
+      {passwordError && <Text style={s.fieldError}>{tr(passwordError)}</Text>}
 
       {mode === 'signin' && (
         <TouchableOpacity
@@ -72,7 +74,7 @@ export default function AuthForm({ mode = 'signin', onSignedUp }) {
           activeOpacity={0.7}
           disabled={loading}
         >
-          <Text style={s.forgotText}>Forgot password?</Text>
+          <Text style={s.forgotText}>{t('auth.forgotPassword')}</Text>
         </TouchableOpacity>
       )}
 
@@ -84,12 +86,12 @@ export default function AuthForm({ mode = 'signin', onSignedUp }) {
       >
         {loading
           ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-          : <Text style={s.btnText}>{mode === 'signin' ? 'Sign In' : 'Create Account'}</Text>}
+          : <Text style={s.btnText}>{mode === 'signin' ? t('auth.signIn') : t('auth.createAccount')}</Text>}
       </TouchableOpacity>
 
       <View style={s.divider}>
         <View style={s.dividerLine} />
-        <Text style={s.dividerText}>OR</Text>
+        <Text style={s.dividerText}>{t('auth.or')}</Text>
         <View style={s.dividerLine} />
       </View>
 
@@ -104,7 +106,7 @@ export default function AuthForm({ mode = 'signin', onSignedUp }) {
           : (
             <>
               <Text style={s.googleG}>G</Text>
-              <Text style={s.googleBtnText}>Continue with Google</Text>
+              <Text style={s.googleBtnText}>{t('auth.continueGoogle')}</Text>
             </>
           )}
       </TouchableOpacity>

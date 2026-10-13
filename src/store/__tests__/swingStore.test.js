@@ -172,6 +172,23 @@ describe('rename and delete', () => {
     expect([...fs.__files.keys()].filter((k) => k.includes(row.id))).toHaveLength(0);
   });
 
+  it('delete sweeps the folder again after a cancelled pass 2 could still write into it', async () => {
+    const row = await store.createSwing({ videoUri: 'file:///picked/clip.mp4' });
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'queueMicrotask', 'nextTick'] });
+    try {
+      await store.deleteSwing(row.id);
+      // a proxy encoder finishing after the delete recreates the folder
+      fs.__dirs.add(`file:///doc/swings/${row.id}`);
+      fs.__dirs.add(`file:///doc/swings/${row.id}/proxy`);
+      fs.__files.set(`file:///doc/swings/${row.id}/proxy/400.jpg`, 'x');
+      jest.advanceTimersByTime(store.DELETE_RESWEEP_MS);
+      expect([...fs.__files.keys()].filter((k) => k.includes(row.id))).toHaveLength(0);
+      expect(fs.__dirs.has(`file:///doc/swings/${row.id}`)).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('pruneOrphanSwingDirs removes folders with no row', async () => {
     const keep = await store.createSwing({ videoUri: 'file:///picked/clip.mp4' });
     fs.__dirs.add('file:///doc/swings/orphan');

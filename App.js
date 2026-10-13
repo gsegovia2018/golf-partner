@@ -4,6 +4,7 @@ import { NavigationContainer, createNavigationContainerRef } from '@react-naviga
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
 import { useFonts } from 'expo-font';
@@ -575,21 +576,27 @@ export default function App() {
     return <LoadingSplash />;
   }
 
+  // GestureHandlerRootView: the swing marking canvas drags marks and scrubs on the UI thread with
+  // react-native-gesture-handler (plan D28), which needs one root view above every screen.
   return (
-    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <ErrorBoundary>
-        <ThemeProvider>
-          <AuthProvider>
-            <NavigationContainer
-              linking={linking}
-              ref={navigationRef}
-              documentTitle={{ formatter: () => 'Golf Partner' }}
-            >
-              <AppNavigator />
-            </NavigationContainer>
-          </AuthProvider>
-        </ThemeProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={appStyles.root}>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <ErrorBoundary>
+          <ThemeProvider>
+            <AuthProvider>
+              <NavigationContainer
+                linking={linking}
+                ref={navigationRef}
+                documentTitle={{ formatter: () => 'Golf Partner' }}
+              >
+                <AppNavigator />
+              </NavigationContainer>
+            </AuthProvider>
+          </ThemeProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const appStyles = StyleSheet.create({ root: { flex: 1 } });
