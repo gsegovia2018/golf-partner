@@ -84,7 +84,7 @@ describe('SwingHomeScreen', () => {
     expect(getByText(SWING_STRINGS.home.emptyTitle)).toBeTruthy();
     expect(getByText(/phone on your toe line, at hand height, aimed at your hands/)).toBeTruthy();
     expect(getByText('Your video and analysis stay on this phone. Nothing is uploaded.')).toBeTruthy();
-    expect(queryByText(/swipe a row to delete/)).toBeNull();
+    expect(queryByText(/long-press it for more/)).toBeNull();
   });
 
   test('lists swings led by the main fault, with counts, fps tag and footer', () => {
@@ -94,7 +94,7 @@ describe('SwingHomeScreen', () => {
     expect(getByText('240 FPS')).toBeTruthy();
     expect(getByText('120 FPS · APPROX')).toBeTruthy();
     expect(getAllByText('6').length).toBeGreaterThan(0);
-    expect(getByText('2 swings · 184 MB on this phone · swipe a row to delete · long-press to compare')).toBeTruthy();
+    expect(getByText('2 swings · 184 MB on this phone · swipe a row or long-press it for more')).toBeTruthy();
     expect(getByText(/MediaPipe/)).toBeTruthy();
   });
 
@@ -233,9 +233,10 @@ describe('SwingHomeScreen', () => {
     expect(pickSwingVideo).not.toHaveBeenCalled();
   });
 
-  test('long-press selects, a second row completes the pair, Compare navigates', () => {
+  test('long-press opens the row actions; Compare starts the pair, a second row completes it, Compare navigates', () => {
     const { getByLabelText, getByText, queryByText, navigation } = setup({ swings: [A, B] });
     fireEvent(getByLabelText(/^Early extension, /), 'longPress');
+    fireEvent.press(getByLabelText(SWING_STRINGS.home.compareWith));
     expect(getByText(SWING_STRINGS.home.pickTwo)).toBeTruthy();
     expect(getByText('1 of 2 picked.')).toBeTruthy();
     expect(queryByText('Record')).toBeNull();
@@ -245,9 +246,23 @@ describe('SwingHomeScreen', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('SwingCompare', { ids: ['a', 'b'] });
   });
 
-  test('long-press does nothing with a single swing', () => {
-    const { getByLabelText, queryByText } = setup({ swings: [A] });
+  test('long-press with a single swing offers Delete only (nothing to compare with)', () => {
+    const { getByLabelText, queryByLabelText } = setup({ swings: [A] });
     fireEvent(getByLabelText(/^Early extension, /), 'longPress');
-    expect(queryByText(SWING_STRINGS.home.pickTwo)).toBeNull();
+    expect(getByLabelText(SWING_STRINGS.home.deleteSwing)).toBeTruthy();
+    expect(queryByLabelText(SWING_STRINGS.home.compareWith)).toBeNull();
+  });
+
+  test('long-press > Delete swing asks first, then deletes only on confirm (no swiping needed)', () => {
+    const { getByLabelText } = setup({ swings: [A, B] });
+    fireEvent(getByLabelText(/^Over the top, /), 'longPress');
+    fireEvent.press(getByLabelText(SWING_STRINGS.home.deleteSwing));
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+    const [title, body, buttons] = Alert.alert.mock.calls[0];
+    expect(title).toBe(SWING_STRINGS.home.deleteTitle);
+    expect(body).toBe(SWING_STRINGS.home.deleteBody);
+    expect(store.deleteSwing).not.toHaveBeenCalled();
+    buttons.find((b) => b.style === 'destructive').onPress();
+    expect(store.deleteSwing).toHaveBeenCalledWith('b');
   });
 });

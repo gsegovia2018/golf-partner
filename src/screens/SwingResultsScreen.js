@@ -2,7 +2,7 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore,
 } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, Modal, Alert, useWindowDimensions,
+  View, Text, StyleSheet, ScrollView, TextInput, Modal, Alert, ActivityIndicator, useWindowDimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -15,11 +15,11 @@ import SwingTimeline from '../components/swing/SwingTimeline';
 import SwingCheckRow from '../components/swing/SwingCheckRow';
 import { useSwingTone } from '../components/swing/swingTone';
 import { useTheme } from '../theme/ThemeContext';
-import { semantic } from '../theme/tokens';
+import { semantic, hud } from '../theme/tokens';
 import { withAlpha } from '../theme/alpha';
 import {
   subscribeSwings, getSwingsVersion, getSwing, hydrateSwings, renameSwing, readAnalysis, readPose,
-  markSwingFailed, swingVideoUri, readProbe, readMarks, saveAnalysis, getSwingProfile, setPracticeOpen,
+  markSwingFailed, deleteSwing, swingVideoUri, readProbe, readMarks, saveAnalysis, getSwingProfile, setPracticeOpen,
 } from '../store/swingStore';
 import { runAnalysis } from '../swing/runAnalysis';
 import { reanalyzeForClub } from '../swing/reanalyze';
@@ -40,6 +40,7 @@ import { drillsForMain, PROGRESSION } from '../swing/drills';
 import { SWING_STRINGS } from '../swing/strings';
 
 const T = SWING_STRINGS.results;
+const H = SWING_STRINGS.home; // the delete confirm is shared with the swings list
 const MAX_NUDGE = 2; // stills exist for the checkpoint frame +-2 (D4)
 
 // --- Sections --------------------------------------------------------------------------------
@@ -145,7 +146,7 @@ function PracticeCard({
   );
 }
 
-function Processing({ s, tone, progress, width }) {
+function Processing({ s, progress, onDelete }) {
   const stage = progress?.stage ?? 'reading';
   const order = ['reading', 'pose', 'planes'];
   const at = order.indexOf(stage);
@@ -153,30 +154,39 @@ function Processing({ s, tone, progress, width }) {
     : stage === 'pose' ? 0.1 + 0.75 * (progress.total ? Math.min(1, progress.done / progress.total) : 0)
       : 0.92;
   return (
-    <View style={[s.processing, { width, minHeight: Math.min(width * 1.1, 360) }]} accessibilityLiveRegion="polite">
-      <View style={s.shutter}><View style={s.shutterDot} /></View>
-      <View style={s.stages}>
-        {order.map((k, i) => {
-          const done = i < at;
-          const active = i === at;
-          return (
-            <View key={k} style={s.stage}>
-              <View style={[s.stageIc, done && { backgroundColor: tone.green, borderColor: tone.green }, active && s.stageActive]}>
-                {done ? <Feather name="check" size={11} color="#0a0d10" /> : null}
+    <View style={s.procWrap} testID="results-processing">
+      <View style={s.processing} accessibilityLiveRegion="polite">
+        <View style={s.shutter}><View style={s.shutterDot} /></View>
+        <Text style={s.procTitle} accessibilityRole="header">{T.processingTitle}</Text>
+        <View style={s.stages}>
+          {order.map((k, i) => {
+            const done = i < at;
+            const active = i === at;
+            return (
+              <View key={k} style={s.stage}>
+                <View style={[s.stageIc, done && s.stageDone, active && s.stageActive]}>
+                  {done ? <Feather name="check" size={11} color={hud.onAccent} /> : null}
+                </View>
+                <Text style={[s.stageText, !done && !active && s.stageTodo]}>{T.stages[k]}</Text>
+                {active && progress?.total ? <Text style={s.stageSub}>{`${progress.done} / ${progress.total}`}</Text> : null}
               </View>
-              <Text style={[s.stageText, !done && !active && s.stageTodo]}>{T.stages[k]}</Text>
-              {active && progress?.total ? <Text style={s.stageSub}>{`${progress.done} / ${progress.total}`}</Text> : null}
-            </View>
-          );
-        })}
+            );
+          })}
+        </View>
+        <View style={s.bar}><View style={[s.barFill, { width: `${Math.round(frac * 100)}%` }]} /></View>
+        {progress?.probe ? <Text style={s.procMeta}>{T.clipLine(progress.probe)}</Text> : null}
+        <Text style={s.procMeta}>{SWING_STRINGS.privacy}</Text>
       </View>
-      <View style={s.bar}><View style={[s.barFill, { width: `${Math.round(frac * 100)}%` }]} /></View>
-      <Text style={s.procMeta}>
-        {progress?.probe ? `${T.clipLine(progress.probe)}\n` : ''}
-        {T.notUploaded}
-      </Text>
-      <Text style={s.procMeta}>{T.nextMarking}</Text>
+      <DeleteLink s={s} onPress={onDelete} />
     </View>
+  );
+}
+
+function DeleteLink({ s, onPress }) {
+  return (
+    <PressableScale style={s.deleteLink} onPress={onPress} accessibilityRole="button" accessibilityLabel={T.deleteSwing} testID="results-delete-link">
+      <Text style={s.deleteLinkText}>{T.deleteSwing}</Text>
+    </PressableScale>
   );
 }
 
@@ -226,7 +236,7 @@ function PlayerBody({ uri, onClose, s }) {
 
 export function SwingResultsView({
   row, phase, analysis, pose, progress, error, stillTick = 0, stillFor, markStatus = {},
-  onBack, onCancel, onRetry, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport, onClubChange,
+  onBack, onCancel, onDelete, onRetry, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport, onClubChange,
   practiceOpen = false, onPracticeToggle,
 }) {
   const { theme } = useTheme();
@@ -271,6 +281,22 @@ export function SwingResultsView({
   const shownDrills = allDrills ? drills : drills.slice(0, 2);
   const openEdit = (k) => onEditMarks?.(k);
 
+  // A neutral loader while a stored swing is read: no results chrome until it is ready.
+  if (phase === 'loading') {
+    return (
+      <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
+        <View style={s.header}>
+          <IconButton icon="chevron-left" accessibilityLabel={T.back} onPress={onBack} />
+          <View style={s.flex} />
+          <View style={s.headerSpacer} />
+        </View>
+        <View style={s.loader} testID="results-loading" accessibilityRole="progressbar" accessibilityLabel={T.loading}>
+          <ActivityIndicator color={theme.accent.primary} />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   const header = (
     <View style={s.header}>
       <IconButton icon="chevron-left" accessibilityLabel={T.back} onPress={onBack} />
@@ -300,18 +326,11 @@ export function SwingResultsView({
               onSecondary={onBack}
               secondaryLabel={T.backToSwings}
             />
+            <DeleteLink s={s} onPress={onDelete} />
           </>
         ) : null}
 
-        {phase === 'processing' || phase === 'loading' ? (
-          <>
-            <Hero s={s} row={row} loading />
-            <View style={{ height: 12 }} />
-            <Processing s={s} tone={tone} progress={progress} width={boxW} />
-            <View style={{ height: 12 }} />
-            <SwingTimeline current="impact" skeleton />
-          </>
-        ) : null}
+        {phase === 'processing' ? <Processing s={s} progress={progress} onDelete={onDelete} /> : null}
 
         {ready ? (
           <>
@@ -472,6 +491,10 @@ export function SwingResultsView({
                 <Text style={s.hint}>{SWING_STRINGS.exportSwing.hint}</Text>
               </View>
             </PressableScale>
+            <PressableScale style={s.menuRow} onPress={() => { setSheet(null); onDelete?.(); }} accessibilityRole="button" accessibilityLabel={T.deleteSwing} testID="results-menu-delete">
+              <Feather name="trash-2" size={18} color={tone.red} />
+              <Text style={[s.menuText, { color: tone.red }]}>{T.deleteSwing}</Text>
+            </PressableScale>
           </>
         )}
       </BottomSheet>
@@ -589,6 +612,22 @@ export default function SwingResultsScreen({ navigation, route }) {
     navigation.goBack();
   };
   const onRetry = () => { started.current = false; start(); };
+  // Same confirm as the swings list. A run in flight is stopped (JS and pass 2) before the files go.
+  const onDelete = () => {
+    Alert.alert(H.deleteTitle, H.deleteBody, [
+      { text: H.cancel, style: 'cancel' },
+      {
+        text: H.delete,
+        style: 'destructive',
+        onPress: async () => {
+          cancelled.current = true;
+          try { nativeApi()?.cancelAnalysis?.(); } catch { /* best effort */ }
+          await deleteSwing(swingId);
+          navigation.goBack();
+        },
+      },
+    ]);
+  };
   const onExport = async () => {
     try {
       if ((await shareSwingExport(swingId)) === 'unavailable') Alert.alert(SWING_STRINGS.exportSwing.unavailable);
@@ -611,6 +650,7 @@ export default function SwingResultsScreen({ navigation, route }) {
         markStatus={statusFromMarks(data.marks)}
         onBack={() => navigation.goBack()}
         onCancel={onCancel}
+        onDelete={onDelete}
         onRetry={onRetry}
         onRecord={() => navigation.navigate('SwingCapture')}
         onEditMarks={(checkpoint) => navigation.navigate('SwingEditMarks', { swingId, checkpoint })}
@@ -705,22 +745,29 @@ const makeStyles = (theme) => StyleSheet.create({
   btnSecondaryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.text.primary },
   btnOff: { opacity: 0.5 },
 
+  loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  procWrap: { alignItems: 'center', gap: 8, paddingTop: 12 },
   processing: {
-    alignSelf: 'center', backgroundColor: '#1b2420', borderRadius: theme.radius.lg, padding: 24, gap: 16,
-    alignItems: 'center', justifyContent: 'center',
+    alignSelf: 'stretch', backgroundColor: hud.card, borderRadius: theme.radius.lg, padding: 24, gap: 16,
+    alignItems: 'center', justifyContent: 'center', minHeight: 320,
+    borderWidth: 1, borderColor: hud.border,
   },
-  shutter: { width: 52, height: 52, borderRadius: 26, borderWidth: 1.5, borderColor: '#ffd700', alignItems: 'center', justifyContent: 'center' },
-  shutterDot: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fefefe' },
+  procTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, color: hud.text, textAlign: 'center' },
+  shutter: { width: 52, height: 52, borderRadius: 26, borderWidth: 1.5, borderColor: hud.accent, alignItems: 'center', justifyContent: 'center' },
+  shutterDot: { width: 44, height: 44, borderRadius: 22, backgroundColor: hud.text },
   stages: { width: '100%', maxWidth: 260, gap: 10 },
   stage: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stageIc: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center' },
-  stageActive: { borderColor: '#ffffff' },
-  stageText: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, color: '#ffffff' },
-  stageTodo: { color: 'rgba(255,255,255,0.5)' },
-  stageSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11.5, color: 'rgba(255,255,255,0.7)', fontVariant: ['tabular-nums'] },
-  bar: { width: '100%', maxWidth: 260, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },
-  barFill: { height: 6, borderRadius: 3, backgroundColor: '#4fae8a' },
-  procMeta: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11.5, lineHeight: 17, color: 'rgba(255,255,255,0.7)', textAlign: 'center' },
+  stageIc: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: withAlpha(hud.text, 0.35), alignItems: 'center', justifyContent: 'center' },
+  stageDone: { backgroundColor: hud.accent, borderColor: hud.accent },
+  stageActive: { borderColor: hud.text },
+  stageText: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, color: hud.text },
+  stageTodo: { color: hud.textDim },
+  stageSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11.5, color: hud.textSoft, fontVariant: ['tabular-nums'] },
+  bar: { width: '100%', maxWidth: 260, height: 6, borderRadius: 3, backgroundColor: hud.fill, overflow: 'hidden' },
+  barFill: { height: 6, borderRadius: 3, backgroundColor: hud.accent },
+  procMeta: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11.5, lineHeight: 17, color: hud.textMuted, textAlign: 'center' },
+  deleteLink: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  deleteLinkText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: theme.text.secondary },
 
   errorSlot: { alignSelf: 'center', backgroundColor: '#12171c', borderRadius: theme.radius.lg, padding: 24, gap: 8, alignItems: 'center', minHeight: 220, justifyContent: 'center' },
   errorTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, color: '#ffffff', textAlign: 'center' },

@@ -29,7 +29,10 @@ export const SWING_STRINGS = {
     failed: 'Could not analyse',
     noFault: 'No clear fault',
     continueMarking: (n, of) => `${n} of ${of} confirmed · Continue`,
-    footer: (n, size) => `${n} swing${n === 1 ? '' : 's'} · ${size} on this phone · swipe a row to delete${n > 1 ? ' · long-press to compare' : ''}`,
+    footer: (n, size) => `${n} swing${n === 1 ? '' : 's'} · ${size} on this phone · swipe a row or long-press it for more`,
+    rowActions: 'Swing actions',
+    deleteSwing: 'Delete swing',
+    compareWith: 'Compare with another swing',
     attribution: 'Pose detection by MediaPipe (Apache 2.0).',
     pickTwo: 'Pick two swings to compare',
     picked: (n) => `${n} of 2 picked.`,
@@ -307,7 +310,9 @@ export const SWING_STRINGS = {
     cancel: 'Cancel',
     close: 'Close',
     back: 'Back',
-    // Processing (inside the results shell).
+    // Processing (its own clean view: nothing from the results shell until marking is done).
+    deleteSwing: 'Delete swing',
+    loading: 'Loading your swing',
     processingTitle: 'Analysing your swing',
     stages: { reading: 'Reading video', pose: 'Detecting posture', planes: 'Calculating planes' },
     frames: (n) => `${n} fr`,

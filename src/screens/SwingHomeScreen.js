@@ -71,6 +71,7 @@ export default function SwingHomeScreen({ navigation }) {
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState([]);
   const [sheet, setSheet] = useState(false);
+  const [actionRow, setActionRow] = useState(null);
   const [heightText, setHeightText] = useState('');
   const [handed, setHanded] = useState('right');
   const [busy, setBusy] = useState(false);
@@ -127,9 +128,14 @@ export default function SwingHomeScreen({ navigation }) {
     if (unmarked(sw)) navigation.navigate('SwingEditMarks', { swingId: sw.id, mode: 'pass' });
     else navigation.navigate('SwingResults', { swingId: sw.id });
   };
+  // Long-press opens the row's actions (Delete, and Compare when there is another swing to pair).
   const onRowLongPress = (sw) => {
-    if (swings.length < 2 || selecting) return;
+    if (selecting) return;
     haptic('medium');
+    setActionRow(sw);
+  };
+  const startCompare = (sw) => {
+    setActionRow(null);
     setSelecting(true);
     setPicked([sw.id]);
   };
@@ -319,6 +325,26 @@ export default function SwingHomeScreen({ navigation }) {
         )}
       </View>
 
+      <BottomSheet visible={actionRow !== null} onClose={() => setActionRow(null)} sheetStyle={s.sheet}>
+        <Text style={s.sheetTitle} numberOfLines={1}>{actionRow?.name ?? T.rowActions}</Text>
+        {swings.length > 1 ? (
+          <PressableScale style={s.menuRow} onPress={() => startCompare(actionRow)} accessibilityRole="button" accessibilityLabel={T.compareWith} testID="row-action-compare">
+            <Feather name="columns" size={18} color={theme.text.primary} />
+            <Text style={s.menuText}>{T.compareWith}</Text>
+          </PressableScale>
+        ) : null}
+        <PressableScale
+          style={s.menuRow}
+          onPress={() => { const sw = actionRow; setActionRow(null); confirmDelete(sw); }}
+          accessibilityRole="button"
+          accessibilityLabel={T.deleteSwing}
+          testID="row-action-delete"
+        >
+          <Feather name="trash-2" size={18} color={tone.red} />
+          <Text style={[s.menuText, { color: tone.red }]}>{T.deleteSwing}</Text>
+        </PressableScale>
+      </BottomSheet>
+
       <BottomSheet visible={sheet} onClose={() => setSheet(false)} sheetStyle={s.sheet}>
         <Text style={s.sheetTitle}>{P.title}</Text>
         <Text style={s.sheetBody}>{P.body}</Text>
@@ -497,4 +523,6 @@ const makeStyles = (theme) => StyleSheet.create({
   pillText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, color: theme.text.secondary },
   pillTextOn: { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' },
   sheetSkip: { marginTop: 10 },
+  menuRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 4 },
+  menuText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: theme.text.primary },
 });
