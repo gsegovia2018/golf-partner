@@ -95,6 +95,11 @@ export function rowToLeague(r) {
   };
 }
 
+// Row from get_league_invitees: an unclaimed reserved spot (admin and members).
+export function rowToInvitee(r) {
+  return { id: r.id, name: r.name, handicap: num(r.handicap), createdAt: r.created_at ?? null };
+}
+
 // Row from the get_league_members RPC (names come from profiles, server side).
 export function rowToMember(r, leagueId = null) {
   return {
@@ -206,7 +211,14 @@ function summaryToCamel(s) {
     memberCount: s.member_count ?? 0,
     proposedHandicap: num(s.proposed_handicap),
     isMember: !!s.is_member,
+    invitees: inviteesToCamel(s.invitees),
   };
+}
+
+// Unclaimed reserved spots as the invite screens see them: id and name only,
+// the handicap stays hidden until a spot is picked (getLeagueInvitee).
+function inviteesToCamel(list) {
+  return (list ?? []).map((i) => ({ id: i.id, name: i.name }));
 }
 
 // ---- cache (display only, while offline) ----------------------------------
@@ -284,8 +296,10 @@ export async function getLeague(leagueId) {
   if (!leagueRow) throw new LeagueError(LEAGUE_GONE_MESSAGE, { code: 'league_gone' });
   const league = rowToLeague(leagueRow);
 
-  const [memberRows, cardRows, voteRows, eventRows, finalRow] = await Promise.all([
+  const [memberRows, inviteeRows, cardRows, voteRows, eventRows, finalRow] = await Promise.all([
     rpc('get_league_members', { p_league: leagueId }),
+    // An older server has no invitees yet; the members list still loads.
+    rpc('get_league_invitees', { p_league: leagueId }).catch(() => []),
     selectRows(
       supabase.from('league_cards').select('*')
         .eq('league_id', leagueId)
@@ -315,6 +329,7 @@ export async function getLeague(leagueId) {
   const result = {
     league,
     members: (memberRows ?? []).map((m) => rowToMember(m, leagueId)),
+    invitees: (inviteeRows ?? []).map(rowToInvitee),
     cards,
     cardsByMonth,
     votes: (voteRows ?? []).map((v) => rowToVote(v, (ballotRows ?? []).filter((b) => b.vote_id === v.id))),
@@ -329,7 +344,9 @@ export async function getLeague(leagueId) {
 
 // ---- RPC wrappers: leagues and membership ---------------------------------
 
-// members: [{ userId, handicap }]. Returns { id, inviteCode }.
+// members: [{ userId, handicap }] or, for someone not in the app yet,
+// [{ name, handicap }] (a reserved spot they claim from the invite link).
+// Returns { id, inviteCode }.
 export async function createLeague({
   name, seasonStart, seasonEnd, pointsTable = null, cap = null, feeCents = 0, members = [],
 }) {
@@ -340,7 +357,9 @@ export async function createLeague({
     p_points_table: pointsTable,
     p_cap: cap,
     p_fee_cents: feeCents,
-    p_members: members.map((m) => ({ user_id: m.userId, handicap: m.handicap ?? null })),
+    p_members: members.map((m) => (m.userId
+      ? { user_id: m.userId, handicap: m.handicap ?? null }
+      : { name: m.name, handicap: m.handicap ?? null })),
   });
   return { id: d.id, inviteCode: d.invite_code };
 }
@@ -362,14 +381,35 @@ export async function getLeagueInvitePreview(code) {
     entryFeeCents: p.entry_fee_cents ?? 0,
     handicapCap: p.handicap_cap == null ? 30 : Number(p.handicap_cap),
     archived: !!p.archived,
+    invitees: inviteesToCamel(p.invitees),
   };
+}
+
+// One reserved spot with the handicap the admin set (anon-callable). null when
+// the spot is gone; `claimed` when someone joined as it meanwhile.
+export async function getLeagueInvitee(code, inviteeId) {
+  const i = await rpc('get_league_invitee', { p_code: code, p_invitee: inviteeId });
+  if (!i) return null;
+  return { id: i.id, name: i.name, handicap: num(i.handicap), claimed: !!i.claimed };
+}
+
+// Unclaimed spots of a league (members only), by name as the server sends.
+export async function listLeagueInvitees(leagueId) {
+  return ((await rpc('get_league_invitees', { p_league: leagueId })) ?? []).map(rowToInvitee);
+}
+
+// Admin: drop a spot nobody has taken.
+export async function removeLeagueInvitee(leagueId, inviteeId) {
+  await rpc('remove_league_invitee', { p_league: leagueId, p_invitee: inviteeId });
 }
 
 // Returns { leagueId }. `displayName` is required by the server for a guest
 // (anonymous) session and saved to the profile; omit it for a real account.
-export async function joinLeague(code, proposedHandicap = null, displayName = null) {
+// `inviteeId` claims a reserved spot the admin saved for this person.
+export async function joinLeague(code, proposedHandicap = null, displayName = null, inviteeId = null) {
   const args = { p_code: code, p_proposed_handicap: proposedHandicap };
   if (displayName) args.p_display_name = displayName;
+  if (inviteeId) args.p_invitee = inviteeId;
   const d = await rpc('join_league', args);
   return { leagueId: d.league_id };
 }

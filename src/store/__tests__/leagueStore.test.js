@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  LeagueError, createLeague, getLeagueByCode, joinLeague, setLeagueHandicap, setLeagueFeePaid,
+  LeagueError, createLeague, getLeagueByCode, joinLeague, getLeagueInvitePreview, getLeagueInvitee, listLeagueInvitees, removeLeagueInvitee, setLeagueHandicap, setLeagueFeePaid,
   updateLeagueRules, leaveLeague, openHandicapVote, castHandicapBallot, announceLeagueCard,
   notifyLeagueTeeOff, submitLeagueCard, addUnannouncedLeagueCard, confirmLeagueCardByPartner,
   attachLeagueProof, createMarkerToken, voidLeagueCard, recordLeagueFinal, getMyLeagues, getMyCardsForMonth,
@@ -130,7 +130,7 @@ describe('RPC params', () => {
     expect(await getLeagueByCode('abc')).toEqual({
       id: 'L1', name: 'Tour', seasonStart: '2026-01-01', seasonEnd: '2026-12-31',
       pointsTable: [500, 300], handicapCap: 30, entryFeeCents: 0, archived: false,
-      adminName: 'Marcos', memberCount: 7, proposedHandicap: 18, isMember: false,
+      adminName: 'Marcos', memberCount: 7, proposedHandicap: 18, isMember: false, invitees: [],
     });
     expect(lastRpc()).toEqual(['get_league_by_code', { p_code: 'abc' }]);
     ok(null);
@@ -141,6 +141,54 @@ describe('RPC params', () => {
     ok({ league_id: 'L1' });
     expect(await joinLeague('ABC', 20)).toEqual({ leagueId: 'L1' });
     expect(lastRpc()).toEqual(['join_league', { p_code: 'ABC', p_proposed_handicap: 20 }]);
+  });
+
+  test('joinLeague sends p_invitee only when a spot was picked', async () => {
+    ok({ league_id: 'L1' });
+    await joinLeague('ABC', 18.4, 'Javi Ortega', 'I1');
+    expect(lastRpc()).toEqual(['join_league', {
+      p_code: 'ABC', p_proposed_handicap: 18.4, p_display_name: 'Javi Ortega', p_invitee: 'I1',
+    }]);
+  });
+
+  test('createLeague sends a reserved spot as { name, handicap }', async () => {
+    ok({ id: 'L1', invite_code: 'ABC123' });
+    await createLeague({
+      name: 'Tour', seasonStart: '2026-01-01', seasonEnd: '2026-12-31',
+      members: [{ userId: 'u2', handicap: 18 }, { name: 'Javi Ortega', handicap: 18.4 }, { name: 'Pilar Sanz' }],
+    });
+    expect(lastRpc()[1].p_members).toEqual([
+      { user_id: 'u2', handicap: 18 },
+      { name: 'Javi Ortega', handicap: 18.4 },
+      { name: 'Pilar Sanz', handicap: null },
+    ]);
+  });
+
+  test('invitees ride along on the summary and the invite preview (id and name only)', async () => {
+    ok({ id: 'L1', name: 'Tour', invitees: [{ id: 'I1', name: 'Javi Ortega', handicap: 18.4 }] });
+    expect((await getLeagueByCode('abc')).invitees).toEqual([{ id: 'I1', name: 'Javi Ortega' }]);
+    ok({ name: 'Tour', invitees: [{ id: 'I1', name: 'Javi Ortega' }] });
+    expect((await getLeagueInvitePreview('abc')).invitees).toEqual([{ id: 'I1', name: 'Javi Ortega' }]);
+    ok({ name: 'Tour' });
+    expect((await getLeagueInvitePreview('abc')).invitees).toEqual([]);
+  });
+
+  test('getLeagueInvitee maps the spot, null when gone', async () => {
+    ok({ id: 'I1', name: 'Javi Ortega', handicap: '18.4', claimed: false });
+    expect(await getLeagueInvitee('ABC', 'I1')).toEqual({ id: 'I1', name: 'Javi Ortega', handicap: 18.4, claimed: false });
+    expect(lastRpc()).toEqual(['get_league_invitee', { p_code: 'ABC', p_invitee: 'I1' }]);
+    ok({ id: 'I1', name: 'Javi Ortega', handicap: null, claimed: true });
+    expect(await getLeagueInvitee('ABC', 'I1')).toMatchObject({ handicap: null, claimed: true });
+    ok(null);
+    expect(await getLeagueInvitee('ABC', 'I1')).toBeNull();
+  });
+
+  test('listLeagueInvitees, removeLeagueInvitee', async () => {
+    ok([{ id: 'I1', name: 'Javi Ortega', handicap: '18.4', created_at: 't' }]);
+    expect(await listLeagueInvitees('L1')).toEqual([{ id: 'I1', name: 'Javi Ortega', handicap: 18.4, createdAt: 't' }]);
+    expect(lastRpc()).toEqual(['get_league_invitees', { p_league: 'L1' }]);
+    await removeLeagueInvitee('L1', 'I1');
+    expect(lastRpc()).toEqual(['remove_league_invitee', { p_league: 'L1', p_invitee: 'I1' }]);
   });
 
   test('setLeagueHandicap returns the clamped number', async () => {

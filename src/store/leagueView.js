@@ -261,6 +261,14 @@ export function firstName(name) {
   return String(name ?? '').trim().split(/\s+/)[0] ?? '';
 }
 
+// 'Nacho Pérez' -> 'NP'; one word -> its first letter. '?' when empty.
+export function initials(name) {
+  const parts = String(name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  const pair = parts.length === 1 ? parts[0][0] : parts[0][0] + parts[parts.length - 1][0];
+  return pair.toUpperCase();
+}
+
 // "Asked 2 min ago · until 19 Oct" for a pending marker request. No pronouns.
 export function markerAskedLine(requestedAt, expiresAt, now = new Date()) {
   const parts = [];
