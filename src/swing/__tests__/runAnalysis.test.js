@@ -222,6 +222,14 @@ describe('runAnalysis', () => {
     expect(store.saveAnalysis.mock.calls[0][2].status).toBe('pending');
   });
 
+  test('review (D26): a pass 2 that fails because it was cancelled does not make the swing ready', async () => {
+    let cancel = false;
+    frames.nativeApi.mockReturnValue(makeApi({ extractCheckpoints: jest.fn(async () => { cancel = true; throw new Error('cancelled'); }) }));
+    const res = await runAnalysis('s1', { isCancelled: () => cancel });
+    expect(res).toEqual({ cancelled: true });
+    expect(store.saveAnalysis).toHaveBeenCalledTimes(1);
+  });
+
   test('review (D26): the final save scores the club and marks as they are then, not as they were at the start', async () => {
     store.getSwing
       .mockReturnValueOnce({ id: 's1', createdAt: '2026-10-11T16:42:00.000Z', club: 'iron', source: 'import', status: 'pending' })

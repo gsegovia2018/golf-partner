@@ -149,6 +149,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
         });
       }
     } catch { /* keep the first analysis; the clubhead waits for the user's marks */ }
+    if (isCancelled()) return { cancelled: true }; // a cancelled pass 2 often fails too: it is not a finished swing
     if (pass2 !== 'done') await saveAnalysis(swingId, first, { thumb: getStill(swingId, frameOfKey(first, 'impact')) });
     return { analysis: final, pass2 };
   } catch {
