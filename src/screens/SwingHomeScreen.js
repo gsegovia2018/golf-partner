@@ -13,13 +13,13 @@ import { semantic } from '../theme/tokens';
 import { haptic } from '../lib/haptics';
 import {
   subscribeSwings, getSwingsVersion, getSwings, getSwingProfile, hydrateSwings,
-  createSwing, deleteSwing, storageBytes, defaultSwingName, setSwingProfile, setLastSwingClub,
+  createSwing, deleteSwing, storageBytes, defaultSwingName, setSwingProfile,
 } from '../store/swingStore';
 import { getSwingAvailability } from '../swing/availability';
 import { pickSwingVideo } from '../swing/importVideo';
 import { defaultHeightCm } from '../swing/scale';
 import { normClub } from '../swing/checks';
-import ClubPicker from '../components/swing/ClubPicker';
+import { passDone, MARK_TOTAL } from '../swing/markPass';
 import { SWING_STRINGS } from '../swing/strings';
 
 const T = SWING_STRINGS.home;
@@ -74,10 +74,6 @@ export default function SwingHomeScreen({ navigation }) {
   const [heightText, setHeightText] = useState('');
   const [handed, setHanded] = useState('right');
   const [busy, setBusy] = useState(false);
-  const [club, setClub] = useState(() => normClub(profile.lastClub)); // D19: the last choice, remembered
-  const clubPicked = useRef(false);
-  // The profile hydrates after first render: follow it until the golfer picks a club here.
-  useEffect(() => { if (!clubPicked.current) setClub(normClub(profile.lastClub)); }, [profile.lastClub]);
   const afterSheet = useRef(null);
 
   const groups = useMemo(() => groupByMonth(swings), [swings]);
@@ -88,19 +84,17 @@ export default function SwingHomeScreen({ navigation }) {
     try {
       const clip = await pickSwingVideo();
       if (!clip) return;
-      const row = await createSwing({
-        videoUri: clip.uri, source: 'import', createdAt: new Date(), club,
-      });
+      // D27: the club is asked per video on the club sheet after the analysis
+      const row = await createSwing({ videoUri: clip.uri, source: 'import', createdAt: new Date() });
       navigation.navigate('SwingResults', { swingId: row.id });
     } catch {
       Alert.alert(T.importFailed);
     } finally {
       setBusy(false);
     }
-  }, [busy, navigation, club]);
+  }, [busy, navigation]);
 
-  const doRecord = useCallback(() => navigation.navigate('SwingCapture', { club }), [navigation, club]);
-  const pickClub = useCallback((c) => { clubPicked.current = true; setClub(c); setLastSwingClub(c); }, []);
+  const doRecord = useCallback(() => navigation.navigate('SwingCapture'), [navigation]);
 
   // First analysis asks height + handedness once (D5, D6), then carries on.
   const gate = useCallback((action) => {
@@ -126,9 +120,12 @@ export default function SwingHomeScreen({ navigation }) {
   const toggle = (id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length >= 2 ? p : [...p, id]));
   const endSelect = () => { setSelecting(false); setPicked([]); };
 
+  // D26: a swing whose marking pass is unfinished resumes it; Results come after.
+  const unmarked = (sw) => sw.status === 'ready' && !!sw.marked && !passDone(sw.marked);
   const onRowPress = (sw) => {
     if (selecting) { toggle(sw.id); return; }
-    navigation.navigate('SwingResults', { swingId: sw.id });
+    if (unmarked(sw)) navigation.navigate('SwingEditMarks', { swingId: sw.id, mode: 'pass' });
+    else navigation.navigate('SwingResults', { swingId: sw.id });
   };
   const onRowLongPress = (sw) => {
     if (swings.length < 2 || selecting) return;
@@ -149,12 +146,15 @@ export default function SwingHomeScreen({ navigation }) {
 
   const renderRow = (sw) => {
     const sel = selecting ? picked.includes(sw.id) : null;
-    const worst = sw.counts ? (sw.counts.red ? 'red' : sw.counts.yellow ? 'yellow' : 'green') : 'none';
+    const marking = unmarked(sw);
+    const worst = sw.counts && !marking ? (sw.counts.red ? 'red' : sw.counts.yellow ? 'yellow' : 'green') : 'none';
     const headline = sw.status === 'pending' ? T.analysing
       : sw.status === 'error' ? T.failed
-        : sw.mainFault ? SWING_STRINGS.fault[sw.mainFault] ?? sw.mainFault : T.noFault;
+        : marking ? T.continueMarking(sw.marked.count, MARK_TOTAL)
+          : sw.mainFault ? SWING_STRINGS.fault[sw.mainFault] ?? sw.mainFault : T.noFault;
     const customName = sw.name !== defaultSwingName(sw.createdAt);
-    const c = sw.counts;
+    const c = marking ? null : sw.counts;
+    const clubName = SWING_STRINGS.club[normClub(sw.club)];
     return (
       <SwipeToDelete key={sw.id} enabled={!selecting} onDelete={() => confirmDelete(sw)} borderRadius={0} accessibilityLabel={`Delete ${sw.name}`}>
         <PressableScale
@@ -162,7 +162,7 @@ export default function SwingHomeScreen({ navigation }) {
           onPress={() => onRowPress(sw)}
           onLongPress={() => onRowLongPress(sw)}
           accessibilityRole="button"
-          accessibilityLabel={`${headline}, ${sw.name}${c ? `, ${T.countLabel(c.green, c.yellow, c.red)}` : ''}`}
+          accessibilityLabel={`${headline}, ${sw.name}, ${clubName}${c ? `, ${T.countLabel(c.green, c.yellow, c.red)}` : ''}`}
           accessibilityState={sel == null ? undefined : { selected: sel }}
         >
           {sel != null ? (
@@ -180,25 +180,24 @@ export default function SwingHomeScreen({ navigation }) {
             </View>
             <Text style={s.rowName} numberOfLines={1}>{sw.name}</Text>
             {customName ? <Text style={s.rowSub}>{defaultSwingName(sw.createdAt)}</Text> : null}
-            {c || sw.fps ? (
-              <View style={s.metaLine}>
-                {c ? (
-                  <View style={s.counts}>
-                    {['green', 'yellow', 'red'].map((k) => (
-                      <View key={k} style={s.count}>
-                        <View style={[s.dotSm, { backgroundColor: tone[k] }]} />
-                        <Text style={s.countNum}>{c[k]}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-                {sw.fps ? (
-                  <Text style={[s.fpsTag, { color: tone[fpsState(sw.fps)] }]}>
-                    {`${Math.round(sw.fps.effective)} FPS${sw.fps.approximate ? ' · APPROX' : ''}`}
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
+            <View style={s.metaLine}>
+              <Text style={s.clubChip} testID={`club-chip-${sw.id}`}>{clubName}</Text>
+              {c ? (
+                <View style={s.counts}>
+                  {['green', 'yellow', 'red'].map((k) => (
+                    <View key={k} style={s.count}>
+                      <View style={[s.dotSm, { backgroundColor: tone[k] }]} />
+                      <Text style={s.countNum}>{c[k]}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+              {sw.fps ? (
+                <Text style={[s.fpsTag, { color: tone[fpsState(sw.fps)] }]}>
+                  {`${Math.round(sw.fps.effective)} FPS${sw.fps.approximate ? ' · APPROX' : ''}`}
+                </Text>
+              ) : null}
+            </View>
           </View>
           {!selecting ? <Feather name="chevron-right" size={18} color={theme.text.muted} /> : null}
         </PressableScale>
@@ -292,10 +291,6 @@ export default function SwingHomeScreen({ navigation }) {
           </View>
         ) : (
           <>
-            <View style={s.clubRow}>
-              <Text style={s.clubLabel}>{SWING_STRINGS.club.label}</Text>
-              <ClubPicker value={club} onChange={pickClub} testID="home-club-picker" />
-            </View>
             <View style={s.btnRow}>
               <PressableScale
                 style={[s.btn, s.btnPrimary, s.btnRecord, !canAnalyse && s.btnDisabled]}
@@ -426,6 +421,10 @@ const makeStyles = (theme) => StyleSheet.create({
   dot: { width: 9, height: 9, borderRadius: 5 },
   dotSm: { width: 7, height: 7, borderRadius: 4 },
   fpsTag: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 0.6 },
+  clubChip: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 10.5, color: theme.text.secondary, backgroundColor: theme.bg.secondary,
+    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden',
+  },
   selCircle: {
     width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: theme.border.default,
     alignItems: 'center', justifyContent: 'center',
@@ -459,8 +458,6 @@ const makeStyles = (theme) => StyleSheet.create({
   privacy: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginBottom: 10 },
   privacyIcon: { marginTop: 1 },
   privacyText: { flex: 1, fontFamily: 'PlusJakartaSans-Medium', fontSize: 11.5, color: theme.text.secondary, lineHeight: 16 },
-  clubRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  clubLabel: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase' },
   btnRow: { flexDirection: 'row', gap: 10 },
   btn: {
     minHeight: 48, borderRadius: 14, paddingHorizontal: 16,

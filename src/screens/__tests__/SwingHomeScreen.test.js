@@ -27,7 +27,6 @@ jest.mock('../../store/swingStore', () => ({
   deleteSwing: jest.fn(),
   storageBytes: jest.fn(() => 184 * 1024 * 1024),
   setSwingProfile: jest.fn(() => Promise.resolve()),
-  setLastSwingClub: jest.fn(() => Promise.resolve()),
   defaultSwingName: jest.requireActual('../../store/swingStore').defaultSwingName,
 }));
 jest.mock('../../swing/availability', () => ({ getSwingAvailability: jest.fn() }));
@@ -45,6 +44,7 @@ const sw = (id, iso, extra = {}) => ({
   fps: { capture: 240, effective: 240, factor: 8, approximate: false },
   thumb: null,
   bytes: 1000,
+  marked: { state: 'done', count: 6 },
   ...extra,
 });
 
@@ -116,7 +116,7 @@ describe('SwingHomeScreen', () => {
   test('Record opens the capture route', () => {
     const { getByLabelText, navigation } = setup();
     fireEvent.press(getByLabelText('Record'));
-    expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture', { club: 'iron' });
+    expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture');
   });
 
   test('Import picks a video, stores a swing and opens results', async () => {
@@ -128,58 +128,47 @@ describe('SwingHomeScreen', () => {
     expect(store.createSwing).toHaveBeenCalledWith(expect.objectContaining({ videoUri: 'file:///clip.mp4', source: 'import' }));
   });
 
-  describe('club picker (D19)', () => {
-    test('shows Iron selected by default, with Driver one tap away', () => {
-      const { getByLabelText } = setup();
-      expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(true);
-      expect(getByLabelText('Driver').props.accessibilityState.selected).toBe(false);
-    });
-
-    test('starts on the last club used and remembers a new choice', () => {
-      store.getSwingProfile.mockReturnValue({ heightCm: null, handedness: 'right', asked: true, lastClub: 'driver' });
-      const { getByLabelText } = setup();
-      expect(getByLabelText('Driver').props.accessibilityState.selected).toBe(true);
-      fireEvent.press(getByLabelText('Iron'));
-      expect(store.setLastSwingClub).toHaveBeenCalledWith('iron');
-      expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(true);
-    });
-
-    test('follows the remembered club when the profile hydrates after the first render, but never overrides a pick', () => {
-      const profile = (lastClub) => ({ heightCm: null, handedness: 'right', asked: true, lastClub });
-      const again = () => <ThemeProvider><SwingHomeScreen navigation={{ navigate: jest.fn(), goBack: jest.fn() }} /></ThemeProvider>;
-      const { getByLabelText, rerender } = setup();
-      expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(true);
-      store.getSwingProfile.mockReturnValue(profile('driver'));
-      rerender(again());
-      expect(getByLabelText('Driver').props.accessibilityState.selected).toBe(true);
-      fireEvent.press(getByLabelText('Iron'));
-      store.getSwingProfile.mockReturnValue(profile('driver '));
-      rerender(again());
-      expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(true);
-    });
-
-    test('Record carries the chosen club to the capture route', () => {
-      const { getByLabelText, navigation } = setup();
-      fireEvent.press(getByLabelText('Driver'));
-      fireEvent.press(getByLabelText('Record'));
-      expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture', { club: 'driver' });
-    });
-
-    test('Import creates the swing with the chosen club', async () => {
+  describe('club per video (D27) and the marking pass (D26)', () => {
+    test('no club picker on Home: Record and Import leave the club to the club sheet', async () => {
       pickSwingVideo.mockResolvedValue({ uri: 'file:///clip.mp4' });
       store.createSwing.mockResolvedValue({ id: 'new1' });
-      const { getByLabelText, navigation } = setup();
-      fireEvent.press(getByLabelText('Driver'));
+      const { queryByLabelText, getByLabelText, navigation } = setup();
+      expect(queryByLabelText('Iron')).toBeNull();
+      expect(queryByLabelText('Driver')).toBeNull();
       fireEvent.press(getByLabelText('Import'));
       await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('SwingResults', { swingId: 'new1' }));
-      expect(store.createSwing).toHaveBeenCalledWith(expect.objectContaining({ club: 'driver' }));
+      expect(store.createSwing.mock.calls[0][0].club).toBeUndefined();
     });
 
-    test('is hidden while picking swings to compare', () => {
-      const { getByLabelText, queryByLabelText } = setup({ swings: [A, B] });
-      expect(getByLabelText('Iron')).toBeTruthy();
-      fireEvent(getByLabelText(/^Early extension, /), 'longPress');
-      expect(queryByLabelText('Iron')).toBeNull();
+    test('each row shows its stored club as a chip (a swing from before the picker reads Iron)', () => {
+      const { getByTestId } = setup({ swings: [A, sw('d', '2026-10-01T10:00:00.000Z', { club: 'driver' })] });
+      expect(getByTestId('club-chip-a').props.children).toBe('Iron');
+      expect(getByTestId('club-chip-d').props.children).toBe('Driver');
+    });
+
+    test('an unfinished marking pass says "n of 6 confirmed · Continue" and resumes the canvas, not Results', () => {
+      const partial = sw('m', '2026-10-12T10:00:00.000Z', { marked: { state: 'partial', count: 2 } });
+      const fresh = sw('n', '2026-10-12T09:00:00.000Z', { marked: { state: 'none', count: 0 } });
+      const { getByText, getByLabelText, navigation } = setup({ swings: [partial, fresh] });
+      expect(getByText(SWING_STRINGS.home.continueMarking(2, 6))).toBeTruthy();
+      expect(getByText(SWING_STRINGS.home.continueMarking(0, 6))).toBeTruthy();
+      fireEvent.press(getByLabelText(/^2 of 6 confirmed/));
+      expect(navigation.navigate).toHaveBeenCalledWith('SwingEditMarks', { swingId: 'm', mode: 'pass' });
+    });
+
+    test('review: a swing whose pass 2 is still running says Analysing and offers no Continue', () => {
+      const running = sw('r', '2026-10-12T11:00:00.000Z', { status: 'pending', marked: { state: 'none', count: 0 } });
+      const { getByText, queryByText, getByLabelText, navigation } = setup({ swings: [running] });
+      expect(getByText(SWING_STRINGS.home.analysing)).toBeTruthy();
+      expect(queryByText(/Continue/)).toBeNull();
+      fireEvent.press(getByLabelText(/^Analysing, /));
+      expect(navigation.navigate).toHaveBeenCalledWith('SwingResults', { swingId: 'r' });
+    });
+
+    test('a row from before the mark-first flow (no state yet) opens Results, which decides', () => {
+      const { getByLabelText, navigation } = setup({ swings: [sw('o', '2026-10-01T10:00:00.000Z', { marked: undefined })] });
+      fireEvent.press(getByLabelText(/^Early extension, /));
+      expect(navigation.navigate).toHaveBeenCalledWith('SwingResults', { swingId: 'o' });
     });
   });
 
@@ -213,7 +202,7 @@ describe('SwingHomeScreen', () => {
     fireEvent.press(getByLabelText('Left-handed'));
     await act(async () => { fireEvent.press(getByLabelText('Save and analyse')); });
     expect(store.setSwingProfile).toHaveBeenCalledWith({ heightCm: 181, handedness: 'left' });
-    expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture', { club: 'iron' });
+    expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture');
   });
 
   test('skipping stores no height (approximate) and still carries on', async () => {
@@ -223,7 +212,7 @@ describe('SwingHomeScreen', () => {
     expect(getByText(/Skip for now · use \d+ cm \(approx\.\)/)).toBeTruthy();
     await act(async () => { fireEvent.press(getByLabelText(/^Skip for now/)); });
     expect(store.setSwingProfile).toHaveBeenCalledWith({ heightCm: null, handedness: 'right' });
-    expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture', { club: 'iron' });
+    expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture');
   });
 
   test('an implausible height keeps Save disabled and explains', () => {

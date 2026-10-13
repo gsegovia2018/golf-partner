@@ -70,7 +70,7 @@ const TAKE = { path: 'file:///cache/swing-take-1.mp4', fps: 240, width: 1280, he
 function setup({ modes = [HS240] } = {}) {
   native.listRecordingModes.mockResolvedValue(modes);
   const navigation = { goBack: jest.fn(), replace: jest.fn(), navigate: jest.fn() };
-  const utils = render(<SwingCaptureScreen navigation={navigation} route={{ params: { club: 'driver' } }} />);
+  const utils = render(<SwingCaptureScreen navigation={navigation} />);
   return { ...utils, navigation };
 }
 
@@ -122,12 +122,13 @@ test('records into the cache and stops into the review step without analysing', 
   expect(utils.getByText(T.analyse)).toBeTruthy();
 });
 
-test('Analyse feeds the import pipeline and replaces the screen with Results', async () => {
+test('Analyse feeds the import pipeline and replaces the screen with Results (the club comes later, D27)', async () => {
   createSwing.mockResolvedValue({ id: 'sw1' });
   const utils = setup();
   await recordAndStop(utils);
   await act(async () => { fireEvent.press(utils.getByTestId('capture-analyse')); });
-  expect(createSwing).toHaveBeenCalledWith(expect.objectContaining({ videoUri: TAKE.path, source: 'camera', club: 'driver' }));
+  expect(createSwing).toHaveBeenCalledWith(expect.objectContaining({ videoUri: TAKE.path, source: 'camera' }));
+  expect(createSwing.mock.calls[0][0].club).toBeUndefined();
   expect(utils.navigation.replace).toHaveBeenCalledWith('SwingResults', { swingId: 'sw1' });
   expect(mockDeleted).toContain(TAKE.path);
 });

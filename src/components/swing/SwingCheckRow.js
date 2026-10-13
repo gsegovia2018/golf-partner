@@ -10,38 +10,37 @@ const T = SWING_STRINGS.results;
 
 /**
  * One check: dot + label (+ the sentence), the value in ink, and the status word (D14).
- * A check waiting for a clubhead (D16) shows a "Place clubhead" button where the word goes;
- * while pass 2 is still running it says "calculating…" instead. `onPress` selects the check
+ * A check waiting for a clubhead (D16) shows a "Place clubhead" button where the word goes.
+ * `onPress` selects the check
  * (draws it on the still); `onPlace` opens Edit marks on the checkpoint that needs a mark.
  */
 export default function SwingCheckRow({
-  check, selected = false, onPress, onPlace, placeAt = null, pending = false, showText = true,
+  check, selected = false, onPress, onPlace, placeAt = null,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const name = check.cp && T.cpSuffix[check.cp] ? `${check.label}, ${T.cpSuffix[check.cp]}` : check.label;
-  const waiting = pending && check.status === 'unknown' && (check.reason === 'unplaced' || check.reason === 'hidden');
-  const status = waiting ? 'unknown' : check.status;
-  const word = waiting ? '…' : status === 'unknown'
+  const { status } = check;
+  const word = status === 'unknown'
     ? (check.reason === 'hidden' ? SWING_STRINGS.statusWord.unknown : '—')
     : SWING_STRINGS.statusWord[status];
-  const value = waiting ? T.calculating : valueText(check);
-  const cta = !waiting && placeAt && onPlace;
-  const a11y = `${name}, ${waiting ? T.calculating : value ? `${value}, ` : ''}${cta ? T.placeClubhead : word}`;
+  const value = valueText(check);
+  const cta = placeAt && onPlace;
+  const a11y = `${name}, ${value ? `${value}, ` : ''}${cta ? T.placeClubhead : word}`;
 
   const body = (
     <View style={[s.row, selected && s.rowOn]}>
       <View style={[s.dot, { backgroundColor: tone[status] }]} />
       <View style={s.mid}>
         <Text style={s.label}>{name}</Text>
-        {showText && check.text ? <Text style={s.text}>{check.text}</Text> : null}
+        {check.text ? <Text style={s.text}>{check.text}</Text> : null}
       </View>
       <View style={s.right}>
         {value ? (
           <Text style={s.value}>
             {value}
-            {check.approximate && check.unit === 'cm' && !waiting ? <Text style={s.approx}>{` ${SWING_STRINGS.approximate}`}</Text> : null}
+            {check.approximate && check.unit === 'cm' ? <Text style={s.approx}>{` ${SWING_STRINGS.approximate}`}</Text> : null}
           </Text>
         ) : null}
         {cta ? (

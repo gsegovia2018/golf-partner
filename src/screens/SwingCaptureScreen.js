@@ -93,9 +93,8 @@ function HudButton({ label, icon, onPress, ghost, testID, disabled, style }) {
   );
 }
 
-export default function SwingCaptureScreen({ navigation, route }) {
+export default function SwingCaptureScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const club = route?.params?.club;
   const [state, dispatch] = useReducer(captureReducer, initialCaptureState);
   const [permission, requestPermission, getPermission] = useCameraPermissions();
   const support = useMemo(() => captureSupport(), []);
@@ -225,25 +224,25 @@ export default function SwingCaptureScreen({ navigation, route }) {
     if (state.phase !== 'review' || !state.take) return;
     dispatch({ type: 'analyse' });
     try {
-      const row = await createSwing({ videoUri: state.take.path, source: 'camera', createdAt: new Date(), club });
+      const row = await createSwing({ videoUri: state.take.path, source: 'camera', createdAt: new Date() });
       deleteFile(takeUri.current);
       takeUri.current = null;
       navigation.replace('SwingResults', { swingId: row.id });
     } catch {
       dispatch({ type: 'saveFailed' });
     }
-  }, [state.phase, state.take, club, navigation]);
+  }, [state.phase, state.take, navigation]);
 
   const importInstead = useCallback(async () => {
     try {
       const clip = await pickSwingVideo();
       if (!clip) return;
-      const row = await createSwing({ videoUri: clip.uri, source: 'import', createdAt: new Date(), club });
+      const row = await createSwing({ videoUri: clip.uri, source: 'import', createdAt: new Date() });
       navigation.replace('SwingResults', { swingId: row.id });
     } catch {
       Alert.alert(SWING_STRINGS.home.importFailed);
     }
-  }, [club, navigation]);
+  }, [navigation]);
 
   const { phase, mode, blocked, take } = state;
   const live = cameraMounted(phase);
