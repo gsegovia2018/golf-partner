@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, Image, StyleSheet } from 'react-native';
-import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import SwingEditMarksScreen from '../SwingEditMarksScreen';
 import SwingOverlay, { fitRect } from '../../components/swing/SwingOverlay';
@@ -93,9 +93,11 @@ function setup({
   return { ...utils, navigation, listeners };
 }
 
-const open = async ({ at = 'mark-canvas', ...opts } = {}) => {
+const open = async ({ at = 'mark-canvas', settle = true, ...opts } = {}) => {
   const r = setup(opts);
   await r.findByTestId(at);
+  // the canvas takes no touch until the still of its frame is on screen
+  if (at === 'mark-canvas' && settle) await waitFor(() => expect(r.queryByTestId('mark-loading')).toBeNull());
   return { ...r, layer: r.queryByTestId('edit-touch-layer') };
 };
 const savedMarks = () => store.saveMarks.mock.calls[store.saveMarks.mock.calls.length - 1][1];
@@ -108,6 +110,8 @@ const press = async (el) => { await act(async () => { fireEvent.press(el); }); }
 beforeEach(() => {
   jest.clearAllMocks();
   getStill.mockReturnValue('file:///doc/swings/s1/frames/x.jpg');
+  ensureStills.mockImplementation(() => Promise.resolve({})); // clearAllMocks keeps a test's own implementation
+  store.saveMarks.mockImplementation(() => Promise.resolve());
   store.getSwingProfile.mockReturnValue({ lastClub: 'iron' });
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 });
@@ -115,7 +119,7 @@ beforeEach(() => {
 describe('the canvas (D26: design C, V2 stop guidance)', () => {
   test('opens at the position with the stop line, the fine strip, the dock and the six chapters; no skeleton or planes', async () => {
     getStill.mockReturnValue(null);
-    const u = await open({ checkpoint: 'top' });
+    const u = await open({ checkpoint: 'top', settle: false });
     expect(u.getByText('P4 · Top of backswing')).toBeTruthy();
     expect(u.getByText(M.edit)).toBeTruthy();
     const stop = u.getByTestId('mark-stop-line');
