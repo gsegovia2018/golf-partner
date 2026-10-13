@@ -17,10 +17,12 @@ import { listFriends, getCachedFriends } from '../store/friendStore';
 import { createLeague } from '../store/leagueStore';
 import { DEFAULT_POINTS_TABLE } from '../store/leagueStandings';
 import {
-  DEFAULT_HANDICAP_CAP, defaultSeason, parseIsoDate, parsePointsTable, formatPointsTable,
+  DEFAULT_HANDICAP_CAP, DEFAULT_PARTICIPATION_POINTS, defaultSeason, parseIsoDate, parsePointsTable, formatPointsTable,
   parseFeeCents, defaultMemberHandicap, parseMemberHandicap, buildCreateArgs, leagueJoinLink,
 } from '../store/leagueDraft';
 import { formatEuros } from '../store/leagueView';
+import PointsForPlaying from '../components/league/PointsForPlaying';
+import { useT } from '../i18n';
 import { shareOrigin } from '../lib/shareOrigin';
 import { NAME_MAX } from '../components/league/GuestIdentityFields';
 
@@ -42,6 +44,7 @@ const fmtDate = (iso) => {
 export default function LeagueCreateScreen({ navigation }) {
   const { theme } = useTheme();
   const { user } = useAuth();
+  const t = useT();
   const s = makeStyles(theme);
 
   const mountedRef = useRef(true);
@@ -56,6 +59,7 @@ export default function LeagueCreateScreen({ navigation }) {
   const [pointsText, setPointsText] = useState(formatPointsTable(DEFAULT_POINTS_TABLE));
   const [capText, setCapText] = useState(String(DEFAULT_HANDICAP_CAP));
   const [feeText, setFeeText] = useState('');
+  const [participationPoints, setParticipationPoints] = useState(DEFAULT_PARTICIPATION_POINTS);
   const [profile, setProfile] = useState(null);
   const [friends, setFriends] = useState([]);
   const [friendsLoading, setFriendsLoading] = useState(true);
@@ -136,7 +140,7 @@ export default function LeagueCreateScreen({ navigation }) {
       ];
       const result = await createLeague(buildCreateArgs({
         name, seasonStart: startIso, seasonEnd: endIso, pointsTable, cap: effectiveCap,
-        feeCents: feeCents ?? 0, members,
+        feeCents: feeCents ?? 0, participationPoints, members,
       }));
       if (mountedRef.current) setCreated(result);
     } catch (e) {
@@ -237,13 +241,15 @@ export default function LeagueCreateScreen({ navigation }) {
       <Text style={s.stepSubtitle}>Set up like your group's rules.</Text>
       <View style={s.card}>
         {ruleRow('calendar', 'One card a month', '18 holes, any rated course. Announce before the first shot.')}
-        {ruleRow('target', 'Better or worse than your handicap', `Each card is scored against the member's league handicap (max ${effectiveCap}) using the tee's slope and rating, so different courses compare fairly. 2.4 better beats 1.4 better.`, true)}
+        {ruleRow('target', t('league.rules.formatTitle'), t('league.rules.formatBody', { cap: effectiveCap }), true)}
       </View>
 
       <Text style={s.fieldLabel}>Points table (1st, 2nd, 3rd…)</Text>
       {input({ value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none', keyboardType: 'numbers-and-punctuation' })}
-      <Text style={s.hint}>Ties (to one decimal) share the summed points equally. No card scores 0.</Text>
+      <Text style={s.hint}>{t('league.rules.tieHint')}</Text>
       {!pointsTable && <Text style={s.errorText}>Enter whole numbers separated by commas.</Text>}
+
+      <PointsForPlaying value={participationPoints} onChange={setParticipationPoints} pointsTable={pointsTable} />
 
       <Text style={s.fieldLabel}>Handicap cap</Text>
       {input({ value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}

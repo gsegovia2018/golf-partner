@@ -194,3 +194,17 @@ describe('formatDate / formatTime', () => {
     spy.mockRestore();
   });
 });
+
+describe('formatOrdinal', () => {
+  const { formatOrdinal } = require('../format');
+  test('English suffixes, with the teens', () => {
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 103].map((n) => formatOrdinal(n, 'en')))
+      .toEqual(['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '103rd']);
+  });
+  test('Spanish uses the masculine ordinal sign', () => {
+    expect([1, 2, 14].map((n) => formatOrdinal(n, 'es'))).toEqual(['1.º', '2.º', '14.º']);
+  });
+  test('non-numbers give an empty string', () => {
+    expect(formatOrdinal(null, 'en')).toBe('');
+  });
+});

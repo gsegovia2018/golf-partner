@@ -8,6 +8,8 @@ import IconButton from '../components/ui/IconButton';
 import PullToRefresh from '../components/PullToRefresh';
 import DateField from '../components/DateField';
 import DeleteLeagueSheet from '../components/DeleteLeagueSheet';
+import PointsForPlaying from '../components/league/PointsForPlaying';
+import { useT, formatNumber } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
@@ -55,6 +57,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   const leagueId = route?.params?.leagueId;
   const { data, loading, refreshing, error, reload, refresh } = useLeague(navigation, leagueId);
   const appSettings = useAppSettings();
+  const t = useT();
 
   const [name, setName] = useState('');
   const [seasonStart, setSeasonStart] = useState('');
@@ -62,6 +65,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   const [pointsText, setPointsText] = useState('');
   const [capText, setCapText] = useState('');
   const [feeText, setFeeText] = useState('');
+  const [participation, setParticipation] = useState(0);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -81,6 +85,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
     setPointsText(formatPointsTable(l.pointsTable));
     setCapText(String(l.handicapCap));
     setFeeText(l.entryFeeCents ? String(l.entryFeeCents / 100) : '');
+    setParticipation(l.participationPoints ?? 0);
   }, [data]);
 
   // A Final started on this device whose link to the league is still being
@@ -163,6 +168,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
     const ok = await act(async () => {
       await updateLeagueRules(leagueId, {
         name: name.trim(), seasonStart: startIso, seasonEnd: endIso, pointsTable, cap, feeCents,
+        participationPoints: participation,
       });
       await reload();
     });
@@ -315,6 +321,8 @@ export default function LeagueSettingsScreen({ navigation, route }) {
               <Text style={s.errorText}>The season must end on or after it starts.</Text>
             )}
             {field('Points table (1st, 2nd, 3rd…)', { value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none' })}
+            <PointsForPlaying value={participation} onChange={setParticipation} pointsTable={pointsTable} count={active.length} />
+            <Text style={s.hint}>{t('league.rules.recompute')}</Text>
             {field('Handicap cap', { value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}
             {field('Entry fee (€)', { value: feeText, onChangeText: setFeeText, keyboardType: 'decimal-pad', placeholder: '0' })}
             <Text style={s.hint}>One card a month and net Stableford are fixed for every league.</Text>
@@ -329,8 +337,11 @@ export default function LeagueSettingsScreen({ navigation, route }) {
           </View>
         ) : (
           <View style={[s.card, { paddingVertical: 4 }]}>
-            {readRow('Format', 'One card a month · net Stableford')}
+            {readRow('Format', t('league.rules.format'))}
             {readRow('Points table', `${formatPointsTable(league.pointsTable)} · ties share`)}
+            {readRow(t('league.rules.playing'), league.participationPoints > 0
+              ? t('league.rules.playingMember', { points: formatNumber(league.participationPoints) })
+              : t('league.rules.playingNone'))}
             {readRow('Handicaps', `Max ${league.handicapCap} · changes need ${voteThreshold(active.length)} of ${active.length} votes`)}
             {readRow('Entry fee', league.entryFeeCents > 0 ? formatEuros(league.entryFeeCents) : 'None', true)}
           </View>

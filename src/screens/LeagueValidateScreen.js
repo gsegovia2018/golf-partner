@@ -17,7 +17,7 @@ import {
 } from '../store/leagueStore';
 import { scoreCard, cardMonth } from '../store/leagueRules';
 import {
-  monthName, formatNetDiff, formatNetDiffSigned, netDiffTone, firstName, markerAskedLine,
+  monthName, formatNetDiffSigned, firstName, markerAskedLine,
 } from '../store/leagueView';
 import { UNRATED_TEE_PROBLEM } from '../store/leagueOffApp';
 
@@ -296,8 +296,6 @@ export default function LeagueValidateScreen({ navigation, route }) {
   const markerFirst = pending ? firstName(pending.name) : '';
   // The server refuses to submit an unrated tee (P0001); say so up front.
   const unrated = !rated && !alreadySubmitted && !result;
-  const netTone = netDiffTone(netDifferential);
-  const netColor = netTone === 'better' ? theme.scoreColor('excellent') : netTone === 'worse' ? theme.destructive : theme.text.primary;
 
   // Fix a hole in the game's own scorecard, then come back and Check again.
   const editInScorecard = (
@@ -409,10 +407,10 @@ export default function LeagueValidateScreen({ navigation, route }) {
                 )}
               </View>
             </View>
-            {rated && netDifferential != null && (
+            {rated && card.points != null && (
               <Text style={s.waitingNet}>
-                <Text style={{ color: netColor, fontFamily: 'PlusJakartaSans-ExtraBold' }}>{formatNetDiff(netDifferential)}</Text>
-                {` ${netDifferential === 0 ? 'with' : 'than'} your league handicap ${card.leagueHandicap.toFixed(1)} · counts once confirmed`}
+                <Text style={{ fontFamily: 'PlusJakartaSans-ExtraBold' }}>{`${card.points} pts`}</Text>
+                {' Stableford · counts once confirmed'}
               </Text>
             )}
             <View style={s.btnRow}>
@@ -455,11 +453,11 @@ export default function LeagueValidateScreen({ navigation, route }) {
         {confirmed && rated && netDifferential != null && (
           <View style={s.resultCard}>
             <View style={s.resultHead}>
-              <Text style={[s.resultValue, { color: netColor }]}>{formatNetDiff(netDifferential)}</Text>
-              <Text style={s.resultKey}>{`${netDifferential === 0 ? 'with' : 'than'} your league handicap ${card.leagueHandicap.toFixed(1)}`}</Text>
+              <Text style={[s.resultValue, { color: theme.text.primary }]}>{card.points}</Text>
+              <Text style={s.resultKey}>Stableford pts</Text>
             </View>
             <Text style={s.resultSub}>
-              {`Net ${formatNetDiffSigned(netDifferential)} · differential ${card.differential.toFixed(1)} · ${card.points} pts · gross ${card.gross} (adjusted ${card.adjustedGross})`}
+              {`Gross ${card.gross} (adjusted ${card.adjustedGross}) · net differential ${formatNetDiffSigned(netDifferential)}, for reference`}
             </Text>
             <TouchableOpacity
               onPress={() => navigation.navigate('LeagueCard', { leagueId, month: cardMonth(new Date()), userId: user?.id })}

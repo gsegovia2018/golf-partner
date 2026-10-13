@@ -2,13 +2,18 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useMyLeagueRows } from '../hooks/useMyLeagueRows';
+import { useT, tr } from '../i18n';
 
 // LEAGUES section of the Play tab: one row per league I'm in, showing my
-// position. Reuses HomeScreen's list styles (`s`) so it matches GAMES and
-// TOURNAMENTS. Renders nothing when I'm in no league.
+// position and, underneath, where this month's card stands. Reuses
+// HomeScreen's list styles (`s`) so it matches GAMES and TOURNAMENTS.
+// Renders nothing when I'm in no league.
 export default function LeagueListSection({ navigation, meId, theme, s }) {
   const rows = useMyLeagueRows(navigation, meId);
+  useT(); // re-render on a language switch
   if (rows.length === 0) return null;
+  // Rows cached by an older version hold plain strings.
+  const text = (m) => (typeof m === 'string' ? m : tr(m));
   return (
     <>
       <Text style={s.sectionLabel}>LEAGUES</Text>
@@ -28,7 +33,8 @@ export default function LeagueListSection({ navigation, meId, theme, s }) {
                   <Text style={s.statusBadgeText}>League</Text>
                 </View>
               </View>
-              <Text style={s.tournamentCardMeta}>{row.position ?? 'No cards confirmed yet'}</Text>
+              <Text style={s.tournamentCardMeta}>{row.position ? text(row.position) : 'No cards confirmed yet'}</Text>
+              {!!row.month && <Text style={[s.tournamentCardMeta, { color: theme.text.muted }]}>{text(row.month)}</Text>}
             </View>
             <View style={s.tournamentCardRight}>
               <Feather name="chevron-right" size={18} color={theme.text.muted} />

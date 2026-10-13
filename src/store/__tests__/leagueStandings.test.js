@@ -270,3 +270,16 @@ describe('seasonTable', () => {
     expect(table.map((r) => [r.total, r.place])).toEqual([[0, 1], [0, 1]]);
   });
 });
+
+describe('monthResults tie size and floor flag', () => {
+  const c = (userId, points) => ({ userId, status: 'confirmed', points });
+  test('ranked rows say how many share their place and whether the floor lifted them', () => {
+    const rows = monthResults([c('a', 40), c('b', 30), c('c', 30), c('d', 10)], ['a', 'b', 'c', 'd'], [500, 300, 190], { participationPoints: 10 });
+    expect(rows.map((r) => [r.userId, r.tieSize, r.floored, r.seasonPoints]))
+      .toEqual([['a', 1, false, 500], ['b', 2, false, 245], ['c', 2, false, 245], ['d', 1, true, 10]]);
+  });
+  test('no floor, no flag', () => {
+    const rows = monthResults([c('a', 40), c('b', 30)], ['a', 'b'], [500]);
+    expect(rows.map((r) => r.floored)).toEqual([false, false]);
+  });
+});

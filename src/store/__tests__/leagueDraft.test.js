@@ -61,6 +61,7 @@ describe('buildCreateArgs', () => {
     expect(args.name).toBe('El Club');
     expect(args.pointsTable).toEqual(DEFAULT_POINTS_TABLE);
     expect(args.cap).toBe(30);
+    expect(args.participationPoints).toBe(10);
     expect(args.members).toEqual([{ userId: 'me', handicap: 18 }, { userId: 'f1', handicap: null }]);
   });
 });

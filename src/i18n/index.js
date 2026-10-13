@@ -4,6 +4,7 @@ import { useSyncExternalStore, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import en from './locales/en';
 import es from './locales/es';
+import { formatDate } from './format';
 
 export const LANGUAGE_PREF_KEY = '@language_pref';
 export const SUPPORTED = ['en', 'es'];
@@ -96,7 +97,15 @@ export function t(key, params = {}, language = lang) {
 }
 
 // Render a { key, params } descriptor returned by a pure store module.
-export const tr = (msg) => (msg ? t(msg.key, msg.params) : '');
+// A `monthKey` param ('2026-10') becomes `month` ("October" / "octubre") at
+// render time, so a descriptor cached before a language switch stays right.
+export const tr = (msg) => {
+  if (!msg) return '';
+  const params = msg.params?.monthKey
+    ? { ...msg.params, month: formatDate(`${msg.params.monthKey}-01`, 'monthName') }
+    : msg.params;
+  return t(msg.key, params);
+};
 
 // Re-renders the component when the language changes.
 export function useT() {
@@ -109,7 +118,7 @@ export function useLanguagePref() {
   return useSyncExternalStore(subscribeLanguage, getLanguagePref, getLanguagePref);
 }
 
-export { formatNumber, formatDate, formatTime } from './format';
+export { formatNumber, formatDate, formatTime, formatOrdinal } from './format';
 
 // Test helper.
 export function __resetForTests() {

@@ -17,9 +17,13 @@ import { semantic } from '../theme/tokens';
 //                mark shows the winner icon beside the name;
 //                onPress (optional) makes the row tappable, with a chevron
 //   footer       optional string under the rows
-//   sections     optional, instead of rows: [{ key, label, icon, gold?, rows?, body? }], each a
+//   sections     optional, instead of rows: [{ key, label, icon, gold?, cols?, rows?, body? }], each a
 //                small uppercase heading (icon + label; gold tints it) over its rows, or over
-//                `body` (a node) when it has no rows. A row may also set
+//                `body` (a node) when it has no rows. `cols` ([points, sub] heads, e.g.
+//                ['PTS', 'LEAGUE']) puts column heads at the right of the heading and gives
+//                the section's points a fixed column so the heads line up. A row may also set
+//                  pointsLabel / subLabel  spoken text for the points and the sub (screen readers)
+//                  white     white points (a count, not the ranking figure)
 //                  detail    a second line under the name
 //                  muted     dim points (the row does not count yet, or is listed but not ranked)
 //                  subGold   gold sub (table points)
@@ -33,7 +37,7 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
   const s = makeStyles(theme);
   const rankColors = [semantic.winner.dark, '#c0c8d4', '#daa06d'];
 
-  const renderRow = (row, i, list) => {
+  const renderRow = (row, i, list, cols) => {
     if (row.gap) {
       return (
         <View key={row.key} style={s.mastersGap} accessibilityLabel="More players">
@@ -65,8 +69,16 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
           </View>
           {!!row.detail && <Text style={s.mastersDetail} numberOfLines={2}>{row.detail}</Text>}
         </View>
-        <Text style={[s.mastersPoints, isFirstPlace && { fontSize: 18 }, row.muted && s.mastersPointsMuted, row.warn && s.mastersWarn]}>{row.points}</Text>
-        {row.sub != null && <Text style={[s.mastersSub, row.subGold && s.mastersSubGold, row.warn && s.mastersWarn]}>{row.compact ? '' : row.sub}</Text>}
+        <Text
+          style={[s.mastersPoints, isFirstPlace && { fontSize: 18 }, cols && s.mastersPointsCol, row.white && s.mastersPointsWhite, row.muted && s.mastersPointsMuted, row.warn && s.mastersWarn]}
+          {...(row.pointsLabel ? { accessibilityLabel: row.pointsLabel } : {})}
+        >{row.points}</Text>
+        {row.sub != null && (
+          <Text
+            style={[s.mastersSub, row.subGold && s.mastersSubGold, row.warn && s.mastersWarn]}
+            {...(row.subLabel ? { accessibilityLabel: row.subLabel } : {})}
+          >{row.compact ? '' : row.sub}</Text>
+        )}
         {!!row.onPress && <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.45)" style={{ marginLeft: 4 }} />}
       </Row>
     );
@@ -84,8 +96,14 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
           <View style={s.mastersSectionHead}>
             <Feather name={sec.icon} size={12} color={sec.gold ? semantic.winner.dark : 'rgba(255,255,255,0.6)'} />
             <Text style={[s.mastersSectionLabel, sec.gold && { color: semantic.winner.dark }]}>{sec.label}</Text>
+            {!!sec.cols && (
+              <View style={[s.mastersColHeads, sec.rows?.some((r) => r.onPress) && { marginRight: 20 }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                <Text style={[s.mastersColHead, s.mastersColHeadPoints]}>{sec.cols[0]}</Text>
+                <Text style={[s.mastersColHead, s.mastersColHeadSub]}>{sec.cols[1]}</Text>
+              </View>
+            )}
           </View>
-          {sec.rows ? sec.rows.map(renderRow) : sec.body}
+          {sec.rows ? sec.rows.map((row, i, list) => renderRow(row, i, list, !!sec.cols)) : sec.body}
         </View>
       )) : rows.map(renderRow)}
       {!!more && (
@@ -130,12 +148,19 @@ function makeStyles(t) {
     mastersSectionHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
     mastersSectionLabel: {
       fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: 'rgba(255,255,255,0.6)',
-      letterSpacing: 1.6, textTransform: 'uppercase',
+      letterSpacing: 1.6, textTransform: 'uppercase', flexShrink: 1,
     },
-    mastersDetail: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.55)', fontSize: 11, marginTop: 2 },
+    // 0.75 white on the deep green is 5.9:1 (the old 0.55 was 4.0:1, under WCAG AA).
+    mastersDetail: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.75)', fontSize: 11, marginTop: 2 },
     mastersNameCol: { flex: 1, minWidth: 0, marginRight: 8 },
     mastersName: { fontFamily: 'PlusJakartaSans-Medium', color: '#ffffff', fontSize: 14 },
     mastersPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 16, marginRight: 8 },
+    mastersPointsWhite: { color: '#ffffff' },
+    mastersPointsCol: { minWidth: 48, textAlign: 'right' },
+    mastersColHeads: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center' },
+    mastersColHead: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: 'rgba(255,255,255,0.75)', letterSpacing: 1.2, textAlign: 'right' },
+    mastersColHeadPoints: { minWidth: 48, marginRight: 8 },
+    mastersColHeadSub: { width: 60 },
     mastersPointsMuted: { color: 'rgba(255,255,255,0.75)', fontSize: 14 },
     mastersWarn: { color: semantic.warning.dark },
     mastersSubGold: { color: semantic.winner.dark, fontFamily: 'PlusJakartaSans-Bold' },

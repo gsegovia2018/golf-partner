@@ -1,6 +1,7 @@
 import {
   monthName, ordinal, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel,
-  positionText, cardStatus, monthRows, leagueSummary, viewableCards, monthBoard, collapseSeasonRows,
+  positionMessage, cardStatus, monthRows, leagueSummary, viewableCards, monthBoard, collapseSeasonRows,
+  tiePlaces, rankNotes, monthStanding, standingCells, monthLine, payoutPreview, stepParticipation,
   formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, myRoundScored, markerAskedLine, firstName, initials, cardBreakdown, leagueNameMatches,
 } from '../leagueView';
 
@@ -43,10 +44,12 @@ describe('standings text', () => {
     expect(deltaLabel(245, '2026-09')).toBe('+245 Sep');
     expect(deltaLabel(0, '2026-09')).toBe('');
   });
-  test('position text, null before any card is confirmed', () => {
-    expect(positionText(table, 'a', cardsByMonth)).toBe('T2nd of 2 · 2,340 pts');
-    expect(positionText(table, 'a', { '2026-10': [] })).toBeNull();
-    expect(positionText(table, 'zz', cardsByMonth)).toBeNull();
+  test('position message, null before any card is confirmed', () => {
+    expect(positionMessage(table, 'a', cardsByMonth)).toEqual({
+      key: 'league.play.position', params: { place: 'T2nd', total: 2, points: '2,340' },
+    });
+    expect(positionMessage(table, 'a', { '2026-10': [] })).toBeNull();
+    expect(positionMessage(table, 'zz', cardsByMonth)).toBeNull();
   });
 });
 
@@ -185,7 +188,7 @@ test('leagueSummary ranks members from the cached snapshot', () => {
       { userId: 'b', status: 'confirmed', points: 36, netDifferential: -0.5 },
     ] },
   };
-  expect(leagueSummary(snapshot, 'a').position).toBe('2nd of 2 · 300 pts');
+  expect(leagueSummary(snapshot, 'a').position.params).toMatchObject({ place: '2nd', total: 2, points: '300' });
   expect(leagueSummary({ ...snapshot, cardsByMonth: {} }, 'a').position).toBeNull();
   // The league's participation points lift a place beyond the table.
   const three = {
@@ -193,7 +196,7 @@ test('leagueSummary ranks members from the cached snapshot', () => {
     members: [{ userId: 'a' }, { userId: 'b' }],
     cardsByMonth: snapshot.cardsByMonth,
   };
-  expect(leagueSummary(three, 'a').position).toBe('2nd of 2 · 10 pts');
+  expect(leagueSummary(three, 'a').position.params).toMatchObject({ place: '2nd', total: 2, points: '10' });
 });
 
 test('viewableCards: scored cards only, in monthRows order, no void or left members', () => {
@@ -429,5 +432,106 @@ describe('myRoundScored', () => {
     expect(myRoundScored(null, 'r0', 'me')).toBeNull();
     expect(myRoundScored(game({}), 'nope', 'me')).toBeNull();
     expect(myRoundScored(game({}), 'r0', 'someone')).toBeNull();
+  });
+});
+
+describe('ties, the floor and the member standing', () => {
+  const league = { pointsTable: [500, 300, 190, 135], participationPoints: 10 };
+  const members = ['a', 'b', 'c', 'd', 'e', 'f'].map((userId) => ({ userId }));
+  const card = (userId, points) => ({ userId, status: 'confirmed', points, confirmation: 'qr', course: { name: 'X' } });
+  const cardsByMonth = {
+    '2026-10': [card('a', 41), card('b', 38), card('c', 38), card('d', 36), card('e', 20), card('f', 20)],
+  };
+  const snapshot = { league, members, cardsByMonth };
+
+  test('tiePlaces names the places a tie occupies', () => {
+    expect(tiePlaces(2, 2)).toBe('2nd + 3rd');
+    expect(tiePlaces(4, 3)).toBe('4th–6th');
+  });
+
+  test('rankNotes says who a tie shares with and when the floor paid', () => {
+    expect(rankNotes({ isTie: true, tieSize: 2, place: 2 })).toEqual([
+      { key: 'league.board.shares', params: { places: '2nd + 3rd' } },
+    ]);
+    expect(rankNotes({ isTie: true, tieSize: 2, place: 5, floored: true }).map((n) => n.key))
+      .toEqual(['league.board.shares', 'league.board.forPlaying']);
+    expect(rankNotes({ isTie: false, place: 1 })).toEqual([]);
+  });
+
+  test('monthBoard rows carry tie size and the floor flag', () => {
+    const { confirmed } = monthBoard(members, cardsByMonth, '2026-10', league.pointsTable, NOW, { participationPoints: 10 });
+    expect(confirmed.map((r) => [r.member.userId, r.place, r.tieSize, r.floored]))
+      .toEqual([['a', 1, 1, false], ['b', 2, 2, false], ['c', 2, 2, false], ['d', 4, 1, false], ['e', 5, 2, true], ['f', 5, 2, true]]);
+  });
+
+  test('monthStanding and standingCells', () => {
+    const d = monthStanding(snapshot, '2026-10', 'd', NOW);
+    expect(d).toMatchObject({ place: 4, of: 6, points: 36, seasonPoints: 135, floored: false });
+    expect(standingCells(d, { month: '2026-10', current: true })).toEqual({
+      place: '4th',
+      placeNote: { key: 'league.card.soFarIn', params: { monthKey: '2026-10' } },
+      lp: '+135',
+      lpNote: { key: 'league.card.ifEndedToday' },
+    });
+    const e = monthStanding(snapshot, '2026-10', 'e', NOW);
+    expect(standingCells(e, { month: '2026-10', current: false })).toEqual({
+      place: 'T5th',
+      placeNote: { key: 'league.card.ofCards', params: { count: 6 } },
+      lp: '+10',
+      lpNote: { key: 'league.card.forPlaying' },
+    });
+    expect(monthStanding(snapshot, '2026-10', 'zz', NOW)).toBeNull();
+  });
+
+  test('monthLine: rank, no card with days left, in progress, missed', () => {
+    expect(monthLine(snapshot, 'd', NOW)).toEqual({
+      key: 'league.play.monthRank', params: { monthKey: '2026-10', points: '36', place: '4th' },
+    });
+    expect(monthLine({ ...snapshot, cardsByMonth: {} }, 'd', NOW)).toEqual({
+      key: 'league.play.monthNone', params: { monthKey: '2026-10', count: 27 },
+    });
+    expect(monthLine({ ...snapshot, cardsByMonth: {} }, 'd', new Date(2026, 9, 31, 10))).toEqual({
+      key: 'league.play.monthNoneLast', params: { monthKey: '2026-10' },
+    });
+    const live = { ...snapshot, cardsByMonth: { '2026-10': [{ userId: 'd', status: 'announced', teeTime: new Date(2026, 9, 5).toISOString() }] } };
+    expect(monthLine(live, 'd', NOW).key).toBe('league.play.monthLive');
+    expect(monthLine({ ...snapshot, league: { ...league, archivedAt: 'x' } }, 'd', NOW)).toBeNull();
+  });
+
+  test('leagueSummary carries the month line only once the league has a position', () => {
+    expect(leagueSummary(snapshot, 'd', NOW).month.key).toBe('league.play.monthRank');
+    expect(leagueSummary({ ...snapshot, cardsByMonth: {} }, 'd', NOW)).toMatchObject({ position: null, month: null });
+  });
+});
+
+describe('payoutPreview and the stepper', () => {
+  const table = [500, 300, 190, 135, 110, 90, 75, 60, 45, 35, 25, 15];
+
+  test('closed range for a known member count, with the floor', () => {
+    expect(payoutPreview(table, 10, 18)).toEqual({
+      items: [{ label: '1st', points: '500' }, { label: '2nd', points: '300' }, { gap: true }, { label: '12th', points: '15' }],
+      rest: { from: '13th', to: '18th', single: false, points: '10' },
+      zero: false,
+    });
+  });
+
+  test('open range without a count, zero floor says playing past the table pays nothing', () => {
+    const p = payoutPreview(table, 0);
+    expect(p.rest).toEqual({ open: '13th', points: '0' });
+    expect(p.zero).toBe(true);
+  });
+
+  test('no range when everyone fits the table; places under the floor are lifted', () => {
+    expect(payoutPreview([500, 5], 10, 2)).toEqual({
+      items: [{ label: '1st', points: '500' }, { label: '2nd', points: '10' }], rest: null, zero: false,
+    });
+    expect(payoutPreview(null, 10)).toBeNull();
+  });
+
+  test('stepParticipation moves by 5 and stops at 0', () => {
+    expect(stepParticipation(10, 1)).toBe(15);
+    expect(stepParticipation(10, -1)).toBe(5);
+    expect(stepParticipation(0, -1)).toBe(0);
+    expect(stepParticipation(3, -1)).toBe(0);
   });
 });

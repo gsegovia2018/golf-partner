@@ -95,15 +95,17 @@ describe('LeagueStatsScreen', () => {
     expect(() => getByText(/Averages need 3 cards/)).toThrow();
   });
 
-  test('grid: a column per scored month and the confirmed net differentials', async () => {
+  test('grid: a column per scored month with each month\'s Stableford points and the point bands', async () => {
     const { getByText, getAllByText } = await open();
     fireEvent.press(getByText('Grid'));
     expect(getByText('Month winner')).toBeTruthy();
     expect(getAllByText('J').length).toBe(1); // Jul
-    expect(getByText('−1.0')).toBeTruthy(); // Nacho, August
-    expect(getByText('0.0')).toBeTruthy(); // Marcos, September
+    expect(getByText('37')).toBeTruthy(); // Nacho, August
+    expect(getByText('36')).toBeTruthy(); // Marcos, September
+    expect(getByText('36+ pts')).toBeTruthy();
+    expect(getByText('Under 33 pts')).toBeTruthy();
     expect(getAllByText('–').length).toBe(1); // Nacho's September card is not confirmed
-    fireEvent.press(getByText('−1.0'));
+    fireEvent.press(getByText('37'));
     expect(navigation.navigate).toHaveBeenCalledWith('LeagueCard', expect.objectContaining({ leagueId: route.params.leagueId }));
   });
 
