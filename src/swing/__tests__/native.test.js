@@ -139,3 +139,23 @@ describe('swing native bridge', () => {
     });
   });
 });
+
+describe('scrub proxies (D28): apiVersion 3, gated on their own', () => {
+  it('apiVersion 3: analysis and proxies', () => {
+    const { native } = load({ mod: fakeModule(3) });
+    expect(native.swingSupport().supported).toBe(true);
+    expect(native.proxySupport()).toBe(true);
+    expect(native.PROXY_API_VERSION).toBe(3);
+  });
+
+  it('apiVersion 2: still analyses and marks (the analysis contract did not change), but writes no proxies', () => {
+    const { native } = load({ mod: fakeModule(2) });
+    expect(native.swingSupport().supported).toBe(true);
+    expect(native.proxySupport()).toBe(false);
+  });
+
+  it('no module (web, or an APK without it): no proxies', () => {
+    expect(load({ os: 'web' }).native.proxySupport()).toBe(false);
+    expect(load({ mod: null }).native.proxySupport()).toBe(false);
+  });
+});

@@ -8,7 +8,7 @@ jest.mock('expo-file-system', () => ({
     get exists() { return mockExists.has(this.path); }
   },
   Directory: class {
-    constructor() { this.exists = true; this.uri = 'file:///doc/swings/s1/frames'; }
+    constructor(...parts) { this.exists = true; this.uri = parts.length > 1 ? `file:///doc/${parts.slice(1).join('/')}` : 'file:///doc/swings/s1/frames'; }
     create() {}
   },
 }));
@@ -55,5 +55,30 @@ describe('ensureStills', () => {
     const { nativeApi, ensureStills } = require('../frames');
     expect(nativeApi()).toBeNull();
     expect(await ensureStills('s1', [1])).toEqual({ 1: null });
+  });
+});
+
+describe('scrub proxies (D28): the swing window, every 4th frame, no I/O per frame', () => {
+  const meta = { every: 4, from: 200, to: 680, count: 121 };
+
+  test('the window is about 1 s before the motion starts to 0.5 s after the finish, clamped', () => {
+    const { proxyWindow } = require('../frames');
+    const a = { fps: { capture: 240 }, internal: { motionStart: 400 }, checkpoints: { finish: { i: 640 } } };
+    expect(proxyWindow(a, 1297)).toEqual([160, 760]);
+    expect(proxyWindow({ ...a, internal: { motionStart: 100 } }, 1297)[0]).toBe(0);
+    expect(proxyWindow({ ...a, checkpoints: { finish: { i: 1250 } } }, 1297)[1]).toBe(1296);
+  });
+
+  test('the nearest proxy inside the window; null outside it or without proxies (apiVersion 2, older swings)', () => {
+    const { getProxy, proxyFrame } = require('../frames');
+    expect(proxyFrame(205, meta)).toBe(204);
+    expect(proxyFrame(207, meta)).toBe(208);
+    expect(proxyFrame(199, meta)).toBe(200);
+    expect(proxyFrame(150, meta)).toBeNull(); // outside: the canvas uses stills there
+    expect(proxyFrame(682, meta)).toBe(680);
+    expect(proxyFrame(700, meta)).toBeNull();
+    expect(proxyFrame(300, null)).toBeNull();
+    expect(getProxy('s1', 205, meta)).toBe('file:///doc/swings/s1/proxy/204.jpg');
+    expect(getProxy('s1', 205, undefined)).toBeNull();
   });
 });

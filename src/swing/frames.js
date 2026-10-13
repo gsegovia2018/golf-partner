@@ -31,6 +31,11 @@
 // Stills always live in <swing dir>/frames/<frame>.jpg, so getStill() finds them without
 // native (Results on a saved swing, a web preview) and ensureStills() only calls native for
 // the frames that are missing.
+//
+// Scrub proxies (D28, apiVersion 3) live in <swing dir>/proxy/<frame>.jpg, one every
+// PROXY_EVERY frames of the whole clip, written by pass 2 (extractCheckpoints' proxyEvery).
+// They go with the swing folder. A swing analysed by an older binary has none: getProxy()
+// returns null and the canvas keeps the last full-resolution still while scrubbing.
 
 import { Paths, File, Directory } from 'expo-file-system';
 import { getSwingAvailability } from './availability';
@@ -47,7 +52,10 @@ export function nativeApi() {
   }
 }
 
+export const PROXY_EVERY = 4;
+
 const framesDir = (swingId) => new Directory(Paths.document, 'swings', swingId, 'frames');
+export const proxyDir = (swingId) => new Directory(Paths.document, 'swings', swingId, 'proxy');
 const stillFile = (swingId, frame) => new File(Paths.document, 'swings', swingId, 'frames', `${Math.round(frame)}.jpg`);
 
 /** URI of the saved still for a frame, or null when it was never extracted. Synchronous. */
@@ -84,4 +92,35 @@ export async function ensureStills(swingId, frames) {
     missing.forEach((f) => { out[f] = got?.[f] ?? getStill(swingId, f); });
   } catch { /* leave them null */ }
   return out;
+}
+
+/**
+ * The swing window pass 2 writes proxies for (D28): about one second before the motion starts to
+ * half a second after the finish, in container frames, clamped to the clip. Outside it the canvas
+ * uses stills.
+ */
+export function proxyWindow(analysis, frameCount) {
+  const fps = analysis?.fps?.capture || 240;
+  const start = analysis?.internal?.motionStart ?? analysis?.checkpoints?.address?.i ?? 0;
+  const finish = analysis?.checkpoints?.finish?.i ?? frameCount - 1;
+  const last = Math.max(0, frameCount - 1);
+  return [Math.max(0, Math.round(start - fps)), Math.min(last, Math.round(finish + fps / 2))];
+}
+
+/**
+ * The proxy frame nearest to `frame` for the proxies a swing has (`pose.pass2.proxies`: { every,
+ * from, to }, as native reported them), or null outside them. Pure: no file is touched per call.
+ */
+export function proxyFrame(frame, proxies) {
+  if (!proxies?.every || !(proxies.to >= proxies.from)) return null;
+  const f = Math.round(frame);
+  if (f < proxies.from - proxies.every / 2 || f > proxies.to + proxies.every / 2) return null;
+  const near = Math.round(f / proxies.every) * proxies.every;
+  return Math.min(proxies.to, Math.max(proxies.from, near));
+}
+
+/** URI of the scrub proxy nearest to a frame, or null (none for this swing or this frame). Synchronous, no I/O. */
+export function getProxy(swingId, frame, proxies) {
+  const f = proxyFrame(frame, proxies);
+  return f == null ? null : `${proxyDir(swingId).uri.replace(/\/$/, '')}/${f}.jpg`;
 }
