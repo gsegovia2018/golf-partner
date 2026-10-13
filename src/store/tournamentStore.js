@@ -307,6 +307,12 @@ async function _overlayAndSave(id, remote, { makeActive = true } = {}) {
     // merge.js:203-206, the LWW path this overlay replaces). Local wins,
     // including an explicit null.
     if (local && 'meId' in local) merged.meId = local.meId;
+    // `_role` comes only from the list RPC (fetchMyTournaments); the single
+    // fetch has none. Keep the cached one, or the two writers of this blob
+    // (Home's list + its tournament refresh) flip it in and out: every save
+    // changes the JSON, emits, and Home reloads both again — the alternating
+    // get_my_game_tournaments / get_game_tournament loop.
+    if (!('_role' in merged) && local?._role != null) merged._role = local._role;
     await saveLocal(merged, { makeActive });
     const latest = await _pendingEntriesFor(id);
     const stable = latest.length === snapshot.length
