@@ -264,9 +264,16 @@ export default function HomeScreen({ navigation, route }) {
   const reloadInFlight = useRef(null);
   const reloadPending = useRef(false);
   const hasLoadedOnceRef = useRef(!!initialTournament);
-  const reload = useCallback(async () => {
+  // `remote: false` (store-change reloads) reads the tournament from the cache
+  // with no background fetch: that fetch writes through saveLocal, which emits
+  // another change, which would re-enter here (see getTournament). Focus,
+  // pull-to-refresh and reconnect keep the refresh.
+  const reloadPendingRemote = useRef(false);
+  const reload = useCallback(async (opts) => {
+    const remote = opts?.remote !== false;
     if (reloadInFlight.current) {
       reloadPending.current = true;
+      if (remote) reloadPendingRemote.current = true;
       return reloadInFlight.current;
     }
     const run = async () => {
@@ -275,7 +282,9 @@ export default function HomeScreen({ navigation, route }) {
       if (!hasLoadedOnceRef.current) setLoading(true);
       try {
         const [t, listResult] = await Promise.all([
-          routeTournamentId ? getTournament(routeTournamentId) : loadTournament(),
+          routeTournamentId
+            ? getTournament(routeTournamentId, { refreshRemote: remote })
+            : loadTournament({ refreshRemote: remote }),
           loadAllTournamentsWithFallback(),
         ]);
         setTournament(t);
@@ -307,8 +316,10 @@ export default function HomeScreen({ navigation, route }) {
     const p = run().finally(() => {
       reloadInFlight.current = null;
       if (reloadPending.current) {
+        const again = reloadPendingRemote.current;
         reloadPending.current = false;
-        reload();
+        reloadPendingRemote.current = false;
+        reload({ remote: again });
       }
     });
     reloadInFlight.current = p;
@@ -391,7 +402,7 @@ export default function HomeScreen({ navigation, route }) {
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', reload);
     const unsubStore = subscribeTournamentChanges(() => {
-      if (shouldHandleStoreChange(navigation)) reload();
+      if (shouldHandleStoreChange(navigation)) reload({ remote: false });
     });
     // Re-pull when the device comes back online so the orange "Sin
     // conexión" banner clears on its own without forcing the user to

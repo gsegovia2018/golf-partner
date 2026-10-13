@@ -83,6 +83,35 @@ describe('Home reload: list + single fetch of the same tournament settle', () =>
     expect(fetchMyTournaments.mock.calls.length).toBeLessThanOrEqual(3);
   });
 
+  test('with a device-local meId too: writers that order keys differently still settle', async () => {
+    jest.doMock('../../lib/connectivity', () => ({
+      isOnline: () => true,
+      subscribeConnectivity: () => () => {},
+    }));
+    const fetchTournament = jest.fn(() => Promise.resolve(fixture()));
+    const fetchMyTournaments = jest.fn(() => Promise.resolve([{ ...fixture(), _role: 'owner' }]));
+    jest.doMock('../tournamentRepo', () => ({ fetchTournament, fetchMyTournaments }));
+    jest.doMock('../../lib/supabase', () => supabaseStub);
+
+    const {
+      saveLocal, getTournament, loadAllTournamentsWithFallback, subscribeTournamentChanges,
+    } = require('../tournamentStore');
+    // meId is device-local: the list writer sets it after `_role` (which the
+    // list entry already carries), the single writer before restoring `_role`.
+    await saveLocal({ ...fixture(), meId: 'p1' }, { makeActive: false });
+
+    let emits = 0;
+    const unsub = subscribeTournamentChanges(() => { emits += 1; });
+    for (let i = 0; i < 6; i++) {
+      await Promise.all([getTournament('t1'), loadAllTournamentsWithFallback()]);
+      await settle();
+    }
+    unsub();
+    // Equal blobs in a different key order are not a change: after the
+    // first round trip settles, nothing emits.
+    expect(emits).toBeLessThanOrEqual(2);
+  });
+
   test('the single fetch keeps the role the list stored', async () => {
     jest.doMock('../../lib/connectivity', () => ({
       isOnline: () => true,
