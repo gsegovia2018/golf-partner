@@ -116,6 +116,16 @@ describe('LeagueMarkerQRScreen', () => {
     await waitFor(() => getByText('Your marker confirmed your card. It counts.'));
   });
 
+  test('Send link shares the same marker URL as the QR', async () => {
+    const share = jest.spyOn(require('react-native').Share, 'share').mockResolvedValue({});
+    const { getByTestId, getByText } = render(wrap(<LeagueMarkerQRScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByTestId('qr-value'));
+    fireEvent.press(getByText('Send link'));
+    await waitFor(() => expect(share).toHaveBeenCalled());
+    expect(share.mock.calls[0][0].message).toContain('https://golf-partner.vercel.app/m/abc_DEF-123');
+    share.mockRestore();
+  });
+
   test('formatCountdown', () => {
     expect(formatCountdown(0)).toBe('0:00');
     expect(formatCountdown(-5)).toBe('0:00');

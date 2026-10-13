@@ -236,7 +236,7 @@ export default function LeagueCreateScreen({ navigation }) {
       <Text style={s.stepPrompt}>How does it work?</Text>
       <Text style={s.stepSubtitle}>Set up like your group's rules.</Text>
       <View style={s.card}>
-        {ruleRow('calendar', 'One card a month', '18 holes, any rated course. Declare before the first shot.')}
+        {ruleRow('calendar', 'One card a month', '18 holes, any rated course. Announce before the first shot.')}
         {ruleRow('target', 'Better or worse than your handicap', `Each card is scored against the member's league handicap (max ${effectiveCap}) using the tee's slope and rating, so different courses compare fairly. 2.4 better beats 1.4 better.`, true)}
       </View>
 
@@ -396,7 +396,7 @@ export default function LeagueCreateScreen({ navigation }) {
         />
         <View style={s.chipRow}>
           <View style={s.chip}><Text style={s.chipText}>{`${memberCount} member${memberCount === 1 ? '' : 's'}`}</Text></View>
-          <View style={s.chip}><Text style={s.chipText}>Net differential</Text></View>
+          <View style={s.chip}><Text style={s.chipText}>Net Stableford</Text></View>
         </View>
       </View>
 
@@ -449,7 +449,7 @@ export default function LeagueCreateScreen({ navigation }) {
             <View style={s.chipRow}>
               <View style={s.chip}><Text style={s.chipText}>{`${memberCount} member${memberCount === 1 ? '' : 's'}`}</Text></View>
               <View style={s.chip}><Text style={s.chipText}>{`${fmtDate(startIso)} – ${fmtDate(endIso)}`}</Text></View>
-              <View style={s.chip}><Text style={s.chipText}>Net differential</Text></View>
+              <View style={s.chip}><Text style={s.chipText}>Net Stableford</Text></View>
             </View>
           </View>
 

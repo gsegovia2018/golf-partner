@@ -7,7 +7,7 @@
 // the confirmed state and a way back to the board.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Share,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
@@ -91,6 +91,16 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
     return () => clearInterval(id);
   }, [cardId, confirmedCard]);
 
+  // The same one-time link as the QR, for a marker who is not next to me.
+  async function sendLink() {
+    if (!code || expired) return;
+    try {
+      await Share.share({ message: `Please confirm my golf card (works once, 2 h):\n${markerLink(code.token)}` });
+    } catch (e) {
+      setError(e?.message || 'Could not share the link.');
+    }
+  }
+
   const goBoard = () => navigation.navigate('LeagueBoard', { leagueId: leagueId ?? confirmedCard?.leagueId });
 
   const expiresAtMs = code ? new Date(code.expiresAt).getTime() : null;
@@ -131,6 +141,14 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
         <Text style={s.expiry}>
           {expired ? 'This code expired · get a new one' : `Expires in ${formatCountdown(remaining)} · works once`}
         </Text>
+        <TouchableOpacity
+          style={[s.secondaryBtn, expired && s.disabled]}
+          onPress={sendLink}
+          disabled={expired}
+          accessibilityRole="button"
+        >
+          <Text style={s.secondaryText}>Send link</Text>
+        </TouchableOpacity>
         {error ? <Text style={s.inlineError}>{error}</Text> : null}
       </>
     );

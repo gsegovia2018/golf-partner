@@ -17,9 +17,10 @@ import { isMissed, needsApproval, deadlineInfo } from '../store/leagueRules';
 import { seasonTable, monthResults } from '../store/leagueStandings';
 import {
   monthName, formatPoints, formatNetDiff, formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard,
-  daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, viewableCards, monthRows,
+  daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, myRoundScored, viewableCards, monthRows,
 } from '../store/leagueView';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
+import { getTournamentSnapshot } from '../store/tournamentStore';
 
 // The league's home: my own card, then this month's board (or the season / a past month).
 // Cache first, then live; pull to refresh.
@@ -300,7 +301,11 @@ export default function LeagueBoardScreen({ navigation, route }) {
 
   // My app card stuck before confirmation (left Validate, or no partner yet):
   // reopen Validate on its round. A submitted card goes straight to the check.
-  const finishValidating = !mine.offApp && (mine.kind === 'playing' || mine.kind === 'submitted') ? (
+  // While holes are still unscored the card is simply being played: the
+  // "Playing with the app" link to the scorecard is the way back, not Validate.
+  const stillPlaying = !mine.offApp && mine.kind === 'playing'
+    && myRoundScored(getTournamentSnapshot(mine.card.tournamentId), mine.card.roundId, meId) === false;
+  const finishValidating = !mine.offApp && !stillPlaying && (mine.kind === 'playing' || mine.kind === 'submitted') ? (
     <TouchableOpacity
       style={s.primaryBtn}
       onPress={() => navigation.navigate('LeagueValidate', {
@@ -363,12 +368,20 @@ export default function LeagueBoardScreen({ navigation, route }) {
       badge = mine.kind === 'playing' ? 'Playing' : 'Announced';
       body = (
         <>
-          <Text style={s.cardText}>
+          {/* An app card: the line opens the game's scorecard (the league
+              round is the game's first round). */}
+          <Text
+            style={s.cardText}
+            {...(!mine.offApp && mine.card.tournamentId ? {
+              onPress: () => navigation.navigate('Scorecard', { tournamentId: mine.card.tournamentId, roundIndex: 0 }),
+              accessibilityRole: 'link',
+            } : {})}
+          >
             {mine.offApp && mine.kind === 'announced'
               ? [`Announced ${timeLabel(mine.card.announcedAt)}`, mine.course,
                 [dayLabel(mine.card.teeTime), timeLabel(mine.card.teeTime)].filter(Boolean).join(' ')]
                 .filter(Boolean).join(' · ') + ' — playing without the app'
-              : `${mine.offApp ? 'Playing without the app' : 'Playing with the app'}${mine.course ? ` · ${mine.course}` : ''}`}
+              : `${mine.offApp ? 'Playing without the app' : 'Playing with the app'}${mine.course ? ` · ${mine.course}` : ''}${!mine.offApp && mine.card.tournamentId ? ' · Open scorecard ›' : ''}`}
           </Text>
           {mine.kind === 'announced' && mine.offApp && (
             <TouchableOpacity
@@ -379,7 +392,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
               <Text style={s.primaryText}>Add your score</Text>
             </TouchableOpacity>
           )}
-          <DeadlineLine card={mine.card} now={now} />
+          <DeadlineLine card={mine.card} now={now} style={s.deadline} />
           {finishValidating}
         </>
       );
@@ -401,6 +414,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
               mine.card.confirmedByName ? `confirmed by ${mine.card.confirmedByName}` : null]
               .filter(Boolean).join(' · ')}
           </Text>
+          {mine.kind === 'submitted' && !!mine.card.markerNote && (
+            <Text style={s.cardText}>{`Your marker sent it back: “${mine.card.markerNote}”`}</Text>
+          )}
           {mine.kind === 'submitted' && mine.offApp && (
             <TouchableOpacity
               style={s.primaryBtn}
@@ -529,6 +545,7 @@ function makeStyles(theme) {
       borderColor: theme.border.default, paddingVertical: 12, paddingHorizontal: 28,
     },
     secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
+    deadline: { marginBottom: 12 },
     btnRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
     splitBtn: {
       flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1,

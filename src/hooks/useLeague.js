@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getLeague, getLeagueCached } from '../store/leagueStore';
 
 // One league's snapshot for the League screens (the shape getLeague returns).
-// Cache first, then live, on mount and on every focus. If the live read fails
-// the cached snapshot stays on screen and `stale` is true; with nothing cached
+// Cache first, then live, on mount and on every focus. The cached snapshot is
+// not `stale` while the live read is still in flight; if the live read fails
+// it stays on screen and `stale` is true; with nothing cached
 // `error` carries the message. A deleted league always ends in `error`. `refresh` is the pull-to-refresh handler.
 export function useLeague(navigation, leagueId) {
   const [data, setData] = useState(null);
@@ -21,7 +22,6 @@ export function useLeague(navigation, leagueId) {
       if (cached?.snapshot && mountedRef.current && !dataRef.current) {
         dataRef.current = cached.snapshot;
         setData(cached.snapshot);
-        setStale(true);
         setLoading(false);
       }
     }

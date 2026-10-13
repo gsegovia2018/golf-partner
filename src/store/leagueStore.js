@@ -38,12 +38,22 @@ function isOfflineNow() {
   return Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.onLine === false;
 }
 
-// A postgres/PostgREST error always carries a `code`; a fetch/network failure
-// does not (same rule syncWorker uses).
+// A postgres/PostgREST error always carries a `code`; only a real network
+// failure (fetch TypeError, "Network request failed", offline browser) maps to
+// the offline message. Anything else keeps its own message.
+export function isNetworkFailure(error) {
+  if (!error || error.code) return false;
+  if (error instanceof TypeError) return true;
+  return /network request failed|failed to fetch|networkerror|load failed|network error/i.test(String(error.message ?? ''));
+}
+
 export function toLeagueError(error) {
   if (error instanceof LeagueError) return error;
   const code = error?.code ?? null;
-  if (!code) return new LeagueError(OFFLINE_MESSAGE, { offline: true });
+  if (!code) {
+    if (isOfflineNow() || isNetworkFailure(error)) return new LeagueError(OFFLINE_MESSAGE, { offline: true });
+    return new LeagueError(error?.message || 'Request failed', { hint: error?.hint ?? null });
+  }
   return new LeagueError(error.message ?? 'Request failed', { code, hint: error.hint ?? null });
 }
 
@@ -53,7 +63,7 @@ async function rpc(fn, args) {
   try {
     res = await supabase.rpc(fn, args);
   } catch (e) {
-    throw toLeagueError({ message: e?.message });
+    throw toLeagueError(e);
   }
   if (res.error) throw toLeagueError(res.error);
   return res.data;
@@ -65,7 +75,7 @@ async function selectRows(query) {
   try {
     res = await query;
   } catch (e) {
-    throw toLeagueError({ message: e?.message });
+    throw toLeagueError(e);
   }
   if (res.error) throw toLeagueError(res.error);
   return res.data;
@@ -379,6 +389,17 @@ export async function createLeague({
 // Join-screen summary; null for an unknown code.
 export async function getLeagueByCode(code) {
   return summaryToCamel(await rpc('get_league_by_code', { p_code: code }));
+}
+
+// Does this code belong to a league? "Join with code" asks after the
+// tournament lookup found nothing. Any failure reads as "no", so the
+// tournament's own error stays the one the person sees.
+export async function leagueCodeExists(code) {
+  try {
+    return !!(await getLeagueByCode(String(code ?? '').toUpperCase().trim()));
+  } catch {
+    return false;
+  }
 }
 
 // Signed-out invite screen: league-level facts only (anon-callable). null for
@@ -711,7 +732,7 @@ export async function uploadLeagueProof(leagueId, cardId, localUri) {
       .upload(path, body, { contentType: 'image/jpeg', upsert: true });
     if (error) throw toLeagueError(error);
   } catch (e) {
-    throw e instanceof LeagueError ? e : toLeagueError({ message: e?.message });
+    throw e instanceof LeagueError ? e : toLeagueError(e);
   }
   return path;
 }

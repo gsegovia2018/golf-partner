@@ -228,3 +228,49 @@ describe('SetupScreen league switch', () => {
     });
   });
 });
+
+describe('SetupScreen league load state', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    store.announceLeagueCard.mockResolvedValue({ id: 'card-1', month: '2026-10-01', announcedAt: 'x', leagueHandicap: 18 });
+    store.getMyCardsForMonth.mockResolvedValue([]);
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+  afterEach(() => { Alert.alert.mockRestore(); });
+
+  test('from the board: Start is held while the league loads, then enabled', async () => {
+    let release;
+    store.getMyLeagues.mockReturnValue(new Promise((r) => { release = r; }));
+    const { getByText, findByText, queryByText, findByLabelText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: params({ leagueId: 'L1' }) }} />,
+    ));
+    expect(await findByText('Checking your league…')).toBeTruthy();
+    fireEvent.press(getByText('Start Game'));
+    expect(mutate).not.toHaveBeenCalled();
+
+    await act(async () => { release([tour()]); });
+    await waitFor(() => expect(queryByText('Checking your league…')).toBeNull());
+    await findByLabelText('Counts for El Club del Mulligan');
+    fireEvent.press(getByText('Start Game'));
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+  });
+
+  test('from the board: a failed read says the round will not count, and Retry reads again', async () => {
+    store.getMyLeagues.mockRejectedValueOnce(new Error('offline'));
+    store.getMyLeagues.mockResolvedValue([tour()]);
+    const { findByText, getByText, findByLabelText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: params({ leagueId: 'L1' }) }} />,
+    ));
+    expect(await findByText("Couldn't load your league — this round won't count.")).toBeTruthy();
+    fireEvent.press(getByText('Retry'));
+    expect(await findByLabelText('Counts for El Club del Mulligan')).toBeTruthy();
+  });
+
+  test('without a league in the route a failed read stays quiet', async () => {
+    store.getMyLeagues.mockRejectedValue(new Error('offline'));
+    const { queryByText } = render(wrap(<SetupScreen navigation={navigation} route={{ params: params() }} />));
+    await flush();
+    await flush();
+    expect(queryByText(/Couldn't load your league/)).toBeNull();
+  });
+});

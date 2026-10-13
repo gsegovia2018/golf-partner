@@ -1,7 +1,7 @@
 import {
   monthName, ordinal, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel,
   positionText, cardStatus, monthRows, leagueSummary, viewableCards, monthBoard, collapseSeasonRows,
-  formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, markerAskedLine, firstName, initials, cardBreakdown, leagueNameMatches,
+  formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, myRoundScored, markerAskedLine, firstName, initials, cardBreakdown, leagueNameMatches,
 } from '../leagueView';
 
 const NOW = new Date(2026, 9, 4, 12, 0);
@@ -73,7 +73,7 @@ describe('card status', () => {
   });
   test('announced shows the time', () => {
     const iso = new Date(2026, 9, 4, 10, 10).toISOString();
-    expect(cardStatus({ status: 'announced', announcedAt: iso }, NOW).text).toBe('Declared · today 10:10');
+    expect(cardStatus({ status: 'announced', announcedAt: iso }, NOW).text).toBe('Announced · today 10:10');
   });
 });
 
@@ -110,7 +110,7 @@ describe('card status: post deadline', () => {
 
   test('a live card carries its deadline, text unchanged', () => {
     const s = cardStatus({ status: 'announced', postBy, announcedAt: '2026-10-10T09:00:00Z' }, before);
-    expect(s.text).toMatch(/^Declared/);
+    expect(s.text).toMatch(/^Announced/);
     expect(s.deadline).toMatchObject({ msLeft: 3 * 3600000, urgent: false });
     expect(cardStatus({ status: 'playing', postBy }, before).deadline.postBy).toEqual(new Date(postBy));
     expect(cardStatus({ status: 'playing' }, before).deadline).toBeNull();
@@ -413,4 +413,21 @@ test('initials', () => {
   expect(initials('María Fernanda de la Torre-Villalobos')).toBe('MT');
   expect(initials('  javi ')).toBe('J');
   expect(initials('')).toBe('?');
+});
+
+describe('myRoundScored', () => {
+  const holes = [{ number: 1 }, { number: 2 }];
+  const game = (scores) => ({
+    players: [{ id: 'p1', user_id: 'me' }],
+    rounds: [{ id: 'r0', holes, scores }],
+  });
+  test('false while a hole is unscored, true once all are', () => {
+    expect(myRoundScored(game({ p1: { 1: 4 } }), 'r0', 'me')).toBe(false);
+    expect(myRoundScored(game({ p1: { 1: 4, 2: 5 } }), 'r0', 'me')).toBe(true);
+  });
+  test('null when the game, round or my player is unknown', () => {
+    expect(myRoundScored(null, 'r0', 'me')).toBeNull();
+    expect(myRoundScored(game({}), 'nope', 'me')).toBeNull();
+    expect(myRoundScored(game({}), 'r0', 'someone')).toBeNull();
+  });
 });

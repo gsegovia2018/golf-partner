@@ -137,12 +137,19 @@ export default function SetupScreen({ navigation, route }) {
   // League switch (games only, before Start): leagues where I have no card
   // this month. The board's "Play with the app" passes leagueId to preselect
   // that league with the switch on.
-  const setupLeagues = useSetupLeagues(isGame, user?.id ?? null);
+  const {
+    leagues: setupLeagues, loading: leaguesLoading, error: leaguesError, retry: retryLeagues,
+  } = useSetupLeagues(isGame, user?.id ?? null);
   const [leaguePick, setLeaguePick] = useState(() => route?.params?.leagueId ?? null);
   const [leagueOn, setLeagueOn] = useState(() => !!route?.params?.leagueId);
   const league = setupLeagues.find((l) => l.id === leaguePick) ?? setupLeagues[0] ?? null;
   const myPlayer = players.find((p) => p.user_id && p.user_id === user?.id) ?? null;
   const leagueOffered = isGame && !!league && !!myPlayer;
+  // Opened from the board's "Play with the app": this round is meant to count,
+  // so a league that is still loading holds Start, and a failed read says so.
+  const leagueIntended = isGame && !!route?.params?.leagueId;
+  const leagueChecking = leagueIntended && !leagueOffered && leaguesLoading;
+  const leagueFailed = leagueIntended && !leagueOffered && !leaguesLoading && leaguesError;
   const leagueEligibleRound = isLeagueLength(rounds[0]);
   // The league ranks by net differential: my tee needs a slope and a rating.
   const leagueRated = !leagueOffered || !leagueEligibleRound || isLeagueRated(rounds[0], myPlayer.id);
@@ -667,7 +674,7 @@ export default function SetupScreen({ navigation, route }) {
 
   const isLastStep = stepKey === 'review';
   const nextEnabled = isStepValid(stepKey, { players, rounds })
-    && (!isLastStep || canStart);
+    && (!isLastStep || (canStart && !leagueChecking));
   const nextLabel = isLastStep
     ? (isGame ? 'Start Game' : 'Start Tournament')
     : 'Next';
@@ -1136,6 +1143,16 @@ export default function SetupScreen({ navigation, route }) {
         </View>
 
         {leagueOffered && renderLeagueSwitch()}
+
+        {leagueChecking && <Text style={s.leagueSub}>Checking your league…</Text>}
+        {leagueFailed && (
+          <View style={s.leagueCard}>
+            <Text style={s.leagueSub}>{"Couldn't load your league — this round won't count."}</Text>
+            <TouchableOpacity onPress={retryLeagues} accessibilityRole="button" style={{ paddingVertical: 6 }}>
+              <Text style={[s.leagueSub, { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' }]}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {finalStrokes.length > 0 && (
           <View style={[s.leagueCard, { paddingVertical: 12 }]}>

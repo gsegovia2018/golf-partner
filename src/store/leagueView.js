@@ -128,7 +128,7 @@ export function cardStatus(card, now = new Date()) {
       return { text: 'Playing now', tone: 'live', flag, deadline: deadlineInfo(card, now) };
     case 'announced':
       return {
-        text: `Declared · ${clock(card.announcedAt, now)}`.trim(), tone: 'live', flag, deadline: deadlineInfo(card, now),
+        text: `Announced · ${clock(card.announcedAt, now)}`.trim(), tone: 'live', flag, deadline: deadlineInfo(card, now),
       };
     default:
       return { text: 'No card yet', tone: 'muted', flag: null };
@@ -304,6 +304,23 @@ export function yourCardState(card) {
     offApp: card.source === 'offapp',
     card,
   };
+}
+
+// Has my league round every hole scored? true / false, or null when this
+// device can't tell (game not loaded, no player of mine in it): callers then
+// treat the card as ready, since Validate guards an incomplete card itself.
+export function myRoundScored(tournament, roundId, userId) {
+  const round = tournament?.rounds?.find((r) => r.id === roundId);
+  if (!round || !round.holes?.length) return null;
+  const players = tournament.players ?? [];
+  const lg = tournament.league ?? tournament.props?.league ?? null;
+  const me = players.find((p) => p.id === lg?.playerId)
+    ?? players.find((p) => p.user_id && p.user_id === userId);
+  if (!me) return null;
+  return round.holes.every((h) => {
+    const v = round.scores?.[me.id]?.[h.number];
+    return v != null && v !== '';
+  });
 }
 
 // Season table + "2nd of 7 · 2,340 pts" for one league snapshot (the shape

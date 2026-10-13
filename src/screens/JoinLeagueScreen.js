@@ -242,7 +242,7 @@ export default function JoinLeagueScreen({ navigation, route }) {
 
         <Text style={s.overline}>HOW IT WORKS</Text>
         <View style={s.card}>
-          {rule('calendar', 'One card a month', 'Declare before the first shot. That card counts.')}
+          {rule('calendar', 'One card a month', 'Announce before the first shot. That card counts.')}
           {rule('target', 'Net Stableford, league handicap', `Max ${league.handicapCap}. The group can lower it by vote.`)}
           {rule('check-circle', 'A marker confirms every card', 'In the app, by QR, or a photo of the signed card.')}
           {rule('award', league.entryFeeCents > 0 ? `Entry ${formatEuros(league.entryFeeCents)}` : 'No entry fee',

@@ -9,6 +9,7 @@ import { useTheme } from '../theme/ThemeContext';
 import {
   joinTournamentByCode, setActiveTournament, getTournament, findClaimedSlot,
 } from '../store/tournamentStore';
+import { leagueCodeExists } from '../store/leagueStore';
 import { supabase } from '../lib/supabase';
 
 export default function JoinTournamentScreen({ navigation, route }) {
@@ -48,6 +49,13 @@ export default function JoinTournamentScreen({ navigation, route }) {
         navigation.replace('ClaimPlayer', { tournamentId });
       }
     } catch (err) {
+      // Not a tournament code (the server said "Invalid code", not revoked or
+      // expired): "Join with code" also takes a league's invite code. A real
+      // tournament code never reaches this, so the two can't be confused.
+      if (/^invalid code/i.test(err?.message ?? '') && await leagueCodeExists(code)) {
+        navigation.replace('JoinLeague', { code: code.trim().toUpperCase() });
+        return;
+      }
       setAutoJoining(false);
       Alert.alert('Error', err.message ?? 'Could not join');
     } finally {
@@ -84,7 +92,7 @@ export default function JoinTournamentScreen({ navigation, route }) {
             <Feather name="link" size={32} color={theme.accent.primary} />
           </View>
           <Text style={s.title}>Enter Invite Code</Text>
-          <Text style={s.subtitle}>Ask the organiser for their invite code.</Text>
+          <Text style={s.subtitle}>Ask the organiser for their invite code (tournament or league).</Text>
 
           <TextInput
             style={s.codeInput}

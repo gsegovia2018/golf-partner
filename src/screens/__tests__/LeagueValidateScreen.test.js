@@ -22,6 +22,7 @@ jest.mock('../../store/leagueStore', () => ({
   requestLeagueMarker: jest.fn(),
   remindLeagueMarker: jest.fn(),
   cancelLeagueMarkerRequest: jest.fn(),
+  getLeagueCard: jest.fn(() => Promise.resolve(null)),
 }));
 
 const repo = require('../../store/tournamentRepo');
@@ -366,5 +367,40 @@ describe('LeagueValidateScreen: pick your marker', () => {
     fireEvent.press(getByText('Ask Ana'));
     await waitFor(() => expect(store.requestLeagueMarker).toHaveBeenCalledWith('card-1', 'user-3'));
     expect(await findByText('Waiting for Ana to confirm')).toBeTruthy();
+  });
+});
+
+describe('LeagueValidateScreen copy, marker note and scorecard route', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    repo.fetchTournament.mockResolvedValue(tournament());
+    store.getLeagueMarkerCandidates.mockResolvedValue({ pending: null, candidates: [] });
+    store.getLeagueCard.mockResolvedValue(null);
+  });
+
+  test('with no marker picked the footnote says the card is not confirmed until a marker does', async () => {
+    const { findByText, queryByText } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+    expect(await findByText(/submitted but not confirmed until a marker confirms it/)).toBeTruthy();
+    expect(queryByText(/counts straight away/)).toBeNull();
+  });
+
+  test('a returned card shows the marker note and Edit in scorecard opens that round', async () => {
+    store.getLeagueCard.mockResolvedValue({ id: 'card-1', status: 'submitted', markerNote: 'Hole 7 was a 6' });
+    const navigation = makeNav();
+    const { findByText, getByText } = render(wrap(<LeagueValidateScreen navigation={navigation} route={route} />));
+    expect(await findByText('Hole 7 was a 6')).toBeTruthy();
+    fireEvent.press(getByText('Edit in scorecard'));
+    expect(navigation.navigate).toHaveBeenCalledWith('Scorecard', { tournamentId: 't1', roundIndex: 0 });
+  });
+
+  test('a missing hole offers Edit in scorecard too', async () => {
+    const partial = { ...fives };
+    delete partial[4];
+    repo.fetchTournament.mockResolvedValue(tournament(partial));
+    const navigation = makeNav();
+    const { findByText, getByText } = render(wrap(<LeagueValidateScreen navigation={navigation} route={route} />));
+    expect(await findByText(/Every hole needs a score/)).toBeTruthy();
+    fireEvent.press(getByText('Edit in scorecard'));
+    expect(navigation.navigate).toHaveBeenCalledWith('Scorecard', { tournamentId: 't1', roundIndex: 0 });
   });
 });

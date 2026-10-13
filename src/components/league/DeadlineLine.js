@@ -45,7 +45,7 @@ function spokenCountdown(msLeft) {
 // countdown. Under 2 hours it turns amber and says "left", so colour is never
 // the only signal. Renders nothing for a card with no deadline. Pass the
 // screen's `now` so every countdown on it ticks together.
-export default function DeadlineLine({ card, now: nowProp }) {
+export default function DeadlineLine({ card, now: nowProp, style }) {
   const { theme } = useTheme();
   const tick = useMinuteClock();
   const now = nowProp ?? tick;
@@ -55,7 +55,7 @@ export default function DeadlineLine({ card, now: nowProp }) {
   const countdown = `${countdownText(info.msLeft)}${info.urgent ? ' left' : ''}`;
   const label = `Post your score by ${clockWithDay(info.postBy, now, true)}, ${spokenCountdown(info.msLeft)} left`;
   return (
-    <View style={s.row} accessible accessibilityLabel={label}>
+    <View style={[s.row, style]} accessible accessibilityLabel={label}>
       <Feather name="clock" size={14} color={color} />
       <Text style={[s.text, { color }]}>
         {`Post by ${clockWithDay(info.postBy, now)} · `}
