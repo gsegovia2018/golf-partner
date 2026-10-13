@@ -405,7 +405,7 @@ export function SwingResultsView({
 
             <View style={s.card} testID="results-marks">
               <Text style={s.overlineDark}>{T.marksTitle}</Text>
-              <MarkChapters themed status={markStatus} onSelect={openEdit} testID="results-chapters" />
+              <MarkChapters themed mirror={analysis.handedness === 'left'} status={markStatus} onSelect={openEdit} testID="results-chapters" />
               <Text style={[s.hint, s.marksHint]}>{T.marksHint}</Text>
               <View style={s.finishRow}>
                 <Text style={[s.hint, s.flex]}>{T.finishAuto}</Text>

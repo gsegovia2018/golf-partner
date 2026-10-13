@@ -9,6 +9,7 @@ import Svg, {
 import { hud, semantic } from '../../theme/tokens';
 import { withAlpha } from '../../theme/alpha';
 import { SWING_STRINGS } from '../../swing/strings';
+import Pictogram, { PICTOGRAM_KEYS } from './Pictogram';
 
 // The pieces of the marking canvas (D26, design C with V2 stop guidance). Fixed HUD palette:
 // the canvas is a video being annotated, the same case as the capture viewfinder.
@@ -17,6 +18,7 @@ const T = SWING_STRINGS.mark;
 const HUD_WARN = semantic.warning.dark; // the HUD amber, as on the capture screen
 export const MARK_COLOR = { hands: hud.accent, head: hud.text, ball: semantic.info.dark };
 const INK = hud.onAccent;
+const PICT_SIZE = 52; // the reference pictogram beside the stop line (V3)
 const DIM = withAlpha(hud.bg, 0.78); // an inactive chip on the picture
 const OUTLINE = withAlpha(hud.text, 0.35);
 const HANDS_FILL = withAlpha(hud.accent, 0.35);
@@ -189,12 +191,17 @@ export function Swatch({ mark, on = false, size = 16 }) {
 
 // --- The stop line (V1, always visible) and its cue panel ---------------------------------------
 
-export function StopLine({ cue, open, onToggle }) {
+export function StopLine({ cue, open, onToggle, mirror = false }) {
   if (!cue) return null;
   const stop = cue.stop;
   return (
     <>
       <View style={styles.stop} accessibilityLiveRegion="polite" testID="mark-stop-line">
+        {PICTOGRAM_KEYS.includes(cue.key) ? (
+          <View style={styles.pict}>
+            <Pictogram swingKey={cue.key} size={PICT_SIZE} color={hud.textSoft} accent={hud.accent} mirror={mirror} testID="mark-pictogram" />
+          </View>
+        ) : null}
         {stop ? (
           <View style={[styles.kind, stop.kind === 'last' && styles.kindLast]} accessibilityLabel={stop.kind === 'first' ? 'First frame' : 'Last frame'}>
             <Text style={styles.kindText}>{T.stopKind[stop.kind]}</Text>
@@ -309,6 +316,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: hud.inset, borderWidth: 1, borderColor: hud.border,
     borderRadius: 12, paddingVertical: 8, paddingHorizontal: 10,
   },
+  pict: { width: PICT_SIZE, height: PICT_SIZE, borderRadius: 8, backgroundColor: hud.fill, alignItems: 'center', justifyContent: 'center' },
   kind: { backgroundColor: hud.accent, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, marginTop: 1 },
   kindLast: { backgroundColor: HUD_WARN },
   kindText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, letterSpacing: 0.8, color: hud.onAccent },

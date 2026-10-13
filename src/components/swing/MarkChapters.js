@@ -5,6 +5,7 @@ import { hud, semantic } from '../../theme/tokens';
 import { withAlpha } from '../../theme/alpha';
 import { MARKED_KEYS, positionStatus, passCounts } from '../../swing/markPass';
 import { SWING_STRINGS } from '../../swing/strings';
+import Pictogram from './Pictogram';
 
 const T = SWING_STRINGS.mark;
 
@@ -16,10 +17,11 @@ const T = SWING_STRINGS.mark;
  * right end ("3 of 6", "editing from Results").
  */
 export default function MarkChapters({
-  status, current = null, onSelect, themed = false, right = null, testID = 'mark-chapters',
+  status, current = null, onSelect, themed = false, right = null, mirror = false, testID = 'mark-chapters',
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme, themed), [theme, themed]);
+  const ink = iconInk(theme, themed);
   const n = passCounts(status);
   return (
     <View style={s.wrap} testID={testID}>
@@ -39,7 +41,7 @@ export default function MarkChapters({
               testID={`chapter-${k}`}
             >
               <View style={[s.tile, on && s.tileOn]}>
-                <Text style={[s.p, on && s.pOn]}>{CP_P[k]}</Text>
+                <Pictogram swingKey={k} size={ICON} color={on ? ink.on : ink.off} accent={ink.accent} mirror={mirror} testID={`chapter-icon-${k}`} />
               </View>
               <View style={[s.dot, st === 'confirmed' && s.dotDone, st === 'skipped' && s.dotSkip]} />
               <Text style={[s.name, on && s.nameOn]} numberOfLines={1}>{name}</Text>
@@ -55,9 +57,12 @@ export default function MarkChapters({
   );
 }
 
-const CP_P = {
-  address: 'P1', leadArm: 'P3', top: 'P4', shaftDown: 'P6', impact: 'P7', shaftThrough: 'P8',
-};
+const ICON = 40; // the pictogram icon (V3); the tile is a little wider than the old P-number chip
+
+// The pictogram's quiet parts and its accent: the HUD palette on the canvas, the theme on Results.
+const iconInk = (theme, themed) => (themed
+  ? { off: theme.text.secondary, on: theme.text.primary, accent: theme.accent.primary }
+  : { off: hud.textMuted, on: hud.textSoft, accent: hud.accent });
 
 const makeStyles = (theme, themed) => {
   const c = themed ? {
@@ -70,14 +75,12 @@ const makeStyles = (theme, themed) => {
   return StyleSheet.create({
     wrap: { gap: 6 },
     row: { flexDirection: 'row', gap: 3 },
-    chapter: { flex: 1, minHeight: 56, alignItems: 'center', gap: 3, paddingTop: 2 },
+    chapter: { flex: 1, minHeight: 70, alignItems: 'center', gap: 3, paddingTop: 2 },
     tile: {
-      width: 40, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center',
+      width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
       backgroundColor: c.tile, borderWidth: 1.5, borderColor: c.tileBorder,
     },
     tileOn: { borderColor: c.onBorder, backgroundColor: c.onFill },
-    p: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: c.text },
-    pOn: { color: c.textOn },
     dot: { width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: c.ring },
     dotDone: { backgroundColor: c.done, borderColor: c.done },
     // shape as well as colour: confirmed is a filled dot, skipped a filled square, to do a ring

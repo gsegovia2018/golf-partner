@@ -555,7 +555,7 @@ export function SwingMarkCanvas({
         </View>
 
         <View style={[s.strip, { paddingBottom: 12 + insets.bottom }]}>
-          <StopLine cue={cue} open={cueOpen} onToggle={() => setCueOpen((v) => !v)} />
+          <StopLine cue={cue} open={cueOpen} onToggle={() => setCueOpen((v) => !v)} mirror={handedness === 'left'} />
           {!cueOpen ? (
             <FineStrip
               center={center}
@@ -594,7 +594,7 @@ export function SwingMarkCanvas({
             ))}
             <Text style={s.toast} accessibilityLiveRegion="polite" numberOfLines={2}>{toast}</Text>
           </View>
-          <MarkChapters status={draft.status} current={chapter && !fixFrom ? cp : null} onSelect={goto} right={countRight} />
+          <MarkChapters mirror={handedness === 'left'} status={draft.status} current={chapter && !fixFrom ? cp : null} onSelect={goto} right={countRight} />
           <View style={s.row}>
             {pass && !fixFrom ? (
               <HudButton ghost label={T.skip} onPress={once(skip)} disabled={saving} style={s.btnSide} testID="mark-skip" />
