@@ -24,10 +24,22 @@
 --       of its 18 holes is refused (HINT 'incomplete_card').
 --   R4  The tee comes from the course library when the card's course is a
 --       library course (see league_library_course below); the card is marked
---       tee_verified. A custom/unknown course keeps the client's tee and
---       tee_verified = false. A rated tee is still required ('unrated_tee').
+--       tee_verified. A library course with a tee label the library doesn't
+--       have is refused ('unknown_tee'), and a library tee without a rating
+--       is 'unrated_tee'. A custom course (no library id, or a library course
+--       with no tees at all) keeps the client's tee with tee_verified = false,
+--       and like an unannounced card it scores nothing until another admin
+--       approves it (approve_league_card). A rated tee is still required.
+--       Every tee and layout the server scores must be plausible: slope
+--       55-155, course rating within par - 15 .. par + 25 ('implausible_tee'),
+--       every par 3-6 and the SIs a permutation of 1-18 ('invalid_layout').
 --   R5  An app card's 18 holes must equal its player's settled game_scores for
 --       the round (HINT 'holes_mismatch').
+--   --  Scramble rounds (scramblepairs / scramble3v1 / scramble4: one team ball)
+--       can't be league cards: announce (p_scoring_mode, or the game round if
+--       it already exists) and submit refuse them ('scramble_round'). The mode
+--       is scoring.roundScoringMode: the round's scoringMode, else the
+--       tournament's props.settings.scoringMode, else 'stableford'.
 --
 -- THE MATHS (mirrors src/store/scoring.js, 18 holes)
 -- ---------
@@ -57,21 +69,25 @@
 -- holes replace the snapshot's. Anything short of that is "not verified".
 -- NOTE: the course library is collaboratively editable by any signed-in user
 -- (course_tees_write), so "verified" means "matches the shared library", not
--- "checked by an admin".
+-- "checked by an admin". The library is a trust boundary; locking its writes
+-- down is a separate follow-up.
 --
 -- BACKFILL (section 6)
 -- --------------------
--- Every non-void card with frozen holes gets playing_handicap, points, gross,
--- differential and net_differential recomputed from its OWN frozen course
--- snapshot and league handicap (the library is not re-applied to old cards:
--- a library edit after the round must not move an old card). tee_verified is
--- set to whether that frozen tee equals what the library resolves today.
--- Cards whose snapshot lacks a par/SI keep their stored values (the NOTICE
--- counts them). The values before the backfill are kept, first run only, in
--- league_cards_scoring_backup (RPC-less, RLS on, no grants) so the change can
--- be audited — see VERIFY — and dropped by hand once it has been checked.
--- A submitted card whose points change gets a new snapshot hash, so an
--- outstanding QR / marker request for it reads 'changed'.
+-- Every non-void card with frozen holes is rescored exactly like submit does:
+-- its OWN frozen course snapshot through league_rated_course (an older app
+-- card's slope/rating from the game round) and its league handicap. The
+-- library is not re-applied to old cards (a library edit after the round must
+-- not move an old card); tee_verified is set to whether that frozen tee
+-- equals what the library resolves today, so an old custom-tee card now
+-- waits for an admin's approval like a new one. A card the server can't
+-- score (no par/SI on every hole) gets points, playing handicap and the
+-- differentials set to NULL: it can't rank. The values before the backfill
+-- are kept, first run only, in league_cards_scoring_backup (RPC-less, RLS on,
+-- no grants) so the change can be audited — see VERIFY — and dropped by hand
+-- once it has been checked. A submitted card whose score changed gets a new
+-- snapshot hash, so its open marker request is ended and its unused tokens
+-- expire (as submit and void do); the owner asks again.
 -- ============================================================================
 
 -- 1) Columns ----------------------------------------------------------------------
@@ -188,13 +204,20 @@ SET search_path = public
 AS $$
   SELECT COALESCE(
     (SELECT gender FROM public.profiles WHERE user_id = p_user),
-    (SELECT gender FROM public.players WHERE user_id = p_user AND gender IS NOT NULL LIMIT 1)
+    (SELECT gender FROM public.players WHERE user_id = p_user AND gender IS NOT NULL
+      ORDER BY id LIMIT 1)
   ) IS NOT DISTINCT FROM 'female';
 $$;
 
--- R4: the course snapshot rebuilt from the course library (course_id, tee
--- label, slope/rating for the player's gender, par, holes), or NULL when the
--- card's course can't be resolved there. See the header for the rules.
+-- R4: what the course library says about the card's course, as
+-- {status, course}:
+--   'verified'    course = the snapshot rebuilt from the library (course_id,
+--                 tee label, slope/rating for the player's gender, par, holes)
+--   'unknown_tee' a library course with tees, but none has the card's label
+--   'unrated'     the library tee has no slope or rating (for that gender)
+--   'custom'      no library course id, a course with no tees, or a library
+--                 layout without 18 holes with par and SI: the client's tee
+-- See the header for where the id and label come from.
 CREATE OR REPLACE FUNCTION public.league_library_course(
   p_course jsonb, p_source text, p_tournament_id text, p_round_id text, p_player_id text,
   p_user uuid
@@ -204,6 +227,7 @@ STABLE
 SET search_path = public
 AS $$
 DECLARE
+  v_custom  constant jsonb := jsonb_build_object('status', 'custom');
   v_id_text text;
   v_id      uuid;
   v_label   text;
@@ -217,7 +241,7 @@ DECLARE
   v_n       int;
 BEGIN
   IF p_course IS NULL OR jsonb_typeof(p_course) <> 'object' THEN
-    RETURN NULL;
+    RETURN v_custom;
   END IF;
   v_id_text := NULLIF(btrim(COALESCE(p_course ->> 'course_id', p_course ->> 'courseId', '')), '');
   v_label   := NULLIF(btrim(COALESCE(p_course ->> 'tee', '')), '');
@@ -228,24 +252,32 @@ BEGIN
     v_label   := COALESCE(v_label,
                    NULLIF(btrim(COALESCE(v_body -> 'playerTees' -> p_player_id ->> 'label', '')), ''));
   END IF;
-  IF v_id_text IS NULL OR v_label IS NULL
+  IF v_id_text IS NULL
      OR v_id_text !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    RETURN NULL;
+    RETURN v_custom;
   END IF;
   v_id := v_id_text::uuid;
+  -- A course with no tee rows (legacy course-level rating) has nothing to
+  -- verify against.
+  IF NOT EXISTS (SELECT 1 FROM public.course_tees WHERE course_id = v_id) THEN
+    RETURN v_custom;
+  END IF;
 
+  -- Case- and space-insensitive, like tees.teeByLabel (plus inner runs of spaces).
   SELECT * INTO v_tee FROM public.course_tees
-   WHERE course_id = v_id AND lower(btrim(label)) = lower(v_label)
+   WHERE course_id = v_id
+     AND lower(regexp_replace(btrim(label), '\s+', ' ', 'g'))
+         = lower(regexp_replace(COALESCE(v_label, ''), '\s+', ' ', 'g'))
    ORDER BY sort_order, created_at
    LIMIT 1;
-  IF NOT FOUND THEN
-    RETURN NULL;
+  IF v_label IS NULL OR NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'unknown_tee');
   END IF;
   v_female := public.league_user_is_female(p_user);
   v_slope  := CASE WHEN v_female THEN COALESCE(v_tee.slope_women, v_tee.slope) ELSE v_tee.slope END;
   v_rating := CASE WHEN v_female THEN COALESCE(v_tee.rating_women, v_tee.rating) ELSE v_tee.rating END;
   IF v_slope IS NULL OR v_slope <= 0 OR v_rating IS NULL THEN
-    RETURN NULL;
+    RETURN jsonb_build_object('status', 'unrated');
   END IF;
 
   SELECT count(*), sum(h.par),
@@ -257,16 +289,117 @@ BEGIN
      OR (SELECT count(DISTINCT h.number) FROM public.course_holes h
           WHERE h.course_id = v_id AND h.number BETWEEN 1 AND 18
             AND h.par IS NOT NULL AND h.stroke_index IS NOT NULL) <> 18 THEN
-    RETURN NULL;
+    RETURN v_custom;
   END IF;
 
-  RETURN p_course || jsonb_build_object(
+  RETURN jsonb_build_object('status', 'verified', 'course', p_course || jsonb_build_object(
     'course_id', v_id,
     'tee',       v_tee.label,
     'slope',     v_slope,
     'rating',    v_rating,
     'par',       v_par,
-    'holes',     v_holes);
+    'holes',     v_holes));
+END;
+$$;
+
+-- The tee and layout of a course snapshot the server is about to score must
+-- be plausible: NULL when they are, else the refusal's HINT —
+-- 'invalid_layout' (a par outside 3-6, SIs that aren't a permutation of 1-18)
+-- or 'implausible_tee' (slope outside 55-155, course rating outside
+-- par - 15 .. par + 25). Assumes a complete card (league_card_score not NULL).
+CREATE OR REPLACE FUNCTION public.league_course_problem(p_course jsonb)
+RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = public
+AS $$
+DECLARE
+  v_bad_par int;
+  v_sis     int[];
+  v_par     int;
+  v_slope   numeric := trunc(public.league_num(p_course -> 'slope'));
+  v_rating  numeric := public.league_num(p_course -> 'rating');
+BEGIN
+  SELECT count(*) FILTER (WHERE x.par IS NULL OR x.par NOT BETWEEN 3 AND 6),
+         array_agg(x.si ORDER BY x.si), sum(x.par)
+    INTO v_bad_par, v_sis, v_par
+    FROM generate_series(1, 18) AS g(n)
+    LEFT JOIN LATERAL (
+      SELECT public.league_num(h -> 'par')::int AS par, public.league_num(h -> 'si')::int AS si
+        FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p_course -> 'holes') = 'array'
+                                       THEN p_course -> 'holes' ELSE '[]'::jsonb END) h
+       WHERE public.league_num(h -> 'n') = g.n
+       LIMIT 1) x ON true;
+  IF v_bad_par > 0 OR v_sis IS DISTINCT FROM (SELECT array_agg(i ORDER BY i) FROM generate_series(1, 18) i) THEN
+    RETURN 'invalid_layout';
+  END IF;
+  IF v_slope IS NULL OR v_slope NOT BETWEEN 55 AND 155
+     OR v_rating IS NULL OR v_rating NOT BETWEEN v_par - 15 AND v_par + 25 THEN
+    RETURN 'implausible_tee';
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+-- RAISE the refusal league_course_problem names, if any.
+CREATE OR REPLACE FUNCTION public.league_assert_plausible_course(p_course jsonb)
+RETURNS void
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = public
+AS $$
+DECLARE
+  v_problem text := public.league_course_problem(p_course);
+BEGIN
+  IF v_problem = 'invalid_layout' THEN
+    RAISE EXCEPTION 'This course layout can''t be right: every par must be 3 to 6 and the stroke indexes 1 to 18, each once.'
+      USING ERRCODE = 'P0001', HINT = 'invalid_layout';
+  ELSIF v_problem = 'implausible_tee' THEN
+    RAISE EXCEPTION 'This tee''s slope or course rating can''t be right: slope runs from 55 to 155, and the rating sits near the par.'
+      USING ERRCODE = 'P0001', HINT = 'implausible_tee';
+  END IF;
+END;
+$$;
+
+-- scoring.roundScoringMode for a game round on the server: the round's own
+-- scoringMode, else the tournament's settings.scoringMode, else 'stableford'.
+-- NULL when the round doesn't exist (yet).
+CREATE OR REPLACE FUNCTION public.league_round_scoring_mode(p_tournament_id text, p_round_id text)
+RETURNS text
+LANGUAGE sql
+STABLE
+SET search_path = public
+AS $$
+  SELECT COALESCE(NULLIF(r.body ->> 'scoringMode', ''),
+                  NULLIF(t.props #>> '{settings,scoringMode}', ''),
+                  'stableford')
+    FROM public.game_rounds r
+    LEFT JOIN public.tournaments t ON t.id = r.tournament_id
+   WHERE r.tournament_id = p_tournament_id AND r.id = p_round_id;
+$$;
+
+-- scoring.SCRAMBLE_MODES: one ball per team, so no personal card.
+CREATE OR REPLACE FUNCTION public.league_is_scramble(p_mode text)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = public
+AS $$
+  SELECT COALESCE(p_mode IN ('scramblepairs', 'scramble3v1', 'scramble4'), false);
+$$;
+
+-- The refusal both announce and submit use.
+CREATE OR REPLACE FUNCTION public.league_assert_not_scramble(p_mode text)
+RETURNS void
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = public
+AS $$
+BEGIN
+  IF public.league_is_scramble(p_mode) THEN
+    RAISE EXCEPTION 'A scramble is played with one team ball, so it can''t be a league card.'
+      USING ERRCODE = 'P0001', HINT = 'scramble_round';
+  END IF;
 END;
 $$;
 
@@ -278,7 +411,12 @@ BEGIN
     'public.league_card_holes(jsonb)',
     'public.league_card_score(jsonb, jsonb, numeric)',
     'public.league_user_is_female(uuid)',
-    'public.league_library_course(jsonb, text, text, text, text, uuid)'
+    'public.league_library_course(jsonb, text, text, text, text, uuid)',
+    'public.league_course_problem(jsonb)',
+    'public.league_assert_plausible_course(jsonb)',
+    'public.league_round_scoring_mode(text, text)',
+    'public.league_is_scramble(text)',
+    'public.league_assert_not_scramble(text)'
   ] LOOP
     EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon, authenticated', v_sig);
   END LOOP;
@@ -454,6 +592,168 @@ BEGIN
   END LOOP;
 END $$;
 
+-- 3b) announce_league_card: no scramble rounds; approve_league_card: hand-entered tees
+
+-- Replaced, not overloaded (an extra defaulted argument on a second overload
+-- would make every existing call ambiguous). Body of 20261012000000 plus
+-- p_scoring_mode and the scramble refusal.
+DROP FUNCTION IF EXISTS public.announce_league_card(uuid, text, jsonb, timestamptz, text, text, text);
+
+CREATE OR REPLACE FUNCTION public.announce_league_card(
+  p_league uuid, p_source text, p_course jsonb, p_tee_time timestamptz,
+  p_tournament_id text DEFAULT NULL, p_round_id text DEFAULT NULL, p_player_id text DEFAULT NULL,
+  p_scoring_mode text DEFAULT NULL
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid   uuid := auth.uid();
+  -- An app card tees off on Start, so its deadline runs from the server
+  -- clock, never from the phone's.
+  v_tee   timestamptz := CASE WHEN p_source = 'app' THEN now() ELSE COALESCE(p_tee_time, now()) END;
+  v_month date;
+  v_hcp   numeric(4,1);
+  v_id    uuid;
+  v_s0    date;
+  v_s1    date;
+BEGIN
+  IF NOT public.league_is_member(p_league, v_uid) THEN
+    RAISE EXCEPTION 'You are not in this league.' USING ERRCODE = '42501';
+  END IF;
+  PERFORM public.league_assert_open(p_league);
+  IF COALESCE(p_source, '') NOT IN ('app','offapp') THEN
+    RAISE EXCEPTION 'Unknown card source %', p_source USING ERRCODE = 'P0001';
+  END IF;
+  IF p_source = 'app' AND (p_tournament_id IS NULL OR p_round_id IS NULL OR p_player_id IS NULL) THEN
+    RAISE EXCEPTION 'An app card needs its game, round and player.' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_course IS NULL OR jsonb_typeof(p_course) <> 'object'
+     OR NULLIF(btrim(COALESCE(p_course ->> 'name', '')), '') IS NULL THEN
+    RAISE EXCEPTION 'Pick the course you are playing.' USING ERRCODE = 'P0001';
+  END IF;
+  -- No scramble card: the mode Setup is starting (p_scoring_mode), or the
+  -- game round's when it already exists. Submit checks the round again.
+  IF p_source = 'app' THEN
+    PERFORM public.league_assert_not_scramble(p_scoring_mode);
+    PERFORM public.league_assert_not_scramble(
+      public.league_round_scoring_mode(p_tournament_id, p_round_id));
+  END IF;
+
+  v_month := public.league_month_of(v_tee);
+  IF v_month < public.league_month_of(now()) THEN
+    RAISE EXCEPTION 'That month is over. Announce a card for this month or later.'
+      USING ERRCODE = 'P0001', HINT = 'past_month';
+  END IF;
+  -- A tee time already gone would be missed on arrival and burn the month.
+  -- A round already played is an unannounced card (approved by an admin).
+  -- 15 minutes of slack for announcing on the first tee.
+  IF p_source = 'offapp' AND v_tee < now() - interval '15 minutes' THEN
+    RAISE EXCEPTION 'That tee time has passed. If you already played, add it as a card you didn''t announce.'
+      USING ERRCODE = 'P0001', HINT = 'tee_time_passed';
+  END IF;
+  SELECT season_start, season_end INTO v_s0, v_s1 FROM public.leagues WHERE id = p_league;
+  IF (v_tee AT TIME ZONE 'Europe/Madrid')::date NOT BETWEEN v_s0 AND v_s1 THEN
+    RAISE EXCEPTION 'That date is outside the season (% to %).', v_s0, v_s1
+      USING ERRCODE = 'P0001', HINT = 'outside_season';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.league_cards
+              WHERE league_id = p_league AND user_id = v_uid
+                AND month = v_month AND status <> 'void') THEN
+    RAISE EXCEPTION 'You already have your % card.', to_char(v_month, 'FMMonth')
+      USING ERRCODE = 'P0001', HINT = 'card_exists';
+  END IF;
+
+  SELECT league_handicap INTO v_hcp FROM public.league_members
+   WHERE league_id = p_league AND user_id = v_uid;
+
+  BEGIN
+    INSERT INTO public.league_cards
+      (league_id, user_id, month, source, status, tournament_id, round_id, player_id,
+       course, tee_time, played_on, announced_at, league_handicap, post_by)
+    VALUES
+      (p_league, v_uid, v_month, p_source,
+       CASE WHEN p_source = 'app' THEN 'playing' ELSE 'announced' END,
+       p_tournament_id, p_round_id, p_player_id,
+       p_course, v_tee, (v_tee AT TIME ZONE 'Europe/Madrid')::date, now(), v_hcp,
+       v_tee + public.league_post_window())
+    RETURNING id INTO v_id;
+  EXCEPTION WHEN unique_violation THEN
+    -- Lost a race with a second device announcing the same month.
+    RAISE EXCEPTION 'You already have your % card.', to_char(v_month, 'FMMonth')
+      USING ERRCODE = 'P0001', HINT = 'card_exists';
+  END;
+
+  PERFORM public.notify_league_members(p_league, v_uid, 'league_card_announced', v_id,
+    jsonb_build_object(
+      'card_id',     v_id,
+      'source',      p_source,
+      'course_name', p_course ->> 'name',
+      'tee',         p_course ->> 'tee',
+      'tee_time',    v_tee,
+      'month',       v_month,
+      'tournament_id', p_tournament_id,
+      'round_id',      p_round_id));
+
+  RETURN jsonb_build_object('id', v_id, 'month', v_month, 'announced_at', now(),
+                            'league_handicap', v_hcp,
+                            'post_by', v_tee + public.league_post_window());
+END;
+$$;
+
+
+-- Body of 20261012000000: an unannounced card (R7) or one whose tee was
+-- entered by hand (tee_verified = false, R4) scores only once another admin
+-- approves it.
+CREATE OR REPLACE FUNCTION public.approve_league_card(p_card uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_c   public.league_cards%ROWTYPE;
+  v_at  timestamptz := now();
+BEGIN
+  SELECT * INTO v_c FROM public.league_cards WHERE id = p_card FOR UPDATE;
+  IF NOT FOUND OR NOT public.league_is_admin(v_c.league_id, v_uid) THEN
+    RAISE EXCEPTION 'Only the league admin can do that.' USING ERRCODE = '42501';
+  END IF;
+  IF v_c.user_id = v_uid THEN
+    RAISE EXCEPTION 'Another admin has to approve your own card.'
+      USING ERRCODE = '42501', HINT = 'own_card';
+  END IF;
+  PERFORM public.league_assert_open(v_c.league_id);
+  IF NOT (v_c.not_announced OR v_c.tee_verified IS FALSE) OR v_c.approved_at IS NOT NULL
+     OR v_c.status NOT IN ('submitted','confirmed') THEN
+    RAISE EXCEPTION 'This card doesn''t need approving.'
+      USING ERRCODE = 'P0001', HINT = 'not_needed';
+  END IF;
+
+  UPDATE public.league_cards
+     SET approved_by = v_uid, approved_at = v_at, updated_at = now()
+   WHERE id = p_card;
+
+  RETURN jsonb_build_object('id', p_card, 'approved_at', v_at);
+END;
+$$;
+
+
+DO $$
+DECLARE
+  v_sig text;
+BEGIN
+  FOREACH v_sig IN ARRAY ARRAY[
+    'public.announce_league_card(uuid, text, jsonb, timestamptz, text, text, text, text)',
+    'public.approve_league_card(uuid)'
+  ] LOOP
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon', v_sig);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated', v_sig);
+  END LOOP;
+END $$;
+
 -- 4) submit_league_card: scored by the server (R3-R5) ------------------------------
 -- Body of 20261013000000 with the score computed here. Same signature:
 -- p_gross, p_points and p_playing_handicap are ignored (older builds send them).
@@ -525,15 +825,25 @@ BEGIN
 
   v_holes := public.league_card_holes(p_holes);
 
+  -- No scramble card, even one announced before this rule.
+  IF v_c.source = 'app' THEN
+    PERFORM public.league_assert_not_scramble(
+      public.league_round_scoring_mode(v_c.tournament_id, v_c.round_id));
+  END IF;
+
   -- R4: the library tee when the course is a library course. An app card from
   -- an older build with no slope/rating gets the game round's tee first.
   v_course := public.league_rated_course(v_c.course, v_c.source, v_c.tournament_id,
                                          v_c.round_id, v_c.player_id);
   v_lib := public.league_library_course(v_course, v_c.source, v_c.tournament_id,
                                         v_c.round_id, v_c.player_id, v_c.user_id);
-  v_verified := v_lib IS NOT NULL;
-  v_course := COALESCE(v_lib, v_course);
-  IF NOT public.league_course_rated(v_course) THEN
+  IF v_lib ->> 'status' = 'unknown_tee' THEN
+    RAISE EXCEPTION 'That tee isn''t one of this course''s tees in the course library. Pick one of its tees.'
+      USING ERRCODE = 'P0001', HINT = 'unknown_tee';
+  END IF;
+  v_verified := v_lib ->> 'status' = 'verified';
+  v_course := CASE WHEN v_verified THEN v_lib -> 'course' ELSE v_course END;
+  IF v_lib ->> 'status' = 'unrated' OR NOT public.league_course_rated(v_course) THEN
     RAISE EXCEPTION 'This tee has no slope and course rating, so it can''t count for the league.'
       USING ERRCODE = 'P0001', HINT = 'unrated_tee';
   END IF;
@@ -559,6 +869,7 @@ BEGIN
     RAISE EXCEPTION 'Every hole of a league card needs a score, a par and a stroke index.'
       USING ERRCODE = 'P0001', HINT = 'incomplete_card';
   END IF;
+  PERFORM public.league_assert_plausible_course(v_course);
   v_ph   := (v_score ->> 'playing_handicap')::int;
   v_diff := public.league_card_differential(v_holes, v_course, v_ph);
   v_net  := public.league_net_differential(v_diff, v_c.league_handicap);
@@ -665,9 +976,13 @@ BEGIN
   v_holes := public.league_card_holes(p_holes);
 
   v_lib := public.league_library_course(p_course, 'offapp', NULL, NULL, NULL, v_uid);
-  v_verified := v_lib IS NOT NULL;
-  v_course := COALESCE(v_lib, p_course);
-  IF NOT public.league_course_rated(v_course) THEN
+  IF v_lib ->> 'status' = 'unknown_tee' THEN
+    RAISE EXCEPTION 'That tee isn''t one of this course''s tees in the course library. Pick one of its tees.'
+      USING ERRCODE = 'P0001', HINT = 'unknown_tee';
+  END IF;
+  v_verified := v_lib ->> 'status' = 'verified';
+  v_course := CASE WHEN v_verified THEN v_lib -> 'course' ELSE p_course END;
+  IF v_lib ->> 'status' = 'unrated' OR NOT public.league_course_rated(v_course) THEN
     RAISE EXCEPTION 'This tee has no slope and course rating, so it can''t count for the league.'
       USING ERRCODE = 'P0001', HINT = 'unrated_tee';
   END IF;
@@ -687,6 +1002,7 @@ BEGIN
     RAISE EXCEPTION 'Every hole of a league card needs a score, a par and a stroke index.'
       USING ERRCODE = 'P0001', HINT = 'incomplete_card';
   END IF;
+  PERFORM public.league_assert_plausible_course(v_course);
   v_ph   := (v_score ->> 'playing_handicap')::int;
   v_diff := public.league_card_differential(v_holes, v_course, v_ph);
 
@@ -741,52 +1057,94 @@ REVOKE ALL ON public.league_cards_scoring_backup FROM anon, authenticated;
 
 DO $$
 DECLARE
-  v_changed int;
-  v_skipped int;
+  v_changed  int;
+  v_unscored int;
+  v_ended    int;
 BEGIN
+  DROP TABLE IF EXISTS league_backfill_changed;
+  CREATE TEMP TABLE league_backfill_changed (id uuid PRIMARY KEY, status text, score_changed boolean) ON COMMIT DROP;
+
   WITH x AS (
-    SELECT c.id, c.holes, c.course, c.league_handicap,
-           public.league_card_score(c.holes, c.course, c.league_handicap) AS sc,
-           public.league_library_course(c.course, c.source, c.tournament_id, c.round_id,
-                                        c.player_id, c.user_id) AS lib
+    -- Exactly what submit scores: the frozen snapshot through league_rated_course.
+    SELECT c.id, c.holes, c.league_handicap, c.status,
+           c.course AS old_course, c.points AS old_points, c.playing_handicap AS old_ph, c.gross AS old_gross,
+           public.league_rated_course(c.course, c.source, c.tournament_id, c.round_id, c.player_id) AS course,
+           c.source, c.tournament_id, c.round_id, c.player_id, c.user_id
       FROM public.league_cards c
      WHERE c.status <> 'void' AND c.holes IS NOT NULL
   ), y AS (
-    SELECT x.*, (x.sc ->> 'playing_handicap')::int AS ph,
-           public.league_card_differential(x.holes, x.course, (x.sc ->> 'playing_handicap')::int) AS diff,
-           x.lib IS NOT NULL
-             AND public.league_num(x.lib -> 'slope')  IS NOT DISTINCT FROM public.league_num(x.course -> 'slope')
-             AND public.league_num(x.lib -> 'rating') IS NOT DISTINCT FROM public.league_num(x.course -> 'rating')
-             AS verified
+    SELECT x.*, public.league_card_score(x.holes, x.course, x.league_handicap) AS sc,
+           public.league_library_course(x.course, x.source, x.tournament_id, x.round_id,
+                                        x.player_id, x.user_id) AS lib
       FROM x
-     WHERE x.sc IS NOT NULL
+  ), z AS (
+    SELECT y.*, (y.sc ->> 'playing_handicap')::int AS ph,
+           (y.sc ->> 'points')::int AS pts,
+           -- A card the server can't score keeps its gross but has no score.
+           COALESCE((y.sc ->> 'gross')::int, (SELECT sum(value::int)::int FROM jsonb_each_text(y.holes))) AS gross,
+           public.league_card_differential(y.holes, y.course, (y.sc ->> 'playing_handicap')::int) AS diff,
+           y.lib ->> 'status' = 'verified'
+             AND public.league_num(y.lib #> '{course,slope}')  IS NOT DISTINCT FROM public.league_num(y.course -> 'slope')
+             AND public.league_num(y.lib #> '{course,rating}') IS NOT DISTINCT FROM public.league_num(y.course -> 'rating')
+             AS verified
+      FROM y
   ), upd AS (
     UPDATE public.league_cards c
-       SET playing_handicap = y.ph,
-           points           = (y.sc ->> 'points')::int,
-           gross            = (y.sc ->> 'gross')::int,
-           differential     = y.diff,
-           net_differential = public.league_net_differential(y.diff, y.league_handicap),
-           tee_verified     = y.verified
-      FROM y
-     WHERE c.id = y.id
-       AND (c.playing_handicap IS DISTINCT FROM y.ph
-            OR c.points IS DISTINCT FROM (y.sc ->> 'points')::int
-            OR c.gross IS DISTINCT FROM (y.sc ->> 'gross')::int
-            OR c.differential IS DISTINCT FROM y.diff
-            OR c.net_differential IS DISTINCT FROM public.league_net_differential(y.diff, y.league_handicap)
-            OR c.tee_verified IS DISTINCT FROM y.verified)
+       SET course           = z.course,
+           playing_handicap = z.ph,
+           points           = z.pts,
+           gross            = z.gross,
+           differential     = z.diff,
+           net_differential = public.league_net_differential(z.diff, z.league_handicap),
+           tee_verified     = z.verified
+      FROM z
+     WHERE c.id = z.id
+       AND (c.course IS DISTINCT FROM z.course
+            OR c.playing_handicap IS DISTINCT FROM z.ph
+            OR c.points IS DISTINCT FROM z.pts
+            OR c.gross IS DISTINCT FROM z.gross
+            OR c.differential IS DISTINCT FROM z.diff
+            OR c.net_differential IS DISTINCT FROM public.league_net_differential(z.diff, z.league_handicap)
+            OR c.tee_verified IS DISTINCT FROM z.verified)
+    RETURNING c.id, z.status,
+              (z.old_points IS DISTINCT FROM z.pts OR z.old_ph IS DISTINCT FROM z.ph) AS score_changed,
+              -- Anything league_card_hash covers: the marker's snapshot is gone.
+              (z.old_course IS DISTINCT FROM z.course OR z.old_points IS DISTINCT FROM z.pts
+               OR z.old_ph IS DISTINCT FROM z.ph OR z.old_gross IS DISTINCT FROM z.gross) AS hash_changed
+  )
+  INSERT INTO league_backfill_changed (id, status, score_changed)
+  SELECT id, status, score_changed FROM upd WHERE hash_changed;
+
+  SELECT count(*) INTO v_changed FROM league_backfill_changed WHERE score_changed;
+  SELECT count(*) INTO v_unscored
+    FROM public.league_cards
+   WHERE status <> 'void' AND holes IS NOT NULL AND points IS NULL;
+
+  -- A submitted card whose score changed has a new snapshot hash: end its open
+  -- marker request and expire its unused tokens, as submit and void do.
+  WITH ended AS (
+    UPDATE public.league_cards c
+       SET marker_user_id = NULL, marker_name = NULL,
+           marker_requested_at = NULL, marker_reminded_at = NULL, updated_at = now()
+      FROM league_backfill_changed b
+     WHERE c.id = b.id AND b.status = 'submitted'
+    RETURNING c.id
+  ), expired AS (
+    UPDATE public.league_marker_tokens t
+       SET expires_at = LEAST(t.expires_at, now())
+      FROM ended e
+     WHERE t.card_id = e.id AND t.used_at IS NULL
+    RETURNING 1
+  ), gone AS (
+    DELETE FROM public.notifications n
+     USING ended e
+     WHERE n.type = 'league_marker_request' AND n.entity_id = e.id
     RETURNING 1
   )
-  SELECT count(*) INTO v_changed FROM upd;
+  SELECT count(*) INTO v_ended FROM ended;
 
-  SELECT count(*) INTO v_skipped
-    FROM public.league_cards c
-   WHERE c.status <> 'void' AND c.holes IS NOT NULL
-     AND public.league_card_score(c.holes, c.course, c.league_handicap) IS NULL;
-
-  RAISE NOTICE 'league_server_scoring backfill: % card rows updated, % cards left as stored (no par/SI on every hole)',
-    v_changed, v_skipped;
+  RAISE NOTICE 'league_server_scoring backfill: % cards with a new score, % cards unscored (no par/SI on every hole: points NULL), % submitted cards had their marker request ended',
+    v_changed, v_unscored, v_ended;
 END $$;
 
 /* ===========================================================================

@@ -2,7 +2,9 @@
 -- Smoke test for 20261015000000_league_server_scoring.sql — the server scores
 -- every league card (R3), takes the tee from the course library (R4), checks
 -- an app card against the game (R5), and leagues carry participation points
--- (R2).
+-- (R2). Also: implausible tees/layouts refused, unknown library tees
+-- refused, hand-entered tees wait for an admin's approval, scramble rounds
+-- refused.
 --
 -- Same shape as leagues_smoke.sql: plain SQL, each check one row in the temp
 -- table `ss_smoke`, a final DO block RAISEs listing every failed check, and
@@ -208,12 +210,21 @@ BEGIN
   INSERT INTO ss_smoke (name, ok, detail) VALUES ('custom course: client tee 120/70.0 kept, unverified, server score',
     (r->>'points')::int = 40 AND (r->>'playing_handicap')::int = 17 AND NOT (r->>'tee_verified')::boolean, r::text);
 
-  -- A library course id but a tee the library doesn't have: the client's tee, unverified.
-  r := public.add_unannounced_league_card(lid,
-         lib || jsonb_build_object('tee', 'Negras', 'slope', 140, 'rating', 74.0, 'holes', cng_holes),
-         NULL, '2026-05-02', h, 86, 99, -54);
-  INSERT INTO ss_smoke (name, ok, detail) VALUES ('library course, unknown tee: client 140/74.0 kept, unverified',
-    (r->>'points')::int = 46 AND (r->>'playing_handicap')::int = 24 AND NOT (r->>'tee_verified')::boolean, r::text);
+  -- A library course id but a tee the library doesn't have: refused, never the client's tee.
+  BEGIN
+    PERFORM public.add_unannounced_league_card(lid,
+              lib || jsonb_build_object('tee', 'Negras', 'slope', 140, 'rating', 74.0, 'holes', cng_holes),
+              NULL, '2026-05-02', h, 86, 99, -54);
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('library course, unknown tee refused', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('library course, unknown tee refused',
+      SQLSTATE = 'P0001' AND SQLERRM = 'That tee isn''t one of this course''s tees in the course library. Pick one of its tees.',
+      SQLSTATE || ' ' || SQLERRM);
+  END;
+  -- The label matches whatever the case and spacing: verified.
+  r := public.add_unannounced_league_card(lid, lib || '{"tee":"  AMARILLAS "}'::jsonb, NULL, '2026-05-02', h, 86, 99, -54);
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('library tee label matched case- and space-insensitively',
+    (r->>'tee_verified')::boolean AND (r->>'points')::int = 42, r::text);
 
   -- The library's unrated tee: nothing to verify against, and no client rating either.
   BEGIN
@@ -236,6 +247,37 @@ BEGIN
       SQLSTATE = 'P0001' AND SQLERRM = 'Every hole of a league card needs a score, a par and a stroke index.',
       SQLSTATE || ' ' || SQLERRM);
   END;
+END $$;
+
+-- Implausible tees and layouts are refused, whatever the client sends (R3/R4 bounds).
+DO $$
+DECLARE lid uuid := (SELECT v::uuid FROM ss_ctx WHERE k='league');
+        h jsonb := (SELECT v::jsonb FROM ss_ctx WHERE k='hcng');
+        custom jsonb := (SELECT v::jsonb FROM ss_ctx WHERE k='custom');
+        v_hint text;
+        hints text := '';
+        bad jsonb;
+BEGIN
+  FOREACH bad IN ARRAY ARRAY[
+    custom || '{"slope":160}'::jsonb,                                   -- slope above 155
+    custom || '{"slope":54}'::jsonb,                                    -- slope below 55
+    custom || '{"rating":98.0}'::jsonb,                                 -- par 72 + 26
+    custom || '{"rating":56.9}'::jsonb,                                 -- par 72 - 15.1
+    jsonb_set(custom, '{holes,0}', '{"n":1,"par":7,"si":3}'::jsonb),    -- a par 7
+    jsonb_set(custom, '{holes,0}', '{"n":1,"par":2,"si":3}'::jsonb),    -- a par 2
+    jsonb_set(custom, '{holes,0}', '{"n":1,"par":4,"si":5}'::jsonb),    -- SI 5 twice, no SI 3
+    jsonb_set(custom, '{holes,0}', '{"n":1,"par":4,"si":19}'::jsonb)    -- SI 19
+  ] LOOP
+    BEGIN
+      PERFORM public.add_unannounced_league_card(lid, bad, NULL, '2026-06-02', h, 86, 30, 20);
+      hints := hints || 'none,';
+    EXCEPTION WHEN others THEN
+      GET STACKED DIAGNOSTICS v_hint = PG_EXCEPTION_HINT; hints := hints || v_hint || ',';
+    END;
+  END LOOP;
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('implausible slope/rating -> implausible_tee; bad par/SI -> invalid_layout',
+    hints = 'implausible_tee,implausible_tee,implausible_tee,implausible_tee,invalid_layout,invalid_layout,invalid_layout,invalid_layout,',
+    hints);
 END $$;
 
 -- The HINT of each refusal (the client branches on it).
@@ -261,6 +303,13 @@ BEGIN
     hints = 'incomplete_card,incomplete_card', hints);
 END $$;
 RESET ROLE;
+-- The edges are allowed: slope 55 and 155, rating par - 15 and par + 25.
+INSERT INTO ss_smoke (name, ok, detail)
+SELECT 'the bounds themselves are plausible',
+       public.league_course_problem(c.v::jsonb || '{"slope":55,"rating":57.0}'::jsonb) IS NULL
+       AND public.league_course_problem(c.v::jsonb || '{"slope":155,"rating":97.0}'::jsonb) IS NULL,
+       NULL
+  FROM ss_ctx c WHERE c.k = 'custom';
 INSERT INTO ss_smoke (name, ok, detail)
 SELECT 'refused cards left nothing behind (Gonzalo: March, April, May only)',
        string_agg(to_char(month, 'MM'), ',' ORDER BY month) = '03,04,05', string_agg(to_char(month, 'MM'), ',' ORDER BY month)
@@ -340,6 +389,113 @@ SELECT 'app card from an older build: library course and tee found through the g
        course::text
   FROM public.league_cards WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='cardApp');
 
+-- 4b) A hand-entered tee waits for an admin; a library tee doesn't (R4) ---------------
+-- Announced off-app cards (not_announced = false) so only the tee decides.
+SELECT set_config('request.jwt.claims', '{"sub":"b1000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := public.announce_league_card((SELECT v::uuid FROM ss_ctx WHERE k='league'), 'offapp',
+         (SELECT v::jsonb FROM ss_ctx WHERE k='custom'), now());
+  INSERT INTO ss_ctx VALUES ('cardHand', r->>'id');
+  r := public.submit_league_card((r->>'id')::uuid, (SELECT v::jsonb FROM ss_ctx WHERE k='hcng'), 86, 40, 17, NULL);
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('announced custom-tee card: announced, but tee not verified',
+    NOT (r->>'not_announced')::boolean AND NOT (r->>'tee_verified')::boolean, r::text);
+  BEGIN
+    PERFORM public.approve_league_card((SELECT v::uuid FROM ss_ctx WHERE k='cardHand'));
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('a member cannot approve a hand-entered tee', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('a member cannot approve a hand-entered tee', SQLSTATE = '42501', SQLERRM);
+  END;
+END $$;
+SELECT set_config('request.jwt.claims', '{"sub":"b1000000-0000-4000-8000-00000000000c","role":"authenticated"}', true);
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := public.announce_league_card((SELECT v::uuid FROM ss_ctx WHERE k='league'), 'offapp',
+         (SELECT v::jsonb FROM ss_ctx WHERE k='lib'), now());
+  INSERT INTO ss_ctx VALUES ('cardLib', r->>'id');
+  PERFORM public.submit_league_card((r->>'id')::uuid, (SELECT v::jsonb FROM ss_ctx WHERE k='hcng'), 86, 40, 17, NULL);
+END $$;
+SELECT set_config('request.jwt.claims', '{"sub":"b1000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := public.approve_league_card((SELECT v::uuid FROM ss_ctx WHERE k='cardHand'));
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('the admin approves a hand-entered tee', r->>'approved_at' IS NOT NULL, r::text);
+  BEGIN
+    PERFORM public.approve_league_card((SELECT v::uuid FROM ss_ctx WHERE k='cardLib'));
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('an announced library-tee card needs no approval', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('an announced library-tee card needs no approval',
+      SQLSTATE = 'P0001' AND SQLERRM = 'This card doesn''t need approving.', SQLERRM);
+  END;
+  -- Own-card rule unchanged: A's own unannounced card (cardW) needs another admin.
+  BEGIN
+    PERFORM public.approve_league_card((SELECT v::uuid FROM ss_ctx WHERE k='cardW'));
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('an admin still cannot approve their own card', false, 'no error');
+  EXCEPTION WHEN others THEN
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('an admin still cannot approve their own card', SQLSTATE = '42501', SQLERRM);
+  END;
+END $$;
+RESET ROLE;
+INSERT INTO ss_smoke (name, ok, detail)
+SELECT 'approval stamped on the hand-entered card; the library card is verified and unapproved',
+       (SELECT approved_by = 'b1000000-0000-4000-8000-00000000000a' AND NOT tee_verified
+          FROM public.league_cards WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='cardHand'))
+       AND (SELECT tee_verified AND approved_at IS NULL
+              FROM public.league_cards WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='cardLib')),
+       NULL;
+
+-- 4c) Scramble rounds are never league cards ----------------------------------------
+SELECT set_config('request.jwt.claims', '{"sub":"b1000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE v_hint text;
+BEGIN
+  PERFORM public.announce_league_card((SELECT v::uuid FROM ss_ctx WHERE k='league'), 'app',
+            (SELECT v::jsonb FROM ss_ctx WHERE k='lib'), now(), 't_ss_scr0', 'r0', 'pG', 'scramble4');
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('announce refuses a scramble round', false, 'no error');
+EXCEPTION WHEN others THEN
+  GET STACKED DIAGNOSTICS v_hint = PG_EXCEPTION_HINT;
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('announce refuses a scramble round',
+    SQLSTATE = 'P0001' AND v_hint = 'scramble_round', SQLSTATE || ' ' || v_hint || ' ' || SQLERRM);
+END $$;
+RESET ROLE;
+-- Rounds that are scrambles through their own mode, or the tournament's.
+INSERT INTO public.tournaments (id, name, props)
+VALUES ('t_ss_scr', 'Scoring smoke scramble', '{}'::jsonb),
+       ('t_ss_scr2', 'Scoring smoke scramble 2', '{"settings":{"scoringMode":"scramble3v1"}}'::jsonb);
+INSERT INTO public.game_rounds (id, tournament_id, round_index, body)
+VALUES ('r0', 't_ss_scr', 0, '{"scoringMode":"scramblepairs"}'::jsonb),
+       ('r0', 't_ss_scr2', 0, '{}'::jsonb);
+INSERT INTO public.game_scores (tournament_id, round_id, player_id, hole, strokes)
+SELECT t, 'r0', 'pA', key::int, value::int
+  FROM jsonb_each_text((SELECT v::jsonb FROM ss_ctx WHERE k='hcng')), unnest(ARRAY['t_ss_scr', 't_ss_scr2']) t;
+INSERT INTO public.league_cards (league_id, user_id, month, source, status, tournament_id, round_id, player_id,
+                                 course, tee_time, played_on, announced_at, league_handicap)
+SELECT (SELECT v::uuid FROM ss_ctx WHERE k='league'), 'b1000000-0000-4000-8000-00000000000a', m::date,
+       'app', 'playing', t, 'r0', 'pA', (SELECT v::jsonb FROM ss_ctx WHERE k='custom'), now(), m::date, now(), 18
+  FROM (VALUES ('t_ss_scr', '2026-08-01'), ('t_ss_scr2', '2026-09-01')) v(t, m);
+SELECT set_config('request.jwt.claims', '{"sub":"b1000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE cid uuid; v_hint text; hints text := '';
+BEGIN
+  FOR cid IN SELECT id FROM public.league_cards WHERE tournament_id IN ('t_ss_scr', 't_ss_scr2') ORDER BY month LOOP
+    BEGIN
+      PERFORM public.submit_league_card(cid, (SELECT v::jsonb FROM ss_ctx WHERE k='hcng'), 86, 40, 17, NULL);
+      hints := hints || 'none,';
+    EXCEPTION WHEN others THEN
+      GET STACKED DIAGNOSTICS v_hint = PG_EXCEPTION_HINT; hints := hints || v_hint || ',';
+    END;
+  END LOOP;
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('submit refuses a scramble round (round mode, or the tournament''s)',
+    hints = 'scramble_round,scramble_round,', hints);
+END $$;
+RESET ROLE;
+
 -- 5) Invariants and grants ------------------------------------------------------------
 INSERT INTO ss_smoke (name, ok, detail)
 SELECT 'every scored card stores the points its frozen data gives (backfill + writes)',
@@ -351,29 +507,41 @@ SELECT 'every scored card stores the points its frozen data gives (backfill + wr
         OR playing_handicap IS DISTINCT FROM (public.league_card_score(holes, course, league_handicap) ->> 'playing_handicap')::int);
 
 INSERT INTO ss_smoke (name, ok, detail)
+SELECT 'a card the server can''t score carries no points to rank on (backfill)',
+       count(*) = 0, string_agg(id::text, ',')
+  FROM public.league_cards
+ WHERE status <> 'void' AND holes IS NOT NULL
+   AND public.league_card_score(holes, course, league_handicap) IS NULL
+   AND (points IS NOT NULL OR playing_handicap IS NOT NULL);
+
+INSERT INTO ss_smoke (name, ok, detail)
 SELECT 'nobody but the owner executes the scoring helpers',
        NOT bool_or(has_function_privilege('authenticated', p.oid, 'EXECUTE')
                    OR has_function_privilege('anon', p.oid, 'EXECUTE')),
        string_agg(p.proname, ',')
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
  WHERE n.nspname = 'public'
-   AND p.proname IN ('league_card_holes','league_card_score','league_user_is_female','league_library_course');
+   AND p.proname IN ('league_card_holes','league_card_score','league_user_is_female','league_library_course',
+                     'league_course_problem','league_assert_plausible_course','league_round_scoring_mode',
+                     'league_is_scramble','league_assert_not_scramble');
 INSERT INTO ss_smoke (name, ok, detail)
 SELECT 'authenticated (not anon) executes the changed RPCs, one signature each',
-       count(*) = 4
+       count(*) = 6
        AND bool_and(has_function_privilege('authenticated', p.oid, 'EXECUTE')
                     AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')),
        string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', ' | ')
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
  WHERE n.nspname = 'public'
-   AND p.proname IN ('create_league','update_league_rules','submit_league_card','add_unannounced_league_card');
+   AND p.proname IN ('create_league','update_league_rules','submit_league_card','add_unannounced_league_card',
+                     'announce_league_card','approve_league_card');
 INSERT INTO ss_smoke (name, ok, detail)
 SELECT 'every SECURITY DEFINER league function pins search_path',
        count(*) FILTER (WHERE NOT COALESCE(p.proconfig @> ARRAY['search_path=public'], false)) = 0,
        string_agg(p.proname, ',') FILTER (WHERE NOT COALESCE(p.proconfig @> ARRAY['search_path=public'], false))
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
  WHERE n.nspname = 'public' AND p.prosecdef
-   AND p.proname IN ('create_league','update_league_rules','submit_league_card','add_unannounced_league_card');
+   AND p.proname IN ('create_league','update_league_rules','submit_league_card','add_unannounced_league_card',
+                     'announce_league_card','approve_league_card');
 INSERT INTO ss_smoke (name, ok, detail)
 SELECT 'scoring backup table is closed to anon and authenticated',
        NOT has_table_privilege('anon', 'public.league_cards_scoring_backup', 'SELECT')

@@ -79,9 +79,10 @@ export function isMissed(card, now = new Date()) {
   return new Date(now).getTime() >= new Date(card.postBy).getTime();
 }
 
-// An unannounced card scores nothing until an admin approves it.
+// An unannounced card, or one whose tee was entered by hand (not found in the
+// course library, teeVerified false), scores nothing until an admin approves it.
 export function needsApproval(card) {
-  return !!card?.notAnnounced && !card.approvedAt
+  return (!!card?.notAnnounced || card?.teeVerified === false) && !card.approvedAt
     && (card.status === 'submitted' || card.status === 'confirmed');
 }
 
@@ -123,7 +124,8 @@ const round1 = (n) => Math.round(n * 10) / 10;
 export function scoreCard({ holes, course, leagueHandicap, tee }) {
   const courseHoles = [...(course?.holes ?? [])].sort((a, b) => a.number - b.number);
   const holeCount = holeCountOf(courseHoles);
-  const par = tee?.par ?? totalParFromHoles(courseHoles);
+  // The sum of the hole pars, as the server's league_card_score uses.
+  const par = totalParFromHoles(courseHoles);
   // No tee slope: calcPlayingHandicap returns round(leagueHandicap) (halved on 9 holes).
   const playingHandicap = calcPlayingHandicap(leagueHandicap, tee?.slope, tee?.rating, par, holeCount);
   const rated = isRatedTee(tee);

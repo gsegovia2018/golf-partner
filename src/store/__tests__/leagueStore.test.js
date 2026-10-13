@@ -280,6 +280,15 @@ describe('RPC params', () => {
     }]);
   });
 
+  test('announceLeagueCard sends the scoring mode only when given', async () => {
+    ok({ id: 'C1', month: '2026-10-01', announced_at: 'x', league_handicap: null });
+    await announceLeagueCard({
+      leagueId: 'L1', source: 'app', course: { name: 'X' }, tournamentId: 't1', roundId: 'r1', playerId: 'p1',
+      scoringMode: 'stableford',
+    });
+    expect(lastRpc()[1]).toMatchObject({ p_scoring_mode: 'stableford' });
+  });
+
   test('announceLeagueCard (offapp) defaults game ids to null', async () => {
     ok({ id: 'C1', month: '2026-10-01', announced_at: 'x', league_handicap: null });
     const res = await announceLeagueCard({ leagueId: 'L1', source: 'offapp', course: { name: 'X' } });

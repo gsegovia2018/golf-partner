@@ -116,6 +116,14 @@ describe('card status: post deadline', () => {
     expect(cardStatus({ status: 'playing' }, before).deadline).toBeNull();
   });
 
+  test('a tee entered by hand flags awaiting approval until an admin approves it', () => {
+    const card = { status: 'confirmed', teeVerified: false, points: 30 };
+    expect(cardStatus(card, before).flag).toBe('Tee entered by hand · awaiting approval');
+    expect(cardStatus({ ...card, notAnnounced: true }, before).flag).toBe('Tee entered by hand · awaiting approval');
+    expect(cardStatus({ ...card, approvedAt: '2026-10-11T00:00:00Z' }, before).flag).toBeNull();
+    expect(cardStatus({ ...card, teeVerified: true }, before).flag).toBeNull();
+  });
+
   test('an unapproved not-announced card flags awaiting approval', () => {
     const card = { status: 'submitted', notAnnounced: true, points: 30 };
     expect(cardStatus(card, before).flag).toBe('Awaiting approval · not counted yet');

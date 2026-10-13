@@ -508,11 +508,16 @@ export async function castHandicapBallot(voteId, yes) {
 // Needs a connection: the server stamps `announced_at`. Throws LeagueError
 // with the server message (e.g. "You already have your October card.", hint
 // 'card_exists'). source: 'app' (needs tournamentId/roundId/playerId) | 'offapp'.
-// Returns { id, month, announcedAt, leagueHandicap }.
+// scoringMode: the app round's mode; the server refuses a scramble
+// ('scramble_round'). Returns { id, month, announcedAt, leagueHandicap }.
 export async function announceLeagueCard({
   leagueId, source, course, teeTime = null, tournamentId = null, roundId = null, playerId = null,
+  scoringMode = null,
 }) {
+  // Sent only when set, so the call still matches a server without the argument.
+  const extra = scoringMode == null ? {} : { p_scoring_mode: scoringMode };
   const d = await rpc('announce_league_card', {
+    ...extra,
     p_league: leagueId,
     p_source: source,
     p_course: course,

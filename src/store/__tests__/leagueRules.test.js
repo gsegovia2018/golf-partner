@@ -163,6 +163,12 @@ describe('scoreCard', () => {
     expect(r.playingHandicap).toBe(19);
   });
 
+  test('par is always the sum of the hole pars, as on the server (a tee par is ignored)', () => {
+    const sum = scoreCard({ holes, course, leagueHandicap: 18, tee: { slope: 125, rating: 71.2 } });
+    const forged = scoreCard({ holes, course, leagueHandicap: 18, tee: { slope: 125, rating: 71.2, par: 60 } });
+    expect(forged.playingHandicap).toBe(sum.playingHandicap);
+  });
+
   test('tee without par falls back to the sum of hole pars (72 here)', () => {
     const withPar = scoreCard({ holes, course, leagueHandicap: 18, tee: { slope: 125, rating: 71.2, par: 72 } });
     const noPar = scoreCard({ holes, course, leagueHandicap: 18, tee: { slope: 125, rating: 71.2 } });
@@ -311,6 +317,15 @@ describe('post deadline', () => {
     expect(needsApproval({ status: 'playing', notAnnounced: true })).toBe(false);
     expect(needsApproval({ status: 'void', notAnnounced: true })).toBe(false);
     expect(needsApproval(null)).toBe(false);
+  });
+
+  test('needsApproval: a tee entered by hand waits for an admin too; a library tee or an older card does not', () => {
+    expect(needsApproval({ status: 'confirmed', teeVerified: false })).toBe(true);
+    expect(needsApproval({ status: 'submitted', teeVerified: false })).toBe(true);
+    expect(needsApproval({ status: 'confirmed', teeVerified: false, approvedAt: '2026-10-11T00:00:00Z' })).toBe(false);
+    expect(needsApproval({ status: 'confirmed', teeVerified: true })).toBe(false);
+    expect(needsApproval({ status: 'confirmed', teeVerified: null })).toBe(false);
+    expect(needsApproval({ status: 'playing', teeVerified: false })).toBe(false);
   });
 
   test('deadlineInfo: countdown, urgent under 2 hours', () => {

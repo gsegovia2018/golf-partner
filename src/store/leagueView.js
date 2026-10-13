@@ -111,7 +111,9 @@ export function cardStatus(card, now = new Date()) {
   if (!card) return { text: 'No card yet', tone: 'muted', flag: null };
   if (isMissed(card, now)) return { text: 'Not posted', tone: 'muted', flag: null, missed: true };
   let flag = card.notAnnounced ? 'Not announced in the app' : null;
-  if (needsApproval(card)) flag = 'Awaiting approval · not counted yet';
+  if (needsApproval(card)) {
+    flag = card.teeVerified === false ? 'Tee entered by hand · awaiting approval' : 'Awaiting approval · not counted yet';
+  }
   const offApp = card.source === 'offapp';
   const lead = card.points != null ? `${formatPoints(card.points)} pts` : null;
   switch (card.status) {
