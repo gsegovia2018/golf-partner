@@ -172,3 +172,28 @@ describe('buildMarkerTable / formatPlayedOn', () => {
     expect(formatPlayedOn('nope')).toBeNull();
   });
 });
+
+describe('MarkerCardScreen in Spanish', () => {
+  const { setLanguagePref } = require('../../i18n');
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    store.getMarkerCard.mockResolvedValue(CARD);
+    await act(async () => { await setLanguagePref('es'); });
+  });
+  afterEach(async () => { await act(async () => { await setLanguagePref('en'); }); });
+
+  test('translates the card page, the date and the meta line', async () => {
+    const { getByText } = render(wrap(<MarkerCardScreen token="tok-1" />));
+    await waitFor(() => getByText('Confirma la tarjeta de Marcos'));
+    expect(getByText('Confirmación del marcador')).toBeTruthy();
+    expect(getByText('Centro Nacional de Golf · dom 4 oct · barras Yellow · Hándicap de juego 20')).toBeTruthy();
+    expect(getByText('Confirmar tarjeta')).toBeTruthy();
+    expect(getByText('Hay algo mal')).toBeTruthy();
+  });
+
+  test('translates a dead-end state', async () => {
+    store.getMarkerCard.mockRejectedValue(new store.MarkerCardError('expired', { reason: 'expired' }));
+    const { getByText } = render(wrap(<MarkerCardScreen token="tok-1" />));
+    await waitFor(() => getByText('Este código ha caducado'));
+  });
+});

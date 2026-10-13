@@ -11,6 +11,7 @@ import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings } from '../store/settingsStore';
 import { resetTour } from '../store/tourStore';
 import { haptic } from '../lib/haptics';
+import { useT, useLanguagePref, setLanguagePref } from '../i18n';
 
 const STAT_GROUP_ROWS = [
   { key: 'putting', label: 'Putting', loss: 'Off: no putting stats, no GIR, no strokes gained putting' },
@@ -61,6 +62,8 @@ function Section({ title, hint, delay, s, children }) {
 
 export default function SettingsScreen({ navigation }) {
   const { theme, themePref, setThemeMode } = useTheme();
+  const t = useT();
+  const languagePref = useLanguagePref();
   const s = makeStyles(theme);
   const appSettings = useAppSettings();
   const setKey = useCallback((patch) => {
@@ -157,6 +160,19 @@ export default function SettingsScreen({ navigation }) {
           <Text style={s.unitsHint}>
             {appSettings.units === 'yards' ? 'e.g. 148 yds ≈ 135 m' : 'e.g. 135 m ≈ 148 yds'}
           </Text>
+          <Text style={s.sectionLabel}>{t('settings.language.title')}</Text>
+          <View style={s.segmentRow}>
+            {['system', 'es', 'en'].map((value) => (
+              <PressableScale key={value} testID={`setting-language-${value}`}
+                style={[s.segment, languagePref === value && s.segmentActive]}
+                onPress={() => setLanguagePref(value)}
+                accessibilityRole="button" accessibilityState={{ selected: languagePref === value }}>
+                <Text style={[s.segmentText, languagePref === value && s.segmentTextActive]}>
+                  {t(`settings.language.${value}`)}
+                </Text>
+              </PressableScale>
+            ))}
+          </View>
           <View style={s.appearanceRow}>
             {THEME_OPTIONS.map((opt) => {
               const active = themePref === opt.value;
