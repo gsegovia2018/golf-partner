@@ -76,6 +76,8 @@ class ExtractCheckpointsOptions : Record {
   /** D28 (apiVersion 3): also write every [proxyEvery]-th frame of the clip, small, to [proxyDir]. 0 = none. */
   @Field val proxyEvery: Int = 0
   @Field val proxyDir: String? = null
+  /** The swing window to cover, [from, to] container frames; null = the whole clip. */
+  @Field val proxyRange: List<Int>? = null
 }
 
 class ExtractFramesOptions : Record {
@@ -174,6 +176,7 @@ class GolfSwingModule : Module() {
           outDir = options.outDir,
           proxyEvery = options.proxyEvery.coerceIn(0, 64),
           proxyDir = options.proxyDir,
+          proxyRange = options.proxyRange?.takeIf { it.size == 2 }?.let { it[0]..it[1] },
         )
         Checkpoints(ctx, req, cancelled).run(path)
       })

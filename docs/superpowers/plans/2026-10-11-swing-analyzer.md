@@ -100,13 +100,13 @@ extractCheckpoints(path, {
   expectedShaftPx,                                         // from scale.js
   addressSearch: { run: [a, b], latest, quiet: [a, b], minRun } | null,   // phases.js, detect.py clubhead_onset (N2, apiVersion 2)
   outDir,
-  proxyEvery: 4, proxyDir                                  // D28 (apiVersion 3): scrub proxies of the whole clip; older binaries ignore both
+  proxyEvery: 4, proxyDir, proxyRange: [from, to]          // D28 (apiVersion 3): scrub proxies of the swing window (motionStart − 1 s → finish + 0.5 s); older binaries ignore them
 }) → {
   stills: { [key]: { [i]: 'file://…/frames/556.jpg' } },   // checkpoint ±neighbours, full decode resolution, JPEG q85
   shaft: { [i]: { angleDeg, lengthPx, head: [x, y] | null, hidden, conf, source: 'edge'|'prior' } },   // v1: 'edge' at address and impact only (D16)
   addressFrame: number | null,                              // image-based P1 (onset in the ball patch − 1)
-  proxies: { every, count } | null,                         // D28: <proxyDir>/<i>.jpg, every 4th frame, short side 160 px, q70
-  timings: { totalMs, scanMs, decodeMs, addressDecodeMs, jpegWaitMs, onsetMs, shaftMs, decoded, stills, proxies, proxyMs }
+  proxies: { every, from, to, count, failed } | null,       // D28: <proxyDir>/<i>.jpg, multiples of 4 in the window, short side 160 px, q70; stored as pose.pass2.proxies
+  timings: { totalMs, scanMs, decodeMs, addressDecodeMs, jpegWaitMs, onsetMs, shaftMs, decoded, stills, proxies, proxyMs, proxyFailures }
 }
 
 listRecordingModes() → [ { width, height, fps, highSpeed: bool } ]   // sorted by fps desc
@@ -121,7 +121,7 @@ Implementation notes for the Opus items (§10):
 - **Camera:** `CameraManager` → the back camera whose `StreamConfigurationMap.getHighSpeedVideoSizes()` is non-empty; choose the size/fps pair with the highest fps ≥ 120 that is ≤ 1080p (prefer 1280×720 @ 240 over 1080p @ 120: impact sharpness matters more than pixels). Session: `createConstrainedHighSpeedCaptureSession([previewSurface, recorderSurface])`, `createHighSpeedRequestList`. `MediaRecorder` with `setVideoFrameRate(fps)` and `setCaptureRate(fps)` (real-time file, accurate timestamps, no retiming), `setOrientationHint` for portrait, no audio source, H.264, ~20 Mbps at 720p240. If no high-speed capability: an ordinary session at the highest `CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES` (usually 60 or 30) and `highSpeed: false` in `listRecordingModes` so the UI warns. Lock AF/AE once the user frames the shot (tap), so exposure doesn't pump mid-swing.
 - **Lifecycle:** release the camera in `onDetachedFromWindow` / app background; one analysis at a time (a mutex); cancel on screen leave.
 - **Permissions:** `CAMERA` is declared by the module's own config plugin (`modules/golf-swing/app.plugin.js`, N3), so capture does not depend on expo-camera staying in `app.json`; no `RECORD_AUDIO` use. Nothing to add to `app.json`.
-- **As built (D28, apiVersion 3):** pass 2 also writes the scrub proxies (`Proxies.kt`): every 4th frame of the whole clip, downscaled on the decoder thread (nearest neighbour, short side 160 px) and JPEG-encoded on the stills pool, so the decode now spans the whole clip instead of the checkpoint span. `native.js` gates their use on `PROXY_API_VERSION = 3` (`proxySupport()`), separately from analysis: `REQUIRED_API_VERSION` stays 2, because the analysis contract did not change and an apiVersion 2 binary must keep analysing and marking (the scrubber falls back to stills there).
+- **As built (D28, apiVersion 3):** pass 2 also writes the scrub proxies (`Proxies.kt`): every 4th frame (multiples of 4) of the **swing window** the JS asks for, about one second before the motion starts to half a second after the finish (`proxyWindow` in `frames.js`), so the decode span stays close to the checkpoint span; outside it the canvas uses stills. They are downscaled on the decoder thread (nearest neighbour, short side 160 px) and JPEG-encoded on the stills pool. A proxy that fails is counted (`timings.proxyFailures`) and never fails pass 2; after a cancel nothing more is written and the pool is awaited (≤ 2 s), and `deleteSwing` sweeps the folder again after 2.5 s. What was written (`{ every, from, to }`) is stored in `pose.pass2.proxies`, so `getProxy` builds the uri without touching the disk. `native.js` gates their use on `PROXY_API_VERSION = 3` (`proxySupport()`), separately from analysis: `REQUIRED_API_VERSION` stays 2, because the analysis contract did not change and an apiVersion 2 binary must keep analysing and marking (the scrubber falls back to stills there). The proxies count in the swing's `bytes` (the folder size walks subfolders and pass 2 waits for them before the final save).
 - **As built (N3):** capture is a second native module, `GolfSwingCamera` (`camera/` package: `listRecordingModes`, `GolfSwingCameraView` with `startRecording({ outPath })` / `stopRecording()` as view functions, the mode as a view prop). `GolfSwing.apiVersion` is 2 for N2 and N3 together (no APK shipped with N1 alone); `native.js` gates capture on `CAPTURE_API_VERSION = 2` **and** the camera module's presence (`captureSupport()`), separately from analysis (`REQUIRED_API_VERSION`), so a binary that analyses but lacks the camera module keeps analysing and the capture screen offers the import instead. The recorder input is a persistent surface, so one session serves every take.
 
 ## 4. Processing strategy
@@ -379,7 +379,7 @@ pose.json            analyzePose result (landmarks, ball, timings)
 analysis.json        the derived result (below)
 marks.json           user corrections (below)
 frames/<i>.jpg       checkpoint stills ±2 (≈ 60 files, ~3 MB at 720p), plus frames the canvas extracted
-proxy/<i>.jpg        D28 scrub proxies: every 4th frame of the clip, short side 160 px (~240 files, ~1.5 MB); none before apiVersion 3
+proxy/<i>.jpg        D28 scrub proxies: every 4th frame of the swing window, short side 160 px (~150 files, ~1 MB); none before apiVersion 3
 thumb.jpg            impact still, 320 px wide, for the list
 ```
 

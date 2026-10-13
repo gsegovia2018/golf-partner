@@ -8,7 +8,7 @@ jest.mock('expo-file-system', () => ({
     get exists() { return mockExists.has(this.path); }
   },
   Directory: class {
-    constructor() { this.exists = true; this.uri = 'file:///doc/swings/s1/frames'; }
+    constructor(...parts) { this.exists = true; this.uri = parts.length > 1 ? `file:///doc/${parts.slice(1).join('/')}` : 'file:///doc/swings/s1/frames'; }
     create() {}
   },
 }));
@@ -58,15 +58,27 @@ describe('ensureStills', () => {
   });
 });
 
-describe('getProxy (D28 scrub proxies, every 4th frame)', () => {
-  test('the nearest proxy on disk; the tail of the clip rounds down; null when the swing has none', () => {
-    ['0', '4', '8', '956'].forEach((f) => mockExists.add(`swings/s1/proxy/${f}.jpg`));
-    const { getProxy, proxyFrames } = require('../frames');
-    expect(proxyFrames(5)).toEqual([4]);
-    expect(proxyFrames(6)).toEqual([8, 4]);
-    expect(getProxy('s1', 5)).toBe('file:///doc/swings/s1/proxy/4.jpg');
-    expect(getProxy('s1', 7)).toBe('file:///doc/swings/s1/proxy/8.jpg');
-    expect(getProxy('s1', 959)).toBe('file:///doc/swings/s1/proxy/956.jpg'); // 960 is past the end
-    expect(getProxy('s2', 5)).toBeNull(); // analysed by an apiVersion 2 binary: no proxies
+describe('scrub proxies (D28): the swing window, every 4th frame, no I/O per frame', () => {
+  const meta = { every: 4, from: 200, to: 680, count: 121 };
+
+  test('the window is about 1 s before the motion starts to 0.5 s after the finish, clamped', () => {
+    const { proxyWindow } = require('../frames');
+    const a = { fps: { capture: 240 }, internal: { motionStart: 400 }, checkpoints: { finish: { i: 640 } } };
+    expect(proxyWindow(a, 1297)).toEqual([160, 760]);
+    expect(proxyWindow({ ...a, internal: { motionStart: 100 } }, 1297)[0]).toBe(0);
+    expect(proxyWindow({ ...a, checkpoints: { finish: { i: 1250 } } }, 1297)[1]).toBe(1296);
+  });
+
+  test('the nearest proxy inside the window; null outside it or without proxies (apiVersion 2, older swings)', () => {
+    const { getProxy, proxyFrame } = require('../frames');
+    expect(proxyFrame(205, meta)).toBe(204);
+    expect(proxyFrame(207, meta)).toBe(208);
+    expect(proxyFrame(199, meta)).toBe(200);
+    expect(proxyFrame(150, meta)).toBeNull(); // outside: the canvas uses stills there
+    expect(proxyFrame(682, meta)).toBe(680);
+    expect(proxyFrame(700, meta)).toBeNull();
+    expect(proxyFrame(300, null)).toBeNull();
+    expect(getProxy('s1', 205, meta)).toBe('file:///doc/swings/s1/proxy/204.jpg');
+    expect(getProxy('s1', 205, undefined)).toBeNull();
   });
 });

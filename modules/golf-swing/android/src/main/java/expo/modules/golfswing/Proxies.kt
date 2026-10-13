@@ -18,8 +18,18 @@ internal object Proxies {
   const val SHORT_SIDE = 160
   private const val JPEG_QUALITY = 70
 
-  /** The proxy frames of a clip of [n] frames: 0, every, 2·every, …; none when [every] < 1. */
-  fun frames(n: Int, every: Int): List<Int> = if (every < 1 || n < 1) emptyList() else (0 until n step every).toList()
+  /**
+   * The proxy frames of a clip of [n] frames: the multiples of [every] inside [range] (clamped to the
+   * clip; null = the whole clip), so the JS finds one by rounding to [every]. None when [every] < 1.
+   */
+  fun frames(n: Int, every: Int, range: IntRange? = null): List<Int> {
+    if (every < 1 || n < 1) return emptyList()
+    val lo = (range?.first ?: 0).coerceIn(0, n - 1)
+    val hi = (range?.last ?: (n - 1)).coerceIn(0, n - 1)
+    if (lo > hi) return emptyList()
+    val first = (lo + every - 1) / every * every
+    return (first..hi step every).toList()
+  }
 
   /** Proxy size for a display-oriented frame, short side [SHORT_SIDE], never larger than the frame. */
   fun size(dispW: Int, dispH: Int): Pair<Int, Int> {

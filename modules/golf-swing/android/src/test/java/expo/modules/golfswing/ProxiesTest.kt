@@ -15,6 +15,14 @@ class ProxiesTest {
   }
 
   @Test
+  fun onlyTheSwingWindowAlignedToEvery() {
+    assertEquals(listOf(100, 104, 108), Proxies.frames(960, 4, 99..110))
+    assertEquals(listOf(952, 956), Proxies.frames(960, 4, 950..2000)) // clamped to the clip
+    assertEquals(listOf(0, 4), Proxies.frames(960, 4, -50..6))
+    assertTrue(Proxies.frames(960, 4, 500..400).isEmpty())
+  }
+
+  @Test
   fun noProxiesWhenOff() {
     assertTrue(Proxies.frames(960, 0).isEmpty())
     assertTrue(Proxies.frames(0, 4).isEmpty())

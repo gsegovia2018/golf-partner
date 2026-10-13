@@ -94,21 +94,33 @@ export async function ensureStills(swingId, frames) {
   return out;
 }
 
-/** The proxy frames nearest to `frame`, best first (rounded, then rounded down: the clip's tail). */
-export function proxyFrames(frame, every = PROXY_EVERY) {
-  const f = Math.max(0, Math.round(frame));
-  const near = Math.round(f / every) * every;
-  const down = Math.floor(f / every) * every;
-  return near === down ? [near] : [near, down];
+/**
+ * The swing window pass 2 writes proxies for (D28): about one second before the motion starts to
+ * half a second after the finish, in container frames, clamped to the clip. Outside it the canvas
+ * uses stills.
+ */
+export function proxyWindow(analysis, frameCount) {
+  const fps = analysis?.fps?.capture || 240;
+  const start = analysis?.internal?.motionStart ?? analysis?.checkpoints?.address?.i ?? 0;
+  const finish = analysis?.checkpoints?.finish?.i ?? frameCount - 1;
+  const last = Math.max(0, frameCount - 1);
+  return [Math.max(0, Math.round(start - fps)), Math.min(last, Math.round(finish + fps / 2))];
 }
 
-/** URI of the scrub proxy nearest to a frame, or null (none written for this swing). Synchronous. */
-export function getProxy(swingId, frame) {
-  try {
-    for (const f of proxyFrames(frame)) {
-      const file = new File(Paths.document, 'swings', swingId, 'proxy', `${f}.jpg`);
-      if (file.exists) return file.uri;
-    }
-  } catch { /* none */ }
-  return null;
+/**
+ * The proxy frame nearest to `frame` for the proxies a swing has (`pose.pass2.proxies`: { every,
+ * from, to }, as native reported them), or null outside them. Pure: no file is touched per call.
+ */
+export function proxyFrame(frame, proxies) {
+  if (!proxies?.every || !(proxies.to >= proxies.from)) return null;
+  const f = Math.round(frame);
+  if (f < proxies.from - proxies.every / 2 || f > proxies.to + proxies.every / 2) return null;
+  const near = Math.round(f / proxies.every) * proxies.every;
+  return Math.min(proxies.to, Math.max(proxies.from, near));
+}
+
+/** URI of the scrub proxy nearest to a frame, or null (none for this swing or this frame). Synchronous, no I/O. */
+export function getProxy(swingId, frame, proxies) {
+  const f = proxyFrame(frame, proxies);
+  return f == null ? null : `${proxyDir(swingId).uri.replace(/\/$/, '')}/${f}.jpg`;
 }
