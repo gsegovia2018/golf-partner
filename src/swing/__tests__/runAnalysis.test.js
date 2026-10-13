@@ -140,7 +140,7 @@ describe('runAnalysis', () => {
     expect(o2.pose.pass2).toEqual({ shaft, addressFrame: lab.expected.addressFrame, timings });
 
     // a saved user mark at impact beats the native proposal on the next analysis
-    store.readMarks.mockResolvedValueOnce({
+    const userMarks = {
       schema: 'swing-club-labels/1',
       ball: { proposed: null, final: null, corrected: false },
       frames: [{
@@ -150,7 +150,8 @@ describe('runAnalysis', () => {
         head: { proposed: [270 / W, 504 / H], proposedHidden: false, final: [0.6, 0.6], finalHidden: false },
         corrected: true,
       }],
-    });
+    };
+    store.readMarks.mockResolvedValueOnce(userMarks).mockResolvedValueOnce(userMarks); // read at the start and before the final save
     const again = await runAnalysis('s1');
     expect(again.analysis.clubMarks.impact.source).toBe('user');
     expect(again.analysis.clubMarks.impact.head[0]).toBeCloseTo(0.6, 9);
@@ -193,13 +194,43 @@ describe('runAnalysis', () => {
     expect(store.saveAnalysis).not.toHaveBeenCalled();
   });
 
-  test('a pass 2 failure keeps the first analysis: the club checks wait for the user', async () => {
+  test('a pass 2 failure keeps the first analysis (the club checks wait for the user) and makes the swing ready', async () => {
     frames.nativeApi.mockReturnValue(makeApi({ extractCheckpoints: jest.fn(async () => { throw new Error('decoder'); }) }));
     const res = await runAnalysis('s1');
     expect(res.pass2).toBe('failed');
     expect(res.analysis.error).toBeUndefined();
-    expect(store.saveAnalysis).toHaveBeenCalledTimes(1);
+    expect(store.saveAnalysis).toHaveBeenCalledTimes(2);
+    expect(store.saveAnalysis.mock.calls[0][2].status).toBe('pending');
+    expect(store.saveAnalysis.mock.calls[1][1]).toBe(res.analysis);
+    expect(store.saveAnalysis.mock.calls[1][2].status).toBeUndefined(); // the store's default: ready
     expect(store.markSwingFailed).not.toHaveBeenCalled();
+  });
+
+  test('review (D26): the swing is not ready, so not markable, until pass 2 has settled', async () => {
+    frames.nativeApi.mockReturnValue(makeApi());
+    await runAnalysis('s1');
+    expect(store.saveAnalysis.mock.calls.map((c) => c[2].status)).toEqual(['pending', undefined]);
+  });
+
+  test('review (D26): pass 2 cancelled by leaving the screen saves nothing more', async () => {
+    let cancel = false;
+    const api = makeApi({ extractCheckpoints: jest.fn(async () => { cancel = true; return { shaft: {}, addressFrame: null }; }) });
+    frames.nativeApi.mockReturnValue(api);
+    const res = await runAnalysis('s1', { isCancelled: () => cancel });
+    expect(res).toEqual({ cancelled: true });
+    expect(store.saveAnalysis).toHaveBeenCalledTimes(1);
+    expect(store.saveAnalysis.mock.calls[0][2].status).toBe('pending');
+  });
+
+  test('review (D26): the final save scores the club and marks as they are then, not as they were at the start', async () => {
+    store.getSwing
+      .mockReturnValueOnce({ id: 's1', createdAt: '2026-10-11T16:42:00.000Z', club: 'iron', source: 'import', status: 'pending' })
+      .mockReturnValue({ id: 's1', createdAt: '2026-10-11T16:42:00.000Z', club: 'driver', source: 'import', status: 'pending' });
+    frames.nativeApi.mockReturnValue(makeApi());
+    const res = await runAnalysis('s1');
+    expect(store.saveAnalysis.mock.calls[0][1].club).toBe('iron');
+    expect(res.analysis.club).toBe('driver');
+    expect(store.readMarks).toHaveBeenCalledTimes(2);
   });
 
   test('cancelling after the probe stops before the pose pass', async () => {

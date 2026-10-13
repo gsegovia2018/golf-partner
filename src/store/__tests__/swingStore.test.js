@@ -269,6 +269,14 @@ describe('the marking pass on the row (D26) and the club per video (D27)', () =>
     expect((await store.readMarks(row.id)).pass).toEqual({ state: 'none', skipped: [] });
   });
 
+  it('a first save while pass 2 still runs keeps the swing pending (not resumable); the final save makes it ready', async () => {
+    const row = await store.createSwing({ videoUri: 'file:///picked/clip.mp4' });
+    await store.saveAnalysis(row.id, analysisFixture, { status: 'pending' });
+    expect(store.getSwing(row.id)).toMatchObject({ status: 'pending', marked: { state: 'none', count: 0 } });
+    await store.saveAnalysis(row.id, analysisFixture);
+    expect(store.getSwing(row.id).status).toBe('ready');
+  });
+
   it('saveMarks mirrors the pass into the index: partial with its count, then done', async () => {
     const row = await store.createSwing({ videoUri: 'file:///picked/clip.mp4' });
     await store.saveAnalysis(row.id, analysisFixture);

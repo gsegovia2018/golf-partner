@@ -6,7 +6,7 @@ import SwingResultsScreen from '../SwingResultsScreen';
 import * as store from '../../store/swingStore';
 import { runAnalysis } from '../../swing/runAnalysis';
 import { shareSwingExport } from '../../swing/shareExport';
-import { getStill, ensureStills } from '../../swing/frames';
+import { getStill, ensureStills, nativeApi } from '../../swing/frames';
 import { analyze } from '../../swing/analyze';
 import { SWING_STRINGS } from '../../swing/strings';
 import { emptyMarks, frameLabel, withFrame } from '../../swing/labels';
@@ -385,6 +385,16 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
     await act(async () => { finish({ analysis: UNMARKED, pass2: 'done' }); });
     expect(navigation.replace).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', mode: 'pass' });
     expect(queryByText(VERDICT)).toBeNull();
+  });
+
+  test('review (D26): leaving while the analysis runs cancels native too, so pass 2 never saves late', async () => {
+    const cancel = jest.fn();
+    nativeApi.mockReturnValue({ cancelAnalysis: cancel });
+    runAnalysis.mockReturnValue(new Promise(() => {}));
+    const { findByText, unmount } = setup({ row: PENDING });
+    await findByText(T.stages.reading);
+    unmount();
+    expect(cancel).toHaveBeenCalled();
   });
 
   test('D12: no_pose says "No golfer found" and offers to record again', async () => {

@@ -1,8 +1,9 @@
 // The analysis pipeline for one stored swing (plan 4.1): probe -> pose (pass 1) -> analyze()
 // -> first save -> stills and club seeds (pass 2) -> analyze() again -> final save.
 //
-// The first save makes the swing usable; pass 2 then fills in the stills and the address /
-// impact clubhead seeds (D16). The marking pass (D26) starts once both are in. Everything native goes through
+// The first save keeps the swing `pending`; pass 2 then fills in the stills and the address /
+// impact clubhead seeds (D16) and the final save makes it ready. Only then can the marking pass
+// (D26) start or resume, so pass 2 never writes over the golfer's marks or club. Everything native goes through
 // frames.nativeApi(); see the contract at the top of frames.js.
 //
 // Never throws. Resolves to
@@ -107,7 +108,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
     const opts = { ...base, probe };
     const a1 = analyze(pose, opts);
     if (a1.error) return await fail(a1.error);
-    await saveAnalysis(swingId, a1, { pose, probe });
+    await saveAnalysis(swingId, a1, { pose, probe, status: 'pending' });
     first = a1;
     onPartial(first);
 
@@ -126,9 +127,18 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
         addressSearch: first.addressSearch ?? null,
         outDir: dir.uri,
       });
+      if (isCancelled()) return { cancelled: true };
       const p2 = { shaft: r?.shaft ?? {}, addressFrame: r?.addressFrame ?? null };
       if (r?.timings) p2.timings = r.timings;
-      const second = analyze(pose, { ...opts, pass2: p2 });
+      // The club and marks as they are now, not as they were when the run started.
+      const latest = await readMarks(swingId);
+      const second = analyze(pose, {
+        ...opts,
+        pass2: p2,
+        club: getSwing(swingId)?.club ?? opts.club,
+        marks: marksForAnalyze(latest),
+        ball: latest?.ball?.final ?? opts.ball,
+      });
       if (!second.error) {
         final = second;
         pass2 = 'done';
@@ -139,8 +149,11 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
         });
       }
     } catch { /* keep the first analysis; the clubhead waits for the user's marks */ }
+    if (pass2 !== 'done') await saveAnalysis(swingId, first, { thumb: getStill(swingId, frameOfKey(first, 'impact')) });
     return { analysis: final, pass2 };
   } catch {
-    return first ? { analysis: first, pass2: 'failed' } : fail('failed');
+    if (!first) return fail('failed');
+    try { await saveAnalysis(swingId, first); } catch { /* the row stays pending and is analysed again */ }
+    return { analysis: first, pass2: 'failed' };
   }
 }

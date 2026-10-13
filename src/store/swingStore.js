@@ -187,8 +187,11 @@ export async function createSwing({ videoUri, source = 'import', createdAt = new
 /**
  * Store a finished analysis: writes analysis.json (+ pose.json / probe.json when
  * given), seeds marks.json once, and fills in the index row used by the list.
+ * `status: 'pending'` keeps the row unresumable while pass 2 is still running (D26).
  */
-export async function saveAnalysis(id, analysis, { pose = null, probe = null, thumb = null } = {}) {
+export async function saveAnalysis(id, analysis, {
+  pose = null, probe = null, thumb = null, status = 'ready',
+} = {}) {
   const row = getSwing(id);
   if (!row) return null;
   const full = { ...analysis, swingId: id, createdAt: row.createdAt };
@@ -199,7 +202,7 @@ export async function saveAnalysis(id, analysis, { pose = null, probe = null, th
     writeJson(id, 'marks.json', { ...emptyMarks({ swingId: id, video: pose?.video ?? null, handedness: analysis.handedness }), pass: newPass() });
   }
   const next = patchRow(id, {
-    status: 'ready',
+    status,
     error: undefined,
     club: normClub(analysis.club ?? row.club),
     fps: analysis.fps

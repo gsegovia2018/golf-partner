@@ -548,7 +548,12 @@ export default function SwingResultsScreen({ navigation, route }) {
         start();
       }
     })();
-    return () => { alive.current = false; cancelled.current = true; };
+    return () => {
+      alive.current = false;
+      cancelled.current = true;
+      // Leaving mid-run stops pass 2 too: a late save must never land after the golfer moved on.
+      if (started.current) { try { nativeApi()?.cancelAnalysis?.(); } catch { /* best effort */ } }
+    };
   }, [swingId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Coming back from Edit marks: the analysis was recomputed there.

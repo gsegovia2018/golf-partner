@@ -156,6 +156,15 @@ describe('SwingHomeScreen', () => {
       expect(navigation.navigate).toHaveBeenCalledWith('SwingEditMarks', { swingId: 'm', mode: 'pass' });
     });
 
+    test('review: a swing whose pass 2 is still running says Analysing and offers no Continue', () => {
+      const running = sw('r', '2026-10-12T11:00:00.000Z', { status: 'pending', marked: { state: 'none', count: 0 } });
+      const { getByText, queryByText, getByLabelText, navigation } = setup({ swings: [running] });
+      expect(getByText(SWING_STRINGS.home.analysing)).toBeTruthy();
+      expect(queryByText(/Continue/)).toBeNull();
+      fireEvent.press(getByLabelText(/^Analysing, /));
+      expect(navigation.navigate).toHaveBeenCalledWith('SwingResults', { swingId: 'r' });
+    });
+
     test('a row from before the mark-first flow (no state yet) opens Results, which decides', () => {
       const { getByLabelText, navigation } = setup({ swings: [sw('o', '2026-10-01T10:00:00.000Z', { marked: undefined })] });
       fireEvent.press(getByLabelText(/^Early extension, /));
