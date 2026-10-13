@@ -64,7 +64,7 @@ export function parseMemberHandicap(text, cap = DEFAULT_HANDICAP_CAP) {
 }
 
 // Draft -> createLeague() argument. `members` = [{ userId, handicap }] with the
-// creator first.
+// creator first, then [{ name, handicap }] for people not in the app.
 export function buildCreateArgs({
   name, seasonStart, seasonEnd, pointsTable = DEFAULT_POINTS_TABLE, cap = DEFAULT_HANDICAP_CAP,
   feeCents = 0, members = [],
@@ -76,7 +76,9 @@ export function buildCreateArgs({
     pointsTable,
     cap,
     feeCents,
-    members: members.map((m) => ({ userId: m.userId, handicap: m.handicap ?? null })),
+    members: members.map((m) => (m.userId
+      ? { userId: m.userId, handicap: m.handicap ?? null }
+      : { name: String(m.name ?? '').trim(), handicap: m.handicap ?? null })),
   };
 }
 

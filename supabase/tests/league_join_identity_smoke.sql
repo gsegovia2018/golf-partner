@@ -58,7 +58,7 @@ BEGIN
       AND (r->>'handicap_cap')::numeric = 28 AND (r->>'archived')::boolean = false, r::text);
   INSERT INTO join_smoke (name, ok, detail) VALUES ('anon preview exposes exactly the whitelisted keys',
     (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(r) k)
-      = ARRAY['admin_first_name','archived','entry_fee_cents','handicap_cap','member_count','name'], r::text);
+      = ARRAY['admin_first_name','archived','entry_fee_cents','handicap_cap','invitees','member_count','name'], r::text);
   INSERT INTO join_smoke (name, ok, detail) VALUES ('anon preview: unknown code -> NULL',
     public.get_league_invite_preview('ZZZZZZZZ') IS NULL, NULL);
 END $$;
@@ -129,17 +129,17 @@ SELECT 'a real account''s existing name is not overwritten',
        display_name = 'Nora Real', display_name
   FROM public.profiles WHERE user_id = 'b0000000-0000-4000-8000-00000000000d';
 INSERT INTO join_smoke (name, ok, detail)
-SELECT 'join_league has exactly one signature, with the name parameter',
+SELECT 'join_league has exactly one signature, with the name and invitee parameters',
        count(*) = 1 AND bool_and(pg_get_function_identity_arguments(p.oid)
-         = 'p_code text, p_proposed_handicap numeric, p_display_name text'),
+         = 'p_code text, p_proposed_handicap numeric, p_display_name text, p_invitee uuid'),
        string_agg(pg_get_function_identity_arguments(p.oid), ' | ')
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
  WHERE n.nspname = 'public' AND p.proname = 'join_league';
 INSERT INTO join_smoke (name, ok, detail)
 SELECT 'grants: anon previews but cannot join; authenticated can do both',
        has_function_privilege('anon', 'public.get_league_invite_preview(text)', 'EXECUTE')
-   AND NOT has_function_privilege('anon', 'public.join_league(text, numeric, text)', 'EXECUTE')
-   AND has_function_privilege('authenticated', 'public.join_league(text, numeric, text)', 'EXECUTE')
+   AND NOT has_function_privilege('anon', 'public.join_league(text, numeric, text, uuid)', 'EXECUTE')
+   AND has_function_privilege('authenticated', 'public.join_league(text, numeric, text, uuid)', 'EXECUTE')
    AND has_function_privilege('authenticated', 'public.get_league_invite_preview(text)', 'EXECUTE'),
        NULL;
 

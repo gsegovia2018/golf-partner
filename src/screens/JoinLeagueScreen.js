@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import { useTheme } from '../theme/ThemeContext';
 import { loadProfile } from '../store/profileStore';
-import { getLeagueByCode, joinLeague } from '../store/leagueStore';
+import { getLeagueByCode, getLeagueInvitee, joinLeague } from '../store/leagueStore';
 import { defaultMemberHandicap, parseMemberHandicap } from '../store/leagueDraft';
 import { formatEuros, monthName, currentMonthKey } from '../store/leagueView';
 import { useAuth } from '../context/AuthContext';
@@ -14,9 +14,12 @@ import { supabase } from '../lib/supabase';
 import { attachEmailToGuest, isEmailTakenError } from '../lib/guestAccount';
 import { consumeJustJoined, requestLoginTab } from '../lib/leagueJoinHandoff';
 import GuestIdentityFields, { guestIdentityErrors } from '../components/league/GuestIdentityFields';
+import InitialsAvatar from '../components/league/InitialsAvatar';
 
 // /league/:code. Shows the league, the rules in brief and the league handicap
-// the admin proposed (the member can propose another), then Join. A guest
+// the admin proposed (the member can propose another), then Join. When the
+// admin saved spots for people outside the app, "Are you one of these?" lets
+// the member claim theirs and keep the handicap set for it. A guest
 // (anonymous session, e.g. from a tournament guest link) must also give a
 // name and an email: the server refuses a nameless guest, and the email sends
 // the link that keeps the account.
@@ -44,6 +47,10 @@ export default function JoinLeagueScreen({ navigation, route }) {
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState(pendingEmail);
   const [submitted, setSubmitted] = useState(false);
+  const [myName, setMyName] = useState('');
+  const [spot, setSpot] = useState(null); // the reserved spot claimed, null = none of these
+  const [spotBusyId, setSpotBusyId] = useState(null);
+  const defaultHcpRef = useRef('');
   const joiningRef = useRef(false);
 
   useEffect(() => {
@@ -62,10 +69,12 @@ export default function JoinLeagueScreen({ navigation, route }) {
           return;
         }
         setGuestName((n) => n || profile?.displayName || '');
+        setMyName(profile?.displayName || '');
         const cap = summary.handicapCap;
         setProfileHcp(profile?.handicap ?? null);
         const start = summary.proposedHandicap ?? defaultMemberHandicap(profile?.handicap, cap);
-        setHcpText(start == null ? '' : String(start));
+        defaultHcpRef.current = start == null ? '' : String(start);
+        setHcpText(defaultHcpRef.current);
         setLeague(summary);
         setState('ready');
       } catch (e) {
@@ -94,6 +103,38 @@ export default function JoinLeagueScreen({ navigation, route }) {
     );
   }
 
+  // Claim one of the admin's reserved spots (or back to none): its handicap
+  // replaces the field, and a guest's name is prefilled from it.
+  async function chooseSpot(invitee) {
+    if (spotBusyId || joiningRef.current) return;
+    if (!invitee) {
+      setSpot(null);
+      setHcpText(defaultHcpRef.current);
+      setProposing(false);
+      return;
+    }
+    setSpotBusyId(invitee.id);
+    setJoinError('');
+    try {
+      const found = await getLeagueInvitee(code, invitee.id);
+      if (!mountedRef.current) return;
+      if (!found || found.claimed) {
+        setLeague((l) => ({ ...l, invitees: l.invitees.filter((i) => i.id !== invitee.id) }));
+        setJoinError(`Someone already joined as ${invitee.name}.`);
+        return;
+      }
+      setSpot(found);
+      if (found.handicap != null) setHcpText(String(found.handicap));
+      setProposing(false);
+      // A guest who already has a name keeps it; the spot name only fills a blank.
+      if (isGuest) setGuestName((n) => n || found.name);
+    } catch (e) {
+      if (mountedRef.current) setJoinError(e?.message || "Couldn't load that spot. Please try again.");
+    } finally {
+      if (mountedRef.current) setSpotBusyId(null);
+    }
+  }
+
   const { nameError, emailError } = guestIdentityErrors({ name: guestName, email: guestEmail });
 
   async function handleJoin() {
@@ -116,13 +157,20 @@ export default function JoinLeagueScreen({ navigation, route }) {
           return;
         }
       }
-      const { leagueId } = isGuest
-        ? await joinLeague(code, proposed, guestName.trim())
-        : await joinLeague(code, proposed);
+      // Extra args only when they apply, so a plain join keeps its plain call.
+      const extra = spot ? [isGuest ? guestName.trim() : null, spot.id] : (isGuest ? [guestName.trim()] : []);
+      const { leagueId } = await joinLeague(code, proposed, ...extra);
       navigation.replace('LeagueBoard', { leagueId });
     } catch (e) {
       joiningRef.current = false;
       setJoinError(e?.message || 'Could not join. Please try again.');
+      // Someone else took the spot meanwhile: drop it from the list.
+      if (spot && /^Someone already joined as/.test(e?.message ?? '')) {
+        const gone = spot.id;
+        setLeague((l) => ({ ...l, invitees: l.invitees.filter((i) => i.id !== gone) }));
+        setSpot(null);
+        setHcpText(defaultHcpRef.current);
+      }
     } finally {
       if (mountedRef.current) setBusy(false);
     }
@@ -211,6 +259,49 @@ export default function JoinLeagueScreen({ navigation, route }) {
           </TouchableOpacity>
         ) : (
           <>
+            {(league.invitees ?? []).length > 0 && (
+              <View style={s.spotBlock}>
+                <Text style={s.overline}>ARE YOU ONE OF THESE?</Text>
+                <Text style={s.spotHint}>{`Pick your name to keep the handicap ${league.adminName ?? 'the admin'} set.`}</Text>
+                <View style={s.spotCard}>
+                  {league.invitees.map((i) => {
+                    const on = spot?.id === i.id;
+                    return (
+                      <TouchableOpacity
+                        key={i.id}
+                        style={[s.spotRow, s.divider, on && s.spotRowOn]}
+                        onPress={() => chooseSpot(i)}
+                        disabled={!!spotBusyId}
+                        activeOpacity={0.7}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: on }}
+                        accessibilityLabel={i.name}
+                      >
+                        <InitialsAvatar name={i.name} />
+                        <Text style={s.spotName} numberOfLines={1}>{i.name}</Text>
+                        {spotBusyId === i.id
+                          ? <ActivityIndicator color={theme.accent.primary} />
+                          : <View style={[s.radio, on && s.radioOn]}>{on && <View style={s.radioDot} />}</View>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <TouchableOpacity
+                    style={[s.spotRow, !spot && s.spotRowOn]}
+                    onPress={() => chooseSpot(null)}
+                    disabled={!!spotBusyId}
+                    activeOpacity={0.7}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: !spot }}
+                  >
+                    <Text style={s.spotName} numberOfLines={2}>
+                      {myName ? `None of these, I'm ${myName}` : 'None of these'}
+                    </Text>
+                    <View style={[s.radio, !spot && s.radioOn]}>{!spot && <View style={s.radioDot} />}</View>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
             <View style={s.hcpCard}>
               <Text style={s.overline}>YOUR LEAGUE HANDICAP</Text>
               {proposing ? (
@@ -229,7 +320,7 @@ export default function JoinLeagueScreen({ navigation, route }) {
                 <Text style={s.hcpValue}>{hcpValue == null ? 'Not set' : hcpValue.toFixed(1)}</Text>
               )}
               <Text style={s.hcpSub}>
-                {`${league.proposedHandicap != null ? proposedBy : 'The admin will set it.'}${profileHcp != null ? ` Your index is ${profileHcp}.` : ''}`}
+                {`${spot?.handicap != null ? `Saved for you by ${league.adminName ?? 'the admin'}.` : league.proposedHandicap != null ? proposedBy : 'The admin will set it.'}${profileHcp != null ? ` Your index is ${profileHcp}.` : ''}`}
               </Text>
               {!proposing && (
                 <TouchableOpacity onPress={() => setProposing(true)} activeOpacity={0.7}>
@@ -321,6 +412,20 @@ function makeStyles(theme) {
     ruleTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14 },
     ruleSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
 
+    spotBlock: { marginBottom: 16 },
+    spotHint: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 10 },
+    spotCard: {
+      backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1, borderColor: cardBorder, overflow: 'hidden',
+    },
+    spotRow: { flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingHorizontal: 14, paddingVertical: 8 },
+    spotRowOn: { backgroundColor: theme.accent.light },
+    spotName: { flex: 1, fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14 },
+    radio: {
+      width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: theme.border.default,
+      alignItems: 'center', justifyContent: 'center', marginLeft: 8,
+    },
+    radioOn: { borderColor: theme.accent.primary },
+    radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.accent.primary },
     hcpCard: {
       backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1, borderColor: cardBorder,
       padding: 16, marginBottom: 16, alignItems: 'flex-start',
