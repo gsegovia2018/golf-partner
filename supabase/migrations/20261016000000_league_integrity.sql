@@ -21,15 +21,19 @@
 --   R7   Off-app announce: tee time >= now + 2 h ('short_notice'; a tee time
 --        already past stays 'tee_time_passed'). Reschedule: only while the
 --        current tee time is >= 2 h away ('reschedule_closed'), to a time
---        >= 2 h away ('short_notice'), same month and season. Every
---        reschedule is on the timeline and notifies members
---        (league_card_rescheduled).
+--        >= 2 h away ('short_notice'), same month and season, at most twice
+--        per card ('reschedule_limit'). Every reschedule is on the timeline
+--        and notifies members (league_card_rescheduled).
 --   R8   An announced off-app card can't be posted before tee time + 3 h
 --        ('too_early'; before the tee time itself it stays 'before_tee_time').
 --   R9   withdraw_league_card: the owner, before the tee time (off-app) or
---        before the first shot (app) ('withdraw_closed'). void with
---        void_kind / voided_reason 'withdrawn'; the month is free again;
---        members are told (league_card_withdrawn).
+--        before the first shot (app) ('withdraw_closed'), and never once the
+--        server holds a score of the player in the round ('round_started').
+--        void with void_kind / voided_reason 'withdrawn'; the month is free
+--        again; members are told (league_card_withdrawn). If scores for that
+--        player still arrive afterwards, the first-shot trigger makes it
+--        'withdrawn_after_play' (the month is taken again), logs it and tells
+--        the members (league_card_played_after_withdraw).
 --   R10  An admin voids, reopens or approves their own card, or sets their own
 --        league handicap, only when no other active admin exists (else 42501,
 --        HINT 'own_card' / 'own_handicap'). Every void, reopen, approval and
@@ -38,8 +42,13 @@
 --        the timeline, handicap changes in league_handicap_events as before.
 --   R11  Neither the owner nor anyone signed in as the owner can confirm or
 --        return a card through a marker token ('own_card'). After a return
---        the owner may resubmit once within 24 h of it, even past post_by;
---        later it is 'post_deadline_passed'.
+--        the owner may resubmit within 24 h of it, even past post_by; later
+--        it is 'post_deadline_passed'. That allowance is once per card:
+--        league_cards.returned_resubmits counts resubmissions after a return,
+--        and past post_by a second one is 'resubmit_used'.
+--        A QR confirmation by a stranger has no account behind it (accepted:
+--        the stranger-marker flow depends on it); its timeline entry is
+--        how 'qr', no actor_user_id, data.marker_account false.
 --   R12  A month closes at the end of the 3rd day of the next month
 --        (Europe/Madrid): league_assert_month_open refuses every write to that
 --        month's cards ('month_closed') — add, submit, partner/marker/photo
@@ -50,21 +59,29 @@
 --        SECURITY DEFINER functions here write it. Existing cards get events
 --        backfilled from their timestamps (data.backfill = true).
 --   R15  remove_league_member / rotate_league_invite_code /
---        release_league_invitee (admin). join_league refuses a spot to an
---        active member ('already_member'), records the spot's handicap as set
---        by the claimer, and tells the admins (league_spot_claimed).
---        Membership changes are logged in league_member_events.
+--        release_league_invitee (admin). Removing or releasing someone ends
+--        their marker tokens and requests (on their cards and as a marker)
+--        and fails any open handicap vote about them; it is refused only when
+--        it would leave the league with no admin ('last_admin'). join_league
+--        refuses a spot to an active member ('already_member'), records the
+--        spot's handicap as set by the claimer, and tells the admins
+--        (league_spot_claimed). set_league_role logs promotions and demotions
+--        and tells the members (league_role_changed). Membership changes are
+--        logged in league_member_events.
 --   R15b An admin void keeps the month taken; a withdrawal (by hand or by the
 --        sweep) frees it. league_cards.void_kind says which: 'admin' |
---        'withdrawn' | 'auto_withdrawn' (NULL on voids from before this
---        migration, which freed the month and still do). "Takes the month"
---        = status <> 'void' OR void_kind = 'admin' (league_takes_month), used
---        by the one-card index and every card_exists check.
+--        'withdrawn' | 'auto_withdrawn' | 'withdrawn_after_play' (NULL on
+--        voids from before this migration, which freed the month and still
+--        do). "Takes the month" = status <> 'void' OR void_kind IN ('admin',
+--        'withdrawn_after_play') (league_takes_month), used by the one-card
+--        index and every card_exists check.
 --   R16  Each league member in a game announces their own card for it: an app
 --        announce is keyed by (league, game, round, player). Once the game
 --        exists the player must be the caller's (game_players.user_id,
---        'not_your_player'); announcing the same (round, player) again
---        returns the same card (existing = true) instead of 'card_exists'.
+--        'not_your_player'); announcing the same (round, player) again, or
+--        losing the insert race to a second tap, returns the same card
+--        (existing = true) instead of 'card_exists'. Submit and tee-off
+--        require the card's player to be the caller's in the game, always.
 --        get_league_game_status lists the game's league members and their
 --        month status, for Setup's league list.
 --   R17  Any round of a casual tournament can be a card: the server never
@@ -77,18 +94,25 @@
 ALTER TABLE public.league_cards ADD COLUMN IF NOT EXISTS void_kind text;
 ALTER TABLE public.league_cards DROP CONSTRAINT IF EXISTS league_cards_void_kind_check;
 ALTER TABLE public.league_cards ADD CONSTRAINT league_cards_void_kind_check
-  CHECK (void_kind IS NULL OR (status = 'void' AND void_kind IN ('admin','withdrawn','auto_withdrawn')));
+  CHECK (void_kind IS NULL OR (status = 'void'
+         AND void_kind IN ('admin','withdrawn','auto_withdrawn','withdrawn_after_play')));
+
+-- R11: resubmissions after a marker's return (the post-deadline one is once
+-- per card). R7: reschedules (at most 2).
+ALTER TABLE public.league_cards ADD COLUMN IF NOT EXISTS returned_resubmits int NOT NULL DEFAULT 0;
+ALTER TABLE public.league_cards ADD COLUMN IF NOT EXISTS reschedules int NOT NULL DEFAULT 0;
 
 -- R15b: an admin void still takes the month.
 DROP INDEX IF EXISTS public.one_card_per_month;
 CREATE UNIQUE INDEX one_card_per_month
   ON public.league_cards (league_id, user_id, month)
-  WHERE status <> 'void' OR void_kind = 'admin';
+  WHERE status <> 'void' OR void_kind IN ('admin','withdrawn_after_play');
 
 -- R16: one card per league per game round and player.
-CREATE UNIQUE INDEX IF NOT EXISTS league_cards_one_per_round_player
+DROP INDEX IF EXISTS public.league_cards_one_per_round_player;
+CREATE UNIQUE INDEX league_cards_one_per_round_player
   ON public.league_cards (league_id, tournament_id, round_id, player_id)
-  WHERE source = 'app' AND (status <> 'void' OR void_kind = 'admin');
+  WHERE source = 'app' AND (status <> 'void' OR void_kind IN ('admin','withdrawn_after_play'));
 
 -- The first-shot trigger's lookup: live app cards still waiting for it.
 CREATE INDEX IF NOT EXISTS league_cards_waiting_first_shot_idx
@@ -104,7 +128,7 @@ CREATE TABLE IF NOT EXISTS public.league_card_events (
   kind           text NOT NULL CHECK (kind IN (
                    'announced','rescheduled','first_shot','submitted','added','sent_to_marker',
                    'returned','confirmed','approved','reopened','missed','withdrawn',
-                   'auto_withdrawn','voided')),
+                   'auto_withdrawn','played_after_withdraw','voided')),
   actor_user_id  uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   actor_name     text,      -- a marker without an account has only a name
   how            text,      -- confirmed: partner | qr | photo | official | marker_request
@@ -118,7 +142,8 @@ CREATE INDEX IF NOT EXISTS league_card_events_league_idx ON public.league_card_e
 CREATE TABLE IF NOT EXISTS public.league_member_events (
   id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   league_id      uuid NOT NULL REFERENCES public.leagues(id) ON DELETE CASCADE,
-  kind           text NOT NULL CHECK (kind IN ('removed','spot_claimed','spot_released','invite_code_rotated')),
+  kind           text NOT NULL CHECK (kind IN ('removed','spot_claimed','spot_released','invite_code_rotated',
+                                                'promoted','demoted')),
   user_id        uuid REFERENCES auth.users(id) ON DELETE SET NULL,   -- the member it is about
   invitee_id     uuid,                                                -- the spot, when there is one
   actor_user_id  uuid REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -126,6 +151,15 @@ CREATE TABLE IF NOT EXISTS public.league_member_events (
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS league_member_events_league_idx ON public.league_member_events (league_id, created_at);
+
+ALTER TABLE public.league_card_events DROP CONSTRAINT IF EXISTS league_card_events_kind_check;
+ALTER TABLE public.league_card_events ADD CONSTRAINT league_card_events_kind_check CHECK (kind IN (
+  'announced','rescheduled','first_shot','submitted','added','sent_to_marker',
+  'returned','confirmed','approved','reopened','missed','withdrawn',
+  'auto_withdrawn','played_after_withdraw','voided'));
+ALTER TABLE public.league_member_events DROP CONSTRAINT IF EXISTS league_member_events_kind_check;
+ALTER TABLE public.league_member_events ADD CONSTRAINT league_member_events_kind_check CHECK (kind IN (
+  'removed','spot_claimed','spot_released','invite_code_rotated','promoted','demoted'));
 
 ALTER TABLE public.league_card_events   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.league_member_events ENABLE ROW LEVEL SECURITY;
@@ -153,7 +187,71 @@ LANGUAGE sql
 IMMUTABLE
 SET search_path = public
 AS $$
-  SELECT p_status IS DISTINCT FROM 'void' OR p_void_kind IS NOT DISTINCT FROM 'admin';
+  SELECT p_status IS DISTINCT FROM 'void' OR COALESCE(p_void_kind IN ('admin','withdrawn_after_play'), false);
+$$;
+
+-- R9 / R16: does the server already hold a score of this player in this
+-- round (settled, or on any phone's scorer card)?
+CREATE OR REPLACE FUNCTION public.league_player_has_scores(p_tournament_id text, p_round_id text, p_player_id text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SET search_path = public
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.game_scores
+                  WHERE tournament_id = p_tournament_id AND round_id = p_round_id
+                    AND player_id = p_player_id AND strokes IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM public.scorer_cards sc
+                   CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(sc.card -> 'holes') = 'object'
+                                                      THEN sc.card -> 'holes' ELSE '{}'::jsonb END) h
+                  WHERE sc.tournament_id = p_tournament_id AND sc.round_id = p_round_id
+                    AND jsonb_typeof(h.value -> 'entries' -> p_player_id) = 'number');
+$$;
+
+-- R16: is this game's player the caller's (game_players.user_id)?
+CREATE OR REPLACE FUNCTION public.league_assert_own_player(p_tournament_id text, p_player_id text, p_uid uuid)
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.game_players
+                  WHERE tournament_id = p_tournament_id AND player_id = p_player_id
+                    AND user_id = p_uid AND deleted_at IS NULL) THEN
+    RAISE EXCEPTION 'This card''s player isn''t yours in the game.'
+      USING ERRCODE = 'P0001', HINT = 'not_your_player';
+  END IF;
+END;
+$$;
+
+-- R15: someone leaves through an admin (remove / release): their marker
+-- tokens and requests end, on their own cards and where they are the marker,
+-- and an open handicap vote about them fails.
+CREATE OR REPLACE FUNCTION public.league_member_cleanup(p_league uuid, p_user uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public.league_marker_tokens t
+     SET expires_at = LEAST(t.expires_at, now())
+    FROM public.league_cards c
+   WHERE t.card_id = c.id AND c.league_id = p_league AND t.used_at IS NULL
+     AND (c.user_id = p_user OR t.marker_user_id = p_user);
+  DELETE FROM public.notifications n
+   USING public.league_cards c
+   WHERE n.type = 'league_marker_request' AND n.entity_id = c.id AND c.league_id = p_league
+     AND (c.user_id = p_user OR c.marker_user_id = p_user OR n.user_id = p_user);
+  UPDATE public.league_cards
+     SET marker_user_id = NULL, marker_name = NULL,
+         marker_requested_at = NULL, marker_reminded_at = NULL, updated_at = now()
+   WHERE league_id = p_league AND marker_user_id IS NOT NULL
+     AND (user_id = p_user OR marker_user_id = p_user);
+  UPDATE public.league_handicap_votes SET status = 'failed'
+   WHERE league_id = p_league AND subject_user = p_user AND status = 'open';
+END;
 $$;
 
 -- R12: the end of the 3rd day of the next month, Europe/Madrid.
@@ -239,7 +337,10 @@ BEGIN
     'public.league_assert_month_open(date)',
     'public.league_other_admin(uuid, uuid)',
     'public.league_card_log(uuid, text, uuid, text, text, text, jsonb)',
-    'public.league_card_notice(public.league_cards)'
+    'public.league_card_notice(public.league_cards)',
+    'public.league_player_has_scores(text, text, text)',
+    'public.league_assert_own_player(text, text, uuid)',
+    'public.league_member_cleanup(uuid, uuid)'
   ] LOOP
     EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon, authenticated', v_sig);
   END LOOP;
@@ -314,14 +415,7 @@ BEGIN
     -- R16: joining a game already under way counts only from before the
     -- player's first shot. A score of theirs anywhere in the round means
     -- it's too late (the first-shot trigger only sees later writes).
-    IF EXISTS (SELECT 1 FROM public.game_scores
-                WHERE tournament_id = p_tournament_id AND round_id = p_round_id
-                  AND player_id = p_player_id AND strokes IS NOT NULL)
-       OR EXISTS (SELECT 1 FROM public.scorer_cards sc
-                    CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(sc.card -> 'holes') = 'object'
-                                                       THEN sc.card -> 'holes' ELSE '{}'::jsonb END) h
-                   WHERE sc.tournament_id = p_tournament_id AND sc.round_id = p_round_id
-                     AND jsonb_typeof(h.value -> 'entries' -> p_player_id) = 'number') THEN
+    IF public.league_player_has_scores(p_tournament_id, p_round_id, p_player_id) THEN
       RAISE EXCEPTION 'This round has started for you. A league card has to be announced before your first shot.'
         USING ERRCODE = 'P0001', HINT = 'round_started';
     END IF;
@@ -385,7 +479,20 @@ BEGIN
        p_course, v_tee, (v_tee AT TIME ZONE 'Europe/Madrid')::date, now(), v_hcp, v_post)
     RETURNING id INTO v_id;
   EXCEPTION WHEN unique_violation THEN
-    -- Lost a race with a second device announcing the same month.
+    -- Lost a race: a second tap on the same game round is the same card.
+    IF p_source = 'app' THEN
+      SELECT * INTO v_mine FROM public.league_cards
+       WHERE league_id = p_league AND source = 'app' AND user_id = v_uid
+         AND tournament_id = p_tournament_id AND round_id = p_round_id AND player_id = p_player_id
+         AND status <> 'void'
+       LIMIT 1;
+      IF FOUND THEN
+        RETURN jsonb_build_object('id', v_mine.id, 'month', v_mine.month, 'announced_at', v_mine.announced_at,
+                                  'league_handicap', v_mine.league_handicap, 'post_by', v_mine.post_by,
+                                  'status', v_mine.status, 'existing', true);
+      END IF;
+    END IF;
+    -- A second device announcing another card for the same month.
     RAISE EXCEPTION 'You already have your % card.', to_char(v_month, 'FMMonth')
       USING ERRCODE = 'P0001', HINT = 'card_exists';
   END;
@@ -434,6 +541,10 @@ BEGIN
   IF v_c.status NOT IN ('announced','playing') THEN
     RETURN;
   END IF;
+  -- R16: only the player's own phone tees off.
+  IF v_c.source = 'app' THEN
+    PERFORM public.league_assert_own_player(v_c.tournament_id, v_c.player_id, v_uid);
+  END IF;
   UPDATE public.league_cards
      SET first_shot_at = now(),
          post_by = CASE WHEN source = 'app' AND post_by IS NULL
@@ -469,7 +580,8 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  r record;
+  r   record;
+  v_c public.league_cards%ROWTYPE;
 BEGIN
   IF jsonb_typeof(NEW.card -> 'holes') IS DISTINCT FROM 'object' THEN
     RETURN NULL;
@@ -493,6 +605,35 @@ BEGIN
     END LOOP;
   EXCEPTION WHEN others THEN
     RAISE WARNING 'league first-shot stamp skipped: %', SQLERRM;
+  END;
+  -- R9: a withdrawn card whose player is scored anyway was played: it takes
+  -- the month again (when no other card of that month does), and the members
+  -- hear about it once.
+  BEGIN
+    FOR r IN
+      SELECT c.id FROM public.league_cards c
+       WHERE c.tournament_id = NEW.tournament_id AND c.round_id = NEW.round_id
+         AND c.source = 'app' AND c.status = 'void' AND c.void_kind = 'withdrawn'
+         AND (c.user_id = NEW.writer_uid
+              OR EXISTS (SELECT 1 FROM jsonb_each(NEW.card -> 'holes') h
+                          WHERE jsonb_typeof(h.value -> 'entries') = 'object'
+                            AND jsonb_typeof(h.value -> 'entries' -> c.player_id) = 'number'))
+         AND NOT EXISTS (SELECT 1 FROM public.league_card_events e
+                          WHERE e.card_id = c.id AND e.kind = 'played_after_withdraw')
+    LOOP
+      UPDATE public.league_cards c SET void_kind = 'withdrawn_after_play', updated_at = now()
+       WHERE c.id = r.id
+         AND NOT EXISTS (SELECT 1 FROM public.league_cards o
+                          WHERE o.league_id = c.league_id AND o.user_id = c.user_id AND o.month = c.month
+                            AND o.id <> c.id AND public.league_takes_month(o.status, o.void_kind));
+      SELECT * INTO v_c FROM public.league_cards WHERE id = r.id;
+      PERFORM public.league_card_log(r.id, 'played_after_withdraw', NEW.writer_uid, NULL, NULL, NULL,
+        jsonb_build_object('month_taken', v_c.void_kind = 'withdrawn_after_play'));
+      PERFORM public.notify_league_members(v_c.league_id, v_c.user_id, 'league_card_played_after_withdraw', r.id,
+        public.league_card_notice(v_c));
+    END LOOP;
+  EXCEPTION WHEN others THEN
+    RAISE WARNING 'league played-after-withdraw check skipped: %', SQLERRM;
   END;
   RETURN NULL;
 END;
@@ -544,6 +685,16 @@ BEGIN
   END IF;
   PERFORM public.league_assert_open(v_c.league_id);
   PERFORM public.league_assert_month_open(v_c.month);
+  -- R16: an app card is the caller's own player of the game.
+  IF v_c.source = 'app' THEN
+    PERFORM public.league_assert_own_player(v_c.tournament_id, v_c.player_id, v_uid);
+  END IF;
+  -- R11: past post_by, the resubmission a marker's return allows is once per card.
+  IF v_c.status = 'submitted' AND v_c.returned_at IS NOT NULL AND v_c.returned_resubmits >= 1
+     AND v_c.post_by IS NOT NULL AND now() > v_c.post_by THEN
+    RAISE EXCEPTION 'You already corrected this card once after a marker sent it back, and the 8 hours to post it are over.'
+      USING ERRCODE = 'P0001', HINT = 'resubmit_used';
+  END IF;
 
   IF v_c.source = 'offapp' AND v_c.status = 'announced' AND v_c.tee_time IS NOT NULL THEN
     IF now() < v_c.tee_time THEN
@@ -668,6 +819,8 @@ BEGIN
                           ELSE COALESCE(p_played_on, played_on) END,
          first_shot_at = v_first, not_announced = v_not,
          approved_by = NULL, approved_at = NULL, returned_at = NULL,
+         returned_resubmits = returned_resubmits
+                              + CASE WHEN v_c.status = 'submitted' AND v_c.returned_at IS NOT NULL THEN 1 ELSE 0 END,
          marker_user_id = NULL, marker_name = NULL,
          marker_requested_at = NULL, marker_reminded_at = NULL,
          status = 'submitted', updated_at = now()
@@ -676,7 +829,8 @@ BEGIN
   PERFORM public.league_card_log(p_card, 'submitted', v_uid, NULL, NULL, NULL,
     jsonb_build_object('points', (v_score ->> 'points')::int, 'gross', (v_score ->> 'gross')::int,
                        'tee_verified', v_verified, 'not_announced', v_not,
-                       'resubmit', v_c.status = 'submitted'));
+                       'resubmit', v_c.status = 'submitted',
+                       'after_return', v_c.status = 'submitted' AND v_c.returned_at IS NOT NULL));
 
   RETURN jsonb_build_object('id', p_card, 'status', 'submitted',
                             'not_announced', v_not, 'first_shot_at', v_first,
@@ -843,6 +997,10 @@ BEGIN
     RAISE EXCEPTION 'Your tee time is less than 2 hours away, so this card can''t be moved any more.'
       USING ERRCODE = 'P0001', HINT = 'reschedule_closed';
   END IF;
+  IF v_c.reschedules >= 2 THEN
+    RAISE EXCEPTION 'This card has been moved twice already, so it can''t be moved again.'
+      USING ERRCODE = 'P0001', HINT = 'reschedule_limit';
+  END IF;
   IF p_tee_time IS NULL OR p_tee_time < now() THEN
     RAISE EXCEPTION 'Pick a tee time that hasn''t passed yet.'
       USING ERRCODE = 'P0001', HINT = 'tee_time_passed';
@@ -866,16 +1024,17 @@ BEGIN
   v_post := p_tee_time + public.league_post_window();
   UPDATE public.league_cards
      SET tee_time = p_tee_time, played_on = (p_tee_time AT TIME ZONE 'Europe/Madrid')::date,
-         post_by = v_post, reminded_at = NULL, updated_at = now()
+         post_by = v_post, reminded_at = NULL, reschedules = reschedules + 1, updated_at = now()
    WHERE id = p_card
   RETURNING * INTO v_c;
 
   PERFORM public.league_card_log(p_card, 'rescheduled', v_uid, NULL, NULL, NULL,
-    jsonb_build_object('from', v_from, 'to', p_tee_time));
+    jsonb_build_object('from', v_from, 'to', p_tee_time, 'count', v_c.reschedules));
   PERFORM public.notify_league_members(v_c.league_id, v_uid, 'league_card_rescheduled', p_card,
     public.league_card_notice(v_c) || jsonb_build_object('old_tee_time', v_from));
 
-  RETURN jsonb_build_object('id', p_card, 'tee_time', p_tee_time, 'post_by', v_post);
+  RETURN jsonb_build_object('id', p_card, 'tee_time', p_tee_time, 'post_by', v_post,
+                            'reschedules_left', GREATEST(2 - v_c.reschedules, 0));
 END;
 $$;
 
@@ -903,6 +1062,12 @@ BEGIN
      OR (v_c.source = 'app' AND v_c.first_shot_at IS NOT NULL) THEN
     RAISE EXCEPTION 'This card has been played, so it can''t be withdrawn. Only an admin can void it now.'
       USING ERRCODE = 'P0001', HINT = 'withdraw_closed';
+  END IF;
+  -- The server already holds a score of the player in this round: played.
+  IF v_c.source = 'app'
+     AND public.league_player_has_scores(v_c.tournament_id, v_c.round_id, v_c.player_id) THEN
+    RAISE EXCEPTION 'This round has started for you, so the card can''t be withdrawn. Only an admin can void it now.'
+      USING ERRCODE = 'P0001', HINT = 'round_started';
   END IF;
 
   UPDATE public.league_cards
@@ -1130,7 +1295,9 @@ BEGIN
 
   PERFORM public.league_card_log(p_card, 'confirmed', p_by_user, COALESCE(p_by_name, ''),
     CASE WHEN p_how = 'marker' THEN 'marker_request' ELSE p_how END, NULL,
-    jsonb_build_object('proof', p_proof IS NOT NULL));
+    jsonb_build_object('proof', p_proof IS NOT NULL,
+                       -- A QR marker signs with a typed name and no account.
+                       'marker_account', CASE WHEN p_how IN ('qr','marker','partner') THEN p_by_user IS NOT NULL END));
 
   PERFORM public.notify_league_members(v_c.league_id, v_c.user_id, 'league_card_confirmed', p_card,
     jsonb_build_object(
@@ -1704,17 +1871,20 @@ BEGIN
     RAISE EXCEPTION 'That player is not in this league.' USING ERRCODE = 'P0001', HINT = 'not_member';
   END IF;
   v_name := public.league_user_name(p_user);
+  -- Never a league without an admin (the caller is one, so today this holds
+  -- whenever they remain; kept for any future non-admin path).
   IF v_role = 'admin' AND NOT EXISTS (
        SELECT 1 FROM public.league_members
-        WHERE league_id = p_league AND user_id NOT IN (v_uid, p_user) AND role = 'admin'
+        WHERE league_id = p_league AND user_id <> p_user AND role = 'admin'
           AND joined_at IS NOT NULL AND left_at IS NULL) THEN
-    RAISE EXCEPTION '% is the only other admin. Make someone else admin first.', v_name
+    RAISE EXCEPTION '% is the league''s only admin. Make someone else admin first.', v_name
       USING ERRCODE = 'P0001', HINT = 'last_admin';
   END IF;
 
   -- Coming back with the invite code makes them a member, not an admin.
   UPDATE public.league_members SET left_at = now(), role = 'member'
    WHERE league_id = p_league AND user_id = p_user;
+  PERFORM public.league_member_cleanup(p_league, p_user);
 
   INSERT INTO public.league_member_events (league_id, kind, user_id, actor_user_id, data)
   VALUES (p_league, 'removed', p_user, v_uid, jsonb_build_object('name', v_name, 'role', v_role));
@@ -1789,17 +1959,19 @@ BEGIN
      AND joined_at IS NOT NULL AND left_at IS NULL
      FOR UPDATE;
   v_name := public.league_user_name(v_i.claimed_by);
+  -- Never a league without an admin (see remove_league_member).
   IF v_role = 'admin' AND NOT EXISTS (
        SELECT 1 FROM public.league_members
-        WHERE league_id = p_league AND user_id NOT IN (v_uid, v_i.claimed_by) AND role = 'admin'
+        WHERE league_id = p_league AND user_id <> v_i.claimed_by AND role = 'admin'
           AND joined_at IS NOT NULL AND left_at IS NULL) THEN
-    RAISE EXCEPTION '% is the only other admin. Make someone else admin first.', v_name
+    RAISE EXCEPTION '% is the league''s only admin. Make someone else admin first.', v_name
       USING ERRCODE = 'P0001', HINT = 'last_admin';
   END IF;
 
   UPDATE public.league_members SET left_at = now(), role = 'member'
    WHERE league_id = p_league AND user_id = v_i.claimed_by
      AND joined_at IS NOT NULL AND left_at IS NULL;
+  PERFORM public.league_member_cleanup(p_league, v_i.claimed_by);
   UPDATE public.league_invitees SET claimed_by = NULL, claimed_at = NULL WHERE id = p_invitee;
 
   INSERT INTO public.league_member_events (league_id, kind, user_id, invitee_id, actor_user_id, data)
@@ -1814,6 +1986,55 @@ BEGIN
                        'spot_name', v_i.name, 'you', true));
   PERFORM public.notify_league_members(p_league, v_uid, 'league_spot_released', p_league,
     jsonb_build_object('subject_id', v_i.claimed_by, 'subject_name', v_name, 'spot_name', v_i.name));
+END;
+$$;
+
+-- Body of 20261004000000 plus: a promotion or demotion is logged and the
+-- members are told (league_role_changed). Setting the role a member already
+-- has changes nothing and says nothing.
+CREATE OR REPLACE FUNCTION public.set_league_role(p_league uuid, p_user uuid, p_role text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_cur text;
+BEGIN
+  PERFORM 1 FROM public.leagues WHERE id = p_league FOR UPDATE;   -- see leave_league
+  IF NOT public.league_is_admin(p_league, v_uid) THEN
+    RAISE EXCEPTION 'Only the league admin can do that.' USING ERRCODE = '42501';
+  END IF;
+  PERFORM public.league_assert_open(p_league);
+  IF COALESCE(p_role, '') NOT IN ('admin','member') THEN
+    RAISE EXCEPTION 'A role is admin or member.' USING ERRCODE = 'P0001';
+  END IF;
+  SELECT role INTO v_cur FROM public.league_members
+   WHERE league_id = p_league AND user_id = p_user
+     AND joined_at IS NOT NULL AND left_at IS NULL
+     FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'That player is not in this league.' USING ERRCODE = 'P0001';
+  END IF;
+  IF v_cur = 'admin' AND p_role = 'member'
+     AND NOT EXISTS (SELECT 1 FROM public.league_members
+                      WHERE league_id = p_league AND user_id <> p_user AND role = 'admin'
+                        AND joined_at IS NOT NULL AND left_at IS NULL) THEN
+    RAISE EXCEPTION 'A league needs at least one admin. Make someone else admin first.'
+      USING ERRCODE = 'P0001';
+  END IF;
+  IF v_cur = p_role THEN
+    RETURN;
+  END IF;
+  UPDATE public.league_members SET role = p_role
+   WHERE league_id = p_league AND user_id = p_user;
+
+  INSERT INTO public.league_member_events (league_id, kind, user_id, actor_user_id, data)
+  VALUES (p_league, CASE WHEN p_role = 'admin' THEN 'promoted' ELSE 'demoted' END, p_user, v_uid,
+          jsonb_build_object('name', public.league_user_name(p_user), 'role', p_role));
+  PERFORM public.notify_league_members(p_league, v_uid, 'league_role_changed', p_league,
+    jsonb_build_object('subject_id', p_user, 'subject_name', public.league_user_name(p_user), 'role', p_role));
 END;
 $$;
 
@@ -1986,6 +2207,7 @@ BEGIN
     'public.remove_league_member(uuid, uuid)',
     'public.rotate_league_invite_code(uuid)',
     'public.release_league_invitee(uuid, uuid)',
+    'public.set_league_role(uuid, uuid, text)',
     'public.join_league(text, numeric, text, uuid)'
   ] LOOP
     EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon', v_sig);

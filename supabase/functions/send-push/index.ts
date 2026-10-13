@@ -248,6 +248,18 @@ Object.assign(RENDERERS, {
     body: `${d.actor_name ?? 'A friend'} withdrew their ${cardPhrase(d)}`,
     deepLink: leagueBoard(d),
   }),
+  league_card_played_after_withdraw: (d: Record<string, unknown>) => ({
+    title: 'Withdrawn card played',
+    body: `${d.owner_name ?? 'A friend'} played their withdrawn ${cardPhrase(d)} after all: it uses their month`,
+    deepLink: leagueBoard(d),
+  }),
+  league_role_changed: (d: Record<string, unknown>) => ({
+    title: d.role === 'admin' ? 'New league admin' : 'League admin stepped down',
+    body: d.role === 'admin'
+      ? `${d.actor_name ?? 'An admin'} made ${d.subject_name ?? 'a member'} an admin of ${d.league_name ?? 'the league'}`
+      : `${d.subject_name ?? 'A member'} is no longer an admin of ${d.league_name ?? 'the league'}`,
+    deepLink: leagueBoard(d),
+  }),
   league_card_auto_withdrawn: (d: Record<string, unknown>) => ({
     title: 'Card withdrawn',
     body: `Your ${cardPhrase(d)} was withdrawn: no shot was played within 24 hours of Start. `
@@ -339,6 +351,8 @@ const CATEGORY_BY_TYPE: Record<string, 'scores' | 'invites' | 'media' | 'league'
   league_member_removed: 'league',
   league_spot_claimed: 'league',
   league_spot_released: 'league',
+  league_role_changed: 'league',
+  league_card_played_after_withdraw: 'league',
 };
 
 // Types with no switch of their own follow a row's switch. Mirrors
@@ -351,6 +365,8 @@ const LEAGUE_PUSH_PREF_OF: Record<string, string> = {
   league_card_approved: 'league_card_voided',
   league_member_removed: 'league_spot_claimed',
   league_spot_released: 'league_spot_claimed',
+  league_role_changed: 'league_spot_claimed',
+  league_card_played_after_withdraw: 'league_card_announced',
 };
 
 type Settings = Record<string, Record<string, unknown>> | null | undefined;

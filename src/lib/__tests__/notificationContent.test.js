@@ -298,9 +298,19 @@ describe('league integrity notifications (20261016000000)', () => {
       .toBe('Ana released your spot in Mulligan');
   });
 
+  test('a withdrawn card played anyway, and role changes', () => {
+    expect(renderNotification('league_card_played_after_withdraw', card).body)
+      .toBe('Pablo played their withdrawn October card at Golf Olivar after all: it uses their month');
+    expect(renderNotification('league_role_changed', { ...card, subject_name: 'Gil', role: 'admin' }).body)
+      .toBe('Ana made Gil an admin of Mulligan');
+    expect(renderNotification('league_role_changed', { ...card, subject_name: 'Gil', role: 'member' }).body)
+      .toBe('Gil is no longer an admin of Mulligan');
+  });
+
   const types = ['league_card_rescheduled', 'league_card_withdrawn', 'league_card_auto_withdrawn',
     'league_card_voided', 'league_card_reopened', 'league_card_approved', 'league_handicap_changed',
-    'league_member_removed', 'league_spot_claimed', 'league_spot_released'];
+    'league_member_removed', 'league_spot_claimed', 'league_spot_released',
+    'league_role_changed', 'league_card_played_after_withdraw'];
 
   test('each has its own icon and opens the board; the removed member goes to the inbox', () => {
     types.forEach((type) => {

@@ -208,6 +208,20 @@ export function renderNotification(type, data = {}) {
         title: 'Card withdrawn',
         body: `${actorName} withdrew their ${cardPhrase(data)}`,
       };
+    case 'league_card_played_after_withdraw':
+      return {
+        icon: 'alert-circle',
+        title: 'Withdrawn card played',
+        body: `${data.owner_name || FALLBACK_NAME} played their withdrawn ${cardPhrase(data)} after all: it uses their month`,
+      };
+    case 'league_role_changed':
+      return {
+        icon: 'shield',
+        title: data.role === 'admin' ? 'New league admin' : 'League admin stepped down',
+        body: data.role === 'admin'
+          ? `${data.actor_name || 'An admin'} made ${data.subject_name || 'a member'} an admin of ${data.league_name || 'the league'}`
+          : `${data.subject_name || 'A member'} is no longer an admin of ${data.league_name || 'the league'}`,
+      };
     case 'league_card_auto_withdrawn':
       return {
         icon: 'x-circle',
@@ -334,6 +348,8 @@ export function notificationLink(type, data = {}) {
     case 'league_card_approved':
     case 'league_handicap_changed':
     case 'league_spot_claimed':
+    case 'league_role_changed':
+    case 'league_card_played_after_withdraw':
       return { screen: 'LeagueBoard', params: { leagueId: data.league_id } };
     // The removed / released member can't open the board any more.
     case 'league_member_removed':

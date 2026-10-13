@@ -480,6 +480,8 @@ VALUES ('t_ss_scr', 'Scoring smoke scramble', '{}'::jsonb),
 INSERT INTO public.game_rounds (id, tournament_id, round_index, body)
 VALUES ('r0', 't_ss_scr', 0, '{"scoringMode":"scramblepairs"}'::jsonb),
        ('r0', 't_ss_scr2', 0, '{}'::jsonb);
+INSERT INTO public.game_players (tournament_id, player_id, user_id, body)
+SELECT t, 'pA', 'b1000000-0000-4000-8000-00000000000a', '{}'::jsonb FROM unnest(ARRAY['t_ss_scr', 't_ss_scr2']) t;
 INSERT INTO public.game_scores (tournament_id, round_id, player_id, hole, strokes)
 SELECT t, 'r0', 'pA', key::int, value::int
   FROM jsonb_each_text((SELECT v::jsonb FROM ss_ctx WHERE k='hcng')), unnest(ARRAY['t_ss_scr', 't_ss_scr2']) t;

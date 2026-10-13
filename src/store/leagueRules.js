@@ -41,11 +41,13 @@ export function cardMonth(dateOrIso) {
 }
 
 // Does this card use up its month? Every card does except a void one, and an
-// admin's void still does (R15b, 20261016000000): only a withdrawal (by hand
+// admin's void still does (R15b, 20261016000000), as does a withdrawn card
+// that was played anyway ('withdrawn_after_play'): only a withdrawal (by hand
 // or the sweep's) and voids from before that migration (voidKind null) free it.
+const MONTH_TAKING_VOIDS = ['admin', 'withdrawn_after_play'];
 export function takesMonth(card) {
   if (!card) return false;
-  return card.status !== 'void' || card.voidKind === 'admin';
+  return card.status !== 'void' || MONTH_TAKING_VOIDS.includes(card.voidKind);
 }
 
 // One card per member per month (see takesMonth). A card's `month` may be
@@ -112,6 +114,7 @@ export const MIN_ROUND_HOURS = 3;        // R8: posted from tee time + 3 h
 export const AUTO_WITHDRAW_HOURS = 24;   // R6: an unplayed app card goes 24 h after Start
 export const RESUBMIT_HOURS = 24;        // R11: one resubmission within 24 h of a return
 export const MONTH_CLOSE_DAYS = 3;       // R12: a month closes at the end of day 3 of the next
+export const MAX_RESCHEDULES = 2;        // R7: an off-app card moves at most twice
 
 const ms = (t) => (t == null ? NaN : new Date(t).getTime());
 const plusHours = (t, h) => {
@@ -124,9 +127,11 @@ export function earliestOffAppTeeTime(now = new Date()) {
   return plusHours(now, OFFAPP_NOTICE_HOURS);
 }
 
-// R7: an announced off-app card can move while its tee time is >= 2 h away.
+// R7: an announced off-app card can move while its tee time is >= 2 h away,
+// at most MAX_RESCHEDULES times.
 export function canReschedule(card, now = new Date()) {
   if (card?.source !== 'offapp' || card.status !== 'announced' || !card.teeTime) return false;
+  if ((card.reschedules ?? 0) >= MAX_RESCHEDULES) return false;
   return ms(card.teeTime) - ms(now) >= OFFAPP_NOTICE_HOURS * HOUR_MS;
 }
 
@@ -153,9 +158,10 @@ export function autoWithdrawAt(card) {
 }
 
 // R11: until when the owner may resubmit a card a marker sent back, when that
-// matters (past post_by); null with no open return.
+// matters (past post_by); null with no open return, or once the card has used
+// its one post-return resubmission.
 export function resubmitBy(card) {
-  if (card?.status !== 'submitted' || !card.returnedAt) return null;
+  if (card?.status !== 'submitted' || !card.returnedAt || (card.returnedResubmits ?? 0) >= 1) return null;
   return plusHours(card.returnedAt, RESUBMIT_HOURS);
 }
 

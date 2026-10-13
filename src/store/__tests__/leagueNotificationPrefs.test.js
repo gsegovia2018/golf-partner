@@ -38,6 +38,9 @@ test('20261016000000 types: admin actions, handicaps and membership have a row, 
   expect(leaguePrefKey('league_card_auto_withdrawn')).toBe('league_post_reminder');
   expect(leaguePrefKey('league_card_approved')).toBe('league_card_voided');
   expect(leaguePrefKey('league_tee_off')).toBe('league_tee_off');
+  // Membership switch: removed (incl. the "you were removed" copy), released, role changes.
+  ['league_member_removed', 'league_spot_released', 'league_role_changed']
+    .forEach((t) => expect(leaguePrefKey(t)).toBe('league_spot_claimed'));
 });
 
 test('send-push mirrors the shared switches', () => {

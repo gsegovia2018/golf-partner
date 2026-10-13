@@ -184,17 +184,22 @@ export function rowToCard(r) {
     markerRequestedAt: r.marker_requested_at ?? null,
     markerRemindedAt: r.marker_reminded_at ?? null,
     voidedReason: r.voided_reason ?? null,
-    // Why a void card is void (20261016000000): 'admin' (keeps the month
-    // taken), 'withdrawn' / 'auto_withdrawn' (the month is free again);
-    // null on voids from before it (they freed the month too).
+    // Why a void card is void (20261016000000): 'admin' and
+    // 'withdrawn_after_play' (scored after a withdrawal) keep the month taken;
+    // 'withdrawn' / 'auto_withdrawn' free it; null on voids from before it
+    // (they freed the month too).
     voidKind: r.void_kind ?? null,
+    // R11 / R7 counters: resubmissions after a marker's return, reschedules.
+    returnedResubmits: r.returned_resubmits ?? 0,
+    reschedules: r.reschedules ?? 0,
   };
 }
 
 // One entry of a card's timeline (get_league_card_events / league_card_events).
 // kind: 'announced' | 'rescheduled' | 'first_shot' | 'submitted' | 'added' |
 // 'sent_to_marker' | 'returned' | 'confirmed' | 'approved' | 'reopened' |
-// 'missed' | 'withdrawn' | 'auto_withdrawn' | 'voided'. actorName is set
+// 'missed' | 'withdrawn' | 'auto_withdrawn' | 'played_after_withdraw' |
+// 'voided'. actorName is set
 // even without an account (a QR marker); how: 'partner' | 'qr' | 'photo' |
 // 'official' | 'marker_request' (confirmed, returned, sent_to_marker).
 // data is kind-specific ({ from, to } for rescheduled, { points, gross,
@@ -233,7 +238,8 @@ export function rowToGameStatus(r) {
 }
 
 // One entry of the membership log (league_member_events, members read it).
-// kind: 'removed' | 'spot_claimed' | 'spot_released' | 'invite_code_rotated'.
+// kind: 'removed' | 'spot_claimed' | 'spot_released' | 'invite_code_rotated' |
+// 'promoted' | 'demoted'.
 export function rowToMemberEvent(r) {
   return {
     id: r.id,
@@ -728,17 +734,21 @@ export async function addUnannouncedLeagueCard({
 
 // Owner. An off-app card's tee time can move while it is at least 2 hours
 // away ('reschedule_closed'), to a time at least 2 hours away ('short_notice'),
-// within the same month and season; the post deadline moves with it and the
-// members are told. Other hints: 'tee_time_passed', 'month_change',
-// 'outside_season', 'not_offapp', 'not_open', 'month_closed'.
-// Returns { id, teeTime, postBy }.
+// within the same month and season, at most twice ('reschedule_limit'); the
+// post deadline moves with it and the members are told. Other hints:
+// 'tee_time_passed', 'month_change', 'outside_season', 'not_offapp',
+// 'not_open', 'month_closed'. Returns { id, teeTime, postBy, reschedulesLeft }
+// (reschedulesLeft null from an older server).
 export async function rescheduleLeagueCard(cardId, teeTime) {
   const d = await rpc('reschedule_league_card', { p_card: cardId, p_tee_time: teeTime });
-  return { id: d.id, teeTime: d.tee_time, postBy: d.post_by ?? null };
+  return {
+    id: d.id, teeTime: d.tee_time, postBy: d.post_by ?? null, reschedulesLeft: d.reschedules_left ?? null,
+  };
 }
 
 // Owner. Takes a card back before it is played: before the tee time
-// (off-app) or the first shot (app); later 'withdraw_closed' (only an admin
+// (off-app) or the first shot (app); later 'withdraw_closed', or
+// 'round_started' once the server holds a score of the player (only an admin
 // can void it then). The card becomes void (voidKind 'withdrawn'), the month
 // is free again and the members are told. Returns { id, status, voidKind }.
 export async function withdrawLeagueCard(cardId) {

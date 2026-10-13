@@ -356,6 +356,7 @@ describe('integrity rules (20261016000000)', () => {
     expect(takesMonth({ status: 'announced' })).toBe(true);
     expect(takesMonth({ status: 'missed' })).toBe(true);
     expect(takesMonth({ status: 'void', voidKind: 'admin' })).toBe(true);
+    expect(takesMonth({ status: 'void', voidKind: 'withdrawn_after_play' })).toBe(true);
     expect(takesMonth({ status: 'void', voidKind: 'withdrawn' })).toBe(false);
     expect(takesMonth({ status: 'void', voidKind: 'auto_withdrawn' })).toBe(false);
     expect(takesMonth({ status: 'void', voidKind: null })).toBe(false);
@@ -378,6 +379,8 @@ describe('integrity rules (20261016000000)', () => {
     expect(canReschedule({ ...card, teeTime: h(1.9) }, NOW)).toBe(false);
     expect(canReschedule({ ...card, source: 'app' }, NOW)).toBe(false);
     expect(canReschedule({ ...card, status: 'submitted' }, NOW)).toBe(false);
+    expect(canReschedule({ ...card, reschedules: 1 }, NOW)).toBe(true);
+    expect(canReschedule({ ...card, reschedules: 2 }, NOW)).toBe(false);
   });
 
   test('postOpensAt: tee time + 3 h for an announced off-app card (R8)', () => {
@@ -406,6 +409,8 @@ describe('integrity rules (20261016000000)', () => {
     expect(resubmitBy({ status: 'submitted', returnedAt: h(0) }).toISOString()).toBe(h(24));
     expect(resubmitBy({ status: 'submitted', returnedAt: null })).toBeNull();
     expect(resubmitBy({ status: 'confirmed', returnedAt: h(0) })).toBeNull();
+    // Once per card: a card that already used it gets no second window.
+    expect(resubmitBy({ status: 'submitted', returnedAt: h(0), returnedResubmits: 1 })).toBeNull();
   });
 
   test('monthClosesAt: midnight Madrid starting day 4 of the next month (R12), both offsets', () => {

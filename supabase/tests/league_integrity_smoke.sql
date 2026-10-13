@@ -4,7 +4,11 @@
 -- minimum round (R8), withdraw (R9), admins on their own card / handicap
 -- (R10), marker returns (R11), month close (R12), the card timeline (R13),
 -- member admin (R15), admin voids keep the month (R15b), several league cards
--- per game (R16) and tournament rounds (R17).
+-- per game (R16) and tournament rounds (R17), plus the review follow-ups:
+-- withdraw refused once scores exist and "played after withdrawing", the
+-- caller's own player on submit/tee-off, role changes logged, QR without an
+-- account, remove/release clean-up, one post-return resubmission per card,
+-- at most 2 reschedules, removing another admin.
 --
 -- Same shape as leagues_smoke.sql: each check is one row in the temp table
 -- `ig_smoke`, a final DO block RAISEs listing every failed check, and the
@@ -115,6 +119,14 @@ END $$;
 SELECT pg_temp.ig_as(u), public.join_league(pg_temp.ig_v('code'), 18) FROM unnest(ARRAY['g','n','m','p','q']) u;
 SELECT pg_temp.ig_as('a');
 SELECT public.set_league_role(pg_temp.ig_v('league')::uuid, pg_temp.ig_v('u:g')::uuid, 'admin');
+SELECT public.set_league_role(pg_temp.ig_v('league')::uuid, pg_temp.ig_v('u:g')::uuid, 'admin');   -- no change
+SELECT pg_temp.ig_ok('R15: a promotion is logged and the members are told, once (a repeat changes nothing)',
+  pg_temp.ig_n(format($s$SELECT count(*) FROM public.league_member_events WHERE league_id = %L AND kind = 'promoted'
+                          AND user_id = %L AND actor_user_id = %L$s$,
+                      pg_temp.ig_v('league'), pg_temp.ig_v('u:g'), pg_temp.ig_v('u:a'))) = 1
+  AND pg_temp.ig_n(format($s$SELECT count(*) FROM public.notifications WHERE type = 'league_role_changed'
+                             AND data->>'subject_name' = 'Gil Smoke' AND data->>'role' = 'admin'
+                             AND data->>'league_id' = %L$s$, pg_temp.ig_v('league'))) = 5);
 
 -- Games: t_ig_g (a casual game: A, G, N and an unlinked player), t_ig_t (a
 -- casual tournament, Q plays rounds r0 and r1), t_ig_o (an official one).
@@ -123,7 +135,8 @@ SELECT pg_temp.ig_sql($q$
     ('t_ig_g', 'Integrity game', '{"kind":"game"}'),
     ('t_ig_t', 'Integrity tournament', '{"kind":"tournament"}'),
     ('t_ig_o', 'Integrity official', '{"kind":"official"}'),
-    ('t_ig_w', 'Integrity withdraw', '{"kind":"game"}');
+    ('t_ig_w', 'Integrity withdraw', '{"kind":"game"}'),
+    ('t_ig_old', 'Integrity old card', '{"kind":"game"}');
   INSERT INTO public.game_rounds (id, tournament_id, round_index, body) VALUES
     ('r0', 't_ig_g', 0, '{}'), ('r0', 't_ig_t', 0, '{}'), ('r1', 't_ig_t', 1, '{}'), ('r0', 't_ig_o', 0, '{}');
   INSERT INTO public.game_players (tournament_id, player_id, user_id, pos, body) VALUES
@@ -133,7 +146,8 @@ SELECT pg_temp.ig_sql($q$
     ('t_ig_g', 'pX', NULL, 3, '{}'),
     ('t_ig_t', 'pQ', 'd1000000-0000-4000-8000-00000000000f', 0, '{}'),
     ('t_ig_t', 'pA', 'd1000000-0000-4000-8000-00000000000a', 1, '{}'),
-    ('t_ig_o', 'pQ', 'd1000000-0000-4000-8000-00000000000f', 0, '{}');
+    ('t_ig_o', 'pQ', 'd1000000-0000-4000-8000-00000000000f', 0, '{}'),
+    ('t_ig_old', 'pA', 'd1000000-0000-4000-8000-00000000000a', 0, '{}');
 $q$);
 
 -- 1) R16: several league cards per game ------------------------------------------------
@@ -193,6 +207,27 @@ SELECT pg_temp.ig_ok('R16: a member who doesn''t play the game gets an empty lis
 SELECT pg_temp.ig_as('o');
 SELECT pg_temp.ig_refuses('R16: get_league_game_status is for members only',
   format($s$SELECT public.get_league_game_status(%L, 't_ig_g', 'r0')$s$, pg_temp.ig_v('league')), NULL, '42501');
+
+-- R16: a card whose player isn't the caller's in the game can't tee off or be posted.
+SELECT pg_temp.ig_sql(format($q$
+  INSERT INTO public.league_cards (id, league_id, user_id, month, source, status, tournament_id, round_id, player_id,
+                                   course, tee_time, played_on, announced_at, league_handicap)
+  VALUES ('d1c00000-0000-4000-8000-000000000005', %L, %L, %L, 'app', 'playing', 't_ig_g', 'r9', 'pA',
+          %L::jsonb, now(), now()::date, now(), 18)$q$,
+  pg_temp.ig_v('league'), pg_temp.ig_v('u:p'), pg_temp.ig_v('next'), pg_temp.ig_v('course')));
+SELECT pg_temp.ig_as('p');
+SELECT pg_temp.ig_refuses('R16: tee-off of a player who isn''t the caller''s is refused',
+  $s$SELECT public.notify_league_tee_off('d1c00000-0000-4000-8000-000000000005')$s$, 'not_your_player');
+SELECT pg_temp.ig_refuses('R16: submit of a player who isn''t the caller''s is refused',
+  format($s$SELECT public.submit_league_card('d1c00000-0000-4000-8000-000000000005', %L::jsonb, 90, 0, 0, NULL)$s$,
+         pg_temp.ig_v('h5')), 'not_your_player');
+
+-- R9: once the server holds a score of the player, the card can't be withdrawn.
+SELECT pg_temp.ig_sql($q$INSERT INTO public.game_scores (tournament_id, round_id, player_id, hole, strokes)
+                        VALUES ('t_ig_g', 'r0', 'pG', 1, 4)$q$);
+SELECT pg_temp.ig_as('g');
+SELECT pg_temp.ig_refuses('R9: an app card with a score on the server can''t be withdrawn',
+  format('SELECT public.withdraw_league_card(%L)', pg_temp.ig_v('cardG')), 'round_started');
 
 -- 2) R17: a tournament round counts; an official round doesn't --------------------------
 SELECT pg_temp.ig_as('q');
@@ -278,6 +313,23 @@ BEGIN
   PERFORM pg_temp.ig_ok('R9: an app card is withdrawn before its first shot',
     r->>'status' = 'void' AND r->>'void_kind' = 'withdrawn', r::text);
 END $$;
+-- N is scored on that round anyway: the card was played after all.
+SELECT pg_temp.ig_sql($q$INSERT INTO public.scorer_cards (tournament_id, round_id, author_id, card)
+  VALUES ('t_ig_n2', 'r0', 'devN', jsonb_build_object('scorer', jsonb_build_object('playerId', 'pN'),
+          'holes', jsonb_build_object('1', jsonb_build_object('v', 1, 'entries', jsonb_build_object('pN', 5)))))$q$);
+SELECT pg_temp.ig_sql($q$UPDATE public.scorer_cards SET card = jsonb_set(card, '{holes,2}', '{"v":1,"entries":{"pN":4}}')
+                        WHERE tournament_id = 't_ig_n2'$q$);
+SELECT pg_temp.ig_ok('R9: scores after a withdrawal: withdrawn_after_play (month taken), logged and told once',
+  pg_temp.ig_n(format($s$SELECT count(*) FROM public.league_cards WHERE id = %L AND status = 'void'
+                          AND void_kind = 'withdrawn_after_play'$s$, pg_temp.ig_v('cardN2'))) = 1
+  AND pg_temp.ig_n(format($s$SELECT count(*) FROM public.league_card_events WHERE card_id = %L
+                             AND kind = 'played_after_withdraw' AND (data->>'month_taken')::boolean$s$, pg_temp.ig_v('cardN2'))) = 1
+  AND pg_temp.ig_n(format($s$SELECT count(*) FROM public.notifications WHERE type = 'league_card_played_after_withdraw'
+                             AND entity_id = %L$s$, pg_temp.ig_v('cardN2'))) = 5);
+SELECT pg_temp.ig_as('n');
+SELECT pg_temp.ig_refuses('R9: ... so the member can''t announce another card that month',
+  format($s$SELECT public.announce_league_card(%L, 'offapp', %L::jsonb, now() + interval '3 hours')$s$,
+         pg_temp.ig_v('league'), pg_temp.ig_v('course')), 'card_exists');
 
 -- 4) R7, R8, R9: off-app notice, minimum round, withdraw (P) ---------------------------------
 SELECT pg_temp.ig_as('p');
@@ -299,14 +351,24 @@ END $$;
 SELECT pg_temp.ig_refuses('R7: reschedule to under 2 hours away is refused',
   format($s$SELECT public.reschedule_league_card(%L, now() + interval '90 minutes')$s$, pg_temp.ig_v('cardP')), 'short_notice');
 SELECT public.reschedule_league_card(pg_temp.ig_v('cardP')::uuid, now() + interval '4 hours');
+DO $$
+DECLARE r jsonb := public.reschedule_league_card(pg_temp.ig_v('cardP')::uuid, now() + interval '5 hours');
+BEGIN
+  PERFORM pg_temp.ig_ok('R7: a second reschedule is allowed, none left after it',
+    (r->>'reschedules_left')::int = 0, r::text);
+END $$;
+SELECT pg_temp.ig_refuses('R7: a third reschedule is refused',
+  format($s$SELECT public.reschedule_league_card(%L, now() + interval '6 hours')$s$, pg_temp.ig_v('cardP')), 'reschedule_limit');
 SELECT pg_temp.ig_ok('R7: a reschedule is on the timeline and notifies the members',
   pg_temp.ig_n(format($s$SELECT count(*) FROM public.league_card_events WHERE card_id = %L AND kind = 'rescheduled'
                           AND (data->>'to')::timestamptz = now() + interval '4 hours'
                           AND (data->>'from')::timestamptz = now() + interval '3 hours'$s$, pg_temp.ig_v('cardP'))) = 1
+  AND pg_temp.ig_n(format($s$SELECT count(*) FROM public.league_card_events WHERE card_id = %L
+                             AND kind = 'rescheduled'$s$, pg_temp.ig_v('cardP'))) = 2
   AND pg_temp.ig_n(format($s$SELECT count(*) FROM public.notifications WHERE type = 'league_card_rescheduled'
                              AND entity_id = %L AND data->>'owner_name' = 'Pau Smoke'
                              AND (data->>'old_tee_time')::timestamptz = now() + interval '3 hours'$s$, pg_temp.ig_v('cardP'))) = 5);
-SELECT pg_temp.ig_rewind(pg_temp.ig_v('cardP')::uuid, interval '150 minutes');   -- tee in 90 minutes
+SELECT pg_temp.ig_rewind(pg_temp.ig_v('cardP')::uuid, interval '210 minutes');   -- tee in 90 minutes
 SELECT pg_temp.ig_refuses('R7: a card whose tee time is under 2 hours away can''t be moved',
   format($s$SELECT public.reschedule_league_card(%L, now() + interval '5 hours')$s$, pg_temp.ig_v('cardP')), 'reschedule_closed');
 SELECT pg_temp.ig_refuses('R9: only the owner can withdraw',
@@ -386,22 +448,27 @@ SELECT set_config('request.jwt.claims', '{"role":"anon"}', true);
 SET LOCAL ROLE anon;
 SELECT public.confirm_marker_card(pg_temp.ig_v('tokM2'), 'Lucía', false, 'Still wrong');
 SET LOCAL ROLE authenticated;
-SELECT pg_temp.ig_sql(format($q$UPDATE public.league_cards SET returned_at = now() - interval '25 hours' WHERE id = %L$q$,
-                             pg_temp.ig_v('cardM')));
 SELECT pg_temp.ig_as('m');
+SELECT pg_temp.ig_refuses('R11: a second return gives no second resubmission (once per card)',
+  format($s$SELECT public.submit_league_card(%L, %L::jsonb, 90, 0, 0, NULL)$s$, pg_temp.ig_v('cardM'), pg_temp.ig_v('h5')),
+  'resubmit_used');
+-- With the allowance unused, a return older than 24 h no longer allows one either.
+SELECT pg_temp.ig_sql(format($q$UPDATE public.league_cards SET returned_resubmits = 0, returned_at = now() - interval '25 hours'
+                                 WHERE id = %L$q$, pg_temp.ig_v('cardM')));
 SELECT pg_temp.ig_refuses('R11: a return older than 24 h no longer allows a resubmission',
   format($s$SELECT public.submit_league_card(%L, %L::jsonb, 90, 0, 0, NULL)$s$, pg_temp.ig_v('cardM'), pg_temp.ig_v('h5')),
   'post_deadline_passed');
-SELECT pg_temp.ig_sql(format($q$UPDATE public.league_cards SET returned_at = now() WHERE id = %L$q$, pg_temp.ig_v('cardM')));
-SELECT public.submit_league_card(pg_temp.ig_v('cardM')::uuid, pg_temp.ig_v('h5')::jsonb, 90, 0, 0, NULL);
+SELECT pg_temp.ig_sql(format($q$UPDATE public.league_cards SET returned_resubmits = 1, returned_at = NULL WHERE id = %L$q$,
+                             pg_temp.ig_v('cardM')));
 INSERT INTO ig_ctx SELECT 'tokM3', public.create_marker_token(pg_temp.ig_v('cardM')::uuid)->>'token';
 SELECT set_config('request.jwt.claims', '{"role":"anon"}', true);
 SET LOCAL ROLE anon;
 SELECT public.confirm_marker_card(pg_temp.ig_v('tokM3'), 'Lucía', true, NULL);
 SET LOCAL ROLE authenticated;
-SELECT pg_temp.ig_ok('R13: a QR confirmation is on the timeline, how = qr, by the marker''s name',
+SELECT pg_temp.ig_ok('R13: a QR confirmation is on the timeline: how qr, the marker''s name, no account',
   pg_temp.ig_n(format($s$SELECT count(*) FROM public.league_card_events WHERE card_id = %L AND kind = 'confirmed'
-                          AND how = 'qr' AND actor_name = 'Lucía'$s$, pg_temp.ig_v('cardM'))) = 1);
+                          AND how = 'qr' AND actor_name = 'Lucía' AND actor_user_id IS NULL
+                          AND NOT (data->>'marker_account')::boolean$s$, pg_temp.ig_v('cardM'))) = 1);
 
 -- 6) R10 + R15b: admins on their own card and handicap ------------------------------------------
 SELECT pg_temp.ig_as('a');
@@ -416,10 +483,11 @@ SELECT pg_temp.ig_sql(format($q$
    WHERE id = 'd1c00000-0000-4000-8000-000000000001';
   INSERT INTO public.league_cards (id, league_id, user_id, month, source, status, course, played_on,
                                    not_announced, league_handicap, playing_handicap, holes, gross, points, tee_verified)
-  VALUES ('d1c00000-0000-4000-8000-000000000002', %L, %L, %L, 'offapp', 'submitted', %L::jsonb, %L::date + 1,
-          true, 18, 20, %L::jsonb, 90, 30, false)$q$,
+  SELECT 'd1c00000-0000-4000-8000-000000000002', %L, %L, %L, 'offapp', 'submitted', %L::jsonb, %L::date + 1,
+         true, 18, (sc->>'playing_handicap')::int, %L::jsonb, (sc->>'gross')::int, (sc->>'points')::int, false
+    FROM (SELECT public.league_card_score(%L::jsonb, %L::jsonb, 18) AS sc) x$q$,
   pg_temp.ig_v('league'), pg_temp.ig_v('u:a'), pg_temp.ig_v('next2'), pg_temp.ig_v('course'), pg_temp.ig_v('next2'),
-  pg_temp.ig_v('h5')));
+  pg_temp.ig_v('h5'), pg_temp.ig_v('h5'), pg_temp.ig_v('course')));
 SELECT pg_temp.ig_refuses('R10: an admin can''t reopen their own card while another admin exists',
   $s$SELECT public.reopen_league_card('d1c00000-0000-4000-8000-000000000001')$s$, 'own_card', '42501');
 SELECT pg_temp.ig_refuses('R10: nor approve it',
@@ -470,7 +538,10 @@ SELECT pg_temp.ig_sql(format($q$
   INSERT INTO public.league_cards (id, league_id, user_id, month, source, status, course, tee_time, played_on, announced_at,
                                    not_announced, league_handicap, playing_handicap, holes, gross, points, tee_verified, post_by)
   VALUES ('d1c00000-0000-4000-8000-000000000003', %1$L, %2$L, %3$L, 'offapp', 'submitted', %4$L::jsonb,
-          %3$L::date + interval '10 hours', %3$L::date, %3$L::date, true, 18, 20, %5$L::jsonb, 90, 30, false, NULL),
+          %3$L::date + interval '10 hours', %3$L::date, %3$L::date, true, 18,
+          (public.league_card_score(%5$L::jsonb, %4$L::jsonb, 18)->>'playing_handicap')::int, %5$L::jsonb,
+          (public.league_card_score(%5$L::jsonb, %4$L::jsonb, 18)->>'gross')::int,
+          (public.league_card_score(%5$L::jsonb, %4$L::jsonb, 18)->>'points')::int, false, NULL),
          ('d1c00000-0000-4000-8000-000000000004', %1$L, %6$L, %3$L, 'offapp', 'announced', %4$L::jsonb,
           now() + interval '1 day', %3$L::date, now(), false, 18, NULL, NULL, NULL, NULL, NULL, now() + interval '32 hours');
   INSERT INTO public.league_marker_tokens (token, card_id, snapshot_hash, expires_at)
@@ -520,7 +591,7 @@ BEGIN
     AND r->0->>'actor_name' = 'Pau Smoke' AND (r->1->'data'->>'points') IS NOT NULL,
     r::text);
   PERFORM pg_temp.ig_ok('R13: members SELECT league_card_events directly (RLS)',
-    (SELECT count(*) FROM public.league_card_events WHERE card_id = pg_temp.ig_v('cardP')::uuid) = 3);
+    (SELECT count(*) FROM public.league_card_events WHERE card_id = pg_temp.ig_v('cardP')::uuid) = 4);
 END $$;
 SELECT pg_temp.ig_refuses('R13: nobody inserts a timeline entry directly',
   format($s$INSERT INTO public.league_card_events (card_id, league_id, kind) VALUES (%L, %L, 'confirmed')$s$,
@@ -585,9 +656,25 @@ SELECT pg_temp.ig_refuses('R15: a member can''t remove anyone',
 SELECT pg_temp.ig_as('a');
 SELECT pg_temp.ig_refuses('R15: an admin can''t remove themselves',
   format('SELECT public.remove_league_member(%L, %L)', pg_temp.ig_v('league'), pg_temp.ig_v('u:a')), 'use_leave');
-SELECT pg_temp.ig_refuses('R15: nor the only other admin',
-  format('SELECT public.remove_league_member(%L, %L)', pg_temp.ig_v('league'), pg_temp.ig_v('u:g')), 'last_admin');
+-- Before removing N: an open vote on N's handicap, N asked to mark P's card,
+-- and N's own card with an unused QR (the closed-month fixture's token).
+SELECT public.open_handicap_vote(pg_temp.ig_v('league')::uuid, pg_temp.ig_v('u:n')::uuid, 15);
+SELECT pg_temp.ig_sql(format($q$
+  UPDATE public.league_cards SET marker_user_id = %1$L, marker_name = 'Nico Smoke', marker_requested_at = now() WHERE id = %2$L;
+  INSERT INTO public.league_marker_tokens (token, card_id, snapshot_hash, expires_at, marker_user_id)
+  VALUES ('ig-bound-n', %2$L, 'x', now() + interval '7 days', %1$L);
+  INSERT INTO public.notifications (user_id, type, entity_id, data) VALUES (%1$L, 'league_marker_request', %2$L, '{}')$q$,
+  pg_temp.ig_v('u:n'), pg_temp.ig_v('cardP2')));
 SELECT public.remove_league_member(pg_temp.ig_v('league')::uuid, pg_temp.ig_v('u:n')::uuid);
+SELECT pg_temp.ig_ok('R15: removal ends their marker tokens and requests and fails the vote about them',
+  pg_temp.ig_n($s$SELECT count(*) FROM public.league_marker_tokens
+                   WHERE token IN ('ig-bound-n', 'ig-closed-token') AND expires_at <= now()$s$) = 2
+  AND pg_temp.ig_n(format($s$SELECT count(*) FROM public.league_cards WHERE id = %L AND marker_user_id IS NULL
+                             AND marker_name IS NULL$s$, pg_temp.ig_v('cardP2'))) = 1
+  AND pg_temp.ig_n(format($s$SELECT count(*) FROM public.notifications WHERE type = 'league_marker_request'
+                             AND entity_id = %L$s$, pg_temp.ig_v('cardP2'))) = 0
+  AND pg_temp.ig_n(format($s$SELECT count(*) FROM public.league_handicap_votes WHERE league_id = %L
+                             AND subject_user = %L AND status = 'failed'$s$, pg_temp.ig_v('league'), pg_temp.ig_v('u:n'))) = 1);
 SELECT pg_temp.ig_ok('R15: a removed member leaves (cards stay), is told, the members are told, it is logged',
   pg_temp.ig_n(format($s$SELECT count(*) FROM public.league_members WHERE league_id = %L AND user_id = %L
                           AND left_at = now() AND role = 'member'$s$, pg_temp.ig_v('league'), pg_temp.ig_v('u:n'))) = 1
@@ -602,8 +689,13 @@ SELECT pg_temp.ig_ok('R15: a removed member leaves (cards stay), is told, the me
                           pg_temp.ig_v('league'), pg_temp.ig_v('u:n'), pg_temp.ig_v('u:a'))) = 1);
 SELECT pg_temp.ig_refuses('R15: removing someone not in the league',
   format('SELECT public.remove_league_member(%L, %L)', pg_temp.ig_v('league'), pg_temp.ig_v('u:o')), 'not_member');
+-- Removing the other admin is fine: the caller stays an admin.
+SELECT public.remove_league_member(pg_temp.ig_v('league')::uuid, pg_temp.ig_v('u:g')::uuid);
+SELECT pg_temp.ig_ok('R15: an admin removes the other admin; the league still has one',
+  pg_temp.ig_n(format($s$SELECT count(*) FROM public.league_members WHERE league_id = %L AND role = 'admin'
+                          AND joined_at IS NOT NULL AND left_at IS NULL$s$, pg_temp.ig_v('league'))) = 1);
 SELECT pg_temp.ig_ok('R15: members read the membership log; an outsider doesn''t',
-  (SELECT count(*) FROM public.league_member_events WHERE league_id = pg_temp.ig_v('league')::uuid) = 5
+  (SELECT count(*) FROM public.league_member_events WHERE league_id = pg_temp.ig_v('league')::uuid) = 7
   AND (SELECT count(*) FROM (SELECT pg_temp.ig_as('o')) x, public.league_member_events
         WHERE league_id = pg_temp.ig_v('league')::uuid) = 0);
 
@@ -617,8 +709,9 @@ SELECT pg_temp.ig_ok('R13: the sweep logs a missed card',
 SELECT pg_temp.ig_ok('R13: every kind this run went through is on some timeline',
   pg_temp.ig_n(format($s$SELECT count(DISTINCT kind) FROM public.league_card_events WHERE league_id = %L
                           AND kind IN ('announced','rescheduled','first_shot','submitted','returned','confirmed',
-                                       'approved','reopened','missed','withdrawn','auto_withdrawn','voided')$s$,
-                      pg_temp.ig_v('league'))) = 12);
+                                       'approved','reopened','missed','withdrawn','auto_withdrawn','voided',
+                                       'played_after_withdraw')$s$,
+                      pg_temp.ig_v('league'))) = 13);
 
 -- 11) Grants -------------------------------------------------------------------------------------
 RESET ROLE;
@@ -633,13 +726,14 @@ SELECT 'new RPCs: authenticated only (not anon)',
                      'remove_league_member','rotate_league_invite_code','release_league_invitee');
 INSERT INTO ig_smoke (name, ok, detail)
 SELECT 'internal helpers: nobody executes them',
-       count(*) = 8 AND bool_and(NOT has_function_privilege('authenticated', p.oid, 'EXECUTE')
+       count(*) = 11 AND bool_and(NOT has_function_privilege('authenticated', p.oid, 'EXECUTE')
                                  AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')),
        string_agg(p.proname, ',')
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
  WHERE n.nspname = 'public'
    AND p.proname IN ('league_takes_month','league_month_closes_at','league_assert_month_open','league_other_admin',
-                     'league_card_log','league_card_notice','league_cards_first_shot_from_scorer','league_sweep_cards');
+                     'league_card_log','league_card_notice','league_cards_first_shot_from_scorer','league_sweep_cards',
+                     'league_player_has_scores','league_assert_own_player','league_member_cleanup');
 INSERT INTO ig_smoke (name, ok, detail)
 SELECT 'every SECURITY DEFINER league function pins search_path',
        count(*) FILTER (WHERE NOT COALESCE(p.proconfig @> ARRAY['search_path=public'], false)) = 0,

@@ -31,6 +31,8 @@ export const LEAGUE_PREF_OF = {
   league_card_approved: 'league_card_voided',
   league_member_removed: 'league_spot_claimed',
   league_spot_released: 'league_spot_claimed',
+  league_role_changed: 'league_spot_claimed',
+  league_card_played_after_withdraw: 'league_card_announced',
 };
 
 // The preference key (a LEAGUE_NOTIFICATION_ROWS type) a notification type is

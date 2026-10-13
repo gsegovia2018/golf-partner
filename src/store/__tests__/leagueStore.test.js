@@ -415,8 +415,9 @@ describe('RPC params', () => {
 describe('post deadline RPCs', () => {
   test('rescheduleLeagueCard, reopenLeagueCard, approveLeagueCard', async () => {
     ok({ id: 'C1', tee_time: '2026-10-12T08:00:00Z', post_by: '2026-10-12T16:00:00Z' });
+    // reschedulesLeft is null from a server before 20261016000000.
     expect(await rescheduleLeagueCard('C1', '2026-10-12T08:00:00Z'))
-      .toEqual({ id: 'C1', teeTime: '2026-10-12T08:00:00Z', postBy: '2026-10-12T16:00:00Z' });
+      .toEqual({ id: 'C1', teeTime: '2026-10-12T08:00:00Z', postBy: '2026-10-12T16:00:00Z', reschedulesLeft: null });
     expect(lastRpc()).toEqual(['reschedule_league_card', { p_card: 'C1', p_tee_time: '2026-10-12T08:00:00Z' }]);
     ok({ id: 'C1', status: 'announced', post_by: '2026-10-12T16:00:00Z' });
     expect(await reopenLeagueCard('C1')).toEqual({ id: 'C1', status: 'announced', postBy: '2026-10-12T16:00:00Z' });
@@ -617,9 +618,19 @@ describe('reads and cache', () => {
     expect(await getMyLeagueCardsForRound(null, 'r1')).toEqual([]);
   });
 
-  test('rowToCard maps void_kind, null when absent', () => {
+  test('rowToCard maps void_kind and the R11/R7 counters, defaults when absent', () => {
     expect(rowToCard({ id: 'c', status: 'void', void_kind: 'admin' }).voidKind).toBe('admin');
-    expect(rowToCard({ id: 'c', status: 'void' }).voidKind).toBeNull();
+    expect(rowToCard({ id: 'c', status: 'void' })).toMatchObject({ voidKind: null, returnedResubmits: 0, reschedules: 0 });
+    expect(rowToCard({ id: 'c', status: 'announced', returned_resubmits: 1, reschedules: 2 }))
+      .toMatchObject({ returnedResubmits: 1, reschedules: 2 });
+  });
+
+  test('getMyCardsForMonth keeps a withdrawn card that was played after all', async () => {
+    mockState.tables.league_cards = {
+      data: [{ id: 'c5', league_id: 'L1', user_id: 'me', month: '2026-10-01', status: 'void', void_kind: 'withdrawn_after_play' }],
+      error: null,
+    };
+    expect((await getMyCardsForMonth('2026-10')).map((c) => c.id)).toEqual(['c5']);
   });
 
   test('getLeagueMemberEvents reads the membership log, oldest first', async () => {

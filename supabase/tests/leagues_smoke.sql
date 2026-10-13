@@ -241,6 +241,14 @@ EXCEPTION WHEN others THEN
     SQLSTATE = 'P0001' AND SQLERRM = 'You already have your October card.', SQLSTATE || ' ' || SQLERRM);
 END $$;
 
+-- 20261016000000 (R16): a tee-off needs the card's player to be the caller's
+-- in the game, so the game's players are written first.
+RESET ROLE;
+INSERT INTO public.tournaments (id, name) VALUES ('t_lg_a', 'League smoke A');
+INSERT INTO public.game_players (tournament_id, player_id, user_id, body)
+VALUES ('t_lg_a', 'pA', 'a0000000-0000-4000-8000-00000000000a', '{}'::jsonb),
+       ('t_lg_a', 'pB', 'a0000000-0000-4000-8000-00000000000b', '{}'::jsonb);
+SET LOCAL ROLE authenticated;
 SELECT public.notify_league_tee_off((SELECT v::uuid FROM league_ctx WHERE k='cardA'));
 SELECT public.notify_league_tee_off((SELECT v::uuid FROM league_ctx WHERE k='cardA'));
 
@@ -266,14 +274,10 @@ SELECT 'tee-off stamps first_shot_at with the server clock', first_shot_at = now
 -- writes a forged card under another author_id that claims to be Javi's
 -- (scorer.userId = B). Javi's real card is written later, as B.
 -- startedAt is AFTER the announcement.
-INSERT INTO public.tournaments (id, name) VALUES ('t_lg_a', 'League smoke A');
 INSERT INTO public.game_rounds (id, tournament_id, round_index, body)
 VALUES ('r0', 't_lg_a', 0, jsonb_build_object('startedAt', to_char((now() + interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
         -- A's tee: card A's snapshot (older-build shape) has no slope/rating.
         'playerTees', '{"pA":{"label":"Yellow","slope":125,"rating":72}}'::jsonb));
-INSERT INTO public.game_players (tournament_id, player_id, user_id, body)
-VALUES ('t_lg_a', 'pA', 'a0000000-0000-4000-8000-00000000000a', '{}'::jsonb),
-       ('t_lg_a', 'pB', 'a0000000-0000-4000-8000-00000000000b', '{}'::jsonb);
 CREATE TEMP TABLE smoke_card_a ON COMMIT DROP AS
 SELECT (SELECT jsonb_object_agg(h::text, jsonb_build_object(
           'v', 1, 'entries', jsonb_build_object('pA', 4, 'pB', 5), 'ts', 1757000000000::bigint))
@@ -819,6 +823,8 @@ RESET ROLE;
 -- Its game: no startedAt, and A's settled 4s (an app card must match the game).
 INSERT INTO public.tournaments (id, name) VALUES ('t_lg_n', 'League smoke N');
 INSERT INTO public.game_rounds (id, tournament_id, round_index, body) VALUES ('r0', 't_lg_n', 0, '{}'::jsonb);
+INSERT INTO public.game_players (tournament_id, player_id, user_id, body)
+VALUES ('t_lg_n', 'pA', 'a0000000-0000-4000-8000-00000000000a', '{}'::jsonb);
 INSERT INTO public.game_scores (tournament_id, round_id, player_id, hole, strokes)
 SELECT 't_lg_n', 'r0', 'pA', h, 4 FROM generate_series(1, 18) h;
 WITH x AS (
