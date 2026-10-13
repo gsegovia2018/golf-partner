@@ -68,12 +68,55 @@ export function getStill(swingId, frame) {
   }
 }
 
+const fromDisk = (swingId, wanted) => Object.fromEntries(wanted.map((f) => [f, getStill(swingId, f)]));
+
+// One native extraction at a time (the module has a single worker thread, so a second call only
+// waits behind the first). Lanes decide who goes first and who is dropped:
+//   'target'     the frame the user released on: runs next, replaces any waiting target/neighbour
+//                job, and cancels a running target/neighbour job that is now stale
+//   'neighbours' prefetch around it: waits behind targets, replaced by a newer prefetch, dropped
+//                (cancelled if running) as soon as a target arrives
+//   undefined    everything else (Results, Compare): plain FIFO, never dropped, never cancelled
+// A dropped job resolves at once with whatever is on disk, like a failed one.
+const queue = { pending: [], running: null };
+const sameFrames = (a, b) => a.length === b.length && a.every((f, i) => f === b[i]);
+
+function drop(job) {
+  job.dropped = true;
+  job.resolve(fromDisk(job.swingId, job.wanted));
+}
+
+function dropRunning(lanes) {
+  const r = queue.running;
+  if (!r || r.dropped || !lanes.includes(r.lane)) return;
+  drop(r);
+  try { nativeApi()?.cancelAnalysis?.(); } catch { /* the job just runs to its end */ }
+}
+
+async function runJob(job) {
+  try {
+    const dir = framesDir(job.swingId);
+    if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
+    const got = await nativeApi().extractFrames(swingVideoUri(job.swingId), { frames: job.missing, outDir: dir.uri });
+    job.missing.forEach((f) => { job.out[f] = got?.[f] ?? getStill(job.swingId, f); });
+  } catch { /* leave them null */ }
+  job.resolve(job.out);
+}
+
+function pump() {
+  if (queue.running || !queue.pending.length) return;
+  const job = queue.pending.shift();
+  queue.running = job;
+  runJob(job).finally(() => { queue.running = null; pump(); });
+}
+
 /**
  * Make sure the given frames have stills. Frames already on disk are returned as they are;
  * the rest are extracted by native when it is available. Resolves to { [frame]: uri | null }
  * and never rejects: a missing still is a state the screens draw, not an error.
+ * `lane` ('target' | 'neighbours') opts into priority and supersede, see above.
  */
-export async function ensureStills(swingId, frames) {
+export function ensureStills(swingId, frames, lane) {
   const wanted = [...new Set(frames.map((f) => Math.round(f)))];
   const out = {};
   const missing = [];
@@ -82,17 +125,44 @@ export async function ensureStills(swingId, frames) {
     out[f] = uri;
     if (!uri) missing.push(f);
   });
-  if (!missing.length) return out;
-  const api = nativeApi();
-  if (!api?.extractFrames) return out;
-  try {
-    const dir = framesDir(swingId);
-    if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
-    const got = await api.extractFrames(swingVideoUri(swingId), { frames: missing, outDir: dir.uri });
-    missing.forEach((f) => { out[f] = got?.[f] ?? getStill(swingId, f); });
-  } catch { /* leave them null */ }
-  return out;
+  if (!missing.length) return Promise.resolve(out);
+  if (!nativeApi()?.extractFrames) return Promise.resolve(out);
+  missing.sort((a, b) => a - b);
+
+  // The same lane already asked for exactly this (a re-render): share it.
+  if (lane) {
+    const same = [queue.running, ...queue.pending].find((j) => j && !j.dropped && j.lane === lane && j.swingId === swingId && sameFrames(j.missing, missing));
+    if (same) return same.promise;
+  }
+  const job = { swingId, wanted, missing, out, lane, dropped: false, resolve: null };
+  job.promise = new Promise((resolve) => { job.resolve = resolve; });
+
+  if (lane === 'target') {
+    queue.pending = queue.pending.filter((j) => {
+      if (j.lane !== 'target' && j.lane !== 'neighbours') return true;
+      drop(j);
+      return false;
+    });
+    dropRunning(['target', 'neighbours']);
+    queue.pending.unshift(job);
+  } else if (lane === 'neighbours') {
+    queue.pending = queue.pending.filter((j) => {
+      if (j.lane !== 'neighbours') return true;
+      drop(j);
+      return false;
+    });
+    dropRunning(['neighbours']);
+    const at = queue.pending.findIndex((j) => j.lane !== 'target');
+    queue.pending.splice(at < 0 ? queue.pending.length : at, 0, job);
+  } else {
+    queue.pending.push(job);
+  }
+  pump();
+  return job.promise;
 }
+
+/** Tests only: forget the queue. */
+export function resetStillQueue() { queue.pending = []; queue.running = null; }
 
 /**
  * The swing window pass 2 writes proxies for (D28): about one second before the motion starts to
