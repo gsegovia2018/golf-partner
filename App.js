@@ -37,6 +37,7 @@ import { useLeagueJoinHeld } from './src/lib/leagueJoinHandoff';
 import SharedBoardScreen from './src/screens/SharedBoardScreen';
 import MarkerCardScreen from './src/screens/MarkerCardScreen';
 import LeagueMarkerQRScreen from './src/screens/LeagueMarkerQRScreen';
+import LeagueMarkerConfirmScreen from './src/screens/LeagueMarkerConfirmScreen';
 import JoinLeagueScreen from './src/screens/JoinLeagueScreen';
 import LeagueCreateScreen from './src/screens/LeagueCreateScreen';
 import LeagueBoardScreen from './src/screens/LeagueBoardScreen';
@@ -409,6 +410,7 @@ function AppNavigator() {
         <Stack.Screen name="LeagueFinal" component={LeagueFinalScreen} />{/* admin: extra strokes per place, then Setup — { leagueId } */}
         <Stack.Screen name="LeagueValidate" component={LeagueValidateScreen} />{/* after Finish of a league round: { leagueId, cardId, tournamentId, roundId } */}
         <Stack.Screen name="LeagueMarkerQR" component={LeagueMarkerQRScreen} />{/* from LeagueValidate: { cardId, leagueId } */}
+        <Stack.Screen name="LeagueMarkerConfirm" component={LeagueMarkerConfirmScreen} />{/* push/inbox "confirm a card" request: { token } */}
         <Stack.Screen name="MarkerCard" component={MarkerCardScreen} />{/* /m/:token opened by a signed-in visitor */}
         <Stack.Screen name="LeagueAnnounce" component={LeagueAnnounceScreen} />{/* off-app card: announce before playing */}
         <Stack.Screen name="LeagueCard" component={LeagueCardScreen} />{/* read-only member card, flick through the month: { leagueId, month, userId } */}

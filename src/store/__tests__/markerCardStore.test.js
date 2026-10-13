@@ -34,8 +34,21 @@ describe('getMarkerCard', () => {
     expect(card).toEqual({
       playerFirstName: 'Marcos', course: 'El Saler', tee: 'Yellow', slope: 133, rating: 72.9, date: '2026-10-04',
       playingHandicap: 20, gross: 80, points: 36, differential: 11.8, netDifferential: -2.4,
-      expiresAt: '2026-10-04T12:00:00Z',
+      expiresAt: '2026-10-04T12:00:00Z', bound: false, signedInName: null, leagueName: null, month: null,
       holes: [{ n: 1, par: 4, si: 7, strokes: 5 }, { n: 2, par: 3, si: 15, strokes: null }],
+    });
+  });
+
+  test('a bound token also returns who is signed in', async () => {
+    mockState.result = {
+      data: {
+        player_first_name: 'Marcos', course: 'El Saler', expires_at: 'x', holes: [],
+        bound: true, signed_in_name: 'Javi Ortega', league_name: 'Tour', month: '2026-10-01',
+      },
+      error: null,
+    };
+    expect(await getMarkerCard('tok')).toMatchObject({
+      bound: true, signedInName: 'Javi Ortega', leagueName: 'Tour', month: '2026-10-01',
     });
   });
 

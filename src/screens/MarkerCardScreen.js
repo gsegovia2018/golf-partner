@@ -113,13 +113,19 @@ export default function MarkerCardScreen(props) {
     try {
       const data = await getMarkerCard(token);
       if (!mountedRef.current) return;
+      // A request sent to a signed-in member (old link): the in-app screen
+      // confirms it as their account.
+      if (data.bound && props.navigation?.replace) {
+        props.navigation.replace('LeagueMarkerConfirm', { token });
+        return;
+      }
       setCard(data);
       setPhase('ready');
     } catch (e) {
       if (!mountedRef.current) return;
       setPhase(STATE_COPY[e?.reason] ? e.reason : 'error');
     }
-  }, [token]);
+  }, [token, props.navigation]);
 
   useEffect(() => { load(); }, [load]);
 

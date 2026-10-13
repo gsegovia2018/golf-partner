@@ -384,7 +384,8 @@ export default function LeagueBoardScreen({ navigation, route }) {
         </>
       );
     } else {
-      badge = needsApproval(mine.card) ? 'Awaiting approval' : mine.kind === 'confirmed' ? 'Confirmed' : 'Submitted';
+      badge = needsApproval(mine.card) ? 'Awaiting approval' : mine.kind === 'confirmed' ? 'Confirmed'
+        : mine.waitingFor ? `Waiting for ${mine.waitingFor}` : 'Submitted';
       const proofText = mine.card.proofPath
         ? (mine.card.confirmation === 'official' ? 'official result attached' : 'photo attached')
         : null;
