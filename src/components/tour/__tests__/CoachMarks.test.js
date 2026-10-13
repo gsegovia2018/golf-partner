@@ -4,6 +4,7 @@ import { ThemeProvider } from '../../../theme/ThemeContext';
 import CoachMarks from '../CoachMarks';
 import { HOME_TOUR_STEPS, SCORECARD_TOUR_STEPS } from '../tourSteps';
 import { measureTourTarget } from '../tourTargets';
+import { t } from '../../../i18n';
 
 jest.mock('../tourTargets', () => ({
   ...jest.requireActual('../tourTargets'),
@@ -23,11 +24,14 @@ afterEach(() => jest.useRealTimers());
 
 it('step copy matches the spec', () => {
   expect(HOME_TOUR_STEPS).toHaveLength(4);
+  // Step copy is catalogue keys; English resolves to the spec wording.
   expect(HOME_TOUR_STEPS[0]).toEqual({
     key: 'tab-play',
-    title: 'Everything starts here',
-    body: 'Tap the flag to start a round or a weekend tournament — pairs and scoring are set up for you.',
+    title: 'tour.play.title',
+    body: 'tour.play.body',
   });
+  expect(t(HOME_TOUR_STEPS[0].title)).toBe('Everything starts here');
+  expect(t(HOME_TOUR_STEPS[0].body)).toBe('Tap the flag to start a round or a weekend tournament — pairs and scoring are set up for you.');
   expect(SCORECARD_TOUR_STEPS.map((s) => s.key)).toEqual(['score-entry', 'hole-distances', 'hole-nav']);
 });
 

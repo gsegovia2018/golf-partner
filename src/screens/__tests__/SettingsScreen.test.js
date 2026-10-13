@@ -1,8 +1,9 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import SettingsScreen from '../SettingsScreen';
 import { getAppSettings, updateAppSettings, __resetAppSettingsForTests } from '../../store/settingsStore';
+import { setLanguagePref } from '../../i18n';
 
 jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn().mockResolvedValue(null),
@@ -62,4 +63,18 @@ test('replays the app tour from the DISPLAY section', async () => {
   const row = await screen.findByTestId('setting-replayTour');
   fireEvent.press(row);
   await waitFor(() => expect(resetTour).toHaveBeenCalledTimes(1));
+});
+
+describe('Spanish', () => {
+  beforeEach(async () => { await act(async () => { await setLanguagePref('es'); }); });
+  afterEach(async () => { await act(async () => { await setLanguagePref('en'); }); });
+
+  test('renders section titles and labels in Spanish', async () => {
+    renderScreen();
+    await waitFor(() => screen.getByText('EN EL CAMPO'));
+    expect(screen.getByText('Ajustes')).toBeTruthy();
+    expect(screen.getByText('VISIBILIDAD DE RESULTADOS')).toBeTruthy();
+    expect(screen.getByText('Distancias GPS')).toBeTruthy();
+    expect(screen.getByText('Repetir el recorrido')).toBeTruthy();
+  });
 });
