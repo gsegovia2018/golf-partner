@@ -1,10 +1,11 @@
 import React, {
   useEffect, useImperativeHandle, useRef, useState,
 } from 'react';
-import { View, Image, StyleSheet } from 'react-native';
+import { View, Image, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, Easing, useReducedMotion,
 } from 'react-native-reanimated';
+import { hud } from '../../theme/tokens';
 import {
   LOUPE_SIZE, LOUPE_FLASH_MS, loupePlacement, loupeImage,
 } from '../../swing/loupe';
@@ -26,7 +27,7 @@ function Cross({ size }) {
 }
 
 function LoupeView({
-  state, rect, uri, size, testID,
+  state, rect, uri, size, label, color, testID,
 }) {
   const reduced = useReducedMotion();
   const opacity = useSharedValue(reduced ? 1 : 0);
@@ -37,7 +38,7 @@ function LoupeView({
 
   const at = loupePlacement(state.finger, rect, size);
   const img = loupeImage(state.mark, rect, size);
-  return (
+  const ring = (
     <Animated.View
       pointerEvents="none"
       accessibilityElementsHidden
@@ -51,6 +52,17 @@ function LoupeView({
       <Cross size={size} />
     </Animated.View>
   );
+  if (!label) return ring;
+  // The canvas names what is being placed (D26): a chip just above the ring, below it near the top.
+  const top = at.top >= 24 ? at.top - 24 : at.top + size + 4;
+  return (
+    <>
+      {ring}
+      <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.chip, { left: at.left, top, backgroundColor: color }]} testID={`${testID}-label`}>
+        <Text style={styles.chipText}>{label}</Text>
+      </View>
+    </>
+  );
 }
 
 /**
@@ -63,7 +75,7 @@ function LoupeView({
  * ref.flash({ mark }) for an arrow nudge (no finger: it is placed off the mark itself).
  */
 export default function DragLoupe({
-  rect, uri, ref, size = LOUPE_SIZE, flashMs = LOUPE_FLASH_MS, testID = 'edit-loupe',
+  rect, uri, ref, size = LOUPE_SIZE, flashMs = LOUPE_FLASH_MS, label = null, color = hud.text, testID = 'edit-loupe',
 }) {
   const [state, setState] = useState(null);
   const timer = useRef(null);
@@ -82,7 +94,7 @@ export default function DragLoupe({
   useEffect(() => stop, []);
 
   if (!state || !rect?.w) return null;
-  return <LoupeView state={state} rect={rect} uri={uri} size={size} testID={testID} />;
+  return <LoupeView state={state} rect={rect} uri={uri} size={size} label={label} color={color} testID={testID} />;
 }
 
 const styles = StyleSheet.create({
@@ -92,4 +104,6 @@ const styles = StyleSheet.create({
   },
   img: { position: 'absolute' },
   line: { position: 'absolute', backgroundColor: '#ffd98a' },
+  chip: { position: 'absolute', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  chipText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, letterSpacing: 0.6, color: hud.onAccent },
 });

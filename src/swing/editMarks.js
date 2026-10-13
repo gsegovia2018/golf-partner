@@ -11,7 +11,7 @@
 // plus the ball ([x, y, r], one for the swing, markable at address) with `ballConfirmed`, and
 // `status` { [key]: 'confirmed' | 'skipped' } for the positions of the marking pass (markPass.js).
 // `base` keeps what analyze() proposed, so every label stores proposed and final side by side
-// (the v2 training data) and "Reset to auto" has something to go back to.
+// (the v2 training data) and a status word can say whether a mark moved.
 
 import { analyze } from './analyze';
 import { CHECKPOINT_KEYS } from './phases';
@@ -81,7 +81,9 @@ export function analyzeMarks(draft, base) {
     const m = {};
     if (d.frame !== p.frame) m.frame = d.frame;
     if (d.hands) m.hands = d.hands;
-    if (headChanged(d, p)) {
+    // On a moved frame the clubhead is what the golfer saw there, never the old frame's proposal
+    // read again by analyze() (marks.json stores it as head.final the same way).
+    if (headChanged(d, p) || d.frame !== p.frame) {
       if (d.hidden) m.hidden = true;
       else if (d.head) m.head = d.head;
     }
@@ -151,21 +153,6 @@ export function draftToMarks({
 export const isDirty = (draft, initial) => JSON.stringify(draft) !== JSON.stringify(initial);
 export const ballChanged = (draft, base) => !sameBall(draft.ball, base.ball);
 
-/** A checkpoint reset to what analyze() proposed (the ball too, at address). */
-export function resetCheckpoint(draft, base, key) {
-  const p = base.cps[key];
-  const next = {
-    ...draft,
-    cps: {
-      ...draft.cps,
-      [key]: {
-        frame: p.frame, hands: null, head: p.head, hidden: p.hidden, confirmed: { hands: false, head: false },
-      },
-    },
-  };
-  return key === 'address' ? { ...next, ball: base.ball, ballConfirmed: false } : next;
-}
-
 export const patchCheckpoint = (draft, key, patch) => ({ ...draft, cps: { ...draft.cps, [key]: { ...draft.cps[key], ...patch } } });
 
 // --- The marking canvas (D26): per-mark status, confirmation, skip and discard -------------------
@@ -193,6 +180,17 @@ export function markStatus(draft, base, key, mark) {
   }
   if (ok.hands) return 'confirmed';
   return d.hands ? 'moved' : 'proposed';
+}
+
+/**
+ * The position moves to another frame (a mark placed, or confirmed, on a previewed frame). Its
+ * marks were confirmed on the old frame, so they need confirming again on this one; the clubhead
+ * stays where it is drawn and is saved and analysed as shown (analyzeMarks).
+ */
+export function adoptFrame(draft, key, frame) {
+  const d = draft.cps[key];
+  if (d.frame === frame) return draft;
+  return patchCheckpoint(draft, key, { frame, confirmed: { hands: false, head: d.hidden && !!okOf(d).head } });
 }
 
 /** Put a mark at a normalised point; a moved mark needs confirming again. */
@@ -277,18 +275,4 @@ export function hitTest(pt, { hands, head, ball }, prefer = 'hands', radius = HI
     if (d <= radius && (!best || d < best.d || (d === best.d && t === prefer))) best = { t, d };
   });
   return best ? best.t : null;
-}
-
-// The club-dependent rows the live card shows, and the one that goes on the picture for a checkpoint.
-const CLUB_IDS = ['clubhead_vs_plane', 'butt_extension', 'top_direction', 'shaft_angle_impact'];
-export const liveChecks = (checks) => checks.filter((c) => CLUB_IDS.includes(c.id));
-export function pillCheck(key, checks) {
-  const find = (id, cp) => checks.find((c) => c.id === id && (!cp || c.cp === cp)) ?? null;
-  switch (key) {
-    case 'preImpact': case 'impact': return find('clubhead_vs_plane', key);
-    case 'leadArm': return find('butt_extension');
-    case 'top': return find('top_direction');
-    case 'address': return find('shaft_angle_impact');
-    default: return null;
-  }
 }

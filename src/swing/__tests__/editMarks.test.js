@@ -1,11 +1,10 @@
 // The Edit marks model on the owner fixture: draft, live recompute, marks.json round trip.
 import { analyze } from '../analyze';
 import {
-  buildDraft, analyzeMarks, recompute, draftToMarks, isDirty, resetCheckpoint, patchCheckpoint, hitTest,
-  liveChecks, pillCheck, clampPt,
+  buildDraft, analyzeMarks, recompute, draftToMarks, isDirty, patchCheckpoint, hitTest, clampPt,
 } from '../editMarks';
 import { marksForAnalyze } from '../labels';
-import { cueFor, CHECKPOINT_DEFS, HOW_TO_MARK, timelineStep } from '../checkpoints';
+import { cueFor, CHECKPOINT_DEFS } from '../checkpoints';
 import { fixtureNative, TRUTH, W, H } from './helpers';
 
 const lab = require('./fixtures/lab-d15-pass1.json');
@@ -129,21 +128,11 @@ describe('marks.json', () => {
     expect(reopened.draft.cps.top.hidden).toBe(true);
     expect(reopened.draft.cps.impact.frame).toBe(draft.cps.impact.frame);
     expect(reopened.draft.ball).toEqual(draft.ball);
-    // proposals survive the round trip: Reset still goes back to what analyze() first proposed
+    // proposals survive the round trip: the status words still compare with what analyze() first proposed
     expect(reopened.base.cps.impact.frame).toBe(c.base.cps.impact.frame);
     expect(reopened.base.ball).toEqual(c.base.ball);
     const round = (o) => JSON.parse(JSON.stringify(o), (k, v) => (typeof v === 'number' ? Math.round(v * 1e6) / 1e6 : v)); // px round trip noise
     expect(round(analyzeMarks(reopened.draft, reopened.base))).toEqual(round(analyzeMarks(draft, c.base)));
-  });
-
-  test('Reset checkpoint to auto restores the proposal, and the ball at address', () => {
-    const { c, draft } = edited();
-    const r = resetCheckpoint(resetCheckpoint(draft, c.base, 'impact'), c.base, 'address');
-    expect(r.cps.impact).toEqual({
-      frame: c.base.cps.impact.frame, hands: null, head: c.base.cps.impact.head, hidden: false, confirmed: { hands: false, head: false },
-    });
-    expect(r.ball).toEqual(c.base.ball);
-    expect(r.cps.leadArm.head).toEqual([0.24, 0.32]); // other checkpoints untouched
   });
 });
 
@@ -161,21 +150,12 @@ describe('helpers', () => {
   test('clampPt keeps points in the frame', () => {
     expect(clampPt([-0.1, 1.2])).toEqual([0, 1]);
   });
-
-  test('live rows are the club-dependent checks and each checkpoint has its pill', () => {
-    const rows = liveChecks(first.checks);
-    expect(rows.map((r) => r.id)).toEqual(expect.arrayContaining(['clubhead_vs_plane', 'butt_extension', 'top_direction', 'shaft_angle_impact']));
-    expect(pillCheck('preImpact', first.checks).cp).toBe('preImpact');
-    expect(pillCheck('leadArm', first.checks).id).toBe('butt_extension');
-    expect(pillCheck('takeaway', first.checks)).toBeNull();
-  });
 });
 
 describe('checkpoints.js (the lab editor cues)', () => {
   test('ten definitions in order with all four fields; P-numbers per D15 and D22', () => {
     expect(CHECKPOINT_DEFS.map((d) => d.p)).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']);
     CHECKPOINT_DEFS.forEach((d) => ['name', 'what', 'stopWhen', 'markTips'].forEach((f) => expect(d[f]).toEqual(expect.any(String))));
-    expect(HOW_TO_MARK.map(([k]) => k)).toEqual(['Hands', 'Clubhead', 'Ball', 'Clubhead hidden']);
   });
   test('left-handed cues mirror left and right', () => {
     expect(cueFor('leadArm', 'right').what).toMatch(/^Left arm/);
@@ -194,10 +174,8 @@ describe('checkpoints.js (the lab editor cues)', () => {
     expect(cueFor('leadArm', 'left').stop.watch).toBe('the right arm');
     expect(cueFor('preImpact').stop).toBeUndefined();
   });
-  test('internal frames have a cue and live under their timeline step', () => {
+  test('internal frames have a cue of their own', () => {
     expect(cueFor('preImpact').name).toBe('Pre-impact');
-    expect(timelineStep('preImpact')).toBe('impact');
-    expect(timelineStep('top')).toBe('top');
     expect(cueFor('nope')).toBeNull();
   });
 });
