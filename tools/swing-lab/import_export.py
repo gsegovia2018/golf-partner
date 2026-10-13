@@ -81,7 +81,7 @@ def build_truth(meta, analysis, marks, clip):
             hands = (f.get("hands") or {}).get("final", hands)
             head = (f.get("head") or {}).get("final", head)
             hidden = bool((f.get("head") or {}).get("finalHidden", hidden))
-            if f.get("corrected"):
+            if f.get("corrected") or f.get("confirmed"):  # confirmed: the golfer said the proposal is right (D26)
                 conf = 1
         if frame is None:
             continue

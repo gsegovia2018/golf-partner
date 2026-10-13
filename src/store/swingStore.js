@@ -4,6 +4,7 @@ import { Paths, Directory, File } from 'expo-file-system';
 import { emptyMarks, parseMarks } from '../swing/labels';
 import { makeZip, utf8 } from '../swing/zip';
 import { normClub, DEFAULT_CLUB } from '../swing/checks';
+import { newPass, markedFromMarks } from '../swing/markPass';
 
 // Local swing library (plan 7). Same shape as shotStore.js (module state, a
 // version counter for useSyncExternalStore, an AsyncStorage mirror) with no
@@ -18,11 +19,11 @@ const PROFILE_KEY = 'golf_swing_profile.v1';
 export const STORAGE_WARN_BYTES = 1024 * 1024 * 1024; // soft cap, plan 7.4
 
 const DEFAULT_PROFILE = {
-  heightCm: null, handedness: 'right', asked: false, lastClub: DEFAULT_CLUB, // lastClub: the Home picker's last choice (D19)
+  heightCm: null, handedness: 'right', asked: false, lastClub: DEFAULT_CLUB, // lastClub: the club sheet's last choice (D27)
   practiceOpen: false, // the Results practice card stays as the golfer left it (D24)
 };
 
-let SWINGS = []; // [{ id, createdAt, name, club, source, status, fps, mainFault, counts, thumb, bytes }]
+let SWINGS = []; // [{ id, createdAt, name, club, source, status, fps, mainFault, counts, thumb, bytes, marked }]
 let PROFILE = { ...DEFAULT_PROFILE };
 let version = 0;
 const listeners = new Set();
@@ -55,6 +56,13 @@ export async function hydrateSwings() {
     if (raw) PROFILE = { ...DEFAULT_PROFILE, ...JSON.parse(raw) };
   } catch { /* ignore */ }
   emit();
+  // Rows analysed before the mark-first flow (D26) have no `marked`: read it from their marks.json.
+  const old = SWINGS.filter((r) => r.status === 'ready' && !r.marked);
+  if (!old.length) return;
+  const got = await Promise.all(old.map((r) => readMarks(r.id)));
+  old.forEach((r, k) => patchRow(r.id, { marked: markedFromMarks(got[k]) }));
+  emit();
+  await persistIndex();
 }
 
 // --- Profile (D5, D6): height and handedness, local only ---------------------
@@ -71,7 +79,7 @@ export async function setSwingProfile({ heightCm, handedness }) {
   return PROFILE;
 }
 
-/** Remember the club chosen on Swing home (D19); does not count as answering the first-run sheet. */
+/** Remember the club chosen on the club sheet (D27); does not count as answering the first-run sheet. */
 export async function setLastSwingClub(club) {
   PROFILE = { ...PROFILE, lastClub: normClub(club) };
   emit();
@@ -145,7 +153,7 @@ function patchRow(id, patch) {
  * Copy a clip into the swing directory and add a row in `pending` state. The
  * source file is never modified (plan 7.1). Returns the row.
  */
-export async function createSwing({ videoUri, source = 'import', createdAt = new Date(), club = DEFAULT_CLUB }) {
+export async function createSwing({ videoUri, source = 'import', createdAt = new Date(), club = PROFILE.lastClub }) {
   const id = uuidv4();
   const when = createdAt instanceof Date ? createdAt : new Date(createdAt);
   const dir = swingDir(id);
@@ -168,6 +176,7 @@ export async function createSwing({ videoUri, source = 'import', createdAt = new
     counts: null,
     thumb: null,
     bytes: dirBytes(id),
+    marked: { state: 'none', count: 0 },
   };
   SWINGS = sortNewest([...SWINGS, row]);
   emit();
@@ -187,7 +196,7 @@ export async function saveAnalysis(id, analysis, { pose = null, probe = null, th
   if (pose) writeJson(id, 'pose.json', pose);
   if (probe) writeJson(id, 'probe.json', probe);
   if (!swingFile(id, 'marks.json').exists) {
-    writeJson(id, 'marks.json', emptyMarks({ swingId: id, video: pose?.video ?? null, handedness: analysis.handedness }));
+    writeJson(id, 'marks.json', { ...emptyMarks({ swingId: id, video: pose?.video ?? null, handedness: analysis.handedness }), pass: newPass() });
   }
   const next = patchRow(id, {
     status: 'ready',
@@ -215,11 +224,11 @@ export async function markSwingFailed(id, error) {
   return next;
 }
 
-/** Persist marks.json (the corrected labels) and refresh the size. */
+/** Persist marks.json (the corrected labels) and refresh the size and the pass state (D26). */
 export async function saveMarks(id, marks) {
   if (!getSwing(id)) return null;
   writeJson(id, 'marks.json', marks);
-  patchRow(id, { bytes: dirBytes(id) });
+  patchRow(id, { bytes: dirBytes(id), marked: markedFromMarks(marks) });
   emit();
   await persistIndex();
   return marks;

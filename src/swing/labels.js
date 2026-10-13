@@ -1,6 +1,10 @@
 // marks.json: the user's corrections and the v2 training labels (plan 7.3,
 // schema swing-club-labels/1). Pure data shaping, no I/O. Coordinates are
 // normalised (0-1 of the decoded frame).
+//
+// The mark-first flow (D26) extends the schema compatibly, so the name stays /1: optional
+// `confirmed` per frame and per mark (hands, head, ball) and an optional top-level `pass`
+// ({ state, skipped }, see markPass.js). Files without them parse as before.
 
 export const LABELS_SCHEMA = 'swing-club-labels/1';
 
@@ -23,7 +27,9 @@ const sameXY = (a, b) => (a == null && b == null) || (a != null && b != null && 
  * One frame entry. `proposed` is what analyze() suggested, `final` what the user
  * left (equal when untouched); `corrected` is derived, never typed by callers.
  */
-export function frameLabel({ i, checkpoint, iProposed = null, hands, head, editedAt = null }) {
+export function frameLabel({
+  i, checkpoint, iProposed = null, hands, head, editedAt = null, confirmed = false,
+}) {
   const corrected = (iProposed != null && iProposed !== i)
     || !sameXY(hands.proposed, hands.final)
     || !sameXY(head.proposed, head.final)
@@ -33,7 +39,12 @@ export function frameLabel({ i, checkpoint, iProposed = null, hands, head, edite
     checkpoint,
     iProposed: iProposed ?? i,
     // placed: the user put the hands there (false = they follow the smoothed grip at the frame)
-    hands: { proposed: hands.proposed ?? null, final: hands.final ?? null, placed: hands.placed ?? !sameXY(hands.proposed, hands.final) },
+    hands: {
+      proposed: hands.proposed ?? null,
+      final: hands.final ?? null,
+      placed: hands.placed ?? !sameXY(hands.proposed, hands.final),
+      confirmed: !!hands.confirmed,
+    },
     head: {
       proposed: head.proposed ?? null,
       proposedHidden: !!head.proposedHidden,
@@ -41,9 +52,11 @@ export function frameLabel({ i, checkpoint, iProposed = null, hands, head, edite
       proposedSource: head.proposedSource ?? null,
       final: head.final ?? null,
       finalHidden: !!head.finalHidden,
+      confirmed: !!head.confirmed,
     },
     corrected,
-    editedAt: corrected ? editedAt : null,
+    confirmed: !!confirmed, // the golfer confirmed the position (D26), moved or not
+    editedAt: corrected || confirmed ? editedAt : null,
   };
 }
 
@@ -54,9 +67,9 @@ export function withFrame(marks, label) {
   return { ...marks, frames };
 }
 
-export function withBall(marks, { proposed = marks.ball.proposed, final }) {
+export function withBall(marks, { proposed = marks.ball.proposed, final, confirmed = false }) {
   const same = (a, b) => (a == null && b == null) || (a != null && b != null && a.every((v, k) => v === b[k]));
-  return { ...marks, ball: { proposed, final, corrected: !same(proposed, final) } };
+  return { ...marks, ball: { proposed, final, corrected: !same(proposed, final), confirmed: !!confirmed } };
 }
 
 /** Did the user place the hands (older files without the flag: they did if they differ from the proposal)? */
