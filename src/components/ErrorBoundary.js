@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { captureException } from '../lib/errorReporting';
 import { semantic } from '../theme/tokens';
+import { t } from '../i18n';
 
 // App-wide error boundary. Without it, any uncaught render error unmounts the
 // whole React tree and the user is left staring at a blank screen with no way
@@ -31,17 +32,17 @@ export default class ErrorBoundary extends React.Component {
     if (this.state.error) {
       return (
         <View style={styles.container}>
-          <Text style={styles.title}>Algo salió mal</Text>
+          <Text style={styles.title}>{t('errorBoundary.title')}</Text>
           <Text style={styles.body}>
-            La app encontró un error inesperado. Inténtalo de nuevo.
+            {t('errorBoundary.body')}
           </Text>
           <TouchableOpacity
             style={styles.button}
             onPress={this.handleRetry}
             accessibilityRole="button"
-            accessibilityLabel="Reintentar"
+            accessibilityLabel={t('common.retry')}
           >
-            <Text style={styles.buttonText}>Reintentar</Text>
+            <Text style={styles.buttonText}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       );

@@ -161,6 +161,7 @@ const hud = {
   textMuted: '#9fb0a4',            // hints & metadata
   danger:    '#e8a0a0',            // destructive labels on dark chrome
   scrim:     'rgba(4,6,8,0.6)',    // modal backdrop
+  scrimStrong: 'rgba(4,6,8,0.78)', // overlays on a photo: white text >= 10:1 on the brightest sky
 };
 
 const typography = {

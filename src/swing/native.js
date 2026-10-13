@@ -16,6 +16,12 @@ export const REQUIRED_API_VERSION = 2;
 // on its own so an APK with only the pose module keeps importing and analysing.
 export const CAPTURE_API_VERSION = 2;
 
+// Scrub proxies (D28) arrived in apiVersion 3: pass 2 writes a small JPEG of every 4th frame for
+// the marking canvas's whole-clip track. Gated on its own, like capture: an apiVersion 2 binary
+// keeps analysing and marking (the analysis contract did not change), and the track falls back to
+// the last full-resolution still while dragging and fills in on release.
+export const PROXY_API_VERSION = 3;
+
 export const UPDATE_APP_MESSAGE = 'Update the app to analyse your swing.';
 
 export const UPDATE_CAPTURE_MESSAGE = 'Update the app to record here. You can still import a slow-motion video.';
@@ -82,6 +88,12 @@ export function captureSupport() {
     return { supported: false, reason: 'update_app', apiVersion: s.apiVersion, message: UPDATE_CAPTURE_MESSAGE };
   }
   return s;
+}
+
+/** Does this binary write scrub proxies in pass 2 (apiVersion >= PROXY_API_VERSION)? */
+export function proxySupport() {
+  const s = swingSupport();
+  return s.supported && s.apiVersion >= PROXY_API_VERSION;
 }
 
 function requireCapture() {
@@ -161,13 +173,16 @@ export async function analyzePose(path, opts = {}) {
  *   from a radial search seeded hands -> ball; head in display px, `source: 'edge'`. Every other
  *   requested checkpoint frame is `{ head: null, hidden: false, conf: 0.1, source: 'prior' }`
  *   (no shaft tracking in v1). No ball or expectedShaftPx: priors everywhere.
- * - timings: { totalMs, decodeMs, addressDecodeMs, jpegWaitMs, onsetMs, shaftMs, decoded, stills }.
+ * - proxies (apiVersion 3, D28): with `proxyEvery` > 0 and `proxyDir`, every proxyEvery-th frame of
+ *   the whole clip as a small JPEG (short side 160 px, q70), `<proxyDir>/<frame>.jpg`; an older
+ *   binary ignores both fields and returns no `proxies`.
+ * - timings: { totalMs, decodeMs, addressDecodeMs, jpegWaitMs, onsetMs, shaftMs, decoded, stills, proxies, proxyMs }.
  * @param {{ frames: Array<{ key, i, hands?: [x, y], neighbours?: number }>, ball?: { x, y, r } | null,
  *   expectedShaftPx?: number, addressSearch?: { run: [a, b], latest, quiet: [a, b], minRun } | null,
- *   outDir: string }} opts  hands and ball normalised; expectedShaftPx in display px
+ *   outDir: string, proxyEvery?: number, proxyDir?: string }} opts  hands and ball normalised; expectedShaftPx in display px
  * @returns {Promise<{ stills: { [key]: { [frame]: string } },
  *   shaft: { [frame]: { head: [x, y] | null, hidden, conf, source: 'edge'|'prior', angleDeg?, lengthPx? } },
- *   addressFrame: number | null, timings: object }>}
+ *   addressFrame: number | null, proxies: { every, count } | null, timings: object }>}
  */
 export async function extractCheckpoints(path, opts) {
   return requireSupported().extractCheckpoints(path, opts);
