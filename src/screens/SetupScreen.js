@@ -40,8 +40,14 @@ import { cardMonth } from '../store/leagueRules';
 import { monthName } from '../store/leagueView';
 import {
   applyLeagueHandicap, isLeagueLength, isLeagueRated, leagueCourse, leagueStrokes, setupPlayerTee,
+  leagueCardsPatch,
 } from '../store/leagueSetup';
+import { leagueCardRows, showsLeagueList } from '../store/leagueGameCards';
 import { useSetupLeagues } from '../hooks/useSetupLeagues';
+import { useLeagueCardsStatus } from '../hooks/useLeagueCardsStatus';
+import { dismissLeagueOptIn } from '../lib/leagueOptIn';
+import LeagueCardsList from '../components/league/LeagueCardsList';
+import { useT, formatNumber } from '../i18n';
 import { applyFinalStrokes, finalStrokeList, finalStrokesRecord } from '../store/leagueFinal';
 
 // Deep green used for the Review hero band — fixed in both themes so white
@@ -148,13 +154,28 @@ export default function SetupScreen({ navigation, route }) {
   // Opened from the board's "Play with the app": this round is meant to count,
   // so a league that is still loading holds Start, and a failed read says so.
   const leagueIntended = isGame && !!route?.params?.leagueId;
-  const leagueChecking = leagueIntended && !leagueOffered && leaguesLoading;
+  // (Declared before the list status below; widened there.)
+  const leagueCheckingLeagues = leagueIntended && !leagueOffered && leaguesLoading;
   const leagueFailed = leagueIntended && !leagueOffered && !leaguesLoading && leaguesError;
   const leagueEligibleRound = isLeagueLength(rounds[0]);
   // The league ranks by net differential: my tee needs a slope and a rating.
   const leagueRated = !leagueOffered || !leagueEligibleRound || isLeagueRated(rounds[0], myPlayer.id);
-  const leagueActive = leagueOffered && leagueOn && leagueEligibleRound && leagueRated;
+  // Several league cards per game (R16, D5 B): when another player of the game
+  // is in this league too, a "League cards" list replaces the switch. Each
+  // member decides on their own phone; only my row has a switch.
+  const otherLinked = players.some((p) => p.user_id && p.user_id !== user?.id);
+  const leagueStatus = useLeagueCardsStatus({ leagueId: league?.id ?? null, enabled: leagueOffered && otherLinked });
+  const leagueRows = leagueCardRows({
+    players, userId: user?.id ?? null, members: leagueStatus.members, round: rounds[0],
+  });
+  const leagueListMode = leagueOffered && otherLinked
+    && (leagueStatus.loading || leagueStatus.error || showsLeagueList(leagueRows));
+  const leagueListBlocked = leagueListMode && (leagueStatus.loading || leagueStatus.error);
+  const leagueActive = leagueOffered && leagueOn && leagueEligibleRound && leagueRated && !leagueListBlocked;
+  // A switch already on (the board's "Play with the app") waits for the list.
+  const leagueChecking = leagueCheckingLeagues || (leagueListMode && leagueOn && leagueStatus.loading);
   const startBusyRef = useRef(false);
+  const t = useT();
 
   // The league Final (LeagueFinalScreen): { leagueId, strokes by user id }.
   // Start raises round 0's playing handicaps by those strokes.
@@ -467,7 +488,10 @@ export default function SetupScreen({ navigation, route }) {
       const hcp = card.leagueHandicap ?? league.leagueHandicap;
       return {
         ...tournament,
+        // `league` keeps builds before R16 reading the creator's card;
+        // `leagueCards` is where every member's card of every round lives.
         league: { leagueId: league.id, cardId: card.id, playerId: meId },
+        ...leagueCardsPatch({ leagueId: league.id, cardId: card.id, playerId: meId, roundId: r0.id }),
         rounds: tournament.rounds.map((r, i) => (
           i === 0 && hcp != null ? applyLeagueHandicap(r, meId, hcp) : r)),
       };
@@ -596,6 +620,8 @@ export default function SetupScreen({ navigation, route }) {
 
     try {
       await mutate(tournament, { type: 'tournament.create', tournament });
+      // I saw my league switch and left it off: the scorecard won't ask again.
+      if (leagueOffered && !leagueActive && meId) await dismissLeagueOptIn(tournament.id, tournament.rounds[0].id);
 
       if (leagueFinal) {
         // The create is only queued for sync, so the tournaments row may not
@@ -975,6 +1001,86 @@ export default function SetupScreen({ navigation, route }) {
     </>
   );
 
+  const renderAddRatingLink = (unratedTee) => (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('CourseEditor', {
+        roundIndex: 0,
+        courseName: rounds[0].courseName || 'Round 1',
+        initialHoles: rounds[0].holes,
+        initialTees: rounds[0].tees ?? [],
+        onSave: handleHolesSaved,
+        courseId: rounds[0].courseId ?? null,
+      })}
+      activeOpacity={0.7}
+      accessibilityRole="link"
+      style={{ paddingVertical: 6 }}
+    >
+      <Text style={[s.leagueSub, { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' }]}>
+        {`Add slope and rating${unratedTee ? ` to ${unratedTee} tees` : ''} ›`}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const renderLeaguePicker = () => (setupLeagues.length > 1 ? (
+    <View style={s.leaguePicker}>
+      {setupLeagues.map((l) => {
+        const on = l.id === league.id;
+        return (
+          <TouchableOpacity
+            key={l.id}
+            style={[s.leagueChip, on && s.leagueChipOn]}
+            onPress={() => setLeaguePick(l.id)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: on }}
+          >
+            <Text style={[s.leagueChipText, on && s.leagueChipTextOn]} numberOfLines={1}>{l.name}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  ) : null);
+
+  // The "League cards" list (D5 B): my row carries my switch and the same
+  // reasons the single switch gives; the other members are asked on their phone.
+  const renderLeagueList = () => {
+    const monthKey = cardMonth(new Date());
+    const month = monthName(monthKey);
+    const hcp = league.leagueHandicap;
+    const unratedTee = !leagueRated ? setupPlayerTee(rounds[0], myPlayer.id)?.label ?? null : null;
+    let sub;
+    if (!leagueEligibleRound) sub = 'League cards are 18 holes. Pick an 18-hole course to count this round.';
+    else if (!leagueRated) {
+      sub = `Your ${unratedTee ? `${unratedTee} tees aren't` : "tee isn't"} rated, so this round can't be your ${month} card yet. Pick a rated tee for yourself, or add the rating.`;
+    } else if (hcp == null) sub = t('league.cards.meSubNoHcp', { month });
+    else {
+      sub = t('league.cards.meSub', {
+        month,
+        strokes: leagueStrokes(rounds[0], myPlayer.id, hcp),
+        hcp: formatNumber(hcp, { decimals: 1 }),
+      });
+    }
+    const state = leagueStatus.loading ? 'loading' : leagueStatus.error ? 'error' : 'ready';
+    return (
+      <LeagueCardsList
+        title={t('league.cards.title', { league: league.name })}
+        state={state}
+        rows={leagueRows}
+        monthKey={monthKey}
+        onRetry={leagueStatus.retry}
+        me={{
+          sub,
+          value: leagueActive,
+          onChange: setLeagueOn,
+          disabled: !leagueEligibleRound || !leagueRated,
+          label: t('league.cards.switchLabel', { league: league.name }),
+          extra: leagueEligibleRound && !leagueRated ? renderAddRatingLink(unratedTee) : null,
+        }}
+      >
+        {renderLeaguePicker()}
+      </LeagueCardsList>
+    );
+  };
+
   const renderLeagueSwitch = () => {
     const hcp = league.leagueHandicap;
     const month = monthName(cardMonth(new Date()));
@@ -995,25 +1101,7 @@ export default function SetupScreen({ navigation, route }) {
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.leagueTitle}>{`Counts for ${league.name}`}</Text>
             {!!sub && <Text style={s.leagueSub}>{sub}</Text>}
-            {leagueEligibleRound && !leagueRated && (
-              <TouchableOpacity
-                onPress={() => navigation.navigate('CourseEditor', {
-                  roundIndex: 0,
-                  courseName: rounds[0].courseName || 'Round 1',
-                  initialHoles: rounds[0].holes,
-                  initialTees: rounds[0].tees ?? [],
-                  onSave: handleHolesSaved,
-                  courseId: rounds[0].courseId ?? null,
-                })}
-                activeOpacity={0.7}
-                accessibilityRole="link"
-                style={{ paddingVertical: 6 }}
-              >
-                <Text style={[s.leagueSub, { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' }]}>
-                  {`Add slope and rating${unratedTee ? ` to ${unratedTee} tees` : ''} ›`}
-                </Text>
-              </TouchableOpacity>
-            )}
+            {leagueEligibleRound && !leagueRated && renderAddRatingLink(unratedTee)}
           </View>
           <Switch
             value={leagueActive}
@@ -1023,24 +1111,7 @@ export default function SetupScreen({ navigation, route }) {
             trackColor={{ true: theme.accent.primary }}
           />
         </View>
-        {setupLeagues.length > 1 && (
-          <View style={s.leaguePicker}>
-            {setupLeagues.map((l) => {
-              const on = l.id === league.id;
-              return (
-                <TouchableOpacity
-                  key={l.id}
-                  style={[s.leagueChip, on && s.leagueChipOn]}
-                  onPress={() => setLeaguePick(l.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                >
-                  <Text style={[s.leagueChipText, on && s.leagueChipTextOn]} numberOfLines={1}>{l.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
+        {renderLeaguePicker()}
       </View>
     );
   };
@@ -1142,9 +1213,9 @@ export default function SetupScreen({ navigation, route }) {
           )}
         </View>
 
-        {leagueOffered && renderLeagueSwitch()}
+        {leagueOffered && (leagueListMode ? renderLeagueList() : renderLeagueSwitch())}
 
-        {leagueChecking && <Text style={s.leagueSub}>Checking your league…</Text>}
+        {leagueCheckingLeagues && <Text style={s.leagueSub}>Checking your league…</Text>}
         {leagueFailed && (
           <View style={s.leagueCard}>
             <Text style={s.leagueSub}>{"Couldn't load your league — this round won't count."}</Text>

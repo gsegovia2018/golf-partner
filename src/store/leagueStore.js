@@ -378,6 +378,25 @@ export async function getMyLeagueCardsForRound(tournamentId, roundId) {
   return (rows ?? []).map(rowToCard).filter(takesMonth);
 }
 
+// Setup's league cards list (D5) before the game exists on the server: the
+// league's active members and every card of theirs this month that takes it.
+// Returns { members: rowToMember[], cards: rowToCard[] }. monthKey: 'YYYY-MM'.
+export async function getLeagueMonthMembers(leagueId, monthKey) {
+  if (!leagueId || !monthKey) return { members: [], cards: [] };
+  const [memberRows, cardRows] = await Promise.all([
+    rpc('get_league_members', { p_league: leagueId }),
+    selectRows(
+      supabase.from('league_cards').select('*')
+        .eq('league_id', leagueId)
+        .eq('month', `${monthKey}-01`),
+    ),
+  ]);
+  return {
+    members: (memberRows ?? []).map((m) => rowToMember(m, leagueId)).filter((m) => !!m.joinedAt && !m.leftAt),
+    cards: (cardRows ?? []).map(rowToCard).filter(takesMonth),
+  };
+}
+
 // One card, live. The marker QR screen polls it to notice the confirmation.
 export async function getLeagueCard(cardId) {
   if (!cardId) return null;

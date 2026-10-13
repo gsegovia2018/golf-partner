@@ -233,6 +233,8 @@ jest.mock('../../store/officialStore', () => ({
 
 jest.mock('../../store/leagueStore', () => ({
   notifyLeagueTeeOff: jest.fn(() => Promise.resolve()),
+  getLeagueCard: jest.fn(() => Promise.resolve(null)),
+  getLeagueGameStatus: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock('../../lib/mediaCapture', () => ({

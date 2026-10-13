@@ -107,6 +107,7 @@ export function holePagePropsEqual(prev, next) {
     || prev.conflictCells !== next.conflictCells
     || prev.onOpenFlyover !== next.onOpenFlyover
     || prev.ghostEnabled !== next.ghostEnabled
+    || prev.leaguePlayers !== next.leaguePlayers
   ) {
     return false;
   }
@@ -145,6 +146,9 @@ export const HolePage = React.memo(function HolePage({
   shotCollapsed, onToggleShotDetail,
   totalsMap,
   conflictCells = new Set(),
+  // Comma-joined ids of the players whose card counts for a league in this
+  // round (a string, so the memo compare above stays a cheap ===).
+  leaguePlayers = '',
   gps, onOpenFlyover,
   // Read-only "ghost" of a peer's entry for a cell this scorer hasn't
   // marked themselves — see HoleView's wiring comment. `scores` above is MY
@@ -366,6 +370,7 @@ export const HolePage = React.memo(function HolePage({
                 pickup={pickup}
                 isPickup={isPickup}
                 teeLabel={round.playerTees?.[player.id]?.label ?? null}
+                league={!!leaguePlayers && leaguePlayers.split(',').includes(player.id)}
                 team={teams[player.id] ?? null}
                 isMe={isMe}
                 canEdit={canEdit}

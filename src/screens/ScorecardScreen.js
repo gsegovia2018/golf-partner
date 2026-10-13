@@ -51,6 +51,11 @@ import { buildLeaderboard } from '../store/officialLeaderboard';
 import { attestCard } from '../store/officialStore';
 import { notifyRoundFinished } from '../store/notificationStore';
 import { leagueCardOf } from '../store/leagueSetup';
+import { useScorecardLeague } from '../hooks/useScorecardLeague';
+import { recordRoundCard } from '../lib/leagueOptIn';
+import LeagueStrip from '../components/scorecard/LeagueStrip';
+import LeagueOptInSheet from '../components/league/LeagueOptInSheet';
+import { useT, formatDate } from '../i18n';
 import { requestLeagueTeeOff, retryLeagueTeeOff } from '../lib/leagueTeeOff';
 import { normalizeRoundNotes } from '../store/roundNotes';
 import {
@@ -758,6 +763,24 @@ export default function ScorecardScreen({ navigation, route }) {
 
   // Every score on screen. Official mode keeps its own RPC-derived map.
   const scores = official ? (officialScores ?? EMPTY_SCORES) : cardScores;
+
+  // League cards in this round (D5 B): the one-time "Count this round?" sheet
+  // for a member whose phone hasn't announced, the strip and LEAGUE chips.
+  // The announced card is written through the save queue like any edit.
+  const recordLeagueCard = useCallback(({ league, card }) => enqueueSave(async () => {
+    const base = tournamentRef.current;
+    const r = base?.rounds?.[roundIndex];
+    if (!base || !r) return null;
+    const next = await recordRoundCard({ tournament: base, roundId: r.id, meId, league, card });
+    tournamentRef.current = next;
+    setTournament(next);
+    return next;
+  }), [enqueueSave, roundIndex, meId]);
+  const leagueLayer = useScorecardLeague({
+    tournament, round, meId, userId: user?.id ?? null, official, scores, record: recordLeagueCard,
+  });
+  const leaguePlayers = (leagueLayer.strip?.playerIds ?? []).join(',');
+  const tl = useT();
   // Shot detail for my card: what I published, with the hole I am on
   // overlaid from the draft. Keyed by player like `scores` for generality,
   // though in practice only "me" has entries.
@@ -982,7 +1005,7 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [reload, paramRoundIndex]));
   useEffect(() => () => { closeLive(); }, []);
   // A league tee-off tap that never reached the server is resent on focus.
-  const leagueCardId = leagueCardOf(tournament, meId)?.cardId ?? null;
+  const leagueCardId = leagueCardOf(tournament, meId, round?.id ?? null)?.cardId ?? null;
   useFocusEffect(useCallback(() => {
     if (leagueCardId) retryLeagueTeeOff(leagueCardId);
   }, [leagueCardId]));
@@ -1230,7 +1253,7 @@ export default function ScorecardScreen({ navigation, route }) {
     // A league round (Setup's switch) tells the league it teed off on my
     // first tap — even when a partner's phone already stamped startedAt.
     // Fire-and-forget; requestLeagueTeeOff is once-only and retries offline.
-    const league = leagueCardOf(t, lastMeIdRef.current);
+    const league = leagueCardOf(t, lastMeIdRef.current, t?.rounds?.[roundIndex]?.id ?? null);
     if (league) requestLeagueTeeOff(league.cardId);
     if (startStampedRef.current) return;
     const r = t?.rounds?.[roundIndex];
@@ -1812,7 +1835,7 @@ export default function ScorecardScreen({ navigation, route }) {
           // Card for the round just played. collectMyRounds keys rounds as
           // `${tournamentId}:${roundIndex}` — match that here. The tournament-
           // complete / archive branch above keeps using goToSummary unchanged.
-          const league = !official && leagueCardOf(freshT, lastMeIdRef.current);
+          const league = !official && leagueCardOf(freshT, lastMeIdRef.current, liveRound.id);
           if (league) {
             // A league round goes on to submit and confirm the card.
             goAfterFinish('LeagueValidate', {
@@ -2080,8 +2103,15 @@ export default function ScorecardScreen({ navigation, route }) {
         onCancel={() => setReopenPrompt(false)}
       />
 
+      <LeagueStrip strip={leagueLayer.strip} postBy={leagueLayer.postBy} onCountMine={leagueLayer.countMine} />
+      {leagueLayer.toast ? (
+        <Text style={s.leagueToast} accessibilityRole="alert">
+          {tl(leagueLayer.toast.key, { month: formatDate(leagueLayer.toast.month, 'monthName') })}
+        </Text>
+      ) : null}
       {view === 'hole' ? (
         <HoleView
+          leaguePlayers={leaguePlayers}
           round={round}
           roundIndex={roundIndex}
           players={players}
@@ -2197,6 +2227,17 @@ export default function ScorecardScreen({ navigation, route }) {
         lastError={official ? null : getLastError(tid)}
         cardsPending={!official && cardState.pending.cards}
         unsentHole={!official && cardState.draft?.[String(currentHole)] ? currentHole : null}
+      />
+      <LeagueOptInSheet
+        visible={leagueLayer.sheet.visible}
+        league={leagueLayer.sheet.league}
+        round={round}
+        meId={meId}
+        starterName={players[0] && players[0].id !== meId ? players[0].name : null}
+        busy={leagueLayer.sheet.busy}
+        error={leagueLayer.sheet.error}
+        onCountIt={leagueLayer.countIt}
+        onNotThisRound={leagueLayer.notThisRound}
       />
       <FlagFinderView
         visible={flagFinderOpen}
