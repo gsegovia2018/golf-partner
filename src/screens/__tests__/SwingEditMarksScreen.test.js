@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Profiler } from 'react';
 import { Alert, Image, StyleSheet } from 'react-native';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
@@ -15,6 +15,12 @@ import { fixtureNative, TRUTH, W, H } from '../../swing/__tests__/helpers';
 
 const lab = require('../../swing/__tests__/fixtures/lab-d15-pass1.json');
 
+// A drag is drawn from shared values: the stock mock would lose them on every render.
+jest.mock('react-native-reanimated', () => require('../../swing/__tests__/liveReanimated'));
+jest.mock('../../swing/analyze', () => {
+  const real = jest.requireActual('../../swing/analyze');
+  return { ...real, analyze: jest.fn(real.analyze) };
+});
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
   return {
@@ -90,8 +96,13 @@ function setup({
     goBack: jest.fn(), dispatch: jest.fn(), navigate: jest.fn(), replace: jest.fn(),
     addListener: jest.fn((name, cb) => { listeners[name] = cb; return () => {}; }),
   };
-  const utils = render(<ThemeProvider><SwingEditMarksScreen navigation={navigation} route={{ params: { swingId: 's1', checkpoint, mode } }} /></ThemeProvider>);
-  return { ...utils, navigation, listeners };
+  const commits = { n: 0 }; // every React commit under the screen
+  const utils = render(
+    <Profiler id="screen" onRender={() => { commits.n += 1; }}>
+      <ThemeProvider><SwingEditMarksScreen navigation={navigation} route={{ params: { swingId: 's1', checkpoint, mode } }} /></ThemeProvider>
+    </Profiler>,
+  );
+  return { ...utils, navigation, listeners, commits };
 }
 
 const open = async ({ at = 'mark-canvas', settle = true, ...opts } = {}) => {
@@ -568,54 +579,60 @@ describe('the marking pass (D26 flow: club sheet → six positions → finish sh
 });
 
 // --- The drag loupe (D20) -------------------------------------------------------------------------
+// Mounted once and shown by opacity; its place is a transform driven by shared values.
 const opt = { includeHiddenElements: true };
 const loupeEl = (u) => u.getByTestId('edit-loupe', opt);
-const maybeLoupe = (u) => u.queryByTestId('edit-loupe', opt);
-const loupeStyle = (u) => StyleSheet.flatten(loupeEl(u).props.style);
-const loupeImg = (u) => StyleSheet.flatten(loupeEl(u).findByType(Image).props.style);
+const flat = (el) => StyleSheet.flatten(el.props.style);
+const loupeShown = (u) => flat(loupeEl(u)).opacity === 1;
+const loupeAt = (u) => { const { transform } = flat(loupeEl(u)); return { left: transform[0].translateX, top: transform[1].translateY }; };
+const loupeImg = (u) => flat(loupeEl(u).findByType(Image).parent);
+const dragged = (u) => flat(u.getByTestId('edit-loupe-mark', opt));
 
 describe('the drag loupe (D20) on the canvas', () => {
   test('shows while a mark is dragged, labelled "Placing · <mark>", and goes on release', async () => {
     const u = await open({ checkpoint: 'impact' });
-    expect(maybeLoupe(u)).toBeNull();
+    expect(loupeShown(u)).toBe(false);
     const [x, y] = px(FIRST.clubMarks.impact.hands);
     await act(async () => { grant(u.layer, [x, y]); });
-    expect(loupeEl(u)).toBeTruthy();
+    expect(loupeShown(u)).toBe(true);
     expect(u.getByText(M.placing('Hands'), opt)).toBeTruthy();
     await act(async () => { move(u.layer, [x + 20, y + 10], [x, y]); });
     await act(async () => { release(u.layer, [x + 20, y + 10], [x, y]); });
-    expect(maybeLoupe(u)).toBeNull();
+    expect(loupeShown(u)).toBe(false);
   });
 
   test('120 px across, above the finger, flips below at the top edge, stays inside the still', async () => {
     const u = await open({ checkpoint: 'impact' });
     const [x, y] = px(FIRST.clubMarks.impact.hands);
     await act(async () => { grant(u.layer, [x, y]); });
-    const first = loupeStyle(u);
+    const first = flat(loupeEl(u));
     expect([first.width, first.height]).toEqual([LOUPE_SIZE, LOUPE_SIZE]);
-    expect(first.top + LOUPE_SIZE).toBeLessThan(y);
+    expect(loupeAt(u).top + LOUPE_SIZE).toBeLessThan(y);
     await act(async () => { release(u.layer, [x, y]); });
     await press(dock(u, 'head'));
     const finger = [RECT.w - 2, 24];
     await act(async () => { grant(u.layer, finger); });
     expect(loupePlacement(finger, RECT).placement).toBe('below');
-    expect(loupeStyle(u).top).toBeGreaterThan(finger[1]);
-    expect(loupeStyle(u).left).toBe(RECT.w - LOUPE_SIZE);
+    expect(loupeAt(u).top).toBeGreaterThan(finger[1]);
+    expect(loupeAt(u).left).toBe(RECT.w - LOUPE_SIZE);
     await act(async () => { release(u.layer, finger); });
   });
 
-  test('the same still at 3x centred on the mark; decorative and touch-transparent', async () => {
+  test('follows the finger on every move: the same still at 3x centred on the mark; decorative and touch-transparent', async () => {
     const u = await open({ checkpoint: 'impact' });
     const [x, y] = px(FIRST.clubMarks.impact.hands);
     await act(async () => { grant(u.layer, [x, y]); });
-    const img = loupeImg(u);
     const want = loupeImage(FIRST.clubMarks.impact.hands, RECT);
-    expect([img.width, img.left, img.top]).toEqual([want.width, want.left, want.top]);
+    expect([loupeImg(u).width, loupeImg(u).transform]).toEqual([want.width, [{ translateX: want.left }, { translateY: want.top }]]);
+    await act(async () => { move(u.layer, [x + 30, y - 12], [x, y]); });
+    const moved = loupeImage([FIRST.clubMarks.impact.hands[0] + 30 / RECT.w, FIRST.clubMarks.impact.hands[1] - 12 / RECT.h], RECT);
+    expect(loupeImg(u).transform).toEqual([{ translateX: moved.left }, { translateY: moved.top }]);
+    expect(loupeAt(u)).toEqual({ left: loupePlacement([x + 30, y - 12], RECT).left, top: loupePlacement([x + 30, y - 12], RECT).top });
     const l = loupeEl(u);
     expect(l.props.accessibilityElementsHidden).toBe(true);
     expect(l.props.pointerEvents).toBe('none');
     await act(async () => { fireEvent(u.layer, 'responderTerminate', { nativeEvent: nativeEvent(x, y), touchHistory: history(x, y) }); });
-    expect(maybeLoupe(u)).toBeNull();
+    expect(loupeShown(u)).toBe(false);
   });
 
   test('an arrow nudge shows it for about 600 ms', async () => {
@@ -623,11 +640,111 @@ describe('the drag loupe (D20) on the canvas', () => {
     jest.useFakeTimers({ doNotFake: ['setImmediate'] });
     try {
       fireEvent.press(u.getByLabelText(M.nudge.right));
-      expect(loupeEl(u)).toBeTruthy();
+      expect(loupeShown(u)).toBe(true);
       act(() => { jest.advanceTimersByTime(650); });
-      expect(maybeLoupe(u)).toBeNull();
+      expect(loupeShown(u)).toBe(false);
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+// --- A drag costs nothing until release (the lag fix) ------------------------------------------------
+
+describe('dragging a mark does not touch React or the analysis until release', () => {
+  const drag = (n = 60, [dx, dy] = [36, -18]) => Array.from({ length: n }, (_, k) => [(dx * (k + 1)) / n, (dy * (k + 1)) / n]);
+
+  test('60 moves: no analyze() and no React commit per move; one analyze() and one commit on release', async () => {
+    const u = await open({ checkpoint: 'impact' });
+    const [x, y] = px(FIRST.clubMarks.impact.hands);
+    const at = (d) => [x + d[0], y + d[1]];
+    await act(async () => { grant(u.layer, [x, y]); });
+    analyze.mockClear();
+    const afterGrant = u.commits.n;
+    const path = drag();
+    await act(async () => {
+      // PanResponder adds up each move's step from the previous point, so the helper is given the previous point
+      path.forEach((d, k) => move(u.layer, at(d), k ? at(path[k - 1]) : [x, y], 2 + k));
+    });
+    expect(analyze).not.toHaveBeenCalled();
+    expect(u.commits.n).toBe(afterGrant); // zero renders for 60 moves
+    // the dragged mark and the loupe are on the finger meanwhile
+    expect(dragged(u).opacity).toBe(1);
+    expect(dragged(u).transform[0].translateX).toBeCloseTo(x + 36, 4);
+    expect(dragged(u).transform[1].translateY).toBeCloseTo(y - 18, 4);
+    expect(loupeShown(u)).toBe(true);
+    const before = u.commits.n;
+    await act(async () => { release(u.layer, at([36, -18]), at([36, -18])); });
+    expect(analyze).toHaveBeenCalledTimes(1);
+    expect(u.commits.n - before).toBeLessThanOrEqual(2); // the release (and the overlay clear), not 60
+    expect(loupeShown(u)).toBe(false);
+    expect(dragged(u).opacity).toBe(0);
+    expect(dockLabel(u, 'hands')).toMatch(new RegExp(M.status.moved, 'i'));
+  });
+
+  test('the SVG layer skips the mark under the finger and draws it again, moved, after the release', async () => {
+    const u = await open({ checkpoint: 'impact', seeded: true });
+    const [x, y] = px(FIRST.clubMarks.impact.hands);
+    const chips = () => u.UNSAFE_getAllByType(SvgText).map((t) => t.props.children).filter((c) => typeof c === 'string' && c.includes('·'));
+    expect(chips().some((c) => c.startsWith(M.names.hands.toUpperCase()))).toBe(true);
+    await act(async () => { grant(u.layer, [x, y]); });
+    expect(chips().some((c) => c.startsWith(M.names.hands.toUpperCase()))).toBe(false);
+    expect(chips().some((c) => c.startsWith(M.names.head.toUpperCase()))).toBe(true); // the others stay
+    await act(async () => { release(u.layer, [x + 20, y], [x, y]); });
+    expect(chips().some((c) => c.startsWith(M.names.hands.toUpperCase()))).toBe(true);
+  });
+
+  test('a whole drag is one undo step and one analysis, wherever it went', async () => {
+    const u = await open({ checkpoint: 'impact' });
+    const [x, y] = px(FIRST.clubMarks.impact.hands);
+    analyze.mockClear();
+    await act(async () => { touch(u.layer, [x, y], drag(30, [25, 25]).map((d) => [x + d[0], y + d[1]])); });
+    expect(analyze).toHaveBeenCalledTimes(1);
+    expect(u.getByLabelText(M.undoCount(1))).toBeTruthy();
+    await press(u.getByTestId('mark-undo'));
+    expect(u.getByLabelText(M.undo)).toBeTruthy();
+    expect(dockLabel(u, 'hands')).not.toMatch(new RegExp(M.status.moved, 'i'));
+  });
+
+  test('a tap on the picture places the active mark there once, on release', async () => {
+    const u = await open({ checkpoint: 'impact' });
+    await press(dock(u, 'head'));
+    analyze.mockClear();
+    const [x, y] = px([0.3, 0.3]);
+    await act(async () => { grant(u.layer, [x, y]); });
+    expect(analyze).not.toHaveBeenCalled();
+    await act(async () => { release(u.layer, [x, y]); });
+    expect(analyze).toHaveBeenCalledTimes(1);
+    await press(u.getByTestId('mark-primary'));
+    const head = savedMarks().frames.find((f) => f.checkpoint === 'impact').head.final;
+    expect(head[0]).toBeCloseTo(0.3, 2);
+    expect(head[1]).toBeCloseTo(0.3, 2);
+  });
+
+  test('a mark dragged on a previewed frame adopts that frame on release', async () => {
+    const u = await open({ checkpoint: 'impact' });
+    const f = FIRST.checkpoints.impact.i;
+    await press(u.getByTestId(`fine-${f + 2}`));
+    await waitFor(() => expect(u.queryByTestId('mark-loading')).toBeNull());
+    const [x, y] = px(FIRST.clubMarks.impact.hands);
+    await act(async () => { touch(u.layer, [x, y], [[x + 14, y + 6]]); });
+    await press(u.getByLabelText(M.primary.editSave));
+    expect(savedMarks().frames.find((m) => m.checkpoint === 'impact')).toMatchObject({ i: f + 2 });
+  });
+
+  test('a drag cut short by the system keeps the point it reached; nudge, confirm and discard still work after a drag', async () => {
+    const u = await open({ checkpoint: 'impact' });
+    const [x, y] = px(FIRST.clubMarks.impact.hands);
+    await act(async () => {
+      grant(u.layer, [x, y]);
+      move(u.layer, [x + 12, y], [x, y], 3);
+      fireEvent(u.layer, 'responderTerminate', { nativeEvent: nativeEvent(x, y), touchHistory: history(x, y) });
+    });
+    expect(dockLabel(u, 'hands')).toMatch(new RegExp(M.status.moved, 'i'));
+    await press(u.getByLabelText(M.nudge.right));
+    await press(u.getByTestId('mark-confirm'));
+    expect(dockLabel(u, 'hands')).toMatch(new RegExp(M.status.confirmed, 'i'));
+    await press(u.getByTestId('mark-cancel'));
+    expect(Alert.alert).toHaveBeenCalled(); // changes to lose: asks first
   });
 });
