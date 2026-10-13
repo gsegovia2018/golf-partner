@@ -91,6 +91,32 @@ const leagueBoard = (d: Record<string, unknown>): DeepLink => ({
   params: { leagueId: d.league_id },
 });
 
+// 'October card at Golf Olivar' / 'card'. Mirrors notificationContent.js.
+function cardPhrase(d: Record<string, unknown>): string {
+  const month = monthName(d.month);
+  return `${month ? `${month} ` : ''}card${d.course_name ? ` at ${d.course_name}` : ''}`;
+}
+
+// "Pablo's" — the card owner, as league_card_notice sends it.
+function ownerPossessive(d: Record<string, unknown>): string {
+  return d.owner_name ? `${d.owner_name}'s` : 'a';
+}
+
+// 'Sat 25 Oct, 09:00' (Europe/Madrid); '' when unparseable.
+function teeTimeText(t: unknown): string {
+  if (!t) return '';
+  try {
+    const date = new Date(String(t));
+    if (Number.isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Madrid', weekday: 'short', day: 'numeric', month: 'short',
+      hour: '2-digit', minute: '2-digit',
+    }).format(date);
+  } catch (_e) {
+    return '';
+  }
+}
+
 // League types (plan 3.4). Copy and links mirror notificationContent.js.
 Object.assign(RENDERERS, {
   league_invite: (d: Record<string, unknown>) => ({
@@ -208,6 +234,76 @@ Object.assign(RENDERERS, {
       + `${d.old != null && d.proposed != null ? `, ${d.old} to ${d.proposed}` : ''}`,
     deepLink: leagueBoard(d),
   }),
+  // 20261016000000 (league integrity).
+  league_card_rescheduled: (d: Record<string, unknown>) => {
+    const when = teeTimeText(d.tee_time);
+    return {
+      title: 'Card rescheduled',
+      body: `${d.actor_name ?? 'A friend'} moved their ${cardPhrase(d)}${when ? ` to ${when}` : ''}`,
+      deepLink: leagueBoard(d),
+    };
+  },
+  league_card_withdrawn: (d: Record<string, unknown>) => ({
+    title: 'Card withdrawn',
+    body: `${d.actor_name ?? 'A friend'} withdrew their ${cardPhrase(d)}`,
+    deepLink: leagueBoard(d),
+  }),
+  league_card_auto_withdrawn: (d: Record<string, unknown>) => ({
+    title: 'Card withdrawn',
+    body: `Your ${cardPhrase(d)} was withdrawn: no shot was played within 24 hours of Start. `
+      + 'You can play another one this month.',
+    deepLink: leagueBoard(d),
+  }),
+  league_card_voided: (d: Record<string, unknown>) => ({
+    title: 'Card voided',
+    body: `${d.actor_name ?? 'An admin'} voided ${ownerPossessive(d)} ${cardPhrase(d)}`
+      + `${d.reason ? `: ${d.reason}` : ''}`,
+    deepLink: leagueBoard(d),
+  }),
+  league_card_reopened: (d: Record<string, unknown>) => ({
+    title: 'Card reopened',
+    body: `${d.actor_name ?? 'An admin'} reopened ${ownerPossessive(d)} ${cardPhrase(d)}: 8 hours to post it`,
+    deepLink: leagueBoard(d),
+  }),
+  league_card_approved: (d: Record<string, unknown>) => ({
+    title: 'Card approved',
+    body: `${d.actor_name ?? 'An admin'} approved ${ownerPossessive(d)} ${cardPhrase(d)}`,
+    deepLink: leagueBoard(d),
+  }),
+  league_handicap_changed: (d: Record<string, unknown>) => ({
+    title: 'League handicap changed',
+    body: `${d.actor_name ?? 'An admin'} set ${d.subject_name ?? 'a member'}'s league handicap`
+      + `${d.old != null ? ` from ${d.old}` : ''}${d.new != null ? ` to ${d.new}` : ''}`,
+    deepLink: leagueBoard(d),
+  }),
+  league_member_removed: (d: Record<string, unknown>) => (d.you
+    ? {
+      title: 'Removed from a league',
+      body: `${d.actor_name ?? 'An admin'} removed you from ${d.league_name ?? 'the league'}`,
+      deepLink: { screen: 'Notifications' },
+    }
+    : {
+      title: 'Member removed',
+      body: `${d.actor_name ?? 'An admin'} removed ${d.subject_name ?? 'a member'} from ${d.league_name ?? 'the league'}`,
+      deepLink: leagueBoard(d),
+    }),
+  league_spot_claimed: (d: Record<string, unknown>) => ({
+    title: 'Spot claimed',
+    body: `${d.actor_name ?? 'Someone'} joined ${d.league_name ?? 'the league'} as ${d.spot_name ?? 'a reserved spot'}`,
+    deepLink: leagueBoard(d),
+  }),
+  league_spot_released: (d: Record<string, unknown>) => (d.you
+    ? {
+      title: 'Spot released',
+      body: `${d.actor_name ?? 'An admin'} released your spot in ${d.league_name ?? 'the league'}`,
+      deepLink: { screen: 'Notifications' },
+    }
+    : {
+      title: 'Spot released',
+      body: `${d.actor_name ?? 'An admin'} released ${d.spot_name ? `the spot ${d.spot_name}` : 'a spot'}`
+        + ` in ${d.league_name ?? 'the league'}`,
+      deepLink: leagueBoard(d),
+    }),
 });
 
 // Notification category per type — matches the three Settings toggles
@@ -233,6 +329,28 @@ const CATEGORY_BY_TYPE: Record<string, 'scores' | 'invites' | 'media' | 'league'
   league_month_reminder: 'league',
   league_post_reminder: 'league',
   league_vote_opened: 'league',
+  league_card_rescheduled: 'league',
+  league_card_withdrawn: 'league',
+  league_card_auto_withdrawn: 'league',
+  league_card_voided: 'league',
+  league_card_reopened: 'league',
+  league_card_approved: 'league',
+  league_handicap_changed: 'league',
+  league_member_removed: 'league',
+  league_spot_claimed: 'league',
+  league_spot_released: 'league',
+};
+
+// Types with no switch of their own follow a row's switch. Mirrors
+// LEAGUE_PREF_OF in src/store/leagueNotificationPrefs.js.
+const LEAGUE_PUSH_PREF_OF: Record<string, string> = {
+  league_card_rescheduled: 'league_card_announced',
+  league_card_withdrawn: 'league_card_announced',
+  league_card_auto_withdrawn: 'league_post_reminder',
+  league_card_reopened: 'league_card_voided',
+  league_card_approved: 'league_card_voided',
+  league_member_removed: 'league_spot_claimed',
+  league_spot_released: 'league_spot_claimed',
 };
 
 type Settings = Record<string, Record<string, unknown>> | null | undefined;
@@ -242,7 +360,7 @@ type Settings = Record<string, Record<string, unknown>> | null | undefined;
 function isLeaguePushMuted(settings: Settings, type: string): boolean {
   const league = settings?.notifications?.league as
     { push?: Record<string, unknown> } | undefined;
-  return league?.push?.[type] === false;
+  return league?.push?.[LEAGUE_PUSH_PREF_OF[type] ?? type] === false;
 }
 
 Deno.serve(async (req) => {
