@@ -114,12 +114,12 @@ describe('loupeImage', () => {
 });
 
 describe('D28: the loupe in the corner opposite the mark', () => {
-  const { loupeCorner, loupeSide, LOUPE_MARGIN } = require('../loupe');
+  const { loupeCorner, loupeSide, LOUPE_MARGIN, LOUPE_TAG_CLEAR } = require('../loupe');
   const rect = { w: 320, h: 570 };
 
   test('right-hand corners, inside the picture', () => {
     expect(loupeCorner(0, rect)).toEqual({ left: 320 - LOUPE_SIZE - LOUPE_MARGIN, top: LOUPE_MARGIN });
-    expect(loupeCorner(1, rect)).toEqual({ left: 320 - LOUPE_SIZE - LOUPE_MARGIN, top: 570 - LOUPE_SIZE - LOUPE_MARGIN });
+    expect(loupeCorner(1, rect)).toEqual({ left: 320 - LOUPE_SIZE - LOUPE_MARGIN, top: 570 - LOUPE_SIZE - LOUPE_MARGIN - LOUPE_TAG_CLEAR }); // clear of the frame tag
   });
 
   test('a mark in the top half gets the bottom corner (clubhead at Top), one in the bottom half the top corner (ball, clubhead at impact)', () => {

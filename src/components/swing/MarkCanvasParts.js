@@ -183,7 +183,7 @@ function MarkDockImpl({
             testID={`dock-${m}`}
           >
             <Swatch mark={m} on={on} size={14} />
-            <Text style={[styles.dkName, on && styles.dkInk]}>{T.names[m]}</Text>
+            <Text style={[styles.dkName, on && styles.dkInk]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{T.names[m]}</Text>
             <Text style={[styles.dkWord, on && styles.dkInk]} numberOfLines={1}>{word}</Text>
           </Pressable>
         );

@@ -63,6 +63,7 @@ export function loupeImage(mark, rect, size = LOUPE_SIZE, zoom = LOUPE_ZOOM) {
 // stays there for the whole drag unless the mark itself comes near it.
 
 export const LOUPE_MARGIN = 8; // px from the picture's edges
+export const LOUPE_TAG_CLEAR = 36; // px kept free at the bottom for the frame tag (VIDEO · n)
 export const LOUPE_CLEAR = 24; // px: the mark this close to the ring's edge sends it to the other corner
 
 /** Top-left of the loupe in corner `side` (0 = top-right, 1 = bottom-right), rect px. */
@@ -70,7 +71,7 @@ export function loupeCorner(side, rect, size = LOUPE_SIZE, margin = LOUPE_MARGIN
   'worklet';
   return {
     left: Math.max(0, rect.w - size - margin),
-    top: side === 1 ? Math.max(0, rect.h - size - margin) : Math.min(margin, Math.max(0, rect.h - size)),
+    top: side === 1 ? Math.max(0, rect.h - size - margin - LOUPE_TAG_CLEAR) : Math.min(margin, Math.max(0, rect.h - size)),
   };
 }
 

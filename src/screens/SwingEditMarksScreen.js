@@ -133,6 +133,7 @@ function useMarkPan({
   const x0 = useSharedValue(0);
   const y0 = useSharedValue(0);
   const moved = useSharedValue(0);
+  const started = useSharedValue(0); // the Pan activated (the finger moved); a tap never does
   return useMemo(() => Gesture.Pan()
     .minDistance(0)
     .maxPointers(1)
@@ -140,6 +141,7 @@ function useMarkPan({
     .onBegin((e) => {
       'worklet';
       kind.value = 0;
+      started.value = 0;
       const c = ctx.value;
       if (!c || !c.w) return;
       if (c.loading) { runOnJS(onRefuse)('loading'); return; }
@@ -180,17 +182,22 @@ function useMarkPan({
       lv.side.value = loupeSide([p[0] * c.w, p[1] * c.h], c, LOUPE_SIZE, lv.side.value);
       if (e.x !== x0.value || e.y !== y0.value) moved.value = 1;
     })
+    .onStart(() => {
+      'worklet';
+      started.value = 1;
+    })
     .onFinalize((_e, success) => {
       'worklet';
       const k = kind.value;
       if (!k) return;
       kind.value = 0;
       lv.opacity.value = 0;
-      // a drag the system cancelled (another gesture, the app backgrounded) commits nothing
-      if (success) runOnJS(onDrop)(k, lv.mx.value, lv.my.value, moved.value);
+      // a drag the system cancelled (another gesture, the app backgrounded) commits nothing; a tap
+      // never activates the Pan, so it ends unsuccessful too, but it is a placement
+      if (success || !started.value) runOnJS(onDrop)(k, lv.mx.value, lv.my.value, moved.value);
       else runOnJS(onDrop)(k, 0, 0, 0);
     })
-    .withTestId('mark-pan'), [ctx, lv, onGrab, onRefuse, onDrop, kind, ox, oy, x0, y0, moved]);
+    .withTestId('mark-pan'), [ctx, lv, onGrab, onRefuse, onDrop, kind, ox, oy, x0, y0, moved, started]);
 }
 
 // --- The canvas (props in) --------------------------------------------------------------------------

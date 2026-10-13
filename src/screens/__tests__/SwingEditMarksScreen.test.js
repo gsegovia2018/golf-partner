@@ -118,14 +118,17 @@ const picture = (u) => u.UNSAFE_getAllByType(SwingOverlay)[0].props.uri;
 const ev = (x, y = 0) => ({ x, y, absoluteX: x, absoluteY: y });
 const markPan = () => getByGestureTestId('mark-pan');
 const grant = (pt) => act(async () => { markPan().handlers.onBegin(ev(...pt)); });
-const move = (pt) => act(async () => { markPan().handlers.onUpdate(ev(...pt)); });
+// As on a device: the Pan activates (onStart) once the finger moves; a tap never activates it and
+// ends unsuccessful.
+const move = (pt) => act(async () => { markPan().handlers.onStart(ev(...pt)); markPan().handlers.onUpdate(ev(...pt)); });
 const release = (pt) => act(async () => { markPan().handlers.onFinalize(ev(...pt), true); });
 const touch = async (pt, moves = []) => {
   await act(async () => {
     const g = markPan().handlers;
     g.onBegin(ev(...pt));
+    if (moves.length) g.onStart(ev(...moves[0]));
     moves.forEach((m) => g.onUpdate(ev(...m)));
-    g.onFinalize(ev(...(moves.length ? moves[moves.length - 1] : pt)), true);
+    g.onFinalize(ev(...(moves.length ? moves[moves.length - 1] : pt)), moves.length > 0);
   });
 };
 const TRACK_W = 300;
@@ -496,6 +499,22 @@ describe('the whole-clip scrub (D28)', () => {
     expect(u.getByTestId(`zoom-${target}`)).toBeTruthy(); // the zoomed row re-centres on it
   });
 
+  test('device: a tap on the track never activates the Pan (it ends unsuccessful) and still snaps', async () => {
+    const u = await open({ mode: 'pass', marks: PARTIAL });
+    await layoutTrack(u);
+    const top = FIRST.checkpoints.top.i;
+    await act(async () => { const g = trackPan().handlers; g.onBegin(ev(atFrame(top) + 3)); g.onFinalize(ev(atFrame(top) + 3), false); });
+    expect(u.getByLabelText(M.primary.useFrame(top))).toBeTruthy();
+  });
+
+  test('a scrub the system cancels after it started picks nothing', async () => {
+    const u = await open({ mode: 'pass', marks: PARTIAL });
+    await layoutTrack(u);
+    await act(async () => { const g = trackPan().handlers; g.onBegin(ev(20)); g.onStart(ev(200)); g.onUpdate(ev(200)); g.onFinalize(ev(200), false); });
+    expect(u.getByLabelText(M.primary.proposedOk)).toBeTruthy();
+    expect(within(u.getByTestId('mark-frame-tag')).getByText(M.frameTag(FIRST.checkpoints.address.i))).toBeTruthy();
+  });
+
   test('a tap near a position tick or the proposal flag snaps to it', async () => {
     const u = await open({ mode: 'pass', marks: PARTIAL });
     await layoutTrack(u);
@@ -520,7 +539,7 @@ describe('the whole-clip scrub (D28)', () => {
     analyze.mockClear();
     const g = trackPan().handlers;
     await act(async () => { g.onBegin(ev(atFrame(f0))); });
-    await act(async () => { g.onUpdate(ev(atFrame(target))); });
+    await act(async () => { g.onStart(ev(atFrame(target))); g.onUpdate(ev(atFrame(target))); });
     expect(picture(u)).toBe(`file:///proxy/${Math.round(target / 4) * 4}.jpg`);
     expect(within(u.getByTestId('mark-frame-tag')).getByText(`${M.frameTag(target)} · ${M.scrubbing}`)).toBeTruthy();
     expect(u.getByTestId(`zoom-${target}`)).toBeTruthy();
@@ -545,7 +564,7 @@ describe('the whole-clip scrub (D28)', () => {
     const u = await open({ mode: 'pass', marks: PARTIAL });
     await layoutTrack(u);
     const g = trackPan().handlers;
-    await act(async () => { g.onBegin(ev(atFrame(f0))); g.onUpdate(ev(atFrame(target))); });
+    await act(async () => { g.onBegin(ev(atFrame(f0))); g.onStart(ev(atFrame(target))); g.onUpdate(ev(atFrame(target))); });
     expect(picture(u)).toBe(`file:///still/${f0}.jpg`); // the last still
     expect(within(u.getByTestId('mark-frame-tag')).getByText(`${M.frameTag(target)} · ${M.scrubbing}`)).toBeTruthy();
     expect(u.getByTestId(`zoom-${target}`).findAllByType(Image)).toEqual([]); // nothing to show yet
@@ -908,8 +927,9 @@ describe('dragging a mark does not touch React or the analysis until release', (
     await act(async () => {
       const g = markPan().handlers;
       g.onBegin(ev(x, y));
+      g.onStart(ev(x + 12, y));
       g.onUpdate(ev(x + 12, y));
-      g.onFinalize(ev(x + 12, y), false); // cancelled
+      g.onFinalize(ev(x + 12, y), false); // cancelled after it had started
     });
     expect(analyze).not.toHaveBeenCalled();
     expect(dockLabel(u, 'hands')).toBe(M.dockLabel('Hands', 'Proposed'));

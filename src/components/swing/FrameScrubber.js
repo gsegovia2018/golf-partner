@@ -51,6 +51,7 @@ function FrameScrubberImpl({
   const x0 = useSharedValue(0);
   const last = useSharedValue(-1);
   const committed = useSharedValue(view);
+  const started = useSharedValue(0); // the Pan activated; a tap on the track never does
 
   const targetKey = [...ticks.map((t) => t.frame), proposed].join(',');
   useEffect(() => { max.value = maxFrame; }, [maxFrame, max]);
@@ -72,6 +73,7 @@ function FrameScrubberImpl({
     .onBegin((e) => {
       'worklet';
       down.value = 1;
+      started.value = 0;
       x0.value = e.x;
       const x = clampX(e.x, tw.value);
       ph.value = x;
@@ -89,11 +91,15 @@ function FrameScrubberImpl({
         runOnJS(setScrub)(f);
       }
     })
+    .onStart(() => {
+      'worklet';
+      started.value = 1;
+    })
     .onFinalize((e, success) => {
       'worklet';
       if (!down.value) return;
       down.value = 0;
-      if (!success) {
+      if (!success && started.value) {
         // cancelled by the system: back to the committed frame, nothing picked
         ph.value = trackX(committed.value, tw.value, max.value);
         runOnJS(abandon)();
@@ -106,7 +112,7 @@ function FrameScrubberImpl({
       ph.value = trackX(f, tw.value, max.value);
       runOnJS(release)(f);
     })
-    .withTestId('scrub-track'), [setScrub, release, abandon, down, x0, tw, ph, max, last, targets, committed]);
+    .withTestId('scrub-track'), [setScrub, release, abandon, down, x0, tw, ph, max, last, targets, committed, started]);
   const head = useAnimatedStyle(() => ({ transform: [{ translateX: ph.value - 1.5 }] }));
 
   const off = cursor - proposed;
