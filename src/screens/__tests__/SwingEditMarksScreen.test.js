@@ -3,6 +3,7 @@ import { Alert, Image, StyleSheet } from 'react-native';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import SwingEditMarksScreen from '../SwingEditMarksScreen';
+import { Text as SvgText } from 'react-native-svg';
 import SwingOverlay, { fitRect } from '../../components/swing/SwingOverlay';
 import * as store from '../../store/swingStore';
 import { getStill, ensureStills } from '../../swing/frames';
@@ -140,6 +141,14 @@ describe('the canvas (D26: design C, V2 stop guidance)', () => {
     expect(overlay.props.pose).toBeUndefined();
     expect(overlay.props.showPlanes).toBe(false);
     expect(ensureStills).toHaveBeenCalledWith('s1', expect.arrayContaining([f - 8, f + 8]));
+  });
+
+  test('review: every mark on the still has its chip, the active one included (hands, clubhead, ball at address)', async () => {
+    const u = await open({ checkpoint: 'address', seeded: true });
+    const chips = () => u.UNSAFE_getAllByType(SvgText).map((n) => n.props.children);
+    expect(chips().sort()).toEqual(['BALL · PROPOSED', 'CLUBHEAD · PROPOSED', 'HANDS · PROPOSED']);
+    await press(u.getByTestId('mark-confirm'));
+    expect(chips()).toContain('HANDS · CONFIRMED');
   });
 
   test('"More" expands the full cue inline (the fine strip folds away); "Less" closes it', async () => {

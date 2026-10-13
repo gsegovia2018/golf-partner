@@ -137,6 +137,7 @@ export function MarkLayer({ rect, marks, active }) {
             <Polyline points={`${x + 10},${y - 13} ${x + 12.3},${y - 10.7} ${x + 16},${y - 15.3}`} fill="none" stroke={INK} strokeWidth={1.6} />
           </G>
         ) : null}
+        {chip}
       </G>
     );
   };
