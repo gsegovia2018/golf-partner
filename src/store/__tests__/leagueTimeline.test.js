@@ -53,6 +53,34 @@ describe('describeCardEvent: who did it', () => {
   });
 });
 
+describe('describeCardEvent: no actor at all (backfill)', () => {
+  const none = { actorUserId: null, actorName: null, data: { backfill: true } };
+  const key = (kind, extra = {}) => d(ev(kind, { ...none, ...extra })).title.key;
+
+  test('uses actor-free wording instead of "Someone"', () => {
+    expect(key('returned')).toBe('league.timeline.returnedAnon');
+    expect(key('approved')).toBe('league.timeline.approvedAnon');
+    expect(key('reopened')).toBe('league.timeline.reopenedAnon');
+    expect(key('withdrawn')).toBe('league.timeline.withdrawnAnon');
+    expect(key('voided')).toBe('league.timeline.voidedAnon');
+    expect(key('voided', { note: 'Wrong tee: x' })).toBe('league.timeline.voidedReasonAnon');
+    expect(key('confirmed', { how: 'partner' })).toBe('league.timeline.confirmedPartnerAnon');
+    expect(key('confirmed', { how: null })).toBe('league.timeline.confirmed');
+  });
+
+  test('a known actor keeps the named wording', () => {
+    expect(d(ev('returned')).title.key).toBe('league.timeline.returned');
+    expect(d(ev('voided')).title.key).toBe('league.timeline.voided');
+  });
+
+  test('every Anon key exists in English and Spanish', () => {
+    const en = require('../../i18n/locales/en').default ?? require('../../i18n/locales/en');
+    const es = require('../../i18n/locales/es').default ?? require('../../i18n/locales/es');
+    const keys = ['returned', 'approved', 'reopened', 'withdrawn', 'voided', 'voidedReason'].map((k) => `league.timeline.${k}Anon`);
+    for (const k of keys) { expect(en[k]).toBeTruthy(); expect(es[k]).toBeTruthy(); }
+  });
+});
+
 describe('describeCardEvent', () => {
   test('a QR confirmation without an account says so, with the QR chip', () => {
     const r = d(ev('confirmed', { actorUserId: null, actorName: 'Borja Arrieta', how: 'qr', data: { marker_account: false } }));

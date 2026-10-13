@@ -40,7 +40,8 @@ export function describeCardEvent(ev, opts = {}) {
   const name = known || someone;
   const you = !!meId && ev?.actorUserId === meId;
   // 'league.timeline.x' / 'league.timeline.xYou' (the viewer did it themselves).
-  const by = (key) => ({ key: you ? `${key}You` : key, params: { name } });
+  // With no actor at all (a backfilled event) the Anon variant: "Approved by an admin".
+  const by = (key) => ({ key: you ? `${key}You` : known ? key : `${key}Anon`, params: { name } });
   const row = (icon, tone, title, extra = {}) => ({
     id: ev.id, icon, tone, title, detail: null, how: null, note: ev.note ?? null, at: ev.at, ...extra,
   });
@@ -86,7 +87,7 @@ export function describeCardEvent(ev, opts = {}) {
         key: data.marker_name ? 'league.timeline.sentTo' : 'league.timeline.sent', params: { name: data.marker_name },
       });
     case 'returned':
-      return row('corner-up-left', 'warn', { key: 'league.timeline.returned', params: { name } }, { how });
+      return row('corner-up-left', 'warn', { key: known ? 'league.timeline.returned' : 'league.timeline.returnedAnon', params: { name } }, { how });
     case 'confirmed': {
       if (ev.how === 'photo') {
         return row('camera', 'good', { key: 'league.timeline.confirmedPhoto' }, {
@@ -132,8 +133,10 @@ export function describeCardEvent(ev, opts = {}) {
       });
     case 'voided': {
       const { reason, note } = splitVoidReason(ev.note);
+      const anon = !you && !known;
       return row('slash', 'bad', {
-        key: reason ? (you ? 'league.timeline.voidedReasonYou' : 'league.timeline.voidedReason') : (you ? 'league.timeline.voidedYou' : 'league.timeline.voided'),
+        key: reason ? (you ? 'league.timeline.voidedReasonYou' : anon ? 'league.timeline.voidedReasonAnon' : 'league.timeline.voidedReason')
+          : (you ? 'league.timeline.voidedYou' : anon ? 'league.timeline.voidedAnon' : 'league.timeline.voided'),
         params: { name, reason },
       }, { note });
     }
