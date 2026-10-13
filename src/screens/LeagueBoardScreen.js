@@ -38,7 +38,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
     if (!data) return null;
     const { league, members, cardsByMonth } = data;
     const active = members.filter((m) => !m.leftAt);
-    const table = seasonTable(active, cardsByMonth, league.pointsTable);
+    const table = seasonTable(active, cardsByMonth, league.pointsTable, { participationPoints: league.participationPoints });
     const last = lastScoredMonth(cardsByMonth);
     const scoredMonths = Object.keys(cardsByMonth)
       .filter((m) => cardsByMonth[m].some((c) => c.status === 'confirmed' && !needsApproval(c)))
@@ -113,7 +113,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
   if (monthScope) {
     const left = daysLeftInMonth(now);
     boardTitle = `${curMonth.toUpperCase()} SO FAR · ${left === 0 ? 'LAST DAY' : `${left} ${left === 1 ? 'DAY' : 'DAYS'} LEFT`}`;
-    const board = monthBoard(members, cardsByMonth, curKey, league.pointsTable, now);
+    const board = monthBoard(members, cardsByMonth, curKey, league.pointsTable, now, { participationPoints: league.participationPoints });
     // Any card this month opens: live and missed ones show their status.
     const canOpen = new Set(monthRows(members, cardsByMonth, curKey, now).filter((r) => r.card).map((r) => r.member.userId));
     const rowOf = (member) => ({
@@ -249,7 +249,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
   } else {
     boardTitle = `${monthName(activeScope).toUpperCase()} · RESULTS`;
     const canOpen = viewable(activeScope);
-    const results = monthResults(cardsByMonth[activeScope], active, league.pointsTable);
+    const results = monthResults(cardsByMonth[activeScope], active, league.pointsTable, { participationPoints: league.participationPoints });
     boardRows = results.map((r) => ({
       key: r.userId,
       place: r.place,

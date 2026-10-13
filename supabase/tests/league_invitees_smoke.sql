@@ -372,7 +372,7 @@ SELECT 'grants: anon previews and greets only; authenticated runs the rest',
    AND NOT has_function_privilege('anon', 'public.join_league(text, numeric, text, uuid)', 'EXECUTE')
    AND NOT has_function_privilege('anon', 'public.get_league_invitees(uuid)', 'EXECUTE')
    AND NOT has_function_privilege('anon', 'public.remove_league_invitee(uuid, uuid)', 'EXECUTE')
-   AND NOT has_function_privilege('anon', 'public.create_league(text, date, date, int[], numeric, int, jsonb)', 'EXECUTE')
+   AND NOT has_function_privilege('anon', 'public.create_league(text, date, date, int[], numeric, int, jsonb, int)', 'EXECUTE')
    AND NOT has_function_privilege('anon', 'public.get_league_by_code(text)', 'EXECUTE')
    AND NOT has_function_privilege('anon', 'public.league_open_invitees(uuid)', 'EXECUTE')
    AND NOT has_function_privilege('authenticated', 'public.league_open_invitees(uuid)', 'EXECUTE')

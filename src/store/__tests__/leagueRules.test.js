@@ -163,10 +163,32 @@ describe('scoreCard', () => {
     expect(r.playingHandicap).toBe(19);
   });
 
+  test('par is always the sum of the hole pars, as on the server (a tee par is ignored)', () => {
+    const sum = scoreCard({ holes, course, leagueHandicap: 18, tee: { slope: 125, rating: 71.2 } });
+    const forged = scoreCard({ holes, course, leagueHandicap: 18, tee: { slope: 125, rating: 71.2, par: 60 } });
+    expect(forged.playingHandicap).toBe(sum.playingHandicap);
+  });
+
   test('tee without par falls back to the sum of hole pars (72 here)', () => {
     const withPar = scoreCard({ holes, course, leagueHandicap: 18, tee: { slope: 125, rating: 71.2, par: 72 } });
     const noPar = scoreCard({ holes, course, leagueHandicap: 18, tee: { slope: 125, rating: 71.2 } });
     expect(noPar.playingHandicap).toBe(withPar.playingHandicap);
+  });
+
+  // The server scores every card with the same maths (league_card_score in
+  // 20261015000000_league_server_scoring.sql); supabase/tests/
+  // league_server_scoring_smoke.sql asserts these exact values on the SQL side.
+  test('server parity: the values the scoring smoke test expects from SQL', () => {
+    const cngPars = [4, 4, 3, 5, 4, 4, 3, 4, 5, 4, 3, 5, 4, 4, 4, 3, 5, 4];
+    const cng = { holes: cngPars.map((par, i) => ({ number: i + 1, par, strokeIndex: sis[i] })) };
+    const hcng = { 1: 5, 2: 5, 3: 3, 4: 9, 5: 5, 6: 5, 7: 3, 8: 5, 9: 6, 10: 5, 11: 3, 12: 6, 13: 5, 14: 4, 15: 5, 16: 3, 17: 5, 18: 4 };
+    const at = (slope, rating) => {
+      const r = scoreCard({ holes: hcng, course: cng, leagueHandicap: 18, tee: { slope, rating } });
+      return [r.playingHandicap, r.points, r.gross, r.differential];
+    };
+    expect(at(135, 73.9)).toEqual([23, 45, 86, 10.1]); // women's Amarillas
+    expect(at(130, 71.4)).toEqual([20, 42, 86, 12.7]); // men's Amarillas
+    expect(at(120, 70.0)).toEqual([17, 40, 86, 14.1]); // custom Blancas
   });
 
   test('tee with no slope falls back to round(leagueHandicap)', () => {
@@ -295,6 +317,15 @@ describe('post deadline', () => {
     expect(needsApproval({ status: 'playing', notAnnounced: true })).toBe(false);
     expect(needsApproval({ status: 'void', notAnnounced: true })).toBe(false);
     expect(needsApproval(null)).toBe(false);
+  });
+
+  test('needsApproval: a tee entered by hand waits for an admin too; a library tee or an older card does not', () => {
+    expect(needsApproval({ status: 'confirmed', teeVerified: false })).toBe(true);
+    expect(needsApproval({ status: 'submitted', teeVerified: false })).toBe(true);
+    expect(needsApproval({ status: 'confirmed', teeVerified: false, approvedAt: '2026-10-11T00:00:00Z' })).toBe(false);
+    expect(needsApproval({ status: 'confirmed', teeVerified: true })).toBe(false);
+    expect(needsApproval({ status: 'confirmed', teeVerified: null })).toBe(false);
+    expect(needsApproval({ status: 'playing', teeVerified: false })).toBe(false);
   });
 
   test('deadlineInfo: countdown, urgent under 2 hours', () => {

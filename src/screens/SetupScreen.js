@@ -9,7 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import {
   createTournament, buildTeamsForMode, teamShapeOf, DEFAULT_SETTINGS, GAME_DEFAULT_SETTINGS,
-  deriveRoundPlayingHandicap, generateInviteCode, buildJoinLink, rosterCap,
+  deriveRoundPlayingHandicap, generateInviteCode, buildJoinLink, rosterCap, roundScoringMode,
 } from '../store/tournamentStore';
 import { defaultHoles, fetchPlayers, fetchMyPlayers } from '../store/libraryStore';
 import { middleTee } from '../store/tees';
@@ -455,6 +455,7 @@ export default function SetupScreen({ navigation, route }) {
         tournamentId: tournament.id,
         roundId: r0.id,
         playerId: meId,
+        scoringMode: roundScoringMode(tournament, r0),
       });
       const hcp = card.leagueHandicap ?? league.leagueHandicap;
       return {

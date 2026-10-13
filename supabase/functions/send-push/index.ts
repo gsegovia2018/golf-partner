@@ -79,13 +79,11 @@ function monthName(month: unknown): string {
   return (m && MONTHS[Number(m[1]) - 1]) || '';
 }
 
-// ' \u00b7 2.4 better than handicap'; null = the card's tee has no rating, so it is not ranked.
-function netResult(netDifferential: unknown): string {
-  const n = Number(netDifferential);
-  if (netDifferential == null || netDifferential === '' || !Number.isFinite(n)) return ' \u00b7 unrated tee, not ranked';
-  const v = Math.round(n * 10) / 10;
-  if (v === 0) return ' \u00b7 level with handicap';
-  return ` \u00b7 ${Math.abs(v).toFixed(1)} ${v < 0 ? 'better' : 'worse'} than handicap`;
+// ' \u00b7 38 pts': the Stableford points the league ranks by; '' when the payload has none.
+function pointsResult(points: unknown): string {
+  const n = Number(points);
+  if (points == null || points === '' || !Number.isFinite(n)) return '';
+  return ` \u00b7 ${n} pts`;
 }
 
 const leagueBoard = (d: Record<string, unknown>): DeepLink => ({
@@ -117,9 +115,8 @@ Object.assign(RENDERERS, {
   }),
   league_card_confirmed: (d: Record<string, unknown>) => {
     const month = monthName(d.month);
-    // Mirrors notificationContent.js: net differential first, points for older payloads.
-    const result = d.net_differential !== undefined ? netResult(d.net_differential)
-      : d.points != null ? `, ${d.points} pts` : '';
+    // Mirrors notificationContent.js: the Stableford points the league ranks by.
+    const result = pointsResult(d.points);
     return {
       title: 'Card confirmed',
       body: `${d.actor_name ?? 'A friend'}'s ${month ? `${month} ` : ''}card is confirmed${result}`,

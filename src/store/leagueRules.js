@@ -79,9 +79,10 @@ export function isMissed(card, now = new Date()) {
   return new Date(now).getTime() >= new Date(card.postBy).getTime();
 }
 
-// An unannounced card scores nothing until an admin approves it.
+// An unannounced card, or one whose tee was entered by hand (not found in the
+// course library, teeVerified false), scores nothing until an admin approves it.
 export function needsApproval(card) {
-  return !!card?.notAnnounced && !card.approvedAt
+  return (!!card?.notAnnounced || card?.teeVerified === false) && !card.approvedAt
     && (card.status === 'submitted' || card.status === 'confirmed');
 }
 
@@ -107,21 +108,24 @@ const round1 = (n) => Math.round(n * 10) / 10;
 // { 1: strokes, ... }. `gender` is accepted by callers but the app's tee
 // snapshots carry a single slope/rating, so it does not change the maths today.
 //
-// The league ranks by net differential (lower is better):
+// The league ranks by net Stableford `points` (more is better). The net
+// differential is secondary information:
 //   adjustedGross   = sum of min(strokes, par + 2 + extra) (net double bogey,
 //                     as handicapIndex.roundDifferential does)
 //   differential    = round1((113 / slope) x (adjustedGross - rating))
 //   netDifferential = round1(differential - leagueHandicap)
 // Both are null when the tee is not rated (`rated` false) or the card is not
-// a full 18 with a score on every hole. Stableford `points` stay as
-// secondary information. The server recomputes the net differential from
-// the frozen card (league_card_differential), so this is for display.
+// a full 18 with a score on every hole. This is a preview only: the server
+// scores the frozen card itself (league_card_score / league_card_differential
+// in 20261015000000_league_server_scoring.sql, the same maths) and ignores
+// the values the client sends, taking a library tee from course_tees.
 // perHole: { n, strokes, extra, points, counted, capped } where counted =
 // min(strokes, cap) and capped = strokes > cap.
 export function scoreCard({ holes, course, leagueHandicap, tee }) {
   const courseHoles = [...(course?.holes ?? [])].sort((a, b) => a.number - b.number);
   const holeCount = holeCountOf(courseHoles);
-  const par = tee?.par ?? totalParFromHoles(courseHoles);
+  // The sum of the hole pars, as the server's league_card_score uses.
+  const par = totalParFromHoles(courseHoles);
   // No tee slope: calcPlayingHandicap returns round(leagueHandicap) (halved on 9 holes).
   const playingHandicap = calcPlayingHandicap(leagueHandicap, tee?.slope, tee?.rating, par, holeCount);
   const rated = isRatedTee(tee);

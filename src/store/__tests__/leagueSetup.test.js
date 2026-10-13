@@ -70,6 +70,12 @@ describe('league handicap on the round', () => {
     expect(out.holes).toHaveLength(18);
   });
 
+  test('leagueCourse carries the library course id so the server can verify the tee', () => {
+    expect(leagueCourse({ ...round, courseId: 'b1c00000-0000-4000-8000-000000000001' }, 'p1'))
+      .toMatchObject({ course_id: 'b1c00000-0000-4000-8000-000000000001' });
+    expect(leagueCourse({ ...round, courseId: undefined }, 'p1')).toMatchObject({ course_id: null });
+  });
+
   test('leagueCourse snapshots the default tee, else the legacy round slope/rating, else nulls', () => {
     expect(leagueCourse(round, 'p1')).toMatchObject({ tee: 'Yellow', slope: 125, rating: 72 });
     expect(leagueCourse({ ...round, tees: [], slope: 130, courseRating: 71.4 }, 'p1'))

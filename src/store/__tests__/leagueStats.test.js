@@ -83,7 +83,7 @@ describe('monthHonours', () => {
       card('c', { status: 'submitted', points: 44, netDifferential: -9, holes: strokes({ 1: 1 }) }),
     ];
     const byKey = Object.fromEntries(monthHonours(cards, members).map((h) => [h.key, h]));
-    expect(byKey.card).toMatchObject({ userId: 'a', text: 'Ana, 1.5 better at Los Arqueros' });
+    expect(byKey.card).toMatchObject({ userId: 'a', text: 'Ana, 36 pts at Los Arqueros' });
     // Beto's 3 on the par-5 13th is 4 pts, ahead of Ana's 3 pts on the 7th.
     expect(byKey.hole).toMatchObject({ userId: 'b', text: 'Beto, a 3 on the par-5 13th at Los Arqueros · 4 pts' });
     expect(byKey.snowman).toMatchObject({ userId: 'a', text: 'Ana, an 8 on the par-4 2nd at Los Arqueros' });
@@ -91,16 +91,16 @@ describe('monthHonours', () => {
     expect(byKey.closer).toMatchObject({ userId: 'b', text: 'Beto, 18 out and 20 back' });
   });
 
-  test('card of the month is the lowest net differential; an unrated card never wins it', () => {
+  test('card of the month is the most points, whatever the net differential; an unscored card never wins it', () => {
     const cards = [
-      card('a', { points: 44, netDifferential: null }),
-      card('b', { points: 30, netDifferential: 0.4 }),
+      card('a', { points: null, netDifferential: -6 }),
+      card('b', { points: 30, netDifferential: -2.4 }),
       card('c', { points: 33, netDifferential: 1.1 }),
     ];
     expect(monthHonours(cards, members).find((h) => h.key === 'card'))
-      .toMatchObject({ userId: 'b', text: 'Beto, 0.4 worse at Los Arqueros' });
-    const unrated = [card('a'), card('b'), card('c')];
-    expect(monthHonours(unrated, members).map((h) => h.key)).not.toContain('card');
+      .toMatchObject({ userId: 'c', text: 'Cris, 33 pts at Los Arqueros' });
+    const unscored = [card('a', { points: null }), card('b', { points: null }), card('c', { points: null })];
+    expect(monthHonours(unscored, members).map((h) => h.key)).not.toContain('card');
   });
 
   test('hole of the month mentions the stroke received', () => {
@@ -207,38 +207,38 @@ describe('statLeaders', () => {
 
 describe('seasonGrid', () => {
   const cards = {
-    '2026-08': [card('a', { netDifferential: 3.1 }), card('b', { netDifferential: -0.4 })],
+    '2026-08': [card('a', { points: 31, netDifferential: 3.1 }), card('b', { points: 37, netDifferential: -0.4 })],
     '2026-09': [
-      card('a', { netDifferential: -1.2 }), card('b', { netDifferential: -1.2 }),
-      card('c', { netDifferential: -5, status: 'submitted' }),
+      card('a', { points: 38, netDifferential: -1.2 }), card('b', { points: 38, netDifferential: -0.9 }),
+      card('c', { points: 44, netDifferential: -5, status: 'submitted' }),
     ],
   };
 
-  test('cells per member in the order given; lowest net differential is best, ties all best, no card is null', () => {
+  test('cells per member in the order given; most points is best, ties all best, no card is null', () => {
     const grid = seasonGrid(cards, members, ['2026-08', '2026-09']);
     expect(grid.map((r) => r.userId)).toEqual(['a', 'b', 'c']);
-    expect(grid[0].cells.map((c) => [c.netDifferential, c.best])).toEqual([[3.1, false], [-1.2, true]]);
-    expect(grid[1].cells.map((c) => [c.netDifferential, c.best])).toEqual([[-0.4, true], [-1.2, true]]);
-    expect(grid[2].cells.map((c) => [c.netDifferential, c.best, c.cardId])).toEqual([[null, false, null], [null, false, null]]);
+    expect(grid[0].cells.map((c) => [c.points, c.netDifferential, c.best])).toEqual([[31, 3.1, false], [38, -1.2, true]]);
+    expect(grid[1].cells.map((c) => [c.points, c.netDifferential, c.best])).toEqual([[37, -0.4, true], [38, -0.9, true]]);
+    expect(grid[2].cells.map((c) => [c.points, c.best, c.cardId])).toEqual([[null, false, null], [null, false, null]]);
   });
 
   test('a month with no confirmed card has no best', () => {
     const grid = seasonGrid({ '2026-10': [card('a', { status: 'announced' })] }, members, ['2026-10']);
-    expect(grid[0].cells[0]).toMatchObject({ netDifferential: null, best: false, cardId: null, unrated: false });
+    expect(grid[0].cells[0]).toMatchObject({ points: null, netDifferential: null, best: false, cardId: null, unrated: false });
   });
 
-  test('uses the best card when a member has two in a month', () => {
+  test('uses the best card (most points) when a member has two in a month', () => {
     const grid = seasonGrid({
-      '2026-09': [card('a', { points: 38, netDifferential: 1.4 }), card('a', { points: 35, netDifferential: 0.2 })],
+      '2026-09': [card('a', { points: 35, netDifferential: 0.2 }), card('a', { points: 38, netDifferential: 1.4 })],
     }, members, ['2026-09']);
-    expect(grid[0].cells[0].netDifferential).toBe(0.2);
+    expect(grid[0].cells[0]).toMatchObject({ points: 38, netDifferential: 1.4 });
   });
 
-  test('an unrated confirmed card shows as unrated, never best', () => {
-    const grid = seasonGrid({ '2026-09': [card('a', { points: 44 }), card('b', { netDifferential: 4 })] }, members, ['2026-09']);
-    expect(grid[0].cells[0]).toMatchObject({ unrated: true, netDifferential: null, best: false });
+  test('an unscored confirmed card shows as unrated, never best; a card with no net differential still ranks', () => {
+    const grid = seasonGrid({ '2026-09': [card('a', { points: null }), card('b', { points: 30 })] }, members, ['2026-09']);
+    expect(grid[0].cells[0]).toMatchObject({ unrated: true, points: null, best: false });
     expect(grid[0].cells[0].cardId).not.toBeNull();
-    expect(grid[1].cells[0]).toMatchObject({ unrated: false, best: true });
+    expect(grid[1].cells[0]).toMatchObject({ unrated: false, best: true, points: 30, netDifferential: null });
   });
 });
 
@@ -261,18 +261,27 @@ describe('rivals', () => {
     expect(rows[2]).toMatchObject({ userId: 'd', months: 0 }); // d's only card is not confirmed
   });
 
-  test('rivalMonths lists shared months newest first', () => {
+  test('rivalMonths lists shared months newest first, with each side\'s points', () => {
     expect(rivalMonths(cards, 'a', 'b')).toEqual([
-      { month: '2026-09', a: 6, b: 3 },
-      { month: '2026-08', a: 6, b: 6 },
-      { month: '2026-07', a: 6, b: 8 },
+      { month: '2026-09', a: 30, b: 33 },
+      { month: '2026-08', a: 30, b: 30 },
+      { month: '2026-07', a: 30, b: 28 },
     ]);
   });
 
-  test('a month where either card is unrated is not shared', () => {
+  test('points decide, not the net differential', () => {
     const rows = rivals({
-      '2026-09': [card('a', { points: 30 }), card('b', { points: 33, netDifferential: null })],
+      '2026-09': [card('a', { points: 34, netDifferential: 2 }), card('b', { points: 33, netDifferential: -4 })],
+    }, all, 'a');
+    expect(rows.find((r) => r.userId === 'b')).toMatchObject({ won: 1, lost: 0, months: 1 });
+  });
+
+  test('a month where either card has no points is not shared; no net differential still is', () => {
+    const rows = rivals({
+      '2026-09': [card('a', { points: 30 }), card('b', { points: null })],
+      '2026-10': [card('a', { points: 30, netDifferential: null }), card('c', { points: 29, netDifferential: null })],
     }, all, 'a');
     expect(rows.find((r) => r.userId === 'b')).toMatchObject({ months: 0 });
+    expect(rows.find((r) => r.userId === 'c')).toMatchObject({ months: 1, won: 1 });
   });
 });

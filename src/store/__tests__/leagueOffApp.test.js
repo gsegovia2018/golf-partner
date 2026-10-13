@@ -63,6 +63,11 @@ describe('helpers', () => {
     expect(back.tee).toEqual({ label: 'Yellow', slope: 125, rating: 72 });
   });
 
+  test('courseSnapshot carries the library course id (null for a course without one)', () => {
+    expect(courseSnapshot({ ...course, id: 'c-lib-1' }, null)).toMatchObject({ course_id: 'c-lib-1' });
+    expect(courseSnapshot({ ...course, id: undefined }, null)).toMatchObject({ course_id: null });
+  });
+
   test('courseProblem rejects a missing or non-18-hole course', () => {
     expect(courseProblem(null)).toMatch(/Pick the course/);
     expect(courseProblem({ holes: holes18.slice(0, 9) })).toMatch(/18-hole/);
