@@ -42,7 +42,8 @@
           "autoVerify": true,
           "data": [
             { "scheme": "https", "host": "golf-partner.vercel.app", "pathPrefix": "/join-tournament" },
-            { "scheme": "https", "host": "golf-partner.vercel.app", "pathPrefix": "/join" }
+            { "scheme": "https", "host": "golf-partner.vercel.app", "pathPrefix": "/join" },
+            { "scheme": "https", "host": "golf-partner.vercel.app", "pathPrefix": "/league" }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
         }
