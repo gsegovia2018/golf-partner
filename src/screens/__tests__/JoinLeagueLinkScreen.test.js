@@ -6,6 +6,7 @@ import JoinLeagueLinkScreen from '../JoinLeagueLinkScreen';
 
 jest.mock('../../store/leagueStore', () => ({
   getLeagueInvitePreview: jest.fn(),
+  getLeagueInvitee: jest.fn(),
   joinLeague: jest.fn(),
 }));
 jest.mock('../../lib/oauth', () => ({
@@ -202,5 +203,48 @@ describe('JoinLeagueLinkScreen', () => {
     await fillForm(utils);
     fireEvent.press(utils.getByText('Join the league'));
     await waitFor(() => expect(store.joinLeague).toHaveBeenCalledWith('MULL7Q4K', 24, 'Lucía Pérez'));
+  });
+
+  describe('with reserved spots', () => {
+    const WITH_SPOTS = {
+      ...PREVIEW,
+      invitees: [{ id: 'I1', name: 'Javi Ortega' }, { id: 'I2', name: 'Pilar Sanz' }],
+    };
+    beforeEach(() => { store.getLeagueInvitePreview.mockResolvedValue(WITH_SPOTS); });
+
+    test('opens on "Who are you?" and "I\'m not on the list" shows the plain form', async () => {
+      const utils = renderScreen();
+      await waitFor(() => utils.getByText('Who are you?'));
+      expect(utils.getByText('Javi Ortega')).toBeTruthy();
+      expect(utils.queryByLabelText('Name')).toBeNull();
+      fireEvent.press(utils.getByText("I'm not on the list"));
+      await waitFor(() => utils.getByLabelText('Handicap'));
+      expect(utils.getByLabelText('Name').props.value).toBe('');
+    });
+
+    test('picking a spot greets, keeps its handicap and joins with the spot id', async () => {
+      store.getLeagueInvitee.mockResolvedValue({ id: 'I1', name: 'Javi Ortega', handicap: 18.4, claimed: false });
+      const utils = renderScreen();
+      await waitFor(() => utils.getByText('Javi Ortega'));
+      fireEvent.press(utils.getByText('Javi Ortega'));
+      await waitFor(() => utils.getByText('Hi Javi, your spot is ready'));
+      expect(utils.getByText('18.4')).toBeTruthy();
+      expect(utils.queryByLabelText('Handicap')).toBeNull();
+      expect(utils.getByLabelText('Name').props.value).toBe('Javi Ortega');
+      fireEvent.changeText(utils.getByLabelText('Email'), 'javi@example.com');
+      fireEvent.press(utils.getByText('Join El Club del Mulligan'));
+      await waitFor(() => expect(store.joinLeague).toHaveBeenCalledWith('MULL7Q4K', 18.4, 'Javi Ortega', 'I1'));
+    });
+
+    test('a spot taken meanwhile shows the status card, and Pick again drops it', async () => {
+      store.getLeagueInvitee.mockResolvedValue({ id: 'I1', name: 'Javi Ortega', handicap: 18.4, claimed: true });
+      const utils = renderScreen();
+      await waitFor(() => utils.getByText('Javi Ortega'));
+      fireEvent.press(utils.getByText('Javi Ortega'));
+      await waitFor(() => utils.getByText('Someone just joined as Javi Ortega'));
+      fireEvent.press(utils.getByText('Pick again'));
+      await waitFor(() => utils.getByText('Pilar Sanz'));
+      expect(utils.queryByText('Javi Ortega')).toBeNull();
+    });
   });
 });
