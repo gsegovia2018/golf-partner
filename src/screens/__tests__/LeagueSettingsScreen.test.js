@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import LeagueSettingsScreen from '../LeagueSettingsScreen';
 
@@ -61,7 +61,7 @@ describe('LeagueSettingsScreen', () => {
     store.getLeagueCached.mockResolvedValue(null);
     alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
-  afterEach(() => alertSpy.mockRestore());
+  afterEach(() => { alertSpy.mockRestore(); jest.useRealTimers(); });
 
   test('an admin edits the rules and saves them through updateLeagueRules', async () => {
     store.getLeague.mockResolvedValue(snapshot());
@@ -94,13 +94,18 @@ describe('LeagueSettingsScreen', () => {
   });
 
   test('season dates are picked in the calendar sheet and the end cannot precede the start', async () => {
+    // BottomSheet unmounts after a real 250 ms exit timer; under a loaded CI runner that blew past
+    // waitFor's 1 s default and left the sheet mounted. Fake timers (clock pinned late on a UTC day,
+    // a month-end-adjacent time that must not matter) make the close deterministic.
+    jest.useFakeTimers({ now: new Date('2026-10-13T23:30:00.000Z') });
     store.getLeague.mockResolvedValue(snapshot());
     const { getByText, getByDisplayValue, getByLabelText, queryAllByLabelText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
     await waitFor(() => getByDisplayValue('El Club'));
     fireEvent.press(getByLabelText('Season starts'));
     fireEvent.press(getByLabelText('Thu 15 Jan 2026'));
     fireEvent.press(getByLabelText('Done'));
-    await waitFor(() => expect(queryAllByLabelText('Previous month')).toHaveLength(0)); // sheet closed
+    act(() => { jest.advanceTimersByTime(500); }); // exit animation + its fallback timer
+    expect(queryAllByLabelText('Previous month')).toHaveLength(0); // sheet closed
     fireEvent.press(getByLabelText('Season ends'));
     for (let i = 0; i < 11; i += 1) fireEvent.press(getByLabelText('Previous month')); // Dec -> Jan
     expect(getByLabelText('Wed 14 Jan 2026').props.accessibilityState.disabled).toBe(true);
