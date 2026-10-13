@@ -184,6 +184,7 @@ export default {
   "settings.theme.light": "Claro",
   "settings.theme.dark": "Oscuro",
   "settings.theme.system": "Sistema",
+  "settings.theme.title": "Tema",
   "settings.units.meters": "Metros",
   "settings.units.yards": "Yardas",
   "settings.units.exampleYards": "p. ej. {yards} yds ≈ {meters} m",

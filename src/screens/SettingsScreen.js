@@ -176,6 +176,7 @@ export default function SettingsScreen({ navigation }) {
               </PressableScale>
             ))}
           </View>
+          <Text style={s.sectionLabel}>{t('settings.theme.title')}</Text>
           <View style={s.appearanceRow}>
             {THEME_OPTIONS.map((opt) => {
               const active = themePref === opt.value;

@@ -76,5 +76,7 @@ describe('Spanish', () => {
     expect(screen.getByText('VISIBILIDAD DE RESULTADOS')).toBeTruthy();
     expect(screen.getByText('Distancias GPS')).toBeTruthy();
     expect(screen.getByText('Repetir el recorrido')).toBeTruthy();
+    expect(screen.getByText('Idioma')).toBeTruthy();
+    expect(screen.getByText('Tema')).toBeTruthy();
   });
 });
