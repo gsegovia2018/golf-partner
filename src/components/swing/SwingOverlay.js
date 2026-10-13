@@ -93,7 +93,9 @@ export default function SwingOverlay({
     <View style={[styles.box, { width, height }, style]}>
       <View style={[styles.frame, { left: r.x, top: r.y, width: r.w, height: r.h }]}>
         {uri ? (
-          <Image source={{ uri }} style={{ width: r.w, height: r.h }} resizeMode="stretch" accessibilityLabel={label} accessibilityIgnoresInvertColors />
+          // resizeMethod "scale": decoded once at full size and scaled by the GPU, so the marking
+          // canvas's loupe (DragLoupe, same uri) reuses this bitmap instead of decoding it again
+          <Image source={{ uri }} style={{ width: r.w, height: r.h }} resizeMode="stretch" resizeMethod="scale" accessibilityLabel={label} accessibilityIgnoresInvertColors />
         ) : (
           <View style={[styles.none, { width: r.w, height: r.h }]} accessibilityLabel={label}>
             <Text style={styles.noneText}>{SWING_STRINGS.results.noStill}</Text>

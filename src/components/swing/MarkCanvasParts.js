@@ -1,6 +1,6 @@
-import React, { memo, useEffect, useRef } from 'react';
+import React, { memo } from 'react';
 import {
-  View, Text, Image, Pressable, ScrollView, StyleSheet,
+  View, Text, Pressable, StyleSheet,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Svg, {
@@ -9,22 +9,25 @@ import Svg, {
 import { hud, semantic } from '../../theme/tokens';
 import { withAlpha } from '../../theme/alpha';
 import { SWING_STRINGS } from '../../swing/strings';
+import { MARKED_KEYS, positionStatus } from '../../swing/markPass';
 import Pictogram, { PICTOGRAM_KEYS } from './Pictogram';
 
-// The pieces of the marking canvas (D26, design C with V2 stop guidance). Fixed HUD palette:
-// the canvas is a video being annotated, the same case as the capture viewfinder.
+// The pieces of the marking canvas (D26, laid out per D28 "Frame Then Marks"). Fixed HUD palette:
+// the canvas is a video being annotated, the same case as the capture viewfinder. The cue card and
+// the dock sit INSIDE the video, on the strong scrim, in the parts of a down-the-line frame that are
+// empty at all six positions (above the head line, left of the body above the ball).
 
 const T = SWING_STRINGS.mark;
 const HUD_WARN = semantic.warning.dark; // the HUD amber, as on the capture screen
 export const MARK_COLOR = { hands: hud.accent, head: hud.text, ball: semantic.info.dark };
 const INK = hud.onAccent;
-const PICT_SIZE = 52; // the reference pictogram beside the stop line (V3)
+const CUE_PICT = 44; // the reference pictogram in the cue card (V3)
+const CHIP_PICT = 24; // the pictogram in a chapter chip of the top row
 const DIM = withAlpha(hud.bg, 0.78); // an inactive chip on the picture
 const OUTLINE = withAlpha(hud.text, 0.35);
 export const HANDS_FILL = withAlpha(hud.accent, 0.35);
 const HEAD_PROPOSED_FILL = withAlpha(hud.text, 0.3);
 const SWATCH_ON_FILL = withAlpha(INK, 0.2);
-export const FINE_REACH = 8; // the fine strip holds the proposal +-8 frames, +-4 in view
 
 // --- The marks on the picture ------------------------------------------------------------------
 
@@ -158,7 +161,7 @@ function MarkLayerImpl({
 
 export const MarkLayer = memo(MarkLayerImpl);
 
-// --- The dock: what you are moving (selector and legend in one) -------------------------------
+// --- The dock: what you are moving (selector and legend in one), inside the video on the left ---
 
 function MarkDockImpl({
   active, statuses, ballOff, onSelect, style,
@@ -179,7 +182,7 @@ function MarkDockImpl({
             accessibilityLabel={T.dockLabel(T.names[m], word)}
             testID={`dock-${m}`}
           >
-            <Swatch mark={m} on={on} />
+            <Swatch mark={m} on={on} size={14} />
             <Text style={[styles.dkName, on && styles.dkInk]}>{T.names[m]}</Text>
             <Text style={[styles.dkWord, on && styles.dkInk]} numberOfLines={1}>{word}</Text>
           </Pressable>
@@ -198,174 +201,153 @@ export function Swatch({ mark, on = false, size = 16 }) {
   return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2.5, borderColor: ink ?? MARK_COLOR.ball }} />;
 }
 
-// --- The stop line (V1, always visible) and its cue panel ---------------------------------------
+// --- The cue, inside the video (step 1): pictogram, FIRST / LAST FRAME, stop phrase, "watch …" ----
 
-function StopLineImpl({ cue, open, onToggle, mirror = false }) {
+/**
+ * The compact card at the top-left of the video; a tap (or "More") expands the full cue over the
+ * top of the video, and a tap on that closes it. Positions without a stop line (the internal
+ * frames) show their `stopWhen` sentence.
+ */
+function CueCardImpl({
+  cue, open, onToggle, mirror = false,
+}) {
   if (!cue) return null;
   const stop = cue.stop;
+  if (open) {
+    return (
+      <Pressable style={styles.cueFull} onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded: true }} accessibilityLabel={T.less} testID="mark-cue">
+        <Text style={styles.cueText}>
+          <Text style={styles.cueBold}>{`${cue.name}${cue.p ? ` · ${cue.p}` : ''}`}</Text>
+          {` — ${cue.what}`}
+        </Text>
+        <Text style={styles.cueText}><Text style={styles.cueBold}>{T.cueStop}</Text>{cue.stopWhen}</Text>
+        <Text style={styles.cueText}><Text style={styles.cueBold}>{T.cueMark}</Text>{cue.markTips}</Text>
+        <Text style={styles.moreText}>{T.less}</Text>
+      </Pressable>
+    );
+  }
   return (
-    <>
-      <View style={styles.stop} accessibilityLiveRegion="polite" testID="mark-stop-line">
-        {PICTOGRAM_KEYS.includes(cue.key) ? (
-          <View style={styles.pict}>
-            <Pictogram swingKey={cue.key} size={PICT_SIZE} color={hud.textSoft} accent={hud.accent} mirror={mirror} testID="mark-pictogram" />
-          </View>
-        ) : null}
-        {stop ? (
-          <View style={[styles.kind, stop.kind === 'last' && styles.kindLast]} accessibilityLabel={stop.kind === 'first' ? 'First frame' : 'Last frame'}>
-            <Text style={styles.kindText}>{T.stopKind[stop.kind]}</Text>
-          </View>
-        ) : null}
-        <View style={styles.stopTxt} accessible accessibilityLabel={stop ? T.stopA11y(stop.kind, stop.short, stop.watch) : cue.stopWhen}>
-          <Text style={styles.stopMain}>
-            <Text style={styles.bold}>{`${cue.name}: `}</Text>
-            {stop ? stop.short : cue.stopWhen}
-          </Text>
-          {stop ? <Text style={styles.stopWatch}>{T.watch(stop.watch)}</Text> : null}
-        </View>
-        <Pressable onPress={onToggle} style={styles.more} hitSlop={{ top: 6, bottom: 6, left: 4 }} accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={open ? T.less : T.more}>
-          <Text style={styles.moreText}>{open ? T.less : T.more}</Text>
-        </Pressable>
-      </View>
-      {open ? (
-        <View style={styles.cue} testID="mark-cue">
-          <Text style={styles.cueText}>
-            <Text style={styles.cueBold}>{`${cue.name}${cue.p ? ` · ${cue.p}` : ''}`}</Text>
-            {` — ${cue.what}`}
-          </Text>
-          <Text style={styles.cueText}><Text style={styles.cueBold}>{T.cueStop}</Text>{cue.stopWhen}</Text>
-          <Text style={styles.cueText}><Text style={styles.cueBold}>{T.cueMark}</Text>{cue.markTips}</Text>
+    <Pressable
+      style={styles.cue}
+      onPress={onToggle}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: false }}
+      accessibilityLabel={`${cue.name}. ${stop ? T.stopA11y(stop.kind, stop.short, stop.watch) : cue.stopWhen} ${T.more}`}
+      accessibilityLiveRegion="polite"
+      testID="mark-stop-line"
+    >
+      {PICTOGRAM_KEYS.includes(cue.key) ? (
+        <View style={styles.pict}>
+          <Pictogram swingKey={cue.key} size={CUE_PICT} color={hud.textSoft} accent={hud.accent} mirror={mirror} testID="mark-pictogram" />
         </View>
       ) : null}
-    </>
+      <View style={styles.cueTx}>
+        <View style={styles.cueLine}>
+          {stop ? (
+            <View style={[styles.kind, stop.kind === 'last' && styles.kindLast]}>
+              <Text style={styles.kindText}>{T.stopKind[stop.kind]}</Text>
+            </View>
+          ) : null}
+          <Text style={styles.cueMain} numberOfLines={2}>{stop ? stop.short : cue.stopWhen}</Text>
+        </View>
+        {stop ? <Text style={styles.cueWatch} numberOfLines={1}>{T.watch(stop.watch)}</Text> : null}
+      </View>
+      <Text style={styles.moreText}>{T.more}</Text>
+    </Pressable>
   );
 }
 
-export const StopLine = memo(StopLineImpl);
+export const CueCard = memo(CueCardImpl);
 
-// --- The fine strip (V2): the neighbours of the position's frame --------------------------------
+// --- The top row: close, the six positions as pictogram chips with a status dot, the count -------
 
 /**
- * Frames `center` +-8 (+-4 in view, the rest by dragging), the proposal flagged, the condition
- * as before / after captions at the ends, a tap previews a frame, ‹ › step one frame.
- * `frame` is the position's frame now (it moves when the golfer adopts another one).
+ * `current` is the open position (none for an automatic frame); `count` and `sub` are the two
+ * lines at the right ("3/6", "2 ✓ · 1 skip"). Confirmed is a filled dot, skipped a filled square,
+ * to do a ring: shape as well as colour.
  */
-function FineStripImpl({
-  center, proposed, frame, view, maxFrame, stillFor, onPreview, before, after, width,
+function MarkChipsImpl({
+  status, current = null, onSelect, onClose, closeLabel, count, sub, mirror = false,
 }) {
-  const scroll = useRef(null);
-  const gap = 4;
-  const thumbW = Math.max(44, Math.floor((width - gap * 8) / 9)); // a 44 dp target; narrow phones scroll more
-  const frames = [];
-  for (let off = -FINE_REACH; off <= FINE_REACH; off += 1) {
-    const f = center + off;
-    if (f >= 0 && f <= maxFrame) frames.push(f);
-  }
-  const startX = Math.max(0, (frames.indexOf(center) - 4) * (thumbW + gap));
-  useEffect(() => { scroll.current?.scrollTo?.({ x: startX, animated: false }); }, [center, startX]);
-  const off = view - proposed;
-  const flag = view !== frame ? T.previewFlag(view, off) : frame === proposed ? T.proposedFlag(frame) : T.currentFlag(frame, off);
   return (
-    <View style={styles.fine} testID="mark-fine-strip">
-      <View style={styles.fcap}>
-        <Pressable style={styles.step} onPress={() => onPreview(view - 1)} disabled={view <= 0} accessibilityRole="button" accessibilityLabel={T.prevFrame}>
-          <Feather name="chevron-left" size={18} color={hud.textSoft} />
-        </Pressable>
-        <Text style={styles.fcapText} numberOfLines={1}>{before ? `← ${before}` : ''}</Text>
-        <View style={[styles.flag, view !== proposed && styles.flagOff]}>
-          <Text style={[styles.flagText, view !== proposed && styles.flagTextOff]} numberOfLines={1}>{flag}</Text>
-        </View>
-        <Text style={[styles.fcapText, styles.right]} numberOfLines={1}>{after ? `${after} →` : ''}</Text>
-        <Pressable style={styles.step} onPress={() => onPreview(view + 1)} disabled={view >= maxFrame} accessibilityRole="button" accessibilityLabel={T.nextFrame}>
-          <Feather name="chevron-right" size={18} color={hud.textSoft} />
-        </Pressable>
-      </View>
-      <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap }}>
-        {frames.map((f) => {
-          const uri = stillFor(f);
-          const isProp = f === proposed;
-          const isOn = f === view;
+    <View style={styles.chrow} testID="mark-chapters">
+      <Pressable style={styles.x} onPress={onClose} accessibilityRole="button" accessibilityLabel={closeLabel} testID="mark-close">
+        <Feather name="x" size={20} color={hud.text} />
+      </Pressable>
+      <View style={styles.chips} accessibilityRole="tablist">
+        {MARKED_KEYS.map((k) => {
+          const st = positionStatus(status, k);
+          const on = k === current;
           return (
             <Pressable
-              key={f}
-              style={[styles.thumb, { width: thumbW }]}
-              onPress={() => onPreview(f)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isOn }}
-              accessibilityLabel={T.thumbLabel(f, f - proposed)}
-              testID={`fine-${f}`}
+              key={k}
+              style={[styles.ch, on && styles.chOn]}
+              onPress={() => onSelect(k)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={T.chapterA11y(SWING_STRINGS.checkpoint[k], st)}
+              testID={`chapter-${k}`}
             >
-              <View style={[styles.ft, { width: thumbW, height: Math.round(thumbW * 1.35) }, isProp && styles.ftProp, isOn && styles.ftOn, Math.abs(f - center) > 3 && !isOn && styles.ftSide]}>
-                {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : (
-                  <Text style={styles.ftWait} accessibilityElementsHidden importantForAccessibility="no">…</Text>
-                )}
-                {isProp ? <View style={styles.pf} /> : null}
-              </View>
-              <Text style={[styles.fn, isProp && styles.fnProp, isOn && styles.fnOn]}>{f}</Text>
+              <Pictogram swingKey={k} size={CHIP_PICT} color={on ? hud.text : hud.textMuted} accent={hud.accent} mirror={mirror} />
+              <View style={[styles.cd, st === 'confirmed' && styles.cdDone, st === 'skipped' && styles.cdSkip]} />
             </Pressable>
           );
         })}
-      </ScrollView>
+      </View>
+      <View style={styles.cnt} accessible accessibilityLabel={`${count}, ${sub}`} testID="mark-count">
+        <Text style={styles.cntMain} numberOfLines={1}>{count}</Text>
+        <Text style={styles.cntSub} numberOfLines={1}>{sub}</Text>
+      </View>
     </View>
   );
 }
 
-/** `stillFor` is stable, so a still that has just arrived is flagged through `loaded` (the strip's own props otherwise stand). */
-export const FineStrip = memo(FineStripImpl);
+export const MarkChips = memo(MarkChipsImpl);
 
 const styles = StyleSheet.create({
-  bold: { fontFamily: 'PlusJakartaSans-ExtraBold' },
-  dock: { gap: 8 },
+  dock: { gap: 6 },
   dk: {
-    width: 62, minHeight: 60, borderRadius: 16, backgroundColor: hud.scrim, borderWidth: 1.5, borderColor: hud.line,
-    alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 6, paddingHorizontal: 2,
+    width: 56, minHeight: 54, borderRadius: 12, backgroundColor: hud.scrimStrong, borderWidth: 1.5, borderColor: hud.line,
+    alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 5, paddingHorizontal: 2,
   },
   dkOn: { backgroundColor: hud.text, borderColor: hud.text },
   dkOff: { opacity: 0.4 },
-  dkName: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, letterSpacing: 0.5, textTransform: 'uppercase', color: hud.textSoft },
-  dkWord: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 8, color: hud.textSoft, opacity: 0.9 },
+  dkName: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 8.5, letterSpacing: 0.4, textTransform: 'uppercase', color: hud.textSoft },
+  dkWord: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 7.5, color: hud.textSoft, opacity: 0.85 },
   dkInk: { color: INK },
 
-  stop: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: hud.inset, borderWidth: 1, borderColor: hud.border,
-    borderRadius: 12, paddingVertical: 8, paddingHorizontal: 10,
+  cue: {
+    position: 'absolute', left: 8, top: 8, right: 60, maxHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: hud.scrimStrong, borderWidth: 1, borderColor: hud.line, borderRadius: 14, paddingVertical: 7, paddingLeft: 7, paddingRight: 10,
   },
-  pict: { width: PICT_SIZE, height: PICT_SIZE, borderRadius: 8, backgroundColor: hud.fill, alignItems: 'center', justifyContent: 'center' },
-  kind: { backgroundColor: hud.accent, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, marginTop: 1 },
+  pict: { width: 48, height: 48, borderRadius: 10, backgroundColor: hud.fill, alignItems: 'center', justifyContent: 'center' },
+  cueTx: { flex: 1 },
+  cueLine: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
+  kind: { backgroundColor: hud.accent, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2, marginTop: 1 },
   kindLast: { backgroundColor: HUD_WARN },
-  kindText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, letterSpacing: 0.8, color: hud.onAccent },
-  stopTxt: { flex: 1 },
-  stopMain: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12.5, lineHeight: 17, color: hud.text },
-  stopWatch: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: hud.textMuted, marginTop: 1 },
-  more: { minWidth: 44, minHeight: 32, alignItems: 'center', justifyContent: 'center', marginVertical: -4, marginRight: -6 },
-  moreText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: hud.accent },
-  cue: { backgroundColor: hud.inset, borderWidth: 1, borderColor: hud.border, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, gap: 4 },
-  cueText: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, lineHeight: 17, color: hud.textSoft },
+  kindText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 8.5, letterSpacing: 0.8, color: hud.onAccent },
+  cueMain: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, lineHeight: 16, color: hud.text },
+  cueWatch: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10.5, color: hud.textSoft, marginTop: 2 },
+  moreText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11.5, color: hud.accent },
+  cueFull: {
+    position: 'absolute', left: 0, right: 0, top: 0, gap: 6, paddingTop: 10, paddingHorizontal: 12, paddingBottom: 14,
+    backgroundColor: hud.scrimStrong,
+  },
+  cueText: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12.5, lineHeight: 18, color: hud.textSoft },
   cueBold: { fontFamily: 'PlusJakartaSans-Bold', color: hud.text },
 
-  fine: { gap: 4 },
-  fcap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  step: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: hud.fill },
-  fcapText: { flex: 1, fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: hud.textMuted },
-  right: { textAlign: 'right' },
-  flag: { borderRadius: 999, borderWidth: 1, borderColor: hud.line, backgroundColor: hud.fill, paddingHorizontal: 8, paddingVertical: 2, maxWidth: '50%' },
-  flagOff: { borderColor: HUD_WARN },
-  flagText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: hud.text, fontVariant: ['tabular-nums'] },
-  flagTextOff: { color: HUD_WARN },
-  thumb: { alignItems: 'center', gap: 2, minHeight: 44 },
-  ft: {
-    borderRadius: 5, overflow: 'hidden', backgroundColor: hud.inset, borderWidth: 1.5, borderColor: 'transparent', opacity: 0.75,
-    alignItems: 'center', justifyContent: 'center',
+  chrow: { height: 52, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4 },
+  x: { width: 44, height: 44, borderRadius: 22, backgroundColor: hud.fill, alignItems: 'center', justifyContent: 'center' },
+  chips: { flex: 1, flexDirection: 'row', gap: 3 },
+  ch: {
+    flex: 1, height: 44, borderRadius: 10, backgroundColor: hud.fill, borderWidth: 1.5, borderColor: 'transparent',
+    alignItems: 'center', justifyContent: 'center', gap: 1,
   },
-  ftProp: { opacity: 1, borderColor: hud.accent },
-  ftOn: { opacity: 1, borderColor: hud.text },
-  ftSide: { opacity: 0.55 },
-  pf: {
-    position: 'absolute', top: -1, alignSelf: 'center', width: 0, height: 0,
-    borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 6, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: hud.accent,
-  },
-  ftWait: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: hud.textMuted }, // still being extracted
-  fn: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 8, color: hud.textMuted, fontVariant: ['tabular-nums'] },
-  fnProp: { color: hud.accent },
-  fnOn: { color: hud.text },
+  chOn: { borderColor: hud.text, backgroundColor: withAlpha(hud.text, 0.14) },
+  cd: { width: 6, height: 6, borderRadius: 3, borderWidth: 1.5, borderColor: hud.textMuted },
+  cdDone: { backgroundColor: hud.accent, borderColor: hud.accent },
+  cdSkip: { backgroundColor: HUD_WARN, borderColor: HUD_WARN, borderRadius: 1 },
+  cnt: { width: 44, alignItems: 'center' },
+  cntMain: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, color: hud.textSoft, fontVariant: ['tabular-nums'] },
+  cntSub: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9, color: hud.textMuted, fontVariant: ['tabular-nums'] },
 });
