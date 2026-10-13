@@ -81,7 +81,7 @@ describe('LeagueBoardScreen', () => {
     expect(getByText('No card yet · 3')).toBeTruthy();
     expect(getByText('You, Javi, Nacho')).toBeTruthy();
     expect(queryByText(/^Confirmed ·/)).toBeNull();
-    expect(getByText(/^Gold = table points if the month ended today/)).toBeTruthy();
+    expect(getByText(/^PTS = Stableford\. LEAGUE = league points if \w+ ended today\./)).toBeTruthy();
     fireEvent.press(getByText('Season'));
     expect(getAllByText('—')).toHaveLength(3);
     expect(getByText(/No cards yet\. .* is open: the board fills in as each card is confirmed\./)).toBeTruthy();
@@ -128,7 +128,7 @@ describe('LeagueBoardScreen', () => {
       },
     }));
     const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
-    await waitFor(() => getByText('4.0 worse than your handicap · 36 pts · Golf Olivar · added after the round · photo attached'));
+    await waitFor(() => getByText('36 pts · 1st so far · +500 league pts · Golf Olivar · added after the round · photo attached'));
   });
 
   test('a submitted off-app card without proof offers "Add proof" (resume)', async () => {
@@ -277,7 +277,7 @@ describe('LeagueBoardScreen', () => {
     }));
     const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Confirmed'));
-    expect(getByText('4.0 worse than your handicap · 36 pts · Golf Olivar · confirmed by Lucía')).toBeTruthy();
+    expect(getByText('36 pts · 1st so far · +500 league pts · Golf Olivar · confirmed by Lucía')).toBeTruthy();
     expect(queryByText('Play with the app')).toBeNull();
   });
 
@@ -288,7 +288,8 @@ describe('LeagueBoardScreen', () => {
     const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Awaiting approval · 1'));
     expect(getByText("Needs an admin's approval · not announced in the app")).toBeTruthy();
-    expect(getByText('10.0 worse')).toBeTruthy();
+    expect(getByText('30')).toBeTruthy();
+    expect(queryByText(/worse|better/)).toBeNull();
     expect(getByText('not counted')).toBeTruthy();
     expect(queryByText(/^Confirmed ·/)).toBeNull();
   });
@@ -373,8 +374,11 @@ describe('LeagueBoardScreen', () => {
     const { getByText, getAllByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Confirmed · 1'));
     expect(getByText('Olivar · marker by QR')).toBeTruthy();
-    expect(getByText('2.0 worse')).toBeTruthy();
-    expect(getAllByText('5.0 worse')).toHaveLength(2); // my card block + the waiting row
+    expect(getByText('38')).toBeTruthy(); // Stableford points under PTS
+    expect(getByText('PTS', { includeHiddenElements: true })).toBeTruthy();
+    expect(getByText('LEAGUE', { includeHiddenElements: true })).toBeTruthy();
+    expect(getAllByText(/35/).length).toBeGreaterThan(0); // my card block + the waiting row
+    expect(queryByText(/worse|better/)).toBeNull();
     expect(getByText('+500')).toBeTruthy();
     expect(getByText('Waiting for confirmation · 1')).toBeTruthy();
     expect(getByText("Olivar · marker hasn't scanned the QR yet")).toBeTruthy();
@@ -398,9 +402,10 @@ describe('LeagueBoardScreen', () => {
         ],
       },
     }));
-    const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Confirmed · 2'));
-    expect(getByText('2.4 better')).toBeTruthy();
+    expect(getByText('38')).toBeTruthy();
+    expect(queryByText(/worse|better/)).toBeNull();
     expect(getByText('unrated')).toBeTruthy();
     expect(getByText('not ranked')).toBeTruthy();
     expect(getByText(/Nacho's card has no slope or rating\. Shown, not ranked\.$/)).toBeTruthy();
@@ -478,7 +483,7 @@ describe('LeagueBoardScreen', () => {
   });
 
 
-  test("a month's results rank by points and still speak the net differential; an unscored card is listed, not ranked", async () => {
+  test("a month's results rank by points with PTS and LEAGUE columns; an unscored card is listed, not ranked", async () => {
     store.getLeague.mockResolvedValue(snapshot({
       cardsByMonth: {
         [PAST_MONTH]: [
@@ -488,11 +493,14 @@ describe('LeagueBoardScreen', () => {
         ],
       },
     }));
-    const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Sep'));
     fireEvent.press(getByText('Sep'));
-    expect(getByText('2.4 better')).toBeTruthy();
-    expect(getByText('3.1 worse')).toBeTruthy();
+    expect(getByText('38')).toBeTruthy();
+    expect(getByText('30')).toBeTruthy();
+    expect(getByText('PTS', { includeHiddenElements: true })).toBeTruthy();
+    expect(getByText('LEAGUE', { includeHiddenElements: true })).toBeTruthy();
+    expect(queryByText(/worse|better/)).toBeNull();
     expect(getByText('unrated')).toBeTruthy();
     expect(getByText('not ranked')).toBeTruthy();
     expect(getByText('Your card has no slope or rating. Shown, not ranked.')).toBeTruthy();

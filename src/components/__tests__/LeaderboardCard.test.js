@@ -73,4 +73,31 @@ describe('LeaderboardCard', () => {
     expect(getByText('unrated')).toBeTruthy();
     expect(getByText('not ranked')).toBeTruthy();
   });
+
+  test('a section with column heads lines its points under them and speaks both units', () => {
+    const { getByText, getByLabelText } = render(wrap(
+      <LeaderboardCard
+        title="T"
+        sections={[{
+          key: 'c', label: 'Confirmed · 1', icon: 'check', gold: true, cols: ['PTS', 'LEAGUE'],
+          rows: [{
+            key: 'a', place: 1, name: 'Ann', points: '41', white: true, sub: '+500', subGold: true,
+            pointsLabel: '41 Stableford points', subLabel: 'plus 500 league points', detail: 'Sotogrande · shares 1st + 2nd',
+          }],
+        }]}
+      />,
+    ));
+    expect(getByText('PTS', { includeHiddenElements: true })).toBeTruthy();
+    expect(getByText('LEAGUE', { includeHiddenElements: true })).toBeTruthy();
+    expect(getByLabelText('41 Stableford points')).toBeTruthy();
+    expect(getByLabelText('plus 500 league points')).toBeTruthy();
+    expect(getByText('Sotogrande · shares 1st + 2nd')).toBeTruthy();
+  });
+
+  test('sections without cols render no column heads', () => {
+    const { queryByText } = render(wrap(
+      <LeaderboardCard title="T" sections={[{ key: 'c', label: 'Confirmed · 1', icon: 'check', rows: [{ key: 'a', place: 1, name: 'Ann', points: '41' }] }]} />,
+    ));
+    expect(queryByText('PTS', { includeHiddenElements: true })).toBeNull();
+  });
 });

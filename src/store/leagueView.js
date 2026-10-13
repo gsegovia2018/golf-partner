@@ -4,6 +4,7 @@ import { cardMonth, isMissed, needsApproval, deadlineInfo } from './leagueRules'
 import { seasonTable, monthResults } from './leagueStandings';
 import { isRatedTee, netDoubleBogeyCap } from './handicapIndex';
 import { calcExtraShots, calcStablefordPoints } from './scoring';
+import { formatNumber, formatOrdinal } from '../i18n';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -85,12 +86,41 @@ export function deltaLabel(delta, month) {
   return `+${formatPoints(delta)} ${monthName(month, true)}`;
 }
 
-// "2nd of 7 · 2,340 pts" for the Play tab row; null until anyone has a card.
-export function positionText(table, userId, cardsByMonth) {
+// "T2nd" for a tie, "4th" otherwise.
+export const placeLabel = (place, isTie) => `${isTie ? 'T' : ''}${formatOrdinal(place)}`;
+
+// League points as shown on the board: 135 -> '135', 111.67 -> '111.7'.
+export const leaguePointsText = (n) => formatNumber(n, { maxDecimals: 1 });
+
+// The places a tie group occupies: "2nd + 3rd" for two, "4th–6th" for more.
+export function tiePlaces(place, size) {
+  const first = formatOrdinal(place);
+  const last = formatOrdinal(place + size - 1);
+  return size === 2 ? `${first} + ${last}` : `${first}–${last}`;
+}
+
+// Why a ranked row's league points are what they are: who it shares the
+// places with, and whether the participation floor lifted it. Message
+// descriptors (see docs/i18n.md); takes a monthResults / monthBoard row.
+export function rankNotes(row) {
+  const notes = [];
+  if (row?.isTie && row.tieSize > 1) {
+    notes.push({ key: 'league.board.shares', params: { places: tiePlaces(row.place, row.tieSize) } });
+  }
+  if (row?.floored) notes.push({ key: 'league.board.forPlaying' });
+  return notes;
+}
+
+// "4th of 18 · 1,045 league pts" for the Play tab row, as a message
+// descriptor; null until anyone has a card.
+export function positionMessage(table, userId, cardsByMonth) {
   if (!lastScoredMonth(cardsByMonth)) return null;
   const row = (table ?? []).find((r) => r.userId === userId);
   if (!row) return null;
-  return `${row.isTie ? 'T' : ''}${ordinal(row.place)} of ${table.length} · ${formatPoints(row.total)} pts`;
+  return {
+    key: 'league.play.position',
+    params: { place: placeLabel(row.place, row.isTie), total: table.length, points: leaguePointsText(row.total) },
+  };
 }
 
 const STATUS_RANK = { confirmed: 0, submitted: 1, playing: 2, announced: 3, missed: 4 };
@@ -191,6 +221,7 @@ export function monthBoard(members, cardsByMonth, month, pointsTable, now = new 
     confirmed.push({
       member, card, place: r.place, isTie: r.isTie, unrated: !!r.unrated,
       netDifferential: r.netDifferential, cardPoints: r.cardPoints, seasonPoints: r.seasonPoints,
+      tieSize: r.tieSize, floored: !!r.floored,
       how: HOW_CONFIRMED[card.confirmation] ?? null,
     });
   }
@@ -323,13 +354,94 @@ export function myRoundScored(tournament, roundId, userId) {
   });
 }
 
-// Season table + "2nd of 7 · 2,340 pts" for one league snapshot (the shape
+// My standing in one month of a league snapshot: { place, isTie, of, points,
+// seasonPoints, floored } for my counting card, or null when I have none.
+// `of` = the cards that rank that month.
+export function monthStanding({ league, members, cardsByMonth }, month, userId, now = new Date()) {
+  const board = monthBoard(members, cardsByMonth, month, league.pointsTable, now,
+    { participationPoints: league.participationPoints });
+  const ranked = board.confirmed.filter((r) => r.place != null);
+  const row = ranked.find((r) => r.member.userId === userId);
+  if (!row) return null;
+  return {
+    place: row.place, isTie: row.isTie, of: ranked.length, points: row.cardPoints,
+    seasonPoints: row.seasonPoints, floored: row.floored,
+  };
+}
+
+// The card screen's two cells under the Stableford headline: my place, and
+// what it pays in league points. `current` = the month is still open
+// (places can move, points are "if it ended today").
+export function standingCells(standing, { month, current }) {
+  return {
+    place: placeLabel(standing.place, standing.isTie),
+    placeNote: current
+      ? { key: 'league.card.soFarIn', params: { monthKey: month } }
+      : { key: 'league.card.ofCards', params: { count: standing.of } },
+    lp: `+${leaguePointsText(standing.seasonPoints)}`,
+    lpNote: standing.floored ? { key: 'league.card.forPlaying' }
+      : { key: current ? 'league.card.ifEndedToday' : 'league.card.leaguePts' },
+  };
+}
+
+// The second, muted line of the Play tab row: where my card for the open
+// month stands. Message descriptor, null for an archived league.
+export function monthLine(snapshot, userId, now = new Date()) {
+  if (snapshot.league.archivedAt) return null;
+  const monthKey = currentMonthKey(now);
+  const card = (snapshot.cardsByMonth?.[monthKey] ?? []).find((c) => c.userId === userId && c.status !== 'void') ?? null;
+  const left = daysLeftInMonth(now);
+  if (!card) {
+    return left === 0
+      ? { key: 'league.play.monthNoneLast', params: { monthKey } }
+      : { key: 'league.play.monthNone', params: { monthKey, count: left } };
+  }
+  if (isMissed(card, now)) return { key: 'league.play.monthMissed', params: { monthKey } };
+  const standing = monthStanding(snapshot, monthKey, userId, now);
+  if (!standing) return { key: 'league.play.monthLive', params: { monthKey } };
+  return {
+    key: 'league.play.monthRank',
+    params: { monthKey, points: formatNumber(standing.points), place: placeLabel(standing.place, standing.isTie) },
+  };
+}
+
+// What the participation floor pays, for the rules screens: a row per place
+// of the table (lifted to the floor), then the places past the table. With
+// `count` (the members) the range is closed ("13th–18th"); without, open
+// ("13th on"). Items: { label, points } or { gap: true }; `rest` is the floor
+// range; `zero` is true when the floor is 0 (playing past the table pays
+// nothing). null for an invalid table.
+export function payoutPreview(pointsTable, floor, count = null) {
+  if (!Array.isArray(pointsTable) || pointsTable.length === 0) return null;
+  const f = Math.max(0, Number(floor) || 0);
+  const shown = (count != null && count < pointsTable.length ? pointsTable.slice(0, count) : pointsTable)
+    .map((v) => Math.max(Number(v) || 0, f));
+  const item = (i) => ({ label: formatOrdinal(i + 1), points: formatNumber(shown[i]) });
+  const items = shown.length <= 3
+    ? shown.map((_, i) => item(i))
+    : [item(0), item(1), { gap: true }, item(shown.length - 1)];
+  let rest = null;
+  const start = pointsTable.length + 1;
+  if (count == null || count >= start) {
+    const label = count == null ? { open: formatOrdinal(start) }
+      : { from: formatOrdinal(start), to: formatOrdinal(count), single: count === start };
+    rest = { ...label, points: formatNumber(f) };
+  }
+  return { items, rest, zero: f === 0 && !!rest };
+}
+
+// Participation points stepper: step 5, never below 0.
+export const PARTICIPATION_STEP = 5;
+export const stepParticipation = (value, direction) => Math.max(0, (Number(value) || 0) + direction * PARTICIPATION_STEP);
+
+// Season table + position + month line for one league snapshot (the shape
 // leagueStore.getLeague returns and caches).
-export function leagueSummary(snapshot, meId) {
+export function leagueSummary(snapshot, meId, now = new Date()) {
   const { league, members, cardsByMonth } = snapshot;
   const table = seasonTable((members ?? []).filter((m) => !m.leftAt), cardsByMonth, league.pointsTable,
     { participationPoints: league.participationPoints });
-  return { table, position: positionText(table, meId, cardsByMonth) };
+  const position = positionMessage(table, meId, cardsByMonth);
+  return { table, position, month: position ? monthLine(snapshot, meId, now) : null };
 }
 
 // Season table on a long league: the top `top` rows, then a gap and my row

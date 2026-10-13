@@ -43,6 +43,8 @@ function sharedPoints(table, place, size) {
 // ranked ones. A confirmed card from someone no longer in `members` (a member
 // who left keeps past cards) still ranks. Rows carry the ranking value
 // `cardPoints` and the card's `netDifferential` (secondary information).
+// Ranked rows also carry `tieSize` (members on that place) and `floored`
+// (the floor lifted the row above its table share).
 export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE, { participationPoints = 0 } = {}) {
   const floor = Math.max(0, Number(participationPoints) || 0);
   const best = new Map();
@@ -64,14 +66,20 @@ export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE,
   const sizes = {};
   placed.forEach((r) => { sizes[r.place] = (sizes[r.place] ?? 0) + 1; });
 
-  const rows = placed.map((r) => ({
-    userId: r.userId,
-    place: r.place,
-    isTie: r.isTie,
-    netDifferential: r.netDifferential,
-    cardPoints: r.cardPoints,
-    seasonPoints: Math.max(sharedPoints(pointsTable, r.place, sizes[r.place]), floor),
-  }));
+  const rows = placed.map((r) => {
+    const share = sharedPoints(pointsTable, r.place, sizes[r.place]);
+    return {
+      userId: r.userId,
+      place: r.place,
+      isTie: r.isTie,
+      tieSize: sizes[r.place],
+      netDifferential: r.netDifferential,
+      cardPoints: r.cardPoints,
+      seasonPoints: Math.max(share, floor),
+      // The place's own share is under the floor: the row got "points for playing".
+      floored: share < floor,
+    };
+  });
 
   const seen = new Set(best.keys());
   for (const userId of unrated) {

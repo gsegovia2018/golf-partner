@@ -6,16 +6,17 @@ import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import PullToRefresh from '../components/PullToRefresh';
+import { useT } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { seasonTable } from '../store/leagueStandings';
 import { needsApproval } from '../store/leagueRules';
 import {
-  monthName, memberName, currentMonthKey, formatNetDiff, formatNetDiffSigned,
+  monthName, memberName, currentMonthKey,
 } from '../store/leagueView';
 import {
-  MIN_HONOUR_CARDS, monthHonours, monthSummary, statLeaders, seasonGrid, rivals, rivalMonths,
+  MIN_HONOUR_CARDS, monthHonours, monthSummary, statLeaders, seasonGrid, pointsBand, rivals, rivalMonths,
 } from '../store/leagueStats';
 
 const TABS = [
@@ -40,6 +41,7 @@ const HONOUR_ICON = {
 // confirmed cards the league snapshot already carries. Cache first, then live.
 export default function LeagueStatsScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const { user } = useAuth();
   const s = makeStyles(theme);
   const meId = user?.id ?? null;
@@ -193,15 +195,17 @@ export default function LeagueStatsScreen({ navigation, route }) {
   const renderGrid = () => {
     if (scored.length === 0) return <Text style={s.emptyNote}>No confirmed cards yet.</Text>;
     const grid = seasonGrid(cardsByMonth, table, scored);
-    // Net differential bands: level or better, up to 3 worse, 3 or more worse.
-    const high = (c) => c.netDifferential != null && c.netDifferential <= 0;
+    // Stableford point bands (the month ranks by points).
+    const high = (c) => pointsBand(c.points) === 'high';
+    const BAND_STYLE = { high: s.cellHigh, mid: s.cellMid, low: s.cellLow };
     const cellStyle = (c) => {
       if (c.cardId == null) return [s.cell, s.cellNone];
       if (c.unrated) return [s.cell, s.cellLow];
-      const base = high(c) ? s.cellHigh : (c.netDifferential < 3 ? s.cellMid : s.cellLow);
-      return [s.cell, base, c.best && { borderWidth: 2, borderColor: gold }];
+      return [s.cell, BAND_STYLE[pointsBand(c.points)], c.best && { borderWidth: 2, borderColor: gold }];
     };
-    const cellLabel = (c) => (c.unrated ? 'unrated, not ranked' : formatNetDiff(c.netDifferential));
+    const cellLabel = (c, row) => (c.unrated
+      ? t('league.stats.cellUnrated', { name: nameOf(row.userId), month: monthName(c.month) })
+      : t('league.stats.cell', { name: nameOf(row.userId), month: monthName(c.month), points: c.points }));
     return (
       <>
         <View style={s.card}>
@@ -223,11 +227,10 @@ export default function LeagueStatsScreen({ navigation, route }) {
                       disabled={c.cardId == null}
                       onPress={() => navigation.navigate('LeagueCard', { leagueId, month: c.month, userId: row.userId })}
                       activeOpacity={0.7}
-                      accessibilityLabel={c.cardId == null ? undefined : `${nameOf(row.userId)}, ${monthName(c.month)}: ${cellLabel(c)}`}
+                      accessibilityLabel={c.cardId == null ? undefined : cellLabel(c, row)}
                     >
                       <Text style={[s.cellText, high(c) && s.cellTextHigh, (c.cardId == null || c.unrated) && s.muted]}>
-                        {c.cardId == null ? '–' : c.unrated ? 'NR'
-                          : c.netDifferential == null ? '—' : formatNetDiffSigned(c.netDifferential)}
+                        {c.cardId == null ? '–' : c.unrated ? 'NR' : String(c.points)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -237,9 +240,9 @@ export default function LeagueStatsScreen({ navigation, route }) {
           </ScrollView>
         </View>
         <View style={s.legend}>
-          <View style={s.legendItem}><View style={[s.swatch, s.cellHigh]} /><Text style={s.legendText}>Level or better</Text></View>
-          <View style={s.legendItem}><View style={[s.swatch, s.cellMid]} /><Text style={s.legendText}>Up to 3 worse</Text></View>
-          <View style={s.legendItem}><View style={[s.swatch, s.cellLow]} /><Text style={s.legendText}>3+ worse</Text></View>
+          <View style={s.legendItem}><View style={[s.swatch, s.cellHigh]} /><Text style={s.legendText}>{t('league.stats.band.high')}</Text></View>
+          <View style={s.legendItem}><View style={[s.swatch, s.cellMid]} /><Text style={s.legendText}>{t('league.stats.band.mid')}</Text></View>
+          <View style={s.legendItem}><View style={[s.swatch, s.cellLow]} /><Text style={s.legendText}>{t('league.stats.band.low')}</Text></View>
           <View style={s.legendItem}><Text style={[s.legendText, s.muted]}>NR</Text><Text style={s.legendText}>unrated, not ranked</Text></View>
           <View style={s.legendItem}><View style={[s.swatch, { borderWidth: 2, borderColor: gold }]} /><Text style={s.legendText}>Month winner</Text></View>
         </View>
@@ -296,16 +299,16 @@ export default function LeagueStatsScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {header}
       <View style={s.tabs}>
-        {TABS.map((t) => (
+        {TABS.map((tb) => (
           <TouchableOpacity
-            key={t.key}
-            style={[s.tab, tab === t.key && s.tabOn]}
-            onPress={() => setTab(t.key)}
+            key={tb.key}
+            style={[s.tab, tab === tb.key && s.tabOn]}
+            onPress={() => setTab(tb.key)}
             activeOpacity={0.7}
             accessibilityRole="tab"
-            accessibilityState={{ selected: tab === t.key }}
+            accessibilityState={{ selected: tab === tb.key }}
           >
-            <Text style={[s.tabText, tab === t.key && s.tabTextOn]}>{t.label}</Text>
+            <Text style={[s.tabText, tab === tb.key && s.tabTextOn]}>{tb.label}</Text>
           </TouchableOpacity>
         ))}
       </View>

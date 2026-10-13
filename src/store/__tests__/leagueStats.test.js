@@ -1,5 +1,5 @@
 import {
-  cardHoleStats, monthHonours, monthSummary, statLeaders, seasonGrid, rivals, rivalMonths,
+  cardHoleStats, monthHonours, monthSummary, statLeaders, seasonGrid, pointsBand, rivals, rivalMonths,
 } from '../leagueStats';
 
 const PARS = [4, 4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 3, 5, 4, 4, 3, 4, 5];
@@ -284,4 +284,9 @@ describe('rivals', () => {
     expect(rows.find((r) => r.userId === 'b')).toMatchObject({ months: 0 });
     expect(rows.find((r) => r.userId === 'c')).toMatchObject({ months: 1, won: 1 });
   });
+});
+
+test('pointsBand shades the season grid by Stableford points', () => {
+  expect([40, 36, 35, 33, 32, 0].map(pointsBand)).toEqual(['high', 'high', 'mid', 'mid', 'low', 'low']);
+  expect(pointsBand(null)).toBeNull();
 });

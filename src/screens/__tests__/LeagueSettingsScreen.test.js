@@ -34,7 +34,7 @@ function snapshot({ admin = true } = {}) {
   return {
     league: {
       id: 'L1', name: 'El Club', handicapCap: 30, entryFeeCents: 3000, archivedAt: null, inviteCode: 'MULL',
-      pointsTable: [500, 300, 190], seasonStart: '2026-01-01', seasonEnd: '2026-12-31',
+      pointsTable: [500, 300, 190], participationPoints: 10, seasonStart: '2026-01-01', seasonEnd: '2026-12-31',
     },
     members: [
       member('me', 'Marcos', { role: admin ? 'admin' : 'member' }),
@@ -70,11 +70,27 @@ describe('LeagueSettingsScreen', () => {
     fireEvent.changeText(getByDisplayValue('El Club'), 'El Club 2');
     fireEvent.changeText(getByDisplayValue('500, 300, 190'), '400, 250, 100');
     fireEvent.changeText(getByLabelText('Handicap cap'), '28');
+    fireEvent.press(getByLabelText('More points'));
     fireEvent.press(getByText('Save rules'));
     await waitFor(() => expect(store.updateLeagueRules).toHaveBeenCalledWith('L1', {
       name: 'El Club 2', seasonStart: '2026-01-01', seasonEnd: '2026-12-31',
-      pointsTable: [400, 250, 100], cap: 28, feeCents: 3000,
+      pointsTable: [400, 250, 100], cap: 28, feeCents: 3000, participationPoints: 15,
     }));
+  });
+
+  test('points for playing is a stepper (step 5, never below 0) with a live payout line', async () => {
+    store.getLeague.mockResolvedValue(snapshot());
+    const { getByText, getByLabelText, getByTestId } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByText('Points for playing'));
+    expect(getByText('Saving recomputes every month of the season.')).toBeTruthy();
+    // 2 members, table of 3: the preview lists the places that exist.
+    expect(getByTestId('payout-preview').props.children).toBeTruthy();
+    fireEvent.press(getByLabelText('Fewer points'));
+    fireEvent.press(getByLabelText('Fewer points'));
+    expect(getByLabelText('Fewer points').props.accessibilityState.disabled).toBe(true);
+    expect(getByLabelText('Points for playing, 0')).toBeTruthy();
+    fireEvent.press(getByLabelText('More points'));
+    expect(getByLabelText('Points for playing, 5')).toBeTruthy();
   });
 
   test('season dates are picked in the calendar sheet and the end cannot precede the start', async () => {
@@ -100,7 +116,9 @@ describe('LeagueSettingsScreen', () => {
   test('a plain member sees the rules read-only and no admin controls', async () => {
     store.getLeague.mockResolvedValue(snapshot({ admin: false }));
     const { getByText, queryByText, queryByDisplayValue } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
-    await waitFor(() => getByText('One card a month · net Stableford'));
+    await waitFor(() => getByText('One card a month · most Stableford points'));
+    expect(getByText('Points for playing')).toBeTruthy();
+    expect(getByText('10 for every confirmed card, whatever its place')).toBeTruthy();
     expect(queryByDisplayValue('El Club')).toBeNull();
     expect(queryByText('Save rules')).toBeNull();
     expect(queryByText('Archive the league')).toBeNull();

@@ -100,18 +100,19 @@ describe('LeagueValidateScreen', () => {
     expect(navigation.replace).toHaveBeenCalledWith('LeagueBoard', { leagueId: 'L1' });
   });
 
-  test('confirmed: a result card speaks the net differential and links to how it is worked out', async () => {
+  test('confirmed: a result card leads with the Stableford points and links to the card', async () => {
     store.confirmLeagueCardByPartner.mockResolvedValue({
       confirmed: true, settled: 18, partnerName: 'Javi', partnerUserId: 'user-2',
     });
     const navigation = makeNav();
-    const { findByText, getByText } = render(wrap(<LeagueValidateScreen navigation={navigation} route={route} />));
+    const { findByText, getByText, queryByText } = render(wrap(<LeagueValidateScreen navigation={navigation} route={route} />));
     fireEvent.press(await findByText('Submit'));
     // Yellow 125 / CR 72, league handicap 18: all 5s on par 4, playing handicap 20 -> cap 7, nothing capped.
     // differential = 113 / 125 x (90 - 72) = 16.3; net = 16.3 - 18 = -1.7.
-    expect(await findByText('1.7 better')).toBeTruthy();
-    expect(getByText('than your league handicap 18.0')).toBeTruthy();
-    expect(getByText('Net −1.7 · differential 16.3 · 38 pts · gross 90 (adjusted 90)')).toBeTruthy();
+    expect(await findByText('38')).toBeTruthy();
+    expect(getByText('Stableford pts')).toBeTruthy();
+    expect(getByText('Gross 90 (adjusted 90) · net differential −1.7, for reference')).toBeTruthy();
+    expect(queryByText(/better|worse/)).toBeNull();
     fireEvent.press(getByText("How it's worked out ›"));
     expect(navigation.navigate).toHaveBeenCalledWith('LeagueCard', expect.objectContaining({ leagueId: 'L1', userId: 'user-1' }));
   });
@@ -276,9 +277,8 @@ describe('LeagueValidateScreen: pick your marker', () => {
     expect(await findByText('Waiting for Javi to confirm')).toBeTruthy();
     expect(store.requestLeagueMarker).toHaveBeenCalledWith('card-1', 'user-2');
     expect(getByText(/^Asked just now · until 19 Oct$/)).toBeTruthy();
-    // 90 gross on Yellow 125/72, league handicap 18 -> 1.7 better.
-    expect(getByText('1.7 better')).toBeTruthy();
-    expect(getByText(/than your league handicap 18.0 · counts once confirmed/)).toBeTruthy();
+    expect(getByText(/38 pts.*Stableford · counts once confirmed/)).toBeTruthy();
+    expect(queryByText(/better|worse/)).toBeNull();
     expect(getByText('Remind Javi')).toBeTruthy();
     expect(getByText('MARKER NOT IN THE APP?')).toBeTruthy();
     expect(getByText('Back to the league')).toBeTruthy();

@@ -16,9 +16,11 @@ import { useMinuteClock } from '../hooks/useMinuteClock';
 import { isMissed, needsApproval, deadlineInfo } from '../store/leagueRules';
 import { seasonTable, monthResults } from '../store/leagueStandings';
 import {
-  monthName, formatPoints, formatNetDiff, formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard,
+  monthName, formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard, rankNotes, placeLabel,
+  leaguePointsText, monthStanding,
   daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, myRoundScored, viewableCards, monthRows,
 } from '../store/leagueView';
+import { useT, tr, formatNumber } from '../i18n';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
 import { getTournamentSnapshot } from '../store/tournamentStore';
 
@@ -34,6 +36,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const [scope, setScope] = useState(null); // null = this month (the season when archived)
   const [showAllSeason, setShowAllSeason] = useState(false);
   const now = useMinuteClock();
+  const t = useT();
 
   const view = useMemo(() => {
     if (!data) return null;
@@ -105,7 +108,6 @@ export default function LeagueBoardScreen({ navigation, route }) {
   // ---- Standings card ------------------------------------------------------
 
   let boardTitle;
-  let boardRows;
   let boardSections;
   let boardFooter = null;
   let boardMore = null;
@@ -134,16 +136,21 @@ export default function LeagueBoardScreen({ navigation, route }) {
         label: `Confirmed · ${board.confirmed.length}`,
         icon: 'check',
         gold: true,
+        cols: [t('league.board.colPts'), t('league.board.colLeague')],
         rows: board.confirmed.map((r) => ({
           ...rowOf(r.member),
           place: r.place,
           isTie: r.isTie,
           unranked: r.unrated,
           muted: r.unrated,
-          points: r.unrated ? 'unrated' : formatNetDiff(r.netDifferential),
-          sub: r.unrated ? 'not ranked' : r.seasonPoints > 0 ? `+${formatPoints(r.seasonPoints)}` : null,
+          white: !r.unrated,
+          points: r.unrated ? 'unrated' : formatNumber(r.cardPoints),
+          pointsLabel: r.unrated ? undefined : t('league.board.stablefordPoints', { count: r.cardPoints }),
+          sub: r.unrated ? 'not ranked' : r.seasonPoints > 0 ? `+${leaguePointsText(r.seasonPoints)}` : null,
+          subLabel: r.unrated || !(r.seasonPoints > 0) ? undefined : t('league.board.leaguePoints', { count: r.seasonPoints }),
           subGold: !r.unrated,
-          detail: detailOf(r.card, r.card.course?.name, r.how),
+          // A tie says who it shares with instead of how it was confirmed.
+          detail: detailOf(r.card, r.card.course?.name, r.isTie ? null : r.how, ...rankNotes(r).map(tr)),
         })),
       },
       board.waiting.length > 0 && {
@@ -155,8 +162,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
           place: null,
           unranked: true,
           muted: true,
-          points: r.card.netDifferential != null ? formatNetDiff(r.card.netDifferential)
-            : r.card.points != null ? String(r.card.points) : '—',
+          points: r.card.points != null ? String(r.card.points) : '—',
           sub: 'pending',
           detail: detailOf(r.card, r.card.course?.name, r.reason),
         })),
@@ -193,8 +199,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
           place: null,
           unranked: true,
           muted: true,
-          points: r.card.netDifferential != null ? formatNetDiff(r.card.netDifferential)
-            : r.card.points != null ? String(r.card.points) : '—',
+          points: r.card.points != null ? String(r.card.points) : '—',
           sub: 'not counted',
           detail: detailOf(r.card, r.card.course?.name, "needs an admin's approval"),
         })),
@@ -228,7 +233,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
       },
     ].filter(Boolean);
     const unratedNow = board.confirmed.filter((r) => r.unrated).map((r) => r.member.userId);
-    boardFooter = 'Gold = table points if the month ended today. The season table is one tap away on Season.'
+    boardFooter = tr({ key: 'league.board.footMonth', params: { monthKey: curKey } })
       + (unratedNow.length > 0 ? ` ${unratedNote(unratedNow)}` : '');
   } else if (activeScope === 'season' || !pastScopes.includes(activeScope)) {
     boardTitle = last ? `SEASON · AFTER ${monthName(last).toUpperCase()}` : 'SEASON';
@@ -237,12 +242,19 @@ export default function LeagueBoardScreen({ navigation, route }) {
       place: noCardsYet ? null : r.place,
       isTie: r.isTie,
       name: nameOf(r.userId),
-      points: noCardsYet ? '—' : formatPoints(r.total),
+      points: noCardsYet ? '—' : leaguePointsText(r.total),
       sub: noCardsYet ? null : deltaLabel(r.lastMonthDelta, last),
       isMe: r.userId === meId,
     }));
     const collapsed = collapseSeasonRows(seasonRows, { expanded: showAllSeason });
-    boardRows = collapsed.rows;
+    boardSections = [{
+      key: 'season',
+      label: t('league.board.seasonSection'),
+      icon: 'award',
+      gold: true,
+      cols: [t('league.board.colTotal'), t('league.board.colLast')],
+      rows: collapsed.rows,
+    }];
     if (collapsed.hidden > 0) boardMore = { label: `Show all ${seasonRows.length}`, onPress: () => setShowAllSeason(true) };
     else if (collapseSeasonRows(seasonRows).hidden > 0) boardMore = { label: 'Show top 8', onPress: () => setShowAllSeason(false) };
     const pot = potCents(members, league.entryFeeCents);
@@ -251,21 +263,43 @@ export default function LeagueBoardScreen({ navigation, route }) {
     boardTitle = `${monthName(activeScope).toUpperCase()} · RESULTS`;
     const canOpen = viewable(activeScope);
     const results = monthResults(cardsByMonth[activeScope], active, league.pointsTable, { participationPoints: league.participationPoints });
-    boardRows = results.map((r) => ({
-      key: r.userId,
-      place: r.place,
-      isTie: r.isTie,
-      name: nameOf(r.userId),
-      points: r.unrated ? 'unrated' : r.place == null ? '—' : formatNetDiff(r.netDifferential),
-      sub: r.unrated ? 'not ranked' : r.place == null ? null : `+${formatPoints(r.seasonPoints)}`,
-      muted: !!r.unrated,
-      isMe: r.userId === meId,
-      onPress: canOpen.has(r.userId) ? () => openCard(activeScope, r.userId) : undefined,
-    }));
+    const ranked = results.filter((r) => r.place != null || r.unrated);
+    const absent = results.filter((r) => r.place == null && !r.unrated);
+    boardSections = [
+      ranked.length > 0 && {
+        key: 'results',
+        label: t('league.board.cards', { count: ranked.length }),
+        icon: 'check',
+        gold: true,
+        cols: [t('league.board.colPts'), t('league.board.colLeague')],
+        rows: ranked.map((r) => ({
+          key: r.userId,
+          place: r.place,
+          isTie: r.isTie,
+          name: nameOf(r.userId),
+          points: r.unrated ? 'unrated' : formatNumber(r.cardPoints),
+          pointsLabel: r.unrated ? undefined : t('league.board.stablefordPoints', { count: r.cardPoints }),
+          white: !r.unrated,
+          sub: r.unrated ? 'not ranked' : `+${leaguePointsText(r.seasonPoints)}`,
+          subLabel: r.unrated ? undefined : t('league.board.leaguePoints', { count: r.seasonPoints }),
+          subGold: !r.unrated,
+          detail: rankNotes(r).map(tr).join(' · '),
+          muted: !!r.unrated,
+          isMe: r.userId === meId,
+          onPress: canOpen.has(r.userId) ? () => openCard(activeScope, r.userId) : undefined,
+        })),
+      },
+      absent.length > 0 && {
+        key: 'noplay',
+        label: t('league.board.noPlay', { count: absent.length }),
+        icon: 'user-x',
+        body: <Text style={s.noCardText}>{t('league.board.noPlayNames', { names: absent.map((r) => nameOf(r.userId)).join(', ') })}</Text>,
+      },
+    ].filter(Boolean);
     const unrated = results.filter((r) => r.unrated).map((r) => r.userId);
-    boardFooter = unrated.length === 0
-      ? "Better or worse than each member's league handicap. Ties share points."
-      : unratedNote(unrated);
+    if (unrated.length > 0) boardFooter = unratedNote(unrated);
+    else if (ranked.some((r) => r.floored)) boardFooter = t('league.board.footPast', { points: formatNumber(league.participationPoints) });
+    else boardFooter = t('league.board.footPastTies');
   }
 
   const chipKeys = [...(archived ? [] : [curKey]), 'season', ...pastScopes];
@@ -295,9 +329,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
 
   const myCard = (cardsByMonth[curKey] ?? []).find((c) => c.userId === meId) ?? null;
   const mine = yourCardState(myCard);
-  // Better = the success green, worse = the danger red, level = plain text.
-  const netColor = (tone) => (tone === 'better' ? theme.scoreColor('excellent')
-    : tone === 'worse' ? theme.destructive : theme.text.primary);
+  // Where my counting card stands in the open month (confirmed, counted).
+  const standing = mine.kind === 'confirmed' && !needsApproval(mine.card)
+    ? monthStanding({ league, members, cardsByMonth }, curKey, meId, now) : null;
 
   // My app card stuck before confirmation (left Validate, or no partner yet):
   // reopen Validate on its round. A submitted card goes straight to the check.
@@ -405,14 +439,15 @@ export default function LeagueBoardScreen({ navigation, route }) {
       body = (
         <>
           <Text style={s.cardText}>
-            {mine.net != null && (
-              <Text style={[s.netLead, { color: netColor(mine.netTone) }]}>{mine.net}</Text>
-            )}
-            {mine.net != null && `${mine.net === 'level' ? ' with' : ' than'} your handicap · `}
+            {!!mine.pts && <Text style={s.netLead}>{mine.pts}</Text>}
+            {!!mine.pts && ' · '}
             {mine.unrated && 'Unrated tee, not ranked · '}
-            {[mine.pts, mine.course, mine.offApp ? 'added after the round' : null, proofText,
-              mine.card.confirmedByName ? `confirmed by ${mine.card.confirmedByName}` : null]
-              .filter(Boolean).join(' · ')}
+            {[
+              standing ? t('league.board.placeSoFar', { place: placeLabel(standing.place, standing.isTie) }) : null,
+              standing ? t('league.board.leaguePts', { points: leaguePointsText(standing.seasonPoints) }) : null,
+              mine.course, mine.offApp ? 'added after the round' : null, proofText,
+              mine.card.confirmedByName ? `confirmed by ${mine.card.confirmedByName}` : null,
+            ].filter(Boolean).join(' · ')}
           </Text>
           {mine.kind === 'submitted' && !!mine.card.markerNote && (
             <Text style={s.cardText}>{`Your marker sent it back: “${mine.card.markerNote}”`}</Text>
@@ -468,7 +503,6 @@ export default function LeagueBoardScreen({ navigation, route }) {
         <LeaderboardCard
           title={boardTitle}
           subheader={chips}
-          rows={boardRows}
           sections={boardSections}
           footer={boardFooter}
           more={boardMore}
@@ -532,7 +566,7 @@ function makeStyles(theme) {
     cardTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15 },
     cardText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 12 },
     badge: { backgroundColor: theme.accent.light, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 },
-    netLead: { fontFamily: 'PlusJakartaSans-Bold' },
+    netLead: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary },
     badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 11 },
 
     primaryBtn: {

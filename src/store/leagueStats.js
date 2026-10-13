@@ -306,3 +306,11 @@ export function rivals(cardsByMonth, members, meId) {
   const gap = (r) => Math.abs(r.won - r.lost);
   return rows.sort((a, b) => (b.months > 0) - (a.months > 0) || gap(a) - gap(b) || b.months - a.months);
 }
+
+// Season grid shading by a month's Stableford points: 36 or more is level with
+// the handicap or better, 33-35 close, under 33 behind.
+export function pointsBand(points) {
+  if (points == null) return null;
+  if (points >= 36) return 'high';
+  return points >= 33 ? 'mid' : 'low';
+}

@@ -62,7 +62,7 @@ function toDate(input) {
 
 // Styles: 'short' "Sat 4 Oct" / "sáb 4 oct"; 'day' "4 Oct" / "4 oct";
 // 'long' "Saturday 4 October 2026" / "sábado, 4 de octubre de 2026";
-// 'month' "October 2026" / "octubre de 2026". Invalid input gives ''.
+// 'month' "October 2026" / "octubre de 2026"; 'monthName' "October" / "octubre". Invalid input gives ''.
 export function formatDate(input, style = 'short', lang = getLanguage()) {
   const d = toDate(input);
   if (Number.isNaN(d.getTime())) return '';
@@ -76,6 +76,7 @@ export function formatDate(input, style = 'short', lang = getLanguage()) {
     case 'long': return l === 'es'
       ? `${wd.long[d.getDay()]}, ${day} de ${mo.long[d.getMonth()]} de ${year}`
       : `${wd.long[d.getDay()]} ${day} ${mo.long[d.getMonth()]} ${year}`;
+    case 'monthName': return mo.long[d.getMonth()];
     case 'month': return l === 'es'
       ? `${mo.long[d.getMonth()]} de ${year}` : `${mo.long[d.getMonth()]} ${year}`;
     default: return `${wd.short[d.getDay()]} ${day} ${mo.short[d.getMonth()]}`;
@@ -111,4 +112,14 @@ export function formatTime(input, opts = {}, lang = getLanguage()) {
   const h = d.getHours();
   if (!hour12) return `${pad2(h)}:${pad2(d.getMinutes())}`;
   return `${h % 12 || 12}:${pad2(d.getMinutes())} ${h < 12 ? 'am' : 'pm'}`;
+}
+
+// formatOrdinal(2) -> "2nd" / "2.º"; 11, 12, 13 -> "11th". Non-numbers give ''.
+export function formatOrdinal(n, lang = getLanguage()) {
+  const v = Math.trunc(Number(n));
+  if (n == null || n === '' || !Number.isFinite(v)) return '';
+  if (lang === 'es') return `${v}.º`;
+  const mod100 = v % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${v}th`;
+  return `${v}${({ 1: 'st', 2: 'nd', 3: 'rd' })[v % 10] ?? 'th'}`;
 }

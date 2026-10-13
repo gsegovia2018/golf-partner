@@ -22,12 +22,13 @@ const { createLeague } = require('../../store/leagueStore');
 const navigation = { navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn() };
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
-async function toReview(utils, { pickFriends = true } = {}) {
+async function toReview(utils, { pickFriends = true, morePoints = false } = {}) {
   const { getByText, getByPlaceholderText, findByText } = utils;
   fireEvent.changeText(getByPlaceholderText('El Club del Mulligan'), '  El Club  ');
   fireEvent.press(getByText('Next'));
   await findByText('How does it work?');
   fireEvent.changeText(utils.getByPlaceholderText('0'), '30');
+  if (morePoints) fireEvent.press(utils.getByLabelText('More points'));
   fireEvent.press(getByText('Next'));
   await findByText("Who's playing?");
   if (pickFriends) {
@@ -67,6 +68,32 @@ describe('LeagueCreateScreen', () => {
       { userId: 'f1', handicap: 12.4 },
       { userId: 'f2', handicap: 30 },
     ]);
+  });
+
+  test('points for playing starts at 10, steps by 5 and is sent with the league', async () => {
+    const utils = render(wrap(<LeagueCreateScreen navigation={navigation} />));
+    fireEvent.changeText(utils.getByPlaceholderText('El Club del Mulligan'), 'El Club');
+    fireEvent.press(utils.getByText('Next'));
+    await utils.findByText('How does it work?');
+    expect(utils.getByText('Most Stableford points wins')).toBeTruthy();
+    expect(utils.getByLabelText('Points for playing, 10')).toBeTruthy();
+    expect(utils.getByText(/13th on/)).toBeTruthy();
+    fireEvent.press(utils.getByLabelText('Fewer points'));
+    fireEvent.press(utils.getByLabelText('Fewer points'));
+    expect(utils.getByLabelText('Fewer points').props.accessibilityState.disabled).toBe(true);
+    expect(utils.getByText(/Playing past 12th scores the same as not playing/)).toBeTruthy();
+    fireEvent.press(utils.getByLabelText('More points'));
+    fireEvent.press(utils.getByLabelText('More points'));
+    fireEvent.press(utils.getByLabelText('More points'));
+    expect(utils.getByLabelText('Points for playing, 15')).toBeTruthy();
+  });
+
+  test('the chosen points for playing reach createLeague', async () => {
+    const utils = render(wrap(<LeagueCreateScreen navigation={navigation} />));
+    await toReview(utils, { pickFriends: false, morePoints: true });
+    fireEvent.press(utils.getByText('Create league'));
+    await waitFor(() => expect(createLeague).toHaveBeenCalledTimes(1));
+    expect(createLeague.mock.calls[0][0].participationPoints).toBe(15);
   });
 
   test('shows the invite code and link on the done view, and a second tap cannot create twice', async () => {
