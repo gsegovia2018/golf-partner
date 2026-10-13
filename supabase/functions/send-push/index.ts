@@ -126,22 +126,47 @@ Object.assign(RENDERERS, {
       deepLink: leagueBoard(d),
     };
   },
-  league_marker_issue: (d: Record<string, unknown>) => ({
-    title: 'Marker sent your card back',
-    body: `${d.marker_name ?? d.actor_name ?? 'Your marker'} flagged your card`
-      + `${d.note ? `: ${d.note}` : ''}`,
-    deepLink: d.league_id && d.card_id && d.tournament_id && d.round_id
-      ? {
-        screen: 'LeagueValidate',
-        params: {
-          leagueId: d.league_id,
-          cardId: d.card_id,
-          tournamentId: d.tournament_id,
-          roundId: d.round_id,
-        },
-      }
-      : leagueBoard(d),
-  }),
+  league_marker_issue: (d: Record<string, unknown>) => {
+    const inApp = d.league_id && d.card_id && d.tournament_id && d.round_id;
+    return {
+      title: 'Marker sent your card back',
+      body: d.note && d.tournament_id && d.round_id
+        ? `${d.marker_name ?? d.actor_name ?? 'Your marker'}: ${d.note}`
+        : `${d.marker_name ?? d.actor_name ?? 'Your marker'} flagged your card`
+          + `${d.note ? `: ${d.note}` : ''}`,
+      deepLink: inApp
+        ? {
+          screen: 'LeagueValidate',
+          params: {
+            leagueId: d.league_id,
+            cardId: d.card_id,
+            tournamentId: d.tournament_id,
+            roundId: d.round_id,
+            submitted: true,
+          },
+        }
+        : leagueBoard(d),
+    };
+  },
+  league_marker_request: (d: Record<string, unknown>) => {
+    const month = monthName(d.month);
+    return {
+      title: `${d.actor_name ?? 'A friend'} asks you to confirm a card`,
+      body: `${month ? `${month} ` : ''}card${d.course_name ? ` at ${d.course_name}` : ''}`
+        + `${d.league_name ? ` in ${d.league_name}` : ''}`,
+      deepLink: d.token
+        ? { screen: 'LeagueMarkerConfirm', params: { token: d.token } }
+        : { screen: 'Notifications' },
+    };
+  },
+  league_marker_confirmed: (d: Record<string, unknown>) => {
+    const month = monthName(d.month);
+    return {
+      title: `${d.actor_name ?? 'A friend'} confirmed your ${month ? `${month} ` : ''}card`,
+      body: `It counts in ${d.league_name ?? 'your league'} now`,
+      deepLink: leagueBoard(d),
+    };
+  },
   league_ranking_updated: (d: Record<string, unknown>) => {
     const month = monthName(d.month);
     return {
@@ -205,6 +230,8 @@ const CATEGORY_BY_TYPE: Record<string, 'scores' | 'invites' | 'media' | 'league'
   league_tee_off: 'league',
   league_card_confirmed: 'league',
   league_marker_issue: 'league',
+  league_marker_request: 'league',
+  league_marker_confirmed: 'league',
   league_ranking_updated: 'league',
   league_month_reminder: 'league',
   league_post_reminder: 'league',

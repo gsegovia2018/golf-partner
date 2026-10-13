@@ -6,6 +6,7 @@ import {
   attachLeagueProof, createMarkerToken, voidLeagueCard, recordLeagueFinal, getMyLeagues, getMyCardsForMonth,
   getLeagueCard, setLeagueRole, archiveLeague, deleteLeague, getLeague, getLeagueCached, setLeagueCache, uploadLeagueProof, rowToCard,
   rescheduleLeagueCard, reopenLeagueCard, approveLeagueCard,
+  getLeagueMarkerCandidates, requestLeagueMarker, remindLeagueMarker, cancelLeagueMarkerRequest,
 } from '../leagueStore';
 
 // mockState is read inside the jest.mock factories; the `mock` prefix is what
@@ -267,6 +268,43 @@ describe('RPC params', () => {
     expect(fail).toMatchObject({ confirmed: false, reason: 'not_settled', settled: 17, partnerName: null });
   });
 
+  test('getLeagueMarkerCandidates maps the pending request and the candidates', async () => {
+    ok({
+      pending: {
+        user_id: 'u2', name: 'Javi Ortega', requested_at: '2026-10-13T09:00:00Z', reminded_at: null, expires_at: '2026-10-19T09:00:00Z',
+      },
+      candidates: [{ user_id: 'u2', name: 'Javi Ortega', in_league: true, marked: 12 }, { user_id: 'u3', name: 'Ana', in_league: false }],
+    });
+    expect(await getLeagueMarkerCandidates('C1')).toEqual({
+      pending: {
+        userId: 'u2', name: 'Javi Ortega', requestedAt: '2026-10-13T09:00:00Z', remindedAt: null, expiresAt: '2026-10-19T09:00:00Z',
+      },
+      candidates: [
+        { userId: 'u2', name: 'Javi Ortega', inLeague: true, marked: 12 },
+        { userId: 'u3', name: 'Ana', inLeague: false, marked: 0 },
+      ],
+    });
+    expect(lastRpc()).toEqual(['get_league_marker_candidates', { p_card: 'C1' }]);
+    ok({ pending: null, candidates: [] });
+    expect(await getLeagueMarkerCandidates('C1')).toEqual({ pending: null, candidates: [] });
+  });
+
+  test('requestLeagueMarker, remindLeagueMarker, cancelLeagueMarkerRequest', async () => {
+    ok({ marker_user_id: 'u2', marker_name: 'Javi Ortega', expires_at: '2026-10-19T09:00:00Z' });
+    expect(await requestLeagueMarker('C1', 'u2')).toEqual({
+      markerUserId: 'u2', markerName: 'Javi Ortega', expiresAt: '2026-10-19T09:00:00Z',
+    });
+    expect(lastRpc()).toEqual(['request_league_marker', { p_card: 'C1', p_user: 'u2' }]);
+    ok({ reminded_at: '2026-10-14T09:00:00Z' });
+    expect(await remindLeagueMarker('C1')).toEqual({ remindedAt: '2026-10-14T09:00:00Z' });
+    expect(lastRpc()).toEqual(['remind_league_marker', { p_card: 'C1' }]);
+    ok(null);
+    await cancelLeagueMarkerRequest('C1');
+    expect(lastRpc()).toEqual(['cancel_league_marker_request', { p_card: 'C1' }]);
+    mockState.rpcResult = { data: null, error: { code: 'P0001', message: 'You can remind once a day.' } };
+    await expect(remindLeagueMarker('C1')).rejects.toThrow('You can remind once a day.');
+  });
+
   test('attachLeagueProof, createMarkerToken, voidLeagueCard, recordLeagueFinal', async () => {
     await attachLeagueProof('C1', 'L1/C1.jpg', 'photo', 'Pepe');
     expect(lastRpc()).toEqual(['attach_league_proof', {
@@ -427,6 +465,17 @@ describe('reads and cache', () => {
     expect(rowToCard({ ...cardRow(), post_by: '2026-10-04T18:00:00Z', approved_by: 'u9', approved_at: '2026-10-05T00:00:00Z' }))
       .toMatchObject({ postBy: '2026-10-04T18:00:00Z', approvedBy: 'u9', approvedAt: '2026-10-05T00:00:00Z' });
     expect(rowToCard(cardRow())).toMatchObject({ postBy: null, approvedBy: null, approvedAt: null });
+  });
+
+  test('rowToCard maps the marker request columns, null when absent', () => {
+    expect(rowToCard({
+      ...cardRow(), marker_user_id: 'u2', marker_name: 'Javi Ortega', marker_requested_at: '2026-10-13T09:00:00Z', marker_reminded_at: '2026-10-14T09:00:00Z',
+    })).toMatchObject({
+      markerUserId: 'u2', markerName: 'Javi Ortega', markerRequestedAt: '2026-10-13T09:00:00Z', markerRemindedAt: '2026-10-14T09:00:00Z',
+    });
+    expect(rowToCard(cardRow())).toMatchObject({
+      markerUserId: null, markerName: null, markerRequestedAt: null, markerRemindedAt: null,
+    });
   });
 
   test('rowToCard maps the server net differential (numeric comes back as a string) and keeps null', () => {

@@ -153,6 +153,13 @@ export function rowToCard(r) {
     confirmedAt: r.confirmed_at ?? null,
     proofPath: r.proof_path ?? null,
     markerNote: r.marker_note ?? null,
+    returnedAt: r.returned_at ?? null,
+    // "Pick your marker": who I asked to confirm this card (markerName is null
+    // once the request is cancelled or answered).
+    markerUserId: r.marker_user_id ?? null,
+    markerName: r.marker_name ?? null,
+    markerRequestedAt: r.marker_requested_at ?? null,
+    markerRemindedAt: r.marker_reminded_at ?? null,
     voidedReason: r.voided_reason ?? null,
   };
 }
@@ -542,6 +549,43 @@ export async function confirmLeagueCardByPartner(cardId) {
     partnerUserId: d.partner_user_id ?? null,
     partnerName: d.partner_name ?? null,
   };
+}
+
+// Who can mark this card: { pending, candidates }. `pending` is my open
+// request ({ userId, name, requestedAt, remindedAt, expiresAt }) or null;
+// `candidates` are other signed-in players of the game who kept a card
+// ({ userId, name, inLeague, marked }), `marked` = holes they scored for me.
+export async function getLeagueMarkerCandidates(cardId) {
+  const d = await rpc('get_league_marker_candidates', { p_card: cardId });
+  const p = d?.pending;
+  return {
+    pending: p ? {
+      userId: p.user_id,
+      name: p.name ?? null,
+      requestedAt: p.requested_at ?? null,
+      remindedAt: p.reminded_at ?? null,
+      expiresAt: p.expires_at ?? null,
+    } : null,
+    candidates: (d?.candidates ?? []).map((c) => ({
+      userId: c.user_id, name: c.name, inLeague: !!c.in_league, marked: c.marked ?? 0,
+    })),
+  };
+}
+
+// Asks a signed-in member to confirm the submitted card. Notifies them.
+export async function requestLeagueMarker(cardId, userId) {
+  const d = await rpc('request_league_marker', { p_card: cardId, p_user: userId });
+  return { markerUserId: d.marker_user_id, markerName: d.marker_name ?? null, expiresAt: d.expires_at };
+}
+
+// Nudges the marker again; the server allows once a day ('You can remind once a day.').
+export async function remindLeagueMarker(cardId) {
+  const d = await rpc('remind_league_marker', { p_card: cardId });
+  return { remindedAt: d.reminded_at };
+}
+
+export async function cancelLeagueMarkerRequest(cardId) {
+  await rpc('cancel_league_marker_request', { p_card: cardId });
 }
 
 // kind: 'photo' | 'official'.
