@@ -60,6 +60,21 @@ describe('LeagueCardScreen', () => {
     store.getLeagueCardEvents.mockResolvedValue([]);
   });
 
+  test("the pager counts the cards you can flick to, not other members' withdrawn or former cards", async () => {
+    const snap = snapshot([card('javi', 'confirmed', 38)]);
+    snap.members.push({ ...member('ex', 'Old'), leftAt: '2025-09-01' });
+    snap.cards = [
+      card('javi', 'confirmed', 38),
+      card('nacho', 'void', 20, { id: 'vn', voidKind: 'withdrawn' }),
+      card('ex', 'void', 20, { id: 'vx', voidKind: 'admin' }),
+    ];
+    store.getLeague.mockResolvedValue(snap);
+    const { getByText, getByLabelText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
+    await waitFor(() => getByText('Javi · October card'));
+    expect(getByText('1 of 1 October league card')).toBeTruthy();
+    expect(getByLabelText('Next card').props.accessibilityState.disabled).toBe(true);
+  });
+
   test('shows the summary and the read-only grid, and flicks between cards', async () => {
     store.getLeague.mockResolvedValue(snapshot([
       card('javi', 'confirmed', 38, { confirmedByName: 'Nacho' }),
@@ -67,7 +82,7 @@ describe('LeagueCardScreen', () => {
     ]));
     const { getByText, getAllByText, getByLabelText, queryByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
     await waitFor(() => getByText('Javi · October card'));
-    expect(getByText('1 of 2 October cards')).toBeTruthy();
+    expect(getByText('1 of 2 October league cards')).toBeTruthy();
     expect(getByText('Confirmed')).toBeTruthy();
     expect(getByText('Golf Olivar · Yellow tees, slope 125 · CR 72')).toBeTruthy();
     expect(getByText('Playing handicap 18 · Gross 90')).toBeTruthy();
@@ -90,7 +105,7 @@ describe('LeagueCardScreen', () => {
 
     fireEvent.press(getByLabelText('Next card'));
     expect(getByText('Nacho · October card')).toBeTruthy();
-    expect(getByText('2 of 2 October cards')).toBeTruthy();
+    expect(getByText('2 of 2 October league cards')).toBeTruthy();
     expect(getByText('Submitted')).toBeTruthy();
     expect(queryByText('Confirmed by Nacho')).toBeNull();
     expect(getByLabelText('Next card').props.accessibilityState.disabled).toBe(true);

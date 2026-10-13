@@ -142,7 +142,7 @@ export default function LeagueCardScreen({ navigation, route }) {
           accessibilityLabel="Previous card"
           accessibilityState={{ disabled: atStart }}
         />
-        <Text style={l.flickText}>{`${idx + 1} of ${cards.length} ${monthLabel} cards`}</Text>
+        <Text style={l.flickText}>{`${idx + 1} of ${cards.length} ${monthLabel} league ${cards.length === 1 ? 'card' : 'cards'}`}</Text>
         <IconButton
           icon="chevron-right"
           onPress={() => go(1)}
@@ -252,6 +252,7 @@ export default function LeagueCardScreen({ navigation, route }) {
           error={timeline.error}
           onRetry={timeline.reload}
           meId={meId}
+          members={data?.members}
           monthKey={card.monthKey}
         />
 

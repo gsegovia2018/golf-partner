@@ -20,6 +20,39 @@ describe('splitVoidReason', () => {
   });
 });
 
+describe('describeCardEvent: who did it', () => {
+  const members = [{ userId: 'u-marker', displayName: 'Luis Navarro', username: 'luis' }, { userId: 'u-nodn', displayName: null, username: 'nacho' }];
+  const nameOf = (r) => (r.title.params ?? {}).name;
+
+  test('a return by an account with no actorName uses the member name, then the username', () => {
+    const r = d(ev('returned', { actorUserId: 'u-marker', actorName: null }), { members });
+    expect(r.title).toEqual({ key: 'league.timeline.returned', params: { name: 'Luis Navarro' } });
+    expect(nameOf(d(ev('returned', { actorUserId: 'u-nodn', actorName: null }), { members }))).toBe('nacho');
+  });
+
+  test('actorName wins, and a marker with no account is named by actorName', () => {
+    expect(nameOf(d(ev('returned', { actorUserId: 'u-marker', actorName: 'Stored Name' }), { members }))).toBe('Stored Name');
+    expect(nameOf(d(ev('returned', { actorUserId: null, actorName: 'Borja Arrieta', how: 'qr' }), { members }))).toBe('Borja Arrieta');
+  });
+
+  test('"Someone" is only the last fallback', () => {
+    expect(nameOf(d(ev('returned', { actorUserId: 'gone', actorName: null }), { members, someone: 'Someone' }))).toBe('Someone');
+    expect(nameOf(d(ev('returned', { actorUserId: null, actorName: null })))).toBe('Someone');
+  });
+
+  test('every kind that names an actor resolves a member without actorName', () => {
+    const base = { actorUserId: 'u-marker', actorName: null };
+    const named = (kind, extra = {}) => d(ev(kind, { ...base, ...extra }), { members });
+    expect(nameOf(named('approved'))).toBe('Luis Navarro');
+    expect(nameOf(named('reopened'))).toBe('Luis Navarro');
+    expect(nameOf(named('withdrawn'))).toBe('Luis Navarro');
+    expect(nameOf(named('voided', { note: 'Wrong tee: x' }))).toBe('Luis Navarro');
+    expect(named('confirmed', { how: 'partner' }).title).toEqual({ key: 'league.timeline.confirmedPartner', params: { name: 'Luis Navarro' } });
+    expect(named('confirmed', { how: 'photo' }).detail).toEqual({ key: 'league.timeline.signedBy', params: { name: 'Luis Navarro' } });
+    expect(named('confirmed', { how: 'qr', data: { marker_account: true } }).title).toEqual({ key: 'league.timeline.confirmedBy', params: { name: 'Luis Navarro' } });
+  });
+});
+
 describe('describeCardEvent', () => {
   test('a QR confirmation without an account says so, with the QR chip', () => {
     const r = d(ev('confirmed', { actorUserId: null, actorName: 'Borja Arrieta', how: 'qr', data: { marker_account: false } }));

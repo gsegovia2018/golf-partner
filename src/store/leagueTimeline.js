@@ -27,13 +27,17 @@ const CHIP = {
 // title, detail (message | null), how (message | null: the who-and-how chip),
 // note (quoted text | null), at }.
 // opts: meId; fmt(isoOrDate) -> 'Sat 10 Oct 13:41' (a stand-in is used in tests);
-// someone: the word for an actor with no known name; monthKey: the card's month.
+// someone: the word for an actor with no known name; monthKey: the card's month;
+// members: the league's members, to name an actor who has an account but no
+// stored actorName (actorName wins; "someone" is the last fallback).
 export function describeCardEvent(ev, opts = {}) {
   const {
-    meId = null, fmt = (d) => new Date(d).toISOString(), someone = 'Someone', monthKey = null,
+    meId = null, fmt = (d) => new Date(d).toISOString(), someone = 'Someone', monthKey = null, members = [],
   } = opts;
   const data = ev?.data ?? {};
-  const name = ev?.actorName || someone;
+  const member = ev?.actorUserId ? (members ?? []).find((m) => m.userId === ev.actorUserId) : null;
+  const known = ev?.actorName || member?.displayName || member?.username || null;
+  const name = known || someone;
   const you = !!meId && ev?.actorUserId === meId;
   // 'league.timeline.x' / 'league.timeline.xYou' (the viewer did it themselves).
   const by = (key) => ({ key: you ? `${key}You` : key, params: { name } });
@@ -86,20 +90,20 @@ export function describeCardEvent(ev, opts = {}) {
     case 'confirmed': {
       if (ev.how === 'photo') {
         return row('camera', 'good', { key: 'league.timeline.confirmedPhoto' }, {
-          how, detail: ev.actorName ? { key: 'league.timeline.signedBy', params: { name: ev.actorName } } : null,
+          how, detail: known ? { key: 'league.timeline.signedBy', params: { name: known } } : null,
         });
       }
       if (ev.how === 'official') return row('check', 'good', { key: 'league.timeline.confirmedOfficial' }, { how });
       if (ev.how === 'partner') {
         return row('check', 'good', {
-          key: ev.actorName ? 'league.timeline.confirmedPartner' : 'league.timeline.confirmedPartnerAnon', params: { name },
+          key: known ? 'league.timeline.confirmedPartner' : 'league.timeline.confirmedPartnerAnon', params: { name },
         }, { how });
       }
       // A QR marker signs with a typed name and no account: say so.
       const noAccount = ev.how === 'qr' && (data.marker_account === false || ev.actorUserId == null);
       if (noAccount) return row('check', 'good', { key: 'league.timeline.confirmedQrNoAccount', params: { name } }, { how });
       return row('check', 'good', {
-        key: ev.actorName ? 'league.timeline.confirmedBy' : 'league.timeline.confirmed', params: { name },
+        key: known ? 'league.timeline.confirmedBy' : 'league.timeline.confirmed', params: { name },
       }, { how });
     }
     case 'approved': {

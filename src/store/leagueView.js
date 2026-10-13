@@ -210,7 +210,9 @@ function waitingReason(card) {
 // awaiting = scored cards (submitted or confirmed) of a not-announced round an
 // admin hasn't approved: they don't rank. missed = not posted in time (a live
 // card past its deadline counts), listed apart from onCourse and noCard.
-export function monthBoard(members, cardsByMonth, month, pointsTable, now = new Date(), { participationPoints = 0 } = {}) {
+// voided = no live card but a void one that still takes the month (pass them
+// as options.voidCards; cardsByMonth leaves void out).
+export function monthBoard(members, cardsByMonth, month, pointsTable, now = new Date(), { participationPoints = 0, voidCards = [] } = {}) {
   const active = (members ?? []).filter((m) => !m.leftAt);
   const cards = (cardsByMonth?.[month] ?? []).filter((c) => c.status !== 'void');
   // Most points first; a card without points after.
@@ -235,6 +237,7 @@ export function monthBoard(members, cardsByMonth, month, pointsTable, now = new 
   const noCard = [];
   const awaiting = [];
   const missed = [];
+  const voided = [];
   for (const member of active) {
     if (placed.has(member.userId)) continue;
     const card = bestCard(member.userId, () => true);
@@ -242,11 +245,18 @@ export function monthBoard(members, cardsByMonth, month, pointsTable, now = new 
     else if (card && isMissed(card, now)) missed.push({ member, card });
     else if (card?.status === 'submitted') waiting.push({ member, card, reason: waitingReason(card) });
     else if (card?.status === 'playing' || card?.status === 'announced') onCourse.push({ member, card });
-    else noCard.push(member);
+    else {
+      // An admin's void (or a played-after-withdraw card) still takes the month:
+      // listed as voided, not as "no card yet".
+      const v = (voidCards ?? []).find((c) => c.userId === member.userId && c.status === 'void'
+        && (c.monthKey ?? String(c.month ?? '').slice(0, 7)) === month && takesMonth(c));
+      if (v) voided.push({ member, card: v });
+      else noCard.push(member);
+    }
   }
   waiting.sort((a, b) => byPoints(a.card, b.card));
   onCourse.sort((a, b) => (a.card.status === 'playing' ? 0 : 1) - (b.card.status === 'playing' ? 0 : 1));
-  return { confirmed, waiting, onCourse, noCard, awaiting, missed };
+  return { confirmed, waiting, onCourse, noCard, awaiting, missed, voided };
 }
 
 // Days left in the calendar month, for the "27 days left" caption.

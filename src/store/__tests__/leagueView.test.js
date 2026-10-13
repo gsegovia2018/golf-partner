@@ -248,6 +248,19 @@ describe('monthBoard', () => {
     expect(board.noCard.map((x) => x.userId)).toEqual(['g']);
   });
 
+  test('a member whose card an admin voided is listed as voided, not as "no card yet"', () => {
+    const voidCards = [
+      card('g', 'void', 20, { voidKind: 'admin', voidedReason: 'Wrong tee: sheet says yellow', monthKey: '2026-10' }),
+      card('f', 'void', 10, { voidKind: 'withdrawn', monthKey: '2026-10' }),
+    ];
+    const board = monthBoard(members, cards, '2026-10', table, new Date('2026-10-14T10:00:00Z'), { voidCards });
+    expect(board.voided.map((r) => [r.member.userId, r.card.voidedReason])).toEqual([['g', 'Wrong tee: sheet says yellow']]);
+    expect(board.noCard).toEqual([]);
+    // Without the void cards (or for another month) nothing changes.
+    expect(monthBoard(members, cards, '2026-10', table).noCard.map((x) => x.userId)).toEqual(['g']);
+    expect(monthBoard(members, cards, '2026-10', table, new Date(), { voidCards: [{ ...voidCards[0], monthKey: '2026-09' }] }).voided).toEqual([]);
+  });
+
   test('a card the marker sent back says so instead of waiting for a QR scan', () => {
     const board = monthBoard(members, {
       '2026-10': [card('d', 'submitted', 30, { returnedAt: '2026-10-13T10:00:00Z' })],
@@ -666,6 +679,19 @@ describe('cards that take the month (R15b) on the board and card screen', () => 
     const withdrawn = { ...snap, cards: [live, voided({ voidKind: 'withdrawn' })] };
     expect(monthCardsView(withdrawn, '2026-10', 'me').map((c) => c.id)).toEqual(['l1', 'v1']);
     expect(monthCardsView(withdrawn, '2026-10', 'javi').map((c) => c.id)).toEqual(['l1']);
+  });
+
+  test('the pager list has one card per member, so its count is what you can flick to', () => {
+    const m3 = [...members, { userId: 'nacho', leftAt: null }, { userId: 'ex', leftAt: '2026-09-01' }];
+    const snap = {
+      members: m3,
+      cardsByMonth: { '2026-10': [live] },
+      cards: [live, voided({ id: 'vx', userId: 'ex', voidKind: 'admin' }), voided({ id: 'vw', userId: 'nacho', voidKind: 'withdrawn' }),
+        voided({ id: 'vo', userId: 'javi', voidKind: 'admin', monthKey: '2026-09' })],
+    };
+    // A left member's card, another member's withdrawal and another month's void are not flickable.
+    expect(monthCardsView(snap, '2026-10', 'javi').map((c) => c.id)).toEqual(['l1']);
+    expect(monthCardsView(snap, '2026-10', 'nacho').map((c) => c.id)).toEqual(['l1', 'vw']);
   });
 
   test('a member with a live card hides their void ones', () => {
