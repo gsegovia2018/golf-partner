@@ -24,8 +24,9 @@ export function madridDate(now = new Date()) {
 }
 
 // Leagues the Setup switch can offer right now: not archived, today inside the
-// season, and no live card of mine this month. `cards` are my cards (any
-// league) as rowToCard returns them.
+// season, and no card of mine this month that takes the month (an admin's
+// void still does, R15b). `cards` are my cards (any league) as rowToCard
+// returns them.
 export function eligibleLeagues({ leagues, cards, userId, now = new Date() }) {
   if (!userId) return [];
   const month = cardMonth(now);
@@ -107,12 +108,50 @@ export function leagueCourse(round, playerId) {
   };
 }
 
-// The league link on a tournament: Setup writes `league` (the repo files
-// extra keys under props, and get_game_tournament spreads props back onto the
-// object). Only the card owner's player gets it; a partner's phone sees null.
-export function leagueCardOf(tournament, meId) {
+// The league links on a tournament (the repo files extra keys under props,
+// and get_game_tournament spreads props back onto the object):
+// - `league` — { leagueId, cardId, playerId }: the one card Setup's Start
+//   announced, for round 0 (builds before 20261016000000).
+// - `leagueCards` — { '<roundId>:<playerId>': { leagueId, cardId, playerId,
+//   roundId } }: every member's own card, any round (R16, R17). Each phone
+//   adds only its own key; tournament.updateProfile (and the server's
+//   patch_game_tournament) merge an object one level deep, so two phones
+//   adding their keys at once never drop each other's.
+export function leagueCardKey(roundId, playerId) {
+  return `${roundId}:${playerId}`;
+}
+
+// Every league link on the tournament, legacy `league` first (its roundId is
+// round 0's).
+export function leagueCardsOf(tournament) {
+  const out = [];
+  const legacy = tournament?.league ?? tournament?.props?.league ?? null;
+  if (legacy?.cardId) {
+    out.push({ ...legacy, roundId: legacy.roundId ?? tournament?.rounds?.[0]?.id ?? null });
+  }
+  const map = tournament?.leagueCards ?? tournament?.props?.leagueCards ?? null;
+  for (const entry of Object.values(map ?? {})) {
+    if (entry?.cardId && !out.some((e) => e.cardId === entry.cardId)) out.push(entry);
+  }
+  return out;
+}
+
+// My league link on this tournament: the card of my player, for `roundId`
+// when given (else the first one found). A partner's phone sees null.
+export function leagueCardOf(tournament, meId, roundId = null) {
   const lg = tournament?.league ?? tournament?.props?.league ?? null;
-  if (!lg?.cardId) return null;
-  if (lg.playerId && lg.playerId !== meId) return null;
-  return lg;
+  const legacyMine = lg?.cardId && (!lg.playerId || lg.playerId === meId);
+  // Same object as before for a tournament with only the legacy link.
+  if (legacyMine && !(tournament?.leagueCards ?? tournament?.props?.leagueCards)
+      && (roundId == null || roundId === (lg.roundId ?? tournament?.rounds?.[0]?.id))) {
+    return lg;
+  }
+  return leagueCardsOf(tournament).find((e) => (!e.playerId || e.playerId === meId)
+    && (roundId == null || e.roundId === roundId)) ?? null;
+}
+
+// The patch for tournament.updateProfile that records my card on a round:
+// { leagueCards: { '<roundId>:<playerId>': entry } } (merged, see above).
+export function leagueCardsPatch({ leagueId, cardId, playerId, roundId }) {
+  return { leagueCards: { [leagueCardKey(roundId, playerId)]: { leagueId, cardId, playerId, roundId } } };
 }

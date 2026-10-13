@@ -1,6 +1,8 @@
 import {
   cardMonth, madridMonthManual, canAnnounce, isNotAnnounced, scoreCard, clampHandicap,
   POST_WINDOW_HOURS, REMINDER_LEAD_HOURS, postByFor, isMissed, needsApproval, deadlineInfo,
+  takesMonth, earliestOffAppTeeTime, canReschedule, postOpensAt, canWithdraw, autoWithdrawAt, resubmitBy,
+  monthClosesAt, isMonthClosed,
 } from '../leagueRules';
 
 describe('cardMonth (Europe/Madrid)', () => {
@@ -343,5 +345,84 @@ describe('post deadline', () => {
     expect(deadlineInfo({ status: 'submitted', postBy }, at(0))).toBeNull();
     expect(deadlineInfo({ status: 'missed', postBy }, at(0))).toBeNull();
     expect(deadlineInfo(null, at(0))).toBeNull();
+  });
+});
+
+describe('integrity rules (20261016000000)', () => {
+  const NOW = new Date('2026-10-13T10:00:00Z');
+  const h = (n) => new Date(NOW.getTime() + n * 3600000).toISOString();
+
+  test('takesMonth: every card but a withdrawn or legacy void; an admin void still does (R15b)', () => {
+    expect(takesMonth({ status: 'announced' })).toBe(true);
+    expect(takesMonth({ status: 'missed' })).toBe(true);
+    expect(takesMonth({ status: 'void', voidKind: 'admin' })).toBe(true);
+    expect(takesMonth({ status: 'void', voidKind: 'withdrawn_after_play' })).toBe(true);
+    expect(takesMonth({ status: 'void', voidKind: 'withdrawn' })).toBe(false);
+    expect(takesMonth({ status: 'void', voidKind: 'auto_withdrawn' })).toBe(false);
+    expect(takesMonth({ status: 'void', voidKind: null })).toBe(false);
+    expect(takesMonth(null)).toBe(false);
+  });
+
+  test('canAnnounce: an admin-voided card keeps the month taken', () => {
+    const cards = [{ userId: 'u1', status: 'void', voidKind: 'admin', month: '2026-10-01' }];
+    expect(canAnnounce(cards, 'u1', '2026-10')).toEqual({ ok: false, reason: 'already_has_card' });
+    expect(canAnnounce([{ ...cards[0], voidKind: 'withdrawn' }], 'u1', '2026-10')).toEqual({ ok: true });
+  });
+
+  test('earliestOffAppTeeTime is 2 hours ahead (R7)', () => {
+    expect(earliestOffAppTeeTime(NOW).toISOString()).toBe(h(2));
+  });
+
+  test('canReschedule: an announced off-app card whose tee time is at least 2 h away (R7)', () => {
+    const card = { source: 'offapp', status: 'announced', teeTime: h(2) };
+    expect(canReschedule(card, NOW)).toBe(true);
+    expect(canReschedule({ ...card, teeTime: h(1.9) }, NOW)).toBe(false);
+    expect(canReschedule({ ...card, source: 'app' }, NOW)).toBe(false);
+    expect(canReschedule({ ...card, status: 'submitted' }, NOW)).toBe(false);
+    expect(canReschedule({ ...card, reschedules: 1 }, NOW)).toBe(true);
+    expect(canReschedule({ ...card, reschedules: 2 }, NOW)).toBe(false);
+  });
+
+  test('postOpensAt: tee time + 3 h for an announced off-app card (R8)', () => {
+    expect(postOpensAt({ source: 'offapp', status: 'announced', teeTime: h(0) }).toISOString()).toBe(h(3));
+    expect(postOpensAt({ source: 'app', status: 'playing', teeTime: h(0) })).toBeNull();
+  });
+
+  test('canWithdraw: before the tee time (off-app) or the first shot (app) (R9)', () => {
+    expect(canWithdraw({ source: 'offapp', status: 'announced', teeTime: h(0.1) }, NOW)).toBe(true);
+    expect(canWithdraw({ source: 'offapp', status: 'announced', teeTime: h(0) }, NOW)).toBe(false);
+    expect(canWithdraw({ source: 'app', status: 'playing', firstShotAt: null }, NOW)).toBe(true);
+    expect(canWithdraw({ source: 'app', status: 'playing', firstShotAt: h(-1) }, NOW)).toBe(false);
+    expect(canWithdraw({ source: 'app', status: 'submitted', firstShotAt: null }, NOW)).toBe(false);
+  });
+
+  test('autoWithdrawAt: 24 h after Start for an app card with no first shot (R6)', () => {
+    const card = { source: 'app', status: 'playing', announcedAt: h(0), firstShotAt: null, postBy: null };
+    expect(autoWithdrawAt(card).toISOString()).toBe(h(24));
+    expect(autoWithdrawAt({ ...card, firstShotAt: h(1) })).toBeNull();
+    // A card announced before the rule keeps its post_by and is never withdrawn.
+    expect(autoWithdrawAt({ ...card, postBy: h(8) })).toBeNull();
+    expect(autoWithdrawAt({ ...card, source: 'offapp' })).toBeNull();
+  });
+
+  test('resubmitBy: 24 h after a marker sent the card back (R11)', () => {
+    expect(resubmitBy({ status: 'submitted', returnedAt: h(0) }).toISOString()).toBe(h(24));
+    expect(resubmitBy({ status: 'submitted', returnedAt: null })).toBeNull();
+    expect(resubmitBy({ status: 'confirmed', returnedAt: h(0) })).toBeNull();
+    // Once per card: a card that already used it gets no second window.
+    expect(resubmitBy({ status: 'submitted', returnedAt: h(0), returnedResubmits: 1 })).toBeNull();
+  });
+
+  test('monthClosesAt: midnight Madrid starting day 4 of the next month (R12), both offsets', () => {
+    expect(monthClosesAt('2026-09').toISOString()).toBe('2026-10-03T22:00:00.000Z');   // CEST
+    expect(monthClosesAt('2026-10-01').toISOString()).toBe('2026-11-03T23:00:00.000Z'); // CET
+    expect(monthClosesAt('2026-12').toISOString()).toBe('2027-01-03T23:00:00.000Z');    // year end
+    expect(monthClosesAt('nope')).toBeNull();
+  });
+
+  test('isMonthClosed', () => {
+    expect(isMonthClosed('2026-09', new Date('2026-10-03T21:59:59Z'))).toBe(false);
+    expect(isMonthClosed('2026-09', new Date('2026-10-03T22:00:00Z'))).toBe(true);
+    expect(isMonthClosed('2026-10', NOW)).toBe(false);
   });
 });

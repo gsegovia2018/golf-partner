@@ -28,6 +28,16 @@ CREATE TEMP TABLE league_ctx (k text PRIMARY KEY, v text) ON COMMIT DROP;
 GRANT ALL ON league_smoke, league_ctx TO authenticated, anon;
 GRANT USAGE ON SEQUENCE league_smoke_seq_seq TO authenticated, anon;
 
+-- 20261016000000 (R7, R8): an off-app card is announced 2 h ahead and posted
+-- 3 h after its tee time. This moves a card's clock back, as if announced
+-- earlier, so it can be posted in the same transaction.
+CREATE FUNCTION pg_temp.lg_rewind(p_card uuid, p_by interval) RETURNS void
+LANGUAGE sql SECURITY DEFINER AS $$
+  UPDATE public.league_cards
+     SET tee_time = tee_time - p_by, announced_at = announced_at - p_by, post_by = post_by - p_by,
+         played_on = ((tee_time - p_by) AT TIME ZONE 'Europe/Madrid')::date
+   WHERE id = p_card $$;
+
 -- Fixture: users, profiles, friendships ---------------------------------------
 INSERT INTO auth.users (id, instance_id, aud, role, email, created_at, updated_at)
 SELECT u.id::uuid, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
@@ -231,6 +241,14 @@ EXCEPTION WHEN others THEN
     SQLSTATE = 'P0001' AND SQLERRM = 'You already have your October card.', SQLSTATE || ' ' || SQLERRM);
 END $$;
 
+-- 20261016000000 (R16): a tee-off needs the card's player to be the caller's
+-- in the game, so the game's players are written first.
+RESET ROLE;
+INSERT INTO public.tournaments (id, name) VALUES ('t_lg_a', 'League smoke A');
+INSERT INTO public.game_players (tournament_id, player_id, user_id, body)
+VALUES ('t_lg_a', 'pA', 'a0000000-0000-4000-8000-00000000000a', '{}'::jsonb),
+       ('t_lg_a', 'pB', 'a0000000-0000-4000-8000-00000000000b', '{}'::jsonb);
+SET LOCAL ROLE authenticated;
 SELECT public.notify_league_tee_off((SELECT v::uuid FROM league_ctx WHERE k='cardA'));
 SELECT public.notify_league_tee_off((SELECT v::uuid FROM league_ctx WHERE k='cardA'));
 
@@ -256,14 +274,10 @@ SELECT 'tee-off stamps first_shot_at with the server clock', first_shot_at = now
 -- writes a forged card under another author_id that claims to be Javi's
 -- (scorer.userId = B). Javi's real card is written later, as B.
 -- startedAt is AFTER the announcement.
-INSERT INTO public.tournaments (id, name) VALUES ('t_lg_a', 'League smoke A');
 INSERT INTO public.game_rounds (id, tournament_id, round_index, body)
 VALUES ('r0', 't_lg_a', 0, jsonb_build_object('startedAt', to_char((now() + interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
         -- A's tee: card A's snapshot (older-build shape) has no slope/rating.
         'playerTees', '{"pA":{"label":"Yellow","slope":125,"rating":72}}'::jsonb));
-INSERT INTO public.game_players (tournament_id, player_id, user_id, body)
-VALUES ('t_lg_a', 'pA', 'a0000000-0000-4000-8000-00000000000a', '{}'::jsonb),
-       ('t_lg_a', 'pB', 'a0000000-0000-4000-8000-00000000000b', '{}'::jsonb);
 CREATE TEMP TABLE smoke_card_a ON COMMIT DROP AS
 SELECT (SELECT jsonb_object_agg(h::text, jsonb_build_object(
           'v', 1, 'entries', jsonb_build_object('pA', 4, 'pB', 5), 'ts', 1757000000000::bigint))
@@ -409,6 +423,11 @@ VALUES ('t_lg_c', 'r0', 'devB', jsonb_build_object(
      'scorer', jsonb_build_object('playerId', 'pB', 'userId', 'a0000000-0000-4000-8000-00000000000b'),
      'holes', (SELECT jsonb_object_agg(h::text, jsonb_build_object('v', 1, 'entries', jsonb_build_object('pC', 5)))
                  FROM generate_series(1, 17) h)));
+-- 20261016000000 stamps the first shot on the first scorer card that carries
+-- the card's player. Card C plays a card from before that (no stamp), so the
+-- round's startedAt decides.
+UPDATE public.league_cards SET first_shot_at = NULL, post_by = NULL
+ WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardC');
 
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000c","role":"authenticated"}', true);
 SET LOCAL ROLE authenticated;
@@ -609,9 +628,11 @@ SET LOCAL ROLE authenticated;
 DO $$
 DECLARE lid uuid := (SELECT v::uuid FROM league_ctx WHERE k='league'); r jsonb; cid uuid;
 BEGIN
-  -- Tee time now: an off-app card can be posted only once it has passed (20261012000000).
-  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"Golf Olivar","tee":"Yellow"}'::jsonb, now());
+  -- An off-app card can be posted only once its tee time has passed (20261012000000).
+  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"Golf Olivar","tee":"Yellow"}'::jsonb, now() + interval '2 hours');
   cid := (r->>'id')::uuid;
+  -- Two hours' notice, posted three hours after the tee time (20261016000000).
+  PERFORM pg_temp.lg_rewind(cid, interval '5 hours');
   INSERT INTO league_ctx VALUES ('cardD', cid::text);
   INSERT INTO league_smoke (name, ok, detail)
   SELECT 'off-app announce -> status announced', status = 'announced', status FROM public.league_cards WHERE id = cid;
@@ -693,12 +714,26 @@ END $$;
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
 SELECT public.void_league_card((SELECT v::uuid FROM league_ctx WHERE k='cardB'), 'Duplicate');
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+-- 20261016000000 (R15b): an admin void keeps the month taken ...
+DO $$
+BEGIN
+  PERFORM public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'offapp',
+            '{"name":"x"}'::jsonb, '2026-10-31 23:30+00');
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('after an admin void the month stays taken', false, 'no error');
+EXCEPTION WHEN others THEN
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('after an admin void the month stays taken',
+    SQLERRM = 'You already have your November card.', SQLERRM);
+END $$;
+-- ... while a void from before that migration (void_kind NULL) still frees it.
+RESET ROLE;
+UPDATE public.league_cards SET void_kind = NULL WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardB');
+SET LOCAL ROLE authenticated;
 DO $$
 DECLARE r jsonb;
 BEGIN
   r := public.announce_league_card((SELECT v::uuid FROM league_ctx WHERE k='league'), 'offapp',
          '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"x"}'::jsonb, '2026-10-31 23:30+00');
-  INSERT INTO league_smoke (name, ok, detail) VALUES ('after a void the member can announce that month again',
+  INSERT INTO league_smoke (name, ok, detail) VALUES ('after an older void the member can announce that month again',
     r->>'month' = '2026-11-01', r::text);
   INSERT INTO league_ctx VALUES ('cardB2', r->>'id');
 END $$;
@@ -707,8 +742,9 @@ END $$;
 -- its tee time has passed (20261012000000): move it to just now, keeping the
 -- card's month.
 RESET ROLE;
-UPDATE public.league_cards SET tee_time = now() - interval '5 minutes'
- WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardB2');
+-- 20261016000000 (R8): posted from 3 hours after the tee time.
+SELECT pg_temp.lg_rewind(id, tee_time - (now() - interval '3 hours 5 minutes'))
+  FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardB2');
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
 SET LOCAL ROLE authenticated;
 DO $$
@@ -772,8 +808,9 @@ BEGIN
     INSERT INTO league_smoke (name, ok, detail) VALUES ('announce refuses an off-app tee time already passed',
       SQLERRM = 'That tee time has passed. If you already played, add it as a card you didn''t announce.', SQLERRM);
   END;
-  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"Late"}'::jsonb, now());
+  r := public.announce_league_card(lid, 'offapp', '{"slope":130,"rating":71.4,"holes":[{"n":1,"par":4,"si":1},{"n":2,"par":4,"si":2},{"n":3,"par":4,"si":3},{"n":4,"par":4,"si":4},{"n":5,"par":4,"si":5},{"n":6,"par":4,"si":6},{"n":7,"par":4,"si":7},{"n":8,"par":4,"si":8},{"n":9,"par":4,"si":9},{"n":10,"par":4,"si":10},{"n":11,"par":4,"si":11},{"n":12,"par":4,"si":12},{"n":13,"par":4,"si":13},{"n":14,"par":4,"si":14},{"n":15,"par":4,"si":15},{"n":16,"par":4,"si":16},{"n":17,"par":4,"si":17},{"n":18,"par":4,"si":18}],"name":"Late"}'::jsonb, now() + interval '2 hours');
   INSERT INTO league_ctx VALUES ('cardBO', r->>'id');
+  PERFORM pg_temp.lg_rewind((r->>'id')::uuid, interval '5 hours');
   r := public.submit_league_card((r->>'id')::uuid, (SELECT jsonb_object_agg(h::text, 5) FROM generate_series(1, 18) h), 90, 31, 20, NULL);
   INSERT INTO league_smoke (name, ok, detail) VALUES ('off-app teeing off as announced -> announced',
     NOT (r->>'not_announced')::boolean, r::text);
@@ -786,6 +823,8 @@ RESET ROLE;
 -- Its game: no startedAt, and A's settled 4s (an app card must match the game).
 INSERT INTO public.tournaments (id, name) VALUES ('t_lg_n', 'League smoke N');
 INSERT INTO public.game_rounds (id, tournament_id, round_index, body) VALUES ('r0', 't_lg_n', 0, '{}'::jsonb);
+INSERT INTO public.game_players (tournament_id, player_id, user_id, body)
+VALUES ('t_lg_n', 'pA', 'a0000000-0000-4000-8000-00000000000a', '{}'::jsonb);
 INSERT INTO public.game_scores (tournament_id, round_id, player_id, hole, strokes)
 SELECT 't_lg_n', 'r0', 'pA', h, 4 FROM generate_series(1, 18) h;
 WITH x AS (
@@ -852,8 +891,9 @@ END $$;
 -- Posting waits for the tee time (20261012000000): move it to just now,
 -- keeping the card's month.
 RESET ROLE;
-UPDATE public.league_cards SET tee_time = now() - interval '5 minutes'
- WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardCU');
+-- 20261016000000 (R8): posted from 3 hours after the tee time.
+SELECT pg_temp.lg_rewind(id, tee_time - (now() - interval '3 hours 5 minutes'))
+  FROM public.league_cards WHERE id = (SELECT v::uuid FROM league_ctx WHERE k='cardCU');
 SELECT set_config('request.jwt.claims', '{"sub":"a0000000-0000-4000-8000-00000000000c","role":"authenticated"}', true);
 SET LOCAL ROLE authenticated;
 DO $$

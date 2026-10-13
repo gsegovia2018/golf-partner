@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { File as FsFile } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
+import { takesMonth } from './leagueRules';
 
 // Client surface for the league tables and RPCs (see
 // supabase/migrations/20261004000000_leagues.sql and
@@ -183,6 +184,72 @@ export function rowToCard(r) {
     markerRequestedAt: r.marker_requested_at ?? null,
     markerRemindedAt: r.marker_reminded_at ?? null,
     voidedReason: r.voided_reason ?? null,
+    // Why a void card is void (20261016000000): 'admin' and
+    // 'withdrawn_after_play' (scored after a withdrawal) keep the month taken;
+    // 'withdrawn' / 'auto_withdrawn' free it; null on voids from before it
+    // (they freed the month too).
+    voidKind: r.void_kind ?? null,
+    // R11 / R7 counters: resubmissions after a marker's return, reschedules.
+    returnedResubmits: r.returned_resubmits ?? 0,
+    reschedules: r.reschedules ?? 0,
+  };
+}
+
+// One entry of a card's timeline (get_league_card_events / league_card_events).
+// kind: 'announced' | 'rescheduled' | 'first_shot' | 'submitted' | 'added' |
+// 'sent_to_marker' | 'returned' | 'confirmed' | 'approved' | 'reopened' |
+// 'missed' | 'withdrawn' | 'auto_withdrawn' | 'played_after_withdraw' |
+// 'voided'. actorName is set
+// even without an account (a QR marker); how: 'partner' | 'qr' | 'photo' |
+// 'official' | 'marker_request' (confirmed, returned, sent_to_marker).
+// data is kind-specific ({ from, to } for rescheduled, { points, gross,
+// tee_verified, ... } for submitted, { post_by } for reopened; backfill: true
+// on entries rebuilt from an older card's timestamps), as the server sends it.
+export function rowToCardEvent(r) {
+  return {
+    id: r.id,
+    cardId: r.card_id ?? null,
+    kind: r.kind,
+    actorUserId: r.actor_user_id ?? null,
+    actorName: r.actor_name || null,
+    how: r.how ?? null,
+    note: r.note ?? null,
+    data: r.data ?? {},
+    at: r.created_at,
+  };
+}
+
+// One player of a game from get_league_game_status: an active league member
+// playing that game, with their card this month (the one that takes it).
+export function rowToGameStatus(r) {
+  return {
+    playerId: r.player_id,
+    userId: r.user_id,
+    name: r.name ?? null,
+    isMe: !!r.is_me,
+    leagueHandicap: num(r.league_handicap),
+    month: r.month ?? null,
+    hasCard: !!r.has_card,
+    cardId: r.card_id ?? null,
+    cardStatus: r.card_status ?? null,
+    cardSource: r.card_source ?? null,
+    thisRound: !!r.this_round,
+  };
+}
+
+// One entry of the membership log (league_member_events, members read it).
+// kind: 'removed' | 'spot_claimed' | 'spot_released' | 'invite_code_rotated' |
+// 'promoted' | 'demoted'.
+export function rowToMemberEvent(r) {
+  return {
+    id: r.id,
+    leagueId: r.league_id,
+    kind: r.kind,
+    userId: r.user_id ?? null,
+    inviteeId: r.invitee_id ?? null,
+    actorUserId: r.actor_user_id ?? null,
+    data: r.data ?? {},
+    at: r.created_at,
   };
 }
 
@@ -281,18 +348,34 @@ export async function getMyLeagues() {
     }));
 }
 
-// My live (non-void) cards for one month across every league, for the Setup
-// switch. monthKey: 'YYYY-MM'.
+// My cards for one month across every league that take the month (not void,
+// or voided by an admin: R15b), for the Setup switch. monthKey: 'YYYY-MM'.
+// Filtered here, not in the query, so it reads the same from a server without
+// void_kind.
 export async function getMyCardsForMonth(monthKey) {
   const me = await currentUserId();
   if (!me || !monthKey) return [];
   const rows = await selectRows(
     supabase.from('league_cards').select('*')
       .eq('user_id', me)
-      .eq('month', `${monthKey}-01`)
-      .neq('status', 'void'),
+      .eq('month', `${monthKey}-01`),
   );
-  return (rows ?? []).map(rowToCard);
+  return (rows ?? []).map(rowToCard).filter(takesMonth);
+}
+
+// My cards (any league) for one game round that take the month (R16: each
+// member's phone announces its own). A phone without the tournament's league
+// link finds its card again here.
+export async function getMyLeagueCardsForRound(tournamentId, roundId) {
+  const me = await currentUserId();
+  if (!me || !tournamentId || !roundId) return [];
+  const rows = await selectRows(
+    supabase.from('league_cards').select('*')
+      .eq('user_id', me)
+      .eq('tournament_id', tournamentId)
+      .eq('round_id', roundId),
+  );
+  return (rows ?? []).map(rowToCard).filter(takesMonth);
 }
 
 // One card, live. The marker QR screen polls it to notice the confirmation.
@@ -447,7 +530,9 @@ export async function joinLeague(code, proposedHandicap = null, displayName = nu
   return { leagueId: d.league_id };
 }
 
-// Admin. Returns the value stored (clamped to the league cap).
+// Admin; their own handicap only when no other admin exists (hint
+// 'own_handicap'). The members are told. Returns the value stored (clamped to
+// the league cap).
 export async function setLeagueHandicap(leagueId, userId, value) {
   return Number(await rpc('set_league_handicap', { p_league: leagueId, p_user: userId, p_value: value }));
 }
@@ -487,6 +572,38 @@ export async function setLeagueRole(leagueId, userId, role) {
 // Admin. An archived league refuses announces, joins and other writes.
 export async function archiveLeague(leagueId) {
   await rpc('archive_league', { p_league: leagueId });
+}
+
+// Admin. The member leaves like leave_league (their cards stay) and is told.
+// Server hints: 'use_leave' (yourself), 'last_admin' (the only other admin),
+// 'not_member'; 42501 for a non-admin.
+export async function removeLeagueMember(leagueId, userId) {
+  await rpc('remove_league_member', { p_league: leagueId, p_user: userId });
+}
+
+// Admin. A new invite code; the old one and every link with it stop working.
+// Returns { inviteCode }.
+export async function rotateLeagueInviteCode(leagueId) {
+  const d = await rpc('rotate_league_invite_code', { p_league: leagueId });
+  return { inviteCode: d.invite_code };
+}
+
+// Admin. Undo a claim: the account that took the spot leaves the league
+// (cards stay) and the spot is open again with its name and handicap.
+// Hints: 'not_claimed', 'use_leave' (your own spot), 'last_admin'.
+export async function releaseLeagueInvitee(leagueId, inviteeId) {
+  await rpc('release_league_invitee', { p_league: leagueId, p_invitee: inviteeId });
+}
+
+// Members. The membership log, oldest first (removed / spot claimed /
+// released / new invite code).
+export async function getLeagueMemberEvents(leagueId) {
+  const rows = await selectRows(
+    supabase.from('league_member_events').select('*')
+      .eq('league_id', leagueId)
+      .order('created_at', { ascending: true }),
+  );
+  return (rows ?? []).map(rowToMemberEvent);
 }
 
 // Admin. Deletes the league for everyone; every league row cascades from it.
@@ -530,7 +647,13 @@ export async function castHandicapBallot(voteId, yes) {
 // with the server message (e.g. "You already have your October card.", hint
 // 'card_exists'). source: 'app' (needs tournamentId/roundId/playerId) | 'offapp'.
 // scoringMode: the app round's mode; the server refuses a scramble
-// ('scramble_round'). Returns { id, month, announcedAt, leagueHandicap }.
+// ('scramble_round'). An off-app tee time needs 2 hours' notice
+// ('short_notice'; past: 'tee_time_passed'). An app card is announced by each
+// member for their own player ('not_your_player'), before their first shot
+// ('round_started'), never on an official round ('official_round');
+// announcing the same round and player again returns that card with
+// `existing` true. Returns { id, month, announcedAt, leagueHandicap, postBy,
+// status, existing }: postBy is null on an app card until its first shot.
 export async function announceLeagueCard({
   leagueId, source, course, teeTime = null, tournamentId = null, roundId = null, playerId = null,
   scoringMode = null,
@@ -552,6 +675,9 @@ export async function announceLeagueCard({
     month: d.month,
     announcedAt: d.announced_at,
     leagueHandicap: num(d.league_handicap),
+    postBy: d.post_by ?? null,
+    status: d.status ?? null,
+    existing: !!d.existing,
   };
 }
 
@@ -606,24 +732,55 @@ export async function addUnannouncedLeagueCard({
   return { id: d.id, month: d.month, status: d.status, notAnnounced: !!d.not_announced };
 }
 
-// Owner. An off-app card's tee time can move until the original passes, within
-// the same month and season; the post deadline moves with it. Server hints:
-// 'tee_time_passed', 'month_change', 'outside_season', 'not_offapp', 'not_open'.
-// Returns { id, teeTime, postBy }.
+// Owner. An off-app card's tee time can move while it is at least 2 hours
+// away ('reschedule_closed'), to a time at least 2 hours away ('short_notice'),
+// within the same month and season, at most twice ('reschedule_limit'); the
+// post deadline moves with it and the members are told. Other hints:
+// 'tee_time_passed', 'month_change', 'outside_season', 'not_offapp',
+// 'not_open', 'month_closed'. Returns { id, teeTime, postBy, reschedulesLeft }
+// (reschedulesLeft null from an older server).
 export async function rescheduleLeagueCard(cardId, teeTime) {
   const d = await rpc('reschedule_league_card', { p_card: cardId, p_tee_time: teeTime });
-  return { id: d.id, teeTime: d.tee_time, postBy: d.post_by ?? null };
+  return {
+    id: d.id, teeTime: d.tee_time, postBy: d.post_by ?? null, reschedulesLeft: d.reschedules_left ?? null,
+  };
 }
 
-// Admin, not on their own card (hint 'own_card'). A missed card goes back to
-// announced/playing with a fresh 8 hours (hint 'not_missed'). Returns { id, status, postBy }.
+// Owner. Takes a card back before it is played: before the tee time
+// (off-app) or the first shot (app); later 'withdraw_closed', or
+// 'round_started' once the server holds a score of the player (only an admin
+// can void it then). The card becomes void (voidKind 'withdrawn'), the month
+// is free again and the members are told. Returns { id, status, voidKind }.
+export async function withdrawLeagueCard(cardId) {
+  const d = await rpc('withdraw_league_card', { p_card: cardId });
+  return { id: d.id, status: d.status, voidKind: d.void_kind ?? null };
+}
+
+// Any member. The card's timeline, oldest first (see rowToCardEvent).
+export async function getLeagueCardEvents(cardId) {
+  return ((await rpc('get_league_card_events', { p_card: cardId })) ?? []).map(rowToCardEvent);
+}
+
+// Setup's league list (D5): every player of a game who is in the league, with
+// their card this month and whether it is this round's. [] when I don't play
+// the game (or it isn't saved yet). See rowToGameStatus.
+export async function getLeagueGameStatus(leagueId, tournamentId, roundId) {
+  return ((await rpc('get_league_game_status', {
+    p_league: leagueId, p_tournament: tournamentId, p_round: roundId,
+  })) ?? []).map(rowToGameStatus);
+}
+
+// Admin; their own card only when no other admin exists (hint 'own_card').
+// A missed card goes back to announced/playing with a fresh 8 hours (hint
+// 'not_missed'); the members are told. Returns { id, status, postBy }.
 export async function reopenLeagueCard(cardId) {
   const d = await rpc('reopen_league_card', { p_card: cardId });
   return { id: d.id, status: d.status, postBy: d.post_by ?? null };
 }
 
-// Admin, not on their own card (hint 'own_card'). Lets a not-announced card
-// score (hint 'not_needed' when it doesn't need it). Returns { id, approvedAt }.
+// Admin; their own card only when no other admin exists (hint 'own_card').
+// Lets a not-announced or hand-entered-tee card score (hint 'not_needed' when
+// it doesn't need it); the members are told. Returns { id, approvedAt }.
 export async function approveLeagueCard(cardId) {
   const d = await rpc('approve_league_card', { p_card: cardId });
   return { id: d.id, approvedAt: d.approved_at };
@@ -693,7 +850,10 @@ export async function createMarkerToken(cardId) {
   return { token: d.token, expiresAt: d.expires_at };
 }
 
-// Admin. Mistakes and duplicates; lets the member announce again.
+// Admin; their own card only when no other admin exists (hint 'own_card').
+// Mistakes and duplicates. The month stays taken (R15b: the member can't play
+// another card that month; a withdrawal is what frees it). Hints
+// 'already_void', 'month_closed'. The members are told.
 export async function voidLeagueCard(cardId, reason = null) {
   await rpc('void_league_card', { p_card: cardId, p_reason: reason });
 }
