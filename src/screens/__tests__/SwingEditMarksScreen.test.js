@@ -178,7 +178,8 @@ describe('the canvas (D26: design C, V2 stop guidance)', () => {
     expect(lead.head.final[0]).toBeCloseTo(0.24, 2);
     expect(lead).toMatchObject({ corrected: true, confirmed: true, head: { confirmed: true }, hands: { confirmed: true } });
     expect(rowStatus(savedAnalysis(), 'butt_extension')).not.toBe('unknown');
-    expect(store.saveAnalysis.mock.invocationCallOrder[0]).toBeLessThan(store.saveMarks.mock.invocationCallOrder[0]);
+    // marks.json is the source of truth: it is written before analysis.json
+    expect(store.saveMarks.mock.invocationCallOrder[0]).toBeLessThan(store.saveAnalysis.mock.invocationCallOrder[0]);
     expect(u.navigation.goBack).toHaveBeenCalled();
   });
 
@@ -328,6 +329,49 @@ describe('the canvas (D26: design C, V2 stop guidance)', () => {
     expect(within(u.getByTestId('mark-stop-line')).getByText(M.stopKind.first)).toBeTruthy();
   });
 
+  test('review: nothing is placed or saved on a still that is not on screen yet (the previous frame is still shown)', async () => {
+    const f = FIRST.checkpoints.leadArm.i;
+    let arrive;
+    getStill.mockImplementation((_id, fr) => (fr === f + 2 ? null : 'file:///doc/swings/s1/frames/x.jpg'));
+    ensureStills.mockImplementation(() => new Promise((r) => { arrive = r; }));
+    const u = await open({ checkpoint: 'leadArm' });
+    await press(u.getByTestId(`fine-${f + 2}`));
+    await act(async () => { await new Promise((r) => setTimeout(r, 120)); }); // past the 90 ms debounce
+    expect(u.getByTestId('mark-loading')).toBeTruthy();
+    expect(u.getByTestId('mark-primary').props.accessibilityState.disabled).toBe(true);
+    await press(dock(u, 'head'));
+    await act(async () => { touch(u.layer, px([0.24, 0.32])); });
+    expect(dockLabel(u, 'head')).toBe(M.dockLabel('Clubhead', 'Missing')); // the tap was refused
+    expect(u.getAllByText(M.loadingFrame(f + 2)).length).toBe(2); // the pill on the still and the toast
+    getStill.mockReturnValue('file:///doc/swings/s1/frames/x.jpg');
+    await act(async () => { arrive({}); });
+    expect(u.queryByTestId('mark-loading')).toBeNull();
+    await act(async () => { touch(u.layer, px([0.24, 0.32])); });
+    expect(dockLabel(u, 'head')).toBe(M.dockLabel('Clubhead', 'Moved'));
+  });
+
+  test('review: Undo stays inside the position; a new position starts with nothing to undo', async () => {
+    const u = await open({ checkpoint: 'leadArm' });
+    await press(dock(u, 'head'));
+    await act(async () => { touch(u.layer, px([0.24, 0.32])); });
+    expect(u.getByLabelText(M.undoCount(1))).toBeTruthy();
+    await press(u.getByTestId('chapter-top'));
+    await press(u.getByLabelText(M.confirmLeave));
+    expect(u.getByTestId('mark-undo').props.accessibilityState.disabled).toBe(true);
+  });
+
+  test('review: TalkBack cannot reach the canvas behind the discard sheet; the touch layer says what a tap does', async () => {
+    const u = await open({ checkpoint: 'leadArm' });
+    expect(u.layer.props.accessibilityLabel).toBe(`Hands · ${M.line.proposed}`);
+    await press(dock(u, 'head'));
+    expect(u.layer.props.accessibilityLabel).toBe(`Clubhead · ${M.line.missing('Clubhead')}`);
+    await act(async () => { touch(u.layer, px([0.24, 0.32])); });
+    await press(u.getByTestId('chapter-top'));
+    const body = u.getByTestId('mark-canvas-body', { includeHiddenElements: true });
+    expect(body.props.importantForAccessibility).toBe('no-hide-descendants');
+    expect(u.getByTestId('mark-discard-sheet').props.accessibilityViewIsModal).toBe(true);
+  });
+
   test('an analysis that is not there says so', async () => {
     const r = setup({ missing: true });
     expect(await r.findByText(M.loadFailed)).toBeTruthy();
@@ -397,6 +441,45 @@ describe('the marking pass (D26 flow: club sheet → six positions → finish sh
     await press(u.getByTestId('mark-see-results'));
     expect(savedMarks().pass).toEqual({ state: 'done', skipped: ['top'] });
     expect(u.navigation.replace).toHaveBeenCalledWith('SwingResults', { swingId: 's1' });
+  });
+
+  test('review: one Skip button (in the footer), and a double tap moves on one position only', async () => {
+    const u = await open({ mode: 'pass', marks: { ...FRESH, pass: { state: 'partial', skipped: [] } } });
+    expect(u.getAllByLabelText(M.skip)).toHaveLength(1);
+    await act(async () => {
+      fireEvent.press(u.getByTestId('mark-primary'));
+      fireEvent.press(u.getByTestId('mark-primary'));
+    });
+    expect(u.getByText('P3 · Lead arm parallel')).toBeTruthy();
+  });
+
+  test('review: a failed save does not block the next ones, and Close then offers to leave without saving', async () => {
+    const u = await open({ mode: 'pass', marks: { ...FRESH, pass: { state: 'partial', skipped: [] } } });
+    store.saveMarks.mockRejectedValueOnce(new Error('disk'));
+    await press(u.getByTestId('mark-primary')); // address: this save fails
+    expect(u.getByText(M.saveFailed)).toBeTruthy();
+    await press(u.getByTestId('mark-skip')); // lead arm: still saved
+    expect(savedMarks().pass.skipped).toEqual(['leadArm']);
+    store.saveMarks.mockRejectedValueOnce(new Error('disk'));
+    await press(u.getByTestId('mark-close'));
+    const [title, , buttons] = Alert.alert.mock.calls[Alert.alert.mock.calls.length - 1];
+    expect(title).toBe(M.saveFailed);
+    buttons.find((b) => b.text === M.leaveUnsaved).onPress();
+    expect(u.navigation.goBack).toHaveBeenCalled();
+  });
+
+  test('review: "Use frame N" saves the clubhead the golfer saw on that frame, and analyses that same clubhead', async () => {
+    const u = await open({ mode: 'pass', seeded: true, marks: { ...FRESH, pass: { state: 'partial', skipped: ['address', 'leadArm', 'top', 'shaftDown'] } } });
+    expect(u.getByText('P7 · Impact')).toBeTruthy();
+    const f = FIRST.checkpoints.impact.i;
+    await press(u.getByTestId(`fine-${f - 1}`));
+    await press(u.getByLabelText(M.primary.use(f - 1)));
+    const label = savedMarks().frames.find((x) => x.checkpoint === 'impact');
+    const a = savedAnalysis();
+    expect(label).toMatchObject({ i: f - 1, confirmed: true, head: { confirmed: true } });
+    expect(a.checkpoints.impact.i).toBe(f - 1);
+    expect(a.clubMarks.impact.head[0]).toBeCloseTo(label.head.final[0], 6);
+    expect(a.clubMarks.impact.head[1]).toBeCloseTo(label.head.final[1], 6);
   });
 
   test('a step moves on at once while its save runs, so the next touch never lands on the position just left', async () => {

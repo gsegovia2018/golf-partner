@@ -24,15 +24,45 @@ export const FINE_REACH = 8; // the fine strip holds the proposal +-8 frames, +-
 
 // --- The marks on the picture ------------------------------------------------------------------
 
-function Chip({ x, y, text, fill, ink, stroke, w: maxW }) {
-  const w = text.length * 5.6 + 14;
-  const cx = Math.max(2, Math.min(x, maxW - w - 2));
+const CHIP_H = 16;
+export const chipWidth = (text) => text.length * 5.6 + 14;
+
+function Chip({
+  x, y, text, fill, ink, stroke,
+}) {
   return (
     <G>
-      <Rect x={cx} y={y} width={w} height={16} rx={8} fill={fill} stroke={stroke} strokeWidth={stroke ? 1 : 0} />
-      <SvgText x={cx + 7} y={y + 11.5} fontSize={8.5} fontWeight="800" fontFamily="PlusJakartaSans-ExtraBold" fill={ink}>{text}</SvgText>
+      <Rect x={x} y={y} width={chipWidth(text)} height={CHIP_H} rx={8} fill={fill} stroke={stroke} strokeWidth={stroke ? 1 : 0} />
+      <SvgText x={x + 7} y={y + 11.5} fontSize={8.5} fontWeight="800" fontFamily="PlusJakartaSans-ExtraBold" fill={ink}>{text}</SvgText>
     </G>
   );
+}
+
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/**
+ * Where each mark's chip goes, so no two chips and no chip and other mark overlap (D26: the
+ * three marks sit close together at address). The active mark is placed first and always gets a
+ * chip; another mark whose chip fits nowhere goes without one (its shape and the dock still say
+ * what it is). `items`: [{ m, text, at: [x, y] px, on }], `shapes`: [{ m, at }] px.
+ * @returns {{ [m]: { x, y } }}
+ */
+export function placeLabels(items, shapes, w, h) {
+  const placed = [];
+  const out = {};
+  const blocks = (m) => shapes.filter((sh) => sh.m !== m).map((sh) => ({ x: sh.at[0] - 16, y: sh.at[1] - 16, w: 32, h: 32 }));
+  [...items].sort((a, b) => Number(b.on) - Number(a.on)).forEach((it) => {
+    const cw = chipWidth(it.text);
+    const [x, y] = it.at;
+    const spots = [[x + 16, y - 32], [x + 16, y + 18], [x - 16 - cw, y - 32], [x - 16 - cw, y + 18], [x - cw / 2, y + 22], [x - cw / 2, y - 40]]
+      .map(([cx, cy]) => ({ x: Math.max(2, Math.min(cx, w - cw - 2)), y: Math.max(2, Math.min(cy, h - CHIP_H - 2)), w: cw, h: CHIP_H }));
+    const free = spots.find((r) => ![...placed, ...blocks(it.m)].some((o) => overlaps(r, o)));
+    const r = free ?? (it.on ? spots[0] : null);
+    if (!r) return;
+    placed.push(r);
+    out[it.m] = { x: r.x, y: r.y };
+  });
+  return out;
 }
 
 /**
@@ -47,37 +77,50 @@ export function MarkLayer({ rect, marks, active }) {
   const X = (p) => [p[0] * rect.w, p[1] * rect.h];
   const order = ['ball', 'head', 'hands'].filter((m) => m !== active).concat(active);
   const handsPx = marks.hands?.pt ? X(marks.hands.pt) : null;
-  const draw = (m) => {
+  const where = (m) => {
     const mk = marks[m];
     if (!mk) return null;
+    if (mk.status === 'hidden') return handsPx; // its chip sits by the hands
+    const at = mk.pt ?? (mk.status === 'missing' ? mk.prior : null);
+    return at ? X(at) : null;
+  };
+  const items = [];
+  const shapes = [];
+  order.forEach((m) => {
+    const at = where(m);
+    if (!at) return;
+    items.push({ m, at, on: m === active, text: `${T.names[m].toUpperCase()} · ${T.status[marks[m].status].toUpperCase()}` });
+    if (marks[m].status !== 'hidden') shapes.push({ m, at });
+  });
+  const spots = placeLabels(items, shapes, rect.w, rect.h);
+
+  const draw = (m) => {
+    const mk = marks[m];
+    const at = where(m);
+    if (!mk || !at) return null;
     const on = m === active;
     const C = MARK_COLOR[m];
-    const name = T.names[m].toUpperCase();
-    const label = (text, lx, ly) => (
-      <Chip x={lx} y={ly} text={text} w={rect.w} fill={on ? C : DIM} ink={on ? INK : C} stroke={on ? null : OUTLINE} />
-    );
-    if (mk.status === 'hidden') {
-      return handsPx ? <G key={m}>{label(`${name} · ${T.status.hidden.toUpperCase()}`, handsPx[0] + 18, handsPx[1] + 24)}</G> : null;
-    }
-    const at = mk.pt ?? (mk.status === 'missing' ? mk.prior : null);
-    if (!at) return null;
-    const [x, y] = X(at);
+    const it = items.find((x) => x.m === m);
+    const chip = spots[m] ? (
+      <Chip x={spots[m].x} y={spots[m].y} text={it.text} fill={on ? C : DIM} ink={on ? INK : C} stroke={on ? null : OUTLINE} />
+    ) : null;
+    if (mk.status === 'hidden') return <G key={m}>{chip}</G>;
+    const [x, y] = at;
     const halo = on ? <Circle cx={x} cy={y} r={24} fill="none" stroke={hud.text} strokeWidth={1.5} strokeDasharray="4 3" /> : null;
-    const ly = y < 40 ? y + 20 : y - 32;
     if (mk.status === 'missing') {
       return (
         <G key={m}>
           <Circle cx={x} cy={y} r={10} fill="none" stroke={C} strokeWidth={2} strokeDasharray="2 3" />
           {halo}
-          {label(`${name} · ${T.status.missing.toUpperCase()}`, x + 14, ly)}
+          {chip}
         </G>
       );
     }
     const dash = mk.status === 'proposed' ? '5 3' : undefined;
     let shape;
     if (m === 'hands') {
-      const h = on ? 14 : 9;
-      shape = <Rect x={x - h} y={y - h} width={2 * h} height={2 * h} fill={HANDS_FILL} stroke={C} strokeWidth={on ? 3 : 2} strokeDasharray={dash} />;
+      const hh = on ? 14 : 9;
+      shape = <Rect x={x - hh} y={y - hh} width={2 * hh} height={2 * hh} fill={HANDS_FILL} stroke={C} strokeWidth={on ? 3 : 2} strokeDasharray={dash} />;
     } else if (m === 'head') {
       const proposed = mk.status === 'proposed';
       shape = <Circle cx={x} cy={y} r={on ? 10 : 7} fill={proposed ? withAlpha(hud.text, 0.3) : hud.text} stroke={proposed ? hud.text : INK} strokeWidth={on ? 2.5 : 1.5} strokeDasharray={dash} />;
@@ -94,11 +137,10 @@ export function MarkLayer({ rect, marks, active }) {
             <Polyline points={`${x + 10},${y - 13} ${x + 12.3},${y - 10.7} ${x + 16},${y - 15.3}`} fill="none" stroke={INK} strokeWidth={1.6} />
           </G>
         ) : null}
-        {/* the ball sits under the clubhead at address: its chip goes below it, clear of the others */}
-        {label(`${name} · ${T.status[mk.status].toUpperCase()}`, m === 'ball' ? x - 30 : x + 16, m === 'ball' ? y + 16 : ly)}
       </G>
     );
   };
+  // drawn in order with the active mark last; chips were placed clear of the other marks
   return (
     <Svg width={rect.w} height={rect.h} style={StyleSheet.absoluteFill} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {order.map(draw)}
@@ -164,7 +206,7 @@ export function StopLine({ cue, open, onToggle }) {
           </Text>
           {stop ? <Text style={styles.stopWatch}>{T.watch(stop.watch)}</Text> : null}
         </View>
-        <Pressable onPress={onToggle} style={styles.more} accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={open ? T.less : T.more}>
+        <Pressable onPress={onToggle} style={styles.more} hitSlop={{ top: 6, bottom: 6, left: 4 }} accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={open ? T.less : T.more}>
           <Text style={styles.moreText}>{open ? T.less : T.more}</Text>
         </Pressable>
       </View>
@@ -194,7 +236,7 @@ export function FineStrip({
 }) {
   const scroll = useRef(null);
   const gap = 4;
-  const thumbW = Math.max(28, Math.floor((width - gap * 8) / 9));
+  const thumbW = Math.max(44, Math.floor((width - gap * 8) / 9)); // a 44 dp target; narrow phones scroll more
   const frames = [];
   for (let off = -FINE_REACH; off <= FINE_REACH; off += 1) {
     const f = center + off;
@@ -235,7 +277,9 @@ export function FineStrip({
               testID={`fine-${f}`}
             >
               <View style={[styles.ft, { width: thumbW, height: Math.round(thumbW * 1.35) }, isProp && styles.ftProp, isOn && styles.ftOn, Math.abs(f - center) > 3 && !isOn && styles.ftSide]}>
-                {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+                {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : (
+                  <Text style={styles.ftWait} accessibilityElementsHidden importantForAccessibility="no">…</Text>
+                )}
                 {isProp ? <View style={styles.pf} /> : null}
               </View>
               <Text style={[styles.fn, isProp && styles.fnProp, isOn && styles.fnOn]}>{f}</Text>
@@ -278,7 +322,7 @@ const styles = StyleSheet.create({
 
   fine: { gap: 4 },
   fcap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  step: { width: 36, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: hud.fill },
+  step: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: hud.fill },
   fcapText: { flex: 1, fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: hud.textMuted },
   right: { textAlign: 'right' },
   flag: { borderRadius: 999, borderWidth: 1, borderColor: hud.line, backgroundColor: hud.fill, paddingHorizontal: 8, paddingVertical: 2, maxWidth: '50%' },
@@ -286,7 +330,10 @@ const styles = StyleSheet.create({
   flagText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: hud.text, fontVariant: ['tabular-nums'] },
   flagTextOff: { color: HUD_WARN },
   thumb: { alignItems: 'center', gap: 2, minHeight: 44 },
-  ft: { borderRadius: 5, overflow: 'hidden', backgroundColor: hud.inset, borderWidth: 1.5, borderColor: 'transparent', opacity: 0.75 },
+  ft: {
+    borderRadius: 5, overflow: 'hidden', backgroundColor: hud.inset, borderWidth: 1.5, borderColor: 'transparent', opacity: 0.75,
+    alignItems: 'center', justifyContent: 'center',
+  },
   ftProp: { opacity: 1, borderColor: hud.accent },
   ftOn: { opacity: 1, borderColor: hud.text },
   ftSide: { opacity: 0.55 },
@@ -294,6 +341,7 @@ const styles = StyleSheet.create({
     position: 'absolute', top: -1, alignSelf: 'center', width: 0, height: 0,
     borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 6, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: hud.accent,
   },
+  ftWait: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: hud.textMuted }, // still being extracted
   fn: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 8, color: hud.textMuted, fontVariant: ['tabular-nums'] },
   fnProp: { color: hud.accent },
   fnOn: { color: hud.text },

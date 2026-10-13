@@ -6,8 +6,9 @@ import {
 } from '../markPass';
 import {
   buildDraft, recompute, draftToMarks, markStatus, placeMark, setHidden, confirmMark, confirmPosition, confirmMoves,
-  restorePosition, skipPosition, pendingMoves, primaryAction,
+  restorePosition, skipPosition, pendingMoves, primaryAction, adoptFrame, analyzeMarks,
 } from '../editMarks';
+import { placeLabels, chipWidth } from '../../components/swing/MarkCanvasParts';
 import { emptyMarks, frameLabel, withFrame, marksForAnalyze, parseMarks } from '../labels';
 import { CHECKPOINT_KEYS } from '../phases';
 import { fixtureNative, TRUTH, W, H } from './helpers';
@@ -115,6 +116,39 @@ describe('the canvas draft (D26)', () => {
     const kept = confirmMoves(moved, c.base, 'address');
     expect(kept.ball).toEqual([0.5, 0.8, snap.ball[2]]);
     expect(pendingMoves(kept, c.base, snap, 'address')).toBe(false);
+  });
+});
+
+describe('review fixes', () => {
+  test('adopting a frame asks for the marks to be confirmed again and analyses the clubhead as shown', () => {
+    const c = ctx();
+    const ok = confirmPosition(placeMark(c.draft, 'impact', 'head', [0.6, 0.6]), c.base, 'impact');
+    const f = ok.cps.impact.frame;
+    const moved = adoptFrame(ok, 'impact', f + 2);
+    expect(moved.cps.impact.frame).toBe(f + 2);
+    expect(markStatus(moved, c.base, 'impact', 'hands')).toBe('proposed');
+    expect(moved.cps.impact.confirmed.head).toBe(false);
+    expect(adoptFrame(ok, 'impact', f)).toBe(ok);
+    // an unmoved proposal on a moved frame is still sent to analyze(), never re-read at the old frame
+    const prop = { ...c.draft, cps: { ...c.draft.cps, impact: { ...c.draft.cps.impact, head: [0.5, 0.7] } } };
+    const base = { ...c.base, cps: { ...c.base.cps, impact: { ...c.base.cps.impact, head: [0.5, 0.7] } } };
+    expect(analyzeMarks(adoptFrame(prop, 'impact', f + 1), base).impact).toEqual({ frame: f + 1, head: [0.5, 0.7] });
+    expect(analyzeMarks(prop, base).impact).toBeUndefined();
+  });
+
+  test('chips at address never overlap each other or another mark; the active one always gets its chip', () => {
+    const items = [
+      { m: 'hands', at: [100, 100], on: true, text: 'HANDS · PROPOSED' },
+      { m: 'head', at: [112, 118], on: false, text: 'CLUBHEAD · PROPOSED' },
+      { m: 'ball', at: [120, 130], on: false, text: 'BALL · PROPOSED' },
+    ];
+    const shapes = items.map(({ m, at }) => ({ m, at }));
+    const spots = placeLabels(items, shapes, 300, 400);
+    expect(spots.hands).toBeDefined();
+    const rects = Object.entries(spots).map(([m, p]) => ({ x: p.x, y: p.y, w: chipWidth(items.find((i) => i.m === m).text), h: 16 }));
+    rects.forEach((a, i) => rects.slice(i + 1).forEach((b) => {
+      expect(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h).toBe(false);
+    }));
   });
 });
 

@@ -231,6 +231,10 @@ export const SWING_STRINGS = {
     discard: 'Discard',
     saving: 'Saving…',
     saveFailed: 'Could not save your marks.',
+    saveFailedBody: 'Your marks on this phone are as they were before this step.',
+    leaveUnsaved: 'Leave without saving',
+    loadingFrame: (f) => `Loading frame ${f}…`,
+    touchHint: 'Tap to place the selected mark, or drag a mark to move it.',
     loadFailed: 'This swing has no analysis to mark yet.',
   },
 

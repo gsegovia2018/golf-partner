@@ -80,7 +80,8 @@ const makeStyles = (theme, themed) => {
     pOn: { color: c.textOn },
     dot: { width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: c.ring },
     dotDone: { backgroundColor: c.done, borderColor: c.done },
-    dotSkip: { backgroundColor: c.skip, borderColor: c.skip },
+    // shape as well as colour: confirmed is a filled dot, skipped a filled square, to do a ring
+    dotSkip: { backgroundColor: c.skip, borderColor: c.skip, borderRadius: 1 },
     name: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 9, color: c.text, maxWidth: '100%' },
     nameOn: { color: c.textOn },
     countLine: { flexDirection: 'row', justifyContent: 'space-between' },

@@ -21,8 +21,8 @@ import {
 import { getStill, ensureStills } from '../swing/frames';
 import { cueFor } from '../swing/checkpoints';
 import {
-  buildDraft, recompute, draftToMarks, isDirty, patchCheckpoint, hitTest, clampPt,
-  markStatus, placeMark, setHidden, confirmMark, confirmPosition, confirmMoves, restorePosition, skipPosition,
+  buildDraft, recompute, draftToMarks, isDirty, hitTest, clampPt,
+  markStatus, placeMark, setHidden, confirmMark, adoptFrame, confirmPosition, confirmMoves, restorePosition, skipPosition,
   pendingMoves, primaryAction,
 } from '../swing/editMarks';
 import {
@@ -48,6 +48,7 @@ function histReducer(state, a) {
       if (a.draft === state.draft) return state;
       return { draft: a.draft, undo: a.push ? [...state.undo, state.draft].slice(-300) : state.undo };
     }
+    case 'clear': return { draft: state.draft, undo: [] }; // undo stays inside one position
     case 'undo': {
       if (!state.undo.length) return state;
       return { draft: state.undo[state.undo.length - 1], undo: state.undo.slice(0, -1) };
@@ -153,8 +154,8 @@ export function SwingMarkCanvas({
     if (have) { setShown({ frame: view, uri: have }); return undefined; }
     const t = setTimeout(async () => {
       await needStills([view]);
-      const uri = stillFor(view);
-      if (alive && uri) setShown({ frame: view, uri });
+      // No still even after extracting: say so on the picture instead of waiting forever.
+      if (alive) setShown({ frame: view, uri: stillFor(view) });
     }, 90);
     return () => { alive = false; clearTimeout(t); };
   }, [view, stillFor, needStills]);
@@ -167,20 +168,30 @@ export function SwingMarkCanvas({
     needStills(want).then(() => { if (alive) setTick((t) => t + 1); });
     return () => { alive = false; };
   }, [phase, center, maxFrame, stillFor, needStills]);
+  // While the golfer is on this position, fetch the ±4 of the next one (one decode, in the background).
+  const nextKey = pass ? nextTodo(draft.status, cp) : MARKED_KEYS[MARKED_KEYS.indexOf(cp) + 1];
+  const nextFrame = nextKey ? draft.cps[nextKey].frame : null;
+  useEffect(() => {
+    if (phase !== 'canvas' || nextFrame == null) return;
+    const want = [];
+    for (let f = nextFrame - 4; f <= nextFrame + 4; f += 1) if (f >= 0 && f <= maxFrame && !stillFor(f)) want.push(f);
+    if (want.length) needStills(want);
+  }, [phase, nextFrame, maxFrame, stillFor, needStills]);
+  // The picture is still the previous frame until the new still arrives: nothing is placed on it meanwhile.
+  const loading = shown.frame !== view;
 
   // --- editing --------------------------------------------------------------------------------------
   const latest = useRef({});
   latest.current = {
-    cp, view, active, draft, rect, handsNow, headNow, ballNow,
+    cp, view, active, draft, rect, handsNow, headNow, ballNow, loading,
   };
   const commit = useCallback((next, push = true) => dispatch({ type: 'set', draft: next, push }), []);
 
-  /** A mark placed on a previewed frame adopts that frame (the rule the owner's lab bug taught us). */
-  const adopt = (dr, key, frame) => (dr.cps[key].frame === frame ? dr : patchCheckpoint(dr, key, { frame }));
 
+  // A mark placed on a previewed frame adopts that frame (the rule the owner's lab bug taught us).
   const place = useCallback((m, pt, push) => {
     const L = latest.current;
-    const from = m === 'ball' ? L.draft : adopt(L.draft, L.cp, L.view);
+    const from = m === 'ball' ? L.draft : adoptFrame(L.draft, L.cp, L.view);
     commit(placeMark(from, L.cp, m, pt), push);
   }, [commit]);
 
@@ -198,6 +209,7 @@ export function SwingMarkCanvas({
       const hit = hitTest([x, y], { hands: px(L.handsNow), head: px(L.headNow), ball: px(L.ballNow) }, L.active);
       const norm = clampPt([x / L.rect.w, y / L.rect.h]);
       setToast('');
+      if (L.loading) { setToast(T.loadingFrame(L.view)); grab.current = null; return; }
       if (hit) {
         setActive(hit);
         const o = hit === 'hands' ? L.handsNow : hit === 'head' ? L.headNow : L.ballNow;
@@ -240,6 +252,7 @@ export function SwingMarkCanvas({
   const lastNudge = useRef(0);
   const nudge = (dx, dy) => {
     const L = latest.current;
+    if (L.loading) return;
     const cur = L.active === 'hands' ? L.handsNow : L.active === 'head' ? L.headNow : L.ballNow;
     if (!cur) { setToast(L.active === 'head' ? T.placeHead : T.ballOnlyAddress); return; }
     const now = Date.now();
@@ -256,12 +269,12 @@ export function SwingMarkCanvas({
     setToast('');
   };
   const confirmActive = () => {
-    commit(confirmMark(adopt(draft, cp, view), base, cp, active));
+    commit(confirmMark(adoptFrame(draft, cp, view), base, cp, active));
     setToast(T.confirmed(T.names[active], view));
   };
   const toggleHidden = () => {
     const on = !d.hidden;
-    commit(setHidden(adopt(draft, cp, view), cp, on));
+    commit(setHidden(adoptFrame(draft, cp, view), cp, on));
     if (!on && !d.head) { setActive('head'); setToast(T.placeHead); } else setToast(on ? T.hiddenToast : '');
   };
   const preview = (f) => setView(Math.min(maxFrame, Math.max(0, Math.round(f))));
@@ -276,13 +289,13 @@ export function SwingMarkCanvas({
   // --- saving ---------------------------------------------------------------------------------------
   const passStateNow = useRef(markedFromMarks(marks).state);
   const write = async (next, passState) => {
-    const a = recompute({ pose, probe, analysis: scored, draft: next, base });
-    if (a.error) return false;
-    const m = draftToMarks({
-      draft: next, base, live: a, swingId: analysis.swingId, video: { width: video.width, height: video.height, fps: video.containerFps },
-      handedness, editedAt: new Date().toISOString(), passState,
-    });
     try {
+      const a = recompute({ pose, probe, analysis: scored, draft: next, base });
+      if (a.error) throw new Error(a.error);
+      const m = draftToMarks({
+        draft: next, base, live: a, swingId: analysis.swingId, video: { width: video.width, height: video.height, fps: video.containerFps },
+        handedness, editedAt: new Date().toISOString(), passState,
+      });
       await onSave({ analysis: a, marks: m });
       passStateNow.current = passState;
       return true;
@@ -295,7 +308,8 @@ export function SwingMarkCanvas({
   // must not keep taking touches for a position the golfer has already left).
   const queue = useRef(Promise.resolve(true));
   const persist = (next, passState = passStateNow.current) => {
-    queue.current = queue.current.then(() => write(next, passState));
+    // one failed save must never stop the ones after it
+    queue.current = queue.current.catch(() => false).then(() => write(next, passState));
     return queue.current;
   };
   /** A save the next screen depends on: wait for it, with the buttons off meanwhile. */
@@ -307,6 +321,7 @@ export function SwingMarkCanvas({
   // --- moving between positions --------------------------------------------------------------------
   const enter = (key, from) => {
     snap.current = from;
+    dispatch({ type: 'clear' });
     setCp(key);
     setView(from.cps[key].frame);
     setActive('hands');
@@ -329,12 +344,22 @@ export function SwingMarkCanvas({
     then(next);
   };
 
+  // One press, one step: a second tap before the canvas has moved on is ignored.
+  const busy = useRef(false);
+  useEffect(() => { busy.current = false; }, [cp, phase, draft]);
+  const once = (fn) => () => {
+    if (busy.current) return;
+    busy.current = true;
+    fn();
+  };
+
   const advance = (next) => {
     const key = nextTodo(next.status, cp);
     if (key) enter(key, next); else setPhase('finish');
   };
   const primary = async () => {
-    const next = confirmPosition(adopt(draft, cp, view), base, cp);
+    if (loading) return;
+    const next = confirmPosition(adoptFrame(draft, cp, view), base, cp);
     commit(next);
     if (pass && !fixFrom) {
       advance(next);
@@ -364,7 +389,12 @@ export function SwingMarkCanvas({
       if (phase === 'club') { proceed(); return; }
       if (fixFrom) { guard(() => { setFixFrom(null); setPhase('finish'); }); return; }
       guard(async (dr) => {
-        if (await persistNow(dr)) proceed();
+        if (await persistNow(dr)) { proceed(); return; }
+        // A save that fails must not trap the golfer on the canvas.
+        Alert.alert(T.saveFailed, T.saveFailedBody, [
+          { text: T.keepEditing, style: 'cancel' },
+          { text: T.leaveUnsaved, style: 'destructive', onPress: proceed },
+        ]);
       });
       return;
     }
@@ -391,7 +421,7 @@ export function SwingMarkCanvas({
   const idx = MARKED_KEYS.indexOf(cp);
   const editLike = !pass || !!fixFrom;
   const action = primaryAction(draft, base, cp, view);
-  const willChange = isDirty(confirmPosition(adopt(draft, cp, view), base, cp), startDraft);
+  const willChange = isDirty(confirmPosition(adoptFrame(draft, cp, view), base, cp), startDraft);
   const primaryLabel = editLike ? (willChange || fixFrom ? T.primary.editSave : T.primary.editDone)
     : action === 'use' ? T.primary.use(view) : T.primary[action];
   const pillSmall = !chapter ? T.auto : pass && !fixFrom ? `${idx + 1}/${MARK_TOTAL}` : T.edit;
@@ -487,94 +517,97 @@ export function SwingMarkCanvas({
   return (
     <View style={[s.screen, { paddingTop: insets.top }]} testID="mark-canvas">
       <StatusBar barStyle="light-content" />
-      <View style={s.top}>
-        <Pressable style={s.cbtn} onPress={() => requestClose(onClose)} accessibilityRole="button" accessibilityLabel={editLike ? T.cancel : T.close} testID="mark-close">
-          <Feather name="x" size={22} color={hud.text} />
-        </Pressable>
-        <View style={[s.pill, s.flex]} accessible accessibilityLabel={`${cue?.p ? `${cue.p} ` : ''}${cue?.name ?? cp}, ${pillSmall}`}>
-          <Text style={s.pillText} numberOfLines={1}>{`${cue?.p ? `${cue.p} · ` : ''}${cue?.name ?? cp}`}</Text>
-          <Text style={s.pillSmall}>{pillSmall}</Text>
-        </View>
-        <Pressable style={[s.cbtn, !hist.undo.length && s.dim]} disabled={!hist.undo.length} onPress={undo} accessibilityRole="button" accessibilityLabel={hist.undo.length ? T.undoCount(hist.undo.length) : T.undo} testID="mark-undo">
-          <Feather name="rotate-ccw" size={18} color={hud.text} />
-        </Pressable>
-        {pass && !fixFrom ? (
-          <Pressable style={s.pill} onPress={skip} accessibilityRole="button" accessibilityLabel={T.skip} testID="mark-skip-top">
-            <Text style={s.pillText}>{T.skip}</Text>
+      {/* the discard sheet is modal: TalkBack must not wander behind it */}
+      <View style={s.flex} importantForAccessibility={dialog ? 'no-hide-descendants' : 'auto'} accessibilityElementsHidden={!!dialog} testID="mark-canvas-body">
+        <View style={s.top}>
+          <Pressable style={s.cbtn} onPress={() => requestClose(onClose)} accessibilityRole="button" accessibilityLabel={editLike ? T.cancel : T.close} testID="mark-close">
+            <Feather name="x" size={22} color={hud.text} />
           </Pressable>
-        ) : null}
-      </View>
-
-      <View style={s.video} onLayout={(e) => { const { width: w, height: h } = e.nativeEvent.layout; if (w && h) setArea({ w, h }); }}>
-        <SwingOverlay width={box.w} height={box.h} video={video} uri={shown.uri} showPlanes={false} label={`${cue?.name ?? cp} still, frame ${shown.frame ?? view}`}>
-          <MarkLayer
-            rect={rect}
-            active={active}
-            marks={{
-              hands: { pt: handsNow, status: statuses.hands },
-              head: { pt: headNow, status: statuses.head, prior: live.clubMarks[cp].priorHead },
-              ball: cp === 'address' && draft.ball ? { pt: draft.ball, status: statuses.ball } : null,
-            }}
-          />
-          <View style={StyleSheet.absoluteFill} {...pan.panHandlers} testID="edit-touch-layer" accessibilityLabel={T.line.missing(T.names[active])} />
-          <DragLoupe ref={loupe} rect={rect} uri={shown.uri} label={T.placing(T.names[active])} color={MARK_COLOR[active]} />
-        </SwingOverlay>
-        <MarkDock style={s.dock} active={active} statuses={statuses} ballOff={cp !== 'address'} onSelect={selectMark} />
-      </View>
-
-      <View style={[s.strip, { paddingBottom: 12 + insets.bottom }]}>
-        <StopLine cue={cue} open={cueOpen} onToggle={() => setCueOpen((v) => !v)} />
-        {!cueOpen ? (
-          <FineStrip
-            center={center}
-            proposed={base.cps[cp].frame}
-            frame={d.frame}
-            view={view}
-            maxFrame={maxFrame}
-            stillFor={stillFor}
-            onPreview={preview}
-            before={cue?.stop?.before ?? ''}
-            after={cue?.stop?.after ?? ''}
-            width={stripW}
-          />
-        ) : null}
-        <View style={s.markRow} testID="mark-row">
-          <Swatch mark={active} size={14} />
-          <Text style={s.markText} numberOfLines={1}>{`${T.names[active]} · ${markLine}`}</Text>
-          {active === 'head' && statuses.head !== 'confirmed' ? (
-            <Pressable style={[s.mini, s.miniGhost]} onPress={toggleHidden} accessibilityRole="button" accessibilityLabel={d.hidden ? T.unhide : T.hide} testID="mark-hidden">
-              <Feather name="eye-off" size={13} color={hud.text} />
-              <Text style={[s.miniText, s.white]}>{d.hidden ? T.unhide : T.hide}</Text>
-            </Pressable>
-          ) : null}
-          {canConfirm ? (
-            <Pressable style={s.mini} onPress={confirmActive} accessibilityRole="button" accessibilityLabel={`${T.confirm} ${T.names[active]}`} testID="mark-confirm">
-              <Feather name="check" size={13} color={hud.onAccent} />
-              <Text style={s.miniText}>{T.confirm}</Text>
-            </Pressable>
-          ) : null}
+          <View style={[s.pill, s.flex]} accessible accessibilityLabel={`${cue?.p ? `${cue.p} ` : ''}${cue?.name ?? cp}, ${pillSmall}`}>
+            <Text style={s.pillText} numberOfLines={1}>{`${cue?.p ? `${cue.p} · ` : ''}${cue?.name ?? cp}`}</Text>
+            <Text style={s.pillSmall}>{pillSmall}</Text>
+          </View>
+          <Pressable style={[s.cbtn, !hist.undo.length && s.dim]} disabled={!hist.undo.length} onPress={undo} accessibilityRole="button" accessibilityLabel={hist.undo.length ? T.undoCount(hist.undo.length) : T.undo} testID="mark-undo">
+            <Feather name="rotate-ccw" size={18} color={hud.text} />
+          </Pressable>
         </View>
-        <View style={s.tools}>
-          {[['left', 'arrow-left', -1, 0], ['up', 'arrow-up', 0, -1], ['down', 'arrow-down', 0, 1], ['right', 'arrow-right', 1, 0]].map(([k, icon, dx, dy]) => (
-            <Pressable key={k} style={s.nudge} onPress={() => nudge(dx, dy)} accessibilityRole="button" accessibilityLabel={T.nudge[k]}>
-              <Feather name={icon} size={16} color={hud.textSoft} />
-            </Pressable>
-          ))}
-          <Text style={s.toast} accessibilityLiveRegion="polite" numberOfLines={2}>{toast}</Text>
+
+        <View style={s.video} onLayout={(e) => { const { width: w, height: h } = e.nativeEvent.layout; if (w && h) setArea({ w, h }); }}>
+          <SwingOverlay width={box.w} height={box.h} video={video} uri={shown.uri} showPlanes={false} label={`${cue?.name ?? cp} still, frame ${shown.frame ?? view}`}>
+            <MarkLayer
+              rect={rect}
+              active={active}
+              marks={{
+                hands: { pt: handsNow, status: statuses.hands },
+                head: { pt: headNow, status: statuses.head, prior: live.clubMarks[cp].priorHead },
+                ball: cp === 'address' && draft.ball ? { pt: draft.ball, status: statuses.ball } : null,
+              }}
+            />
+            <View style={StyleSheet.absoluteFill} {...pan.panHandlers} testID="edit-touch-layer" accessible accessibilityLabel={`${T.names[active]} · ${markLine}`} accessibilityHint={T.touchHint} />
+            <DragLoupe ref={loupe} rect={rect} uri={shown.uri} label={T.placing(T.names[active])} color={MARK_COLOR[active]} />
+          </SwingOverlay>
+          {loading ? (
+            <View style={s.loadingPill} pointerEvents="none" accessibilityLiveRegion="polite" testID="mark-loading">
+              <Text style={s.loadingText}>{T.loadingFrame(view)}</Text>
+            </View>
+          ) : null}
+          <MarkDock style={s.dock} active={active} statuses={statuses} ballOff={cp !== 'address'} onSelect={selectMark} />
         </View>
-        <MarkChapters status={draft.status} current={chapter && !fixFrom ? cp : null} onSelect={goto} right={countRight} />
-        <View style={s.row}>
-          {pass && !fixFrom ? (
-            <HudButton ghost label={T.skip} onPress={skip} disabled={saving} style={s.btnSide} testID="mark-skip" />
-          ) : (
-            <HudButton ghost label={T.cancel} onPress={() => requestClose(onClose)} disabled={saving} style={s.btnSide} testID="mark-cancel" />
-          )}
-          <HudButton icon="check" label={saving ? T.saving : primaryLabel} onPress={primary} disabled={saving} style={s.flex} testID="mark-primary" />
+
+        <View style={[s.strip, { paddingBottom: 12 + insets.bottom }]}>
+          <StopLine cue={cue} open={cueOpen} onToggle={() => setCueOpen((v) => !v)} />
+          {!cueOpen ? (
+            <FineStrip
+              center={center}
+              proposed={base.cps[cp].frame}
+              frame={d.frame}
+              view={view}
+              maxFrame={maxFrame}
+              stillFor={stillFor}
+              onPreview={preview}
+              before={cue?.stop?.before ?? ''}
+              after={cue?.stop?.after ?? ''}
+              width={stripW}
+            />
+          ) : null}
+          <View style={s.markRow} testID="mark-row">
+            <Swatch mark={active} size={14} />
+            <Text style={s.markText} numberOfLines={1}>{`${T.names[active]} · ${markLine}`}</Text>
+            {active === 'head' && statuses.head !== 'confirmed' ? (
+              <Pressable style={[s.mini, s.miniGhost, loading && s.dim]} disabled={loading} onPress={toggleHidden} accessibilityRole="button" accessibilityLabel={d.hidden ? T.unhide : T.hide} testID="mark-hidden">
+                <Feather name="eye-off" size={13} color={hud.text} />
+                <Text style={[s.miniText, s.white]}>{d.hidden ? T.unhide : T.hide}</Text>
+              </Pressable>
+            ) : null}
+            {canConfirm ? (
+              <Pressable style={[s.mini, loading && s.dim]} disabled={loading} onPress={confirmActive} accessibilityRole="button" accessibilityLabel={`${T.confirm} ${T.names[active]}`} testID="mark-confirm">
+                <Feather name="check" size={13} color={hud.onAccent} />
+                <Text style={s.miniText}>{T.confirm}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <View style={s.tools}>
+            {[['left', 'arrow-left', -1, 0], ['up', 'arrow-up', 0, -1], ['down', 'arrow-down', 0, 1], ['right', 'arrow-right', 1, 0]].map(([k, icon, dx, dy]) => (
+              <Pressable key={k} style={s.nudge} onPress={() => nudge(dx, dy)} disabled={loading} accessibilityRole="button" accessibilityLabel={T.nudge[k]}>
+                <Feather name={icon} size={16} color={hud.textSoft} />
+              </Pressable>
+            ))}
+            <Text style={s.toast} accessibilityLiveRegion="polite" numberOfLines={2}>{toast}</Text>
+          </View>
+          <MarkChapters status={draft.status} current={chapter && !fixFrom ? cp : null} onSelect={goto} right={countRight} />
+          <View style={s.row}>
+            {pass && !fixFrom ? (
+              <HudButton ghost label={T.skip} onPress={once(skip)} disabled={saving} style={s.btnSide} testID="mark-skip" />
+            ) : (
+              <HudButton ghost label={T.cancel} onPress={() => requestClose(onClose)} disabled={saving} style={s.btnSide} testID="mark-cancel" />
+            )}
+            <HudButton icon="check" label={saving ? T.saving : primaryLabel} onPress={once(primary)} disabled={saving || loading} style={s.flex} testID="mark-primary" />
+          </View>
         </View>
       </View>
 
       {dialog ? (
-        <View style={StyleSheet.absoluteFill} testID="mark-discard-sheet">
+        <View style={StyleSheet.absoluteFill} testID="mark-discard-sheet" accessibilityViewIsModal>
           <Pressable style={s.scrim} onPress={() => answer('keep')} accessible={false} />
           <View style={[s.sheet, { paddingBottom: 24 + insets.bottom }]}>
             <View style={s.handle} />
@@ -625,9 +658,10 @@ export default function SwingEditMarksScreen({ navigation, route }) {
     return got;
   }, [swingId]);
 
+  // marks.json is the source of truth (the analysis is re-derived from it): it is written first.
   const onSave = async ({ analysis, marks }) => {
-    await saveAnalysis(swingId, analysis);
     await saveMarks(swingId, marks);
+    await saveAnalysis(swingId, analysis);
   };
   const onClub = (club) => { setSwingClub(swingId, club); setLastSwingClub(club); };
   const leave = (fn) => { leaving.current = true; fn(); };
@@ -680,6 +714,10 @@ const s = StyleSheet.create({
 
   video: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   dock: { position: 'absolute', right: 10, top: 8 },
+  loadingPill: {
+    position: 'absolute', top: 10, alignSelf: 'center', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: hud.scrim,
+  },
+  loadingText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11.5, color: hud.textSoft },
 
   strip: { paddingHorizontal: 12, paddingTop: 8, gap: 8 },
   markRow: {
@@ -693,7 +731,7 @@ const s = StyleSheet.create({
   miniGhost: { backgroundColor: hud.fill },
   miniText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: hud.onAccent },
   tools: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  nudge: { width: 40, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: hud.fill },
+  nudge: { width: 48, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: hud.fill },
   toast: { flex: 1, fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: hud.accent, textAlign: 'center' },
 
   btn: {

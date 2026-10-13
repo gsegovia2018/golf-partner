@@ -81,7 +81,9 @@ export function analyzeMarks(draft, base) {
     const m = {};
     if (d.frame !== p.frame) m.frame = d.frame;
     if (d.hands) m.hands = d.hands;
-    if (headChanged(d, p)) {
+    // On a moved frame the clubhead is what the golfer saw there, never the old frame's proposal
+    // read again by analyze() (marks.json stores it as head.final the same way).
+    if (headChanged(d, p) || d.frame !== p.frame) {
       if (d.hidden) m.hidden = true;
       else if (d.head) m.head = d.head;
     }
@@ -178,6 +180,17 @@ export function markStatus(draft, base, key, mark) {
   }
   if (ok.hands) return 'confirmed';
   return d.hands ? 'moved' : 'proposed';
+}
+
+/**
+ * The position moves to another frame (a mark placed, or confirmed, on a previewed frame). Its
+ * marks were confirmed on the old frame, so they need confirming again on this one; the clubhead
+ * stays where it is drawn and is saved and analysed as shown (analyzeMarks).
+ */
+export function adoptFrame(draft, key, frame) {
+  const d = draft.cps[key];
+  if (d.frame === frame) return draft;
+  return patchCheckpoint(draft, key, { frame, confirmed: { hands: false, head: d.hidden && !!okOf(d).head } });
 }
 
 /** Put a mark at a normalised point; a moved mark needs confirming again. */
