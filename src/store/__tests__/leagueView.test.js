@@ -1,7 +1,7 @@
 import {
   monthName, ordinal, formatPoints, formatEuros, potCents, lastScoredMonth, deltaLabel,
   positionText, cardStatus, monthRows, leagueSummary, viewableCards, monthBoard, collapseSeasonRows,
-  formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, markerAskedLine, firstName, initials, cardBreakdown, leagueNameMatches,
+  formatNetDiff, formatNetDiffSigned, netDiffTone, yourCardState, myRoundScored, markerAskedLine, firstName, initials, cardBreakdown, leagueNameMatches,
 } from '../leagueView';
 
 const NOW = new Date(2026, 9, 4, 12, 0);
@@ -387,4 +387,21 @@ test('initials', () => {
   expect(initials('María Fernanda de la Torre-Villalobos')).toBe('MT');
   expect(initials('  javi ')).toBe('J');
   expect(initials('')).toBe('?');
+});
+
+describe('myRoundScored', () => {
+  const holes = [{ number: 1 }, { number: 2 }];
+  const game = (scores) => ({
+    players: [{ id: 'p1', user_id: 'me' }],
+    rounds: [{ id: 'r0', holes, scores }],
+  });
+  test('false while a hole is unscored, true once all are', () => {
+    expect(myRoundScored(game({ p1: { 1: 4 } }), 'r0', 'me')).toBe(false);
+    expect(myRoundScored(game({ p1: { 1: 4, 2: 5 } }), 'r0', 'me')).toBe(true);
+  });
+  test('null when the game, round or my player is unknown', () => {
+    expect(myRoundScored(null, 'r0', 'me')).toBeNull();
+    expect(myRoundScored(game({}), 'nope', 'me')).toBeNull();
+    expect(myRoundScored(game({}), 'r0', 'someone')).toBeNull();
+  });
 });

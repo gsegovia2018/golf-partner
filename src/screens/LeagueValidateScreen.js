@@ -438,7 +438,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
                 <Text style={s.statusSub}>{returnNote}</Text>
               </View>
             </View>
-            {editInScorecard}
+            <View style={{ marginBottom: 16 }}>{editInScorecard}</View>
           </>
         )}
 
