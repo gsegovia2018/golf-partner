@@ -1,7 +1,9 @@
 // Pure rendering + routing for notifications. The send-push edge function
-// (Deno) deliberately mirrors renderNotification — it cannot import React
-// Native code, so the two are kept in sync by hand. The copy below is the
-// in-app inbox: English by default, Spanish when `lang` is 'es' (docs/i18n.md).
+// (Deno) cannot import React Native code, so renderPushText in
+// supabase/functions/_shared/notificationRender.js mirrors renderNotification
+// over a generated copy of the notif.* keys; notificationPush.test.js fails
+// when the two disagree. The copy below is the in-app inbox: English by
+// default, Spanish when `lang` is 'es' (docs/i18n.md).
 import { t, getLanguage, formatDate, formatNumber } from '../i18n';
 
 // 'YYYY-MM-DD' (league month, first day) -> 'October' / 'octubre'. '' when unparseable.
