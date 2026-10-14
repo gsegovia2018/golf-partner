@@ -107,6 +107,7 @@ import * as Notifications from 'expo-notifications';
 import { registerPushToken, configureNotificationHandler } from './src/lib/pushNotifications';
 import { normalizeDeepLink } from './src/lib/notificationContent';
 import { startLeagueFinalPending } from './src/lib/leagueFinalPending';
+import { startProfileLocaleSync } from './src/lib/profileLocale';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -575,6 +576,8 @@ export default function App() {
     startReplication();
     // Retries linking a started League Final to its league.
     startLeagueFinalPending();
+    // Reports the app language to profiles.locale so pushes arrive in it.
+    startProfileLocaleSync();
     // Non-blocking: GPS geometry starts from the bundled seed and upgrades to
     // live table data whenever this resolves. Not part of the render gate.
     hydrateCourseGeometry();

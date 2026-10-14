@@ -1,4 +1,5 @@
 import { renderNotification, notificationLink, normalizeDeepLink } from '../notificationContent';
+import { renderPushText } from '../../../supabase/functions/_shared/notificationRender';
 
 describe('renderNotification', () => {
   test('friend_request uses the actor name', () => {
@@ -329,8 +330,9 @@ describe('league integrity notifications (20261016000000)', () => {
   test('send-push renders the same types', () => {
     const src = require('fs').readFileSync(require('path').join(__dirname, '../../../supabase/functions/send-push/index.ts'), 'utf8');
     types.forEach((type) => {
-      expect(src).toContain(`  ${type}: (d: Record<string, unknown>) =>`);
+      expect(src).toMatch(new RegExp(`\\n  ${type}: (leagueBoard,|\\(d\\) =>)`));
       expect(src).toContain(`  ${type}: 'league',`);
+      expect(renderPushText(type, {}, 'en')).not.toBeNull();
     });
   });
 });
