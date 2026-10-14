@@ -55,7 +55,7 @@ import { useScorecardLeague } from '../hooks/useScorecardLeague';
 import { recordRoundCard } from '../lib/leagueOptIn';
 import { ensureRealtimeForTournament } from '../store/realtimeSync';
 import LeagueOptInSheet from '../components/league/LeagueOptInSheet';
-import { useT, tr, formatDate, formatNumber } from '../i18n';
+import { useT, t as tNow, tr, formatDate, formatNumber } from '../i18n';
 import { requestLeagueTeeOff, retryLeagueTeeOff } from '../lib/leagueTeeOff';
 import { normalizeRoundNotes } from '../store/roundNotes';
 import {
@@ -199,13 +199,13 @@ export function buildConflictRows({ disputes, cells, round, players, names }) {
         playerId,
         hole,
         par: round?.holes?.[hole - 1]?.par ?? null,
-        playerName: (players ?? []).find((p) => p.id === playerId)?.name ?? 'Player',
+        playerName: (players ?? []).find((p) => p.id === playerId)?.name ?? tNow('scorecard.conflict.playerFallback'),
         currentValue: cells?.[playerId]?.[String(hole)]?.shown ?? null,
         candidates: values.map((v) => ({
           value: v.value,
           ts: v.ts,
           authorId: v.scorerKey,
-          authorName: v.name ?? names?.[v.scorerKey] ?? 'Another phone',
+          authorName: v.name ?? names?.[v.scorerKey] ?? tNow('scorecard.conflict.anotherPhone'),
         })),
         blankAuthors: [],
       });
@@ -599,7 +599,7 @@ export default function ScorecardScreen({ navigation, route }) {
       currentRound: 0,
       rounds: [{
         id: r.id,
-        courseName: r.course_name ?? r.name ?? 'Official Round',
+        courseName: r.course_name ?? r.name ?? tNow('game.official.round'),
         holes,
         playerHandicaps,
         pairs: [],
@@ -685,7 +685,7 @@ export default function ScorecardScreen({ navigation, route }) {
     for (const [authorIdKey, card] of Object.entries(cardState.cardsByAuthor)) {
       const scorerKey = scorerKeyOf(card, authorIdKey);
       const player = players.find((p) => p.id === card?.scorer?.playerId);
-      out[scorerKey] = player?.name ?? 'Another phone';
+      out[scorerKey] = player?.name ?? tNow('scorecard.conflict.anotherPhone');
     }
     return out;
   }, [cardState.cardsByAuthor, players]);
@@ -741,7 +741,7 @@ export default function ScorecardScreen({ navigation, route }) {
     const out = {};
     for (const { playerId, hole, scorerKey } of unverified) {
       if (!out[playerId]) out[playerId] = {};
-      out[playerId][String(hole)] = names[scorerKey] ?? 'Another phone';
+      out[playerId][String(hole)] = names[scorerKey] ?? tNow('scorecard.conflict.anotherPhone');
     }
     return out;
   }, [unverified, names]);
@@ -1118,7 +1118,7 @@ export default function ScorecardScreen({ navigation, route }) {
     // read-only side of the resolve sheet).
     const markerNameFor = (subjectRosterId) => {
       const m = members.find((x) => x.marks_roster_id === subjectRosterId && !x.withdrawn);
-      return m?.display_name ?? 'Marker';
+      return m?.display_name ?? tNow('scorecard.discrepancy.marker');
     };
     return {
       cellEntries,

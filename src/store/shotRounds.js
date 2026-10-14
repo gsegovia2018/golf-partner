@@ -1,3 +1,4 @@
+import { t as translate } from '../i18n';
 import { loadAllTournamentsWithFallback } from './tournamentStore';
 
 // Shots (src/store/shotStore.js) reference the round they were marked on by
@@ -23,7 +24,7 @@ export function buildShotRoundIndex(tournaments) {
         courseName: round.courseName || '',
         courseId: round.courseId ?? null,
         holes: round.holes || [],
-        tournamentName: t.name || 'Tournament',
+        tournamentName: t.name || translate('game.noun.tournamentTitle'),
         tournamentDate: t.createdAt ?? null,
       });
     });

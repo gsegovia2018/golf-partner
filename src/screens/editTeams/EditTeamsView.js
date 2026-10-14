@@ -31,6 +31,7 @@ function Avatar({ name, size, ring, armed, s, theme }) {
 
 // One tappable roster row: avatar + name + handicap, with a trailing affordance.
 function PlayerTile({ name, hcp, ring, armed, dimmed, trailing, onPress, s, theme }) {
+  const t = useT();
   return (
     <TouchableOpacity
       style={[s.tile, armed && s.tileArmed, dimmed && s.tileDimmed]}
@@ -40,7 +41,7 @@ function PlayerTile({ name, hcp, ring, armed, dimmed, trailing, onPress, s, them
       <Avatar name={name} size={40} ring={ring} armed={armed} s={s} theme={theme} />
       <View style={s.tileText}>
         <Text style={[s.tileName, armed && s.tileNameArmed]} numberOfLines={1}>{name}</Text>
-        {hcp != null && <Text style={s.tileHcp}>HCP {hcp}</Text>}
+        {hcp != null && <Text style={s.tileHcp}>{t('shared.hcp', { value: hcp })}</Text>}
       </View>
       {trailing}
     </TouchableOpacity>
@@ -48,10 +49,11 @@ function PlayerTile({ name, hcp, ring, armed, dimmed, trailing, onPress, s, them
 }
 
 function VsDivider({ s }) {
+  const t = useT();
   return (
     <View style={s.vsRow}>
       <View style={s.vsLine} />
-      <Text style={s.vsText}>VS</Text>
+      <Text style={s.vsText}>{t('shared.teams.vs').toUpperCase()}</Text>
       <View style={s.vsLine} />
     </View>
   );

@@ -29,7 +29,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
-import { useT, formatNumber } from '../i18n';
+import { useT, formatNumber, formatDate } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { buildSharedBoardModel, buildSharedMediaModel } from '../store/sharedBoard';
 import FeedRoundCard from '../components/feed/FeedRoundCard';
@@ -72,7 +72,7 @@ function formatHeroDate(iso) {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return null;
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return formatDate(d, 'day');
   } catch {
     return null;
   }

@@ -47,7 +47,7 @@ function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound, dur
       <View style={s.dropLine}>
         <View style={{ flex: 1 }}>
           <Text style={s.dropTitle} numberOfLines={1}>{round.courseName}</Text>
-          <Text style={s.dropSub} numberOfLines={1}>{round.tournamentName}</Text>
+          <Text style={s.dropSub} numberOfLines={1}>{round.tournamentName || t('stats.data.tournament')}</Text>
         </View>
         <PressableScale style={s.pickBtn} onPress={() => setPickerOpen(true)}>
           <Text style={s.pickBtnText}>{t('stats.my.report.change')}</Text>
@@ -97,7 +97,7 @@ function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound, dur
                   onPress={() => { onSelect(r.key); setPickerOpen(false); }}
                 >
                   <Text style={s.pickName} numberOfLines={1}>{r.courseName}</Text>
-                  <Text style={s.pickSub} numberOfLines={1}>{r.tournamentName}</Text>
+                  <Text style={s.pickSub} numberOfLines={1}>{r.tournamentName || t('stats.data.tournament')}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>

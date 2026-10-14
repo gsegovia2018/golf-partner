@@ -242,7 +242,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
                 />
                 <TextInput
                   style={[s.input, s.inputHcp]}
-                  placeholder="Hcp"
+                  placeholder={t('game.claim.hcpPlaceholder')}
                   placeholderTextColor={theme.text.muted}
                   value={newHcp}
                   onChangeText={setNewHcp}

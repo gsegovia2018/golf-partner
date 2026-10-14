@@ -82,11 +82,10 @@ export function stepTime(text, delta) {
   return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
 }
 
-const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
-  'September', 'October', 'November', 'December'];
-
+// "October 2026" / "Octubre de 2026" in the active language.
 export function monthTitle({ y, m }) {
-  return `${MONTH_NAMES[m - 1]} ${y}`;
+  const text = formatDate(new Date(y, m - 1, 1), 'month');
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 // "Sat 10 Oct 2026" / "sáb 10 oct 2026" in the active language.

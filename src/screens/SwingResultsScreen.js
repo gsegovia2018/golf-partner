@@ -61,7 +61,7 @@ function Hero({
       <Text style={s.overline}>{T.mainTitle}</Text>
       {loading ? <View style={s.skelHero} /> : (
         <>
-          <Text style={s.verdict}>{main ? `${main.label}.` : `${T.noFaultTitle}.`}</Text>
+          <Text style={s.verdict}>{main ? `${SWING_STRINGS.fault[main.fault] ?? main.label}.` : `${T.noFaultTitle}.`}</Text>
           <Text style={s.why}>{main ? main.evidence.slice(0, 2).map((e) => e.text).join(' · ') : T.noFaultWhy}</Text>
           {main?.consequences?.length ? (
             <Text style={s.also} testID="results-also-causing">{T.alsoCausing(main.consequences.map((f) => SWING_STRINGS.fault[f] ?? f))}</Text>
@@ -416,7 +416,7 @@ export function SwingResultsView({
 
             {drills.length ? (
               <View style={s.card}>
-                <Text style={s.overlineDark}>{T.drillsTitle(analysis.main.label)}</Text>
+                <Text style={s.overlineDark}>{T.drillsTitle(SWING_STRINGS.fault[analysis.main.fault] ?? analysis.main.label)}</Text>
                 {shownDrills.map((d) => (
                   <View key={d.id} style={s.drill}>
                     <Text style={s.drillTitle}>{d.title}</Text>

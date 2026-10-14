@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { WebView } from 'react-native-webview';
-import { buildHoleMapHtml } from '../../lib/holeMapHtml';
+import { buildHoleMapHtml, hudLabels } from '../../lib/holeMapHtml';
+import { useT, getLanguage } from '../../i18n';
 import { getTileDataUrl } from '../../store/tileCache';
 
 // Native host: renders the Leaflet map page in a WebView. Same contract as the
@@ -8,8 +9,10 @@ import { getTileDataUrl } from '../../store/tileCache';
 // injected as postMessage into the page so it never reloads.
 export function HoleMapView({ data, player, anchor, activeField, shots, lastShot, targets, onShotMove, onAim, onShotTap, onPoint, style }) {
   const ref = useRef(null);
+  useT(); // re-render when the language changes, so the page is rebuilt in it
+  const lang = getLanguage();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const html = useMemo(() => buildHoleMapHtml(data), [data.holeKey]);
+  const html = useMemo(() => buildHoleMapHtml({ ...data, hudLabels: hudLabels() }), [data.holeKey, lang]);
 
   const send = (m) => {
     const str = JSON.stringify(JSON.stringify(m));

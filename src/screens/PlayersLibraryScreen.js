@@ -45,7 +45,7 @@ export default function PlayersLibraryScreen() {
     try {
       setPlayers(await fetchMyGuestPlayers());
     } catch (err) {
-      setLoadError(err?.message ?? 'Could not load players');
+      setLoadError(err?.message ?? t('players.loadFailed'));
     } finally {
       hasLoadedOnceRef.current = true;
       setLoading(false);

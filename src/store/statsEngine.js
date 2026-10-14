@@ -1561,12 +1561,17 @@ export function matchPlayResults(tournament, { metric = 'points' } = {}) {
     const scoreline = closedScore
       ? `${closedScore.up}&${closedScore.remaining}`
       : pair1Up === 0 ? 'Halved' : `${Math.abs(pair1Up)} up`;
+    // Descriptor for display in the active language (see tr()); `scoreline`
+    // stays the English text for non-UI callers.
+    const scorelineMsg = closedScore ? null
+      : pair1Up === 0 ? { key: 'stats.screen.matchPlay.halved' }
+        : { key: 'stats.data.matchPlay.up', params: { count: Math.abs(pair1Up) } };
 
     return {
       roundIndex, courseName: round.courseName, available: true,
       pair1, pair2,
       pair1Up, finalPair1Up: pair1Up,
-      holes, closedAt, closedScore, scoreline,
+      holes, closedAt, closedScore, scoreline, scorelineMsg,
       winnerPair, metric,
     };
   });

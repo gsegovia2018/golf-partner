@@ -20,7 +20,7 @@ function rowToPerson(row) {
   return {
     userId: row.user_id,
     username: row.username ?? '',
-    displayName: row.display_name ?? row.username ?? 'Golfer',
+    displayName: row.display_name ?? row.username ?? t('misc.friend.golfer'),
     handicap: row.handicap ?? null,
     avatarUrl: row.avatar_url ?? null,
     avatarColor: row.avatar_color ?? null,

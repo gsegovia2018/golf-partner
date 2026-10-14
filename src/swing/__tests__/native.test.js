@@ -37,7 +37,7 @@ describe('swing native bridge', () => {
       supported: false,
       reason: 'update_app',
       apiVersion: 0,
-      message: native.UPDATE_APP_MESSAGE,
+      message: native.updateAppMessage(),
     });
     await expect(native.analyzePose('x.mp4')).rejects.toMatchObject({ code: 'ERR_UPDATE_APP' });
     expect(mod.analyzePose).not.toHaveBeenCalled();
@@ -135,7 +135,7 @@ describe('swing native bridge', () => {
     it('a binary that analyses but lacks the camera module keeps analysing and offers the import', () => {
       const { native } = loadCapture({ apiVersion: 2, camera: null });
       expect(native.swingSupport().supported).toBe(true);
-      expect(native.captureSupport()).toMatchObject({ supported: false, reason: 'update_app', message: native.UPDATE_CAPTURE_MESSAGE });
+      expect(native.captureSupport()).toMatchObject({ supported: false, reason: 'update_app', message: native.updateCaptureMessage() });
     });
   });
 });

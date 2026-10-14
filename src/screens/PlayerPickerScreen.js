@@ -62,7 +62,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
           setLastUsed(buildPlayerLastUsed(tournaments));
         })
         .catch((err) => {
-          if (!cancelled) setLoadError(err?.message ?? 'Could not load players');
+          if (!cancelled) setLoadError(err?.message ?? t('players.loadFailed'));
         })
         .finally(() => {
           if (!cancelled) {
@@ -71,7 +71,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
           }
         });
       return () => { cancelled = true; };
-    }, [reloadKey]),
+    }, [reloadKey, t]),
   );
 
   const filteredPlayers = useMemo(() => {

@@ -161,7 +161,7 @@ export default function SwingHomeScreen({ navigation }) {
       : sw.status === 'error' ? T.failed
         : marking ? T.continueMarking(sw.marked.count, MARK_TOTAL)
           : sw.mainFault ? SWING_STRINGS.fault[sw.mainFault] ?? sw.mainFault : T.noFault;
-    const customName = sw.name !== defaultSwingName(sw.createdAt);
+    const customName = sw.name !== defaultSwingName(sw.createdAt, 'en') && sw.name !== defaultSwingName(sw.createdAt, 'es');
     const c = marking ? null : sw.counts;
     const clubName = SWING_STRINGS.club[normClub(sw.club)];
     return (
@@ -187,7 +187,7 @@ export default function SwingHomeScreen({ navigation }) {
               <View style={[s.dot, { backgroundColor: tone[worst] }]} />
               <Text style={s.fault} numberOfLines={1}>{headline}</Text>
             </View>
-            <Text style={s.rowName} numberOfLines={1}>{sw.name}</Text>
+            <Text style={s.rowName} numberOfLines={1}>{customName ? sw.name : defaultSwingName(sw.createdAt)}</Text>
             {customName ? <Text style={s.rowSub}>{defaultSwingName(sw.createdAt)}</Text> : null}
             <View style={s.metaLine}>
               <Text style={s.clubChip} testID={`club-chip-${sw.id}`}>{clubName}</Text>

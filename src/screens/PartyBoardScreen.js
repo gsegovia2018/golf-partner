@@ -135,7 +135,7 @@ export default function PartyBoardScreen({ route, navigation }) {
   const unassigned = roster.filter((r) => !assignedIds.has(r.id));
 
   const rosterById = new Map(roster.map((r) => [r.id, r]));
-  const nameOf = (id) => rosterById.get(id)?.display_name ?? 'Unknown';
+  const nameOf = (id) => rosterById.get(id)?.display_name ?? t('misc.partyBoard.unknown');
   const handicapOf = (id) => rosterById.get(id)?.handicap ?? 0;
 
   // Auto-fill helper. Excludes withdrawn players from the balance input.
@@ -322,8 +322,8 @@ export default function PartyBoardScreen({ route, navigation }) {
       ) : (
         <ScrollView style={s.container} contentContainerStyle={s.content}>
           <Text style={s.subtitle}>
-            {t('partyBoard.subtitle', { format: roundFormat, count: roster.length })}
-            {roundStatus !== 'setup' ? `  •  ${roundStatus}` : ''}
+            {t('partyBoard.subtitle', { format: t(`misc.partyBoard.format.${roundFormat}`), count: roster.length })}
+            {roundStatus !== 'setup' ? `  •  ${t(`misc.partyBoard.status.${roundStatus}`)}` : ''}
           </Text>
 
           {/* Pairing method */}

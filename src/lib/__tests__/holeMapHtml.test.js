@@ -168,7 +168,7 @@ describe('buildHoleMapHtml', () => {
       const valid = (p) => Array.isArray(p) && isFinite(p[0]) && isFinite(p[1]);
       // hudSource closes over `anchor`/`valid`; supplying them as parameters of
       // the wrapper puts them in its enclosing scope.
-      return new Function('anchor', 'valid', 'aim', `${src}; return hudSource(aim);`)(anchor, valid, aim);
+      return new Function('anchor', 'valid', 'DATA', 'aim', `${src}; return hudSource(aim);`)(anchor, valid, {}, aim);
     };
     const GPS = [38.5601, -0.1401];
     const TEE = [38.5634, -0.1439];
