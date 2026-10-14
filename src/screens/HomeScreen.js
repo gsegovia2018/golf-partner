@@ -51,6 +51,7 @@ import { assignPlacements, comparatorForBoardMode } from '../store/leaderboardPl
 import { subscribeConnectivity, isOnline } from '../lib/connectivity';
 import { getAppSettings, updateAppSettings } from '../store/settingsStore';
 import { useAppSettings } from '../hooks/useAppSettings';
+import { useMyLeagueRows } from '../hooks/useMyLeagueRows';
 import { unreadCount } from '../store/notificationStore';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { useAuth } from '../context/AuthContext';
@@ -140,6 +141,7 @@ export default function HomeScreen({ navigation, route }) {
   const currentUserId = user?.id ?? null;
   const currentUserIdRef = useRef(currentUserId);
   currentUserIdRef.current = currentUserId;
+  const leagueRows = useMyLeagueRows(navigation, currentUserId);
   const [needsGender, setNeedsGender] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -1241,6 +1243,8 @@ export default function HomeScreen({ navigation, route }) {
           </PressableScale>
         </View>
 
+        <LeagueListSection navigation={navigation} rows={leagueRows} />
+
         <TouchableOpacity
           style={s.joinTile}
           onPress={() => navigation.navigate('JoinTournament')}
@@ -1381,6 +1385,8 @@ export default function HomeScreen({ navigation, route }) {
           // the Play view stays focused on starting and resuming play.
           const games = active.filter((t) => t.kind === 'game');
           const tournaments = active.filter((t) => t.kind !== 'game');
+          // A league is still in play: no "nothing here" / "all caught up" line.
+          if (active.length === 0 && leagueRows.length > 0) return null;
           if (sorted.length === 0) {
             if (listStale) {
               return (
@@ -1428,7 +1434,6 @@ export default function HomeScreen({ navigation, route }) {
             </>
           );
         })()}
-        <LeagueListSection navigation={navigation} meId={currentUserId} theme={theme} s={s} />
         </PullToRefresh>
 
         <BottomSheet visible={showListMenu} onClose={() => setShowListMenu(false)} sheetStyle={s.modalSheet}>
