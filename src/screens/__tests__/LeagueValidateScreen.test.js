@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import LeagueValidateScreen, { PARTNER_REASONS } from '../LeagueValidateScreen';
 import { t as translate } from '../../i18n';
@@ -401,7 +401,9 @@ describe('LeagueValidateScreen copy, marker note and scorecard route', () => {
   test('a resubmitted card (returnedAt cleared, marker_note kept) shows no sent-back note', async () => {
     store.getLeagueCard.mockResolvedValue({ id: 'card-1', status: 'submitted', returnedAt: null, markerNote: 'Hole 7 was a 6' });
     const { findByText, queryByText } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
-    await findByText('Edit in scorecard');
+    await findByText('Centro Nacional · Round 1');
+    await waitFor(() => expect(store.getLeagueCard).toHaveBeenCalled());
+    await act(async () => {});
     expect(queryByText('Hole 7 was a 6')).toBeNull();
   });
 
