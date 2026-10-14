@@ -130,6 +130,10 @@ export function rowToMember(r, leagueId = null) {
     username: r.username ?? null,
     displayName: r.display_name ?? r.username ?? null,
     avatarUrl: r.avatar_url ?? null,
+    // The server-made public name (first name + initial; null when the
+    // display name is missing, the username or the email prefix). Shared
+    // messages use only this. A server before 20261018000000 sends none: null.
+    publicName: r.public_name ?? null,
   };
 }
 

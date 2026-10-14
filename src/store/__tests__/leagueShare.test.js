@@ -8,7 +8,10 @@ import { daysLeftInMonth } from '../leagueView';
 const NOW = new Date(2026, 9, 13, 10, 0); // Tue 13 Oct 2026, 18 days left
 const URL = 'https://golf-partner.vercel.app/league-board/tok_123456789012345678';
 
-const member = (userId, displayName, extra = {}) => ({ userId, displayName, role: 'member', leftAt: null, ...extra });
+// publicName is what get_league_members' public_name sends for a real name.
+const member = (userId, displayName, extra = {}) => ({
+  userId, displayName, publicName: publicNameRule(displayName), role: 'member', leftAt: null, ...extra,
+});
 const card = (userId, monthKey, points, { course = 'Golf Santander', ...extra } = {}) => ({
   id: `${userId}-${monthKey}`, userId, monthKey, month: `${monthKey}-01`, status: 'confirmed', source: 'offapp',
   points, course: { name: course }, ...extra,
@@ -58,19 +61,19 @@ test('shareName: no display name gives the neutral label in the sharer\'s langua
   expect(shareName(null, 'es')).toBe('Jugador');
 });
 
-test('publicDisplayName never falls back to the username', () => {
-  expect(publicDisplayName({ displayName: 'Ana Pérez', username: 'ana.p' })).toBe('Ana Pérez');
-  // The members RPC puts the username in display_name when there is none.
-  expect(publicDisplayName({ displayName: 'ana.p', username: 'ana.p' })).toBeNull();
-  expect(publicDisplayName({ displayName: '  ', username: 'ana.p' })).toBeNull();
-  expect(publicDisplayName({ displayName: null, username: 'ana.p' })).toBeNull();
-  expect(publicDisplayName({ displayName: 'Bea' })).toBe('Bea');
+test('publicDisplayName is the server-made public name only, never the display name or username', () => {
+  expect(publicDisplayName({ publicName: 'Ana P.', displayName: 'Ana Pérez', username: 'ana.p' })).toBe('Ana P.');
+  // The server sends null for an email prefix, a username or no display name.
+  expect(publicDisplayName({ publicName: null, displayName: 'ana.perez', username: 'ana.p' })).toBeNull();
+  expect(publicDisplayName({ publicName: '  ', displayName: 'Ana Pérez' })).toBeNull();
+  // A server before 20261018000000 sends no public_name: nothing is derived.
+  expect(publicDisplayName({ displayName: 'Bea', username: 'bea' })).toBeNull();
 });
 
-test('a member with only a username is shared as "Golfer", the username never appears', () => {
+test('a member whose display name is their email prefix is shared as "Golfer", the prefix never appears', () => {
   const snap = {
     ...snapshot,
-    members: [...snapshot.members, member('u6', 'leaky.local', { username: 'leaky.local' })],
+    members: [...snapshot.members, member('u6', 'leaky.local', { username: 'someone', publicName: null })],
     cardsByMonth: { '2026-10': [card('u6', '2026-10', 44, { course: 'Club C' })] },
   };
   const text = standingsMessage(snap, { now: NOW, lang: 'en' });
@@ -83,7 +86,7 @@ test('WhatsApp markers are stripped from league, course and player names', () =>
   expect(wa('*Bold* _it_ ~st~ `code`')).toBe('Bold it st code');
   const snap = {
     league: { ...snapshot.league, name: '*Mulli_gan*' },
-    members: [member('u1', 'Íñigo ~Echeverría'), member('u2', '`Javier` Ortega')],
+    members: [member('u1', 'Íñigo~ Echeverría'), member('u2', '`Javier` Ortega')],
     cardsByMonth: {
       '2026-10': [
         card('u1', '2026-10', 41, { course: 'RCG *Soto*grande', confirmedByName: '_Javi_ Ortega' }),

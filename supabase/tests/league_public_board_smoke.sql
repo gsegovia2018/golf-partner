@@ -12,7 +12,8 @@
 --   psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/league_public_board_smoke.sql
 --
 -- Cast: A Ana (admin), B Bea (member), C (member with a username but no
--- display name), O Olga (not in the league).
+-- display name), O Olga (not in the league), and in section 3b E (display
+-- name = their email's local part) and F (display name = their username).
 -- ============================================================================
 
 BEGIN;
@@ -290,6 +291,53 @@ BEGIN
   PERFORM pg_temp.pb_ok('a new link while switched off stays off and shows no token',
     r = '{"enabled": false, "token": null}'::jsonb
     AND public.get_public_league_board(pg_temp.pb_v('token2')) IS NULL, r::text);
+END $$;
+
+-- 3b) Never an email prefix (20261018000000) ------------------------------------------------
+-- E's display name is their email's local part in other case; F's is their
+-- username. Both join with the code; the admin switches the board back on.
+RESET ROLE;
+INSERT INTO pb_ctx (k, v) VALUES
+  ('u:e', 'e2000000-0000-4000-8000-00000000000e'), ('u:f', 'e2000000-0000-4000-8000-00000000000f');
+INSERT INTO auth.users (id, instance_id, aud, role, email, created_at, updated_at)
+SELECT v::uuid, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+       'league-board-' || substr(k, 3) || '@example.invalid', now(), now()
+  FROM pb_ctx WHERE k IN ('u:e', 'u:f');
+INSERT INTO public.profiles (user_id, display_name)
+SELECT v::uuid, CASE k WHEN 'u:e' THEN ' League-Board-E ' ELSE 'FUser' END FROM pb_ctx WHERE k IN ('u:e', 'u:f')
+ON CONFLICT (user_id) DO UPDATE SET display_name = EXCLUDED.display_name;
+UPDATE public.profiles SET username = 'fuser' WHERE user_id = pg_temp.pb_v('u:f')::uuid;
+UPDATE public.profiles SET username = 'someone_else' WHERE user_id = pg_temp.pb_v('u:e')::uuid;
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.pb_as('e');
+SELECT public.join_league(pg_temp.pb_v('code'), 20);
+SELECT pg_temp.pb_as('f');
+SELECT public.join_league(pg_temp.pb_v('code'), 20);
+SELECT pg_temp.pb_as('a');
+DO $$
+DECLARE
+  tok text := public.set_league_public_board(pg_temp.pb_v('league')::uuid, true) ->> 'token';
+  pn  jsonb;
+BEGIN
+  SELECT jsonb_object_agg(user_id::text, COALESCE(to_jsonb(public_name), 'null'::jsonb)) INTO pn
+    FROM public.get_league_members(pg_temp.pb_v('league')::uuid);
+  PERFORM pg_temp.pb_ok('get_league_members: public_name is NULL for an email prefix, a username or no display name',
+    pn -> pg_temp.pb_v('u:e') = 'null'::jsonb AND pn -> pg_temp.pb_v('u:f') = 'null'::jsonb
+    AND pn -> pg_temp.pb_v('u:c') = 'null'::jsonb, pn::text);
+  PERFORM pg_temp.pb_ok('get_league_members: a real name still gets its public name',
+    pn ->> pg_temp.pb_v('u:a') = 'Ana S.' AND pn ->> pg_temp.pb_v('u:b') = 'Bea', pn::text);
+  INSERT INTO pb_ctx VALUES ('token3', tok);
+END $$;
+RESET ROLE;
+SELECT pg_temp.pb_as('anon');
+SET LOCAL ROLE anon;
+DO $$
+DECLARE r jsonb := public.get_public_league_board(pg_temp.pb_v('token3'));
+BEGIN
+  PERFORM pg_temp.pb_ok('public board: the email prefix and the username appear nowhere, their names are NULL',
+    position('league-board-e' IN lower(r::text)) = 0 AND position('fuser' IN lower(r::text)) = 0
+    AND (SELECT count(*) FROM jsonb_array_elements(r -> 'members') m WHERE m -> 'name' = 'null'::jsonb) = 3
+    AND EXISTS (SELECT 1 FROM jsonb_array_elements(r -> 'members') m WHERE m ->> 'name' = 'Ana S.'), r ->> 'members');
 END $$;
 
 -- 4) The name rule, case by case (the same cases as leagueShare.test.js) ---------------------
