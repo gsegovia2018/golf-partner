@@ -15,14 +15,15 @@ import { getStill, ensureStills } from '../swing/frames';
 import { compareAnalyses } from '../swing/compare';
 import { normClub } from '../swing/checks';
 import { SWING_STRINGS } from '../swing/strings';
+import { useT } from '../i18n';
+import { formatDate } from '../i18n/format';
 
 const T = SWING_STRINGS.compare;
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "11 Oct" for the two column heads. */
 export function shortDate(iso) {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return Number.isNaN(d.getTime()) ? '' : formatDate(d, 'day');
 }
 
 const impactFrame = (analysis) => analysis?.checkpoints?.impact?.i ?? null;
@@ -72,7 +73,7 @@ export function SwingCompareView({ left, right, onBack, onSwap }) {
               {[left, right].map((side, i) => (
                 <View key={side.row.id} style={{ width: colW }}>
                   <Text style={s.colName} numberOfLines={1}>{`${side.row.name} · ${SWING_STRINGS.club[clubOf(side)]}`}</Text>
-                  <View style={[s.stillBox, { width: colW, height: colW / (side.aspect || 0.75) }]} accessibilityLabel={`${side.row.name}, ${T.impactStills.toLowerCase()}`}>
+                  <View style={[s.stillBox, { width: colW, height: colW / (side.aspect || 0.75) }]} accessibilityLabel={T.stillA11y(side.row.name, T.impactStills.toLowerCase())}>
                     {side.stillUri ? (
                       <Image source={{ uri: side.stillUri }} style={s.still} resizeMode="cover" />
                     ) : <Text style={s.noStill}>{T.noStill}</Text>}
@@ -146,6 +147,7 @@ async function loadSide(id) {
 }
 
 export default function SwingCompareScreen({ navigation, route }) {
+  useT(); // the swing copy reads the language as it renders: re-render when it changes
   const ids = route?.params?.ids ?? [];
   const [sides, setSides] = useState(null); // [left, right] | 'failed'
   const alive = useRef(true);

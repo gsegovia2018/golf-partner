@@ -38,6 +38,7 @@ import {
 } from '../swing/scrub';
 import { CLUBS, normClub } from '../swing/checks';
 import { SWING_STRINGS } from '../swing/strings';
+import { useT, getLanguage } from '../i18n';
 
 // The marking canvas (plan §6, D26, laid out per D28 "Frame Then Marks"). Two steps per position:
 // step 1 "Find the frame" (the cue inside the video, the whole-clip track with the six position
@@ -109,7 +110,7 @@ const ScrubPicture = memo(function ScrubPicture({
   const note = src.exact ? '' : drag != null ? T.scrubbing : T.loadingTag;
   return (
     <>
-      <SwingOverlay width={box.w} height={box.h} video={video} uri={src.uri} showPlanes={false} resizeMethod="scale" label={`${name} still, frame ${frame}`} />
+      <SwingOverlay width={box.w} height={box.h} video={video} uri={src.uri} showPlanes={false} resizeMethod="scale" label={T.stillA11y(name, frame)} />
       <View style={s.tag} pointerEvents="none">
         <Text style={s.tagText} testID="mark-frame-tag">{`${T.frameTag(frame)}${note ? ` · ${note}` : ''}`}</Text>
       </View>
@@ -266,7 +267,7 @@ export function SwingMarkCanvas({
 
   const d = draft.cps[cp];
   const chapter = isMarkedKey(cp);
-  const cue = useMemo(() => cueFor(cp, handedness), [cp, handedness]);
+  const cue = useMemo(() => cueFor(cp, handedness), [cp, handedness, getLanguage()]); // eslint-disable-line react-hooks/exhaustive-deps
   const statuses = useMemo(() => ({
     hands: markStatus(draft, base, cp, 'hands'),
     head: markStatus(draft, base, cp, 'head'),
@@ -684,7 +685,7 @@ export function SwingMarkCanvas({
             </>
           ) : (
             <>
-              <SwingOverlay width={box.w} height={box.h} video={video} uri={shown.uri} showPlanes={false} resizeMethod="scale" label={`${cue?.name ?? cp} still, frame ${shown.frame ?? view}`}>
+              <SwingOverlay width={box.w} height={box.h} video={video} uri={shown.uri} showPlanes={false} resizeMethod="scale" label={T.stillA11y(cue?.name ?? cp, shown.frame ?? view)}>
                 <MarkLayer rect={rect} active={active} marks={marksNow} hidden={dragging} />
                 <GestureDetector gesture={markPan}>
                   <View style={StyleSheet.absoluteFill} testID="edit-touch-layer" accessible accessibilityLabel={`${T.names[active]} · ${markLine}`} accessibilityHint={T.touchHint} />
@@ -694,7 +695,7 @@ export function SwingMarkCanvas({
               <View style={s.pospill} accessible accessibilityLabel={T.posPill(cue?.p, short, d.frame, d.frame !== proposed)} testID="mark-pospill">
                 <Text style={s.pospillText} numberOfLines={1}>
                   {`${cue?.p ? `${cue.p} · ` : ''}${short}`}
-                  <Text style={s.pospillSmall}>{` · frame ${d.frame}${d.frame !== proposed ? ' (chosen)' : ''}`}</Text>
+                  <Text style={s.pospillSmall}>{T.posTail(d.frame, d.frame !== proposed)}</Text>
                 </Text>
               </View>
               <MarkDock style={s.dock} active={active} statuses={statuses} ballOff={cp !== 'address'} onSelect={selectMark} />
@@ -799,6 +800,7 @@ export function SwingMarkCanvas({
 // --- The screen (store, navigation guard) -------------------------------------------------------------
 
 export default function SwingEditMarksScreen({ navigation, route }) {
+  useT(); // the swing copy reads the language as it renders: re-render when it changes
   const { swingId, checkpoint = 'impact', mode = 'edit' } = route.params ?? {};
   const [data, setData] = useState(null); // { analysis, pose, probe, marks } | 'missing'
   const [, setTick] = useState(0);
