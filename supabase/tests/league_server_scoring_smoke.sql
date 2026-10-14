@@ -555,10 +555,14 @@ SELECT 'every SECURITY DEFINER league function pins search_path',
    AND p.proname IN ('create_league','update_league_rules','submit_league_card','add_unannounced_league_card',
                      'announce_league_card','approve_league_card');
 INSERT INTO ss_smoke (name, ok, detail)
-SELECT 'scoring backup table is closed to anon and authenticated',
-       NOT has_table_privilege('anon', 'public.league_cards_scoring_backup', 'SELECT')
-       AND NOT has_table_privilege('authenticated', 'public.league_cards_scoring_backup', 'SELECT'),
-       NULL;
+-- The backup may already be dropped once checked (20261015000000, end of file):
+-- a missing table passes, an existing one must stay closed. The oid form of
+-- has_table_privilege never errors on a missing table (NULL in, NULL out).
+SELECT 'scoring backup table is closed to anon and authenticated (or dropped)',
+       to_regclass('public.league_cards_scoring_backup') IS NULL
+       OR (NOT has_table_privilege('anon', to_regclass('public.league_cards_scoring_backup'), 'SELECT')
+           AND NOT has_table_privilege('authenticated', to_regclass('public.league_cards_scoring_backup'), 'SELECT')),
+       CASE WHEN to_regclass('public.league_cards_scoring_backup') IS NULL THEN 'table dropped' END;
 
 -- Verdict ------------------------------------------------------------------------------------
 DO $$
