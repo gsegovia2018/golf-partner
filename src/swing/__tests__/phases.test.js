@@ -158,3 +158,22 @@ describe('synthetic variations of the lab samples', () => {
     expect(r.fps.effective).toBeCloseTo(r.fps.capture, 6);
   });
 });
+
+// 2026-10-14, a 240 fps iron clip: the grip bottomed out at 1271 and the ball left at 1277
+// (25 ms later). A 20 ms window dropped the ball signal and impact stayed 6 frames early,
+// where the clubhead is still behind the trail foot, so pass 2 found no clubhead at impact.
+describe('impact from the ball leaving after the grip bottoms out', () => {
+  const { idx, L } = labSamples();
+  const bottom = detectLab(idx, L, { ballGoneFrame: null }).checkpoints.impact.i; // pose-only impact = the grip bottom
+
+  test('the ball leaving 25 ms after the grip bottom still sets impact', () => {
+    const r = detectLab(idx, L, { ballGoneFrame: bottom + 6 });
+    expect(r.sources.impact).toBe('ballGoneFrame');
+    expect(r.checkpoints.impact.i).toBe(bottom + 5);
+  });
+
+  test('a ball that leaves long after the grip bottom is not trusted', () => {
+    const r = detectLab(idx, L, { ballGoneFrame: bottom + 20 });
+    expect(r.sources.impact).toBe('pose');
+  });
+});
