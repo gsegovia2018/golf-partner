@@ -2,6 +2,7 @@ import React, { useMemo, useSyncExternalStore } from 'react';
 import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { recommendClub } from '../../lib/shotStats';
@@ -21,6 +22,7 @@ export function HoleDistanceBlock({
   gps, onPress, compact = false,
 }) {
   const { theme } = useTheme();
+  const tx = useT();
   const appSettings = useAppSettings();
   const { units } = appSettings;
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -47,9 +49,9 @@ export function HoleDistanceBlock({
   // is the only actionable state: tapping it opens the OS location settings.
   const pick = (t) => (t ? t[theme.isDark ? 'dark' : 'light'] : theme.text.muted);
   const STATUS = {
-    ok:        { color: pick(theme.semantic?.score?.good), label: 'GPS OK · far away' },
-    acquiring: { color: pick(theme.semantic?.warning),     label: 'Locating GPS…' },
-    denied:    { color: pick(theme.semantic?.destructive), label: 'Location off', action: true },
+    ok:        { color: pick(theme.semantic?.score?.good), labelKey: 'scorecard.dist.gpsOk' },
+    acquiring: { color: pick(theme.semantic?.warning),     labelKey: 'scorecard.dist.locating' },
+    denied:    { color: pick(theme.semantic?.destructive), labelKey: 'scorecard.dist.locationOff', action: true },
   };
   const status = fixState && fixState !== 'disabled' ? STATUS[fixState] : null;
 
@@ -62,7 +64,7 @@ export function HoleDistanceBlock({
     const c = distances?.center;
     if (c == null) return null;
     return (
-      <Pressable onPress={onPress} hitSlop={8} style={s.compactRow} accessibilityRole="button" accessibilityLabel="Hole map">
+      <Pressable onPress={onPress} hitSlop={8} style={s.compactRow} accessibilityRole="button" accessibilityLabel={tx('scorecard.dist.holeMap')}>
         {/* Flag (not the live-GPS arrow) when the number is measured from the
             tee, so the slim bar doesn't imply a live-to-pin reading either. */}
         <Feather name={source === 'tee' ? 'flag' : 'navigation'} size={13} color={theme.accent.primary} />
@@ -78,19 +80,19 @@ export function HoleDistanceBlock({
   const bunker = distances?.hazards?.find((h) => h.kind === 'bunker');
   const water = distances?.hazards?.find((h) => h.kind === 'water');
   const hazardLine = [
-    bunker && `Bunker ${fmt(bunker.reach)}–${fmt(bunker.carry)}`,
-    water && `Water ${fmt(water.reach)}–${fmt(water.carry)}`,
+    bunker && tx('scorecard.dist.bunker', { range: `${fmt(bunker.reach)}–${fmt(bunker.carry)}` }),
+    water && tx('scorecard.dist.water', { range: `${fmt(water.reach)}–${fmt(water.carry)}` }),
   ].filter(Boolean).join(' · ');
 
   if (source === 'tee' && distances) {
     return (
-      <Pressable ref={tourRef} onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
+      <Pressable ref={tourRef} onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel={tx('scorecard.dist.openMap')}>
         <View style={s.heroRow}>
           <Text style={s.hero}>{fmt(distances.center)}</Text>
           <Text style={s.unit}>{unitSuffix(units)}</Text>
         </View>
-        <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
-        <Text style={s.mapHint}>TAP FOR MAP</Text>
+        <Text style={s.fb}>{tx('scorecard.dist.frontBack', { front: fmt(distances.front), back: fmt(distances.back) })}</Text>
+        <Text style={s.mapHint}>{tx('scorecard.dist.tapForMap')}</Text>
         {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
         {!!status && (
           status.action ? (
@@ -99,15 +101,15 @@ export function HoleDistanceBlock({
               hitSlop={6}
               style={s.status}
               accessibilityRole="button"
-              accessibilityLabel="Location off — open settings"
+              accessibilityLabel={tx('scorecard.dist.locationOffA11y')}
             >
               <View style={[s.statusDot, { backgroundColor: status.color }]} />
-              <Text style={[s.statusTxt, { color: status.color }]}>{status.label}</Text>
+              <Text style={[s.statusTxt, { color: status.color }]}>{tx(status.labelKey)}</Text>
             </Pressable>
           ) : (
             <View style={s.status}>
               <View style={[s.statusDot, { backgroundColor: status.color }]} />
-              <Text style={[s.statusTxt, { color: status.color }]}>{status.label}</Text>
+              <Text style={[s.statusTxt, { color: status.color }]}>{tx(status.labelKey)}</Text>
             </View>
           )
         )}
@@ -116,8 +118,8 @@ export function HoleDistanceBlock({
   }
 
   return (
-    <Pressable ref={tourRef} onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
-      {distances?.kind === 'nearest' && <Text style={s.overline}>NEAREST GREEN</Text>}
+    <Pressable ref={tourRef} onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel={tx('scorecard.dist.openMap')}>
+      {distances?.kind === 'nearest' && <Text style={s.overline}>{tx('scorecard.dist.nearestGreen')}</Text>}
       {distances ? (
         <>
           <View style={s.heroRow}>
@@ -125,9 +127,9 @@ export function HoleDistanceBlock({
             <Text style={s.hero}>{fmt(distances.center)}</Text>
             <Text style={s.unit}>{unitSuffix(units)}</Text>
           </View>
-          <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
+          <Text style={s.fb}>{tx('scorecard.dist.frontBack', { front: fmt(distances.front), back: fmt(distances.back) })}</Text>
           {!!club && <Text style={s.club}>{club.label}</Text>}
-          <Text style={s.mapHint}>TAP FOR MAP</Text>
+          <Text style={s.mapHint}>{tx('scorecard.dist.tapForMap')}</Text>
           {poorFix && <Text style={s.caption}>{`±${fmt(accuracy)}${unitSuffix(units)}`}</Text>}
           {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
         </>
@@ -137,7 +139,7 @@ export function HoleDistanceBlock({
             <Feather name="navigation" size={14} color={theme.accent.primary} />
             <Text style={s.hero}>…</Text>
           </View>
-          <Text style={s.caption}>Getting GPS fix</Text>
+          <Text style={s.caption}>{tx('scorecard.dist.gettingFix')}</Text>
         </>
       )}
     </Pressable>

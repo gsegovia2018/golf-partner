@@ -4,12 +4,14 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { CELEBRATION_TIERS } from './constants';
+import { useT, formatNumber } from '../../i18n';
 
 // Full-screen takeover for the rare tiers (eagle, albatross, hole-in-one):
 // scrim + expanding ring + centred card. Common results use CelebrationToast
 // instead — a takeover on every birdie interrupts score entry.
 export function CelebrationOverlay({ celebration, celebrationAnim, players }) {
   const { theme } = useTheme();
+  const tl = useT();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
 
   if (!celebration?.label) return null;
@@ -66,11 +68,11 @@ export function CelebrationOverlay({ celebration, celebrationAnim, players }) {
         <View style={[s.celebrationIconWrap, { borderColor: tier.accent }]}>
           <Feather name={tier.icon} size={22} color={tier.accent} />
         </View>
-        <Text style={[s.celebrationEyebrow, { color: tier.accent }]}>{tier.eyebrow}</Text>
-        <Text style={s.celebrationLabelBig}>{celebration.label}</Text>
+        <Text style={[s.celebrationEyebrow, { color: tier.accent }]}>{tl(`scorecard.celebration.${tier.key}.eyebrow`)}</Text>
+        <Text style={s.celebrationLabelBig}>{tl(`scorecard.celebration.${tier.key}.name`)}</Text>
         {!!firstName && (
           <Text style={s.celebrationSubtitle}>
-            {firstName} · Hole {celebration.holeNumber}
+            {tl('scorecard.celebration.subtitle', { name: firstName, hole: formatNumber(celebration.holeNumber) })}
           </Text>
         )}
       </Animated.View>

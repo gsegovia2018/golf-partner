@@ -55,7 +55,7 @@ import { useScorecardLeague } from '../hooks/useScorecardLeague';
 import { recordRoundCard } from '../lib/leagueOptIn';
 import { ensureRealtimeForTournament } from '../store/realtimeSync';
 import LeagueOptInSheet from '../components/league/LeagueOptInSheet';
-import { useT, formatDate, formatNumber } from '../i18n';
+import { useT, tr, formatDate, formatNumber } from '../i18n';
 import { requestLeagueTeeOff, retryLeagueTeeOff } from '../lib/leagueTeeOff';
 import { normalizeRoundNotes } from '../store/roundNotes';
 import {
@@ -214,16 +214,15 @@ export function buildConflictRows({ disputes, cells, round, players, names }) {
   return rows;
 }
 
+// Message descriptors (rendered with tr); the count picks has/have.
 export function roundDecisionNoticeForPair(pair) {
   const namedPlayers = Array.isArray(pair)
     ? pair.map((p) => p?.name).filter(Boolean)
     : [];
-  const names = namedPlayers.join(' & ') || 'The leading side';
-  const verb = namedPlayers.length > 1 ? 'have' : 'has';
-  return {
-    title: 'Round decided',
-    message: `${names} ${verb} already won this round. You can keep scoring, but the round result will not change.`,
-  };
+  const message = namedPlayers.length
+    ? { key: 'scorecard.roundDecided.message', params: { names: namedPlayers.join(' & '), count: namedPlayers.length > 1 ? 2 : 1 } }
+    : { key: 'scorecard.roundDecided.leading' };
+  return { title: { key: 'scorecard.roundDecided.title' }, message };
 }
 
 export default function ScorecardScreen({ navigation, route }) {
@@ -1732,9 +1731,9 @@ export default function ScorecardScreen({ navigation, route }) {
       // A failed local write must not abort the finish silently — surface it
       // exactly like the finalize step's catch below.
       finishingRef.current = false;
-      const message = err?.message ?? 'Could not finish this game.';
+      const message = err?.message ?? tl('scorecard.screen.finishFallback');
       if (Platform.OS === 'web') window.alert(message);
-      else Alert.alert('Finish failed', message);
+      else Alert.alert(tl('scorecard.screen.finishFailed'), message);
       return;
     } finally {
       setFinishBusy(false);
@@ -1841,8 +1840,8 @@ export default function ScorecardScreen({ navigation, route }) {
         setRoundCompleteVisible(false);
         setFinishBusy(false);
         if (tournamentDone && freshT.kind !== 'game' && !official) {
-          const title = '🏆 Tournament complete';
-          const message = 'Every round is finished. Archive this tournament?';
+          const title = tl('scorecard.screen.tournamentDone');
+          const message = tl('scorecard.screen.tournamentDoneBody');
           if (Platform.OS === 'web') {
             if (window.confirm(`${title}\n${message}`)) {
               navigation.navigate('Finished');
@@ -1851,8 +1850,8 @@ export default function ScorecardScreen({ navigation, route }) {
             }
           } else {
             Alert.alert(title, message, [
-              { text: 'View round summary', style: 'cancel', onPress: goToSummary },
-              { text: 'Finish tournament', onPress: () => navigation.navigate('Finished') },
+              { text: tl('scorecard.screen.viewSummary'), style: 'cancel', onPress: goToSummary },
+              { text: tl('scorecard.screen.finishTournament'), onPress: () => navigation.navigate('Finished') },
             ]);
           }
         } else {
@@ -1883,12 +1882,12 @@ export default function ScorecardScreen({ navigation, route }) {
       // Staying on the screen — the back listener needs to be armed again.
       finishingRef.current = false;
       setFinishBusy(false);
-      const message = err?.message ?? 'Could not finish this game.';
+      const message = err?.message ?? tl('scorecard.screen.finishFallback');
       if (Platform.OS === 'web') window.alert(message);
-      else Alert.alert('Finish failed', message);
+      else Alert.alert(tl('scorecard.screen.finishFailed'), message);
     }
   }, [roundIndex, navigation, goBack, official, finishBusy, enqueueSave, queueDraft, actions,
-    tid, names, playerIds, holeNumbers, scores]);
+    tid, names, playerIds, holeNumbers, scores, tl]);
 
   // The finish sheet closes itself the moment the last dispute is agreed (on
   // this phone or a peer's) and carries on with the finish — no "all agreed"
@@ -1914,11 +1913,11 @@ export default function ScorecardScreen({ navigation, route }) {
       // to its attested, read-only state.
       await officialData.refresh();
     } catch (e) {
-      setAttestError(e?.message ?? 'Could not attest your card.');
+      setAttestError(e?.message ?? tl('scorecard.screen.attestFailed'));
     } finally {
       setAttestBusy(false);
     }
-  }, [official, attestBusy, officialToken, officialRoundId, officialData]);
+  }, [official, attestBusy, officialToken, officialRoundId, officialData, tl]);
 
   const { openCaptureMenu: openCapturePicker, sheets: mediaSheets } = useMediaAttachFlow({
     tournament,
@@ -1928,7 +1927,7 @@ export default function ScorecardScreen({ navigation, route }) {
     extraActions: roundMediaCount > 0 ? [{
       key: 'view',
       icon: 'image',
-      label: `View this round's memories (${roundMediaCount})`,
+      label: tl('scorecard.screen.viewMemories', { count: formatNumber(roundMediaCount) }),
       onPress: () => {
         setLightboxItems(roundMediaItems);
         setLightboxIndex(0);
@@ -1942,19 +1941,19 @@ export default function ScorecardScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <IconButton icon="chevron-left" onPress={goBack} accessibilityLabel="Back" />
-          <Text style={s.headerTitle}>Scorecard</Text>
+          <IconButton icon="chevron-left" onPress={goBack} accessibilityLabel={tl('common.back')} />
+          <Text style={s.headerTitle}>{tl('scorecard.screen.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
         <View style={s.statusCenter}>
           <Feather name="alert-circle" size={44} color={theme.text.muted} />
-          <Text style={s.statusTitle}>Couldn't load this round</Text>
+          <Text style={s.statusTitle}>{tl('scorecard.screen.loadErrorTitle')}</Text>
           <Text style={s.statusSubtitle}>
-            Check your connection and try again.
+            {tl('scorecard.screen.loadErrorBody')}
           </Text>
           <TouchableOpacity style={s.statusRetryBtn} onPress={retryLoad} activeOpacity={0.8}>
             <Feather name="rotate-ccw" size={14} color={theme.text.inverse} />
-            <Text style={s.statusRetryText}>Retry</Text>
+            <Text style={s.statusRetryText}>{tl('scorecard.screen.retry')}</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -1966,13 +1965,13 @@ export default function ScorecardScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <IconButton icon="chevron-left" onPress={goBack} accessibilityLabel="Back" />
-          <Text style={s.headerTitle}>Scorecard</Text>
+          <IconButton icon="chevron-left" onPress={goBack} accessibilityLabel={tl('common.back')} />
+          <Text style={s.headerTitle}>{tl('scorecard.screen.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
         <View style={s.statusCenter}>
           <ActivityIndicator color={theme.accent.primary} />
-          <Text style={s.statusSubtitle}>Loading round…</Text>
+          <Text style={s.statusSubtitle}>{tl('scorecard.screen.loading')}</Text>
         </View>
       </ScreenContainer>
     );
@@ -1987,20 +1986,20 @@ export default function ScorecardScreen({ navigation, route }) {
   const hasCurrentNotes = showNotesControls && !!(holeNote.trim() || roundNote.trim());
   const nextView = view === 'hole' ? 'grid' : 'hole';
   const viewSwitchLabel = view === 'hole'
-    ? 'Show full scorecard'
-    : 'Show hole by hole scorecard';
+    ? tl('scorecard.screen.viewFull')
+    : tl('scorecard.screen.viewHoles');
   const viewSwitchIcon = view === 'hole' ? 'grid' : 'circle';
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {/* Header with compact scorecard view switch. */}
       <View style={s.header}>
-        <IconButton icon="chevron-left" onPress={goBack} accessibilityLabel="Back" />
-        <Text style={s.headerTitle}>Scorecard</Text>
+        <IconButton icon="chevron-left" onPress={goBack} accessibilityLabel={tl('common.back')} />
+        <Text style={s.headerTitle}>{tl('scorecard.screen.title')}</Text>
         <View style={s.headerRight}>
           <IconButton
             onPress={() => setSyncSheetOpen(true)}
-            accessibilityLabel="Sync status"
+            accessibilityLabel={tl('scorecard.screen.syncStatus')}
           >
             <SyncIndicator status={syncStatus} saveError={saveError} theme={theme} s={s} />
           </IconButton>
@@ -2009,10 +2008,10 @@ export default function ScorecardScreen({ navigation, route }) {
               onPress={() => setViewOnly(false)}
               style={s.editRoundBtn}
               accessibilityRole="button"
-              accessibilityLabel="Edit round"
+              accessibilityLabel={tl('scorecard.screen.editRound')}
             >
               <Feather name="edit-2" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
-              <Text style={s.editRoundBtnText}>Edit round</Text>
+              <Text style={s.editRoundBtnText}>{tl('scorecard.screen.editRound')}</Text>
             </TouchableOpacity>
           )}
           <IconButton
@@ -2024,7 +2023,7 @@ export default function ScorecardScreen({ navigation, route }) {
             <IconButton
               icon="award"
               onPress={() => setOfficialLeaderboardOpen(true)}
-              accessibilityLabel="View official leaderboard"
+              accessibilityLabel={tl('scorecard.screen.officialBoard')}
             />
           )}
           {showNotesControls && (
@@ -2032,14 +2031,14 @@ export default function ScorecardScreen({ navigation, route }) {
               icon={hasCurrentNotes ? 'edit-3' : 'edit-2'}
               onPress={() => setNotesOpen(true)}
               dot={hasCurrentNotes}
-              accessibilityLabel={hasCurrentNotes ? 'Open notes' : 'Add notes'}
+              accessibilityLabel={hasCurrentNotes ? tl('scorecard.screen.openNotes') : tl('scorecard.screen.addNotes')}
             />
           )}
           {showFlagFinder && (
             <IconButton
               icon="flag"
               onPress={() => setFlagFinderOpen(true)}
-              accessibilityLabel="Find the flag"
+              accessibilityLabel={tl('scorecard.screen.findFlag')}
             />
           )}
           {leagueLayer.canCountMine && (
@@ -2052,7 +2051,7 @@ export default function ScorecardScreen({ navigation, route }) {
           <IconButton
             icon="camera"
             onPress={openCapturePicker}
-            accessibilityLabel="Attach a memory"
+            accessibilityLabel={tl('scorecard.screen.attachMemory')}
           />
         </View>
       </View>
@@ -2061,18 +2060,18 @@ export default function ScorecardScreen({ navigation, route }) {
         <View style={s.saveErrorBanner}>
           <Feather name="alert-triangle" size={14} color={theme.text.inverse} />
           <Text style={s.saveErrorText}>
-            Couldn't save your last change.
+            {tl('scorecard.screen.saveErrorBody')}
           </Text>
           <TouchableOpacity
             onPress={() => { setSaveError(false); retrySave(); }}
-            accessibilityLabel="Retry saving"
+            accessibilityLabel={tl('scorecard.screen.retrySaving')}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={s.saveErrorAction}>Retry</Text>
+            <Text style={s.saveErrorAction}>{tl('scorecard.screen.retry')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setSaveError(false)}
-            accessibilityLabel="Dismiss"
+            accessibilityLabel={tl('scorecard.screen.dismiss')}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Feather name="x" size={14} color={theme.text.inverse} />
@@ -2100,14 +2099,14 @@ export default function ScorecardScreen({ navigation, route }) {
             <Feather name="award" size={17} color={theme.accent.primary} />
           </View>
           <View style={s.roundDecisionCopy}>
-            <Text style={s.roundDecisionTitle}>{roundDecisionNotice.title}</Text>
-            <Text style={s.roundDecisionMessage}>{roundDecisionNotice.message}</Text>
+            <Text style={s.roundDecisionTitle}>{tr(roundDecisionNotice.title)}</Text>
+            <Text style={s.roundDecisionMessage}>{tr(roundDecisionNotice.message)}</Text>
           </View>
           <TouchableOpacity
             onPress={dismissRoundDecisionNotice}
             style={s.roundDecisionCloseBtn}
             accessibilityRole="button"
-            accessibilityLabel="Dismiss round decided notice"
+            accessibilityLabel={tl('scorecard.screen.dismissRoundDecided')}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Feather name="x" size={16} color={theme.text.secondary} />
@@ -2118,7 +2117,7 @@ export default function ScorecardScreen({ navigation, route }) {
         visible={reopenPrompt}
         playerCount={(tournament?.players ?? []).length}
         defaultMode={currentMode}
-        title="Change scoring mode"
+        title={tl('scorecard.screen.changeMode')}
         onConfirm={async (chosenMode) => {
           setReopenPrompt(false);
           if (chosenMode === currentMode) return;
@@ -2219,13 +2218,13 @@ export default function ScorecardScreen({ navigation, route }) {
         <BottomSheet visible={notesOpen} onClose={() => setNotesOpen(false)} sheetStyle={s.notesSheet}>
           <View style={s.notesHandle} />
           <View style={s.notesHeader}>
-            <Text style={s.notesTitle}>Notes</Text>
+            <Text style={s.notesTitle}>{tl('scorecard.screen.notes')}</Text>
             <IconButton icon="x" onPress={() => setNotesOpen(false)} />
           </View>
-          <Text style={s.notesFieldLabel}>{`Hole ${currentHole}`}</Text>
+          <Text style={s.notesFieldLabel}>{tl('scorecard.screen.notesHole', { hole: formatNumber(currentHole) })}</Text>
           <TextInput
             style={s.notesModalInputCompact}
-            placeholder={`Notes for hole ${currentHole}`}
+            placeholder={tl('scorecard.screen.notesHolePlaceholder', { hole: formatNumber(currentHole) })}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -2233,10 +2232,10 @@ export default function ScorecardScreen({ navigation, route }) {
             value={holeNote}
             onChangeText={(text) => saveHoleNote(currentHole, text)}
           />
-          <Text style={[s.notesFieldLabel, s.notesFieldLabelSpaced]}>Round</Text>
+          <Text style={[s.notesFieldLabel, s.notesFieldLabelSpaced]}>{tl('scorecard.screen.roundLabel')}</Text>
           <TextInput
             style={s.notesModalInputCompact}
-            placeholder="What happened this round?"
+            placeholder={tl('scorecard.screen.roundPlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -2285,7 +2284,7 @@ export default function ScorecardScreen({ navigation, route }) {
         rows={conflictRows}
         localAuthorIds={localAuthorIds}
         onPick={(playerId, hole, value) => resolveConflict(playerId, hole, value)}
-        primaryLabel="Finish round"
+        primaryLabel={tl('scorecard.screen.finishRound')}
         onPrimary={() => {
           setFinishConflictsOpen(false);
           handleFinish();
@@ -2309,7 +2308,7 @@ export default function ScorecardScreen({ navigation, route }) {
             // available while conflicts remain and still advances. The peer
             // prompt has nowhere to go, so it only offers Done once settled.
             allowPrimaryWhilePending={leave}
-            primaryLabel={leave ? (pending ? 'Continue anyway' : 'Continue') : 'Done'}
+            primaryLabel={leave ? (pending ? tl('scorecard.screen.continueAnyway') : tl('scorecard.screen.continue')) : tl('common.done')}
             onPrimary={() => { close(); if (leave) proceedFromLeave(); }}
           />
         );
@@ -2327,8 +2326,8 @@ export default function ScorecardScreen({ navigation, route }) {
             <View style={s.roundCompleteIconWrap}>
               <Feather name="flag" size={26} color={theme.accent.primary} />
             </View>
-            <Text style={s.roundCompleteEyebrow}>ROUND COMPLETE</Text>
-            <Text style={s.roundCompleteTitle}>Nice round!</Text>
+            <Text style={s.roundCompleteEyebrow}>{tl('scorecard.screen.roundComplete')}</Text>
+            <Text style={s.roundCompleteTitle}>{tl('scorecard.screen.niceRound')}</Text>
           </View>
         </View>
       )}
@@ -2345,15 +2344,15 @@ export default function ScorecardScreen({ navigation, route }) {
         >
           <View style={s.notesHandle} />
           <View style={s.notesHeader}>
-            <Text style={s.notesTitle}>Leaderboard</Text>
+            <Text style={s.notesTitle}>{tl('scorecard.screen.leaderboard')}</Text>
             <IconButton
               icon="x"
               onPress={() => setOfficialLeaderboardOpen(false)}
-              accessibilityLabel="Close leaderboard"
+              accessibilityLabel={tl('scorecard.screen.closeLeaderboard')}
             />
           </View>
           {officialLeaderboard.length === 0 ? (
-            <Text style={s.statusSubtitle}>No scores yet.</Text>
+            <Text style={s.statusSubtitle}>{tl('scorecard.screen.noScores')}</Text>
           ) : (
             <ScrollView style={s.officialLbList}>
               {officialLeaderboard.map((row, i) => (
@@ -2364,9 +2363,9 @@ export default function ScorecardScreen({ navigation, route }) {
                     {row.discrepancy ? ' ⚠' : ''}
                   </Text>
                   <Text style={s.officialLbThru}>
-                    {row.thru > 0 ? `thru ${row.thru} · gross ${row.gross}` : '—'}
+                    {row.thru > 0 ? tl('scorecard.screen.thruGross', { thru: formatNumber(row.thru), gross: formatNumber(row.gross) }) : '—'}
                   </Text>
-                  <Text style={s.officialLbGross}>{row.points} pts</Text>
+                  <Text style={s.officialLbGross}>{tl('scorecard.screen.pts', { points: formatNumber(row.points) })}</Text>
                 </View>
               ))}
             </ScrollView>
@@ -2380,29 +2379,30 @@ export default function ScorecardScreen({ navigation, route }) {
 // Compact header sync/error indicator. Reflects the store's sync status and
 // flips to an explicit error dot when a local save fails.
 function SyncIndicator({ status, saveError, theme, s }) {
+  const tl = useT();
   if (saveError || status === 'error') {
     return (
-      <View style={s.syncDot} accessibilityLabel="Sync error">
+      <View style={s.syncDot} accessibilityLabel={tl('scorecard.screen.syncError')}>
         <Feather name="alert-circle" size={14} color={theme.destructive} />
       </View>
     );
   }
   if (status === 'syncing') {
     return (
-      <View style={s.syncDot} accessibilityLabel="Syncing">
+      <View style={s.syncDot} accessibilityLabel={tl('scorecard.screen.syncing')}>
         <ActivityIndicator size="small" color={theme.text.muted} />
       </View>
     );
   }
   if (status === 'pending') {
     return (
-      <View style={s.syncDot} accessibilityLabel="Changes pending sync">
+      <View style={s.syncDot} accessibilityLabel={tl('scorecard.screen.syncPending')}>
         <Feather name="cloud" size={14} color={theme.text.muted} />
       </View>
     );
   }
   return (
-    <View style={s.syncDot} accessibilityLabel="Synced">
+    <View style={s.syncDot} accessibilityLabel={tl('scorecard.screen.synced')}>
       <Feather name="check-circle" size={14} color={theme.accent.primary} />
     </View>
   );

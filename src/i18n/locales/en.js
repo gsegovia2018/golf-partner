@@ -4,6 +4,7 @@
 import auth from './en/auth';
 import common from './en/common';
 import courses from './en/courses';
+import holeMap from './en/holeMap';
 import leagueBoard from './en/leagueBoard';
 import leagueCards from './en/leagueCards';
 import leagueMembers from './en/leagueMembers';
@@ -15,12 +16,14 @@ import players from './en/players';
 import profile from './en/profile';
 import scorecard from './en/scorecard';
 import settings from './en/settings';
+import shots from './en/shots';
 import tour from './en/tour';
 
 export const AREAS = {
   auth,
   common,
   courses,
+  holeMap,
   leagueBoard,
   leagueCards,
   leagueMembers,
@@ -32,6 +35,7 @@ export const AREAS = {
   profile,
   scorecard,
   settings,
+  shots,
   tour,
 };
 
@@ -39,6 +43,7 @@ export default {
   ...auth,
   ...common,
   ...courses,
+  ...holeMap,
   ...leagueBoard,
   ...leagueCards,
   ...leagueMembers,
@@ -50,5 +55,6 @@ export default {
   ...profile,
   ...scorecard,
   ...settings,
+  ...shots,
   ...tour,
 };

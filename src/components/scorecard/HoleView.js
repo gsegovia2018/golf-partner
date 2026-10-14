@@ -29,6 +29,7 @@ import ConflictWizardSheet from './ConflictWizardSheet';
 import { getShotDetailCollapsed, setShotDetailCollapsed } from '../../lib/prefs';
 import { prefetchCourseTiles } from '../../store/tileCache';
 import { useTourTarget } from '../tour/tourTargets';
+import { useT, formatNumber } from '../../i18n';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
 // platform. On web, react-native-web 0.21's `pagingEnabled` only sets
@@ -66,6 +67,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
 
 export function HoleView({ leaguePlayers = '', round, roundIndex, players, scores, myScores = null, ghostAuthors = null, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled, conflictHoles = new Set(), conflictCells = new Set(), conflictRows = EMPTY_CONFLICT_ROWS, localAuthorIds }) {
   const { theme } = useTheme();
+  const tl = useT();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
   // True once the "which player are you?" modal is dismissed via "Not now",
@@ -417,11 +419,11 @@ export function HoleView({ leaguePlayers = '', round, roundIndex, players, score
               disabled={finishBusy}
               activeOpacity={0.75}
               accessibilityRole="button"
-              accessibilityLabel="Finish game"
+              accessibilityLabel={tl('scorecard.hole.finishGame')}
             >
               <Feather name="flag" size={14} color={theme.text.inverse} />
               <Text style={s.quickFinishBtnText}>
-                {finishBusy ? 'Finishing' : 'Finish'}
+                {finishBusy ? tl('scorecard.hole.finishing') : tl('scorecard.hole.finish')}
               </Text>
             </TouchableOpacity>
           )}
@@ -429,10 +431,10 @@ export function HoleView({ leaguePlayers = '', round, roundIndex, players, score
             style={s.notesPillBtn}
             onPress={() => setHolePickerOpen(true)}
             activeOpacity={0.7}
-            accessibilityLabel="Jump to hole"
+            accessibilityLabel={tl('scorecard.hole.jumpToHole')}
           >
             <Feather name="list" size={14} color={theme.text.muted} />
-            <Text style={s.notesPillBtnText}>Go to hole</Text>
+            <Text style={s.notesPillBtnText}>{tl('scorecard.hole.goToHole')}</Text>
           </TouchableOpacity>
           {(() => {
             // Last-hole affordance. Official mode (Task 16) replaces the casual
@@ -443,15 +445,15 @@ export function HoleView({ leaguePlayers = '', round, roundIndex, players, score
               const attestDisabled = hasDiscrepancies || officialAttestBusy
                 || officialHasAttested;
               const label = officialHasAttested
-                ? 'Attested'
-                : officialAttestBusy ? 'Attesting…' : 'Attest my card';
+                ? tl('scorecard.hole.attested')
+                : officialAttestBusy ? tl('scorecard.hole.attesting') : tl('scorecard.hole.attestMine');
               return (
                 <TouchableOpacity
                   style={[s.saveBtn, attestDisabled && s.saveBtnDisabled]}
                   onPress={onAttest}
                   disabled={attestDisabled}
                   activeOpacity={0.8}
-                  accessibilityLabel="Attest my card"
+                  accessibilityLabel={tl('scorecard.hole.attestMine')}
                 >
                   <Text style={s.saveBtnText}>{label}</Text>
                   <Feather
@@ -472,7 +474,7 @@ export function HoleView({ leaguePlayers = '', round, roundIndex, players, score
                   activeOpacity={0.8}
                 >
                   <Text style={s.saveBtnText}>
-                    {primaryDisabled ? 'Finishing' : onLastHole ? 'Finish' : `Hole ${currentHole + 1}`}
+                    {primaryDisabled ? tl('scorecard.hole.finishing') : onLastHole ? tl('scorecard.hole.finish') : tl('scorecard.hole.nextHole', { hole: formatNumber(currentHole + 1) })}
                   </Text>
                   <Feather
                     name={onLastHole ? 'flag' : 'chevron-right'}
@@ -488,10 +490,10 @@ export function HoleView({ leaguePlayers = '', round, roundIndex, players, score
           || (officialDiscrepancy?.myHoles?.length ?? 0) > 0 || officialAttestError) && (
           <Text style={s.attestHint}>
             {officialHasAttested
-              ? 'Attested — waiting for your party'
+              ? tl('scorecard.hole.attestedWaiting')
               : officialAttestError
                 ? officialAttestError
-                : 'Resolve discrepancies before attesting'}
+                : tl('scorecard.hole.resolveFirst')}
           </Text>
         )}
       </View>
@@ -505,7 +507,7 @@ export function HoleView({ leaguePlayers = '', round, roundIndex, players, score
       >
         <Pressable style={s.notesBackdrop} onPress={() => setHolePickerOpen(false)}>
           <Pressable style={s.holePickerSheet} onPress={() => {}}>
-            <Text style={s.notesTitle}>Jump to hole</Text>
+            <Text style={s.notesTitle}>{tl('scorecard.hole.jumpToHole')}</Text>
             <View style={s.holePickerGrid}>
               {round.holes.map((h) => {
                 const n = h.number;
@@ -570,7 +572,7 @@ export function HoleView({ leaguePlayers = '', round, roundIndex, players, score
             visible
             onClose={() => setDiscrepancyTarget(null)}
             hole={dHole}
-            subjectName={subject?.name ?? 'Player'}
+            subjectName={subject?.name ?? tl('scorecard.conflict.playerFallback')}
             selfStrokes={self}
             markerStrokes={marker}
             markerName={officialDiscrepancy.markerNameFor(subjectRosterId)}
@@ -602,7 +604,7 @@ export function HoleView({ leaguePlayers = '', round, roundIndex, players, score
             rows={rows}
             localAuthorIds={localAuthorIds}
             onPick={(pid, h, value) => onResolveConflict?.(pid, h, value)}
-            primaryLabel="Done"
+            primaryLabel={tl('common.done')}
             onPrimary={() => setConflictTarget(null)}
           />
         );
