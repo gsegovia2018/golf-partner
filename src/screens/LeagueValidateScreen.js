@@ -178,7 +178,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
       try {
         const c = await getLeagueCard(cardId);
         if (alive && c) setServerCard(c);
-        if (alive && c?.status === 'submitted' && c.markerNote) setReturnNote(c.markerNote);
+        if (alive && c?.status === 'submitted' && c.returnedAt && c.markerNote) setReturnNote(c.markerNote);
       } catch { /* no note shown */ }
     })();
     return () => { alive = false; };
@@ -261,6 +261,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
         playedOn: null,
       });
       setServerCard((c) => ({ ...(c ?? {}), ...scored }));
+      setReturnNote(null);
       const r = await confirmLeagueCardByPartner(cardId);
       setResult(r);
       if (!r.confirmed && picked && !RESUBMIT_REASONS.includes(r.reason)) await ask(picked.userId, picked.name);

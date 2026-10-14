@@ -122,6 +122,7 @@ describe('LeagueMarkerQRScreen', () => {
     await waitFor(() => getByText('Your marker sent the card back'));
     expect(getByText('Hole 7 was a 6')).toBeTruthy();
     expect(queryByText('New code')).toBeNull();
+    expect(queryByText('Ask your marker to scan')).toBeNull();
     fireEvent.press(getByText('Review your card'));
     expect(nav.replace).toHaveBeenCalledWith('LeagueValidate', {
       leagueId: 'L1', cardId: 'card-1', tournamentId: 't1', roundId: 't1-r0', submitted: true,

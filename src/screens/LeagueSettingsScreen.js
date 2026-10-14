@@ -15,6 +15,7 @@ import { useT, formatNumber, formatDate } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
+import { dropLeagueRow } from '../hooks/useMyLeagueRows';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings } from '../store/settingsStore';
 import {
@@ -249,6 +250,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
     setDeleteError(null);
     try {
       await deleteLeague(leagueId);
+      dropLeagueRow(leagueId);
       setDeleteOpen(false);
       navigation.navigate('Main');
     } catch (e) {

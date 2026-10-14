@@ -194,11 +194,15 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <ScreenHeader onBack={() => navigation.goBack()} title={t('league.markerQr.title')} />
       <ScrollView contentContainerStyle={s.content}>
-        <View style={s.titleRow}>
-          <Feather name="smartphone" size={18} color={theme.text.primary} />
-          <Text style={s.title}>{t('league.markerQr.heading')}</Text>
-        </View>
-        <Text style={s.subtitle}>{t('league.markerQr.subtitle')}</Text>
+        {!returnedCard && (
+          <>
+            <View style={s.titleRow}>
+              <Feather name="smartphone" size={18} color={theme.text.primary} />
+              <Text style={s.title}>{t('league.markerQr.heading')}</Text>
+            </View>
+            <Text style={s.subtitle}>{t('league.markerQr.subtitle')}</Text>
+          </>
+        )}
         {body}
         {!settled && (
           <TouchableOpacity
