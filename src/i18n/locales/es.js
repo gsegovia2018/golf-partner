@@ -14,6 +14,11 @@ import profile from './es/profile';
 import scorecard from './es/scorecard';
 import settings from './es/settings';
 import tour from './es/tour';
+import statsScreen from './es/statsScreen';
+import statExplainers from './es/statExplainers';
+import statsTabs from './es/statsTabs';
+import myStats from './es/myStats';
+import playerStats from './es/playerStats';
 
 export const AREAS = {
   auth,
@@ -29,6 +34,11 @@ export const AREAS = {
   scorecard,
   settings,
   tour,
+  statsScreen,
+  statExplainers,
+  statsTabs,
+  myStats,
+  playerStats,
 };
 
 export default {
@@ -45,4 +55,9 @@ export default {
   ...scorecard,
   ...settings,
   ...tour,
+  ...statsScreen,
+  ...statExplainers,
+  ...statsTabs,
+  ...myStats,
+  ...playerStats,
 };
