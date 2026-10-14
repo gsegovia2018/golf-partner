@@ -26,7 +26,7 @@ const THIS_MONTH = (() => {
 const PAST_MONTH = '2025-09';
 
 const member = (userId, displayName, extra = {}) => ({
-  userId, displayName, role: 'member', feePaid: false, leftAt: null, leagueHandicap: 18, ...extra,
+  userId, displayName, publicName: displayName, role: 'member', feePaid: false, leftAt: null, leagueHandicap: 18, ...extra,
 });
 
 function snapshot({ cardsByMonth = {}, members } = {}) {

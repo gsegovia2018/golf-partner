@@ -11,9 +11,11 @@
 // WhatsApp formatting: *bold* for the league name; the markers * _ ~ ` are
 // stripped from every name inside the text (wa()) so a name can't restyle it.
 //
-// Privacy: names are the profile's display name only, never the username
-// (it comes from the email's local part). No display name -> "Golfer" /
-// "Jugador". The server's league_public_name follows the same rule.
+// Privacy: names are the server-made public name only (get_league_members'
+// public_name, the public board's name), never derived here from the display
+// name or the username: the server drops a display name that is the email's
+// local part or the username (20261018000000). No public name -> "Golfer" /
+// "Jugador".
 import { t, formatNumber, formatDate, formatTime, formatOrdinal } from '../i18n';
 import { monthResults, seasonTable } from './leagueStandings';
 import {
@@ -53,14 +55,12 @@ export function shareName(name, lang) {
   return publicNameRule(name) ?? t('league.share.golfer', {}, lang);
 }
 
-// A member's display name for sharing, never the username: the members RPC
-// falls back to the username when there is no display name, so a value equal
-// to the username counts as none.
+// A member's name for sharing: the server-made public name (already first
+// name + initial), null when the server gave none. Never the display name or
+// the username.
 export function publicDisplayName(member) {
-  const name = String(member?.displayName ?? '').trim();
-  if (!name) return null;
-  const username = String(member?.username ?? '').trim();
-  return username && name.toLowerCase() === username.toLowerCase() ? null : name;
+  const name = String(member?.publicName ?? '').trim();
+  return name || null;
 }
 
 // WhatsApp markers out of a name: * _ ~ `.
@@ -272,7 +272,7 @@ export function publicBoardSnapshot(payload) {
   if (!payload || typeof payload !== 'object' || !payload.league) return null;
   const l = payload.league;
   const members = (payload.members ?? []).map((m) => ({
-    userId: m.key, displayName: m.name, leftAt: m.active === false ? 'left' : null,
+    userId: m.key, displayName: m.name, publicName: m.name ?? null, leftAt: m.active === false ? 'left' : null,
   }));
   const cardsByMonth = {};
   for (const c of payload.cards ?? []) {
