@@ -383,7 +383,7 @@ export default function NextRoundScreen({ navigation, route }) {
       if (!revealOnly) {
         await mutate(updated, { type: 'tournament.advanceRound', roundIndex });
       }
-      navigation.replace('Home');
+      navigation.replace('Scorecard', { roundIndex, tournamentId: tournament.id });
     } catch (err) {
       showMutationError(err, t('rounds.next.startError'));
     } finally {

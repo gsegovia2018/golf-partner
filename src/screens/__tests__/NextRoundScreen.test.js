@@ -88,7 +88,7 @@ describe('NextRoundScreen confirm/reshuffle error handling (Task 3.7)', () => {
     Alert.alert.mockRestore();
   });
 
-  test('handleConfirm success path still navigates Home (revealOnly)', async () => {
+  test('handleConfirm success path opens the scorecard (revealOnly)', async () => {
     const { mutate } = require('../../store/mutate');
     mutate.mockImplementation((current) => Promise.resolve(current));
 
@@ -101,7 +101,7 @@ describe('NextRoundScreen confirm/reshuffle error handling (Task 3.7)', () => {
     await waitFor(() => expect(getByText("Let's Play!")).toBeTruthy());
     fireEvent.press(getByText("Let's Play!"));
 
-    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Home'));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Scorecard', expect.objectContaining({ tournamentId: 't1' })));
     expect(Alert.alert).not.toHaveBeenCalled();
   });
 
@@ -126,7 +126,7 @@ describe('NextRoundScreen confirm/reshuffle error handling (Task 3.7)', () => {
     mutate.mockImplementation((current) => Promise.resolve(current));
     fireEvent.press(getByText("Let's Play!"));
 
-    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Home'));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Scorecard', expect.objectContaining({ tournamentId: 't1' })));
   });
 
   test('handleConfirm calls advanceRound when not revealOnly; a rejected advanceRound alerts and does not navigate', async () => {
@@ -225,7 +225,7 @@ describe('NextRoundScreen league card for the round (D5 B)', () => {
     expect(getByText(/Only round 2 counts\. Round 1 stays a tournament round\./)).toBeTruthy();
 
     fireEvent.press(getByText("Let's Play!"));
-    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Home'));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Scorecard', expect.objectContaining({ tournamentId: 't1' })));
     expect(announceRoundCard).toHaveBeenCalledWith(expect.objectContaining({ roundId: 'r1', meId: 'p1', league }));
     expect(mutate.mock.calls[0][0]).toBe(announced);
   });
@@ -238,7 +238,7 @@ describe('NextRoundScreen league card for the round (D5 B)', () => {
     const { getByText, getByLabelText } = render(wrap(<NextRoundScreen navigation={navigation} route={route} />));
     await reachPlay(getByText, getByLabelText);
     fireEvent.press(getByText("Let's Play!"));
-    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Home'));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('Scorecard', expect.objectContaining({ tournamentId: 't1' })));
     expect(dismissLeagueOptIn).toHaveBeenCalledWith('t1', 'r1');
     expect(announceRoundCard).not.toHaveBeenCalled();
   });

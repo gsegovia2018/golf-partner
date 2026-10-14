@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import LeagueValidateScreen, { PARTNER_REASONS } from '../LeagueValidateScreen';
 import { t as translate } from '../../i18n';
@@ -390,12 +390,21 @@ describe('LeagueValidateScreen copy, marker note and scorecard route', () => {
   });
 
   test('a returned card shows the marker note and Edit in scorecard opens that round', async () => {
-    store.getLeagueCard.mockResolvedValue({ id: 'card-1', status: 'submitted', markerNote: 'Hole 7 was a 6' });
+    store.getLeagueCard.mockResolvedValue({ id: 'card-1', status: 'submitted', returnedAt: '2026-10-13T10:05:00Z', markerNote: 'Hole 7 was a 6' });
     const navigation = makeNav();
     const { findByText, getByText } = render(wrap(<LeagueValidateScreen navigation={navigation} route={route} />));
     expect(await findByText('Hole 7 was a 6')).toBeTruthy();
     fireEvent.press(getByText('Edit in scorecard'));
     expect(navigation.navigate).toHaveBeenCalledWith('Scorecard', { tournamentId: 't1', roundIndex: 0 });
+  });
+
+  test('a resubmitted card (returnedAt cleared, marker_note kept) shows no sent-back note', async () => {
+    store.getLeagueCard.mockResolvedValue({ id: 'card-1', status: 'submitted', returnedAt: null, markerNote: 'Hole 7 was a 6' });
+    const { findByText, queryByText } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+    await findByText('Centro Nacional · Round 1');
+    await waitFor(() => expect(store.getLeagueCard).toHaveBeenCalled());
+    await act(async () => {});
+    expect(queryByText('Hole 7 was a 6')).toBeNull();
   });
 
   test('once submitted, the result shows the server-scored points, gross and differential', async () => {
