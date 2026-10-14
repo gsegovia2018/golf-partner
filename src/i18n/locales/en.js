@@ -19,6 +19,11 @@ import settings from './en/settings';
 import shots from './en/shots';
 import tour from './en/tour';
 
+import home from './en/home';
+import setup from './en/setup';
+import rounds from './en/rounds';
+import official from './en/official';
+
 export const AREAS = {
   auth,
   common,
@@ -37,6 +42,10 @@ export const AREAS = {
   settings,
   shots,
   tour,
+  home,
+  setup,
+  rounds,
+  official,
 };
 
 export default {
@@ -57,4 +66,8 @@ export default {
   ...settings,
   ...shots,
   ...tour,
+  ...home,
+  ...setup,
+  ...rounds,
+  ...official,
 };

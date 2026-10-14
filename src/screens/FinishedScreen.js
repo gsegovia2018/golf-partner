@@ -13,9 +13,11 @@ import {
   deleteTournament, subscribeTournamentChanges,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
+import { useT } from '../i18n';
 
 export default function FinishedScreen({ navigation }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const [finished, setFinished] = useState([]);
@@ -55,71 +57,71 @@ export default function FinishedScreen({ navigation }) {
     navigation.navigate('Tournament', { tournamentId: id, viewMode: 'tournament' });
   }
 
-  async function reopen(t) {
+  async function reopen(item) {
     const confirmed = Platform.OS === 'web'
-      ? window.confirm(`Reopen "${t.name}"? It will move back to your active list.`)
+      ? window.confirm(t('rounds.finished.reopenConfirm', { name: item.name }))
       : await new Promise((resolve) => Alert.alert(
-          'Reopen',
-          `Reopen "${t.name}"? It will move back to your active list.`,
-          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-           { text: 'Reopen', onPress: () => resolve(true) }],
+          t('rounds.finished.reopen'),
+          t('rounds.finished.reopenConfirm', { name: item.name }),
+          [{ text: t('rounds.finished.cancel'), style: 'cancel', onPress: () => resolve(false) },
+           { text: t('rounds.finished.reopen'), onPress: () => resolve(true) }],
         ));
     if (!confirmed) return;
     try {
-      await mutate(t, { type: 'tournament.setFinished', finishedAt: null });
+      await mutate(item, { type: 'tournament.setFinished', finishedAt: null });
       await reload();
     } catch (err) {
-      const msg = err?.message ?? 'Could not reopen';
+      const msg = err?.message ?? t('rounds.finished.reopenError');
       if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('Error', msg);
+      else Alert.alert(t('rounds.finished.error'), msg);
     }
   }
 
-  async function confirmDelete(t) {
+  async function confirmDelete(item) {
     const confirmed = Platform.OS === 'web'
-      ? window.confirm(`Delete "${t.name}"? This cannot be undone.`)
+      ? window.confirm(t('rounds.finished.deleteConfirm', { name: item.name }))
       : await new Promise((resolve) => Alert.alert(
-          'Delete', `Delete "${t.name}"? This cannot be undone.`,
-          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-           { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }],
+          t('rounds.finished.delete'), t('rounds.finished.deleteConfirm', { name: item.name }),
+          [{ text: t('rounds.finished.cancel'), style: 'cancel', onPress: () => resolve(false) },
+           { text: t('rounds.finished.delete'), style: 'destructive', onPress: () => resolve(true) }],
         ));
     if (!confirmed) return;
     try {
-      await deleteTournament(t.id);
+      await deleteTournament(item.id);
       await reload();
     } catch (err) {
-      const msg = err?.message ?? 'Could not delete';
+      const msg = err?.message ?? t('rounds.finished.deleteError');
       if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('Error', msg);
+      else Alert.alert(t('rounds.finished.error'), msg);
     }
   }
 
-  const renderCard = (t) => {
-    const players = t.players ?? [];
-    const rounds = t.rounds ?? [];
-    const isGameKind = t.kind === 'game';
+  const renderCard = (item) => {
+    const players = item.players ?? [];
+    const rounds = item.rounds ?? [];
+    const isGameKind = item.kind === 'game';
     const courseName = isGameKind ? (rounds[0]?.courseName ?? '') : null;
     const metaText = players.length > 0
       ? players.map((p) => p.name.split(' ')[0]).join(' · ')
       : '';
     return (
-      <View key={t.id} style={s.cardWrapper}>
+      <View key={item.id} style={s.cardWrapper}>
         <TouchableOpacity
           style={s.card}
-          onPress={() => openTournament(t.id)}
+          onPress={() => openTournament(item.id)}
           activeOpacity={0.7}
         >
           <View style={s.cardLeft}>
             <View style={s.cardHeader}>
-              <Text style={s.cardName}>{t.name}</Text>
+              <Text style={s.cardName}>{item.name}</Text>
               <View style={s.statusBadge}>
-                <Text style={s.statusBadgeText}>Finished</Text>
+                <Text style={s.statusBadgeText}>{t('rounds.finished.badge')}</Text>
               </View>
             </View>
             {metaText ? <Text style={s.cardMeta}>{metaText}</Text> : null}
             {rounds.length > 0 && (
               <Text style={s.cardRound}>
-                {isGameKind ? (courseName || 'Single round') : `${rounds.length} rounds`}
+                {isGameKind ? (courseName || t('rounds.finished.singleRound')) : t('rounds.finished.roundCount', { count: rounds.length })}
               </Text>
             )}
           </View>
@@ -128,15 +130,15 @@ export default function FinishedScreen({ navigation }) {
         <View style={s.cardActions}>
           <IconButton
             icon="rotate-ccw"
-            onPress={() => reopen(t)}
-            accessibilityLabel="Reopen"
+            onPress={() => reopen(item)}
+            accessibilityLabel={t('rounds.finished.reopen')}
           />
-          {t._role === 'owner' && (
+          {item._role === 'owner' && (
             <IconButton
               icon="trash-2"
               color={theme.destructive}
-              onPress={() => confirmDelete(t)}
-              accessibilityLabel="Delete"
+              onPress={() => confirmDelete(item)}
+              accessibilityLabel={t('rounds.finished.delete')}
             />
           )}
         </View>
@@ -151,7 +153,7 @@ export default function FinishedScreen({ navigation }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Finished</Text>
+        <Text style={s.headerTitle}>{t('rounds.finished.title')}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -159,19 +161,19 @@ export default function FinishedScreen({ navigation }) {
         {!loading && finished.length === 0 && (
           <View style={s.emptyState}>
             <Feather name="archive" size={44} color={theme.text.muted} />
-            <Text style={s.emptyTitle}>Nothing finished yet</Text>
-            <Text style={s.emptySubtitle}>Completed games and tournaments will show up here.</Text>
+            <Text style={s.emptyTitle}>{t('rounds.finished.emptyTitle')}</Text>
+            <Text style={s.emptySubtitle}>{t('rounds.finished.emptyBody')}</Text>
           </View>
         )}
         {games.length > 0 && (
           <>
-            <Text style={s.sectionLabel}>GAMES</Text>
+            <Text style={s.sectionLabel}>{t('rounds.finished.games')}</Text>
             {games.map(renderCard)}
           </>
         )}
         {tournaments.length > 0 && (
           <>
-            <Text style={s.sectionLabel}>TOURNAMENTS</Text>
+            <Text style={s.sectionLabel}>{t('rounds.finished.tournaments')}</Text>
             {tournaments.map(renderCard)}
           </>
         )}

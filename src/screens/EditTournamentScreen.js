@@ -8,9 +8,10 @@ import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useT, t as translate } from '../i18n';
 import {
   loadTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, buildTeamsForMode,
-  normalizeRoundHandicaps, isRoundComplete, tournamentNounCapitalized,
+  normalizeRoundHandicaps, isRoundComplete,
   getActiveTournamentSnapshot, getTournamentSnapshot, getTournament,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
@@ -24,11 +25,11 @@ import {
   roundRemovalConfirmation,
 } from './editTournamentRoundDeletion';
 
-async function confirmDialog(title, message, confirmLabel = 'Remove') {
+async function confirmDialog(title, message, confirmLabel) {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
   return new Promise((resolve) => Alert.alert(
     title, message,
-    [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+    [{ text: translate('setup.edit.cancel'), style: 'cancel', onPress: () => resolve(false) },
      { text: confirmLabel, style: 'destructive', onPress: () => resolve(true) }],
   ));
 }
@@ -88,6 +89,7 @@ function emittedNotesSeed(t) {
 }
 
 export default function EditTournamentScreen({ navigation, route }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = makeStyles(theme);
   // Edit the tournament the user navigated into (route param), not the global
@@ -272,9 +274,9 @@ export default function EditTournamentScreen({ navigation, route }) {
         setSaveState('saved');
       } catch (err) {
         setSaveState('error');
-        const msg = err?.message ?? 'Could not save changes';
+        const msg = err?.message ?? translate('setup.edit.saveError');
         if (Platform.OS === 'web') window.alert(msg);
-        else Alert.alert('Save failed', msg);
+        else Alert.alert(translate('setup.edit.saveFailed'), msg);
       }
     }, 400);
   }, [rounds, settings, name]);
@@ -355,9 +357,9 @@ export default function EditTournamentScreen({ navigation, route }) {
       tournament: { ...tournamentRef.current, rounds },
     });
     const ok = await confirmDialog(
-      confirmation.title,
-      confirmation.message,
-      confirmation.confirmLabel,
+      translate(confirmation.titleKey),
+      translate(confirmation.messageKey, confirmation.params),
+      translate(confirmation.confirmKey),
     );
     if (!ok) return;
     // Persist the deletion through mutate() so the round.remove mutation is
@@ -406,7 +408,7 @@ export default function EditTournamentScreen({ navigation, route }) {
       {/* Header */}
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Edit Tournament</Text>
+        <Text style={s.headerTitle}>{t('setup.edit.title')}</Text>
         {saveState === 'idle' ? (
           <View style={{ width: 64 }} />
         ) : (
@@ -422,7 +424,7 @@ export default function EditTournamentScreen({ navigation, route }) {
               style={{ marginRight: 4 }}
             />
             <Text style={[s.savePillText, saveState === 'error' && s.savePillTextError]}>
-              {saveState === 'error' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Saving…'}
+              {saveState === 'error' ? t('setup.edit.saveFailed') : saveState === 'saved' ? t('setup.edit.saved') : t('setup.edit.saving')}
             </Text>
           </View>
         )}
@@ -431,12 +433,12 @@ export default function EditTournamentScreen({ navigation, route }) {
       <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
         {/* Tournament / game name — editable at any time, including finished. */}
         <View style={s.roundHeader}>
-          <Text style={s.sectionTitle}>{`${tournamentNounCapitalized(tournament)} Name`}</Text>
+          <Text style={s.sectionTitle}>{tournament.kind === 'game' ? t('setup.edit.gameName') : t('setup.edit.tournamentName')}</Text>
         </View>
         <View style={s.roundCard}>
           <TextInput
             style={s.input}
-            placeholder={`${tournamentNounCapitalized(tournament)} name`}
+            placeholder={tournament.kind === 'game' ? t('setup.edit.gameNamePlaceholder') : t('setup.edit.tournamentNamePlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -454,11 +456,11 @@ export default function EditTournamentScreen({ navigation, route }) {
           return (
           <View key={r.id}>
             <View style={s.roundHeader}>
-              <Text style={s.sectionTitle}>Round {ri + 1}{r.tees?.length ? `  --  ${r.tees.length} tees` : ''}</Text>
+              <Text style={s.sectionTitle}>{r.tees?.length ? t('setup.edit.roundWithTees', { n: ri + 1, count: r.tees.length }) : t('setup.edit.round', { n: ri + 1 })}</Text>
               {canRemove && (
                 <TouchableOpacity onPress={() => removeRound(ri)} style={s.removeBtn}>
                   <Feather name="trash-2" size={14} color={theme.destructive} style={{ marginRight: 4 }} />
-                  <Text style={s.removeBtnText}>Remove</Text>
+                  <Text style={s.removeBtnText}>{t('setup.edit.remove')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -466,7 +468,7 @@ export default function EditTournamentScreen({ navigation, route }) {
             <View style={s.roundCard}>
               <TextInput
                 style={s.input}
-                placeholder="Course name"
+                placeholder={t('setup.edit.courseName')}
                 placeholderTextColor={theme.text.muted}
                 keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                 selectionColor={theme.accent.primary}
@@ -475,12 +477,12 @@ export default function EditTournamentScreen({ navigation, route }) {
               />
               {r.courseId ? (
                 <Text style={s.courseNameHint}>
-                  Renames this round only — the course saved in your library is unchanged.
+                  {t('setup.edit.courseRenameHint')}
                 </Text>
               ) : null}
               <TextInput
                 style={[s.input, s.notesInput]}
-                placeholder="Round notes..."
+                placeholder={t('setup.edit.notes')}
                 placeholderTextColor={theme.text.muted}
                 keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                 selectionColor={theme.accent.primary}
@@ -504,10 +506,10 @@ export default function EditTournamentScreen({ navigation, route }) {
                 >
                   <Feather name="edit-3" size={14} color={theme.accent.primary} style={{ marginRight: 8 }} />
                   <Text style={s.editHolesBtnText}>
-                    Edit Holes & Tees
+                    {t('setup.edit.editHoles')}
                   </Text>
                   <View style={s.parBadge}>
-                    <Text style={s.parBadgeText}>Par {r.holes.reduce((sum, h) => sum + h.par, 0)}</Text>
+                    <Text style={s.parBadgeText}>{t('setup.edit.par', { par: r.holes.reduce((sum, h) => sum + h.par, 0) })}</Text>
                   </View>
                 </TouchableOpacity>
               )}
@@ -519,7 +521,7 @@ export default function EditTournamentScreen({ navigation, route }) {
         <View>
           <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
             <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 8 }} />
-            <Text style={s.addRoundBtnText}>Add Round</Text>
+            <Text style={s.addRoundBtnText}>{t('setup.edit.addRound')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

@@ -2,13 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatDate, getLanguage } from '../i18n';
 import BottomSheet from './BottomSheet';
 import {
   parseIso, todayIso, addDays, nearestSaturday, inBounds, clampIso, addMonths, monthGrid,
-  stepTime, formatLabel, monthTitle,
+  stepTime, formatLabel,
 } from '../lib/calendar';
 
-const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const STEP_MINUTES = 10;
 
 const monthOf = (iso) => {
@@ -17,6 +17,13 @@ const monthOf = (iso) => {
 };
 const monthKey = ({ y, m }) => y * 12 + m;
 
+// "Sat 10 Oct 2026". English keeps the en-GB label from lib/calendar; Spanish
+// goes through the shared date formatter.
+const dateLabel = (iso) => (getLanguage() === 'en'
+  ? formatLabel(iso)
+  : `${formatDate(iso, 'short')} ${iso.slice(0, 4)}`);
+const monthLabel = ({ y, m }) => formatDate(`${y}-${String(m).padStart(2, '0')}-01`, 'month');
+
 // Pure-JS calendar sheet (no native picker, so it ships over the air and looks
 // the same on web and Android). Dates are 'YYYY-MM-DD', time is 'HH:MM'.
 //   min / max   - inclusive selectable range (either may be omitted)
@@ -24,6 +31,7 @@ const monthKey = ({ y, m }) => y * 12 + m;
 //   time        - when set, a tee-time stepper is shown and passed back
 //   onChange    - (iso, time) on Done
 export default function DateSheet({ visible, title, value, onChange, onClose, min, max, time, quickDates = true }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const today = todayIso();
@@ -43,17 +51,17 @@ export default function DateSheet({ visible, title, value, onChange, onClose, mi
   }, [visible]);
 
   const candidates = [
-    ['Today', today],
-    ['Yesterday', addDays(today, -1)],
-    ['Tomorrow', addDays(today, 1)],
-    ['Saturday', nearestSaturday(today)],
+    ['today', today],
+    ['yesterday', addDays(today, -1)],
+    ['tomorrow', addDays(today, 1)],
+    ['saturday', nearestSaturday(today)],
   ];
   const seen = new Set();
   let pastShown = false;
   const chips = candidates.filter(([label, iso]) => {
     if (!inBounds(iso, min, max) || seen.has(iso)) return false;
     // Yesterday and Tomorrow are alternatives: one is enough.
-    if (label === 'Yesterday' || label === 'Tomorrow') {
+    if (label === 'yesterday' || label === 'tomorrow') {
       if (pastShown) return false;
       pastShown = true;
     }
@@ -70,7 +78,7 @@ export default function DateSheet({ visible, title, value, onChange, onClose, mi
       <View style={s.handle} />
       <View style={s.titleRow}>
         <Text style={s.title}>{title}</Text>
-        {!!sel && <Text style={s.selected}>{formatLabel(sel)}</Text>}
+        {!!sel && <Text style={s.selected}>{dateLabel(sel)}</Text>}
       </View>
 
       {quickDates && <View style={s.chips}>
@@ -81,9 +89,9 @@ export default function DateSheet({ visible, title, value, onChange, onClose, mi
             onPress={() => pick(iso)}
             hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
             accessibilityRole="button"
-            accessibilityLabel={`${label}, ${formatLabel(iso)}`}
+            accessibilityLabel={`${t(`setup.date.${label}`)}, ${dateLabel(iso)}`}
           >
-            <Text style={[s.chipText, sel === iso && s.chipTextOn]}>{label}</Text>
+            <Text style={[s.chipText, sel === iso && s.chipTextOn]}>{t(`setup.date.${label}`)}</Text>
           </TouchableOpacity>
         ))}
       </View>}
@@ -94,18 +102,18 @@ export default function DateSheet({ visible, title, value, onChange, onClose, mi
           disabled={!canPrev}
           onPress={() => setView(addMonths(view, -1))}
           accessibilityRole="button"
-          accessibilityLabel="Previous month"
+          accessibilityLabel={t('setup.date.prevMonth')}
           accessibilityState={{ disabled: !canPrev }}
         >
           <Feather name="chevron-left" size={22} color={theme.text.primary} />
         </TouchableOpacity>
-        <Text style={s.monthText}>{monthTitle(view)}</Text>
+        <Text style={s.monthText}>{monthLabel(view)}</Text>
         <TouchableOpacity
           style={[s.arrow, !canNext && s.off]}
           disabled={!canNext}
           onPress={() => setView(addMonths(view, 1))}
           accessibilityRole="button"
-          accessibilityLabel="Next month"
+          accessibilityLabel={t('setup.date.nextMonth')}
           accessibilityState={{ disabled: !canNext }}
         >
           <Feather name="chevron-right" size={22} color={theme.text.primary} />
@@ -113,7 +121,7 @@ export default function DateSheet({ visible, title, value, onChange, onClose, mi
       </View>
 
       <View style={s.week}>
-        {WEEKDAYS.map((d, i) => <Text key={i} style={s.weekday}>{d}</Text>)}
+        {t('setup.date.weekdays').split(' ').map((d, i) => <Text key={i} style={s.weekday}>{d}</Text>)}
       </View>
       <View style={s.grid}>
         {monthGrid(view).map((iso, i) => {
@@ -127,7 +135,7 @@ export default function DateSheet({ visible, title, value, onChange, onClose, mi
                 disabled={!ok}
                 onPress={() => pick(iso)}
                 accessibilityRole="button"
-                accessibilityLabel={formatLabel(iso)}
+                accessibilityLabel={dateLabel(iso)}
                 accessibilityState={{ disabled: !ok, selected: on }}
               >
                 <Text style={[s.dayText, !ok && s.dayTextOff, on && s.dayTextOn]}>{Number(iso.slice(8))}</Text>
@@ -144,21 +152,21 @@ export default function DateSheet({ visible, title, value, onChange, onClose, mi
               style={s.stepBtn}
               onPress={() => setClock(stepTime(clock, -STEP_MINUTES))}
               accessibilityRole="button"
-              accessibilityLabel="Earlier tee time"
+              accessibilityLabel={t('setup.date.earlier')}
             >
               <Feather name="minus" size={20} color={theme.accent.primary} />
             </TouchableOpacity>
-            <Text style={s.time} accessibilityLabel={`Tee time ${clock}`}>{clock}</Text>
+            <Text style={s.time} accessibilityLabel={t('setup.date.teeTime', { time: clock })}>{clock}</Text>
             <TouchableOpacity
               style={s.stepBtn}
               onPress={() => setClock(stepTime(clock, STEP_MINUTES))}
               accessibilityRole="button"
-              accessibilityLabel="Later tee time"
+              accessibilityLabel={t('setup.date.later')}
             >
               <Feather name="plus" size={20} color={theme.accent.primary} />
             </TouchableOpacity>
           </View>
-          <Text style={s.rule}>Tee time moves in 10-minute steps.</Text>
+          <Text style={s.rule}>{t('setup.date.rule')}</Text>
         </View>
       )}
 
@@ -168,9 +176,9 @@ export default function DateSheet({ visible, title, value, onChange, onClose, mi
         onPress={() => { onChange(sel, clock); onClose(); }}
         activeOpacity={0.8}
         accessibilityRole="button"
-        accessibilityLabel="Done"
+        accessibilityLabel={t('setup.date.done')}
       >
-        <Text style={s.doneText}>Done</Text>
+        <Text style={s.doneText}>{t('setup.date.done')}</Text>
       </TouchableOpacity>
     </BottomSheet>
   );
