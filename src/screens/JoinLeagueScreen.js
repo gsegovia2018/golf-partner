@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
+import { buttonStyles } from '../components/ui/Buttons';
+import ScreenHeader from '../components/ui/ScreenHeader';
+import LeagueHero from '../components/league/LeagueHero';
 import { useTheme } from '../theme/ThemeContext';
 import { useT, formatNumber, formatDate } from '../i18n';
 import { loadProfile } from '../store/profileStore';
@@ -17,6 +20,7 @@ import { consumeJustJoined, requestLoginTab } from '../lib/leagueJoinHandoff';
 import GuestIdentityFields, { guestIdentityErrors } from '../components/league/GuestIdentityFields';
 import InitialsAvatar from '../components/league/InitialsAvatar';
 import { leagueErrorText } from '../lib/leagueErrorText';
+import { useConfirmSheet } from '../components/league/ConfirmSheet';
 
 // /league/:code. Shows the league, the rules in brief and the league handicap
 // the admin proposed (the member can propose another), then Join. When the
@@ -29,6 +33,7 @@ export default function JoinLeagueScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const t = useT();
+  const { ask, sheet: confirmSheet } = useConfirmSheet();
   const code = route?.params?.code ?? '';
   const authUser = useAuth()?.user ?? null;
   const isGuest = !!authUser?.is_anonymous;
@@ -90,20 +95,15 @@ export default function JoinLeagueScreen({ navigation, route }) {
   }, [code, navigation]);
 
   // Logging in from a guest session signs the guest out, and whatever they
-  // did as a guest stays with that session, so ask first. (Alert is the
-  // app's confirm; src/lib/webAlert.js makes it a real confirm on web.)
-  function confirmLogIn() {
-    Alert.alert(
-      t('league.join.loginTitle'),
-      t('league.join.loginBody'),
-      [
-        { text: t('league.join.stayGuest'), style: 'cancel' },
-        {
-          text: t('league.join.logIn'),
-          onPress: () => { requestLoginTab(); supabase.auth.signOut().catch(() => {}); },
-        },
-      ],
-    );
+  // did as a guest stays with that session, so ask first.
+  async function confirmLogIn() {
+    const yes = await ask({
+      title: t('league.join.loginTitle'),
+      message: t('league.join.loginBody'),
+      confirmLabel: t('league.join.logIn'),
+      cancelLabel: t('league.join.stayGuest'),
+    });
+    if (yes) { requestLoginTab(); supabase.auth.signOut().catch(() => {}); }
   }
 
   // Claim one of the admin's reserved spots (or back to none): its handicap
@@ -221,27 +221,17 @@ export default function JoinLeagueScreen({ navigation, route }) {
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} accessibilityLabel={t('league.join.goBack')}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>{t('league.join.title')}</Text>
-        <View style={{ width: 36 }} />
-      </View>
+      <ScreenHeader onBack={() => navigation.goBack()} backLabel={t('league.join.goBack')} title={t('league.join.title')} />
 
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-        <View style={s.hero}>
-          <Text style={s.heroOverline}>
-            {league.adminName ? t('league.join.invitedYou', { name: league.adminName.toUpperCase() }) : t('league.join.youAreInvited')}
-          </Text>
-          <Text style={s.heroName}>{league.name}</Text>
-          <View style={s.chipRow}>
-            <View style={s.chip}>
-              <Text style={s.chipText}>{t('league.join.members', { count: league.memberCount })}</Text>
-            </View>
-            <View style={s.chip}><Text style={s.chipText}>{t('league.join.monthOpen', { month: formatDate(`${currentMonthKey()}-01`, 'monthName') })}</Text></View>
-          </View>
-        </View>
+        <LeagueHero
+          overline={league.adminName ? t('league.join.invitedYou', { name: league.adminName.toUpperCase() }) : t('league.join.youAreInvited')}
+          name={league.name}
+          chips={[
+            t('league.join.members', { count: league.memberCount }),
+            t('league.join.monthOpen', { month: formatDate(`${currentMonthKey()}-01`, 'monthName') }),
+          ]}
+        />
 
         <Text style={s.overline}>{t('league.join.howItWorks')}</Text>
         <View style={s.card}>
@@ -386,28 +376,21 @@ export default function JoinLeagueScreen({ navigation, route }) {
           </>
         )}
       </ScrollView>
+      {confirmSheet}
     </ScreenContainer>
   );
 }
 
 function makeStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingTop: 8 },
-    backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-    headerTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15 },
     content: { padding: 20, paddingBottom: 40 },
-    emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 22, marginTop: 14, textAlign: 'center' },
+    emptyTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 18, lineHeight: 24, marginTop: 14, textAlign: 'center' },
     emptyText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, marginTop: 6, marginBottom: 18, textAlign: 'center' },
 
-    hero: { backgroundColor: theme.bg.deep, borderRadius: 20, padding: 20, marginBottom: 20 },
-    heroOverline: { fontFamily: 'PlusJakartaSans-Bold', color: 'rgba(255,255,255,0.55)', fontSize: 10, letterSpacing: 1.6 },
-    heroName: { fontFamily: 'PlayfairDisplay-Bold', color: '#ffffff', fontSize: 26, letterSpacing: -0.3, marginTop: 6 },
-    chipRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-    chip: { backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12 },
-    chipText: { fontFamily: 'PlusJakartaSans-Bold', color: '#ffffff', fontSize: 11 },
 
     overline: {
       fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 11,
@@ -440,7 +423,7 @@ function makeStyles(theme) {
       backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1, borderColor: cardBorder,
       padding: 16, marginBottom: 16, alignItems: 'flex-start',
     },
-    hcpValue: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 34 },
+    hcpValue: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.primary, fontSize: 34, fontVariant: ['tabular-nums'] },
     hcpInput: {
       alignSelf: 'stretch', color: theme.text.primary, borderRadius: 10, borderWidth: 1,
       borderColor: theme.border.default, backgroundColor: theme.bg.secondary, padding: 12,
@@ -451,15 +434,9 @@ function makeStyles(theme) {
 
     errorText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 12, marginBottom: 10 },
     errorLink: { color: theme.accent.primary, textDecorationLine: 'underline' },
-    primaryBtn: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.accent.primary, borderRadius: 14, paddingVertical: 15,
-    },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
-    secondaryBtn: {
-      alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1,
-      borderColor: theme.border.default, paddingVertical: 12, paddingHorizontal: 28,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
+    primaryBtn: btn.primaryBtn,
+    primaryText: btn.primaryText,
+    secondaryBtn: { ...btn.secondaryBtn, paddingHorizontal: 28 },
+    secondaryText: btn.secondaryText,
   });
 }

@@ -16,8 +16,9 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
-import { semantic } from '../theme/tokens';
+import { semantic, onDeep } from '../theme/tokens';
 import LeaderboardCard from '../components/LeaderboardCard';
+import LeagueHero from '../components/league/LeagueHero';
 import { useT, formatNumber, formatDate, getLanguage } from '../i18n';
 import { getPublicLeagueBoard } from '../store/publicLeagueBoardStore';
 import { publicBoardSnapshot, publicBoardView, publicBoardScopes } from '../store/leagueShare';
@@ -25,9 +26,6 @@ import { currentMonthKey, leaguePointsText } from '../store/leagueView';
 
 const POLL_MS = 60000;
 const SITE = 'golf-partner.vercel.app';
-// Cream on the deep-green hero (same family as SharedBoardScreen's hero).
-const CREAM = '#f3efe6';
-const CREAM_70 = 'rgba(243,239,230,0.7)';
 const GOLD = semantic.winner.dark;
 
 const cap = (x) => (x ? x.charAt(0).toUpperCase() + x.slice(1) : x);
@@ -195,16 +193,22 @@ export default function LeagueBoardPublicScreen(props) {
 
     body = (
       <>
-        <View style={s.hero} testID="league-public-hero">
-          <Text style={s.heroTitle} numberOfLines={2} accessibilityRole="header">{snapshot.league.name}</Text>
-          <Text style={s.heroMeta}>{heroLine}</Text>
+        <LeagueHero
+          style={s.hero}
+          testID="league-public-hero"
+          name={snapshot.league.name}
+          nameLines={2}
+          nameRole="header"
+          meta={heroLine}
+          metaSize={13}
+        >
           {!!leaderLine && !empty && (
             <View style={s.heroLeaderRow}>
               <Feather name="award" size={15} color={GOLD} />
               <Text style={s.heroLeaderText} numberOfLines={1}>{leaderLine}</Text>
             </View>
           )}
-        </View>
+        </LeagueHero>
         <LeaderboardCard
           title={season ? t('league.public.season').toUpperCase() : monthWord(active).toUpperCase()}
           subheader={chips}
@@ -239,7 +243,7 @@ const makeStyles = (theme) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginBottom: 16,
   },
   stateTitle: {
-    fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary, marginBottom: 6, textAlign: 'center',
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 18, lineHeight: 24, color: theme.text.primary, marginBottom: 6, textAlign: 'center',
   },
   stateText: {
     fontFamily: 'PlusJakartaSans-Regular', fontSize: 14, color: theme.text.secondary, textAlign: 'center', maxWidth: 320, lineHeight: 20,
@@ -250,32 +254,27 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   retryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.accent.primary },
 
-  hero: {
-    backgroundColor: theme.bg.deep, borderRadius: 20, padding: 18, marginBottom: 14,
-    ...(theme.isDark ? {} : { shadowColor: '#004030', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, elevation: 6 }),
-  },
-  heroTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 26, color: CREAM, marginBottom: 4 },
-  heroMeta: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, lineHeight: 19, color: CREAM_70 },
+  hero: { padding: 18, marginBottom: 14, ...(theme.isDark ? {} : theme.shadow.elevated) },
   heroLeaderRow: {
     flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 12,
-    paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(243,239,230,0.14)',
+    paddingTop: 12, borderTopWidth: 1, borderTopColor: onDeep.border,
   },
-  heroLeaderText: { flex: 1, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13, color: CREAM },
+  heroLeaderText: { flex: 1, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13, color: onDeep.primary },
 
   chipRow: { flexGrow: 0, marginBottom: 12 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)', minHeight: 32,
+    borderRadius: 999, backgroundColor: onDeep.fill, minHeight: 32,
   },
   chipDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: GOLD },
   chipDotOn: { backgroundColor: theme.bg.deep },
-  chipOn: { backgroundColor: 'rgba(255,255,255,0.9)' },
-  chipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.72)', fontSize: 12 },
+  chipOn: { backgroundColor: onDeep.strong },
+  chipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: onDeep.soft, fontSize: 12 },
   chipTextOn: { color: theme.bg.deep },
-  emptyText: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.72)', fontSize: 13, lineHeight: 20, paddingVertical: 6 },
+  emptyText: { fontFamily: 'PlusJakartaSans-Medium', color: onDeep.soft, fontSize: 13, lineHeight: 20, paddingVertical: 6 },
 
   footer: { alignItems: 'center', paddingTop: 16, gap: 4 },
-  footerText: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, color: theme.text.muted, textAlign: 'center' },
+  footerText: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, color: theme.text.secondary, textAlign: 'center' },
   footerLink: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: theme.accent.primary },
-  footerNote: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: theme.text.muted, textAlign: 'center' },
+  footerNote: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: theme.text.secondary, textAlign: 'center' },
 });

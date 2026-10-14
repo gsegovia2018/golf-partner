@@ -48,10 +48,7 @@ export default function MemberAdminSheet({
 
 function makeStyles(theme) {
   return StyleSheet.create({
-    sheet: {
-      backgroundColor: theme.bg.primary, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-      padding: 20, paddingBottom: 32, gap: 10,
-    },
+    sheet: { padding: 20, gap: 10 },
     title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, lineHeight: 28, color: theme.text.primary },
     lead: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, lineHeight: 18, color: theme.text.secondary },
     consequence: { backgroundColor: theme.bg.secondary, borderRadius: 12, padding: 12 },

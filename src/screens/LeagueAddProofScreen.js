@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
-import IconButton from '../components/ui/IconButton';
+import ScreenHeader from '../components/ui/ScreenHeader';
 import { makeOffAppStyles } from '../components/league/offAppStyles';
 import { useTheme } from '../theme/ThemeContext';
 import { useLeague } from '../hooks/useLeague';
@@ -113,10 +113,7 @@ export default function LeagueAddProofScreen({ navigation, route }) {
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
-      <View style={s.header}>
-        <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
-        <Text style={s.headerTitle}>{t('league.addProof.title')}</Text>
-      </View>
+      <ScreenHeader onBack={() => navigation.goBack()} title={t('league.addProof.title')} />
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
         {!!summary && <Text style={[s.cardTitle, { marginBottom: 12 }]}>{summary.line}</Text>}
 

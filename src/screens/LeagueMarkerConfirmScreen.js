@@ -4,7 +4,8 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
-import IconButton from '../components/ui/IconButton';
+import { buttonStyles } from '../components/ui/Buttons';
+import ScreenHeader from '../components/ui/ScreenHeader';
 import PersonAvatar from '../components/ui/PersonAvatar';
 import { useTheme } from '../theme/ThemeContext';
 import { getMarkerCard, confirmMarkerCard } from '../store/markerCardStore';
@@ -82,11 +83,7 @@ export default function LeagueMarkerConfirmScreen({ navigation, route }) {
   const openHole = (h) => { setHole(h); setFix(h.strokes ?? h.par); setSubmitError(null); setPhase('flag'); };
   const closeFlag = () => { setPhase('ready'); setSubmitError(null); };
 
-  const header = (
-    <View style={s.header}>
-      <IconButton icon="x" size={22} color={theme.accent.primary} onPress={close} accessibilityLabel={t('league.markerConfirm.close')} />
-    </View>
-  );
+  const header = <ScreenHeader onBack={close} backLabel={t('league.markerConfirm.close')} />;
 
   const message = (icon, title, extra) => (
     <View style={s.center}>
@@ -211,6 +208,7 @@ export default function LeagueMarkerConfirmScreen({ navigation, route }) {
 
 function makeStyles(theme) {
   const line = theme.isDark ? theme.glass?.border : theme.border.default;
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     header: { flexDirection: 'row', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6 },
@@ -219,14 +217,14 @@ function makeStyles(theme) {
     ownerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, lineHeight: 28, color: theme.text.primary },
     meta: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, lineHeight: 17, color: theme.text.secondary },
-    messageTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, lineHeight: 26, color: theme.text.primary, textAlign: 'center' },
+    messageTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 18, lineHeight: 24, color: theme.text.primary, textAlign: 'center' },
     nine: {
       flexDirection: 'row', borderWidth: 1, borderColor: line, borderRadius: 12,
       overflow: 'hidden', backgroundColor: theme.bg.card,
     },
     cell: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 48, paddingVertical: 6, gap: 2 },
     cellEdge: { borderLeftWidth: 1, borderLeftColor: line },
-    holeNo: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 10 },
+    holeNo: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 11 },
     strokes: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.primary, fontSize: 16 },
     stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24, marginVertical: 8 },
     stepBtn: {
@@ -236,16 +234,10 @@ function makeStyles(theme) {
     stepValue: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 40, color: theme.text.primary, minWidth: 56, textAlign: 'center' },
     error: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: theme.destructive },
     wide: { alignSelf: 'stretch' },
-    primaryBtn: {
-      minHeight: 52, borderRadius: 14, backgroundColor: theme.accent.primary,
-      alignItems: 'center', justifyContent: 'center', padding: 14,
-    },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15, color: theme.text.inverse },
-    secondaryBtn: {
-      minHeight: 50, borderRadius: 14, borderWidth: 1, borderColor: theme.border.default,
-      backgroundColor: theme.bg.card, alignItems: 'center', justifyContent: 'center', padding: 14,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, color: theme.accent.primary },
+    primaryBtn: btn.primaryBtn,
+    primaryText: btn.primaryText,
+    secondaryBtn: { ...btn.secondaryBtn, backgroundColor: theme.bg.card },
+    secondaryText: btn.secondaryTextAccent,
     disabled: { opacity: 0.5 },
   });
 }

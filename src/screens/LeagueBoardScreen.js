@@ -4,13 +4,15 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
+import { buttonStyles } from '../components/ui/Buttons';
 import IconButton from '../components/ui/IconButton';
+import ScreenHeader from '../components/ui/ScreenHeader';
 import PullToRefresh from '../components/PullToRefresh';
 import LeaderboardCard from '../components/LeaderboardCard';
 import DeadlineLine, { countdownText } from '../components/league/DeadlineLine';
 import LeagueShareSheet from '../components/league/LeagueShareSheet';
 import { useTheme } from '../theme/ThemeContext';
-import { semantic } from '../theme/tokens';
+import { semantic, onDeep } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { useMinuteClock } from '../hooks/useMinuteClock';
@@ -60,31 +62,32 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const title = view?.league.name ?? route?.params?.name ?? t('league.stats.leagueFallback');
 
   const header = (
-    <View style={s.header}>
-      <View style={s.headerLeft}>
-        <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
-        <Text style={s.headerTitle} numberOfLines={1}>{title}</Text>
-      </View>
-      <View style={s.headerRight}>
-        {!!view && (
+    <ScreenHeader
+      onBack={() => navigation.goBack()}
+      title={title}
+      numberOfLines={1}
+      right={(
+        <>
+          {!!view && (
+            <IconButton
+              icon="share-2"
+              onPress={() => setShare({ mode: 'board' })}
+              accessibilityLabel={t('league.share.boardButton')}
+            />
+          )}
           <IconButton
-            icon="share-2"
-            onPress={() => setShare({ mode: 'board' })}
-            accessibilityLabel={t('league.share.boardButton')}
+            icon="bar-chart-2"
+            onPress={() => navigation.navigate('LeagueStats', { leagueId })}
+            accessibilityLabel={t('league.home.statsA11y')}
           />
-        )}
-        <IconButton
-          icon="bar-chart-2"
-          onPress={() => navigation.navigate('LeagueStats', { leagueId })}
-          accessibilityLabel={t('league.home.statsA11y')}
-        />
-        <IconButton
-          icon="settings"
-          onPress={() => navigation.navigate('LeagueSettings', { leagueId })}
-          accessibilityLabel={t('league.home.settingsA11y')}
-        />
-      </View>
-    </View>
+          <IconButton
+            icon="settings"
+            onPress={() => navigation.navigate('LeagueSettings', { leagueId })}
+            accessibilityLabel={t('league.home.settingsA11y')}
+          />
+        </>
+      )}
+    />
   );
 
   if (!view) {
@@ -201,6 +204,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
           unranked: true,
           muted: true,
           points: dl ? countdownText(dl.msLeft) : '—',
+          countdown: !!dl,
           sub: dl ? t(dl.urgent ? 'league.home.left' : 'league.home.toPost') : null,
           warn: !!dl?.urgent,
           detail: detailOf(
@@ -638,21 +642,13 @@ const monthShort = (key) => cap(formatDate(`${key}-01`, 'day').split(' ')[1] ?? 
 
 function makeStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-    header: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6,
-    },
-    headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, gap: 4 },
-    headerRight: { flexDirection: 'row', gap: 4 },
-    headerTitle: {
-      fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 17, letterSpacing: -0.3, flexShrink: 1,
-    },
     content: { padding: 16, paddingBottom: 40 },
 
-    emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 22, marginTop: 14, textAlign: 'center' },
+    emptyTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 18, lineHeight: 24, marginTop: 14, textAlign: 'center' },
     emptyText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, marginTop: 6, marginBottom: 18, textAlign: 'center' },
     emptyNote: {
       fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, lineHeight: 19,
@@ -662,12 +658,12 @@ function makeStyles(theme) {
     chipRow: { flexGrow: 0, marginBottom: 12 },
     chip: {
       flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6,
-      borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)',
+      borderRadius: 999, backgroundColor: onDeep.fill,
     },
     chipDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: semantic.winner.dark },
     chipDotOn: { backgroundColor: theme.bg.deep },
-    chipOn: { backgroundColor: 'rgba(255,255,255,0.9)' },
-    chipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.72)', fontSize: 12 },
+    chipOn: { backgroundColor: onDeep.strong },
+    chipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: onDeep.soft, fontSize: 12 },
     chipTextOn: { color: theme.bg.deep },
 
     staleBanner: {
@@ -687,16 +683,10 @@ function makeStyles(theme) {
     netLead: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary },
     badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 11 },
 
-    primaryBtn: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.accent.primary, borderRadius: 14, paddingVertical: 14,
-    },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
-    secondaryBtn: {
-      alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1,
-      borderColor: theme.border.default, paddingVertical: 12, paddingHorizontal: 28,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
+    primaryBtn: btn.primaryBtn,
+    primaryText: btn.primaryText,
+    secondaryBtn: { ...btn.secondaryBtn, paddingHorizontal: 28 },
+    secondaryText: btn.secondaryText,
     deadline: { marginBottom: 12 },
     btnRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
     splitBtn: {
@@ -712,7 +702,7 @@ function makeStyles(theme) {
     finalTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15 },
     finalSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, marginTop: 2 },
 
-    noCardText: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 20, paddingVertical: 6 },
-    noCardMe: { fontFamily: 'PlusJakartaSans-Bold', color: '#ffffff' },
+    noCardText: { fontFamily: 'PlusJakartaSans-Medium', color: onDeep.soft, fontSize: 13, lineHeight: 20, paddingVertical: 6 },
+    noCardMe: { fontFamily: 'PlusJakartaSans-Bold', color: onDeep.primary },
   });
 }

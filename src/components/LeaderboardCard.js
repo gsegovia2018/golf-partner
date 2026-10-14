@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
-import { semantic } from '../theme/tokens';
+import { semantic, onDeep } from '../theme/tokens';
 import { useT } from '../i18n';
 
 // The deep-green leaderboard card: the tournament leaderboard on Play and the
@@ -30,6 +30,7 @@ import { useT } from '../i18n';
 //                  subGold   gold sub (table points)
 //                  unranked  dashed place badge
 //                  warn      amber points and sub (a deadline under 2 hours away)
+//                  countdown a time left as points ("10 h 59 m"): smaller figure and a narrower sub column, so the name and course keep their room
 //                A row may set compact (shorter, no sub), or be { key, gap: true }: a "⋯" spacer
 //                for rows left out.
 //   more         optional { label, onPress }: a text button under the rows (Show all 18)
@@ -37,20 +38,21 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
-  const rankColors = [semantic.winner.dark, '#c0c8d4', '#daa06d'];
+  const d = onDeep;
+  const rankColors = [semantic.winner.dark, d.silver, d.bronze];
 
   const renderRow = (row, i, list, cols) => {
     if (row.gap) {
       return (
         <View key={row.key} style={s.mastersGap} accessibilityLabel={t('shared.leaderboard.morePlayers')}>
-          <Feather name="more-horizontal" size={16} color="rgba(255,255,255,0.4)" />
+          <Feather name="more-horizontal" size={16} color={d.dim} />
         </View>
       );
     }
     const placeIdx = row.place - 1;
     const isFirstPlace = row.place === 1;
-    const rankColor = rankColors[placeIdx] || 'rgba(255,255,255,0.4)';
-    const rankBg = placeIdx === 0 ? 'rgba(255,215,0,0.2)' : placeIdx === 1 ? 'rgba(192,200,212,0.15)' : placeIdx === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
+    const rankColor = rankColors[placeIdx] || d.dim;
+    const rankBg = placeIdx === 0 ? d.goldFill : placeIdx === 1 ? d.silverFill : placeIdx === 2 ? d.bronzeFill : d.fill;
     const rankLabel = row.place == null ? '–' : row.isTie ? `T${row.place}` : row.place;
     const Row = row.onPress ? TouchableOpacity : View;
     return (
@@ -72,16 +74,16 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
           {!!row.detail && <Text style={s.mastersDetail} numberOfLines={2}>{row.detail}</Text>}
         </View>
         <Text
-          style={[s.mastersPoints, isFirstPlace && { fontSize: 18 }, cols && s.mastersPointsCol, row.white && s.mastersPointsWhite, row.muted && s.mastersPointsMuted, row.warn && s.mastersWarn]}
+          style={[s.mastersPoints, isFirstPlace && { fontSize: 18 }, cols && s.mastersPointsCol, row.white && s.mastersPointsWhite, row.muted && s.mastersPointsMuted, row.countdown && s.mastersPointsCountdown, row.warn && s.mastersWarn]}
           {...(row.pointsLabel ? { accessibilityLabel: row.pointsLabel } : {})}
         >{row.points}</Text>
         {row.sub != null && (
           <Text
-            style={[s.mastersSub, row.subGold && s.mastersSubGold, row.warn && s.mastersWarn]}
+            style={[s.mastersSub, row.subGold && s.mastersSubGold, row.countdown && s.mastersSubCountdown, row.warn && s.mastersWarn]}
             {...(row.subLabel ? { accessibilityLabel: row.subLabel } : {})}
           >{row.compact ? '' : row.sub}</Text>
         )}
-        {!!row.onPress && <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.45)" style={{ marginLeft: 4 }} />}
+        {!!row.onPress && <Feather name="chevron-right" size={16} color={d.dim} style={{ marginLeft: 4 }} />}
       </Row>
     );
   };
@@ -96,7 +98,7 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
       {sections ? sections.map((sec) => (
         <View key={sec.key} style={s.mastersSection}>
           <View style={s.mastersSectionHead}>
-            <Feather name={sec.icon} size={12} color={sec.gold ? semantic.winner.dark : 'rgba(255,255,255,0.6)'} />
+            <Feather name={sec.icon} size={12} color={sec.gold ? semantic.winner.dark : d.faint} />
             <Text style={[s.mastersSectionLabel, sec.gold && { color: semantic.winner.dark }]}>{sec.label}</Text>
             {!!sec.cols && (
               <View style={[s.mastersColHeads, sec.rows?.some((r) => r.onPress) && { marginRight: 20 }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -119,57 +121,60 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
 }
 
 function makeStyles(t) {
+  const d = onDeep;
   return StyleSheet.create({
     // Same title-row layout HomeScreen's `cardTitleRow` has.
     cardTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 8 },
     mastersCard: {
       backgroundColor: t.bg.deep,
       borderRadius: 20, padding: 16, marginBottom: 16,
-      ...(t.isDark ? {} : { shadowColor: '#004030', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, elevation: 6 }),
+      ...(t.isDark ? {} : t.shadow.elevated),
     },
     mastersCardTitle: {
       fontFamily: 'PlusJakartaSans-SemiBold',
-      fontSize: 10, color: 'rgba(255,255,255,0.6)',
+      fontSize: 10, color: d.faint,
       letterSpacing: 2, textTransform: 'uppercase',
     },
     mastersRow: {
       flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
-      borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.12)',
+      borderBottomWidth: 1, borderBottomColor: d.border,
     },
     mastersRowCompact: { paddingVertical: 6 },
-    mastersGap: { alignItems: 'center', paddingVertical: 2, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.12)' },
+    mastersGap: { alignItems: 'center', paddingVertical: 2, borderBottomWidth: 1, borderBottomColor: d.border },
     mastersMore: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
-    mastersMoreText: { fontFamily: 'PlusJakartaSans-Bold', color: '#ffffff', fontSize: 13 },
+    mastersMoreText: { fontFamily: 'PlusJakartaSans-Bold', color: d.primary, fontSize: 13 },
     mastersRowFirst: { borderLeftWidth: 3, borderLeftColor: semantic.winner.dark, paddingLeft: 8, marginLeft: -8 },
     // The signed-in member's own row (league board); the tournament view never sets it.
-    mastersRowMe: { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 10, paddingHorizontal: 8, marginHorizontal: -8 },
+    mastersRowMe: { backgroundColor: d.fill, borderRadius: 10, paddingHorizontal: 8, marginHorizontal: -8 },
     mastersRankBadge: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
     mastersRankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
-    mastersRankUnranked: { borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.3)', backgroundColor: 'transparent' },
+    mastersRankUnranked: { borderWidth: 1, borderStyle: 'dashed', borderColor: d.borderStrong, backgroundColor: 'transparent' },
     mastersSection: { marginTop: 8 },
     mastersSectionHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
     mastersSectionLabel: {
-      fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: 'rgba(255,255,255,0.6)',
+      fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: d.faint,
       letterSpacing: 1.6, textTransform: 'uppercase', flexShrink: 1,
     },
     // 0.75 white on the deep green is 5.9:1 (the old 0.55 was 4.0:1, under WCAG AA).
-    mastersDetail: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.75)', fontSize: 11, marginTop: 2 },
+    mastersDetail: { fontFamily: 'PlusJakartaSans-Medium', color: d.soft, fontSize: 11, marginTop: 2 },
     mastersNameCol: { flex: 1, minWidth: 0, marginRight: 8 },
-    mastersName: { fontFamily: 'PlusJakartaSans-Medium', color: '#ffffff', fontSize: 14 },
+    mastersName: { fontFamily: 'PlusJakartaSans-Medium', color: d.primary, fontSize: 14 },
     mastersPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 16, marginRight: 8 },
-    mastersPointsWhite: { color: '#ffffff' },
+    mastersPointsWhite: { color: d.primary },
     mastersPointsCol: { minWidth: 48, textAlign: 'right' },
     mastersColHeads: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center' },
-    mastersColHead: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: 'rgba(255,255,255,0.75)', letterSpacing: 1.2, textAlign: 'right' },
+    mastersColHead: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: d.soft, letterSpacing: 1.2, textAlign: 'right' },
     mastersColHeadPoints: { minWidth: 48, marginRight: 8 },
     mastersColHeadSub: { width: 60 },
-    mastersPointsMuted: { color: 'rgba(255,255,255,0.75)', fontSize: 14 },
+    mastersPointsMuted: { color: d.soft, fontSize: 14 },
+    mastersPointsCountdown: { fontSize: 12, marginRight: 4 },
+    mastersSubCountdown: { width: 40 },
     mastersWarn: { color: semantic.warning.dark },
     mastersSubGold: { color: semantic.winner.dark, fontFamily: 'PlusJakartaSans-Bold' },
     // 0.75 white on the deep green is 5.9:1 (the old 0.45 was 3.1:1, under WCAG AA).
-    mastersSub: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.75)', fontSize: 11, width: 60, textAlign: 'right' },
+    mastersSub: { fontFamily: 'PlusJakartaSans-Medium', color: d.soft, fontSize: 11, width: 60, textAlign: 'right' },
     mastersMatchStatus: {
-      fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.85)',
+      fontFamily: 'PlusJakartaSans-SemiBold', color: d.strong,
       fontSize: 12, textAlign: 'center', marginTop: 10,
     },
   });

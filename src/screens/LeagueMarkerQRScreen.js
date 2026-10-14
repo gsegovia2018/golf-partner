@@ -12,7 +12,8 @@ import {
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import ScreenContainer from '../components/ScreenContainer';
-import IconButton from '../components/ui/IconButton';
+import { buttonStyles } from '../components/ui/Buttons';
+import ScreenHeader from '../components/ui/ScreenHeader';
 import { useTheme } from '../theme/ThemeContext';
 import { createMarkerToken, getLeagueCard } from '../store/leagueStore';
 import { shareOrigin } from '../lib/shareOrigin';
@@ -159,10 +160,7 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
-      <View style={s.header}>
-        <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
-        <Text style={s.headerTitle}>{t('league.markerQr.title')}</Text>
-      </View>
+      <ScreenHeader onBack={() => navigation.goBack()} title={t('league.markerQr.title')} />
       <ScrollView contentContainerStyle={s.content}>
         <View style={s.titleRow}>
           <Feather name="smartphone" size={18} color={theme.text.primary} />
@@ -187,10 +185,9 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
 }
 
 function makeStyles(theme) {
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6, gap: 4 },
-    headerTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 17, letterSpacing: -0.3 },
     content: { padding: 16, paddingBottom: 40, gap: 12, width: '100%', maxWidth: 480, alignSelf: 'center' },
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     title: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 16, color: theme.text.primary },
@@ -209,18 +206,12 @@ function makeStyles(theme) {
     inlineError: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: theme.destructive, textAlign: 'center' },
     errorBlock: { paddingVertical: 32, alignItems: 'center', gap: 6 },
     confirmedBlock: { paddingVertical: 32, alignItems: 'center', gap: 10 },
-    primaryBtn: {
-      alignSelf: 'stretch', minHeight: 52, borderRadius: 14, backgroundColor: theme.accent.primary,
-      alignItems: 'center', justifyContent: 'center', padding: 14, marginTop: 12,
-    },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15, color: theme.text.inverse },
-    errorTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary, textAlign: 'center' },
+    primaryBtn: { ...btn.primaryBtn, alignSelf: 'stretch', marginTop: 12 },
+    primaryText: btn.primaryText,
+    errorTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 18, lineHeight: 24, color: theme.text.primary, textAlign: 'center' },
     errorText: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, color: theme.text.secondary, textAlign: 'center' },
-    secondaryBtn: {
-      minHeight: 50, borderRadius: 14, borderWidth: 1, borderColor: theme.border.default,
-      backgroundColor: theme.bg.card, alignItems: 'center', justifyContent: 'center', padding: 14,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, color: theme.accent.primary },
+    secondaryBtn: { ...btn.secondaryBtn, backgroundColor: theme.bg.card },
+    secondaryText: btn.secondaryTextAccent,
     disabled: { opacity: 0.5 },
   });
 }

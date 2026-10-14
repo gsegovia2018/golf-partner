@@ -4,7 +4,8 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
-import IconButton from '../components/ui/IconButton';
+import { buttonStyles } from '../components/ui/Buttons';
+import ScreenHeader from '../components/ui/ScreenHeader';
 import PersonAvatar from '../components/ui/PersonAvatar';
 import { ScorecardTable } from '../components/scorecard/GridView';
 import { useTheme } from '../theme/ThemeContext';
@@ -271,10 +272,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
   const goBoard = () => navigation.replace('LeagueBoard', { leagueId });
 
   const header = (
-    <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={goBoard} accessibilityLabel={t('common.back')} />
-      <Text style={s.headerTitle} numberOfLines={1}>{t('league.validate.headerTitle', { month })}</Text>
-    </View>
+    <ScreenHeader onBack={goBoard} title={t('league.validate.headerTitle', { month })} numberOfLines={1} />
   );
 
   if (loading || !card) {
@@ -575,11 +573,10 @@ export default function LeagueValidateScreen({ navigation, route }) {
 
 function makeStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-    header: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6 },
-    headerTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 17, letterSpacing: -0.3, flexShrink: 1 },
     content: { padding: 14, paddingBottom: 24 },
     emptyText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, marginBottom: 16, textAlign: 'center' },
 
@@ -602,7 +599,7 @@ function makeStyles(theme) {
     resultLink: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13, marginTop: 8 },
 
     courseTitle: {
-      fontFamily: 'PlayfairDisplay-Bold', color: theme.accent.primary, fontSize: 16, letterSpacing: -0.3, marginBottom: 12,
+      fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 16, letterSpacing: -0.3, marginBottom: 12,
     },
     errorText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 12, marginTop: 12 },
 
@@ -635,17 +632,11 @@ function makeStyles(theme) {
     fallbackSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
 
     footer: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, borderTopWidth: 1, borderTopColor: theme.border.subtle },
-    footnote: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, textAlign: 'center', marginBottom: 10 },
-    primaryBtn: {
-      alignItems: 'center', justifyContent: 'center', backgroundColor: theme.accent.primary,
-      borderRadius: 14, paddingVertical: 16, minHeight: 52,
-    },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 15 },
-    secondaryBtn: {
-      alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1,
-      borderColor: theme.border.default, paddingVertical: 12, paddingHorizontal: 28, marginTop: 12,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
+    footnote: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, textAlign: 'center', marginBottom: 10 },
+    primaryBtn: btn.primaryBtn,
+    primaryText: btn.primaryText,
+    secondaryBtn: { ...btn.secondaryBtn, paddingHorizontal: 28, marginTop: 12 },
+    secondaryText: btn.secondaryText,
     disabled: { opacity: 0.5 },
   });
 }

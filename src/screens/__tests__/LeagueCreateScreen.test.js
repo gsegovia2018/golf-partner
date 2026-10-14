@@ -115,13 +115,13 @@ describe('LeagueCreateScreen', () => {
 
   test('a failed create keeps the wizard on review so the user can retry', async () => {
     createLeague.mockRejectedValueOnce(new Error('A league needs a name.'));
-    const alertSpy = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
     const utils = render(wrap(<LeagueCreateScreen navigation={navigation} />));
     await toReview(utils, { pickFriends: false });
     fireEvent.press(utils.getByText('Create league'));
-    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Error', 'A league needs a name.'));
+    // The failure shows in an in-app sheet (Alert.alert is a no-op on web).
+    await waitFor(() => utils.getByText('A league needs a name.'));
+    fireEvent.press(utils.getByText('Done'));
     fireEvent.press(utils.getByText('Create league'));
     await waitFor(() => expect(createLeague).toHaveBeenCalledTimes(2));
-    alertSpy.mockRestore();
   });
 });

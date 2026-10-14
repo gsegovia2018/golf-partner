@@ -4,6 +4,8 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { buttonStyles } from '../components/ui/Buttons';
+import LeagueHero from '../components/league/LeagueHero';
 import { useT, formatNumber, formatDate } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { signInAnonymously } from '../lib/oauth';
@@ -254,11 +256,12 @@ export default function JoinLeagueLinkScreen({ code }) {
   );
 
   const hero = (
-    <View style={s.hero}>
-      <Text style={s.heroOverline}>{admin ? t('league.join.invitedYou', { name: admin.toUpperCase() }) : t('league.join.youreInvited')}</Text>
-      <Text style={s.heroName}>{preview?.name ?? t('league.join.leagueInvite')}</Text>
-      {!!meta && <Text style={s.heroMeta}>{meta}</Text>}
-    </View>
+    <LeagueHero
+      style={{ marginBottom: 16 }}
+      overline={admin ? t('league.join.invitedYou', { name: admin.toUpperCase() }) : t('league.join.youreInvited')}
+      name={preview?.name ?? t('league.join.leagueInvite')}
+      meta={meta}
+    />
   );
 
   const backRow = (label, onPress) => (
@@ -482,25 +485,22 @@ export default function JoinLeagueLinkScreen({ code }) {
 
 function makeStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: theme.bg.primary },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
     content: { padding: 20, paddingBottom: 40, width: '100%', maxWidth: 460, alignSelf: 'center' },
-    emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 22, marginTop: 14, textAlign: 'center' },
+    emptyTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 18, lineHeight: 24, marginTop: 14, textAlign: 'center' },
     emptyText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, marginTop: 6, marginBottom: 18, textAlign: 'center' },
 
-    hero: { backgroundColor: theme.bg.deep, borderRadius: 20, padding: 20, marginBottom: 16 },
-    heroOverline: { fontFamily: 'PlusJakartaSans-Bold', color: 'rgba(255,255,255,0.55)', fontSize: 10, letterSpacing: 1.6 },
-    heroName: { fontFamily: 'PlayfairDisplay-Bold', color: '#ffffff', fontSize: 26, letterSpacing: -0.3, marginTop: 6 },
-    heroMeta: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 10 },
 
     segment: {
       flexDirection: 'row', backgroundColor: theme.bg.secondary, borderRadius: 12, padding: 4,
       marginBottom: 16, borderWidth: 1, borderColor: theme.border.default,
     },
-    segmentBtn: { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center' },
+    segmentBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
     segmentBtnActive: { backgroundColor: theme.bg.card, ...(theme.isDark ? {} : theme.shadow?.card) },
-    segmentText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 13 },
+    segmentText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 13 },
     segmentTextActive: { color: theme.text.primary },
 
     card: {
@@ -512,13 +512,10 @@ function makeStyles(theme) {
     },
     errorText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 12, lineHeight: 17, marginBottom: 10 },
     errorLink: { color: theme.accent.primary, textDecorationLine: 'underline' },
-    primaryBtn: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.accent.primary, borderRadius: 14, paddingVertical: 15,
-    },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
+    primaryBtn: btn.primaryBtn,
+    primaryText: btn.primaryText,
     note: {
-      fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, lineHeight: 17,
+      fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17,
       textAlign: 'center', marginTop: 12,
     },
     stepTitle: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 24, letterSpacing: -0.3 },
@@ -552,14 +549,8 @@ function makeStyles(theme) {
     },
     statusTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14 },
     statusSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 2 },
-    secondaryBtnFull: {
-      alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1,
-      borderColor: theme.border.default, paddingVertical: 14,
-    },
-    secondaryBtn: {
-      alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1,
-      borderColor: theme.border.default, paddingVertical: 12, paddingHorizontal: 28,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
+    secondaryBtnFull: btn.secondaryBtn,
+    secondaryBtn: { ...btn.secondaryBtn, paddingHorizontal: 28 },
+    secondaryText: btn.secondaryText,
   });
 }
