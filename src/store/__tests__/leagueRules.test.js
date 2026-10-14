@@ -1,7 +1,7 @@
 import {
   cardMonth, madridMonthManual, canAnnounce, isNotAnnounced, scoreCard, clampHandicap,
   POST_WINDOW_HOURS, REMINDER_LEAD_HOURS, postByFor, isMissed, needsApproval, deadlineInfo,
-  takesMonth, earliestOffAppTeeTime, canReschedule, postOpensAt, canWithdraw, autoWithdrawAt, resubmitBy,
+  takesMonth, earliestOffAppTeeTime, defaultOffAppTeeTime, offAppTeeProblem, postOpensLater, canReschedule, postOpensAt, canWithdraw, autoWithdrawAt, resubmitBy,
   monthClosesAt, isMonthClosed,
 } from '../leagueRules';
 
@@ -373,6 +373,19 @@ describe('integrity rules (20261016000000)', () => {
     expect(earliestOffAppTeeTime(NOW).toISOString()).toBe(h(2));
   });
 
+  test('defaultOffAppTeeTime: the earliest allowed, rounded up to 10 minutes (R7)', () => {
+    expect(defaultOffAppTeeTime(NOW).toISOString()).toBe(h(2));
+    expect(defaultOffAppTeeTime(new Date('2026-10-13T10:01:30Z')).toISOString()).toBe('2026-10-13T12:10:00.000Z');
+    expect(defaultOffAppTeeTime(new Date('2026-10-13T10:59:00Z')).toISOString()).toBe('2026-10-13T13:00:00.000Z');
+  });
+
+  test('offAppTeeProblem: past, short notice or fine (R7)', () => {
+    expect(offAppTeeProblem(h(-0.1), NOW)).toBe('past');
+    expect(offAppTeeProblem(h(1.9), NOW)).toBe('short');
+    expect(offAppTeeProblem(h(2), NOW)).toBeNull();
+    expect(offAppTeeProblem(null, NOW)).toBeNull();
+  });
+
   test('canReschedule: an announced off-app card whose tee time is at least 2 h away (R7)', () => {
     const card = { source: 'offapp', status: 'announced', teeTime: h(2) };
     expect(canReschedule(card, NOW)).toBe(true);
@@ -386,6 +399,13 @@ describe('integrity rules (20261016000000)', () => {
   test('postOpensAt: tee time + 3 h for an announced off-app card (R8)', () => {
     expect(postOpensAt({ source: 'offapp', status: 'announced', teeTime: h(0) }).toISOString()).toBe(h(3));
     expect(postOpensAt({ source: 'app', status: 'playing', teeTime: h(0) })).toBeNull();
+  });
+
+  test('postOpensLater: the opening time until tee time + 3 h, then null (R8)', () => {
+    const card = { source: 'offapp', status: 'announced', teeTime: h(-1) };
+    expect(postOpensLater(card, NOW).toISOString()).toBe(h(2));
+    expect(postOpensLater({ ...card, teeTime: h(-3) }, NOW)).toBeNull();
+    expect(postOpensLater({ ...card, source: 'app', status: 'playing' }, NOW)).toBeNull();
   });
 
   test('canWithdraw: before the tee time (off-app) or the first shot (app) (R9)', () => {

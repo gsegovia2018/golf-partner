@@ -29,11 +29,13 @@ const member = (userId, displayName, extra = {}) => ({
   userId, displayName, publicName: displayName, role: 'member', feePaid: false, leftAt: null, leagueHandicap: 18, ...extra,
 });
 
-function snapshot({ cardsByMonth = {}, members } = {}) {
+// The season spans "now" (the tests run on the real clock), ending in a December.
+function snapshot({ cardsByMonth = {}, members, league = {} } = {}) {
   return {
     league: {
       id: 'L1', name: 'El Club', pointsTable: [500, 300, 190], handicapCap: 30, entryFeeCents: 3000,
-      seasonStart: '2025-01-01', seasonEnd: '2025-12-31', archivedAt: null, inviteCode: 'MULL',
+      seasonStart: '2025-01-01', seasonEnd: '2099-12-31', archivedAt: null, inviteCode: 'MULL',
+      ...league,
     },
     members: members ?? [
       member('me', 'Marcos', { role: 'admin', feePaid: true }),
@@ -154,6 +156,37 @@ describe('LeagueBoardScreen', () => {
     expect(getByText('Announced 09:12 · Golf Olivar · Sat 4 Oct 09:30 — playing without the app')).toBeTruthy();
     fireEvent.press(getByText('Add your score'));
     expect(nav.navigate).toHaveBeenCalledWith('LeagueAddScore', { leagueId: 'L1', cardId: 'c1' });
+  });
+
+  test('announced off-app before tee time + 3 h: "Post from" instead of "Add your score" (R8)', async () => {
+    const teeTime = new Date(Date.now() - 3600000).toISOString();
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'announced', null, {
+          id: 'c1', source: 'offapp', course: { name: 'Golf Olivar' }, announcedAt: teeTime, teeTime,
+        })],
+      },
+    }));
+    const nav = makeNav();
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText(/^Post from /));
+    expect(queryByText('Add your score')).toBeNull();
+    fireEvent.press(getByText(/^Post from /));
+    expect(nav.navigate).not.toHaveBeenCalledWith('LeagueAddScore', expect.anything());
+  });
+
+  test('outside the season the play buttons give way to "starts on" / "is over"', async () => {
+    store.getLeague.mockResolvedValue(snapshot({ league: { seasonStart: '2099-01-01', seasonEnd: '2099-12-31' } }));
+    const first = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => first.getByText('The season starts on 1 Jan.'));
+    expect(first.queryByText('Play with the app')).toBeNull();
+    expect(first.queryByText('Playing without the app')).toBeNull();
+    first.unmount();
+
+    store.getLeague.mockResolvedValue(snapshot({ league: { seasonStart: '2025-01-01', seasonEnd: '2025-12-31' } }));
+    const over = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => over.getByText('The season is over.'));
+    expect(over.queryByText('Play with the app')).toBeNull();
   });
 
   test('off-app card with its proof attached reads "added after the round · photo attached"', async () => {
@@ -293,7 +326,7 @@ describe('LeagueBoardScreen', () => {
         [THIS_MONTH]: [card('javi', 'confirmed', 36), card('nacho', 'playing', null)],
       },
     }));
-    const { getByText, getAllByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    const { getByText, getAllByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Season'));
     fireEvent.press(getByText('Season'));
     await waitFor(() => getByText(/^SEASON · AFTER /));
@@ -301,7 +334,9 @@ describe('LeagueBoardScreen', () => {
     expect(getAllByText('T2').length).toBe(2);
     expect(getByText('1,000')).toBeTruthy();
     expect(getAllByText(/^\+\d+ /).length).toBeGreaterThan(0);
-    expect(getByText(/Final in December — extra strokes from these standings, set on the day\. Pot 60 €/)).toBeTruthy();
+    // The Final is hidden for now: the footer keeps only the pot.
+    expect(getByText('Pot 60 €')).toBeTruthy();
+    expect(queryByText(/Final in/)).toBeNull();
   });
 
   test('my own card block reflects a confirmed card', async () => {

@@ -650,6 +650,17 @@ describe('card actions menu', () => {
     expect(kinds(unannounced)).toEqual(['void', 'reopen', 'approve']);
   });
 
+  test("reopen is offered only in the card's own month (the server refuses past_month)", () => {
+    const missed = { ...base, userId: 'javi', status: 'missed', source: 'app', month: '2026-10-01', monthKey: '2026-10' };
+    // 2 November: October is still open (R12) but no longer the current month.
+    const items = cardActions(missed, admin, {}, new Date('2026-11-02T10:00:00Z'));
+    expect(by(items, 'reopen')).toMatchObject({
+      enabled: false, sub: { key: 'league.actions.reopen.pastMonth', params: { monthKey: '2026-10' } },
+    });
+    expect(by(items, 'void').enabled).toBe(true);
+    expect(by(cardActions(missed, admin, {}, NOW_A), 'reopen').enabled).toBe(true);
+  });
+
   test('an admin on their own card: nothing with another admin, void/reopen/approve as the only admin', () => {
     const mine = { ...base, status: 'submitted', notAnnounced: true };
     expect(cardActions(mine, { isOwner: true, isAdmin: true, otherAdmin: true }, {}, NOW_A)).toEqual([]);

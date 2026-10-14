@@ -1,6 +1,6 @@
 import {
   eligibleLeagues, leagueStrokes, applyLeagueHandicap, leagueCourse, leagueCardOf, isLeagueLength, madridDate,
-  isLeagueRated, leagueCardsOf, leagueCardKey, leagueCardsPatch,
+  isLeagueRated, leagueCardsOf, leagueCardKey, leagueCardsPatch, seasonPhase, preselectedLeagueMissing,
 } from '../leagueSetup';
 import { getPlayingHandicap } from '../scoring';
 
@@ -37,6 +37,24 @@ describe('eligibleLeagues', () => {
   test('signed out: nothing', () => {
     expect(eligibleLeagues({ leagues: [league()], cards: [], userId: null, now: NOW })).toEqual([]);
   });
+});
+
+test('preselectedLeagueMissing: only once the list loaded without the board\'s league', () => {
+  const leagues = [league(), league({ id: 'L2' })];
+  expect(preselectedLeagueMissing({ leagues, pickId: 'L2' })).toBe(false);
+  expect(preselectedLeagueMissing({ leagues, pickId: 'L9' })).toBe(true);
+  expect(preselectedLeagueMissing({ leagues: [], pickId: 'L9', loading: true })).toBe(false);
+  expect(preselectedLeagueMissing({ leagues: [], pickId: 'L9', error: true })).toBe(false);
+  expect(preselectedLeagueMissing({ leagues, pickId: null })).toBe(false);
+});
+
+test('seasonPhase: before the first day, after the last, null inside (Madrid days)', () => {
+  expect(seasonPhase(league(), NOW)).toBeNull();
+  expect(seasonPhase(league({ seasonStart: '2026-11-01' }), NOW)).toBe('before');
+  expect(seasonPhase(league({ seasonEnd: '2026-10-14' }), NOW)).toBe('after');
+  expect(seasonPhase(league({ seasonEnd: '2026-10-15' }), NOW)).toBeNull();
+  // 23:30 UTC on 31 Oct is already 1 Nov in Madrid.
+  expect(seasonPhase(league({ seasonStart: '2026-11-01' }), new Date('2026-10-31T23:30:00Z'))).toBeNull();
 });
 
 test('madridDate uses the Madrid calendar day', () => {

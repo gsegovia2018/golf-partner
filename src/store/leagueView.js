@@ -470,10 +470,18 @@ export function cardActions(card, viewer, league, now = new Date(), { when = (d)
       sub: closed ? closedMsg : { key: 'league.actions.void.sub' }, enabled: !closed, tone: 'danger',
     });
     const missed = isMissed(card, now);
+    // reopen_league_card refuses a card of an earlier month (past_month),
+    // even while that month is still open for the rest (R12).
+    const pastMonth = !!monthKey && monthKey < currentMonthKey(now);
+    let reopenSub;
+    if (closed) reopenSub = closedMsg;
+    else if (!missed) reopenSub = { key: 'league.actions.reopen.notMissed' };
+    else if (pastMonth) reopenSub = { key: 'league.actions.reopen.pastMonth', params: { monthKey } };
+    else reopenSub = { key: 'league.actions.reopen.sub', params: { hours: POST_WINDOW_HOURS } };
     items.push({
       kind: 'reopen', icon: 'rotate-ccw', title: { key: 'league.actions.reopen.title' },
-      sub: closed ? closedMsg : missed ? { key: 'league.actions.reopen.sub', params: { hours: POST_WINDOW_HOURS } } : { key: 'league.actions.reopen.notMissed' },
-      enabled: missed && !closed,
+      sub: reopenSub,
+      enabled: missed && !closed && !pastMonth,
     });
     if (needsApproval(card)) {
       items.push({

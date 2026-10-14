@@ -4,7 +4,8 @@
 // marker's phone browser. A new code voids the previous one server-side.
 // Route `LeagueMarkerQR`, params `{ cardId, leagueId }` (from LeagueValidate).
 // While open it polls the card; once the marker confirms, the QR gives way to
-// the confirmed state and a way back to the board.
+// the confirmed state and a way back to the board. If the marker sends it back
+// instead, their note shows with a way to Validate (fix it, submit again).
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Share,
@@ -15,6 +16,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import { useTheme } from '../theme/ThemeContext';
 import { createMarkerToken, getLeagueCard } from '../store/leagueStore';
+import { needsApproval } from '../store/leagueRules';
 import { shareOrigin } from '../lib/shareOrigin';
 import { useT } from '../i18n';
 import { leagueErrorText } from '../lib/leagueErrorText';
@@ -46,6 +48,10 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
   const [error, setError] = useState(null);
   const [now, setNow] = useState(() => Date.now());
   const [confirmedCard, setConfirmedCard] = useState(null);
+  const [returnedCard, setReturnedCard] = useState(null);
+  // The card's returnedAt before this code was shown (Validate passes it; else
+  // the first read sets it): a different one is a new send-back.
+  const knownReturn = useRef(route?.params?.returnedAt);
   const busyRef = useRef(false);
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -70,29 +76,34 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
 
   useEffect(() => { newCode(); }, [newCode]);
 
+  const settled = !!confirmedCard || !!returnedCard;
   useEffect(() => {
-    if (!code || confirmedCard) return undefined;
+    if (!code || settled) return undefined;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [code, confirmedCard]);
+  }, [code, settled]);
 
-  // Watch for the marker's confirmation. A failed read (no signal) is simply
-  // tried again on the next tick.
+  // Watch for the marker's answer: confirmed, or sent back (a new returnedAt
+  // on a still-submitted card). A failed read (no signal) is simply tried
+  // again on the next tick.
   useEffect(() => {
-    if (!cardId || confirmedCard) return undefined;
+    if (!cardId || settled) return undefined;
     let inFlight = false;
     const id = setInterval(async () => {
       if (inFlight) return;
       inFlight = true;
       try {
         const c = await getLeagueCard(cardId);
-        if (mountedRef.current && c?.status === 'confirmed') setConfirmedCard(c);
+        if (!mountedRef.current || !c) return;
+        if (c.status === 'confirmed') setConfirmedCard(c);
+        else if (knownReturn.current === undefined) knownReturn.current = c.returnedAt ?? null;
+        else if (c.status === 'submitted' && c.returnedAt && c.returnedAt !== knownReturn.current) setReturnedCard(c);
       } catch { /* next tick */ } finally {
         inFlight = false;
       }
     }, POLL_MS);
     return () => clearInterval(id);
-  }, [cardId, confirmedCard]);
+  }, [cardId, settled]);
 
   // The same one-time link as the QR, for a marker who is not next to me.
   async function sendLink() {
@@ -105,6 +116,15 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
   }
 
   const goBoard = () => navigation.navigate('LeagueBoard', { leagueId: leagueId ?? confirmedCard?.leagueId });
+  // A fresh Validate on the submitted card: it shows the note, Edit in
+  // scorecard and the ways to get it confirmed again.
+  const openValidate = () => navigation.replace('LeagueValidate', {
+    leagueId: leagueId ?? returnedCard?.leagueId,
+    cardId,
+    tournamentId: returnedCard?.tournamentId,
+    roundId: returnedCard?.roundId,
+    submitted: true,
+  });
 
   const expiresAtMs = code ? new Date(code.expiresAt).getTime() : null;
   const remaining = expiresAtMs != null ? expiresAtMs - now : 0;
@@ -117,12 +137,24 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
         <Feather name="check-circle" size={40} color={theme.accent.primary} />
         <Text style={s.errorTitle}>{t('league.markerQr.confirmedTitle')}</Text>
         <Text style={s.errorText}>
-          {confirmedCard.confirmedByName
-            ? t('league.markerQr.confirmedBy', { name: confirmedCard.confirmedByName })
-            : t('league.markerQr.confirmedByMarker')}
+          {needsApproval(confirmedCard) ? t('league.validate.confirmedAwaitingAdmin')
+            : confirmedCard.confirmedByName
+              ? t('league.markerQr.confirmedBy', { name: confirmedCard.confirmedByName })
+              : t('league.markerQr.confirmedByMarker')}
         </Text>
         <TouchableOpacity style={s.primaryBtn} onPress={goBoard} accessibilityRole="button" activeOpacity={0.8}>
           <Text style={s.primaryText}>{t('league.markerQr.backToLeague')}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  } else if (returnedCard) {
+    body = (
+      <View style={s.confirmedBlock}>
+        <Feather name="message-circle" size={40} color={theme.text.secondary} />
+        <Text style={s.errorTitle}>{t('league.markerQr.returnedTitle')}</Text>
+        <Text style={s.errorText}>{returnedCard.markerNote || t('league.markerQr.returnedNoNote')}</Text>
+        <TouchableOpacity style={s.primaryBtn} onPress={openValidate} accessibilityRole="button" activeOpacity={0.8}>
+          <Text style={s.primaryText}>{t('league.markerQr.reviewCard')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -170,7 +202,7 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
         </View>
         <Text style={s.subtitle}>{t('league.markerQr.subtitle')}</Text>
         {body}
-        {!confirmedCard && (
+        {!settled && (
           <TouchableOpacity
             style={[s.secondaryBtn, loading && s.disabled]}
             onPress={newCode}

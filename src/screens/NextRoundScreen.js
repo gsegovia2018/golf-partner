@@ -29,6 +29,7 @@ import { listText } from '../store/leagueGameCards';
 import { cardMonth } from '../store/leagueRules';
 import LeagueCardsList from '../components/league/LeagueCardsList';
 import { useT, formatNumber } from '../i18n';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
 export default function NextRoundScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -369,7 +370,7 @@ export default function NextRoundScreen({ navigation, route }) {
               tournament, roundId: round.id, meId: roundLeague.meId, league: roundLeague.league,
             }));
           } catch (err) {
-            const ok = await confirmStartWithoutLeague(roundLeague.league.name, err?.message ?? t('league.cards.offline'));
+            const ok = await confirmStartWithoutLeague(roundLeague.league.name, leagueErrorText(err) || t('league.cards.offline'));
             if (!ok) return;
           }
         } else {

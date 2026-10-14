@@ -32,6 +32,7 @@ import { memberLabel } from '../lib/leagueNames';
 import {
   getPendingLeagueFinals, subscribePendingLeagueFinals, flushPendingLeagueFinals,
 } from '../lib/leagueFinalPending';
+import { LEAGUE_FINAL_ENABLED } from '../store/leagueFinal';
 import {
   LEAGUE_NOTIFICATION_ROWS, resolveLeaguePrefs, leaguePrefsPatch,
 } from '../store/leagueNotificationPrefs';
@@ -303,7 +304,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
       sub: data.final ? t('league.settings.finalOpen') : t('league.settings.finalLinking'),
       onPress: () => navigation.navigate('Tournament', { tournamentId: finalId, viewMode: 'tournament' }),
     };
-  } else if (isAdmin && !archived) {
+  } else if (isAdmin && !archived && LEAGUE_FINAL_ENABLED) {
     finalRow = {
       title: t('league.settings.setUpFinal'),
       sub: t('league.settings.setUpFinalSub', { month: formatDate(`${String(league.seasonEnd).slice(0, 7)}-01`, 'monthName') }),

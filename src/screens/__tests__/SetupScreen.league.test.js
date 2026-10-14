@@ -186,13 +186,29 @@ describe('SetupScreen league switch', () => {
     expect(queryByLabelText('Counts for El Club del Mulligan')).toBeNull();
   });
 
-  test('a tournament never shows the switch', async () => {
-    const { queryByLabelText } = render(wrap(
-      <SetupScreen navigation={navigation} route={{ params: params({ kind: 'tournament' }) }} />,
+  test('round 1 of a casual tournament offers the switch too, and Start announces that round (R17)', async () => {
+    const { findByLabelText, getByText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: params({ kind: 'tournament', leagueId: 'L1' }) }} />,
     ));
-    await flush();
-    expect(queryByLabelText('Counts for El Club del Mulligan')).toBeNull();
-    expect(store.getMyLeagues).not.toHaveBeenCalled();
+    expect((await findByLabelText('Counts for El Club del Mulligan')).props.value).toBe(true);
+    fireEvent.press(getByText('Start Tournament'));
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    const t = createdTournament();
+    expect(store.announceLeagueCard.mock.calls[0][0]).toMatchObject({
+      leagueId: 'L1', source: 'app', tournamentId: t.id, roundId: t.rounds[0].id, playerId: 'p1',
+    });
+  });
+
+  test('a preselected league that cannot take a card turns the switch off (no other league switched on)', async () => {
+    store.getMyLeagues.mockResolvedValue([tour({ id: 'L2', name: 'Otra Liga' })]);
+    const { findByLabelText, getByText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: params({ leagueId: 'L1' }) }} />,
+    ));
+    const sw = await findByLabelText('Counts for Otra Liga');
+    await waitFor(() => expect(sw.props.value).toBe(false));
+    fireEvent.press(getByText('Start Game'));
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    expect(store.announceLeagueCard).not.toHaveBeenCalled();
   });
 
   describe('announce fails', () => {

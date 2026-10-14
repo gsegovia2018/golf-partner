@@ -4,6 +4,11 @@
 // helpers, no I/O.
 import { deriveRoundPlayingHandicap } from './scoring';
 
+// The Final is hidden for now (owner's call, 2026-10-14): no "Set up the
+// Final" row and no footer promise. The code and the LeagueFinal route stay;
+// flip this to bring it back. A Final already set up still shows its link.
+export const LEAGUE_FINAL_ENABLED = false;
+
 export const MAX_FINAL_STROKES = 10;
 
 export function clampFinalStrokes(n) {

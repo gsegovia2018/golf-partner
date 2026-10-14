@@ -1839,7 +1839,18 @@ export default function ScorecardScreen({ navigation, route }) {
       setTimeout(() => {
         setRoundCompleteVisible(false);
         setFinishBusy(false);
-        if (tournamentDone && freshT.kind !== 'game' && !official) {
+        // A league round goes on to submit and confirm the card first, even
+        // when it is a tournament's last round (R17): the card has a deadline,
+        // the tournament summary is still there afterwards.
+        const league = !official && leagueCardOf(freshT, lastMeIdRef.current, liveRound.id);
+        if (league) {
+          goAfterFinish('LeagueValidate', {
+            leagueId: league.leagueId,
+            cardId: league.cardId,
+            tournamentId: freshT.id,
+            roundId: liveRound.id,
+          });
+        } else if (tournamentDone && freshT.kind !== 'game' && !official) {
           const title = tl('scorecard.screen.tournamentDone');
           const message = tl('scorecard.screen.tournamentDoneBody');
           if (Platform.OS === 'web') {
@@ -1859,16 +1870,7 @@ export default function ScorecardScreen({ navigation, route }) {
           // Card for the round just played. collectMyRounds keys rounds as
           // `${tournamentId}:${roundIndex}` — match that here. The tournament-
           // complete / archive branch above keeps using goToSummary unchanged.
-          const league = !official && leagueCardOf(freshT, lastMeIdRef.current, liveRound.id);
-          if (league) {
-            // A league round goes on to submit and confirm the card.
-            goAfterFinish('LeagueValidate', {
-              leagueId: league.leagueId,
-              cardId: league.cardId,
-              tournamentId: freshT.id,
-              roundId: liveRound.id,
-            });
-          } else if (!official && freshT.kind !== 'official') {
+          if (!official && freshT.kind !== 'official') {
             goAfterFinish('MyStats', {
               tab: 'reportCard',
               roundKey: `${freshT.id}:${roundIndex}`,

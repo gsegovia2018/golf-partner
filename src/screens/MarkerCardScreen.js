@@ -17,6 +17,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import { ScorecardTable } from '../components/scorecard/GridView';
 import { useTheme } from '../theme/ThemeContext';
 import { getMarkerCard, confirmMarkerCard } from '../store/markerCardStore';
+import { leagueErrorText } from '../lib/leagueErrorText';
 import { useT, t as translate, formatDate, formatNumber } from '../i18n';
 
 // Text on the green top bar. The bar is the brand accent in both themes, so
@@ -126,7 +127,7 @@ export default function MarkerCardScreen(props) {
     } catch (e) {
       if (!mountedRef.current) return;
       if (STATE_COPY[e?.reason]) setPhase(e.reason);
-      else setSubmitError(e?.message || t('marker.submit.failed'));
+      else setSubmitError(leagueErrorText(e) || t('marker.submit.failed'));
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setBusy(false);

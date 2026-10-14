@@ -48,23 +48,35 @@ describe('LeagueAnnounceScreen', () => {
 
   test('hints the post-by time as soon as the tee time is valid, and follows the pickers', async () => {
     const { getByText, getByLabelText } = render(wrap(<LeagueAnnounceScreen navigation={nav()} route={route} />));
-    // Default tee time is now (08:00 today): 16:00 the same day.
-    expect(getByText("You'll have until 16:00 to post your score — 8 hours after tee time.")).toBeTruthy();
+    // Default tee time is the earliest R7 allows (now + 2 h = 10:00): 18:00 the same day.
+    expect(getByText("You'll have until 18:00 to post your score — 8 hours after tee time.")).toBeTruthy();
     fireEvent.press(getByLabelText('Date and tee time'));
-    for (let i = 0; i < 72; i += 1) fireEvent.press(getByLabelText('Later tee time')); // 08:00 -> 20:00
+    for (let i = 0; i < 72; i += 1) fireEvent.press(getByLabelText('Later tee time')); // 10:00 -> 22:00
     fireEvent.press(getByLabelText('Done'));
-    expect(getByText("You'll have until 04:00 tomorrow to post your score — 8 hours after tee time.")).toBeTruthy();
+    expect(getByText("You'll have until 06:00 tomorrow to post your score — 8 hours after tee time.")).toBeTruthy();
+  });
+
+  test('a tee time less than 2 hours away gets the notice rule, a past one the way out (R7)', async () => {
+    const { getByText, getByLabelText } = render(wrap(<LeagueAnnounceScreen navigation={nav()} route={route} />));
+    fireEvent.press(getByLabelText('Date and tee time'));
+    fireEvent.press(getByLabelText('Earlier tee time')); // 10:00 -> 09:50
+    fireEvent.press(getByLabelText('Done'));
+    expect(getByText('Announce at least 2 hours before your tee time. Pick a later time.')).toBeTruthy();
+    fireEvent.press(getByLabelText('Date and tee time'));
+    for (let i = 0; i < 12; i += 1) fireEvent.press(getByLabelText('Earlier tee time')); // 09:50 -> 07:50
+    fireEvent.press(getByLabelText('Done'));
+    expect(getByText(/That tee time has passed/)).toBeTruthy();
   });
 
   test('announces with source offapp, the course snapshot and the tee time, then offers the group chat', async () => {
     store.announceLeagueCard.mockResolvedValue({ id: 'c1', month: '2025-10-01', postBy: null });
     const navigation = nav();
     const { getByText, getByLabelText } = render(wrap(<LeagueAnnounceScreen navigation={navigation} route={route} />));
-    expect(getByText(/Announce before your first shot\. Your group is notified now; you'll add the score after the round\./)).toBeTruthy();
+    expect(getByText(/Announce at least 2 hours before your tee time\. Your group is notified now; you'll add the score after the round\./)).toBeTruthy();
     await waitFor(() => getByText('Golf Olivar'));
     fireEvent.press(getByLabelText('Date and tee time'));
     fireEvent.press(getByLabelText('Sat 4 Oct 2025'));
-    for (let i = 0; i < 9; i += 1) fireEvent.press(getByLabelText('Later tee time')); // 08:00 -> 09:30
+    for (let i = 0; i < 3; i += 1) fireEvent.press(getByLabelText('Earlier tee time')); // 10:00 -> 09:30
     fireEvent.press(getByLabelText('Done'));
     fireEvent.press(getByText('Announce card'));
 
@@ -117,10 +129,10 @@ describe('LeagueAnnounceScreen', () => {
     expect(store.announceLeagueCard).not.toHaveBeenCalled();
   });
 
-  test('the date field starts on today and the sheet greys out past days', async () => {
+  test('the date field starts on the earliest allowed tee time and the sheet greys out past days', async () => {
     const { getByText, getByLabelText } = render(wrap(<LeagueAnnounceScreen navigation={nav()} route={route} />));
     await waitFor(() => getByText('Golf Olivar'));
-    expect(getByText('Fri 3 Oct 2025 · 08:00')).toBeTruthy();
+    expect(getByText('Fri 3 Oct 2025 · 10:00')).toBeTruthy();
     fireEvent.press(getByLabelText('Date and tee time'));
     expect(getByLabelText('Thu 2 Oct 2025').props.accessibilityState.disabled).toBe(true);
     expect(getByLabelText('Sat 4 Oct 2025').props.accessibilityState.disabled).toBe(false);

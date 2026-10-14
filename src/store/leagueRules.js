@@ -151,6 +151,26 @@ export function earliestOffAppTeeTime(now = new Date()) {
   return plusHours(now, OFFAPP_NOTICE_HOURS);
 }
 
+// The tee time the announce form starts on: the earliest R7 allows, rounded up
+// to the next 10 minutes (a whole tee slot, with a little slack for filling in
+// the form).
+const TEE_SLOT_MS = 10 * 60000;
+export function defaultOffAppTeeTime(now = new Date()) {
+  const earliest = earliestOffAppTeeTime(now);
+  if (!earliest) return null;
+  return new Date(Math.ceil(earliest.getTime() / TEE_SLOT_MS) * TEE_SLOT_MS);
+}
+
+// R7 for the announce form: 'past' (the tee time is gone), 'short' (less than
+// 2 hours' notice) or null (fine). null too for no tee time.
+export function offAppTeeProblem(teeTime, now = new Date()) {
+  const tee = ms(teeTime);
+  if (Number.isNaN(tee)) return null;
+  if (tee < ms(now)) return 'past';
+  if (tee < earliestOffAppTeeTime(now).getTime()) return 'short';
+  return null;
+}
+
 // R7: an announced off-app card can move while its tee time is >= 2 h away,
 // at most MAX_RESCHEDULES times.
 export function canReschedule(card, now = new Date()) {
@@ -164,6 +184,13 @@ export function canReschedule(card, now = new Date()) {
 export function postOpensAt(card) {
   if (card?.source !== 'offapp' || card.status !== 'announced' || !card.teeTime) return null;
   return plusHours(card.teeTime, MIN_ROUND_HOURS);
+}
+
+// R8 for the "Add your score" button: when posting opens, while that is still
+// ahead of `now`; null once the card can be posted (or for any other card).
+export function postOpensLater(card, now = new Date()) {
+  const at = postOpensAt(card);
+  return at && ms(now) < at.getTime() ? at : null;
 }
 
 // R9: the owner may withdraw a live card before its tee time (off-app) or

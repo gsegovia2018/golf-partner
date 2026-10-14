@@ -40,8 +40,9 @@ import { cardMonth } from '../store/leagueRules';
 import { monthName } from '../store/leagueView';
 import {
   applyLeagueHandicap, isLeagueLength, isLeagueRated, leagueCourse, leagueStrokes, setupPlayerTee,
-  leagueCardsPatch,
+  leagueCardsPatch, preselectedLeagueMissing,
 } from '../store/leagueSetup';
+import { leagueErrorText } from '../lib/leagueErrorText';
 import { leagueCardRows, showsLeagueList } from '../store/leagueGameCards';
 import { useSetupLeagues } from '../hooks/useSetupLeagues';
 import { useLeagueCardsStatus } from '../hooks/useLeagueCardsStatus';
@@ -138,20 +139,32 @@ export default function SetupScreen({ navigation, route }) {
   // Which round's course name is being edited inline (null = none).
   const [renamingIndex, setRenamingIndex] = useState(null);
 
-  // League switch (games only, before Start): leagues where I have no card
-  // this month. The board's "Play with the app" passes leagueId to preselect
-  // that league with the switch on.
+  // League switch (before Start): leagues where I have no card this month.
+  // A casual game, or round 1 of a casual tournament (R17; later rounds opt in
+  // at Start Round N). The board's "Play with the app" passes leagueId to
+  // preselect that league with the switch on.
+  const leagueSetup = isGame || kind === 'tournament';
   const {
     leagues: setupLeagues, loading: leaguesLoading, error: leaguesError, retry: retryLeagues,
-  } = useSetupLeagues(isGame, user?.id ?? null);
+  } = useSetupLeagues(leagueSetup, user?.id ?? null);
   const [leaguePick, setLeaguePick] = useState(() => route?.params?.leagueId ?? null);
   const [leagueOn, setLeagueOn] = useState(() => !!route?.params?.leagueId);
+  // The preselected league can't take a card (not in the eligible list): the
+  // switch goes off instead of switching another league on.
+  const pickMissing = preselectedLeagueMissing({
+    leagues: setupLeagues, pickId: leaguePick, loading: leaguesLoading, error: leaguesError,
+  });
+  useEffect(() => {
+    if (!pickMissing) return;
+    setLeagueOn(false);
+    setLeaguePick(null);
+  }, [pickMissing]);
   const league = setupLeagues.find((l) => l.id === leaguePick) ?? setupLeagues[0] ?? null;
   const myPlayer = players.find((p) => p.user_id && p.user_id === user?.id) ?? null;
-  const leagueOffered = isGame && !!league && !!myPlayer;
+  const leagueOffered = leagueSetup && !!league && !!myPlayer;
   // Opened from the board's "Play with the app": this round is meant to count,
   // so a league that is still loading holds Start, and a failed read says so.
-  const leagueIntended = isGame && !!route?.params?.leagueId;
+  const leagueIntended = leagueSetup && !!route?.params?.leagueId;
   // (Declared before the list status below; widened there.)
   const leagueCheckingLeagues = leagueIntended && !leagueOffered && leaguesLoading;
   const leagueFailed = leagueIntended && !leagueOffered && !leaguesLoading && leaguesError;
@@ -171,7 +184,7 @@ export default function SetupScreen({ navigation, route }) {
   const leagueListMode = leagueOffered && otherLinked && !leagueStatus.error
     && (leagueStatus.loading || showsLeagueList(leagueRows));
   const leagueListBlocked = leagueListMode && leagueStatus.loading;
-  const leagueActive = leagueOffered && leagueOn && leagueEligibleRound && leagueRated && !leagueListBlocked;
+  const leagueActive = leagueOffered && leagueOn && !pickMissing && leagueEligibleRound && leagueRated && !leagueListBlocked;
   // A switch already on (the board's "Play with the app") waits for the list.
   const leagueChecking = leagueCheckingLeagues || (leagueListMode && leagueOn && leagueStatus.loading);
   const startBusyRef = useRef(false);
@@ -498,7 +511,7 @@ export default function SetupScreen({ navigation, route }) {
           i === 0 && hcp != null ? applyLeagueHandicap(r, meId, hcp) : r)),
       };
     } catch (err) {
-      const ok = await askStartWithoutLeague(league.name, err?.message ?? t('league.setup.unreachable'));
+      const ok = await askStartWithoutLeague(league.name, leagueErrorText(err) || t('league.setup.unreachable'));
       return ok ? tournament : null;
     }
   }

@@ -23,6 +23,15 @@ export function madridDate(now = new Date()) {
   return now.toISOString().slice(0, 10);
 }
 
+// Where today (Europe/Madrid) falls against a league's season: 'before' its
+// first day, 'after' its last, or null inside it.
+export function seasonPhase(league, now = new Date()) {
+  const today = madridDate(now);
+  if (league?.seasonStart && today < String(league.seasonStart).slice(0, 10)) return 'before';
+  if (league?.seasonEnd && today > String(league.seasonEnd).slice(0, 10)) return 'after';
+  return null;
+}
+
 // Leagues the Setup switch can offer right now: not archived, today inside the
 // season, and no card of mine this month that takes the month (an admin's
 // void still does, R15b). `cards` are my cards (any league) as rowToCard
@@ -30,14 +39,21 @@ export function madridDate(now = new Date()) {
 export function eligibleLeagues({ leagues, cards, userId, now = new Date() }) {
   if (!userId) return [];
   const month = cardMonth(now);
-  const today = madridDate(now);
   return (leagues ?? []).filter((l) => {
     if (!l || l.archivedAt) return false;
-    if (l.seasonStart && today < String(l.seasonStart).slice(0, 10)) return false;
-    if (l.seasonEnd && today > String(l.seasonEnd).slice(0, 10)) return false;
+    if (seasonPhase(l, now)) return false;
     const mine = (cards ?? []).filter((c) => c.leagueId === l.id);
     return canAnnounce(mine, userId, month).ok;
   });
+}
+
+// The board's "Play with the app" preselects a league; once the eligible list
+// has loaded without it (a card this month already, out of season…), Setup
+// turns the switch off rather than switching another league on. Not while
+// loading or after a failed read: a retry may still bring it.
+export function preselectedLeagueMissing({ leagues, pickId, loading = false, error = false }) {
+  if (!pickId || loading || error) return false;
+  return !(leagues ?? []).some((l) => l?.id === pickId);
 }
 
 // My tee in a setup round: the one picked on the Tees step, else the middle
@@ -68,8 +84,8 @@ function leagueTee(round, playerId) {
   return setupPlayerTee(round, playerId) ?? resolveRoundTee(round, playerId);
 }
 
-// League cards rank by net differential, so my tee needs a slope and a course
-// rating (the server refuses the card otherwise).
+// The server scores a league card from my league handicap on a rated tee (R3,
+// R4): my tee needs a slope and a course rating, or the card is refused.
 export function isLeagueRated(round, playerId) {
   return isRatedTee(leagueTee(round, playerId));
 }

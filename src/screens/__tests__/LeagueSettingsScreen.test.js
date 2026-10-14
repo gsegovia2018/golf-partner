@@ -133,7 +133,7 @@ describe('LeagueSettingsScreen', () => {
     expect(getByText('Leave league')).toBeTruthy();
   });
 
-  test('LEAGUE section: the admin gets Members and "Set up the Final"; once recorded the Final is an open link', async () => {
+  test('LEAGUE section: the admin gets Members, no "Set up the Final" (hidden); a recorded Final is still an open link', async () => {
     store.getLeague.mockResolvedValueOnce({ ...snapshot(), votes: [{ id: 'v1' }] });
     const first = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
     await waitFor(() => first.getByText('Members and handicaps'));
@@ -141,9 +141,9 @@ describe('LeagueSettingsScreen', () => {
     expect(first.getByText('1 vote open')).toBeTruthy();
     fireEvent.press(first.getByText('Members and handicaps'));
     expect(navigation.navigate).toHaveBeenCalledWith('LeagueMembers', { leagueId: 'L1' });
-    expect(first.getByText('December · extra strokes from the standings')).toBeTruthy();
-    fireEvent.press(first.getByText('Set up the Final'));
-    expect(navigation.navigate).toHaveBeenCalledWith('LeagueFinal', { leagueId: 'L1' });
+    // The Final is hidden for now (LEAGUE_FINAL_ENABLED): no way to set it up.
+    expect(first.queryByText('Set up the Final')).toBeNull();
+    expect(first.queryByText('December · extra strokes from the standings')).toBeNull();
     first.unmount();
 
     store.getLeague.mockResolvedValueOnce({

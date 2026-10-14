@@ -759,6 +759,8 @@ export async function submitLeagueCard({
     notAnnounced: !!d.not_announced,
     firstShotAt: d.first_shot_at ?? null,
     points: d.points ?? null,
+    gross: d.gross ?? null,
+    netDifferential: num(d.net_differential),
     playingHandicap: d.playing_handicap ?? null,
     teeVerified: d.tee_verified ?? null,
   };

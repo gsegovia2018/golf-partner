@@ -105,6 +105,48 @@ describe('LeagueMarkerQRScreen', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('LeagueBoard', { leagueId: 'L1' });
   });
 
+  test('a marker who sends the card back: their note, and Review your card opens Validate', async () => {
+    const nav = { navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn() };
+    const { getByTestId, getByText, queryByText } = render(wrap(
+      <LeagueMarkerQRScreen navigation={nav} route={{ params: { ...route.params, returnedAt: null } }} />,
+    ));
+    await waitFor(() => getByTestId('qr-value'));
+    await act(async () => { jest.advanceTimersByTime(POLL_MS); });
+    expect(getByTestId('qr-value')).toBeTruthy();
+
+    store.getLeagueCard.mockResolvedValue({
+      id: 'card-1', leagueId: 'L1', status: 'submitted', tournamentId: 't1', roundId: 't1-r0',
+      returnedAt: '2026-10-13T10:05:00Z', markerNote: 'Hole 7 was a 6',
+    });
+    await act(async () => { jest.advanceTimersByTime(POLL_MS); });
+    await waitFor(() => getByText('Your marker sent the card back'));
+    expect(getByText('Hole 7 was a 6')).toBeTruthy();
+    expect(queryByText('New code')).toBeNull();
+    fireEvent.press(getByText('Review your card'));
+    expect(nav.replace).toHaveBeenCalledWith('LeagueValidate', {
+      leagueId: 'L1', cardId: 'card-1', tournamentId: 't1', roundId: 't1-r0', submitted: true,
+    });
+  });
+
+  test('an earlier send-back (before this code) does not count as a new one', async () => {
+    store.getLeagueCard.mockResolvedValue({
+      id: 'card-1', leagueId: 'L1', status: 'submitted', returnedAt: '2026-10-12T10:00:00Z', markerNote: 'old',
+    });
+    const { getByTestId, queryByText } = render(wrap(<LeagueMarkerQRScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByTestId('qr-value'));
+    await act(async () => { jest.advanceTimersByTime(POLL_MS * 2); });
+    expect(queryByText('Your marker sent the card back')).toBeNull();
+    expect(getByTestId('qr-value')).toBeTruthy();
+  });
+
+  test('a confirmed card that still needs an admin does not say it counts', async () => {
+    const { getByTestId, getByText } = render(wrap(<LeagueMarkerQRScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByTestId('qr-value'));
+    store.getLeagueCard.mockResolvedValue({ id: 'card-1', leagueId: 'L1', status: 'confirmed', notAnnounced: true });
+    await act(async () => { jest.advanceTimersByTime(POLL_MS); });
+    await waitFor(() => getByText("Confirmed · waiting for an admin's approval."));
+  });
+
   test('a failed poll (no signal) keeps the QR up and tries again', async () => {
     store.getLeagueCard.mockRejectedValueOnce(new Error('You need a connection to do this.'));
     const { getByTestId, getByText } = render(wrap(<LeagueMarkerQRScreen navigation={navigation} route={route} />));

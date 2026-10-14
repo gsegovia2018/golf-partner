@@ -325,12 +325,21 @@ describe('RPC params', () => {
     // An older server returns no score: the new fields read null.
     expect(res).toEqual({
       id: 'C1', status: 'submitted', notAnnounced: true, firstShotAt: '2026-10-04T09:00:00Z',
-      points: null, playingHandicap: null, teeVerified: null,
+      points: null, gross: null, netDifferential: null, playingHandicap: null, teeVerified: null,
     });
     expect(lastRpc()).toEqual(['submit_league_card', {
       p_card: 'C1', p_holes: { 1: 5 }, p_gross: 5, p_points: 1, p_playing_handicap: 20,
       p_played_on: '2026-10-04',
     }]);
+  });
+
+  test('submitLeagueCard returns the server-scored values', async () => {
+    ok({
+      id: 'C1', status: 'submitted', not_announced: false, points: 36, gross: 88, playing_handicap: 16,
+      tee_verified: true, differential: 14.2, net_differential: '-1.8',
+    });
+    const res = await submitLeagueCard({ cardId: 'C1', holes: {}, gross: 0, points: 0, playingHandicap: 0 });
+    expect(res).toMatchObject({ points: 36, gross: 88, netDifferential: -1.8, playingHandicap: 16, teeVerified: true });
   });
 
   test('addUnannouncedLeagueCard', async () => {

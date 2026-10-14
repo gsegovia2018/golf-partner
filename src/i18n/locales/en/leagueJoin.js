@@ -250,7 +250,7 @@ export default {
   "league.tee.a11yRated": "{tee}, slope {slope} · course rating {rating}",
   "league.tee.a11yUnrated": "{tee}, no slope or rating",
   "league.tee.unratedTitle": "{tee} tees aren't rated yet",
-  "league.tee.unratedBody": "A league card needs the tee's slope and course rating to work out the differential. You can add them now, or play the card off a rated tee.",
+  "league.tee.unratedBody": "A league card needs the tee's slope and course rating to work out your playing handicap. You can add them now, or play the card off a rated tee.",
   "league.tee.addRating": "Add slope & rating",
   "league.tee.use": "Use {tee}",
 };

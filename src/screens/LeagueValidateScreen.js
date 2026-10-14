@@ -83,6 +83,9 @@ export default function LeagueValidateScreen({ navigation, route }) {
   const [selected, setSelected] = useState(undefined);
   // After "Ask someone else": the picker shows again inside the fallbacks.
   const [markerNote, setMarkerNote] = useState(null);
+  // The card as the server holds it (getLeagueCard, then what submit returns):
+  // its month, frozen league handicap and, once submitted, the server's score.
+  const [serverCard, setServerCard] = useState(null);
   const autoChecked = useRef(false);
 
   const load = useCallback(async () => {
@@ -109,8 +112,14 @@ export default function LeagueValidateScreen({ navigation, route }) {
     if (!player) return null;
     const strokes = round.scores?.[player.id] ?? {};
     const holes = [...(round.holes ?? [])].sort((a, b) => a.number - b.number);
+    // The preview scores off the card's frozen league handicap, else the
+    // league handicap Start put on the round; with neither it is the game
+    // handicap and only an estimate (the server scores the card, R3).
     const override = round.playerIndexes?.[player.id];
-    const leagueHandicap = override != null && override !== '' ? Number(override) : player.handicap;
+    const hasOverride = override != null && override !== '';
+    const frozen = serverCard?.leagueHandicap;
+    const leagueHandicap = frozen != null ? frozen : hasOverride ? Number(override) : player.handicap;
+    const estimate = frozen == null && !hasOverride;
     const {
       gross, points, playingHandicap, rated, adjustedGross, differential, netDifferential,
     } = scoreCard({
@@ -129,9 +138,9 @@ export default function LeagueValidateScreen({ navigation, route }) {
     const roundNumber = tournament.rounds.indexOf(round) + 1;
     return {
       round, roundNumber, player, strokes, gross, points, playingHandicap, snapshot, missing,
-      rated, adjustedGross, differential, netDifferential, leagueHandicap: Number(leagueHandicap) || 0,
+      rated, adjustedGross, differential, netDifferential, leagueHandicap: Number(leagueHandicap) || 0, estimate,
     };
-  }, [tournament, roundId, cardId, user?.id]);
+  }, [tournament, roundId, cardId, user?.id, serverCard?.leagueHandicap]);
 
   const checkPartner = useCallback(async () => {
     setBusy(true);
@@ -167,6 +176,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
     (async () => {
       try {
         const c = await getLeagueCard(cardId);
+        if (alive && c) setServerCard(c);
         if (alive && c?.status === 'submitted' && c.markerNote) setReturnNote(c.markerNote);
       } catch { /* no note shown */ }
     })();
@@ -240,7 +250,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
     setBusy(true);
     setError(null);
     try {
-      await submitLeagueCard({
+      const scored = await submitLeagueCard({
         cardId,
         holes: card.snapshot,
         gross: card.gross,
@@ -249,6 +259,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
         // The server keeps the date it stamped at the announce.
         playedOn: null,
       });
+      setServerCard((c) => ({ ...(c ?? {}), ...scored }));
       const r = await confirmLeagueCardByPartner(cardId);
       setResult(r);
       if (!r.confirmed && picked && !RESUBMIT_REASONS.includes(r.reason)) await ask(picked.userId, picked.name);
@@ -267,7 +278,10 @@ export default function LeagueValidateScreen({ navigation, route }) {
     await load();
   }
 
-  const month = monthName(cardMonth(new Date()));
+  // The card's own month (a card validated just after midnight on the 1st
+  // still belongs to the month it was played in).
+  const monthKey = serverCard?.monthKey ?? cardMonth(new Date());
+  const month = monthName(monthKey);
   const goBoard = () => navigation.replace('LeagueBoard', { leagueId });
 
   const header = (
@@ -302,6 +316,17 @@ export default function LeagueValidateScreen({ navigation, route }) {
   const waiting = !!pending && !confirmed;
   const notConfirmed = !!result && !confirmed;
   const markerFirst = pending ? firstName(pending.name) : '';
+  // Once submitted, the server's score is the card's score; until then the
+  // preview's (an estimate without the league handicap).
+  const serverScored = serverCard?.points != null
+    && (serverCard.status === 'submitted' || serverCard.status === 'confirmed');
+  const shownPoints = serverScored ? serverCard.points : card.points;
+  const shownGross = serverScored ? serverCard.gross : card.gross;
+  const shownNetDiff = serverScored ? serverCard.netDifferential : netDifferential;
+  // Not announced in time, or a tee entered by hand: it counts once an admin
+  // approves it (needsApproval), not on confirmation.
+  const awaitingAdmin = !!serverCard && (!!serverCard.notAnnounced || serverCard.teeVerified === false)
+    && !serverCard.approvedAt;
   // The server refuses to submit an unrated tee (P0001); say so up front.
   const unrated = !rated && !alreadySubmitted && !result;
 
@@ -370,7 +395,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
       <Text style={s.overline}>{t('league.validate.fallbacksOverline')}</Text>
       <View style={s.fallbackList}>
         {fallback('maximize', t('league.validate.qrTitle'), t('league.validate.qrSub'),
-          'LeagueMarkerQR', { leagueId, cardId })}
+          'LeagueMarkerQR', { leagueId, cardId, ...(serverCard && 'returnedAt' in serverCard ? { returnedAt: serverCard.returnedAt } : {}) })}
         {/* The card is already submitted: AddProof only uploads and attaches. */}
         {fallback('camera', t('league.validate.uploadTitle'), t('league.validate.uploadSub'),
           'LeagueAddProof', { leagueId, cardId, source: 'app', kind: 'photo' })}
@@ -391,7 +416,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
               <Text style={s.statusTitle}>
                 {t('league.validate.confirmedTitle', { partner: result.partnerName || t('league.validate.yourPartner'), settled: result.settled ?? 18 })}
               </Text>
-              <Text style={s.statusSub}>{t('league.validate.confirmedSub')}</Text>
+              <Text style={s.statusSub}>{t(awaitingAdmin ? 'league.validate.confirmedAwaitingAdmin' : 'league.validate.confirmedSub')}</Text>
             </View>
           </View>
         )}
@@ -415,9 +440,9 @@ export default function LeagueValidateScreen({ navigation, route }) {
                 )}
               </View>
             </View>
-            {rated && card.points != null && (
+            {rated && shownPoints != null && (
               <Text style={s.waitingNet}>
-                <Text style={{ fontFamily: 'PlusJakartaSans-ExtraBold' }}>{t('league.scoring.pts', { points: card.points })}</Text>
+                <Text style={{ fontFamily: 'PlusJakartaSans-ExtraBold' }}>{t('league.scoring.pts', { points: shownPoints })}</Text>
                 {t('league.validate.countsOnceConfirmed')}
               </Text>
             )}
@@ -458,17 +483,19 @@ export default function LeagueValidateScreen({ navigation, route }) {
           </View>
         )}
 
-        {confirmed && rated && netDifferential != null && (
+        {confirmed && rated && shownNetDiff != null && (
           <View style={s.resultCard}>
             <View style={s.resultHead}>
-              <Text style={[s.resultValue, { color: theme.text.primary }]}>{card.points}</Text>
+              <Text style={[s.resultValue, { color: theme.text.primary }]}>{shownPoints}</Text>
               <Text style={s.resultKey}>{t('league.card.stableford')}</Text>
             </View>
             <Text style={s.resultSub}>
-              {t('league.validate.resultSub', { gross: card.gross, adjusted: card.adjustedGross, diff: formatNetDiffSigned(netDifferential) })}
+              {serverScored
+                ? t('league.validate.resultSubServer', { gross: shownGross, diff: formatNetDiffSigned(shownNetDiff) })
+                : t('league.validate.resultSub', { gross: card.gross, adjusted: card.adjustedGross, diff: formatNetDiffSigned(netDifferential) })}
             </Text>
             <TouchableOpacity
-              onPress={() => navigation.navigate('LeagueCard', { leagueId, month: cardMonth(new Date()), userId: user?.id })}
+              onPress={() => navigation.navigate('LeagueCard', { leagueId, month: monthKey, userId: user?.id })}
               activeOpacity={0.7}
               accessibilityRole="link"
             >
@@ -495,8 +522,11 @@ export default function LeagueValidateScreen({ navigation, route }) {
           editable={() => false}
           mode="stableford"
           meId={player.id}
-          handicapsOverride={{ [player.id]: playingHandicap }}
+          handicapsOverride={{ [player.id]: serverScored && serverCard.playingHandicap != null ? serverCard.playingHandicap : playingHandicap }}
         />
+        {card.estimate && !serverScored && (
+          <Text style={s.noteText}>{t('league.validate.estimate')}</Text>
+        )}
 
         {missing.length > 0 && !result && !alreadySubmitted && (
           <Text style={s.errorText}>

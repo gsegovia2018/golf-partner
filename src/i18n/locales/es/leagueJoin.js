@@ -250,7 +250,7 @@ export default {
   "league.tee.a11yRated": "{tee}, slope {slope} · valor de campo {rating}",
   "league.tee.a11yUnrated": "{tee}, sin slope ni valoración",
   "league.tee.unratedTitle": "Las barras {tee} aún no tienen valoración",
-  "league.tee.unratedBody": "Una tarjeta de liga necesita el slope y el valor de campo de las barras para calcular el diferencial. Puedes añadirlos ahora o jugar la tarjeta desde unas barras con valoración.",
+  "league.tee.unratedBody": "Una tarjeta de liga necesita el slope y el valor de campo de las barras para calcular tu hándicap de juego. Puedes añadirlos ahora o jugar la tarjeta desde unas barras con valoración.",
   "league.tee.addRating": "Añadir slope y valoración",
   "league.tee.use": "Usar {tee}",
 };

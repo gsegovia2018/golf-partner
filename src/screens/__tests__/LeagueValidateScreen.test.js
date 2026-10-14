@@ -71,6 +71,8 @@ describe('LeagueValidateScreen', () => {
     store.requestLeagueMarker.mockResolvedValue({ markerUserId: 'user-2', markerName: 'Javi Ortega', expiresAt: '2026-10-19T10:00:00Z' });
     store.remindLeagueMarker.mockResolvedValue({ remindedAt: '2026-10-13T10:00:00Z' });
     store.cancelLeagueMarkerRequest.mockResolvedValue(undefined);
+    store.getLeagueCard.mockResolvedValue(null);
+    store.submitLeagueCard.mockResolvedValue({ id: 'card-1', status: 'submitted' });
   });
 
   test('confirmed: submits the frozen card, names the partner, Done goes to the board', async () => {
@@ -244,6 +246,8 @@ describe('LeagueValidateScreen: pick your marker', () => {
     store.requestLeagueMarker.mockResolvedValue({ markerUserId: 'user-2', markerName: 'Javi Ortega', expiresAt: '2026-10-19T10:00:00Z' });
     store.remindLeagueMarker.mockResolvedValue({ remindedAt: '2026-10-13T10:00:00Z' });
     store.cancelLeagueMarkerRequest.mockResolvedValue(undefined);
+    store.getLeagueCard.mockResolvedValue(null);
+    store.submitLeagueCard.mockResolvedValue({ id: 'card-1', status: 'submitted' });
   });
 
   const mount = (params = {}, navigation = makeNav()) => render(wrap(
@@ -392,6 +396,65 @@ describe('LeagueValidateScreen copy, marker note and scorecard route', () => {
     expect(await findByText('Hole 7 was a 6')).toBeTruthy();
     fireEvent.press(getByText('Edit in scorecard'));
     expect(navigation.navigate).toHaveBeenCalledWith('Scorecard', { tournamentId: 't1', roundIndex: 0 });
+  });
+
+  test('once submitted, the result shows the server-scored points, gross and differential', async () => {
+    store.submitLeagueCard.mockResolvedValue({
+      id: 'card-1', status: 'submitted', points: 35, gross: 90, netDifferential: -0.4, playingHandicap: 17, teeVerified: true,
+    });
+    store.confirmLeagueCardByPartner.mockResolvedValue({ confirmed: true, settled: 18, partnerName: 'Javi' });
+    const {
+      findByText, getByText, getAllByText, queryByText,
+    } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+    fireEvent.press(await findByText('Submit'));
+    expect(await findByText('Gross 90 · net differential −0.4, for reference')).toBeTruthy();
+    // The result card and the grid (re-scored off the server's playing handicap 17).
+    expect(getAllByText('35').length).toBeGreaterThanOrEqual(2);
+    expect(queryByText('38')).toBeNull();
+    expect(queryByText(/adjusted/)).toBeNull();
+    expect(getByText('Your card counts. The league has been told.')).toBeTruthy();
+  });
+
+  test('a confirmed card that needs an admin says so instead of "Your card counts"', async () => {
+    store.submitLeagueCard.mockResolvedValue({ id: 'card-1', status: 'submitted', points: 38, teeVerified: false });
+    store.confirmLeagueCardByPartner.mockResolvedValue({ confirmed: true, settled: 18, partnerName: 'Javi' });
+    const { findByText, queryByText } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+    fireEvent.press(await findByText('Submit'));
+    expect(await findByText("Confirmed · waiting for an admin's approval.")).toBeTruthy();
+    expect(queryByText(/Your card counts/)).toBeNull();
+  });
+
+  test("the header and the card link use the card's month, not today's", async () => {
+    store.getLeagueCard.mockResolvedValue({
+      id: 'card-1', status: 'submitted', month: '2026-09-01', monthKey: '2026-09', points: 38, gross: 90, netDifferential: -1.7, leagueHandicap: 18,
+    });
+    store.confirmLeagueCardByPartner.mockResolvedValue({ confirmed: true, settled: 18, partnerName: 'Javi' });
+    const navigation = makeNav();
+    const { findByText } = render(wrap(
+      <LeagueValidateScreen navigation={navigation} route={{ params: { ...route.params, submitted: true } }} />,
+    ));
+    expect(await findByText('September card')).toBeTruthy();
+    fireEvent.press(await findByText("How it's worked out ›"));
+    expect(navigation.navigate).toHaveBeenCalledWith('LeagueCard', { leagueId: 'L1', month: '2026-09', userId: 'user-1' });
+  });
+
+  test('without a league handicap the preview is labelled an estimate', async () => {
+    const t = tournament();
+    delete t.rounds[0].playerIndexes;
+    repo.fetchTournament.mockResolvedValue(t);
+    const { findByText } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+    expect(await findByText(/Points are an estimate/)).toBeTruthy();
+  });
+
+  test('the frozen league handicap of the card drives the preview, with no estimate note', async () => {
+    const t = tournament();
+    delete t.rounds[0].playerIndexes;
+    repo.fetchTournament.mockResolvedValue(t);
+    store.getLeagueCard.mockResolvedValue({ id: 'card-1', status: 'playing', monthKey: '2026-10', leagueHandicap: 18 });
+    const { findByText, queryByText } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+    // League handicap 18 on Yellow 125/72: 38 points (game handicap 4 would give far fewer).
+    expect(await findByText('38')).toBeTruthy();
+    expect(queryByText(/Points are an estimate/)).toBeNull();
   });
 
   test('a missing hole offers Edit in scorecard too', async () => {

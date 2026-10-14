@@ -98,6 +98,7 @@ export default {
   'league.actions.reopen.title': 'Reabrir la tarjeta',
   'league.actions.reopen.sub': 'Le da {hours} horas más para enviarla',
   'league.actions.reopen.notMissed': 'Solo para una tarjeta que no se envió a tiempo',
+  'league.actions.reopen.pastMonth': 'Solo durante {month}, el mes de la tarjeta',
   'league.actions.reopen.sheetTitle': '¿Reabrir la tarjeta de {name}?',
   'league.actions.reopen.lead': 'Vuelve a donde estaba, con un plazo nuevo.',
   'league.actions.reopen.consequence': '{name} tiene {hours} horas más, hasta el {until}.',
