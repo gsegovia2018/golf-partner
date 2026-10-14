@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import en from '../locales/en';
-import es from '../locales/es';
+import en, { AREAS as EN_AREAS } from '../locales/en';
+import es, { AREAS as ES_AREAS } from '../locales/es';
 import {
   t, tr, resolveLanguage, pluralForm, getLanguage, getLanguagePref, setLanguagePref,
   loadLanguagePref, detectSystemLanguage, LANGUAGE_PREF_KEY, __resetForTests,
@@ -10,6 +10,25 @@ import {
 const params = (s) => (String(typeof s === 'object' ? Object.values(s).join(' ') : s).match(/\{\w+\}/g) ?? []).sort();
 
 describe('catalogues', () => {
+  test('en and es have the same area modules, each with the same keys', () => {
+    expect(Object.keys(ES_AREAS).sort()).toEqual(Object.keys(EN_AREAS).sort());
+    for (const area of Object.keys(EN_AREAS)) {
+      expect([area, Object.keys(ES_AREAS[area]).sort()]).toEqual([area, Object.keys(EN_AREAS[area]).sort()]);
+    }
+  });
+
+  test('no key appears in two area modules', () => {
+    for (const areas of [EN_AREAS, ES_AREAS]) {
+      const seen = {};
+      for (const [area, entries] of Object.entries(areas)) {
+        for (const key of Object.keys(entries)) {
+          expect([key, seen[key]]).toEqual([key, undefined]);
+          seen[key] = area;
+        }
+      }
+    }
+  });
+
   test('es and en have the same keys', () => {
     expect(Object.keys(es).sort()).toEqual(Object.keys(en).sort());
   });
