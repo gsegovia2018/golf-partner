@@ -11,7 +11,10 @@ import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { useT, tr } from '../i18n';
 import { announceLeagueCard } from '../store/leagueStore';
-import { POST_WINDOW_HOURS, postByFor } from '../store/leagueRules';
+import {
+  POST_WINDOW_HOURS, OFFAPP_NOTICE_HOURS, postByFor, defaultOffAppTeeTime, earliestOffAppTeeTime, offAppTeeProblem,
+} from '../store/leagueRules';
+import { useMinuteClock } from '../hooks/useMinuteClock';
 import { clockWithDay } from '../components/league/DeadlineLine';
 import {
   courseSnapshot, courseProblem, buildTeeTime, localDateText, localTimeText,
@@ -19,9 +22,9 @@ import {
 import { leagueErrorText } from '../lib/leagueErrorText';
 
 // Announce a card played without the app: course, tee and tee time. The group
-// is notified now; the score is added after the round. The server stamps the
-// announcement time, so there is no grace period: a late announcement is
-// flagged there, and any server refusal is shown as is.
+// is notified now; the score is added after the round. The tee time must be at
+// least 2 hours away (R7): the form starts on the earliest one allowed. The
+// server stamps the announcement time and any refusal is shown as is.
 export default function LeagueAnnounceScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeOffAppStyles(theme);
@@ -29,10 +32,11 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
   const { user } = useAuth();
   const t = useT();
   const { data } = useLeague(navigation, leagueId);
+  const now = useMinuteClock();
 
   const [pick, setPick] = useState({ course: null, tee: null });
-  const [dateText, setDateText] = useState(() => localDateText());
-  const [timeText, setTimeText] = useState(() => localTimeText());
+  const [dateText, setDateText] = useState(() => localDateText(defaultOffAppTeeTime()));
+  const [timeText, setTimeText] = useState(() => localTimeText(defaultOffAppTeeTime()));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   // After announcing: what the "Tell the group chat" message says.
@@ -42,16 +46,17 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
   useEffect(() => () => { mountedRef.current = false; }, []);
 
   // The post-by time for the tee time picked so far (null until it is valid).
-  // A tee time already gone (beyond the server's 15 minutes of slack) can't be
-  // announced, so it gets the way out instead of a deadline.
+  // A tee time already gone can't be announced, so it gets the way out; one
+  // less than 2 hours away gets the notice rule (R7) instead of a deadline.
   const deadlineText = useMemo(() => {
     const tee = buildTeeTime(dateText, timeText);
     const postBy = postByFor(tee);
     if (!postBy) return null;
-    if (new Date(tee).getTime() < Date.now() - 15 * 60000) return 'past';
+    const problem = offAppTeeProblem(tee, now);
+    if (problem) return problem;
     const sameDay = postBy.toDateString() === new Date(tee).toDateString();
     return clockWithDay(postBy, sameDay ? postBy : new Date());
-  }, [dateText, timeText]);
+  }, [dateText, timeText, now]);
 
   async function announce() {
     const problem = courseProblem(pick.course, pick.tee ?? pick.course);
@@ -117,7 +122,7 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
       </View>
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
         <Text style={[s.text, { marginBottom: 8 }]}>
-          {t('league.announce.intro')}
+          {t('league.announce.intro', { hours: OFFAPP_NOTICE_HOURS })}
         </Text>
 
         <CourseTeePicker navigation={navigation} value={pick} onChange={(p) => { setPick(p); setError(null); }} />
@@ -129,14 +134,14 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
           onChange={(v) => { setDateText(v); setError(null); }}
           time={timeText}
           onTimeChange={(v) => { setTimeText(v); setError(null); }}
-          min={localDateText()}
+          min={localDateText(earliestOffAppTeeTime(now))}
         />
 
         {!!deadlineText && (
           <Text style={[s.text, { marginTop: 8 }]}>
-            {deadlineText === 'past'
-              ? t('league.announce.past')
-              : t('league.announce.deadline', { time: deadlineText, hours: POST_WINDOW_HOURS })}
+            {deadlineText === 'past' ? t('league.announce.past')
+              : deadlineText === 'short' ? t('league.announce.shortNotice', { hours: OFFAPP_NOTICE_HOURS })
+                : t('league.announce.deadline', { time: deadlineText, hours: POST_WINDOW_HOURS })}
           </Text>
         )}
 

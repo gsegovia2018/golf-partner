@@ -98,6 +98,7 @@ export default {
   'league.actions.reopen.title': 'Reopen card',
   'league.actions.reopen.sub': 'Gives it {hours} more hours to post',
   'league.actions.reopen.notMissed': 'Only for a card that wasn’t posted in time',
+  'league.actions.reopen.pastMonth': 'Only during {month}, the card’s own month',
   'league.actions.reopen.sheetTitle': 'Reopen {name}’s card?',
   'league.actions.reopen.lead': 'It goes back to where it was, with a fresh deadline.',
   'league.actions.reopen.consequence': '{name} gets {hours} more hours, until {until}.',

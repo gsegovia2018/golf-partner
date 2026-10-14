@@ -324,6 +324,29 @@ describe('ScorecardScreen on a league round', () => {
       });
     }, { timeout: 3000 });
   });
+
+  test("a tournament's last round with a league card goes to LeagueValidate, not the tournament-done prompt", async () => {
+    const kind = mockTournament.kind;
+    mockTournament.kind = 'tournament';
+    const ts = require('../../store/tournamentStore');
+    ts.isTournamentFinished.mockReturnValue(true);
+    const alert = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
+    try {
+      const { findByLabelText } = render(wrap(
+        <ScorecardScreen navigation={navigation} route={route} />,
+      ));
+      fireEvent.press(await findByLabelText('Finish round'));
+      await waitFor(() => {
+        const reset = navigation.dispatch.mock.calls.map(([a]) => a).find((a) => a?.routes);
+        expect(reset?.routes?.[1]?.name).toBe('LeagueValidate');
+      }, { timeout: 3000 });
+      expect(alert).not.toHaveBeenCalled();
+    } finally {
+      mockTournament.kind = kind;
+      ts.isTournamentFinished.mockReturnValue(false);
+      alert.mockRestore();
+    }
+  });
 });
 
 describe('ScorecardScreen league signals (no strip on the holes)', () => {

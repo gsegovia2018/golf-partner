@@ -1,6 +1,10 @@
 import {
-  suggestFinalStrokes, applyFinalStrokes, finalStrokeList, finalStrokesRecord, clampFinalStrokes,
+  suggestFinalStrokes, applyFinalStrokes, finalStrokeList, finalStrokesRecord, clampFinalStrokes, LEAGUE_FINAL_ENABLED,
 } from '../leagueFinal';
+
+test('the Final is hidden for now (owner decision 2026-10-14)', () => {
+  expect(LEAGUE_FINAL_ENABLED).toBe(false);
+});
 
 const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
 

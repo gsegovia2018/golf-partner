@@ -14,7 +14,9 @@ import { semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { useMinuteClock } from '../hooks/useMinuteClock';
-import { isMissed, needsApproval, deadlineInfo, isMonthClosed, monthClosesAt } from '../store/leagueRules';
+import { isMissed, needsApproval, deadlineInfo, isMonthClosed, monthClosesAt, postOpensLater } from '../store/leagueRules';
+import { LEAGUE_FINAL_ENABLED } from '../store/leagueFinal';
+import { seasonPhase } from '../store/leagueSetup';
 import { seasonTable, monthResults } from '../store/leagueStandings';
 import {
   formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard, rankNotes, placeLabel,
@@ -297,8 +299,11 @@ export default function LeagueBoardScreen({ navigation, route }) {
     if (collapsed.hidden > 0) boardMore = { label: t('league.home.showAll', { count: seasonRows.length }), onPress: () => setShowAllSeason(true) };
     else if (collapseSeasonRows(seasonRows).hidden > 0) boardMore = { label: t('league.home.showTop'), onPress: () => setShowAllSeason(false) };
     const pot = potCents(members, league.entryFeeCents);
-    boardFooter = t('league.home.footSeason', { month: monthWord(league.seasonEnd) })
-      + (pot > 0 ? ` ${t('league.home.footPot', { pot: formatEuros(pot) })}` : '');
+    // The December Final is hidden for now (LEAGUE_FINAL_ENABLED): no promise of it.
+    boardFooter = [
+      LEAGUE_FINAL_ENABLED ? t('league.home.footSeason', { month: monthWord(league.seasonEnd) }) : null,
+      pot > 0 ? t('league.home.footPot', { pot: formatEuros(pot) }) : null,
+    ].filter(Boolean).join(' ') || null;
   } else {
     boardTitle = t('league.home.titleResults', { month: monthLong(activeScope).toUpperCase() });
     const canOpen = viewable(activeScope);
@@ -414,10 +419,22 @@ export default function LeagueBoardScreen({ navigation, route }) {
     </TouchableOpacity>
   ) : null;
 
+  const postOpens = postOpensLater(mine.card, now);
+
   const renderYourCard = () => {
     let body;
     let badge = null;
-    if (mine.kind === 'none') {
+    // Outside the season there is nothing to play for yet (or any more).
+    const phase = mine.kind === 'none' ? seasonPhase(league, now) : null;
+    if (phase) {
+      body = (
+        <Text style={s.cardText}>
+          {phase === 'before'
+            ? t('league.home.seasonStarts', { date: formatDate(String(league.seasonStart).slice(0, 10), 'day') })
+            : t('league.home.seasonOver')}
+        </Text>
+      );
+    } else if (mine.kind === 'none') {
       body = (
         <>
           <Text style={s.cardText}>
@@ -469,7 +486,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
       badge = t('league.home.badgeNotPosted');
       body = (
         <Text style={s.cardText}>
-          {t(mine.course ? 'league.home.missedCourse' : 'league.home.missed', { course: mine.course })}
+          {t(mine.course ? 'league.home.missedCourse' : 'league.home.missed', { course: mine.course, month: monthWord(curKey) })}
         </Text>
       );
     } else if (mine.kind === 'announced' || mine.kind === 'playing') {
@@ -498,12 +515,18 @@ export default function LeagueBoardScreen({ navigation, route }) {
                 !mine.offApp && mine.card.tournamentId ? t('league.home.openScorecard') : null].filter(Boolean).join(' · ')}
           </Text>
           {mine.kind === 'announced' && mine.offApp && (
+            // R8: an off-app card can be posted from tee time + 3 h.
             <TouchableOpacity
-              style={s.primaryBtn}
+              style={[s.primaryBtn, !!postOpens && { opacity: 0.5 }]}
               onPress={() => navigation.navigate('LeagueAddScore', { leagueId, cardId: mine.card.id })}
+              disabled={!!postOpens}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !!postOpens }}
             >
-              <Text style={s.primaryText}>{t('league.home.addScore')}</Text>
+              <Text style={s.primaryText}>
+                {postOpens ? t('league.home.postFrom', { time: timeLabel(postOpens) }) : t('league.home.addScore')}
+              </Text>
             </TouchableOpacity>
           )}
           <DeadlineLine card={mine.card} now={now} style={s.deadline} />

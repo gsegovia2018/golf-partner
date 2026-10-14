@@ -104,6 +104,9 @@ export default function LeagueMembersScreen({ navigation, route }) {
   const active = members.filter((m) => !m.leftAt);
   const me = active.find((m) => m.userId === meId);
   const isAdmin = me?.role === 'admin';
+  // R10: an admin sets their own handicap only when no other active admin
+  // exists (set_league_handicap refuses 'own_handicap'); otherwise it's a vote.
+  const otherAdmin = active.some((m) => m.role === 'admin' && m.userId !== meId);
   const archived = !!league.archivedAt;
   const needed = voteThreshold(active.length);
   const link = leagueJoinLink(shareOrigin(), rotated ?? league.inviteCode);
@@ -503,7 +506,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
           selectionColor={theme.accent.primary}
           accessibilityLabel={t('league.membersMisc.newHcpA11y')}
         />
-        {isAdmin && (
+        {isAdmin && !(target?.userId === meId && otherAdmin) && (
           <TouchableOpacity
             style={[s.primaryBtn, (proposed == null || busy) && { opacity: 0.5 }]}
             disabled={proposed == null || busy}

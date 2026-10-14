@@ -105,6 +105,20 @@ describe('LeagueMembersScreen', () => {
     await waitFor(() => expect(store.openHandicapVote).toHaveBeenCalledWith('L1', 'alv', 27));
   });
 
+  test('with another admin, my own sheet has no Set handicap, only the vote (R10)', async () => {
+    const snap = snapshot();
+    snap.members = snap.members.map((m) => (m.userId === 'javi' ? { ...m, role: 'admin' } : m));
+    store.getLeague.mockResolvedValue(snap);
+    const { getByText, getByLabelText, queryByText } = render(wrap(<LeagueMembersScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByText('You (Marcos)'));
+    fireEvent.press(getByText('You (Marcos)'));
+    await waitFor(() => getByText('Open a vote (needs 2 of 3)'));
+    expect(queryByText('Set handicap')).toBeNull();
+    // Someone else's sheet keeps it.
+    fireEvent.press(getByLabelText('Álvaro handicap'));
+    expect(getByText('Set handicap')).toBeTruthy();
+  });
+
   test('a plain member only gets Open a vote', async () => {
     store.getLeague.mockResolvedValue(snapshot({ admin: false }));
     const { getByText, getByLabelText, queryByText } = render(wrap(<LeagueMembersScreen navigation={navigation} route={route} />));
