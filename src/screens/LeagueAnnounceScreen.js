@@ -9,7 +9,7 @@ import { makeOffAppStyles } from '../components/league/offAppStyles';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
-import { useT } from '../i18n';
+import { useT, tr } from '../i18n';
 import { announceLeagueCard } from '../store/leagueStore';
 import { POST_WINDOW_HOURS, postByFor } from '../store/leagueRules';
 import { clockWithDay } from '../components/league/DeadlineLine';
@@ -55,7 +55,7 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
 
   async function announce() {
     const problem = courseProblem(pick.course, pick.tee ?? pick.course);
-    if (problem) { setError(problem); return; }
+    if (problem) { setError(tr(problem)); return; }
     const teeTime = buildTeeTime(dateText, timeText);
     if (!teeTime) { setError(t('league.announce.needDate')); return; }
     setError(null);

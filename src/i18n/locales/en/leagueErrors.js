@@ -1,5 +1,6 @@
 // English catalogue: league batch 7 (leagueErrors): server refusals and store
-// messages (store/leagueErrors.js, store/leagueView.js). See docs/i18n.md.
+// messages (store/leagueErrors.js, store/leagueView.js, store/leagueOffApp.js,
+// lib/leagueNames.js). See docs/i18n.md.
 // The English text is the server's own sentence (supabase/migrations).
 export default {
   // Client side.
@@ -134,4 +135,25 @@ export default {
   'league.view.waiting.photo': 'needs the card photo',
   'league.view.waiting.sentBack': 'sent back by the marker',
   'league.view.waiting.noScan': "marker hasn't scanned the QR yet",
+  // store/leagueView.js + lib/leagueNames.js: names and short lines.
+  'league.view.you': 'You',
+  'league.view.golfer': 'Golfer',
+  'league.view.formerMember': 'Former member',
+  'league.view.nameCount': '{name} {count}',
+  'league.view.listJoin': '{a}, {b}',
+  'league.view.hcpEvent.set': '{name} set to {value}',
+  'league.view.hcpEvent.move': '{name} {old} → {new}',
+  'league.view.hcpReason.set': 'set by the admin',
+  'league.view.hcpReason.proposed': 'proposed on joining',
+  'league.view.hcpReason.vote': 'by vote',
+  'league.view.asked.justNow': 'Asked just now',
+  'league.view.asked.minutes': 'Asked {count} min ago',
+  'league.view.asked.hours': 'Asked {count} h ago',
+  'league.view.asked.days': 'Asked {count} d ago',
+  'league.view.asked.until': 'until {date}',
+  // store/leagueOffApp.js: course checks and the proof summary.
+  'league.offApp.need18': 'League cards need an 18-hole layout. Pick another course or layout.',
+  'league.offApp.unratedTee': "This tee has no slope and course rating, so it can't count for the league. Pick a rated tee or add its slope and rating in the course library.",
+  'league.offApp.proofLine': '{head} · {points} pts · gross {gross}',
+  'league.offApp.proofLineBare': '{points} pts · gross {gross}',
 };

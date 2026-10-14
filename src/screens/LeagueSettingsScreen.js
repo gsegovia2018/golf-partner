@@ -26,8 +26,9 @@ import {
   parseIsoDate, parsePointsTable, formatPointsTable, parseFeeCents,
 } from '../store/leagueDraft';
 import {
-  formatEuros, memberLabel, voteThreshold,
+  formatEuros, voteThreshold,
 } from '../store/leagueView';
+import { memberLabel } from '../lib/leagueNames';
 import {
   getPendingLeagueFinals, subscribePendingLeagueFinals, flushPendingLeagueFinals,
 } from '../lib/leagueFinalPending';

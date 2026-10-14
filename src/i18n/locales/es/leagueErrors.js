@@ -1,5 +1,6 @@
 // Spanish catalogue: league batch 7 (leagueErrors): server refusals and store
-// messages (store/leagueErrors.js, store/leagueView.js). See docs/i18n.md.
+// messages (store/leagueErrors.js, store/leagueView.js, store/leagueOffApp.js,
+// lib/leagueNames.js). See docs/i18n.md.
 export default {
   // Client side.
   'league.error.offline': 'Necesitas conexión para hacer esto.',
@@ -133,4 +134,25 @@ export default {
   'league.view.waiting.photo': 'falta la foto de la tarjeta',
   'league.view.waiting.sentBack': 'devuelta por el marcador',
   'league.view.waiting.noScan': 'el marcador aún no ha escaneado el QR',
+  // store/leagueView.js + lib/leagueNames.js: names and short lines.
+  'league.view.you': 'Tú',
+  'league.view.golfer': 'Golfista',
+  'league.view.formerMember': 'Antiguo miembro',
+  'league.view.nameCount': '{name} {count}',
+  'league.view.listJoin': '{a}, {b}',
+  'league.view.hcpEvent.set': '{name}: fijado en {value}',
+  'league.view.hcpEvent.move': '{name} {old} → {new}',
+  'league.view.hcpReason.set': 'fijado por el admin',
+  'league.view.hcpReason.proposed': 'propuesto al unirse',
+  'league.view.hcpReason.vote': 'por votación',
+  'league.view.asked.justNow': 'Solicitado ahora mismo',
+  'league.view.asked.minutes': 'Solicitado hace {count} min',
+  'league.view.asked.hours': 'Solicitado hace {count} h',
+  'league.view.asked.days': 'Solicitado hace {count} d',
+  'league.view.asked.until': 'hasta el {date}',
+  // store/leagueOffApp.js: course checks and the proof summary.
+  'league.offApp.need18': 'Las tarjetas de liga necesitan un recorrido de 18 hoyos. Elige otro campo o recorrido.',
+  'league.offApp.unratedTee': 'Estas barras no tienen slope ni valor de campo, así que no pueden contar para la liga. Elige unas barras valoradas o añade su slope y valor de campo en la biblioteca de campos.',
+  'league.offApp.proofLine': '{head} · {points} ptos · bruto {gross}',
+  'league.offApp.proofLineBare': '{points} ptos · bruto {gross}',
 };

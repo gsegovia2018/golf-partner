@@ -8,7 +8,7 @@ import IconButton from '../components/ui/IconButton';
 import { makeOffAppStyles } from '../components/league/offAppStyles';
 import { useTheme } from '../theme/ThemeContext';
 import { useLeague } from '../hooks/useLeague';
-import { useT } from '../i18n';
+import { useT, tr } from '../i18n';
 import { pickMedia } from '../lib/mediaCapture';
 import { formatPoints } from '../store/leagueView';
 import {
@@ -63,7 +63,8 @@ export default function LeagueAddProofScreen({ navigation, route }) {
           c.gross != null ? t('league.addProof.gross', { gross: c.gross }) : null].filter(Boolean).join(' · '),
       };
     }
-    return proofSummary({ snapshot, playedOn, strokes, leagueHandicap });
+    const res = proofSummary({ snapshot, playedOn, strokes, leagueHandicap });
+    return { ...res, line: tr(res.line) };
   }, [fromCard, data, cardId, snapshot, playedOn, strokes, leagueHandicap, t]);
 
   async function capture(source) {

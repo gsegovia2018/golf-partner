@@ -11,7 +11,8 @@ import { useLeague } from '../hooks/useLeague';
 import { useT } from '../i18n';
 import { fetchPlayers } from '../store/libraryStore';
 import { seasonTable } from '../store/leagueStandings';
-import { formatPoints, memberName } from '../store/leagueView';
+import { formatPoints } from '../store/leagueView';
+import { memberName } from '../lib/leagueNames';
 import { MAX_FINAL_STROKES, clampFinalStrokes, suggestFinalStrokes } from '../store/leagueFinal';
 import { leagueErrorText } from '../lib/leagueErrorText';
 

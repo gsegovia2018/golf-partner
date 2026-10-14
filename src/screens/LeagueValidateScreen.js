@@ -21,7 +21,7 @@ import {
 } from '../store/leagueView';
 import { UNRATED_TEE_PROBLEM } from '../store/leagueOffApp';
 import { leagueCardsOf } from '../store/leagueSetup';
-import { useT } from '../i18n';
+import { useT, tr } from '../i18n';
 import { leagueErrorText } from '../lib/leagueErrorText';
 
 // Catalogue keys for confirm_league_card_by_partner's refusals.
@@ -410,7 +410,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
                 ) : (
                   <>
                     <Text style={s.statusTitle}>{t('league.validate.waiting', { name: markerFirst })}</Text>
-                    <Text style={s.statusSub}>{markerAskedLine(pending.requestedAt, pending.expiresAt)}</Text>
+                    <Text style={s.statusSub}>{markerAskedLine(pending.requestedAt, pending.expiresAt).map(tr).join(' · ')}</Text>
                   </>
                 )}
               </View>
@@ -482,7 +482,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
             <Feather name="alert-circle" size={18} color={theme.text.secondary} style={{ marginRight: 12 }} />
             <View style={{ flex: 1 }}>
               <Text style={s.statusTitle}>{t('league.validate.unratedTitle')}</Text>
-              <Text style={s.statusSub}>{UNRATED_TEE_PROBLEM}</Text>
+              <Text style={s.statusSub}>{tr(UNRATED_TEE_PROBLEM)}</Text>
             </View>
           </View>
         )}

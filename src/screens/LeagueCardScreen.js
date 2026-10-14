@@ -22,9 +22,10 @@ import { dayLabel, timeLabel } from '../store/leagueOffApp';
 import { isMissed, needsApproval, isMonthClosed } from '../store/leagueRules';
 import { shareCardAction } from '../store/leagueShare';
 import {
-  monthName, netDiffTone, memberName, cardBreakdown, monthStanding, standingCells, currentMonthKey,
+  monthName, netDiffTone, cardBreakdown, monthStanding, standingCells, currentMonthKey,
   monthCardsView, cardActions, voidedNote,
 } from '../store/leagueView';
+import { memberName } from '../lib/leagueNames';
 
 // A member's card, read-only, with ‹ › to flick through that month's cards
 // (same order as the board). Params: { leagueId, month ('YYYY-MM'), userId }.

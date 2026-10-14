@@ -19,8 +19,9 @@ import { seasonTable, monthResults } from '../store/leagueStandings';
 import {
   formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard, rankNotes, placeLabel,
   leaguePointsText, monthStanding,
-  daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, myMonthCard, voidedNote, myRoundScored, viewableCards, monthRows,
+  daysLeftInMonth, collapseSeasonRows, currentMonthKey, yourCardState, myMonthCard, voidedNote, myRoundScored, viewableCards, monthRows,
 } from '../store/leagueView';
+import { memberName } from '../lib/leagueNames';
 import { useT, tr, formatNumber, formatDate } from '../i18n';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
 import { splitVoidReason } from '../store/leagueTimeline';
@@ -171,7 +172,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
           subLabel: r.unrated || !(r.seasonPoints > 0) ? undefined : t('league.board.leaguePoints', { count: r.seasonPoints }),
           subGold: !r.unrated,
           // A tie says who it shares with instead of how it was confirmed.
-          detail: detailOf(r.card, r.card.course?.name, r.isTie ? null : r.how, ...rankNotes(r).map(tr)),
+          detail: detailOf(r.card, r.card.course?.name, r.isTie ? null : tr(r.howMsg), ...rankNotes(r).map(tr)),
         })),
       },
       board.waiting.length > 0 && {
@@ -185,7 +186,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
           muted: true,
           points: r.card.points != null ? String(r.card.points) : '—',
           sub: t('league.home.pending'),
-          detail: detailOf(r.card, r.card.course?.name, r.reason),
+          detail: detailOf(r.card, r.card.course?.name, tr(r.reasonMsg)),
         })),
       },
       board.onCourse.length > 0 && {
@@ -296,7 +297,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
     if (collapsed.hidden > 0) boardMore = { label: t('league.home.showAll', { count: seasonRows.length }), onPress: () => setShowAllSeason(true) };
     else if (collapseSeasonRows(seasonRows).hidden > 0) boardMore = { label: t('league.home.showTop'), onPress: () => setShowAllSeason(false) };
     const pot = potCents(members, league.entryFeeCents);
-    boardFooter = t('league.home.footSeason', { month: monthLong(league.seasonEnd) })
+    boardFooter = t('league.home.footSeason', { month: monthWord(league.seasonEnd) })
       + (pot > 0 ? ` ${t('league.home.footPot', { pot: formatEuros(pot) })}` : '');
   } else {
     boardTitle = t('league.home.titleResults', { month: monthLong(activeScope).toUpperCase() });
@@ -420,7 +421,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
       body = (
         <>
           <Text style={s.cardText}>
-            {t('league.home.announceFirst', { month: curMonth })}
+            {t('league.home.announceFirst', { month: monthWord(curKey) })}
           </Text>
           <TouchableOpacity
             style={s.primaryBtn}
@@ -518,7 +519,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
       body = (
         <>
           <Text style={s.cardText}>
-            {!!mine.pts && <Text style={s.netLead}>{mine.pts}</Text>}
+            {!!mine.pts && <Text style={s.netLead}>{tr(mine.pts)}</Text>}
             {!!mine.pts && ' · '}
             {mine.unrated && `${t('league.home.unratedTee')} · `}
             {[
@@ -547,7 +548,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
     return (
       <View style={s.card}>
         <View style={s.cardHeadRow}>
-          <Text style={s.cardTitle}>{t('league.home.yourCard', { month: curMonth })}</Text>
+          <Text style={s.cardTitle}>{t('league.home.yourCard', { month: monthWord(curKey) })}</Text>
           {badge && <View style={s.badge}><Text style={s.badgeText}>{badge}</Text></View>}
         </View>
         {body}
@@ -630,7 +631,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
 }
 
 const cap = (x) => (x ? x.charAt(0).toUpperCase() + x.slice(1) : x);
-const monthLong = (key) => cap(formatDate(`${String(key).slice(0, 7)}-01`, 'monthName'));
+// Mid-sentence the month stays as the language writes it ("octubre").
+const monthWord = (key) => formatDate(`${String(key).slice(0, 7)}-01`, 'monthName');
+const monthLong = (key) => cap(monthWord(key));
 const monthShort = (key) => cap(formatDate(`${key}-01`, 'day').split(' ')[1] ?? '');
 
 function makeStyles(theme) {

@@ -9,7 +9,7 @@
 // docs/superpowers/plans/2026-10-13-league-review-followups.md (R1).
 import { calcExtraShots, calcStablefordPoints } from './scoring';
 import { formatNumber, formatOrdinal } from '../i18n';
-import { memberName } from './leagueView';
+import { memberNameMsg } from './leagueView';
 import { dayLabel, timeLabel } from './leagueOffApp';
 import { needsApproval } from './leagueRules';
 
@@ -114,7 +114,7 @@ function maxBy(list, key) {
 export function monthHonours(cards, members, meId = null) {
   const done = confirmed(cards);
   if (done.length < MIN_HONOUR_CARDS) return [];
-  const name = (userId) => memberName(members, userId, meId);
+  const name = (userId) => memberNameMsg(members, userId, meId);
   const withHoles = readable(done);
   const honours = [];
   const add = (key, text, userId) => honours.push({
@@ -159,7 +159,10 @@ export function monthHonours(cards, members, meId = null) {
   if (birdies.size) {
     const total = sum([...birdies.values()]);
     const ranked = [...birdies].sort((a, b) => b[1] - a[1]).slice(0, 2);
-    add('birdies', { total, list: ranked.map(([id, n]) => `${name(id)} ${n}`).join(', ') }, ranked[0][0]);
+    // Names can be descriptors ("You"), so the list is nested descriptors too.
+    const list = ranked.map(([id, n]) => ({ key: 'league.view.nameCount', params: { name: name(id), count: n } }))
+      .reduce((acc, item) => ({ key: 'league.view.listJoin', params: { a: acc, b: item } }));
+    add('birdies', { total, list }, ranked[0][0]);
   }
 
   const snowman = maxBy(holeList, ({ h }) => (h.strokes - h.par) * 100 + h.strokes);

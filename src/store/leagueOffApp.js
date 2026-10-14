@@ -40,18 +40,16 @@ export function defaultTee(course) {
   return middleTee(course?.tees);
 }
 
-export const UNRATED_TEE_PROBLEM = "This tee has no slope and course rating, so it can't count for the league. "
-  + 'Pick a rated tee or add its slope and rating in the course library.';
+// Message descriptors (render with tr()); compare problems by `key`.
+export const UNRATED_TEE_PROBLEM = { key: 'league.offApp.unratedTee' };
 
-// A league card is 18 holes off a rated tee; return an error line or null.
+// A league card is 18 holes off a rated tee; return an error descriptor or null.
 // `tee` defaults to `course.tee` (courseFromSnapshot's shape, where an
 // unrated snapshot reads tee: null). A library course passed without a tee
 // and without a `tee` key skips the rating check (callers pass the picked tee).
 export function courseProblem(course, tee = course?.tee) {
-  if (!course) return 'Pick the course you are playing.';
-  if ((course.holes ?? []).length !== HOLES_PER_CARD) {
-    return 'League cards need an 18-hole layout. Pick another course or layout.';
-  }
+  if (!course) return { key: 'league.error.pickCoursePlaying' };
+  if ((course.holes ?? []).length !== HOLES_PER_CARD) return { key: 'league.offApp.need18' };
   const checkTee = tee !== undefined || Object.prototype.hasOwnProperty.call(course, 'tee');
   if (checkTee && !isRatedTee(tee)) return UNRATED_TEE_PROBLEM;
   return null;
@@ -115,15 +113,15 @@ export function timeLabel(iso) {
   return Number.isNaN(d.getTime()) ? '' : localTimeText(d);
 }
 
-// The proof summary: "<course> · <date> · <points> pts · gross <g>" plus the
-// numbers the RPCs need.
+// The proof summary: "<course> · <date> · <points> pts · gross <g>" (`line`, a
+// descriptor) plus the numbers the RPCs need.
 export function proofSummary({ snapshot, playedOn, strokes, leagueHandicap }) {
   const course = courseFromSnapshot(snapshot);
   const { gross, points, playingHandicap, netDifferential } = scoreCard({
     holes: strokes, course, leagueHandicap, tee: course.tee,
   });
-  const line = [snapshot?.name, dayLabel(playedOn), `${points} pts`, `gross ${gross}`]
-    .filter(Boolean).join(' · ');
+  const head = [snapshot?.name, dayLabel(playedOn)].filter(Boolean).join(' · ');
+  const line = { key: head ? 'league.offApp.proofLine' : 'league.offApp.proofLineBare', params: { head, points, gross } };
   return { line, gross, points, playingHandicap, netDifferential };
 }
 

@@ -10,30 +10,21 @@ import { calcExtraShots, calcStablefordPoints } from './scoring';
 import { formatNumber, formatOrdinal, formatDate } from '../i18n';
 import { splitVoidReason } from './leagueTimeline';
 
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-
-// 'YYYY-MM' (or 'YYYY-MM-01') -> 'October' / 'Oct'.
+// 'YYYY-MM' (or 'YYYY-MM-01') -> 'October' / 'Oct' ('octubre' / 'oct'), in
+// the language active when called (call it at render time).
 export function monthName(key, short = false) {
-  const idx = Number(String(key ?? '').slice(5, 7)) - 1;
-  const name = MONTHS[idx];
-  if (!name) return '';
-  return short ? name.slice(0, 3) : name;
+  const k = String(key ?? '').slice(0, 7);
+  const idx = Number(k.slice(5, 7)) - 1;
+  if (!/^\d{4}-\d{2}$/.test(k) || idx < 0 || idx > 11) return '';
+  return short ? formatDate(`${k}-01`, 'day').split(' ')[1] : formatDate(`${k}-01`, 'monthName');
 }
 
-export function ordinal(n) {
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
-  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' })[n % 10] ?? 'th'}`;
-}
+export const ordinal = (n) => formatOrdinal(n);
 
-// 2340 -> '2,340'; a shared tie can be fractional (233.3).
+// 2340 -> '2,340' / '2.340'; a shared tie can be fractional (233.3 / 233,3).
 export function formatPoints(n) {
   const v = Number(n) || 0;
-  const text = Number.isInteger(v) ? String(v) : v.toFixed(1);
-  return text.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return formatNumber(v, { decimals: Number.isInteger(v) ? 0 : 1 });
 }
 
 // A net differential in words (lower is better): -2.4 -> '2.4 better',
@@ -55,12 +46,14 @@ export function netDiffTone(n) {
   return v < 0 ? 'better' : 'worse';
 }
 
-// The signed number behind the words: -2.4 -> '−2.4', 3.1 -> '+3.1', 0 -> '0.0'.
+// The signed number behind the words: -2.4 -> '−2.4', 3.1 -> '+3.1', 0 -> '0.0'
+// (Spanish: '−2,4').
 export function formatNetDiffSigned(n) {
   const v = Math.round(Number(n) * 10) / 10;
   if (!Number.isFinite(v)) return '—';
-  if (v === 0) return '0.0';
-  return `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(1)}`;
+  const num = formatNumber(Math.abs(v), { decimals: 1 });
+  if (v === 0) return num;
+  return `${v < 0 ? '−' : '+'}${num}`;
 }
 
 // 3000 -> '30 €', 3050 -> '30,50 €'.
@@ -195,19 +188,9 @@ export function viewableCards(members, cardsByMonth, month) {
     .filter((c) => c && (c.status === 'confirmed' || c.status === 'submitted') && c.holes);
 }
 
-const HOW_CONFIRMED = {
-  partner: 'app partner', marker: 'marker in the app', qr: 'marker by QR', photo: 'signed card photo', official: 'official result',
-};
+const HOW_CONFIRMED = new Set(['partner', 'marker', 'qr', 'photo', 'official']);
 
-// Why a submitted card is not counting yet. `reason` (English) stays until the
-// board renders `reasonMsg`; same for `how` / `howMsg`.
-function waitingReason(card) {
-  if (card.markerName && card.source !== 'offapp') return `submitted · waiting for ${card.markerName}`;
-  if (card.source === 'offapp') return card.proofPath ? 'waiting for the check' : 'needs the card photo';
-  return card.returnedAt ? 'sent back by the marker' : "marker hasn't scanned the QR yet";
-}
-
-// The same, as a descriptor.
+// Why a submitted card is not counting yet, as a descriptor.
 function waitingReasonMsg(card) {
   if (card.markerName && card.source !== 'offapp') return V('waiting.marker', { name: card.markerName });
   if (card.source === 'offapp') return V(card.proofPath ? 'waiting.check' : 'waiting.photo');
@@ -241,8 +224,7 @@ export function monthBoard(members, cardsByMonth, month, pointsTable, now = new 
       member, card, place: r.place, isTie: r.isTie, unrated: !!r.unrated,
       netDifferential: r.netDifferential, cardPoints: r.cardPoints, seasonPoints: r.seasonPoints,
       tieSize: r.tieSize, floored: !!r.floored,
-      how: HOW_CONFIRMED[card.confirmation] ?? null,
-      howMsg: HOW_CONFIRMED[card.confirmation] ? V(`how.${card.confirmation}`) : null,
+      howMsg: HOW_CONFIRMED.has(card.confirmation) ? V(`how.${card.confirmation}`) : null,
     });
   }
   const placed = new Set(confirmed.map((r) => r.member.userId));
@@ -257,7 +239,7 @@ export function monthBoard(members, cardsByMonth, month, pointsTable, now = new 
     const card = bestCard(member.userId, () => true);
     if (card && needsApproval(card)) awaiting.push({ member, card });
     else if (card && isMissed(card, now)) missed.push({ member, card });
-    else if (card?.status === 'submitted') waiting.push({ member, card, reason: waitingReason(card), reasonMsg: waitingReasonMsg(card) });
+    else if (card?.status === 'submitted') waiting.push({ member, card, reasonMsg: waitingReasonMsg(card) });
     else if (card?.status === 'playing' || card?.status === 'announced') onCourse.push({ member, card });
     else {
       // An admin's void (or a played-after-withdraw card) still takes the month:
@@ -285,8 +267,14 @@ export function currentMonthKey(now = new Date()) {
   return cardMonth(now);
 }
 
-export function memberLabel(member, meId) {
-  return member.userId === meId ? 'You' : (member.displayName || member.username || 'Golfer');
+// A member's name as shown: their own name (a string), or a descriptor for
+// "You" / "Golfer" / "Former member". Screens use lib/leagueNames (text);
+// stores put it in descriptor params, rendered nested (leagueStats).
+export function memberNameMsg(members, userId, meId) {
+  const m = (members ?? []).find((x) => x.userId === userId);
+  if (!m) return V('formerMember');
+  if (m.userId === meId) return V('you');
+  return m.displayName || m.username || V('golfer');
 }
 
 // Votes needed to pass: ceil(2/3 of active members), decision D2. Display
@@ -300,21 +288,6 @@ export function leagueNameMatches(typed, name) {
 
 export function voteThreshold(activeMemberCount) {
   return Math.ceil((activeMemberCount * 2) / 3);
-}
-
-export function memberName(members, userId, meId) {
-  const m = (members ?? []).find((x) => x.userId === userId);
-  return m ? memberLabel(m, meId) : 'Former member';
-}
-
-const REASON_TEXT = { set: 'set by the admin', proposed: 'proposed on joining', vote: 'by vote' };
-
-// One handicap history line: "Nacho 24.0 -> 21.0 · by vote · 12 Jun".
-export function handicapEventLine(event, members, meId) {
-  const when = new Date(event.at);
-  const day = Number.isNaN(when.getTime()) ? '' : ` · ${when.getDate()} ${MONTHS[when.getMonth()].slice(0, 3)}`;
-  const move = event.old == null ? `set to ${event.new.toFixed(1)}` : `${event.old.toFixed(1)} → ${event.new.toFixed(1)}`;
-  return `${memberName(members, event.userId, meId)} ${move} · ${REASON_TEXT[event.reason] ?? event.reason}${day}`;
 }
 
 // 'Javi Ortega' -> 'Javi'.
@@ -331,18 +304,18 @@ export function initials(name) {
 }
 
 // "Asked 2 min ago · until 19 Oct" for a pending marker request. No pronouns.
+// A list of descriptors: render each with tr() and join them with ' · '.
 export function markerAskedLine(requestedAt, expiresAt, now = new Date()) {
   const parts = [];
   const asked = new Date(requestedAt);
   if (requestedAt && !Number.isNaN(asked.getTime())) {
     const mins = Math.max(0, Math.floor((now.getTime() - asked.getTime()) / 60000));
-    const ago = mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago`
-      : mins < 1440 ? `${Math.floor(mins / 60)} h ago` : `${Math.floor(mins / 1440)} d ago`;
-    parts.push(`Asked ${ago}`);
+    parts.push(mins < 1 ? V('asked.justNow') : mins < 60 ? V('asked.minutes', { count: mins })
+      : mins < 1440 ? V('asked.hours', { count: Math.floor(mins / 60) }) : V('asked.days', { count: Math.floor(mins / 1440) }));
   }
   const until = new Date(expiresAt);
-  if (expiresAt && !Number.isNaN(until.getTime())) parts.push(`until ${until.getDate()} ${MONTHS[until.getMonth()].slice(0, 3)}`);
-  return parts.join(' · ');
+  if (expiresAt && !Number.isNaN(until.getTime())) parts.push(V('asked.until', { date: formatDate(until, 'day') }));
+  return parts;
 }
 
 // The "Your <Month> card" block: what state my card is in and what it shows.
@@ -358,13 +331,14 @@ export function yourCardState(card) {
       kind: 'voided',
       voidKind: card.voidKind,
       course: card.course?.name ?? null,
-      pts: card.points != null ? `${formatPoints(card.points)} pts` : null,
+      pts: card.points != null ? { key: 'league.scoring.pts', params: { points: formatPoints(card.points) } } : null,
       reason: card.voidedReason ?? null,
       card,
     };
   }
   const course = card.course?.name ?? null;
-  const pts = card.points != null ? `${formatPoints(card.points)} pts` : null;
+  // Message descriptor (render with tr()).
+  const pts = card.points != null ? { key: 'league.scoring.pts', params: { points: formatPoints(card.points) } } : null;
   const hasNet = card.netDifferential != null;
   return {
     kind: card.status,

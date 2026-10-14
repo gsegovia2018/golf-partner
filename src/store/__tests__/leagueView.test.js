@@ -252,19 +252,16 @@ describe('monthBoard', () => {
 
   test('groups the month and ranks only the confirmed, ties sharing table points', () => {
     const board = monthBoard(members, cards, '2026-10', table);
-    expect(board.confirmed.map((r) => [r.member.userId, r.place, r.isTie, r.seasonPoints, r.how])).toEqual([
+    expect(board.confirmed.map((r) => [r.member.userId, r.place, r.isTie, r.seasonPoints, tr(r.howMsg)])).toEqual([
       ['b', 1, false, 500, 'app partner'],
       ['a', 2, true, 245, 'marker by QR'],
       ['c', 2, true, 245, 'signed card photo'],
     ]);
-    expect(board.waiting.map((r) => [r.member.userId, r.reason])).toEqual([
+    expect(board.waiting.map((r) => [r.member.userId, tr(r.reasonMsg)])).toEqual([
       ['d', "marker hasn't scanned the QR yet"],
       ['e', 'needs the card photo'],
     ]);
-    // The descriptors say the same thing.
-    expect(board.confirmed.map((r) => tr(r.howMsg))).toEqual(['app partner', 'marker by QR', 'signed card photo']);
     expect(board.waiting.map((r) => r.reasonMsg.key)).toEqual(['league.view.waiting.noScan', 'league.view.waiting.photo']);
-    expect(board.waiting.map((r) => tr(r.reasonMsg))).toEqual(board.waiting.map((r) => r.reason));
     expect(board.onCourse.map((r) => r.member.userId)).toEqual(['f']);
     expect(board.noCard.map((x) => x.userId)).toEqual(['g']);
   });
@@ -286,7 +283,7 @@ describe('monthBoard', () => {
     const board = monthBoard(members, {
       '2026-10': [card('d', 'submitted', 30, { returnedAt: '2026-10-13T10:00:00Z' })],
     }, '2026-10', table);
-    expect(board.waiting.map((r) => r.reason)).toEqual(['sent back by the marker']);
+    expect(board.waiting.map((r) => tr(r.reasonMsg))).toEqual(['sent back by the marker']);
   });
 
   test('confirmed ranks by points (best card each); an unscored confirmed card is listed after, not ranked', () => {
@@ -321,7 +318,7 @@ describe('monthBoard', () => {
         card('c', 'submitted', 31, { source: 'offapp', proofPath: 'p.jpg' })],
     }, '2026-10', table);
     expect(board.onCourse.map((r) => r.member.userId)).toEqual(['b', 'a']);
-    expect(board.waiting[0].reason).toBe('waiting for the check');
+    expect(tr(board.waiting[0].reasonMsg)).toBe('waiting for the check');
     expect(board.confirmed).toEqual([]);
   });
 
@@ -379,10 +376,12 @@ describe('net differential words', () => {
     expect(netDiffTone(null)).toBeNull();
   });
   test('your card state carries the points and the spoken net, or flags an unscored confirmed card', () => {
-    expect(yourCardState({ status: 'confirmed', points: 36, netDifferential: -0.6 }))
-      .toMatchObject({ pts: '36 pts', net: '0.6 better', netTone: 'better', unrated: false });
-    expect(yourCardState({ status: 'confirmed', points: 30, netDifferential: null }))
-      .toMatchObject({ pts: '30 pts', net: null, unrated: false });
+    const s36 = yourCardState({ status: 'confirmed', points: 36, netDifferential: -0.6 });
+    expect(s36).toMatchObject({ net: '0.6 better', netTone: 'better', unrated: false });
+    expect(tr(s36.pts)).toBe('36 pts');
+    const s30 = yourCardState({ status: 'confirmed', points: 30, netDifferential: null });
+    expect(s30).toMatchObject({ net: null, unrated: false });
+    expect(tr(s30.pts)).toBe('30 pts');
     expect(yourCardState({ status: 'confirmed', points: null, netDifferential: null }))
       .toMatchObject({ pts: null, unrated: true });
   });
@@ -426,7 +425,7 @@ describe('pick your marker', () => {
     const members = [{ userId: 'a', displayName: 'Ana' }];
     const cards = { '2026-10': [{ id: 'c', userId: 'a', status: 'submitted', source: 'app', markerName: 'Javi Ortega', points: 30 }] };
     const board = monthBoard(members, cards, '2026-10', [500]);
-    expect(board.waiting[0].reason).toBe('submitted · waiting for Javi Ortega');
+    expect(tr(board.waiting[0].reasonMsg)).toBe('submitted · waiting for Javi Ortega');
   });
 
   test('confirmed by a marker in the app reads as such', () => {
@@ -434,14 +433,15 @@ describe('pick your marker', () => {
     const cards = { '2026-10': [{
       id: 'c', userId: 'a', status: 'confirmed', source: 'app', confirmation: 'marker', netDifferential: -1, points: 30,
     }] };
-    expect(monthBoard(members, cards, '2026-10', [500]).confirmed[0].how).toBe('marker in the app');
+    expect(tr(monthBoard(members, cards, '2026-10', [500]).confirmed[0].howMsg)).toBe('marker in the app');
   });
 
   test('markerAskedLine: relative time and expiry date, no pronouns', () => {
     const now = new Date('2026-10-13T10:00:00');
-    expect(markerAskedLine('2026-10-13T09:58:00', '2026-10-19T10:00:00', now)).toBe('Asked 2 min ago · until 19 Oct');
-    expect(markerAskedLine('2026-10-13T10:00:00', null, now)).toBe('Asked just now');
-    expect(markerAskedLine('2026-10-13T07:00:00', '2026-10-19T10:00:00', now)).toBe('Asked 3 h ago · until 19 Oct');
+    const asked = (...args) => markerAskedLine(...args).map(tr).join(' · ');
+    expect(asked('2026-10-13T09:58:00', '2026-10-19T10:00:00', now)).toBe('Asked 2 min ago · until 19 Oct');
+    expect(asked('2026-10-13T10:00:00', null, now)).toBe('Asked just now');
+    expect(asked('2026-10-13T07:00:00', '2026-10-19T10:00:00', now)).toBe('Asked 3 h ago · until 19 Oct');
     expect(firstName('Javi Ortega')).toBe('Javi');
   });
 });
@@ -677,8 +677,9 @@ describe('cards that take the month (R15b) on the board and card screen', () => 
   const members = [{ userId: 'me', leftAt: null }, { userId: 'javi', leftAt: null }];
 
   test('yourCardState: an admin void or a played-after-withdraw card is "voided", a withdrawal frees the month', () => {
-    expect(yourCardState(voided({ voidKind: 'admin', voidedReason: 'Wrong tee' })))
-      .toMatchObject({ kind: 'voided', voidKind: 'admin', pts: '41 pts', course: 'RCG Sotogrande' });
+    const v = yourCardState(voided({ voidKind: 'admin', voidedReason: 'Wrong tee' }));
+    expect(v).toMatchObject({ kind: 'voided', voidKind: 'admin', course: 'RCG Sotogrande' });
+    expect(tr(v.pts)).toBe('41 pts');
     expect(yourCardState(voided({ voidKind: 'withdrawn_after_play' })).kind).toBe('voided');
     expect(yourCardState(voided({ voidKind: 'withdrawn' }))).toEqual({ kind: 'none' });
     expect(yourCardState(voided({ voidKind: 'auto_withdrawn' }))).toEqual({ kind: 'none' });

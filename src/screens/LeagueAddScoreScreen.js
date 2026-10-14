@@ -9,7 +9,7 @@ import { makeOffAppStyles } from '../components/league/offAppStyles';
 import { ScorecardTable } from '../components/scorecard/GridView';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { useT } from '../i18n';
+import { useT, tr } from '../i18n';
 import { useLeague } from '../hooks/useLeague';
 import { scoreCard } from '../store/leagueRules';
 import { parseIsoDate } from '../store/leagueDraft';
@@ -150,8 +150,8 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
         {course && (
           <>
             {/* With the picker on screen, the unrated tee already has its own note. */}
-            {!!courseProblem(course) && (cardId || courseProblem(course) !== UNRATED_TEE_PROBLEM)
-              && <Text style={s.errorText}>{courseProblem(course)}</Text>}
+            {!!courseProblem(course) && (cardId || courseProblem(course).key !== UNRATED_TEE_PROBLEM.key)
+              && <Text style={s.errorText}>{tr(courseProblem(course))}</Text>}
             <ScorecardTable
               round={{
                 holes: course.holes,

@@ -12,7 +12,8 @@ import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { seasonTable } from '../store/leagueStandings';
 import { needsApproval } from '../store/leagueRules';
-import { memberName, currentMonthKey } from '../store/leagueView';
+import { currentMonthKey } from '../store/leagueView';
+import { memberName } from '../lib/leagueNames';
 import {
   MIN_HONOUR_CARDS, MIN_STAT_CARDS, monthHonours, monthSummary, statLeaders, seasonGrid, pointsBand, rivals, rivalMonths,
 } from '../store/leagueStats';

@@ -20,8 +20,9 @@ import {
 } from '../store/leagueMembersAdmin';
 import { parseMemberHandicap, leagueJoinLink } from '../store/leagueDraft';
 import {
-  formatEuros, potCents, memberLabel, memberName, handicapEventLine, voteThreshold,
+  formatEuros, potCents, voteThreshold,
 } from '../store/leagueView';
+import { memberLabel, memberName, handicapEventLine } from '../lib/leagueNames';
 import { shareOrigin } from '../lib/shareOrigin';
 import InitialsAvatar from '../components/league/InitialsAvatar';
 import MemberAdminSheet from '../components/league/MemberAdminSheet';
