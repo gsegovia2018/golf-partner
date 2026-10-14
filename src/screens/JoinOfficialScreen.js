@@ -10,6 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { redeemToken, saveToken } from '../store/officialToken';
+import { useT } from '../i18n';
 
 // A pasted invite can be a bare token or a full `/join/<token>` URL.
 // Extract the token segment so either form works in the re-enter field.
@@ -23,6 +24,7 @@ function extractToken(raw) {
 
 export default function JoinOfficialScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   // Guards async handlers from calling setState after the screen unmounts.
@@ -117,7 +119,7 @@ export default function JoinOfficialScreen({ navigation, route }) {
       <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
         <View style={s.centered}>
           <ActivityIndicator size="large" color={theme.accent.primary} />
-          <Text style={s.loadingText}>Checking your invite…</Text>
+          <Text style={s.loadingText}>{t('official.join.checking')}</Text>
         </View>
       </ScreenContainer>
     );
@@ -129,19 +131,19 @@ export default function JoinOfficialScreen({ navigation, route }) {
       <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
         <View style={s.header}>
           <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-          <Text style={s.headerTitle}>Join Tournament</Text>
+          <Text style={s.headerTitle}>{t('official.join.title')}</Text>
           <View style={{ width: 64 }} />
         </View>
         <ScrollView style={s.container} contentContainerStyle={s.content}>
           <View style={s.card}>
             <Feather name="alert-circle" size={44} color={theme.destructive} style={{ marginBottom: 10 }} />
-            <Text style={s.errorTitle}>This invite link is not valid.</Text>
+            <Text style={s.errorTitle}>{t('official.join.invalidTitle')}</Text>
             <Text style={s.hint}>
-              Paste your invite link or token below and try again.
+              {t('official.join.invalidHint')}
             </Text>
             <TextInput
               style={s.input}
-              placeholder="Paste invite link or token"
+              placeholder={t('official.join.pastePlaceholder')}
               placeholderTextColor={theme.text.muted}
               keyboardAppearance={theme.isDark ? 'dark' : 'light'}
               selectionColor={theme.accent.primary}
@@ -155,7 +157,7 @@ export default function JoinOfficialScreen({ navigation, route }) {
               onPress={handleReentry}
               disabled={!reentry.trim()}
             >
-              <Text style={s.primaryBtnText}>Re-enter link</Text>
+              <Text style={s.primaryBtnText}>{t('official.join.reenter')}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -168,14 +170,14 @@ export default function JoinOfficialScreen({ navigation, route }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Join Tournament</Text>
+        <Text style={s.headerTitle}>{t('official.join.title')}</Text>
         <View style={{ width: 64 }} />
       </View>
 
       <ScrollView style={s.container} contentContainerStyle={s.content}>
         <View style={s.card}>
           <Feather name="check-circle" size={44} color={theme.accent.primary} style={{ marginBottom: 10 }} />
-          <Text style={s.confirmTitle}>You're in as {player.display_name}</Text>
+          <Text style={s.confirmTitle}>{t('official.join.youreIn', { name: player.display_name })}</Text>
           {!!tournamentName && (
             <Text style={s.confirmSub}>{tournamentName}</Text>
           )}
@@ -183,7 +185,7 @@ export default function JoinOfficialScreen({ navigation, route }) {
             <View style={s.withdrawnNote}>
               <Feather name="user-x" size={14} color={theme.destructive} style={{ marginRight: 6 }} />
               <Text style={s.withdrawnText}>
-                You have been withdrawn from this tournament by the admin.
+                {t('official.join.withdrawn')}
               </Text>
             </View>
           )}
@@ -191,16 +193,16 @@ export default function JoinOfficialScreen({ navigation, route }) {
 
         {!!rules.trim() && (
           <>
-            <Text style={s.sectionTitle}>Local rules & notes</Text>
+            <Text style={s.sectionTitle}>{t('official.join.rulesTitle')}</Text>
             <View style={s.card}>
               <Text style={s.rulesText}>{rules}</Text>
             </View>
           </>
         )}
 
-        <Text style={s.sectionTitle}>Rounds</Text>
+        <Text style={s.sectionTitle}>{t('official.join.rounds')}</Text>
         {rounds.length === 0 ? (
-          <Text style={s.hint}>No rounds have been added yet.</Text>
+          <Text style={s.hint}>{t('official.join.noRounds')}</Text>
         ) : (
           rounds.map((round) => {
             const notStarted = round.status === 'setup';
@@ -208,7 +210,7 @@ export default function JoinOfficialScreen({ navigation, route }) {
               <View key={round.id} style={s.roundCard}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.roundTitle}>
-                    Round {round.round_index + 1}
+                    {t('official.join.roundN', { n: round.round_index + 1 })}
                   </Text>
                   <Text style={s.roundMeta}>
                     {(round.format || 'stableford')}
@@ -216,7 +218,7 @@ export default function JoinOfficialScreen({ navigation, route }) {
                     {round.status || 'unknown'}
                   </Text>
                   {notStarted && (
-                    <Text style={s.roundHint}>Not started yet.</Text>
+                    <Text style={s.roundHint}>{t('official.join.notStarted')}</Text>
                   )}
                 </View>
                 <TouchableOpacity
@@ -228,7 +230,7 @@ export default function JoinOfficialScreen({ navigation, route }) {
                   })}
                   disabled={notStarted}
                 >
-                  <Text style={s.scoreBtnText}>Score this round</Text>
+                  <Text style={s.scoreBtnText}>{t('official.join.scoreRound')}</Text>
                 </TouchableOpacity>
               </View>
             );

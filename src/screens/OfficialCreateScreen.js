@@ -15,13 +15,14 @@ import { consumePendingCourses } from '../lib/selectionBridge';
 import { applyCoursePick, applyLayoutChoice } from '../lib/roundCourse';
 import RoundLayoutSelect from '../components/RoundLayoutSelect';
 import { createOfficialTournament, addRosterPlayer, createRound } from '../store/officialAdmin';
+import { useT } from '../i18n';
 
 // Official tournament round formats — distinct value set from ScoringModePicker.
 const OFFICIAL_FORMATS = [
-  { value: 'gross_net', label: 'Stroke play (gross & net)' },
-  { value: 'stableford', label: 'Stableford' },
-  { value: 'pairs', label: 'Pairs (Best Ball / Sindicato)' },
-  { value: 'match', label: 'Match play' },
+  { value: 'gross_net', labelKey: 'official.create.format.grossNet' },
+  { value: 'stableford', labelKey: 'official.create.format.stableford' },
+  { value: 'pairs', labelKey: 'official.create.format.pairs' },
+  { value: 'match', labelKey: 'official.create.format.match' },
 ];
 
 // Deep green used for the Review hero band — fixed in both themes so white
@@ -36,10 +37,10 @@ function newRoundId() { return `official-r${Date.now()}-${_roundIdSeq++}`; }
 let _rosterIdSeq = 0;
 function newRosterId() { return `roster-${Date.now()}-${_rosterIdSeq++}`; }
 
-function showError(message) {
-  const msg = message || 'Something went wrong';
+function showError(t, message) {
+  const msg = message || t('official.create.genericError');
   if (Platform.OS === 'web') window.alert(msg);
-  else Alert.alert('Error', msg);
+  else Alert.alert(t('official.create.errorTitle'), msg);
 }
 
 // Project a wizard round down to just the course data an official round needs.
@@ -56,6 +57,7 @@ function officialCourseFor(round) {
 
 export default function OfficialCreateScreen({ navigation }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   // Guards async handlers from calling setState after the screen unmounts.
@@ -190,10 +192,10 @@ export default function OfficialCreateScreen({ navigation }) {
         // finish. Send the admin to the management screen to complete it —
         // never leave them on Review where a retry creates a duplicate.
         if (mountedRef.current) setCreatedTournamentId(tournamentId);
-        showError('Tournament created, but some setup did not finish. Complete it on the next screen.');
+        showError(t, t('official.create.partialError'));
         navigation.replace('OfficialSetup', { tournamentId });
       } else {
-        showError("Couldn't create the tournament. Please try again.");
+        showError(t, t('official.create.createError'));
       }
     } finally {
       if (mountedRef.current) setBusy(false);
@@ -223,19 +225,19 @@ export default function OfficialCreateScreen({ navigation }) {
   const nextEnabled = isStepValid(stepKey, { roster, rounds })
     && (!isLastStep || canCreate)
     && !busy;
-  const nextLabel = isLastStep ? 'Create Tournament' : 'Next';
+  const nextLabel = isLastStep ? t('official.create.createButton') : t('official.create.next');
 
   // ---- Step bodies --------------------------------------------------------
 
   const renderRosterStep = () => (
     <>
-      <Text style={s.stepOverline}>ROSTER</Text>
-      <Text style={s.stepPrompt}>Who's competing?</Text>
-      <Text style={s.stepSubtitle}>Add every player in the official tournament.</Text>
+      <Text style={s.stepOverline}>{t('official.create.roster.overline')}</Text>
+      <Text style={s.stepPrompt}>{t('official.create.roster.prompt')}</Text>
+      <Text style={s.stepSubtitle}>{t('official.create.roster.subtitle')}</Text>
 
       <TextInput
         style={s.input}
-        placeholder="Tournament name"
+        placeholder={t('official.create.tournamentName')}
         placeholderTextColor={theme.text.muted}
         keyboardAppearance={theme.isDark ? 'dark' : 'light'}
         selectionColor={theme.accent.primary}
@@ -246,14 +248,14 @@ export default function OfficialCreateScreen({ navigation }) {
       {roster.length === 0 && (
         <View style={s.emptyHint}>
           <Feather name="users" size={14} color={theme.text.muted} style={{ marginRight: 8 }} />
-          <Text style={s.emptyHintText}>Add at least 1 player to continue.</Text>
+          <Text style={s.emptyHintText}>{t('official.create.needPlayer')}</Text>
         </View>
       )}
       {roster.map((entry) => (
         <View key={entry.id} style={s.playerCard}>
           <View style={s.playerInfo}>
             <Text style={s.playerName}>{entry.displayName}</Text>
-            <Text style={s.playerHcp}>HCP {entry.handicap}</Text>
+            <Text style={s.playerHcp}>{t('official.create.hcp', { hcp: entry.handicap })}</Text>
           </View>
           <TouchableOpacity onPress={() => removeRosterEntry(entry.id)} style={s.removeBtn}>
             <Feather name="x" size={16} color={theme.destructive} />
@@ -264,7 +266,7 @@ export default function OfficialCreateScreen({ navigation }) {
       <View style={s.rosterAddForm}>
         <TextInput
           style={[s.input, s.rosterNameInput]}
-          placeholder="Player name"
+          placeholder={t('official.create.playerName')}
           placeholderTextColor={theme.text.muted}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor={theme.accent.primary}
@@ -273,7 +275,7 @@ export default function OfficialCreateScreen({ navigation }) {
         />
         <TextInput
           style={[s.input, s.rosterHcpInput]}
-          placeholder="HCP"
+          placeholder={t('official.create.hcpPlaceholder')}
           placeholderTextColor={theme.text.muted}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor={theme.accent.primary}
@@ -284,26 +286,26 @@ export default function OfficialCreateScreen({ navigation }) {
       </View>
       <TouchableOpacity style={s.pickBtn} onPress={handleAddRosterEntry}>
         <Feather name="plus" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-        <Text style={s.pickBtnText}>Add Player</Text>
+        <Text style={s.pickBtnText}>{t('official.create.addPlayer')}</Text>
       </TouchableOpacity>
     </>
   );
 
   const renderRoundsStep = () => (
     <>
-      <Text style={s.stepOverline}>ROUNDS</Text>
-      <Text style={s.stepPrompt}>Where are you playing?</Text>
-      <Text style={s.stepSubtitle}>Add each round and pick its course.</Text>
+      <Text style={s.stepOverline}>{t('official.create.rounds.overline')}</Text>
+      <Text style={s.stepPrompt}>{t('official.create.rounds.prompt')}</Text>
+      <Text style={s.stepSubtitle}>{t('official.create.rounds.subtitle')}</Text>
       {rounds.map((r, i) => {
         const missingName = !(r.courseName || '').trim();
         return (
           <View key={r.id ?? `round-${i}`} style={s.courseBlock}>
             <View style={s.roundHeader}>
-              <Text style={s.roundLabel}>Round {i + 1}</Text>
+              <Text style={s.roundLabel}>{t('official.create.roundN', { n: i + 1 })}</Text>
               {rounds.length > 1 && (
                 <TouchableOpacity onPress={() => removeRound(i)} style={s.removeRoundBtn}>
                   <Feather name="trash-2" size={14} color={theme.destructive} />
-                  <Text style={s.removeRoundText}>Remove</Text>
+                  <Text style={s.removeRoundText}>{t('official.create.remove')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -329,28 +331,28 @@ export default function OfficialCreateScreen({ navigation }) {
                   style={{ marginRight: 6 }}
                 />
                 <Text style={s.pickBtnText}>
-                  {r.courseName ? `Course: ${r.courseName}` : 'Pick a Club or Course'}
+                  {r.courseName ? t('official.create.course', { name: r.courseName }) : t('official.create.pickCourse')}
                 </Text>
               </TouchableOpacity>
             )}
             {missingName && !r.club && (
-              <Text style={s.errorText}>{`Round ${i + 1} needs a course.`}</Text>
+              <Text style={s.errorText}>{t('official.create.roundNeedsCourse', { n: i + 1 })}</Text>
             )}
           </View>
         );
       })}
       <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
         <Feather name="plus-circle" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-        <Text style={s.addRoundBtnText}>Add Round</Text>
+        <Text style={s.addRoundBtnText}>{t('official.create.addRound')}</Text>
       </TouchableOpacity>
     </>
   );
 
   const renderFormatStep = () => (
     <>
-      <Text style={s.stepOverline}>FORMAT</Text>
-      <Text style={s.stepPrompt}>How is it scored?</Text>
-      <Text style={s.stepSubtitle}>Pick the official scoring format.</Text>
+      <Text style={s.stepOverline}>{t('official.create.format.overline')}</Text>
+      <Text style={s.stepPrompt}>{t('official.create.format.prompt')}</Text>
+      <Text style={s.stepSubtitle}>{t('official.create.format.subtitle')}</Text>
       {OFFICIAL_FORMATS.map((opt) => {
         const selected = officialFormat === opt.value;
         return (
@@ -360,7 +362,7 @@ export default function OfficialCreateScreen({ navigation }) {
             onPress={() => setOfficialFormat(opt.value)}
           >
             <Text style={[s.formatRowText, selected && s.formatRowTextSelected]}>
-              {opt.label}
+              {t(opt.labelKey)}
             </Text>
             {selected && <Feather name="check" size={14} color={theme.accent.primary} />}
           </TouchableOpacity>
@@ -370,17 +372,19 @@ export default function OfficialCreateScreen({ navigation }) {
   );
 
   const renderReviewStep = () => {
-    const formatLabel = OFFICIAL_FORMATS.find((f) => f.value === officialFormat)?.label ?? 'Stableford';
+    const formatLabel = t(
+      OFFICIAL_FORMATS.find((f) => f.value === officialFormat)?.labelKey ?? 'official.create.format.stableford',
+    );
     return (
       <>
         {/* Green hero recap */}
         <View style={s.reviewHero}>
-          <Text style={s.reviewHeroOverline}>REVIEW & CONFIRM</Text>
+          <Text style={s.reviewHeroOverline}>{t('official.create.review.overline')}</Text>
           <TextInput
             style={s.reviewNameInput}
             value={tournamentName}
             onChangeText={setTournamentName}
-            placeholder="Tournament name"
+            placeholder={t('official.create.tournamentName')}
             placeholderTextColor="rgba(255,255,255,0.5)"
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor="#ffffff"
@@ -388,7 +392,7 @@ export default function OfficialCreateScreen({ navigation }) {
           <View style={s.reviewChipRow}>
             <View style={s.reviewChip}>
               <Text style={s.reviewChipText}>
-                {roster.length} player{roster.length === 1 ? '' : 's'}
+                {t('official.create.review.players', { count: roster.length })}
               </Text>
             </View>
             <View style={s.reviewChip}>
@@ -397,7 +401,7 @@ export default function OfficialCreateScreen({ navigation }) {
           </View>
         </View>
 
-        <Text style={s.stepOverline}>TAP TO EDIT</Text>
+        <Text style={s.stepOverline}>{t('official.create.review.tapToEdit')}</Text>
         <View style={s.reviewList}>
           <TouchableOpacity
             style={[s.reviewRow, s.reviewRowDivider]}
@@ -405,9 +409,9 @@ export default function OfficialCreateScreen({ navigation }) {
           >
             <Feather name="users" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
-              <Text style={s.reviewRowTitle}>Players</Text>
+              <Text style={s.reviewRowTitle}>{t('official.create.review.playersTitle')}</Text>
               <Text style={s.reviewRowSub}>
-                {roster.length} golfer{roster.length === 1 ? '' : 's'}
+                {t('official.create.review.golfers', { count: roster.length })}
               </Text>
             </View>
             <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -419,9 +423,9 @@ export default function OfficialCreateScreen({ navigation }) {
           >
             <Feather name="map-pin" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
-              <Text style={s.reviewRowTitle}>Rounds</Text>
+              <Text style={s.reviewRowTitle}>{t('official.create.review.roundsTitle')}</Text>
               <Text style={s.reviewRowSub}>
-                {rounds.length} round{rounds.length === 1 ? '' : 's'}
+                {t('official.create.review.rounds', { count: rounds.length })}
               </Text>
             </View>
             <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -430,7 +434,7 @@ export default function OfficialCreateScreen({ navigation }) {
           <TouchableOpacity style={s.reviewRow} onPress={() => goToStep('format')}>
             <Feather name="target" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
-              <Text style={s.reviewRowTitle}>Format</Text>
+              <Text style={s.reviewRowTitle}>{t('official.create.review.formatTitle')}</Text>
               <Text style={s.reviewRowSub}>{formatLabel}</Text>
             </View>
             <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -440,8 +444,8 @@ export default function OfficialCreateScreen({ navigation }) {
         {!canCreate && (
           <Text style={s.errorText}>
             {roster.length === 0
-              ? 'Add at least 1 player to continue.'
-              : 'Pick a course for every round to continue.'}
+              ? t('official.create.needPlayer')
+              : t('official.create.needCourses')}
           </Text>
         )}
       </>

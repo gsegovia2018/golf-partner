@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useT, t as translate } from '../i18n';
 import BottomSheet from './BottomSheet';
 import { light, semantic, typography, spacing, radius } from '../theme/tokens';
 
@@ -38,7 +39,7 @@ export function quickStartCourseMeta(course) {
   const par = coursePar(course);
   const teeCount = courseTeeCount(course);
   if (par == null || teeCount === 0) return '';
-  return `Par ${par} · ${teeCount} ${teeCount === 1 ? 'tee' : 'tees'}`;
+  return translate('setup.quickStart.meta', { par, count: teeCount });
 }
 
 export function initialQuickStartPlayerIds(players, userId) {
@@ -48,11 +49,11 @@ export function initialQuickStartPlayerIds(players, userId) {
 }
 
 function courseTitle(course) {
-  return course?.layoutName || course?.name || 'Course';
+  return course?.layoutName || course?.name || translate('setup.quickStart.course');
 }
 
 function playerName(player) {
-  return player?.name || player?.displayName || 'Player';
+  return player?.name || player?.displayName || translate('setup.quickStart.player');
 }
 
 function playerInitials(player) {
@@ -82,6 +83,7 @@ export default function QuickStartCourses({
   onStart,
   onEditDetails,
 }) {
+  const t = useT();
   const themeContext = useTheme() || {};
   const theme = themeContext.theme || DEFAULT_THEME;
   const s = makeStyles(theme);
@@ -170,24 +172,24 @@ export default function QuickStartCourses({
   return (
     <View style={s.section}>
       <View style={s.header}>
-        <Text style={s.heading}>QUICK START</Text>
+        <Text style={s.heading}>{t('setup.quickStart.heading')}</Text>
         <TouchableOpacity
           onPress={onManage}
           style={[s.manageButton, !onManage && s.manageButtonDisabled]}
           disabled={!onManage}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityRole="button"
-          accessibilityLabel="Manage quick start courses"
+          accessibilityLabel={t('setup.quickStart.manageLabel')}
           accessibilityState={{ disabled: !onManage }}
         >
-          <Text style={[s.manageText, !onManage && s.manageTextDisabled]}>Manage</Text>
+          <Text style={[s.manageText, !onManage && s.manageTextDisabled]}>{t('setup.quickStart.manage')}</Text>
         </TouchableOpacity>
       </View>
 
       {coursesLoading && normalizedCourses.length === 0 ? (
         <View style={s.emptyState}>
           <ActivityIndicator color={theme.accent.primary} />
-          <Text style={s.emptyTitle}>Loading favorite courses...</Text>
+          <Text style={s.emptyTitle}>{t('setup.quickStart.loadingCourses')}</Text>
         </View>
       ) : normalizedCourses.length ? (
         <ScrollView
@@ -204,7 +206,7 @@ export default function QuickStartCourses({
                 activeOpacity={0.78}
                 onPress={() => openCourse(course)}
                 accessibilityRole="button"
-                accessibilityLabel={`Open ${courseTitle(course)} quick start`}
+                accessibilityLabel={t('setup.quickStart.openCourse', { name: courseTitle(course) })}
               >
                 <View style={s.courseIcon}>
                   <Feather name="flag" size={18} color={theme.accent.primary} />
@@ -218,9 +220,9 @@ export default function QuickStartCourses({
       ) : (
         <View style={s.emptyState}>
           <Feather name="star" size={32} color={theme.text.muted} />
-          <Text style={s.emptyTitle}>No favorite courses yet</Text>
+          <Text style={s.emptyTitle}>{t('setup.quickStart.emptyTitle')}</Text>
           <Text style={s.emptySubtitle}>
-            Open Courses and tap the star on a course to quick start from here.
+            {t('setup.quickStart.emptyHint')}
           </Text>
         </View>
       )}
@@ -230,7 +232,7 @@ export default function QuickStartCourses({
         <View style={s.sheetInner}>
             <View style={s.sheetHeader}>
               <View style={s.sheetTitleWrap}>
-                <Text style={s.sheetEyebrow}>Quick start</Text>
+                <Text style={s.sheetEyebrow}>{t('setup.quickStart.eyebrow')}</Text>
                 <Text style={s.sheetTitle}>{courseTitle(selectedCourse)}</Text>
                 {quickStartCourseMeta(selectedCourse) ? (
                   <Text style={s.sheetMeta}>{quickStartCourseMeta(selectedCourse)}</Text>
@@ -240,46 +242,46 @@ export default function QuickStartCourses({
                 onPress={closeSheet}
                 style={s.closeButton}
                 accessibilityRole="button"
-                accessibilityLabel="Close quick start"
+                accessibilityLabel={t('setup.quickStart.close')}
               >
                 <Feather name="x" size={20} color={theme.text.muted} />
               </TouchableOpacity>
             </View>
 
             <Text style={s.notice}>
-              Tees are auto-assigned. Use Edit details to change them.
+              {t('setup.quickStart.teesNotice')}
             </Text>
 
             <View style={s.playersHeader}>
-              <Text style={s.playersLabel}>Players</Text>
+              <Text style={s.playersLabel}>{t('setup.quickStart.players')}</Text>
               {addingPlayer ? (
                 <TouchableOpacity
                   onPress={() => setAddingPlayer(false)}
                   accessibilityRole="button"
-                  accessibilityLabel="Back to selected players"
+                  accessibilityLabel={t('setup.quickStart.backToSelected')}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text style={s.playersHeaderAction}>Slots</Text>
+                  <Text style={s.playersHeaderAction}>{t('setup.quickStart.slots')}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
             {playersLoading ? (
               <View style={s.stateBox}>
                 <ActivityIndicator color={theme.accent.primary} />
-                <Text style={s.stateText}>Loading players...</Text>
+                <Text style={s.stateText}>{t('setup.quickStart.loadingPlayers')}</Text>
               </View>
             ) : playersError ? (
               <View style={s.stateBox}>
                 <Text style={s.errorText}>
-                  {typeof playersError === 'string' ? playersError : 'Could not load players.'}
+                  {typeof playersError === 'string' ? playersError : t('setup.quickStart.playersError')}
                 </Text>
                 <TouchableOpacity
                   style={s.retryButton}
                   onPress={onRetryPlayers}
                   accessibilityRole="button"
-                  accessibilityLabel="Retry loading players"
+                  accessibilityLabel={t('setup.quickStart.retryLabel')}
                 >
-                  <Text style={s.retryText}>Retry</Text>
+                  <Text style={s.retryText}>{t('setup.quickStart.retry')}</Text>
                 </TouchableOpacity>
               </View>
             ) : addingPlayer ? (
@@ -291,7 +293,7 @@ export default function QuickStartCourses({
                     activeOpacity={0.75}
                     onPress={() => addPlayer(player.id)}
                     accessibilityRole="button"
-                    accessibilityLabel={`Add ${playerName(player)}`}
+                    accessibilityLabel={t('setup.quickStart.addPlayerNamed', { name: playerName(player) })}
                   >
                     <View style={s.addPlayerAvatar}>
                       <Text style={s.addPlayerInitials}>{playerInitials(player)}</Text>
@@ -302,13 +304,13 @@ export default function QuickStartCourses({
                         {isLinkedAppUser(player) ? (
                           <View style={s.linkedBadge}>
                             <Feather name="user-check" size={10} color={theme.accent.primary} />
-                            <Text style={s.linkedBadgeText}>App user</Text>
+                            <Text style={s.linkedBadgeText}>{t('setup.quickStart.appUser')}</Text>
                           </View>
                         ) : null}
                       </View>
                       {player?.handicap != null || player?.handicapIndex != null ? (
                         <Text style={s.playerMeta}>
-                          HCP {player.handicap ?? player.handicapIndex}
+                          {t('setup.quickStart.hcp', { value: player.handicap ?? player.handicapIndex })}
                         </Text>
                       ) : null}
                     </View>
@@ -316,7 +318,7 @@ export default function QuickStartCourses({
                   </TouchableOpacity>
                 )) : (
                   <View style={s.stateBox}>
-                    <Text style={s.stateText}>All available players are already selected.</Text>
+                    <Text style={s.stateText}>{t('setup.quickStart.allSelected')}</Text>
                   </View>
                 )}
               </ScrollView>
@@ -329,7 +331,7 @@ export default function QuickStartCourses({
                         style={s.slotRemove}
                         onPress={() => removePlayer(player.id)}
                         accessibilityRole="button"
-                        accessibilityLabel={`Remove ${playerName(player)}`}
+                        accessibilityLabel={t('setup.quickStart.removePlayerNamed', { name: playerName(player) })}
                       >
                         <Feather name="x" size={14} color={theme.text.muted} />
                       </TouchableOpacity>
@@ -339,7 +341,7 @@ export default function QuickStartCourses({
                       <Text style={s.slotName} numberOfLines={1}>{playerName(player)}</Text>
                       {player?.handicap != null || player?.handicapIndex != null ? (
                         <Text style={s.slotHcp}>
-                          HCP {player.handicap ?? player.handicapIndex}
+                          {t('setup.quickStart.hcp', { value: player.handicap ?? player.handicapIndex })}
                         </Text>
                       ) : null}
                     </View>
@@ -351,12 +353,12 @@ export default function QuickStartCourses({
                       activeOpacity={0.78}
                       onPress={() => setAddingPlayer(true)}
                       accessibilityRole="button"
-                      accessibilityLabel="Add player to quick start"
+                      accessibilityLabel={t('setup.quickStart.addPlayerLabel')}
                     >
                       <View style={s.slotPlus}>
                         <Feather name="plus" size={18} color={theme.accent.primary} />
                       </View>
-                      <Text style={s.slotEmptyLabel}>ADD PLAYER</Text>
+                      <Text style={s.slotEmptyLabel}>{t('setup.quickStart.addPlayer')}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -369,20 +371,20 @@ export default function QuickStartCourses({
                 onPress={editDetails}
                 disabled={!selectedCourse}
                 accessibilityRole="button"
-                accessibilityLabel="Edit quick start details"
+                accessibilityLabel={t('setup.quickStart.editLabel')}
                 accessibilityState={{ disabled: !selectedCourse }}
               >
-                <Text style={s.secondaryText}>Edit details</Text>
+                <Text style={s.secondaryText}>{t('setup.quickStart.edit')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[s.primaryButton, startDisabled && s.primaryButtonDisabled]}
                 onPress={startRound}
                 disabled={startDisabled}
                 accessibilityRole="button"
-                accessibilityLabel="Start quick start round"
+                accessibilityLabel={t('setup.quickStart.startLabel')}
                 accessibilityState={{ disabled: startDisabled }}
               >
-                <Text style={s.primaryText}>{starting ? 'Starting...' : 'Start'}</Text>
+                <Text style={s.primaryText}>{starting ? t('setup.quickStart.starting') : t('setup.quickStart.start')}</Text>
               </TouchableOpacity>
             </View>
           </View>

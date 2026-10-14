@@ -38,6 +38,7 @@ import { normalizeRoundNotes } from '../store/roundNotes';
 import { buildRoundAchievements } from '../store/roundAchievements';
 import { collectMyRounds } from '../store/personalStats';
 import { loadProfile } from '../store/profileStore';
+import { useT } from '../i18n';
 import { ShareableRoundCard, shareRoundSummary } from '../components/ShareableCard';
 
 // Stable empty roster so the useRoundRoster memo below does not see a new
@@ -68,6 +69,7 @@ function roundFeedKey(tournamentId, roundId) {
 
 export default function RoundSummaryScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const { tournamentId, roundId } = route.params ?? {};
   const initialTournament = getTournamentSnapshot(tournamentId);
@@ -254,14 +256,14 @@ export default function RoundSummaryScreen({ navigation, route }) {
               <IconButton
                 icon="share-2"
                 onPress={handleShareRound}
-                accessibilityLabel="Share round summary"
+                accessibilityLabel={t('rounds.summary.shareLabel')}
               />
             )
           ) : null}
           {live ? (
-            <View style={s.liveBadge} accessibilityLabel="Live round in progress">
+            <View style={s.liveBadge} accessibilityLabel={t('rounds.summary.liveLabel')}>
               <View style={s.liveDot} />
-              <Text style={s.liveBadgeText}>LIVE</Text>
+              <Text style={s.liveBadgeText}>{t('rounds.summary.live')}</Text>
             </View>
           ) : null}
           {!round ? <View style={{ width: 22 }} /> : null}
@@ -273,7 +275,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
       ) : !round ? (
         <View style={s.center}>
           <Feather name="alert-circle" size={44} color={theme.text.muted} />
-          <Text style={s.missingText}>This round is no longer available.</Text>
+          <Text style={s.missingText}>{t('rounds.summary.missing')}</Text>
         </View>
       ) : (
         <PullToRefresh
@@ -322,7 +324,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
                     activeOpacity={0.85}
                     onPress={() => navigation.navigate('Gallery', { tournamentId, mediaId: m.id })}
                     accessibilityRole="imagebutton"
-                    accessibilityLabel="Open photo in gallery"
+                    accessibilityLabel={t('rounds.summary.openPhotoLabel')}
                   >
                     <Image source={{ uri: m.thumbUrl || m.url }} style={s.photo} resizeMode="cover" />
                     {m.kind === 'video' ? (
@@ -334,7 +336,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
                 ))}
               </View>
             ) : (
-              <Text style={s.empty}>No photos for this round.</Text>
+              <Text style={s.empty}>{t('rounds.summary.noPhotos')}</Text>
             )
           ) : null}
 
@@ -346,16 +348,16 @@ export default function RoundSummaryScreen({ navigation, route }) {
                 <>
                   {roundNote ? (
                     <>
-                      <Text style={s.sectionLabel}>NOTES</Text>
+                      <Text style={s.sectionLabel}>{t('rounds.summary.notes')}</Text>
                       <Text style={s.notes}>{roundNote}</Text>
                     </>
                   ) : null}
                   {holeNotes.length > 0 ? (
                     <>
-                      <Text style={s.sectionLabel}>HOLE NOTES</Text>
+                      <Text style={s.sectionLabel}>{t('rounds.summary.holeNotes')}</Text>
                       {holeNotes.map(([hole, text]) => (
                         <View key={hole} style={s.holeNoteRow}>
-                          <Text style={s.holeNoteLabel}>{`Hole ${hole}`}</Text>
+                          <Text style={s.holeNoteLabel}>{t('rounds.summary.hole', { hole })}</Text>
                           <Text style={s.holeNoteText}>{text.trim()}</Text>
                         </View>
                       ))}
@@ -373,7 +375,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
               activeOpacity={0.85}
             >
               <Feather name="edit-3" size={14} color={theme.text.inverse} />
-              <Text style={s.openBtnText}>Open in scorecard</Text>
+              <Text style={s.openBtnText}>{t('rounds.summary.openScorecard')}</Text>
             </TouchableOpacity>
           )}
         </PullToRefresh>
@@ -382,7 +384,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
         <TouchableOpacity
           style={s.fab}
           onPress={openCaptureMenu}
-          accessibilityLabel="Add photo"
+          accessibilityLabel={t('rounds.summary.addPhotoLabel')}
           activeOpacity={0.85}
         >
           <Feather name="plus" size={26} color={theme.text.inverse} />

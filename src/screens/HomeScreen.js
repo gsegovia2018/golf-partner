@@ -34,7 +34,6 @@ import {
   roundLeaderboard, tournamentLeaderboardResolved,
   DEFAULT_SETTINGS, GAME_DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
   buildBoardLink, enableBoardSharing, rotateBoardToken, disableBoardSharing,
-  tournamentNoun, tournamentNounCapitalized,
   getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
   lastTeeForPlayerOnCourse,
 } from '../store/tournamentStore';
@@ -57,6 +56,7 @@ import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { useAuth } from '../context/AuthContext';
 import { shouldOfferPostCreateEditorInvite } from './setupWizard';
 import { ScorecardTable, resolveScorecardRows } from '../components/scorecard/GridView';
+import { useT } from '../i18n';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
 // RNW 0.21's `pagingEnabled` omits `scroll-snap-stop: always`, so a
@@ -99,16 +99,16 @@ function pairsPreviewText(t) {
 // Short label for a leaderboard's native scoring mode, used in the LEADERBOARD
 // card header ("R2 · Match Play"). Mirrors scoringModes.js's fuller labels but
 // stays local since this card only ever needs the short form.
-const ROUND_MODE_LABELS = {
-  stableford: 'Stableford',
-  matchplay: 'Match Play',
-  sindicato: 'Sindicato',
-  bestball: 'Best Ball',
-  pairsmatchplay: 'Pairs Match Play',
+const ROUND_MODE_LABEL_KEYS = {
+  stableford: 'home.roundMode.stableford',
+  matchplay: 'home.roundMode.matchplay',
+  sindicato: 'home.roundMode.sindicato',
+  bestball: 'home.roundMode.bestball',
+  pairsmatchplay: 'home.roundMode.pairsmatchplay',
 };
-function roundModeLabel(mode) {
-  if (mode?.startsWith?.('scramble')) return 'Scramble';
-  return ROUND_MODE_LABELS[mode] ?? 'Stableford';
+function roundModeLabel(mode, t) {
+  if (mode?.startsWith?.('scramble')) return t('home.roundMode.scramble');
+  return t(ROUND_MODE_LABEL_KEYS[mode] ?? 'home.roundMode.stableford');
 }
 // True "Stroke Play" alt-view modes: the alt toggle re-sorts by gross
 // strokes. Other modes (matchplay/sindicato/bestball/pairsmatchplay) label
@@ -135,6 +135,7 @@ export default function HomeScreen({ navigation, route }) {
   const viewMode = route?.params?.viewMode ?? 'auto';
   const routeTournamentId = route?.params?.tournamentId ?? null;
   const { theme } = useTheme();
+  const tx = useT();
   const { user } = useAuth();
   const currentUserId = user?.id ?? null;
   const currentUserIdRef = useRef(currentUserId);
@@ -236,12 +237,12 @@ export default function HomeScreen({ navigation, route }) {
   // resolves true/false; replaces window.confirm so web matches native.
   const [confirmState, setConfirmState] = useState(null);
   const confirmResolverRef = useRef(null);
-  const confirm = useCallback(({ title, message, confirmLabel = 'Confirm', destructive = false }) => (
+  const confirm = useCallback(({ title, message, confirmLabel = tx('home.confirm.confirm'), destructive = false }) => (
     new Promise((resolve) => {
       confirmResolverRef.current = resolve;
       setConfirmState({ title, message, confirmLabel, destructive });
     })
-  ), []);
+  ), [tx]);
   const resolveConfirm = useCallback((result) => {
     const resolver = confirmResolverRef.current;
     confirmResolverRef.current = null;
@@ -307,7 +308,7 @@ export default function HomeScreen({ navigation, route }) {
       } catch (err) {
         // Surface the failure inline (with a Retry) rather than letting the
         // empty state render as if there were genuinely nothing to show.
-        setReloadError(err?.message ?? 'Could not load your tournaments');
+        setReloadError(err?.message ?? tx('home.error.loadTournaments'));
       } finally {
         hasLoadedOnceRef.current = true;
         setLoading(false);
@@ -324,7 +325,7 @@ export default function HomeScreen({ navigation, route }) {
     });
     reloadInFlight.current = p;
     return p;
-  }, [routeTournamentId]);
+  }, [routeTournamentId, tx]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -372,12 +373,12 @@ export default function HomeScreen({ navigation, route }) {
       setQuickStartPlayers(players);
     } catch (err) {
       if (quickStartPlayerLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
-      setQuickStartPlayersError(err?.message ?? 'Could not load players.');
+      setQuickStartPlayersError(err?.message ?? tx('home.error.loadPlayers'));
     } finally {
       if (quickStartPlayerLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
       setQuickStartPlayersLoading(false);
     }
-  }, [currentUserId]);
+  }, [currentUserId, tx]);
 
   useEffect(() => {
     loadQuickStartCourses();
@@ -538,7 +539,7 @@ export default function HomeScreen({ navigation, route }) {
     }
   }
 
-  function showError(message, title = 'Error') {
+  function showError(message, title = tx('home.common.error')) {
     if (Platform.OS === 'web') window.alert(message);
     else Alert.alert(title, message);
   }
@@ -619,24 +620,24 @@ export default function HomeScreen({ navigation, route }) {
   async function sharePostCreateInvite() {
     if (!postCreateInvite.link) return;
     try {
-      const label = postCreateInvite.tournament?.name ?? 'my game';
+      const label = postCreateInvite.tournament?.name ?? tx('home.share.myGame');
       await Share.share({
-        message: `Join "${label}" on Golf Partner:\n${postCreateInvite.link}`,
+        message: tx('home.share.joinMessage', { name: label, link: postCreateInvite.link }),
       });
     } catch (err) {
-      showError(err?.message ?? 'Could not share the invite link');
+      showError(err?.message ?? tx('home.error.shareInvite'));
     }
   }
 
   async function handleQuickStartStart({ course, players }) {
     if (quickStartStartingRef.current) return;
     if (!course) {
-      showError('Choose a course before starting.');
+      showError(tx('home.error.chooseCourseStart'));
       return;
     }
     const selectedPlayers = Array.isArray(players) ? players.filter(Boolean) : [];
     if (selectedPlayers.length === 0) {
-      showError('Select at least 1 player.');
+      showError(tx('home.error.selectPlayer'));
       return;
     }
     quickStartStartingRef.current = true;
@@ -689,7 +690,7 @@ export default function HomeScreen({ navigation, route }) {
             visible: true,
             loading: false,
             link: '',
-            error: inviteErr?.message ?? 'Could not create the invite link right now.',
+            error: inviteErr?.message ?? tx('home.error.createInviteLink'),
             tournament: created,
           });
         }
@@ -698,7 +699,7 @@ export default function HomeScreen({ navigation, route }) {
 
       navigateToCreatedGame();
     } catch (err) {
-      showError(err?.message ?? 'Could not create game');
+      showError(err?.message ?? tx('home.error.createGame'));
     } finally {
       quickStartStartingRef.current = false;
       setQuickStartStarting(false);
@@ -707,7 +708,7 @@ export default function HomeScreen({ navigation, route }) {
 
   async function handleQuickStartEditDetails({ course, players }) {
     if (!course) {
-      showError('Choose a course before editing details.');
+      showError(tx('home.error.chooseCourseEdit'));
       return;
     }
     try {
@@ -727,15 +728,15 @@ export default function HomeScreen({ navigation, route }) {
         },
       });
     } catch (err) {
-      showError(err?.message ?? 'Could not prepare game details');
+      showError(err?.message ?? tx('home.error.prepareGame'));
     }
   }
 
   async function confirmDelete(t) {
     const confirmed = await confirm({
-      title: `Delete ${tournamentNounCapitalized(t)}`,
-      message: `Delete "${t.name}"? This cannot be undone.`,
-      confirmLabel: 'Delete',
+      title: tx(t?.kind === 'game' ? 'home.delete.gameTitle' : 'home.delete.tournamentTitle'),
+      message: tx('home.delete.message', { name: t.name }),
+      confirmLabel: tx('home.delete.confirm'),
       destructive: true,
     });
     if (!confirmed) return;
@@ -755,8 +756,9 @@ export default function HomeScreen({ navigation, route }) {
         else navigation.navigate('Main', { screen: 'Home', params: { viewMode: 'list' } });
       }
     } catch (err) {
-      if (Platform.OS === 'web') window.alert(err.message ?? `Could not delete ${tournamentNoun(t)}`);
-      else Alert.alert('Error', err.message ?? `Could not delete ${tournamentNoun(t)}`);
+      const deleteFailed = err.message ?? tx(t?.kind === 'game' ? 'home.delete.gameError' : 'home.delete.tournamentError');
+      if (Platform.OS === 'web') window.alert(deleteFailed);
+      else Alert.alert(tx('home.common.error'), deleteFailed);
     }
   }
 
@@ -767,12 +769,12 @@ export default function HomeScreen({ navigation, route }) {
   // actions (gated on isOwner in the Share sheet's Viewer mode), so the
   // 42501 branch below is just a defensive plain-language fallback.
   function boardSharingErrorMessage(err) {
-    if (!isOnline()) return 'You need to be online to change board sharing.';
+    if (!isOnline()) return tx('home.board.offline');
     const msg = err?.message ?? '';
     if (msg.includes('not authorized') || err?.code === '42501') {
-      return 'Only the tournament owner can change board sharing.';
+      return tx('home.board.ownerOnly');
     }
-    return msg || 'Could not update board sharing.';
+    return msg || tx('home.board.updateFailed');
   }
 
   function shareBoardLink(token) {
@@ -780,7 +782,7 @@ export default function HomeScreen({ navigation, route }) {
     // Blank line before the URL keeps WhatsApp from wrapping the text into
     // the middle of the link and breaking the tap target — same format as
     // the invite-link share above.
-    Share.share({ message: `Watch our live leaderboard 🏌️\n\n${url}` });
+    Share.share({ message: tx('home.board.shareMessage', { url }) });
   }
 
   // Auto-enable path: triggered by changeInviteRole when the owner switches
@@ -808,9 +810,9 @@ export default function HomeScreen({ navigation, route }) {
   async function handleRotateBoardLink() {
     if (!tournament || boardShareBusy) return;
     const confirmed = await confirm({
-      title: 'New link',
-      message: 'The old board link stops working immediately. Anyone still using it loses access.',
-      confirmLabel: 'New link',
+      title: tx('home.board.newLinkTitle'),
+      message: tx('home.board.newLinkMessage'),
+      confirmLabel: tx('home.board.newLinkTitle'),
     });
     if (!confirmed) return;
     if (!isOnline()) { showError(boardSharingErrorMessage()); return; }
@@ -829,9 +831,9 @@ export default function HomeScreen({ navigation, route }) {
   async function handleStopSharingBoard() {
     if (!tournament || boardShareBusy) return;
     const confirmed = await confirm({
-      title: 'Stop sharing',
-      message: 'The board link stops working immediately.',
-      confirmLabel: 'Stop sharing',
+      title: tx('home.board.stopTitle'),
+      message: tx('home.board.stopMessage'),
+      confirmLabel: tx('home.board.stopTitle'),
       destructive: true,
     });
     if (!confirmed) return;
@@ -864,9 +866,9 @@ export default function HomeScreen({ navigation, route }) {
       await reload();
       setShowRoundModeSheet(false);
     } catch (err) {
-      const msg = err?.message ?? 'Could not update scoring mode';
+      const msg = err?.message ?? tx('home.error.updateScoringMode');
       if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('Error', msg);
+      else Alert.alert(tx('home.common.error'), msg);
     }
   }
 
@@ -884,9 +886,9 @@ export default function HomeScreen({ navigation, route }) {
       await reload();
       setShowPointValues(false);
     } catch (err) {
-      const msg = err?.message ?? 'Could not update point values';
+      const msg = err?.message ?? tx('home.error.updatePointValues');
       if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('Error', msg);
+      else Alert.alert(tx('home.common.error'), msg);
     }
   }
 
@@ -903,9 +905,9 @@ export default function HomeScreen({ navigation, route }) {
       });
       await reload();
     } catch (err) {
-      const msg = err?.message ?? 'Could not update team settings';
+      const msg = err?.message ?? tx('home.error.updateTeamSettings');
       if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('Error', msg);
+      else Alert.alert(tx('home.common.error'), msg);
     }
   }
 
@@ -924,9 +926,9 @@ export default function HomeScreen({ navigation, route }) {
         else navigation.navigate('Main', { screen: 'Home', params: { viewMode: 'list' } });
       }
     } catch (err) {
-      const msg = err?.message ?? 'Could not update tournament';
+      const msg = err?.message ?? tx('home.error.updateTournament');
       if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('Error', msg);
+      else Alert.alert(tx('home.common.error'), msg);
     }
   }
 
@@ -1087,7 +1089,7 @@ export default function HomeScreen({ navigation, route }) {
         activeOpacity={0.7}
       >
         <Feather name="users" size={14} color={theme.text.primary} />
-        <Text style={s.menuItemText}>Edit Teams</Text>
+        <Text style={s.menuItemText}>{tx('home.menu.editTeams')}</Text>
         <Feather name="chevron-right" size={16} color={theme.text.muted} />
       </TouchableOpacity>
     ) : (
@@ -1097,7 +1099,7 @@ export default function HomeScreen({ navigation, route }) {
         activeOpacity={0.7}
       >
         <Feather name="eye" size={14} color={theme.text.primary} />
-        <Text style={s.menuItemText}>Reveal Teams</Text>
+        <Text style={s.menuItemText}>{tx('home.menu.revealTeams')}</Text>
         <Feather name="chevron-right" size={16} color={theme.text.muted} />
       </TouchableOpacity>
     );
@@ -1124,8 +1126,8 @@ export default function HomeScreen({ navigation, route }) {
       >
         <Feather name="hash" size={14} color={theme.text.primary} />
         <View style={{ flex: 1 }}>
-          <Text style={s.menuItemText}>Point Values</Text>
-          <Text style={s.modalSubtle}>{`Best ${vals.bestBallValue} · Worst ${vals.worstBallValue} pts / hole`}</Text>
+          <Text style={s.menuItemText}>{tx('home.menu.pointValues')}</Text>
+          <Text style={s.modalSubtle}>{tx('home.menu.pointValuesSummary', { best: vals.bestBallValue, worst: vals.worstBallValue })}</Text>
         </View>
         <Feather name="chevron-right" size={16} color={theme.text.muted} />
       </TouchableOpacity>
@@ -1168,14 +1170,14 @@ export default function HomeScreen({ navigation, route }) {
             <IconButton
               icon="menu"
               onPress={() => setShowListMenu(true)}
-              accessibilityLabel="Menu"
+              accessibilityLabel={tx('home.list.menuA11y')}
             />
             <IconButton
               icon="bell"
               onPress={() => navigation.navigate('Notifications')}
               dot={unreadNotifs > 0}
               dotColor={theme.accent.danger ?? '#e5484d'}
-              accessibilityLabel={unreadNotifs > 0 ? `Notifications, ${unreadNotifs} unread` : 'Notifications'}
+              accessibilityLabel={unreadNotifs > 0 ? tx('home.list.notificationsUnreadA11y', { count: unreadNotifs }) : tx('home.list.notificationsA11y')}
             />
           </View>
         </View>
@@ -1191,20 +1193,20 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => navigation.navigate('Profile')}
             activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel="Complete your profile"
+            accessibilityLabel={tx('home.list.completeProfileA11y')}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12,
                      borderWidth: 1, borderColor: theme.accent.primary + '55',
                      backgroundColor: theme.accent.light, padding: 12, marginBottom: 12 }}
           >
             <Feather name="user" size={16} color={theme.accent.primary} />
             <Text style={{ fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 13, flex: 1 }}>
-              Complete your profile — set your gender so handicaps use the right tee rating.
+              {tx('home.list.completeProfile')}
             </Text>
             <Feather name="chevron-right" size={16} color={theme.accent.primary} />
           </TouchableOpacity>
         )}
         <LiveRoundCard onOpen={() => pushTournamentScorecard()} />
-        <Text style={s.startHeading}>Start playing</Text>
+        <Text style={s.startHeading}>{tx('home.list.startPlaying')}</Text>
         <View style={s.startTilesRow}>
           <PressableScale
             style={[s.startTile, s.startTileFeatured]}
@@ -1215,12 +1217,12 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="flag" size={24} color={theme.text.inverse} />
             </View>
             <View>
-              <Text style={[s.startTileTitle, s.startTileTitleFeatured]}>Game</Text>
-              <Text style={[s.startTileSub, s.startTileSubFeatured]}>Single round</Text>
+              <Text style={[s.startTileTitle, s.startTileTitleFeatured]}>{tx('home.list.gameTile')}</Text>
+              <Text style={[s.startTileSub, s.startTileSubFeatured]}>{tx('home.list.gameTileSub')}</Text>
             </View>
             <View style={[s.startTileCta, s.startTileCtaFeatured]}>
               <Feather name="plus" size={14} color={theme.text.inverse} />
-              <Text style={[s.startTileCtaText, { color: theme.text.inverse }]}>New game</Text>
+              <Text style={[s.startTileCtaText, { color: theme.text.inverse }]}>{tx('home.list.newGame')}</Text>
             </View>
           </PressableScale>
           <PressableScale
@@ -1232,12 +1234,12 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="award" size={24} color={theme.accent.primary} />
             </View>
             <View>
-              <Text style={s.startTileTitle}>Tournament</Text>
-              <Text style={s.startTileSub}>Multi-day event</Text>
+              <Text style={s.startTileTitle}>{tx('home.list.tournamentTile')}</Text>
+              <Text style={s.startTileSub}>{tx('home.list.tournamentTileSub')}</Text>
             </View>
             <View style={s.startTileCta}>
               <Feather name="plus" size={14} color={theme.accent.primary} />
-              <Text style={s.startTileCtaText}>New tournament</Text>
+              <Text style={s.startTileCtaText}>{tx('home.list.newTournament')}</Text>
             </View>
           </PressableScale>
         </View>
@@ -1251,8 +1253,8 @@ export default function HomeScreen({ navigation, route }) {
             <Feather name="link" size={20} color={theme.accent.primary} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.joinTileTitle}>Join with code</Text>
-            <Text style={s.joinTileSub}>Enter an invite code from a friend</Text>
+            <Text style={s.joinTileTitle}>{tx('home.list.joinTitle')}</Text>
+            <Text style={s.joinTileSub}>{tx('home.list.joinSub')}</Text>
           </View>
           <Feather name="chevron-right" size={18} color={theme.text.muted} />
         </TouchableOpacity>
@@ -1275,12 +1277,12 @@ export default function HomeScreen({ navigation, route }) {
           <View style={s.errorCard}>
             <Feather name="alert-triangle" size={14} color={theme.destructive} />
             <View style={{ flex: 1 }}>
-              <Text style={s.errorCardTitle}>Couldn't load</Text>
+              <Text style={s.errorCardTitle}>{tx('home.list.loadErrorTitle')}</Text>
               <Text style={s.errorCardText}>{reloadError}</Text>
             </View>
             <TouchableOpacity style={s.errorRetryBtn} onPress={reload} activeOpacity={0.8}>
               <Feather name="refresh-cw" size={14} color={theme.accent.primary} />
-              <Text style={s.errorRetryText}>Retry</Text>
+              <Text style={s.errorRetryText}>{tx('home.list.retry')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1288,7 +1290,7 @@ export default function HomeScreen({ navigation, route }) {
         {listStale && allTournaments.length > 0 && (
           <View style={s.staleBanner}>
             <Feather name="cloud-off" size={14} color="#c77a0a" />
-            <Text style={s.staleBannerText}>Offline · showing last saved list</Text>
+            <Text style={s.staleBannerText}>{tx('home.list.offlineBanner')}</Text>
           </View>
         )}
 
@@ -1329,21 +1331,21 @@ export default function HomeScreen({ navigation, route }) {
                       {totalRounds > 0 && (
                         <View style={[s.statusBadge, !isActive && s.statusBadgeFinished]}>
                           <Text style={[s.statusBadgeText, !isActive && s.statusBadgeTextFinished]}>
-                            {isActive ? 'Active' : 'Finished'}
+                            {isActive ? tx('home.card.active') : tx('home.card.finished')}
                           </Text>
                         </View>
                       )}
                       {t._role === 'viewer' && (
                         <View style={s.viewerBadge}>
                           <Feather name="eye" size={9} color={theme.text.muted} />
-                          <Text style={s.viewerBadgeText}>Viewer</Text>
+                          <Text style={s.viewerBadgeText}>{tx('home.card.viewer')}</Text>
                         </View>
                       )}
                     </View>
                     {metaText ? <Text style={s.tournamentCardMeta}>{metaText}</Text> : null}
                     {totalRounds > 0 && (
                       <Text style={s.tournamentCardRound}>
-                        {isGameKind ? (courseName || 'Single round') : `Round ${played}/${totalRounds}`}
+                        {isGameKind ? (courseName || tx('home.card.singleRound')) : tx('home.card.roundProgress', { played, total: totalRounds })}
                       </Text>
                     )}
                   </View>
@@ -1351,7 +1353,7 @@ export default function HomeScreen({ navigation, route }) {
                     {!openable ? (
                       <View style={s.offlineBadge}>
                         <Feather name="cloud-off" size={14} color="#c77a0a" />
-                        <Text style={s.offlineBadgeText}>Connection required</Text>
+                        <Text style={s.offlineBadgeText}>{tx('home.card.connectionRequired')}</Text>
                       </View>
                     ) : (
                       <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -1363,7 +1365,7 @@ export default function HomeScreen({ navigation, route }) {
                     icon="trash-2"
                     color={theme.destructive}
                     onPress={() => confirmDelete(t)}
-                    accessibilityLabel="Delete"
+                    accessibilityLabel={tx('home.card.deleteA11y')}
                     style={s.deleteCardBtn}
                   />
                 )}
@@ -1387,15 +1389,15 @@ export default function HomeScreen({ navigation, route }) {
               return (
                 <View style={s.staleEmpty}>
                   <Feather name="cloud-off" size={44} color={theme.text.muted} />
-                  <Text style={s.staleEmptyText}>Offline · no saved tournaments yet</Text>
+                  <Text style={s.staleEmptyText}>{tx('home.list.offlineEmpty')}</Text>
                 </View>
               );
             }
             return (
               <View style={s.emptyState}>
                 <Feather name="flag" size={44} color={theme.text.muted} />
-                <Text style={s.emptyTitle}>Nothing here yet</Text>
-                <Text style={s.emptySubtitle}>Create your first game or tournament to start playing</Text>
+                <Text style={s.emptyTitle}>{tx('home.list.emptyTitle')}</Text>
+                <Text style={s.emptySubtitle}>{tx('home.list.emptySub')}</Text>
               </View>
             );
           }
@@ -1403,8 +1405,8 @@ export default function HomeScreen({ navigation, route }) {
             return (
               <View style={s.emptyState}>
                 <Feather name="check-circle" size={44} color={theme.text.muted} />
-                <Text style={s.emptyTitle}>All caught up</Text>
-                <Text style={s.emptySubtitle}>Every game and tournament is finished. Start a new one above.</Text>
+                <Text style={s.emptyTitle}>{tx('home.list.caughtUpTitle')}</Text>
+                <Text style={s.emptySubtitle}>{tx('home.list.caughtUpSub')}</Text>
               </View>
             );
           }
@@ -1412,13 +1414,13 @@ export default function HomeScreen({ navigation, route }) {
             <>
               {games.length > 0 && (
                 <>
-                  <Text style={s.sectionLabel}>GAMES</Text>
+                  <Text style={s.sectionLabel}>{tx('home.list.sectionGames')}</Text>
                   {games.map(renderCard)}
                 </>
               )}
               {tournaments.length > 0 && (
                 <>
-                  <Text style={s.sectionLabel}>TOURNAMENTS</Text>
+                  <Text style={s.sectionLabel}>{tx('home.list.sectionTournaments')}</Text>
                   {tournaments.map(renderCard)}
                 </>
               )}
@@ -1430,7 +1432,7 @@ export default function HomeScreen({ navigation, route }) {
 
         <BottomSheet visible={showListMenu} onClose={() => setShowListMenu(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>Menu</Text>
+          <Text style={s.modalTitle}>{tx('home.list.menuTitle')}</Text>
 
           <TouchableOpacity
             style={s.menuItem}
@@ -1438,7 +1440,7 @@ export default function HomeScreen({ navigation, route }) {
             activeOpacity={0.7}
           >
             <Feather name="map" size={14} color={theme.text.primary} />
-            <Text style={s.menuItemText}>Courses</Text>
+            <Text style={s.menuItemText}>{tx('home.list.menuCourses')}</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
 
@@ -1448,14 +1450,14 @@ export default function HomeScreen({ navigation, route }) {
             activeOpacity={0.7}
           >
             <Feather name="user" size={14} color={theme.text.primary} />
-            <Text style={s.menuItemText}>Players</Text>
+            <Text style={s.menuItemText}>{tx('home.list.menuPlayers')}</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
         </BottomSheet>
 
         <BottomSheet visible={showTournamentKindChoice} onClose={() => setShowTournamentKindChoice(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>New Tournament</Text>
+          <Text style={s.modalTitle}>{tx('home.kind.title')}</Text>
 
           <TouchableOpacity
             style={s.menuItem}
@@ -1464,8 +1466,8 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="users" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>Casual tournament</Text>
-              <Text style={s.modalSubtle}>Friends scoring a round together</Text>
+              <Text style={s.menuItemText}>{tx('home.kind.casual')}</Text>
+              <Text style={s.modalSubtle}>{tx('home.kind.casualSub')}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -1477,8 +1479,8 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="award" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>Official tournament</Text>
-              <Text style={s.modalSubtle}>Invite players by link; double-entered, verified scoring</Text>
+              <Text style={s.menuItemText}>{tx('home.kind.official')}</Text>
+              <Text style={s.modalSubtle}>{tx('home.kind.officialSub')}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -1490,8 +1492,8 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="users" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>League</Text>
-              <Text style={s.modalSubtle}>One card a month, all season</Text>
+              <Text style={s.menuItemText}>{tx('home.kind.league')}</Text>
+              <Text style={s.modalSubtle}>{tx('home.kind.leagueSub')}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -1518,9 +1520,9 @@ export default function HomeScreen({ navigation, route }) {
       <ScreenContainer style={[s.screen, { alignItems: 'center', justifyContent: 'center', padding: 24 }]} edges={['top', 'bottom']}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Feather name="flag" size={44} color={theme.text.muted} />
-          <Text style={[s.emptyTitle, { marginTop: 16 }]}>No active tournament</Text>
+          <Text style={[s.emptyTitle, { marginTop: 16 }]}>{tx('home.noActive.title')}</Text>
           <Text style={[s.emptySubtitle, { marginTop: 6, marginBottom: 8 }]}>
-            Start a game or tournament to begin playing.
+            {tx('home.noActive.sub')}
           </Text>
           <TouchableOpacity
             style={[s.primaryBtn, s.emptyStateBtn]}
@@ -1528,7 +1530,7 @@ export default function HomeScreen({ navigation, route }) {
             activeOpacity={0.8}
           >
             <Feather name="flag" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-            <Text style={s.primaryBtnText}>Start a Game</Text>
+            <Text style={s.primaryBtnText}>{tx('home.noActive.startGame')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.secondaryBtn, s.emptyStateBtn]}
@@ -1536,7 +1538,7 @@ export default function HomeScreen({ navigation, route }) {
             activeOpacity={0.8}
           >
             <Feather name="award" size={14} color={theme.accent.primary} />
-            <Text style={s.secondaryBtnText}>Start a Tournament</Text>
+            <Text style={s.secondaryBtnText}>{tx('home.noActive.startTournament')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.secondaryBtn, s.emptyStateBtn]}
@@ -1544,13 +1546,13 @@ export default function HomeScreen({ navigation, route }) {
             activeOpacity={0.8}
           >
             <Feather name="home" size={14} color={theme.accent.primary} />
-            <Text style={s.secondaryBtnText}>Go to Home</Text>
+            <Text style={s.secondaryBtnText}>{tx('home.noActive.goHome')}</Text>
           </TouchableOpacity>
         </View>
 
         <BottomSheet visible={showTournamentKindChoice} onClose={() => setShowTournamentKindChoice(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>New Tournament</Text>
+          <Text style={s.modalTitle}>{tx('home.kind.title')}</Text>
 
           <TouchableOpacity
             style={s.menuItem}
@@ -1559,8 +1561,8 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="users" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>Casual tournament</Text>
-              <Text style={s.modalSubtle}>Friends scoring a round together</Text>
+              <Text style={s.menuItemText}>{tx('home.kind.casual')}</Text>
+              <Text style={s.modalSubtle}>{tx('home.kind.casualSub')}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -1572,8 +1574,8 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="award" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>Official tournament</Text>
-              <Text style={s.modalSubtle}>Invite players by link; double-entered, verified scoring</Text>
+              <Text style={s.menuItemText}>{tx('home.kind.official')}</Text>
+              <Text style={s.modalSubtle}>{tx('home.kind.officialSub')}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -1585,8 +1587,8 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="users" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>League</Text>
-              <Text style={s.modalSubtle}>One card a month, all season</Text>
+              <Text style={s.menuItemText}>{tx('home.kind.league')}</Text>
+              <Text style={s.modalSubtle}>{tx('home.kind.leagueSub')}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -1619,19 +1621,19 @@ export default function HomeScreen({ navigation, route }) {
           <IconButton
             icon="image"
             onPress={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
-            accessibilityLabel="Memories"
+            accessibilityLabel={tx('home.header.memoriesA11y')}
           />
           {!appSettings.noSpoilers && (
             <IconButton
               icon={showRunning ? 'eye-off' : 'eye'}
               onPress={toggleRunning}
-              accessibilityLabel={showRunning ? 'Hide running scores' : 'Show running scores'}
+              accessibilityLabel={showRunning ? tx('home.header.hideRunningA11y') : tx('home.header.showRunningA11y')}
             />
           )}
           <IconButton
             icon="settings"
             onPress={() => setShowSettings(true)}
-            accessibilityLabel="Tournament settings"
+            accessibilityLabel={tx('home.header.settingsA11y')}
           />
         </View>
       </View>
@@ -1645,7 +1647,7 @@ export default function HomeScreen({ navigation, route }) {
 
       {tournament.players.length >= 2 && (
       <LeaderboardCard
-        title={leaderboardOverall && !isGame ? 'OVERALL' : `R${selectedRound + 1} · ${roundModeLabel(displayedBoard.mode)}`}
+        title={leaderboardOverall && !isGame ? tx('home.board.overallTitle') : tx('home.board.roundTitle', { n: selectedRound + 1, mode: roundModeLabel(displayedBoard.mode, tx) })}
         headerRight={resolvedBoard.entries.length > 0 && (
           <View style={s.inlineToggle}>
             <Text style={[s.mastersToggleLabel, !leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.left}</Text>
@@ -1671,7 +1673,7 @@ export default function HomeScreen({ navigation, route }) {
               onPress={() => setLeaderboardOverall(true)}
               activeOpacity={0.7}
             >
-              <Text style={[s.mastersChipText, leaderboardOverall && s.mastersChipTextActive]}>Overall</Text>
+              <Text style={[s.mastersChipText, leaderboardOverall && s.mastersChipTextActive]}>{tx('home.board.overall')}</Text>
             </TouchableOpacity>
             {tournament.rounds.map((round, index) => (
               <TouchableOpacity
@@ -1685,7 +1687,7 @@ export default function HomeScreen({ navigation, route }) {
                 activeOpacity={0.7}
               >
                 <Text style={[s.mastersChipText, !leaderboardOverall && selectedRound === index && s.mastersChipTextActive]}>
-                  R{index + 1}
+                  {tx('home.board.roundChip', { n: index + 1 })}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -1698,7 +1700,7 @@ export default function HomeScreen({ navigation, route }) {
           name: entry.player.name,
           mark: showRunning && entry.player.id === tournamentClinchedId,
           points: !showRunning ? '—' : `${entry.points} ${displayedBoard.unit}`,
-          sub: entry.strokes != null ? (!showRunning ? '' : `${entry.strokes || '-'} str`) : null,
+          sub: entry.strokes != null ? (!showRunning ? '' : tx('home.board.strokesSub', { strokes: entry.strokes || '-' })) : null,
         }))}
         footer={settings.scoringMode === 'matchplay' && matchPlayStandings && showRunning && !tournamentHasMixedModes(tournament)
           ? matchPlayStandings.status : null}
@@ -1711,7 +1713,7 @@ export default function HomeScreen({ navigation, route }) {
         <View style={s.card} testID="finished-game-scorecard">
           <View style={s.cardTitleRow}>
             <View style={s.cardTitleLeft}>
-              <Text style={s.cardTitle}>SCORECARD</Text>
+              <Text style={s.cardTitle}>{tx('home.card.scorecardTitle')}</Text>
               {tournament.rounds[0].courseName && (
                 <Text style={s.cardTitleCourse} numberOfLines={1}>{' · '}{tournament.rounds[0].courseName}</Text>
               )}
@@ -1730,7 +1732,7 @@ export default function HomeScreen({ navigation, route }) {
         <View style={s.card}>
           <View style={s.cardTitleRow}>
             <View style={s.cardTitleLeft}>
-              <Text style={s.cardTitle}>ROUND SCORES</Text>
+              <Text style={s.cardTitle}>{tx('home.leaderboard.roundScores')}</Text>
               {tournament.rounds.length === 1 && tournament.rounds[0].courseName && (
                 <Text style={s.cardTitleCourse} numberOfLines={1}>
                   {' · '}{tournament.rounds[0].courseName}
@@ -1756,7 +1758,7 @@ export default function HomeScreen({ navigation, route }) {
                   activeOpacity={0.7}
                 >
                   <Text style={[s.tabText, selectedRound === index && s.tabTextActive]}>
-                    R{index + 1}
+                    {tx('home.board.roundChip', { n: index + 1 })}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -1904,7 +1906,7 @@ export default function HomeScreen({ navigation, route }) {
             activeOpacity={0.8}
           >
             <Feather name="edit-2" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-            <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Edit Scores'}</Text>
+            <Text style={s.primaryBtnText}>{isCurrentRound ? tx('home.bar.scorecard') : tx('home.bar.editScores')}</Text>
           </TouchableOpacity>
           {canShowNext && (
             nextRevealed ? (
@@ -1914,7 +1916,7 @@ export default function HomeScreen({ navigation, route }) {
                 activeOpacity={0.7}
               >
                 <Feather name="eye" size={14} color={theme.accent.primary} />
-                <Text style={s.secondaryBtnText}>Next Round</Text>
+                <Text style={s.secondaryBtnText}>{tx('home.bar.nextRound')}</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -1923,7 +1925,7 @@ export default function HomeScreen({ navigation, route }) {
                 activeOpacity={0.8}
               >
                 <Feather name="play" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-                <Text style={s.primaryBtnText}>Start Next Round</Text>
+                <Text style={s.primaryBtnText}>{tx('home.bar.startNextRound')}</Text>
               </TouchableOpacity>
             )
           )}
@@ -1933,22 +1935,22 @@ export default function HomeScreen({ navigation, route }) {
 
     <BottomSheet visible={showInvite} onClose={() => setShowInvite(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>Share</Text>
+          <Text style={s.modalTitle}>{tx('home.share.title')}</Text>
           <Text style={s.inviteSubtitle}>
             {(() => {
-              const noun = tournamentNoun(tournament);
+              const isGameNoun = tournament.kind === 'game';
               if (inviteRoleState === 'editor') {
-                return `Anyone with this code can enter scores for this ${noun}.`;
+                return tx(isGameNoun ? 'home.share.editorGame' : 'home.share.editorTournament');
               }
               // Viewer mode: the public live board when the owner has shared
               // one, otherwise the legacy viewer join-code flow.
               if (tournament.shareToken) {
-                return 'Anyone with this link can watch the live board — no account needed.';
+                return tx('home.share.viewerBoard');
               }
               if (isOwner && boardShareBusy) {
-                return 'Turning on the live board…';
+                return tx('home.share.viewerBusy');
               }
-              return `Anyone with this code can view this ${noun} (read-only).`;
+              return tx(isGameNoun ? 'home.share.viewerGame' : 'home.share.viewerTournament');
             })()}
           </Text>
 
@@ -1962,7 +1964,7 @@ export default function HomeScreen({ navigation, route }) {
                   color="#000000"
                 />
               </View>
-              <Text style={s.inviteQrHint}>Scan to watch</Text>
+              <Text style={s.inviteQrHint}>{tx('home.share.scanWatch')}</Text>
             </View>
           ) : inviteRoleState === 'viewer' && isOwner && boardShareBusy ? (
             <ActivityIndicator color={theme.accent.primary} style={{ marginVertical: 24 }} />
@@ -1989,14 +1991,14 @@ export default function HomeScreen({ navigation, route }) {
                               color="#000000"
                             />
                           </View>
-                          <Text style={s.inviteQrHint}>Scan to join</Text>
+                          <Text style={s.inviteQrHint}>{tx('home.share.scanJoin')}</Text>
                         </View>
                       );
                     })()}
                   </>
                 )}
               {inviteRoleState === 'viewer' && !isOwner && (
-                <Text style={s.modalSubtle}>The owner can turn on a no-login live board link.</Text>
+                <Text style={s.modalSubtle}>{tx('home.share.ownerHint')}</Text>
               )}
             </>
           )}
@@ -2009,7 +2011,7 @@ export default function HomeScreen({ navigation, route }) {
               disabled={!inviteCode}
             >
               <Text style={[s.inviteRoleText, inviteRoleState === 'editor' && s.inviteRoleTextActive]}>
-                Editor
+                {tx('home.share.editor')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -2019,7 +2021,7 @@ export default function HomeScreen({ navigation, route }) {
               disabled={!inviteCode}
             >
               <Text style={[s.inviteRoleText, inviteRoleState === 'viewer' && s.inviteRoleTextActive]}>
-                Viewer
+                {tx('home.share.viewer')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -2033,14 +2035,14 @@ export default function HomeScreen({ navigation, route }) {
               }
               // Blank line before the URL keeps WhatsApp from wrapping the
               // text into the middle of the link and breaking the tap target.
-              const message = `Join my golf tournament 🏌️\n\n${buildJoinLink(currentOrigin(), inviteCode)}`;
+              const message = tx('home.share.inviteMessage', { link: buildJoinLink(currentOrigin(), inviteCode) });
               Share.share({ message });
             }}
             activeOpacity={0.7}
             disabled={inviteRoleState === 'viewer' && tournament.shareToken ? false : !inviteCode}
           >
             <Feather name="share-2" size={14} color={theme.text.primary} />
-            <Text style={s.menuItemText}>Share link</Text>
+            <Text style={s.menuItemText}>{tx('home.share.shareLink')}</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
 
@@ -2054,8 +2056,8 @@ export default function HomeScreen({ navigation, route }) {
               >
                 <Feather name="refresh-cw" size={14} color={theme.text.primary} />
                 <View style={{ flex: 1 }}>
-                  <Text style={s.menuItemText}>New link</Text>
-                  <Text style={s.modalSubtle}>Rotating breaks the old link — share the new one.</Text>
+                  <Text style={s.menuItemText}>{tx('home.share.newLink')}</Text>
+                  <Text style={s.modalSubtle}>{tx('home.share.newLinkHint')}</Text>
                 </View>
                 {boardShareBusy
                   ? <ActivityIndicator size="small" color={theme.text.muted} />
@@ -2068,7 +2070,7 @@ export default function HomeScreen({ navigation, route }) {
                 disabled={boardShareBusy}
               >
                 <Feather name="x-circle" size={14} color={theme.destructive} />
-                <Text style={[s.menuItemText, { color: theme.destructive }]}>Stop sharing</Text>
+                <Text style={[s.menuItemText, { color: theme.destructive }]}>{tx('home.share.stop')}</Text>
                 {boardShareBusy && <ActivityIndicator size="small" color={theme.text.muted} />}
               </TouchableOpacity>
             </>
@@ -2081,7 +2083,7 @@ export default function HomeScreen({ navigation, route }) {
               activeOpacity={0.7}
             >
               <Feather name="share-2" size={14} color={theme.text.primary} />
-              <Text style={s.menuItemText}>Share leaderboard image</Text>
+              <Text style={s.menuItemText}>{tx('home.share.leaderboardImage')}</Text>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
@@ -2096,7 +2098,7 @@ export default function HomeScreen({ navigation, route }) {
       <Pressable style={s.modalBackdrop} onPress={() => setShowRoundEdit(false)}>
         <Pressable style={s.modalSheet} onPress={() => {}}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>Round {selectedRound + 1}</Text>
+          <Text style={s.modalTitle}>{tx('home.round.sheetTitle', { n: selectedRound + 1 })}</Text>
 
           {/* Per-round sheet (multi-round only). Round-scoped actions live
               here; tournament-wide settings live in the gear menu. */}
@@ -2107,7 +2109,7 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="flag" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>Scoring Mode</Text>
+              <Text style={s.menuItemText}>{tx('home.round.scoringMode')}</Text>
               <Text style={s.modalSubtle}>
                 {getScoringMode(roundScoringMode(tournament, tournament.rounds[selectedRound])).label}
               </Text>
@@ -2130,7 +2132,7 @@ export default function HomeScreen({ navigation, route }) {
 
     <BottomSheet visible={showSettings} onClose={() => setShowSettings(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>{`${tournamentNounCapitalized(tournament)} Settings`}</Text>
+          <Text style={s.modalTitle}>{tx(tournament.kind === 'game' ? 'home.settings.titleGame' : 'home.settings.titleTournament')}</Text>
 
           {/* Teams are round-scoped. Single-round tournaments have no separate
               per-round sheet, so teams surface here; multi-round keeps them in
@@ -2144,7 +2146,7 @@ export default function HomeScreen({ navigation, route }) {
             activeOpacity={0.7}
           >
             <Feather name="bar-chart-2" size={14} color={theme.text.primary} />
-            <Text style={s.menuItemText}>Statistics</Text>
+            <Text style={s.menuItemText}>{tx('home.settings.statistics')}</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
 
@@ -2160,7 +2162,7 @@ export default function HomeScreen({ navigation, route }) {
             activeOpacity={0.7}
           >
             <Feather name="users" size={14} color={theme.text.primary} />
-            <Text style={s.menuItemText}>Players</Text>
+            <Text style={s.menuItemText}>{tx('home.list.menuPlayers')}</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
 
@@ -2175,7 +2177,7 @@ export default function HomeScreen({ navigation, route }) {
             >
               <Feather name="flag" size={14} color={theme.text.primary} />
               <View style={{ flex: 1 }}>
-                <Text style={s.menuItemText}>Scoring Mode</Text>
+                <Text style={s.menuItemText}>{tx('home.round.scoringMode')}</Text>
                 <Text style={s.modalSubtle}>
                   {getScoringMode(roundScoringMode(tournament, tournament.rounds[0])).label}
                 </Text>
@@ -2193,7 +2195,7 @@ export default function HomeScreen({ navigation, route }) {
               activeOpacity={0.7}
             >
               <Feather name="users" size={14} color={theme.text.primary} />
-              <Text style={s.menuItemText}>Team Settings</Text>
+              <Text style={s.menuItemText}>{tx('home.settings.teamSettings')}</Text>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
@@ -2211,13 +2213,13 @@ export default function HomeScreen({ navigation, route }) {
               activeOpacity={0.7}
             >
               <Feather name="edit-3" size={14} color={theme.text.primary} />
-              <Text style={s.menuItemText}>{tournament.rounds.length === 1 ? 'Edit Round' : 'Edit Tournament'}</Text>
+              <Text style={s.menuItemText}>{tx(tournament.rounds.length === 1 ? 'home.settings.editRound' : 'home.settings.editTournament')}</Text>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
 
           {!isViewer && (() => {
-            const kindLabel = tournamentNounCapitalized(tournament);
+            const isGameKind = tournament.kind === 'game';
             if (tournament.finishedAt) {
               return (
                 <TouchableOpacity
@@ -2226,7 +2228,7 @@ export default function HomeScreen({ navigation, route }) {
                   activeOpacity={0.7}
                 >
                   <Feather name="rotate-ccw" size={14} color={theme.text.primary} />
-                  <Text style={s.menuItemText}>Reopen {kindLabel}</Text>
+                  <Text style={s.menuItemText}>{tx(isGameKind ? 'home.settings.reopenGame' : 'home.settings.reopenTournament')}</Text>
                   <Feather name="chevron-right" size={16} color={theme.text.muted} />
                 </TouchableOpacity>
               );
@@ -2238,7 +2240,7 @@ export default function HomeScreen({ navigation, route }) {
                 activeOpacity={0.7}
               >
                 <Feather name="flag" size={14} color={theme.text.primary} />
-                <Text style={s.menuItemText}>Finish {kindLabel}</Text>
+                <Text style={s.menuItemText}>{tx(isGameKind ? 'home.settings.finishGame' : 'home.settings.finishTournament')}</Text>
                 <Feather name="chevron-right" size={16} color={theme.text.muted} />
               </TouchableOpacity>
             );
@@ -2251,14 +2253,14 @@ export default function HomeScreen({ navigation, route }) {
               activeOpacity={0.7}
             >
               <Feather name="trash-2" size={14} color={theme.destructive} />
-              <Text style={[s.menuItemText, { color: theme.destructive }]}>{`Delete ${tournamentNounCapitalized(tournament)}`}</Text>
+              <Text style={[s.menuItemText, { color: theme.destructive }]}>{tx(tournament.kind === 'game' ? 'home.delete.gameTitle' : 'home.delete.tournamentTitle')}</Text>
             </TouchableOpacity>
           )}
     </BottomSheet>
 
     <BottomSheet visible={showTeamSettings} onClose={() => setShowTeamSettings(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>Team Settings</Text>
+          <Text style={s.modalTitle}>{tx('home.settings.teamSettings')}</Text>
           <TeamsSettingsFields
             value={teamSettingsMode}
             playerCount={tournament.players.length}
@@ -2277,7 +2279,7 @@ export default function HomeScreen({ navigation, route }) {
             >
               <Feather name="edit-2" size={14} color={theme.text.primary} />
               <View style={{ flex: 1 }}>
-                <Text style={s.menuItemText}>Edit Pairs</Text>
+                <Text style={s.menuItemText}>{tx('home.settings.editPairs')}</Text>
                 <Text style={s.modalSubtle}>{pairsPreviewText(tournament)}</Text>
               </View>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
@@ -2287,7 +2289,7 @@ export default function HomeScreen({ navigation, route }) {
 
     <BottomSheet visible={showPointValues} onClose={() => setShowPointValues(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>{`Point Values · Round ${selectedRound + 1}`}</Text>
+          <Text style={s.modalTitle}>{tx('home.pointValues.title', { n: selectedRound + 1 })}</Text>
           {pointValuesDraft && (
             <>
               <BestBallValueFields settings={pointValuesDraft} onSettingsChange={setPointValuesDraft} />
@@ -2297,7 +2299,7 @@ export default function HomeScreen({ navigation, route }) {
                 activeOpacity={0.7}
               >
                 <Feather name="check" size={14} color={theme.text.primary} />
-                <Text style={s.menuItemText}>Save</Text>
+                <Text style={s.menuItemText}>{tx('home.pointValues.save')}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -2323,6 +2325,7 @@ export default function HomeScreen({ navigation, route }) {
 // Themed in-app confirmation dialog. Used in place of window.confirm so the
 // web build matches the native styling; native uses it too for consistency.
 function ConfirmModal({ state, onResult, theme, s }) {
+  const t = useT();
   return (
     <Modal statusBarTranslucent hardwareAccelerated
       visible={!!state}
@@ -2340,7 +2343,7 @@ function ConfirmModal({ state, onResult, theme, s }) {
               onPress={() => onResult(false)}
               activeOpacity={0.8}
             >
-              <Text style={s.confirmBtnCancelText}>Cancel</Text>
+              <Text style={s.confirmBtnCancelText}>{t('home.confirm.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.confirmBtn, state?.destructive ? s.confirmBtnDestructive : s.confirmBtnPrimary]}
@@ -2351,7 +2354,7 @@ function ConfirmModal({ state, onResult, theme, s }) {
                 s.confirmBtnPrimaryText,
                 state?.destructive && s.confirmBtnDestructiveText,
               ]}>
-                {state?.confirmLabel ?? 'Confirm'}
+                {state?.confirmLabel ?? t('home.confirm.confirm')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -2370,6 +2373,7 @@ const RoundPage = React.memo(function RoundPage({
   onGoToRound, onOpenEdit, isSingleRound, showRunning = true, scoringMode = null,
   scorecardSettings = null,
 }) {
+  const t = useT();
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
   return (
     <View
@@ -2385,17 +2389,17 @@ const RoundPage = React.memo(function RoundPage({
             onPress={() => hasPrev && onGoToRound(index - 1)}
             disabled={!hasPrev}
             activeOpacity={0.7}
-            accessibilityLabel="Previous round"
+            accessibilityLabel={t('home.round.prevA11y')}
           >
             <Feather name="chevron-left" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
-          <Text style={s.tabRoundTitle}>ROUND {index + 1} · {round.courseName || '—'}</Text>
+          <Text style={s.tabRoundTitle}>{t('home.round.title', { n: index + 1, course: round.courseName || '—' })}</Text>
           {onOpenEdit && (
             <TouchableOpacity
               onPress={() => onOpenEdit(index)}
               style={s.roundEditBtn}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityLabel="Round options"
+              accessibilityLabel={t('home.round.optionsA11y')}
             >
               <Feather name="settings" size={16} color={theme.text.muted} />
             </TouchableOpacity>
@@ -2405,7 +2409,7 @@ const RoundPage = React.memo(function RoundPage({
             onPress={() => hasNext && onGoToRound(index + 1)}
             disabled={!hasNext}
             activeOpacity={0.7}
-            accessibilityLabel="Next round"
+            accessibilityLabel={t('home.round.nextA11y')}
           >
             <Feather name="chevron-right" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
@@ -2416,7 +2420,7 @@ const RoundPage = React.memo(function RoundPage({
       ) : hasScores || revealed ? (
         <RoundScoreboard round={round} players={players} meId={meId} showRunning={showRunning} scoringMode={scoringMode} />
       ) : (
-        <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
+        <Text style={s.emptyRoundHint}>{t('home.round.noScores')}</Text>
       )}
     </View>
   );

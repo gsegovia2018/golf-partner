@@ -3,15 +3,17 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { Feather } from '@expo/vector-icons';
 import { blankTee } from '../store/tees';
 import { computeDupeTeeLabels } from '../lib/courseLibrary';
+import { useT } from '../i18n';
 
 // Controlled tee-list editor. `tees` is an array of
 // { id, label, rating, slope } (rating/slope may be '' while editing).
 // `onChange` receives the next array.
 export default function TeesEditor({ tees, onChange, theme }) {
+  const t = useT();
   const s = makeStyles(theme);
 
   function update(index, patch) {
-    onChange(tees.map((t, i) => (i === index ? { ...t, ...patch } : t)));
+    onChange(tees.map((tee, i) => (i === index ? { ...tee, ...patch } : tee)));
   }
   function add() {
     onChange([...tees, blankTee()]);
@@ -26,12 +28,12 @@ export default function TeesEditor({ tees, onChange, theme }) {
 
   return (
     <View style={s.card}>
-      <Text style={s.sectionTitle}>Tees</Text>
+      <Text style={s.sectionTitle}>{t('setup.tees.title')}</Text>
 
       <View style={s.headerRow}>
-        <Text style={[s.headerText, s.labelCol]}>Label</Text>
-        <Text style={[s.headerText, s.numCol]}>Rating</Text>
-        <Text style={[s.headerText, s.numCol]}>Slope</Text>
+        <Text style={[s.headerText, s.labelCol]}>{t('setup.tees.label')}</Text>
+        <Text style={[s.headerText, s.numCol]}>{t('setup.tees.rating')}</Text>
+        <Text style={[s.headerText, s.numCol]}>{t('setup.tees.slope')}</Text>
         <View style={s.removeCol} />
       </View>
 
@@ -40,7 +42,7 @@ export default function TeesEditor({ tees, onChange, theme }) {
           <View style={s.row}>
             <TextInput
               style={[s.input, s.labelCol]}
-              placeholder="White / 3 / Champ"
+              placeholder={t('setup.tees.labelPlaceholder')}
               placeholderTextColor={theme.text.muted}
               keyboardAppearance={theme.isDark ? 'dark' : 'light'}
               selectionColor={theme.accent.primary}
@@ -74,13 +76,13 @@ export default function TeesEditor({ tees, onChange, theme }) {
               onPress={() => remove(i)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={`Remove ${tee.label || 'tee'}`}
+              accessibilityLabel={tee.label ? t('setup.tees.removeNamed', { name: tee.label }) : t('setup.tees.removeTee')}
             >
               <Feather name="x" size={16} color={theme.destructive} />
             </TouchableOpacity>
           </View>
           <View style={s.womenRow}>
-            <Text style={[s.womenLabel, s.labelCol]}>Women&apos;s</Text>
+            <Text style={[s.womenLabel, s.labelCol]}>{t('setup.tees.womens')}</Text>
             <TextInput
               style={[s.input, s.numCol]}
               keyboardType="decimal-pad"
@@ -113,20 +115,20 @@ export default function TeesEditor({ tees, onChange, theme }) {
         onPress={add}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel="Add tee"
+        accessibilityLabel={t('setup.tees.add')}
       >
         <Feather name="plus" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-        <Text style={s.addBtnText}>Add tee</Text>
+        <Text style={s.addBtnText}>{t('setup.tees.add')}</Text>
       </TouchableOpacity>
 
       {dupes.length > 0 && (
         <Text style={s.warnText}>
-          Tee labels must be unique — duplicate: {dupes.join(', ')}
+          {t('setup.tees.duplicate', { labels: dupes.join(', ') })}
         </Text>
       )}
       {tees.length === 0 && (
         <Text style={s.hintText}>
-          No tees yet. Without a tee, players use their raw handicap index.
+          {t('setup.tees.empty')}
         </Text>
       )}
     </View>

@@ -16,15 +16,16 @@ import {
   addRosterPlayer, listRoster,
   regenerateToken, withdrawPlayer, createRound, saveTournamentData,
 } from '../store/officialAdmin';
+import { useT } from '../i18n';
 
 function joinLink(token) {
   return `${shareOrigin()}/join/${token}`;
 }
 
-function showError(message) {
-  const msg = message || 'Something went wrong';
+function showError(t, message) {
+  const msg = message || t('official.setup.genericError');
   if (Platform.OS === 'web') window.alert(msg);
-  else Alert.alert('Error', msg);
+  else Alert.alert(t('official.setup.errorTitle'), msg);
 }
 
 function copyToClipboard(text) {
@@ -34,6 +35,7 @@ function copyToClipboard(text) {
 
 export default function OfficialSetupScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   // The tournament being managed — supplied by the setup wizard.
@@ -128,7 +130,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
       tournamentDataRef.current = nextData;
     } catch (e) {
       if (!mountedRef.current) return;
-      showError(e?.message);
+      showError(t, e?.message);
     } finally {
       if (mountedRef.current) setSavingRules(false);
     }
@@ -150,7 +152,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
       setNewHandicap('');
     } catch (e) {
       if (!mountedRef.current) return;
-      showError(e?.message);
+      showError(t, e?.message);
     } finally {
       if (mountedRef.current) setAddingPlayer(false);
     }
@@ -176,7 +178,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
       )));
     } catch (e) {
       if (!mountedRef.current) return;
-      showError(e?.message);
+      showError(t, e?.message);
     } finally {
       if (mountedRef.current) setPendingRowId(null);
     }
@@ -194,7 +196,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
       )));
     } catch (e) {
       if (!mountedRef.current) return;
-      showError(e?.message);
+      showError(t, e?.message);
     } finally {
       if (mountedRef.current) setPendingRowId(null);
     }
@@ -219,7 +221,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
       navigation.navigate('PartyBoard', { tournamentId, roundId });
     } catch (e) {
       if (!mountedRef.current) return;
-      showError(e?.message);
+      showError(t, e?.message);
     } finally {
       if (mountedRef.current) setAddingRound(false);
     }
@@ -229,7 +231,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Official Tournament</Text>
+        <Text style={s.headerTitle}>{t('official.setup.title')}</Text>
         <View style={{ width: 64 }} />
       </View>
 
@@ -241,29 +243,29 @@ export default function OfficialSetupScreen({ navigation, route }) {
         <View style={s.centerState}>
           <Text style={s.errorText}>
             {tournamentId
-              ? 'Could not load this tournament.'
-              : 'No tournament selected.'}
+              ? t('official.setup.loadError')
+              : t('official.setup.noneSelected')}
           </Text>
           {!!tournamentId && (
             <TouchableOpacity style={s.secondaryBtn} onPress={load}>
-              <Text style={s.secondaryBtnText}>Retry</Text>
+              <Text style={s.secondaryBtnText}>{t('official.setup.retry')}</Text>
             </TouchableOpacity>
           )}
         </View>
       ) : (
         <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
           {/* Tournament name (read-only) */}
-          <Text style={s.sectionTitle}>Tournament</Text>
+          <Text style={s.sectionTitle}>{t('official.setup.tournament')}</Text>
           <View style={s.card}>
-            <Text style={s.tournamentName}>{name || 'Untitled tournament'}</Text>
+            <Text style={s.tournamentName}>{name || t('official.setup.untitled')}</Text>
           </View>
 
           {/* Local rules & notes */}
-          <Text style={s.sectionTitle}>Local Rules & Notes</Text>
+          <Text style={s.sectionTitle}>{t('official.setup.rulesTitle')}</Text>
           <View style={s.card}>
             <TextInput
               style={[s.input, s.notesInput]}
-              placeholder="Local rules, notes, dress code..."
+              placeholder={t('official.setup.rulesPlaceholder')}
               placeholderTextColor={theme.text.muted}
               keyboardAppearance={theme.isDark ? 'dark' : 'light'}
               selectionColor={theme.accent.primary}
@@ -273,14 +275,14 @@ export default function OfficialSetupScreen({ navigation, route }) {
               onBlur={handleRulesSave}
             />
             {savingRules && (
-              <Text style={s.hint}>Saving…</Text>
+              <Text style={s.hint}>{t('official.setup.saving')}</Text>
             )}
           </View>
 
           {/* Roster */}
-          <Text style={s.sectionTitle}>Roster</Text>
+          <Text style={s.sectionTitle}>{t('official.setup.roster')}</Text>
           {roster.length === 0 && (
-            <Text style={s.hint}>No players yet. Add the first below.</Text>
+            <Text style={s.hint}>{t('official.setup.noPlayers')}</Text>
           )}
           {roster.map((row) => (
             <View key={row.id} style={s.playerCard}>
@@ -290,7 +292,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
                     {row.display_name}
                   </Text>
                   <Text style={s.playerMeta}>
-                    Handicap {row.handicap}{row.withdrawn ? '  •  Withdrawn' : ''}
+                    {t('official.setup.handicap', { hcp: row.handicap })}{row.withdrawn ? t('official.setup.withdrawnSuffix') : ''}
                   </Text>
                 </View>
               </View>
@@ -298,7 +300,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
                 <TouchableOpacity style={s.actionBtn} onPress={() => handleShowLink(row)}>
                   <Feather name="link" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
                   <Text style={s.actionBtnText}>
-                    {openLinkId === row.id ? 'Hide link' : 'Show link'}
+                    {openLinkId === row.id ? t('official.setup.hideLink') : t('official.setup.showLink')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -307,7 +309,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
                   disabled={pendingRowId === row.id}
                 >
                   <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
-                  <Text style={s.actionBtnText}>Regenerate</Text>
+                  <Text style={s.actionBtnText}>{t('official.setup.regenerate')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[s.actionBtn, pendingRowId === row.id && s.btnDisabled]}
@@ -321,7 +323,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
                     style={{ marginRight: 4 }}
                   />
                   <Text style={[s.actionBtnText, !row.withdrawn && s.actionBtnTextDanger]}>
-                    {row.withdrawn ? 'Reinstate' : 'Withdraw'}
+                    {row.withdrawn ? t('official.setup.reinstate') : t('official.setup.withdraw')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -336,7 +338,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
                     />
                   </View>
                   <Text style={s.linkText} selectable>{joinLink(row.magic_token)}</Text>
-                  <Text style={s.hint}>Link copied to clipboard.</Text>
+                  <Text style={s.hint}>{t('official.setup.linkCopied')}</Text>
                 </View>
               )}
             </View>
@@ -344,10 +346,10 @@ export default function OfficialSetupScreen({ navigation, route }) {
 
           {/* Add player */}
           <View style={s.card}>
-            <Text style={s.cardLabel}>Add player</Text>
+            <Text style={s.cardLabel}>{t('official.setup.addPlayer')}</Text>
             <TextInput
               style={s.input}
-              placeholder="Display name"
+              placeholder={t('official.setup.displayName')}
               placeholderTextColor={theme.text.muted}
               keyboardAppearance={theme.isDark ? 'dark' : 'light'}
               selectionColor={theme.accent.primary}
@@ -356,7 +358,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
             />
             <TextInput
               style={s.input}
-              placeholder="Handicap"
+              placeholder={t('official.setup.handicapPlaceholder')}
               placeholderTextColor={theme.text.muted}
               keyboardType="decimal-pad"
               keyboardAppearance={theme.isDark ? 'dark' : 'light'}
@@ -371,14 +373,14 @@ export default function OfficialSetupScreen({ navigation, route }) {
             >
               {addingPlayer
                 ? <ActivityIndicator size="small" color={theme.text.inverse} />
-                : <Text style={s.primaryBtnText}>Add player</Text>}
+                : <Text style={s.primaryBtnText}>{t('official.setup.addPlayer')}</Text>}
             </TouchableOpacity>
           </View>
 
           {/* Rounds */}
-          <Text style={s.sectionTitle}>Rounds</Text>
+          <Text style={s.sectionTitle}>{t('official.setup.rounds')}</Text>
           {rounds.length === 0 && (
-            <Text style={s.hint}>No rounds added yet.</Text>
+            <Text style={s.hint}>{t('official.setup.noRounds')}</Text>
           )}
           {rounds.map((round) => (
             <TouchableOpacity
@@ -387,7 +389,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
               onPress={() => navigation.navigate('PartyBoard', { tournamentId, roundId: round.id })}
             >
               <View style={{ flex: 1 }}>
-                <Text style={s.roundName}>Round {(round.round_index ?? 0) + 1}</Text>
+                <Text style={s.roundName}>{t('official.setup.roundN', { n: (round.round_index ?? 0) + 1 })}</Text>
                 <Text style={s.roundMeta}>
                   {(round.format ?? 'stableford')}  •  {(round.status ?? 'setup')}
                 </Text>
@@ -405,7 +407,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
             ) : (
               <>
                 <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 8 }} />
-                <Text style={s.addRoundBtnText}>Add Round</Text>
+                <Text style={s.addRoundBtnText}>{t('official.setup.addRound')}</Text>
               </>
             )}
           </TouchableOpacity>

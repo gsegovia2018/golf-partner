@@ -9,6 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useT, t as translate } from '../i18n';
 import { semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -30,11 +31,11 @@ import { consumePendingPlayers } from '../lib/selectionBridge';
 import { parseHandicapIndex } from '../lib/handicap';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 
-async function confirmDialog(title, message, confirmLabel = 'Remove') {
+async function confirmDialog(title, message, confirmLabel = translate('setup.players.remove')) {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
   return new Promise((resolve) => Alert.alert(
     title, message,
-    [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+    [{ text: translate('setup.players.cancel'), style: 'cancel', onPress: () => resolve(false) },
      { text: confirmLabel, style: 'destructive', onPress: () => resolve(true) }],
   ));
 }
@@ -68,6 +69,9 @@ function editableRoundsFromTournament(t) {
 
 export default function PlayersScreen({ navigation, route }) {
   const { tournamentId, tournamentName } = route.params ?? {};
+  // `tx` renders (and re-renders on language change); handlers use `translate`
+  // because several of them shadow `t` with a tournament.
+  const tx = useT();
   const { theme } = useTheme();
   const { user } = useAuth();
   const s = makeStyles(theme);
@@ -127,7 +131,7 @@ export default function PlayersScreen({ navigation, route }) {
       setEditPlayers(editablePlayersFromTournament(t));
       setRounds(editableRoundsFromTournament(t));
     } catch (err) {
-      setLoadError(err?.message ?? 'Could not load players');
+      setLoadError(err?.message ?? translate('setup.players.loadFallback'));
     } finally {
       hasLoadedOnceRef.current = true;
       setLoading(false);
@@ -179,9 +183,9 @@ export default function PlayersScreen({ navigation, route }) {
     }
     await load();
     if (skipped.length > 0) {
-      const msg = `Could not add ${skipped.join(', ')}: invalid handicap on file. Fix it in the players library first.`;
+      const msg = translate('setup.players.skipped', { names: skipped.join(', ') });
       if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('Some players not added', msg);
+      else Alert.alert(translate('setup.players.skippedTitle'), msg);
     }
   }, [load, tournamentId]);
 
@@ -230,7 +234,7 @@ export default function PlayersScreen({ navigation, route }) {
     if (!t) return;
     const newCount = (t.players ?? []).length - 1;
     if (newCount < 2) {
-      Alert.alert('Cannot remove', 'A game needs at least 2 players.');
+      Alert.alert(translate('setup.players.cannotRemoveTitle'), translate('setup.players.cannotRemove'));
       return;
     }
     const currentMode = t.settings?.scoringMode ?? 'stableford';
@@ -375,9 +379,9 @@ export default function PlayersScreen({ navigation, route }) {
       } catch (err) {
         if (isMountedRef.current) {
           setSaveState('error');
-          const msg = err?.message ?? 'Could not save changes';
+          const msg = err?.message ?? translate('setup.players.saveError');
           if (Platform.OS === 'web') window.alert(msg);
-          else Alert.alert('Save failed', msg);
+          else Alert.alert(translate('setup.players.saveFailed'), msg);
         }
       }
     }, 400);
@@ -427,9 +431,9 @@ export default function PlayersScreen({ navigation, route }) {
     if (!target) return;
     const alreadyUsed = editPlayers.some((p) => p.id !== target.id && p.user_id === friend.userId);
     if (alreadyUsed) {
-      const msg = `${friend.displayName} is already linked to another player in this game.`;
+      const msg = translate('setup.players.alreadyLinkedMsg', { name: friend.displayName });
       if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('Already linked', msg);
+      else Alert.alert(translate('setup.players.alreadyLinked'), msg);
       return;
     }
     setEditPlayers((prev) => prev.map((p) => (
@@ -454,13 +458,13 @@ export default function PlayersScreen({ navigation, route }) {
   }, []);
 
   async function confirmRemove(row) {
-    const name = row.profile?.display_name || 'this member';
+    const name = row.profile?.display_name || translate('setup.players.thisMember');
     const confirmed = Platform.OS === 'web'
-      ? window.confirm(`Remove ${name} from the tournament?`)
+      ? window.confirm(translate('setup.players.removeMemberMsg', { name }))
       : await new Promise((resolve) => Alert.alert(
-          'Remove member', `Remove ${name} from the tournament?`,
-          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-           { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }],
+          translate('setup.players.removeMemberTitle'), translate('setup.players.removeMemberMsg', { name }),
+          [{ text: translate('setup.players.cancel'), style: 'cancel', onPress: () => resolve(false) },
+           { text: translate('setup.players.remove'), style: 'destructive', onPress: () => resolve(true) }],
         ));
     if (!confirmed) return;
     setRemovingId(row.userId);
@@ -468,21 +472,21 @@ export default function PlayersScreen({ navigation, route }) {
       await removeTournamentMember(tournamentId, row.userId);
       await load();
     } catch (err) {
-      Alert.alert('Error', err.message ?? 'Could not remove member');
+      Alert.alert(translate('setup.players.error'), err.message ?? translate('setup.players.removeMemberError'));
     } finally {
       setRemovingId(null);
     }
   }
 
   async function releaseSlot(row, slot) {
-    const name = slot?.name || row.profile?.display_name || 'this player';
+    const name = slot?.name || row.profile?.display_name || translate('setup.players.thisPlayer');
     const confirmed = Platform.OS === 'web'
-      ? window.confirm(`Release the "${name}" slot? They will be removed and the slot reopens for someone else to claim.`)
+      ? window.confirm(translate('setup.players.releaseMsgWeb', { name }))
       : await new Promise((resolve) => Alert.alert(
-          'Release player slot',
-          `Release the "${name}" slot? They will be removed and the slot reopens.`,
-          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-           { text: 'Release', style: 'destructive', onPress: () => resolve(true) }],
+          translate('setup.players.releaseTitle'),
+          translate('setup.players.releaseMsg', { name }),
+          [{ text: translate('setup.players.cancel'), style: 'cancel', onPress: () => resolve(false) },
+           { text: translate('setup.players.release'), style: 'destructive', onPress: () => resolve(true) }],
         ));
     if (!confirmed) return;
     setReleasingId(row.userId);
@@ -490,7 +494,7 @@ export default function PlayersScreen({ navigation, route }) {
       await releaseTournamentPlayer(tournamentId, slot.id);
       await load();
     } catch (err) {
-      Alert.alert('Error', err?.message ?? 'Could not release the slot');
+      Alert.alert(translate('setup.players.error'), err?.message ?? translate('setup.players.releaseError'));
     } finally {
       setReleasingId(null);
     }
@@ -505,15 +509,18 @@ export default function PlayersScreen({ navigation, route }) {
         ? window.location.origin
         : '';
       const link = buildJoinLink(origin, editorCode);
-      const message = `Join "${tournamentName ?? 'my tournament'}" on Golf Partner:\n${link}`;
+      const message = translate('setup.players.inviteShare', {
+        name: tournamentName ?? translate('setup.players.myTournament'),
+        link,
+      });
       if (Platform.OS === 'web') {
         try { await navigator.clipboard?.writeText(link); } catch (_) {}
-        window.alert(`Invite link copied:\n${link}`);
+        window.alert(translate('setup.players.inviteCopied', { link }));
       } else {
         await Share.share({ message });
       }
     } catch (err) {
-      Alert.alert('Error', err?.message ?? 'Could not create invite link');
+      Alert.alert(translate('setup.players.error'), err?.message ?? translate('setup.players.inviteError'));
     } finally {
       setInviting(false);
     }
@@ -521,13 +528,14 @@ export default function PlayersScreen({ navigation, route }) {
 
   async function changeRole(row) {
     const nextRole = row.role === 'editor' ? 'viewer' : 'editor';
-    const name = row.profile?.display_name || 'this member';
+    const name = row.profile?.display_name || translate('setup.players.thisMember');
+    const roleWord = translate(`setup.players.roleWord.${nextRole}`);
     const confirmed = Platform.OS === 'web'
-      ? window.confirm(`Change ${name} to ${nextRole}?`)
+      ? window.confirm(translate('setup.players.changeRoleMsg', { name, role: roleWord }))
       : await new Promise((resolve) => Alert.alert(
-          'Change role', `Change ${name} to ${nextRole}?`,
-          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-           { text: 'Change', onPress: () => resolve(true) }],
+          translate('setup.players.changeRoleTitle'), translate('setup.players.changeRoleMsg', { name, role: roleWord }),
+          [{ text: translate('setup.players.cancel'), style: 'cancel', onPress: () => resolve(false) },
+           { text: translate('setup.players.change'), onPress: () => resolve(true) }],
         ));
     if (!confirmed) return;
     setRoleBusyId(row.userId);
@@ -535,7 +543,7 @@ export default function PlayersScreen({ navigation, route }) {
       await updateMemberRole(tournamentId, row.userId, nextRole);
       await load();
     } catch (err) {
-      Alert.alert('Error', err?.message ?? 'Could not update role');
+      Alert.alert(translate('setup.players.error'), err?.message ?? translate('setup.players.roleError'));
     } finally {
       setRoleBusyId(null);
     }
@@ -544,12 +552,12 @@ export default function PlayersScreen({ navigation, route }) {
   async function leaveTournament() {
     if (leaving || !user?.id) return;
     const confirmed = Platform.OS === 'web'
-      ? window.confirm('Leave this tournament? You will need a new invite code to rejoin.')
+      ? window.confirm(translate('setup.players.leaveMsg'))
       : await new Promise((resolve) => Alert.alert(
-          'Leave tournament',
-          'Leave this tournament? You will need a new invite code to rejoin.',
-          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-           { text: 'Leave', style: 'destructive', onPress: () => resolve(true) }],
+          translate('setup.players.leave'),
+          translate('setup.players.leaveMsg'),
+          [{ text: translate('setup.players.cancel'), style: 'cancel', onPress: () => resolve(false) },
+           { text: translate('setup.players.leaveConfirm'), style: 'destructive', onPress: () => resolve(true) }],
         ));
     if (!confirmed) return;
     setLeaving(true);
@@ -557,7 +565,7 @@ export default function PlayersScreen({ navigation, route }) {
       await removeTournamentMember(tournamentId, user.id);
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Error', err?.message ?? 'Could not leave tournament');
+      Alert.alert(translate('setup.players.error'), err?.message ?? translate('setup.players.leaveError'));
       setLeaving(false);
     }
   }
@@ -574,7 +582,7 @@ export default function PlayersScreen({ navigation, route }) {
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <View style={s.headerCenter}>
-          <Text style={s.headerTitle}>Players</Text>
+          <Text style={s.headerTitle}>{tx('setup.players.title')}</Text>
           {tournamentName ? <Text style={s.headerSubtitle} numberOfLines={1}>{tournamentName}</Text> : null}
         </View>
         {saveState === 'idle' ? (
@@ -592,7 +600,7 @@ export default function PlayersScreen({ navigation, route }) {
               style={{ marginRight: 4 }}
             />
             <Text style={[s.savePillText, saveState === 'error' && s.savePillTextError]}>
-              {saveState === 'error' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Saving…'}
+              {saveState === 'error' ? tx('setup.players.saveFailed') : saveState === 'saved' ? tx('setup.players.saved') : tx('setup.players.saving')}
             </Text>
           </View>
         )}
@@ -603,17 +611,17 @@ export default function PlayersScreen({ navigation, route }) {
       ) : loadError ? (
         <View style={s.errorBox}>
           <Feather name="wifi-off" size={44} color={theme.destructive} />
-          <Text style={s.errorTitle}>Couldn't load players</Text>
+          <Text style={s.errorTitle}>{tx('setup.players.loadError')}</Text>
           <Text style={s.errorMsg}>{loadError}</Text>
           <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.7}>
             <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-            <Text style={s.retryBtnText}>Retry</Text>
+            <Text style={s.retryBtnText}>{tx('setup.players.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <ScrollView style={s.scroll} contentContainerStyle={s.content}>
           <View style={s.topRow}>
-            <Text style={s.sectionLabel}>{editPlayers.length} {editPlayers.length === 1 ? 'player' : 'players'}</Text>
+            <Text style={s.sectionLabel}>{tx('setup.players.count', { count: editPlayers.length })}</Text>
             {!isViewer && editPlayers.length < rosterCap(tournament?.kind) && (
               <TouchableOpacity
                 style={s.addBtn}
@@ -624,7 +632,7 @@ export default function PlayersScreen({ navigation, route }) {
                 activeOpacity={0.7}
               >
                 <Feather name="user-plus" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-                <Text style={s.addBtnText}>Add</Text>
+                <Text style={s.addBtnText}>{tx('setup.players.add')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -645,25 +653,25 @@ export default function PlayersScreen({ navigation, route }) {
                     {member ? (
                       <View style={[s.roleBadge, member.role === 'owner' && s.roleBadgeOwner]}>
                         <Text style={[s.roleText, member.role === 'owner' && s.roleTextOwner]}>
-                          {member.role.toUpperCase()}
+                          {tx(`setup.players.role.${member.role}`)}
                         </Text>
                       </View>
                     ) : null}
                     {p.user_id ? (
                       <View style={s.linkedBadge}>
                         <Feather name="user-check" size={10} color={theme.accent.primary} />
-                        <Text style={s.linkedBadgeText}>Linked</Text>
+                        <Text style={s.linkedBadgeText}>{tx('setup.players.linked')}</Text>
                       </View>
                     ) : (
                       <View style={s.localBadge}>
                         <Feather name="user" size={10} color={theme.text.muted} />
-                        <Text style={s.localBadgeText}>Local</Text>
+                        <Text style={s.localBadgeText}>{tx('setup.players.local')}</Text>
                       </View>
                     )}
                   </View>
                 </View>
                 {isViewer ? (
-                  <Text style={s.metaText}>HCP {p.handicap}</Text>
+                  <Text style={s.metaText}>{tx('setup.players.hcp', { value: p.handicap })}</Text>
                 ) : (
                   <TextInput
                     style={s.hcpInput}
@@ -674,7 +682,7 @@ export default function PlayersScreen({ navigation, route }) {
                     onChangeText={(v) => updateBaseHandicap(p.id, v)}
                     placeholder="0"
                     placeholderTextColor={theme.text.muted}
-                    accessibilityLabel={`Handicap for ${p.name}`}
+                    accessibilityLabel={tx('setup.players.handicapFor', { name: p.name })}
                   />
                 )}
                 {!isViewer && !p.user_id && (
@@ -682,7 +690,7 @@ export default function PlayersScreen({ navigation, route }) {
                     onPress={() => openLinkSheet(p)}
                     style={s.linkBtn}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    accessibilityLabel={`Link ${p.name} to an app account`}
+                    accessibilityLabel={tx('setup.players.linkToApp', { name: p.name })}
                   >
                     <Feather name="link" size={16} color={theme.accent.primary} />
                   </TouchableOpacity>
@@ -694,14 +702,14 @@ export default function PlayersScreen({ navigation, route }) {
                       <TouchableOpacity
                         onPress={async () => {
                           const ok = await confirmDialog(
-                            'Remove player',
-                            `Remove ${p.name} from the game? Their scores for this game will be deleted.`,
+                            tx('setup.players.removePlayerTitle'),
+                            tx('setup.players.removePlayerMsg', { name: p.name }),
                           );
                           if (ok) applyRemovePlayer(p.id);
                         }}
                         style={s.removeBtn}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        accessibilityLabel={`Remove ${p.name} from the game`}
+                        accessibilityLabel={tx('setup.players.removeFromGame', { name: p.name })}
                       >
                         <Feather name="user-x" size={18} color={theme.destructive} />
                       </TouchableOpacity>
@@ -716,7 +724,7 @@ export default function PlayersScreen({ navigation, route }) {
                         onPress={() => changeRole(member)}
                         style={s.roleActionBtn}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        accessibilityLabel={member.role === 'editor' ? `Demote ${p.name} to viewer` : `Promote ${p.name} to editor`}
+                        accessibilityLabel={member.role === 'editor' ? tx('setup.players.demote', { name: p.name }) : tx('setup.players.promote', { name: p.name })}
                       >
                         <Feather name={member.role === 'editor' ? 'arrow-down' : 'arrow-up'} size={16} color={theme.accent.primary} />
                       </TouchableOpacity>
@@ -729,7 +737,7 @@ export default function PlayersScreen({ navigation, route }) {
                             onPress={() => releaseSlot(member, findClaimedSlot(players, member.userId))}
                             style={s.roleActionBtn}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            accessibilityLabel={`Release the ${p.name} player slot`}
+                            accessibilityLabel={tx('setup.players.releaseLabel', { name: p.name })}
                           >
                             <Feather name="rotate-ccw" size={15} color={theme.accent.primary} />
                           </TouchableOpacity>
@@ -742,7 +750,7 @@ export default function PlayersScreen({ navigation, route }) {
                           onPress={() => confirmRemove(member)}
                           style={s.removeBtn}
                           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                          accessibilityLabel={`Remove ${p.name} member access`}
+                          accessibilityLabel={tx('setup.players.removeAccess', { name: p.name })}
                         >
                           <Feather name="user-minus" size={18} color={theme.destructive} />
                         </TouchableOpacity>
@@ -757,16 +765,16 @@ export default function PlayersScreen({ navigation, route }) {
               {inviting
                 ? <ActivityIndicator size="small" color={theme.accent.primary} />
                 : <Feather name="user-plus" size={14} color={theme.accent.primary} />}
-              <Text style={s.inviteBtnText}>Invite people</Text>
+              <Text style={s.inviteBtnText}>{tx('setup.players.invite')}</Text>
             </TouchableOpacity>
           )}
           {!isViewer && rounds.length > 0 && (
             <>
-              <Text style={s.sectionTitle}>Tees & playing handicaps</Text>
+              <Text style={s.sectionTitle}>{tx('setup.players.teesSection')}</Text>
               {rounds.map((r, ri) => (
                 <View key={r.id} style={s.roundCard}>
                   <Text style={s.roundCardTitle}>
-                    Round {ri + 1}{r.courseName ? ` — ${r.courseName}` : ''}
+                    {r.courseName ? tx('setup.players.roundCourse', { n: ri + 1, course: r.courseName }) : tx('setup.players.round', { n: ri + 1 })}
                   </Text>
                   <RoundTeeAssignments
                     key={`${r.id}:${editPlayers.map((p) => p.handicap).join(',')}`}
@@ -787,7 +795,7 @@ export default function PlayersScreen({ navigation, route }) {
               {leaving
                 ? <ActivityIndicator size="small" color={theme.destructive} />
                 : <Feather name="log-out" size={14} color={theme.destructive} />}
-              <Text style={s.leaveBtnText}>Leave tournament</Text>
+              <Text style={s.leaveBtnText}>{tx('setup.players.leave')}</Text>
             </TouchableOpacity>
           )}
         </ScrollView>
@@ -796,9 +804,13 @@ export default function PlayersScreen({ navigation, route }) {
         visible={!!modePrompt}
         playerCount={modePrompt?.newCount ?? 0}
         defaultMode={modePrompt?.defaultMode}
-        title="Pick a new scoring mode"
+        title={tx('setup.players.pickMode')}
         subtitle={modePrompt
-          ? `Adding this player makes ${getScoringMode(modePrompt.prevMode).label} invalid (${getScoringMode(modePrompt.prevMode).requirement.toLowerCase()}). Pick a mode for ${modePrompt.newCount} players.`
+          ? tx('setup.players.addInvalid', {
+            mode: tx(getScoringMode(modePrompt.prevMode).labelKey),
+            requirement: tx(getScoringMode(modePrompt.prevMode).requirementKey).toLowerCase(),
+            count: modePrompt.newCount,
+          })
           : undefined}
         onConfirm={async (chosenMode) => {
           const picked = modePrompt.picked;
@@ -811,9 +823,13 @@ export default function PlayersScreen({ navigation, route }) {
         visible={!!removeModePrompt}
         playerCount={removeModePrompt?.newCount ?? 0}
         defaultMode={removeModePrompt?.defaultMode}
-        title="Pick a new scoring mode"
+        title={tx('setup.players.pickMode')}
         subtitle={removeModePrompt
-          ? `Removing this player makes ${getScoringMode(removeModePrompt.prevMode).label} invalid (${getScoringMode(removeModePrompt.prevMode).requirement.toLowerCase()}). Pick a mode for ${removeModePrompt.newCount} players.`
+          ? tx('setup.players.removeInvalid', {
+            mode: tx(getScoringMode(removeModePrompt.prevMode).labelKey),
+            requirement: tx(getScoringMode(removeModePrompt.prevMode).requirementKey).toLowerCase(),
+            count: removeModePrompt.newCount,
+          })
           : undefined}
         onConfirm={async (chosenMode) => {
           const playerId = removeModePrompt.playerId;
@@ -826,16 +842,16 @@ export default function PlayersScreen({ navigation, route }) {
       <BottomSheet visible={!!linkTarget} onClose={() => setLinkTarget(null)} sheetStyle={s.linkSheet}>
         <View style={s.linkSheetHandle} />
         <Text style={s.linkSheetTitle}>
-          {linkTarget ? `Link ${linkTarget.name} to an account` : 'Link to an account'}
+          {linkTarget ? tx('setup.players.linkTitleNamed', { name: linkTarget.name }) : tx('setup.players.linkTitle')}
         </Text>
         <Text style={s.linkSheetSubtitle}>
-          Pick the friend who plays as this player so the game shows up for them.
+          {tx('setup.players.linkHint')}
         </Text>
         {friendsLoading ? (
           <ActivityIndicator color={theme.accent.primary} style={{ marginVertical: 24 }} />
         ) : friends.length === 0 ? (
           <Text style={s.linkSheetEmpty}>
-            No friends yet. Add friends first, or share an invite link from “Invite people”.
+            {tx('setup.players.noFriends')}
           </Text>
         ) : (
           <ScrollView style={s.linkSheetList}>
@@ -849,7 +865,7 @@ export default function PlayersScreen({ navigation, route }) {
                   disabled={used}
                   activeOpacity={0.7}
                   accessibilityRole="button"
-                  accessibilityLabel={`Link to ${f.displayName}${used ? ', already linked' : ''}`}
+                  accessibilityLabel={used ? tx('setup.players.linkToUsed', { name: f.displayName }) : tx('setup.players.linkTo', { name: f.displayName })}
                 >
                   <View style={[s.linkFriendAvatar, { backgroundColor: f.avatarColor || theme.accent.primary }]}>
                     {f.avatarUrl
@@ -861,7 +877,7 @@ export default function PlayersScreen({ navigation, route }) {
                     {f.username ? <Text style={s.linkFriendMeta}>@{f.username}</Text> : null}
                   </View>
                   {used
-                    ? <Text style={s.linkFriendUsed}>Linked</Text>
+                    ? <Text style={s.linkFriendUsed}>{tx('setup.players.linked')}</Text>
                     : <Feather name="chevron-right" size={18} color={theme.text.muted} />}
                 </TouchableOpacity>
               );
