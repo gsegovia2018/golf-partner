@@ -5,7 +5,11 @@ import auth from './es/auth';
 import common from './es/common';
 import leagueBoard from './es/leagueBoard';
 import leagueCards from './es/leagueCards';
+import leagueErrors from './es/leagueErrors';
+import leagueJoin from './es/leagueJoin';
 import leagueMembers from './es/leagueMembers';
+import leagueMisc from './es/leagueMisc';
+import leagueScoring from './es/leagueScoring';
 import leagueShare from './es/leagueShare';
 import leagueTimeline from './es/leagueTimeline';
 import marker from './es/marker';
@@ -20,7 +24,11 @@ export const AREAS = {
   common,
   leagueBoard,
   leagueCards,
+  leagueErrors,
+  leagueJoin,
   leagueMembers,
+  leagueMisc,
+  leagueScoring,
   leagueShare,
   leagueTimeline,
   marker,
@@ -36,7 +44,11 @@ export default {
   ...common,
   ...leagueBoard,
   ...leagueCards,
+  ...leagueErrors,
+  ...leagueJoin,
   ...leagueMembers,
+  ...leagueMisc,
+  ...leagueScoring,
   ...leagueShare,
   ...leagueTimeline,
   ...marker,
