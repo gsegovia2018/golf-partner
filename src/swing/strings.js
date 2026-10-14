@@ -369,6 +369,14 @@ export const SWING_STRINGS = build({
       noDrill: L,
     },
     allChecks: L,
+    // Design B: one thing to work on, then the rest by priority.
+    practiseTitle: L,
+    priorityTitle: L,
+    goodFold: (n) => t('swing.results.goodFold', { count: n }),
+    unknownFold: (n) => t('swing.results.unknownFold', { count: n }),
+    show: L,
+    hide: L,
+    detailTitle: L,
     // Plain-language coaching: the fixes card, the open row under a selected check and the fix sheet.
     fixes: {
       legendYou: L,
@@ -395,9 +403,6 @@ export const SWING_STRINGS = build({
     },
     // D26: the marks behind these results.
     unconfirmedChip: (n) => t('swing.results.unconfirmedChip', { count: n }),
-    marksTitle: L,
-    marksHint: L,
-    finishAuto: L,
     nextMarking: L,
     placeClubhead: L,
     placeClubheadHint: (where) => t('swing.results.placeClubheadHint', { where: where.toLowerCase() }),

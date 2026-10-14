@@ -3,9 +3,10 @@
 import { analyze } from '../analyze';
 import { poseAtFrame } from '../poseAt';
 import {
-  checksAt, worstAt, worstByCheckpoint, unplacedCheckpoint, homeOf, CHECK_KEY,
+  checksAt, prioritizeChecks, worstAt, worstByCheckpoint, unplacedCheckpoint, homeOf, CHECK_KEY,
 } from '../checkpointChecks';
 import { highlightFor, valueText } from '../highlights';
+import { CHECKPOINT_KEYS } from '../phases';
 import { fixtureNative, TRUTH, W, H } from './helpers';
 
 const lab = require('./fixtures/lab-d15-pass1.json');
@@ -25,6 +26,19 @@ const ctx = (a) => ({ analysis: a, poseAt: (f) => poseAtFrame(native, f), frameO
 const row = (a, id, cp) => a.checks.find((c) => c.id === id && (!cp || c.cp === cp));
 
 describe('checkpointChecks', () => {
+  test('prioritizeChecks groups by status and sorts each group in swing order, keeping ties stable', () => {
+    const g = prioritizeChecks(marked.checks);
+    expect(Object.keys(g)).toEqual(['red', 'yellow', 'unknown', 'green']);
+    expect(Object.values(g).flat()).toHaveLength(marked.checks.length);
+    Object.entries(g).forEach(([status, list]) => {
+      list.forEach((c) => expect(c.status).toBe(status));
+      const at = list.map((c) => CHECKPOINT_KEYS.indexOf(homeOf(c)));
+      expect(at).toEqual([...at].sort((a, b) => a - b));
+    });
+    const tied = marked.checks.filter((c) => c.status === 'green' && homeOf(c) === 'address');
+    expect(g.green.filter((c) => tied.includes(c))).toEqual(tied);
+  });
+
   test('every check has a home among the ten checkpoints, and clubhead_vs_plane rows live at impact', () => {
     expect(unmarked.checks).toHaveLength(23);
     unmarked.checks.forEach((c) => expect(checksAt(unmarked.checks, homeOf(c))).toContain(c));
