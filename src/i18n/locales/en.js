@@ -8,7 +8,11 @@ import holeMap from './en/holeMap';
 import feed from './en/feed';
 import leagueBoard from './en/leagueBoard';
 import leagueCards from './en/leagueCards';
+import leagueErrors from './en/leagueErrors';
+import leagueJoin from './en/leagueJoin';
 import leagueMembers from './en/leagueMembers';
+import leagueMisc from './en/leagueMisc';
+import leagueScoring from './en/leagueScoring';
 import leagueShare from './en/leagueShare';
 import leagueTimeline from './en/leagueTimeline';
 import marker from './en/marker';
@@ -41,7 +45,11 @@ export const AREAS = {
   feed,
   leagueBoard,
   leagueCards,
+  leagueErrors,
+  leagueJoin,
   leagueMembers,
+  leagueMisc,
+  leagueScoring,
   leagueShare,
   leagueTimeline,
   marker,
@@ -74,7 +82,11 @@ export default {
   ...feed,
   ...leagueBoard,
   ...leagueCards,
+  ...leagueErrors,
+  ...leagueJoin,
   ...leagueMembers,
+  ...leagueMisc,
+  ...leagueScoring,
   ...leagueShare,
   ...leagueTimeline,
   ...marker,

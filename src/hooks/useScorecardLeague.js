@@ -8,6 +8,7 @@ import {
 import {
   announceMyRoundCard, dismissLeagueOptIn, isLeagueOptInDismissed,
 } from '../lib/leagueOptIn';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
 // The scorecard's league layer (D5 B): the one-time "Count this round?" sheet
 // on a member's phone, the header's "Count this round" action after "Not this
@@ -146,7 +147,7 @@ export function useScorecardLeague({
         setLateHint(true);
         setSheetOpen(false);
       } else {
-        setError(err?.offline || !err?.hint ? 'offline' : (err?.message ?? 'offline'));
+        setError(err?.offline || !err?.hint ? 'offline' : (leagueErrorText(err) || 'offline'));
       }
     } finally {
       setBusy(false);

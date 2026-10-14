@@ -16,6 +16,8 @@ import IconButton from '../components/ui/IconButton';
 import { useTheme } from '../theme/ThemeContext';
 import { createMarkerToken, getLeagueCard } from '../store/leagueStore';
 import { shareOrigin } from '../lib/shareOrigin';
+import { useT } from '../i18n';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
 export function markerLink(token) {
   return `${shareOrigin()}/m/${encodeURIComponent(token)}`;
@@ -34,6 +36,7 @@ export function formatCountdown(ms) {
 
 export default function LeagueMarkerQRScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const cardId = route?.params?.cardId;
   const leagueId = route?.params?.leagueId;
@@ -58,12 +61,12 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
       setCode(next);
       setNow(Date.now());
     } catch (e) {
-      if (mountedRef.current) setError(e?.message || 'Could not create a code.');
+      if (mountedRef.current) setError(leagueErrorText(e) || t('league.markerQr.createFailed'));
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setLoading(false);
     }
-  }, [cardId]);
+  }, [cardId, t]);
 
   useEffect(() => { newCode(); }, [newCode]);
 
@@ -95,9 +98,9 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
   async function sendLink() {
     if (!code || expired) return;
     try {
-      await Share.share({ message: `Please confirm my golf card (works once, 2 h):\n${markerLink(code.token)}` });
+      await Share.share({ message: t('league.markerQr.shareMessage', { link: markerLink(code.token) }) });
     } catch (e) {
-      setError(e?.message || 'Could not share the link.');
+      setError(e?.message || t('league.markerQr.shareFailed'));
     }
   }
 
@@ -112,14 +115,14 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
     body = (
       <View style={s.confirmedBlock}>
         <Feather name="check-circle" size={40} color={theme.accent.primary} />
-        <Text style={s.errorTitle}>Card confirmed</Text>
+        <Text style={s.errorTitle}>{t('league.markerQr.confirmedTitle')}</Text>
         <Text style={s.errorText}>
           {confirmedCard.confirmedByName
-            ? `${confirmedCard.confirmedByName} confirmed your card. It counts.`
-            : 'Your marker confirmed your card. It counts.'}
+            ? t('league.markerQr.confirmedBy', { name: confirmedCard.confirmedByName })
+            : t('league.markerQr.confirmedByMarker')}
         </Text>
         <TouchableOpacity style={s.primaryBtn} onPress={goBoard} accessibilityRole="button" activeOpacity={0.8}>
-          <Text style={s.primaryText}>Back to the league</Text>
+          <Text style={s.primaryText}>{t('league.markerQr.backToLeague')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -128,18 +131,18 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
   } else if (!code) {
     body = (
       <View style={s.errorBlock}>
-        <Text style={s.errorTitle}>{"Couldn't create a code"}</Text>
+        <Text style={s.errorTitle}>{t('league.markerQr.couldntCreate')}</Text>
         <Text style={s.errorText}>{error}</Text>
       </View>
     );
   } else {
     body = (
       <>
-        <View style={[s.qrWrap, expired && s.qrExpired]} accessibilityLabel="Marker QR code">
+        <View style={[s.qrWrap, expired && s.qrExpired]} accessibilityLabel={t('league.markerQr.qrLabel')}>
           <QRCode value={markerLink(code.token)} size={208} backgroundColor="#ffffff" color="#000000" />
         </View>
         <Text style={s.expiry}>
-          {expired ? 'This code expired · get a new one' : `Expires in ${formatCountdown(remaining)} · works once`}
+          {expired ? t('league.markerQr.expired') : t('league.markerQr.expires', { time: formatCountdown(remaining) })}
         </Text>
         <TouchableOpacity
           style={[s.secondaryBtn, expired && s.disabled]}
@@ -147,7 +150,7 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
           disabled={expired}
           accessibilityRole="button"
         >
-          <Text style={s.secondaryText}>Send link</Text>
+          <Text style={s.secondaryText}>{t('league.markerQr.sendLink')}</Text>
         </TouchableOpacity>
         {error ? <Text style={s.inlineError}>{error}</Text> : null}
       </>
@@ -157,15 +160,15 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel="Back" />
-        <Text style={s.headerTitle}>Show QR to marker</Text>
+        <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
+        <Text style={s.headerTitle}>{t('league.markerQr.title')}</Text>
       </View>
       <ScrollView contentContainerStyle={s.content}>
         <View style={s.titleRow}>
           <Feather name="smartphone" size={18} color={theme.text.primary} />
-          <Text style={s.title}>Ask your marker to scan</Text>
+          <Text style={s.title}>{t('league.markerQr.heading')}</Text>
         </View>
-        <Text style={s.subtitle}>Ask your marker to scan this with their camera. No app needed.</Text>
+        <Text style={s.subtitle}>{t('league.markerQr.subtitle')}</Text>
         {body}
         {!confirmedCard && (
           <TouchableOpacity
@@ -175,7 +178,7 @@ export default function LeagueMarkerQRScreen({ navigation, route }) {
             accessibilityRole="button"
           >
             {loading && code ? <ActivityIndicator color={theme.accent.primary} />
-              : <Text style={s.secondaryText}>New code</Text>}
+              : <Text style={s.secondaryText}>{t('league.markerQr.newCode')}</Text>}
           </TouchableOpacity>
         )}
       </ScrollView>

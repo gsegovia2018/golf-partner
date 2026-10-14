@@ -10,6 +10,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber } from '../i18n';
 import BottomSheet from './BottomSheet';
 import { leagueNameMatches } from '../store/leagueView';
 
@@ -19,6 +20,7 @@ export default function DeleteLeagueSheet({
 }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
+  const t = useT();
   const [typed, setTyped] = useState('');
 
   useEffect(() => {
@@ -26,9 +28,7 @@ export default function DeleteLeagueSheet({
   }, [visible]);
 
   const matches = leagueNameMatches(typed, leagueName);
-  const lead = memberCount === 1
-    ? "Only you are in it. You can't undo this."
-    : `This removes it for all ${memberCount} members. You can't undo this.`;
+  const lead = t('league.delete.lead', { count: memberCount });
 
   const row = (label, value, last, keep) => (
     <View style={[s.listRow, !last && s.rowDivider]}>
@@ -39,17 +39,17 @@ export default function DeleteLeagueSheet({
 
   return (
     <BottomSheet visible={visible} onClose={busy ? undefined : onCancel} sheetStyle={s.sheet}>
-      <Text style={s.title} accessibilityRole="header">{`Delete ${leagueName}?`}</Text>
+      <Text style={s.title} accessibilityRole="header">{t('league.delete.title', { name: leagueName })}</Text>
       <Text style={s.lead}>{lead}</Text>
 
       <View style={s.list}>
-        {row('Members', String(memberCount), false)}
-        {row(cardCount > 0 ? 'Cards, with proof photos' : 'Cards', String(cardCount), false)}
-        {row('Handicap history and votes', 'All', !hasFinal)}
-        {hasFinal && row('The Final', 'Kept as a game', true, true)}
+        {row(t('league.delete.members'), formatNumber(memberCount), false)}
+        {row(cardCount > 0 ? t('league.delete.cardsProof') : t('league.delete.cards'), formatNumber(cardCount), false)}
+        {row(t('league.delete.history'), t('league.delete.all'), !hasFinal)}
+        {hasFinal && row(t('league.delete.final'), t('league.delete.finalKept'), true, true)}
       </View>
 
-      <Text style={s.label}>Type the league name to confirm</Text>
+      <Text style={s.label}>{t('league.delete.typeName')}</Text>
       <TextInput
         style={[s.input, matches && s.inputMatch]}
         value={typed}
@@ -59,12 +59,12 @@ export default function DeleteLeagueSheet({
         autoCapitalize="none"
         autoCorrect={false}
         editable={!busy}
-        accessibilityLabel="Type the league name to confirm"
+        accessibilityLabel={t('league.delete.typeName')}
         keyboardAppearance={theme.isDark ? 'dark' : 'light'}
         selectionColor={theme.destructive}
       />
 
-      {error ? <Text style={s.error}>{`${/[.!?]$/.test(error) ? error : `${error}.`} Nothing was deleted.`}</Text> : null}
+      {error ? <Text style={s.error}>{t('league.delete.errorNothing', { error: /[.!?]$/.test(error) ? error : `${error}.` })}</Text> : null}
 
       <TouchableOpacity
         style={[s.deleteBtn, (!matches || busy) && s.deleteBtnOff]}
@@ -72,23 +72,23 @@ export default function DeleteLeagueSheet({
         disabled={!matches || busy}
         accessibilityRole="button"
         accessibilityState={{ disabled: !matches || busy, busy }}
-        accessibilityHint={matches ? undefined : 'Type the league name first'}
+        accessibilityHint={matches ? undefined : t('league.delete.typeFirst')}
       >
         {busy ? (
           <View style={s.busyRow}>
             <ActivityIndicator color={theme.text.inverse} size="small" />
-            <Text style={s.deleteText}>Deleting…</Text>
+            <Text style={s.deleteText}>{t('league.delete.deleting')}</Text>
           </View>
-        ) : <Text style={s.deleteText}>Delete the league</Text>}
+        ) : <Text style={s.deleteText}>{t('league.delete.action')}</Text>}
       </TouchableOpacity>
 
       {canArchive ? (
         <TouchableOpacity style={s.textBtn} onPress={onArchiveInstead} disabled={busy} accessibilityRole="button">
-          <Text style={s.archiveText}>Archive instead</Text>
+          <Text style={s.archiveText}>{t('league.delete.archiveInstead')}</Text>
         </TouchableOpacity>
       ) : (
         <TouchableOpacity style={s.textBtn} onPress={onCancel} disabled={busy} accessibilityRole="button">
-          <Text style={s.cancelText}>Cancel</Text>
+          <Text style={s.cancelText}>{t('common.cancel')}</Text>
         </TouchableOpacity>
       )}
     </BottomSheet>

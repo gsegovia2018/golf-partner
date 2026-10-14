@@ -22,9 +22,10 @@ import { dayLabel, timeLabel } from '../store/leagueOffApp';
 import { isMissed, needsApproval, isMonthClosed } from '../store/leagueRules';
 import { shareCardAction } from '../store/leagueShare';
 import {
-  monthName, netDiffTone, memberName, cardBreakdown, monthStanding, standingCells, currentMonthKey,
+  monthName, netDiffTone, cardBreakdown, monthStanding, standingCells, currentMonthKey,
   monthCardsView, cardActions, voidedNote,
 } from '../store/leagueView';
+import { memberName } from '../lib/leagueNames';
 
 // A member's card, read-only, with ‹ › to flick through that month's cards
 // (same order as the board). Params: { leagueId, month ('YYYY-MM'), userId }.
@@ -65,8 +66,8 @@ export default function LeagueCardScreen({ navigation, route }) {
 
   const header = (
     <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel="Back" />
-      <Text style={[s.headerTitle, { flex: 1 }]} numberOfLines={1}>{data ? `${who} · ${monthLabel} card` : `${monthLabel} card`}</Text>
+      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
+      <Text style={[s.headerTitle, { flex: 1 }]} numberOfLines={1}>{data ? t('league.cardScreen.title', { who, month: monthLabel }) : t('league.cardScreen.titleNoWho', { month: monthLabel })}</Text>
       {items.length > 0 && (
         <IconButton
           icon="more-vertical"
@@ -95,8 +96,8 @@ export default function LeagueCardScreen({ navigation, route }) {
           {loading && !data ? <ActivityIndicator color={theme.accent.primary} /> : (
             <>
               <Feather name="clipboard" size={40} color={theme.text.muted} />
-              <Text style={[s.cardTitle, { marginTop: 12 }]}>No card to show</Text>
-              <Text style={s.text}>{(!data && error) || 'This card is not available yet.'}</Text>
+              <Text style={[s.cardTitle, { marginTop: 12 }]}>{t('league.cardScreen.none')}</Text>
+              <Text style={s.text}>{(!data && error) || t('league.cardScreen.notAvailable')}</Text>
             </>
           )}
         </View>
@@ -110,17 +111,22 @@ export default function LeagueCardScreen({ navigation, route }) {
   const awaiting = needsApproval(card);
   const voided = card.status === 'void';
   const withdrawn = voided && (card.voidKind === 'withdrawn' || card.voidKind === 'auto_withdrawn');
-  const badge = voided ? (withdrawn ? t('league.void.badgeWithdrawn') : t('league.void.badge')) : missed ? 'Not posted' : awaiting ? 'Awaiting approval' : card.status === 'playing' ? 'Playing' : card.status === 'announced' ? 'Announced' : card.status === 'confirmed' ? 'Confirmed' : offApp ? 'Added after the round' : 'Submitted';
+  const badge = voided ? (withdrawn ? t('league.void.badgeWithdrawn') : t('league.void.badge')) : missed ? t('league.cardScreen.badge.notPosted')
+    : awaiting ? t('league.cardScreen.badge.awaiting')
+      : card.status === 'playing' ? t('league.cardScreen.badge.playing')
+        : card.status === 'announced' ? t('league.cardScreen.badge.announced')
+          : card.status === 'confirmed' ? t('league.cardScreen.badge.confirmed')
+            : offApp ? t('league.cardScreen.badge.offApp') : t('league.cardScreen.badge.submitted');
   const course = card.course;
   const played = card.playedOn ? dayLabel(card.playedOn) : null;
   const breakdown = cardBreakdown(card);
   const teeText = course?.tee
-    ? (breakdown.rated ? `${course.tee} tees, slope ${breakdown.slope} · CR ${breakdown.rating}` : course.tee)
+    ? (breakdown.rated ? t('league.cardScreen.teeRated', { tee: course.tee, slope: breakdown.slope, rating: breakdown.rating }) : course.tee)
     : null;
   const subline = [course?.name, teeText, played].filter(Boolean).join(' · ');
   // Stableford points are the headline (the league ranks by them).
-  const valueText = card.points != null ? formatNumber(card.points) : 'Unrated';
-  const valueKey = card.points != null ? t('league.card.stableford') : 'not ranked';
+  const valueText = card.points != null ? formatNumber(card.points) : t('league.cardScreen.unrated');
+  const valueKey = card.points != null ? t('league.card.stableford') : t('league.cardScreen.notRanked');
   const handTee = card.teeVerified === false;
   const standing = scored && !awaiting && !missed
     ? monthStanding(data, month, card.userId, now) : null;
@@ -143,16 +149,16 @@ export default function LeagueCardScreen({ navigation, route }) {
           onPress={() => go(-1)}
           disabled={atStart}
           style={[l.arrow, atStart && l.arrowOff]}
-          accessibilityLabel="Previous card"
+          accessibilityLabel={t('league.cardScreen.previous')}
           accessibilityState={{ disabled: atStart }}
         />
-        <Text style={l.flickText}>{`${idx + 1} of ${cards.length} ${monthLabel} league ${cards.length === 1 ? 'card' : 'cards'}`}</Text>
+        <Text style={l.flickText}>{t('league.cardScreen.flick', { index: idx + 1, count: cards.length, month: monthLabel })}</Text>
         <IconButton
           icon="chevron-right"
           onPress={() => go(1)}
           disabled={atEnd}
           style={[l.arrow, atEnd && l.arrowOff]}
-          accessibilityLabel="Next card"
+          accessibilityLabel={t('league.cardScreen.next')}
           accessibilityState={{ disabled: atEnd }}
         />
       </View>
@@ -205,10 +211,10 @@ export default function LeagueCardScreen({ navigation, route }) {
               {[card.playingHandicap != null ? t('league.card.handicaps', { playing: card.playingHandicap }) : null,
                 card.gross != null ? t('league.card.gross', { gross: card.gross }) : null].filter(Boolean).join(' · ')}
             </Text>
-            {!!card.confirmedByName && <Text style={s.text}>{`Confirmed by ${card.confirmedByName}`}</Text>}
+            {!!card.confirmedByName && <Text style={s.text}>{t('league.cardScreen.confirmedBy', { name: card.confirmedByName })}</Text>}
             {handTee && <Text style={s.text}>{t('league.card.teeByHandNote')}</Text>}
-            {card.notAnnounced && <Text style={s.text}>Not announced in the app</Text>}
-            {awaiting && <Text style={s.text}>Awaiting an admin's approval · not counted yet</Text>}
+            {card.notAnnounced && <Text style={s.text}>{t('league.cardScreen.notAnnounced')}</Text>}
+            {awaiting && <Text style={s.text}>{t('league.cardScreen.awaitingNote')}</Text>}
             {!!cells && (
               <View style={l.strip}>
                 <View style={l.cell}>
@@ -225,16 +231,16 @@ export default function LeagueCardScreen({ navigation, route }) {
         ) : (
           <View style={s.card}>
             <View style={l.headRow}>
-              <Text style={s.cardTitle}>{missed ? 'Not posted' : card.status === 'playing' ? 'Playing now' : 'Announced'}</Text>
+              <Text style={s.cardTitle}>{missed ? t('league.cardScreen.badge.notPosted') : card.status === 'playing' ? t('league.cardScreen.playingNow') : t('league.cardScreen.badge.announced')}</Text>
               <View style={l.badge}><Text style={l.badgeText}>{badge}</Text></View>
             </View>
             {!!subline && <Text style={s.text}>{subline}</Text>}
             {!!card.teeTime && (
-              <Text style={s.text}>{`Tee time ${[dayLabel(card.teeTime), timeLabel(card.teeTime)].filter(Boolean).join(' ')}`}</Text>
+              <Text style={s.text}>{t('league.cardScreen.teeTime', { when: [dayLabel(card.teeTime), timeLabel(card.teeTime)].filter(Boolean).join(' ') })}</Text>
             )}
-            {!!card.announcedAt && <Text style={s.text}>{`Announced ${timeLabel(card.announcedAt)}`}</Text>}
+            {!!card.announcedAt && <Text style={s.text}>{t('league.cardScreen.announcedAt', { time: timeLabel(card.announcedAt) })}</Text>}
             {missed
-              ? <Text style={s.text}>{`Not posted — this month's card is used.`}</Text>
+              ? <Text style={s.text}>{t('league.cardScreen.missedNote')}</Text>
               : <DeadlineLine card={card} />}
           </View>
         )}
@@ -294,6 +300,7 @@ export default function LeagueCardScreen({ navigation, route }) {
 
 // The signed card photo / official result. The URL is signed on demand.
 function ProofPhoto({ path, official, theme }) {
+  const t = useT();
   const s = makeOffAppStyles(theme);
   const l = useMemo(() => makeStyles(theme), [theme]);
   const [url, setUrl] = useState(null);
@@ -310,15 +317,15 @@ function ProofPhoto({ path, official, theme }) {
   }, [path]);
   useEffect(() => { load(); }, [load]);
 
-  const label = official ? 'Official result' : 'Signed card photo';
+  const label = official ? t('league.cardScreen.proofOfficial') : t('league.cardScreen.proofSigned');
   return (
     <View style={[s.card, { marginTop: 14 }]}>
       <Text style={s.cardTitle}>{label}</Text>
       {failed ? (
         <View style={l.photoFail}>
-          <Text style={s.text}>Couldn't load the photo</Text>
+          <Text style={s.text}>{t('league.cardScreen.photoFailed')}</Text>
           <TouchableOpacity onPress={load} activeOpacity={0.7} accessibilityRole="button">
-            <Text style={l.retry}>Try again</Text>
+            <Text style={l.retry}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : url ? (

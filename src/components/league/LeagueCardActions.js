@@ -13,6 +13,7 @@ import { useT, tr } from '../../i18n';
 import {
   rescheduleLeagueCard, reopenLeagueCard, approveLeagueCard, withdrawLeagueCard, voidLeagueCard,
 } from '../../store/leagueStore';
+import { leagueErrorText } from '../../lib/leagueErrorText';
 
 const RUN = {
   reschedule: (card, teeTime) => rescheduleLeagueCard(card.id, teeTime),
@@ -36,7 +37,7 @@ export default function LeagueCardActions({
   function messageFor(kind, e) {
     const key = `league.actions.${kind}.err.${e?.hint}`;
     const known = e?.hint ? t(key, { month: monthLabel }) : key;
-    return known !== key ? known : (e?.message || t('league.actions.failed'));
+    return known !== key ? known : (leagueErrorText(e) || t('league.actions.failed'));
   }
 
   async function confirm(arg) {

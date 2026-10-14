@@ -47,7 +47,7 @@ import { useSetupLeagues } from '../hooks/useSetupLeagues';
 import { useLeagueCardsStatus } from '../hooks/useLeagueCardsStatus';
 import { dismissLeagueOptIn } from '../lib/leagueOptIn';
 import LeagueCardsList from '../components/league/LeagueCardsList';
-import { useT, t as translate, formatNumber, formatDate } from '../i18n';
+import { useT, t as translate, t as tNow, formatNumber, formatDate } from '../i18n';
 import { applyFinalStrokes, finalStrokeList, finalStrokesRecord } from '../store/leagueFinal';
 
 // Deep green used for the Review hero band — fixed in both themes so white
@@ -60,13 +60,13 @@ function newRoundId() { return `setup-r${Date.now()}-${_roundIdSeq++}`; }
 
 // The league announce failed: start a normal game instead, or stay here.
 async function askStartWithoutLeague(leagueName, reason) {
-  const title = "Couldn't announce your card";
-  const message = `${reason}\n\nStart it as a normal game? It won't count for ${leagueName}.`;
+  const title = tNow('league.cards.failTitle');
+  const message = tNow('league.setup.failMessage', { reason, league: leagueName });
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
   return new Promise((resolve) => Alert.alert(
     title, message,
-    [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-     { text: 'Start normal game', onPress: () => resolve(true) }],
+    [{ text: tNow('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+     { text: tNow('league.setup.startNormal'), onPress: () => resolve(true) }],
   ));
 }
 
@@ -498,7 +498,7 @@ export default function SetupScreen({ navigation, route }) {
           i === 0 && hcp != null ? applyLeagueHandicap(r, meId, hcp) : r)),
       };
     } catch (err) {
-      const ok = await askStartWithoutLeague(league.name, err?.message ?? 'The league could not be reached.');
+      const ok = await askStartWithoutLeague(league.name, err?.message ?? t('league.setup.unreachable'));
       return ok ? tournament : null;
     }
   }
@@ -638,9 +638,9 @@ export default function SetupScreen({ navigation, route }) {
           if (isRetryableFinalError(finalErr)) {
             await enqueueLeagueFinal({ leagueId: leagueFinal.leagueId, tournamentId: tournament.id, strokes });
           } else {
-            const msg = `The Final was created, but the league could not be told: ${finalErr?.message ?? 'try again from the league board.'}`;
+            const msg = t('league.setup.finalTold', { error: finalErr?.message ?? t('league.setup.finalTryAgain') });
             if (Platform.OS === 'web') window.alert(msg);
-            else Alert.alert('League Final', msg);
+            else Alert.alert(t('league.setup.finalTitle'), msg);
           }
         }
       }
@@ -1021,7 +1021,7 @@ export default function SetupScreen({ navigation, route }) {
       style={{ paddingVertical: 6 }}
     >
       <Text style={[s.leagueSub, { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' }]}>
-        {`Add slope and rating${unratedTee ? ` to ${unratedTee} tees` : ''} ›`}
+        {unratedTee ? t('league.setup.addRatingTee', { tee: unratedTee }) : t('league.setup.addRating')}
       </Text>
     </TouchableOpacity>
   );
@@ -1053,9 +1053,9 @@ export default function SetupScreen({ navigation, route }) {
     const hcp = league.leagueHandicap;
     const unratedTee = !leagueRated ? setupPlayerTee(rounds[0], myPlayer.id)?.label ?? null : null;
     let sub;
-    if (!leagueEligibleRound) sub = 'League cards are 18 holes. Pick an 18-hole course to count this round.';
+    if (!leagueEligibleRound) sub = t('league.setup.eighteenOnly');
     else if (!leagueRated) {
-      sub = `Your ${unratedTee ? `${unratedTee} tees aren't` : "tee isn't"} rated, so this round can't be your ${month} card yet. Pick a rated tee for yourself, or add the rating.`;
+      sub = unratedTee ? t('league.setup.unratedTees', { tee: unratedTee, month }) : t('league.setup.unratedTee', { month });
     } else if (hcp == null) sub = t('league.cards.meSubNoHcp', { month });
     else {
       sub = t('league.cards.meSub', {
@@ -1091,20 +1091,20 @@ export default function SetupScreen({ navigation, route }) {
     const month = monthName(cardMonth(new Date()));
     let sub;
     const unratedTee = !leagueRated ? setupPlayerTee(rounds[0], myPlayer.id)?.label ?? null : null;
-    if (!leagueEligibleRound) sub = 'League cards are 18 holes. Pick an 18-hole course to count this round.';
+    if (!leagueEligibleRound) sub = t('league.setup.eighteenOnly');
     else if (!leagueRated) {
-      sub = `Your ${unratedTee ? `${unratedTee} tees aren't` : "tee isn't"} rated, so this round can't be your ${month} card yet. Pick a rated tee for yourself, or add the rating.`;
+      sub = unratedTee ? t('league.setup.unratedTees', { tee: unratedTee, month }) : t('league.setup.unratedTee', { month });
     } else if (!leagueOn) sub = null;
-    else if (hcp == null) sub = `Your ${month} card · no league handicap set yet, your own index is used · counts whatever you score`;
+    else if (hcp == null) sub = t('league.setup.subNoHcp', { month });
     else {
       const strokes = leagueStrokes(rounds[0], myPlayer.id, hcp);
-      sub = `Your ${month} card · ${strokes} strokes from your league handicap ${Number(hcp).toFixed(1)} · counts whatever you score`;
+      sub = t('league.setup.sub', { month, strokes, hcp: formatNumber(hcp, { decimals: 1 }) });
     }
     return (
       <View style={s.leagueCard}>
         <View style={s.leagueRow}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={s.leagueTitle}>{`Counts for ${league.name}`}</Text>
+            <Text style={s.leagueTitle}>{t('league.cards.switchLabel', { league: league.name })}</Text>
             {!!sub && <Text style={s.leagueSub}>{sub}</Text>}
             {leagueEligibleRound && !leagueRated && renderAddRatingLink(unratedTee)}
           </View>
@@ -1112,7 +1112,7 @@ export default function SetupScreen({ navigation, route }) {
             value={leagueActive}
             onValueChange={setLeagueOn}
             disabled={!leagueEligibleRound || !leagueRated}
-            accessibilityLabel={`Counts for ${league.name}`}
+            accessibilityLabel={t('league.cards.switchLabel', { league: league.name })}
             trackColor={{ true: theme.accent.primary }}
           />
         </View>
@@ -1220,21 +1220,21 @@ export default function SetupScreen({ navigation, route }) {
 
         {leagueOffered && (leagueListMode ? renderLeagueList() : renderLeagueSwitch())}
 
-        {leagueCheckingLeagues && <Text style={s.leagueSub}>Checking your league…</Text>}
+        {leagueCheckingLeagues && <Text style={s.leagueSub}>{t('league.cards.checking')}</Text>}
         {leagueFailed && (
           <View style={s.leagueCard}>
-            <Text style={s.leagueSub}>{"Couldn't load your league — this round won't count."}</Text>
+            <Text style={s.leagueSub}>{t('league.setup.loadFailed')}</Text>
             <TouchableOpacity onPress={retryLeagues} accessibilityRole="button" style={{ paddingVertical: 6 }}>
-              <Text style={[s.leagueSub, { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' }]}>Retry</Text>
+              <Text style={[s.leagueSub, { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' }]}>{t('league.setup.retry')}</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {finalStrokes.length > 0 && (
           <View style={[s.leagueCard, { paddingVertical: 12 }]}>
-            <Text style={s.leagueTitle}>League Final · extra strokes applied</Text>
+            <Text style={s.leagueTitle}>{t('league.setup.finalApplied')}</Text>
             {finalStrokes.map(({ player, extra }) => (
-              <Text key={player.id} style={s.leagueSub}>{`${player.name} +${extra}`}</Text>
+              <Text key={player.id} style={s.leagueSub}>{t('league.setup.finalExtra', { name: player.name, extra })}</Text>
             ))}
           </View>
         )}

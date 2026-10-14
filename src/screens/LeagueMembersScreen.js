@@ -20,22 +20,18 @@ import {
 } from '../store/leagueMembersAdmin';
 import { parseMemberHandicap, leagueJoinLink } from '../store/leagueDraft';
 import {
-  formatEuros, potCents, memberLabel, memberName, handicapEventLine, voteThreshold,
+  formatEuros, potCents, voteThreshold,
 } from '../store/leagueView';
+import { memberLabel, memberName, handicapEventLine } from '../lib/leagueNames';
 import { shareOrigin } from '../lib/shareOrigin';
 import InitialsAvatar from '../components/league/InitialsAvatar';
 import MemberAdminSheet from '../components/league/MemberAdminSheet';
-import { useT, formatDate, formatTime, formatNumber } from '../i18n';
+import { useT, t as translate, formatDate, formatTime, formatNumber } from '../i18n';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
 function fail(e) {
-  Alert.alert('Error', e?.message || 'Something went wrong');
+  Alert.alert(translate('common.error'), leagueErrorText(e) || translate('league.membersMisc.wrong'));
 }
-
-const shortDate = (iso) => {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-};
 
 // Members, league handicaps and their history, the open handicap vote, and the
 // invite link. Fee and role changes live in League settings.
@@ -81,8 +77,8 @@ export default function LeagueMembersScreen({ navigation, route }) {
 
   const header = (
     <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel="Back" />
-      <Text style={s.headerTitle}>Members</Text>
+      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
+      <Text style={s.headerTitle}>{t('league.membersMisc.title')}</Text>
     </View>
   );
 
@@ -93,9 +89,9 @@ export default function LeagueMembersScreen({ navigation, route }) {
         <View style={s.center}>
           {loading ? <ActivityIndicator color={theme.accent.primary} /> : (
             <>
-              <Text style={s.emptyTitle}>Couldn't load the members</Text>
+              <Text style={s.emptyTitle}>{t('league.membersMisc.loadError')}</Text>
               <Text style={s.emptyText}>{error}</Text>
-              <TouchableOpacity style={s.secondaryBtn} onPress={reload}><Text style={s.secondaryText}>Try again</Text></TouchableOpacity>
+              <TouchableOpacity style={s.secondaryBtn} onPress={reload}><Text style={s.secondaryText}>{t('common.retry')}</Text></TouchableOpacity>
             </>
           )}
         </View>
@@ -155,12 +151,12 @@ export default function LeagueMembersScreen({ navigation, route }) {
 
   function confirmRemoveInvitee(invitee) {
     Alert.alert(
-      `Remove ${invitee.name}?`,
-      'Their spot and handicap are deleted. They can still join from the link with "I\'m not on the list".',
+      t('league.members.removeTitle', { name: invitee.name }),
+      t('league.membersMisc.removeInviteeBody'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Remove',
+          text: t('league.membersMisc.remove'),
           style: 'destructive',
           onPress: () => run(() => removeLeagueInvitee(leagueId, invitee.id)),
         },
@@ -198,7 +194,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
             setRotated((await rotateLeagueInviteCode(leagueId)).inviteCode);
             message = t('league.members.removedNewCode', { name });
           } catch (e) {
-            message = t('league.members.removedCodeFailed', { name, error: e?.message || '' });
+            message = t('league.members.removedCodeFailed', { name, error: leagueErrorText(e) || '' });
           }
         }
         setNotice(message);
@@ -214,7 +210,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
       await reload();
     } catch (e) {
       const key = memberAdminErrorKey(e);
-      setSheetError(key ? t(key, { name }) : (e?.message || 'Something went wrong'));
+      setSheetError(key ? t(key, { name }) : (leagueErrorText(e) || t('league.membersMisc.wrong')));
       if (e?.hint === 'not_claimed' || e?.hint === 'not_member') reload();
     } finally {
       setSheetBusy(false);
@@ -223,7 +219,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
 
   async function shareLink() {
     try {
-      await Share.share({ message: `Join "${league.name}" on Golf Partner:\n${link}` });
+      await Share.share({ message: t('league.membersMisc.shareMessage', { league: league.name, link }) });
     } catch (e) {
       fail(e);
     }
@@ -334,29 +330,31 @@ export default function LeagueMembersScreen({ navigation, route }) {
           const subject = memberName(members, v.subjectUser, meId);
           const current = members.find((m) => m.userId === v.subjectUser)?.leagueHandicap;
           const myBallot = v.ballots.find((b) => b.voter === meId);
-          const verb = current != null && v.proposed > current ? 'Raise' : 'Lower';
+          const verb = current != null && v.proposed > current ? 'raise' : 'lower';
           return (
             <View key={v.id} style={s.voteCard}>
               <View style={s.voteHead}>
-                <Text style={s.voteOverline}>OPEN VOTE</Text>
+                <Text style={s.voteOverline}>{t('league.membersMisc.openVote')}</Text>
               </View>
               <Text style={s.voteTitle}>
                 {current != null
-                  ? `${verb} ${subject}'s handicap from ${current.toFixed(1)} to ${v.proposed.toFixed(1)}?`
-                  : `Set ${subject}'s handicap to ${v.proposed.toFixed(1)}?`}
+                  ? t(`league.membersMisc.${verb}Title`, { subject, from: formatNumber(current, { decimals: 1 }), to: formatNumber(v.proposed, { decimals: 1 }) })
+                  : t('league.membersMisc.setTitle', { subject, to: formatNumber(v.proposed, { decimals: 1 }) })}
               </Text>
               <Text style={s.voteMeta}>
-                {`Proposed by ${memberName(members, v.openedBy, meId)} · ${v.ballots.filter((b) => b.yes).length} yes of ${active.length} votes, needs ${needed} · closes ${shortDate(v.closesAt)}`}
+                {t('league.membersMisc.voteMeta', {
+                  name: memberName(members, v.openedBy, meId), yes: v.ballots.filter((b) => b.yes).length, total: active.length, needed, date: formatDate(v.closesAt),
+                })}
               </Text>
               {myBallot ? (
-                <Text style={s.voteMeta}>{`You voted ${myBallot.yes ? 'yes' : 'no'}.`}</Text>
+                <Text style={s.voteMeta}>{t(myBallot.yes ? 'league.membersMisc.votedYes' : 'league.membersMisc.votedNo')}</Text>
               ) : (
                 <View style={s.voteBtns}>
                   <TouchableOpacity style={[s.voteBtn, s.voteNo]} onPress={() => vote(v, false)} disabled={busy || archived} activeOpacity={0.8}>
-                    <Text style={s.voteNoText}>No</Text>
+                    <Text style={s.voteNoText}>{t('league.membersMisc.no')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[s.voteBtn, s.voteYes]} onPress={() => vote(v, true)} disabled={busy || archived} activeOpacity={0.8}>
-                    <Text style={s.voteYesText}>{`Yes, ${verb.toLowerCase()} it`}</Text>
+                    <Text style={s.voteYesText}>{t(`league.membersMisc.yes.${verb}`)}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -365,11 +363,13 @@ export default function LeagueMembersScreen({ navigation, route }) {
         })}
 
         <Text style={s.sectionLabel}>
-          {`${active.length} MEMBERS${league.entryFeeCents > 0 ? ` · POT ${formatEuros(pot).toUpperCase()}` : ''}`}
+          {league.entryFeeCents > 0
+            ? t('league.membersMisc.membersPot', { count: active.length, pot: formatEuros(pot).toUpperCase() })
+            : t('league.membersMisc.members', { count: active.length })}
         </Text>
         <View style={s.card}>
           {active.map((m, i) => {
-            const hcp = m.leagueHandicap == null ? 'No league handicap yet' : `League hcp ${m.leagueHandicap.toFixed(1)}`;
+            const hcp = m.leagueHandicap == null ? t('league.membersMisc.noHcp') : t('league.membersMisc.hcp', { value: formatNumber(m.leagueHandicap, { decimals: 1 }) });
             const atCap = m.leagueHandicap != null && m.leagueHandicap >= league.handicapCap;
             const claim = claimForUser(claims, m.userId);
             return (
@@ -379,14 +379,14 @@ export default function LeagueMembersScreen({ navigation, route }) {
                 onPress={() => !archived && openSheet(m)}
                 activeOpacity={0.7}
                 accessibilityRole="button"
-                accessibilityLabel={`${memberLabel(m, meId)} handicap`}
+                accessibilityLabel={t('league.membersMisc.hcpA11y', { name: memberLabel(m, meId) })}
               >
                 <View style={{ flex: 1 }}>
                   <Text style={s.memberName} numberOfLines={1}>
-                    {m.userId === meId ? `You (${m.displayName ?? 'me'})` : memberLabel(m, meId)}
+                    {m.userId === meId ? t('league.membersMisc.youNamed', { name: m.displayName ?? t('league.membersMisc.me') }) : memberLabel(m, meId)}
                   </Text>
                   <Text style={s.memberSub}>
-                    {`${hcp}${atCap ? ' · at the cap' : ''}${m.role === 'admin' ? ' · admin' : ''}`}
+                    {[hcp, atCap ? t('league.membersMisc.atCap') : null, m.role === 'admin' ? t('league.membersMisc.adminLower') : null].filter(Boolean).join(' · ')}
                   </Text>
                   {!!claim && <Text style={s.memberSub}>{t('league.members.claimedLineNoHcp', { when: formatDate(claim.at) })}</Text>}
                 </View>
@@ -400,10 +400,10 @@ export default function LeagueMembersScreen({ navigation, route }) {
                     <Text style={s.chipText}>{t('league.members.release')}</Text>
                   </TouchableOpacity>
                 )}
-                {m.role === 'admin' && <View style={s.badge}><Text style={s.badgeText}>Admin</Text></View>}
+                {m.role === 'admin' && <View style={s.badge}><Text style={s.badgeText}>{t('league.membersMisc.admin')}</Text></View>}
                 {league.entryFeeCents > 0 && (
                   <Text style={[s.fee, m.feePaid ? { color: theme.accent.primary } : { color: theme.destructive }]}>
-                    {m.feePaid ? 'Paid' : `${formatEuros(league.entryFeeCents)} due`}
+                    {m.feePaid ? t('league.membersMisc.paid') : t('league.membersMisc.due', { amount: formatEuros(league.entryFeeCents) })}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -413,23 +413,23 @@ export default function LeagueMembersScreen({ navigation, route }) {
 
         {invitees.length > 0 && (
           <>
-            <Text style={s.sectionLabel}>INVITED</Text>
+            <Text style={s.sectionLabel}>{t('league.membersMisc.invited')}</Text>
             <View style={s.card}>
               {invitees.map((i, idx) => (
                 <View key={i.id} style={[s.memberRow, s.invitedRow, idx < invitees.length - 1 && s.rowDivider]}>
                   <InitialsAvatar name={i.name} muted />
                   <View style={{ flex: 1 }}>
                     <Text style={s.memberName} numberOfLines={1}>{i.name}</Text>
-                    <Text style={s.memberSub}>Not joined yet</Text>
+                    <Text style={s.memberSub}>{t('league.membersMisc.notJoined')}</Text>
                   </View>
-                  <Text style={s.memberSub}>{i.handicap == null ? '' : i.handicap.toFixed(1)}</Text>
+                  <Text style={s.memberSub}>{i.handicap == null ? '' : formatNumber(i.handicap, { decimals: 1 })}</Text>
                   {isAdmin && !archived && (
                     <TouchableOpacity
                       style={s.removeBtn}
                       onPress={() => confirmRemoveInvitee(i)}
                       disabled={busy}
                       accessibilityRole="button"
-                      accessibilityLabel={`Remove ${i.name}`}
+                      accessibilityLabel={t('league.members.removeAction', { name: i.name })}
                     >
                       <Feather name="x" size={18} color={theme.text.muted} />
                     </TouchableOpacity>
@@ -442,7 +442,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
 
         {history.length > 0 && (
           <>
-            <Text style={s.sectionLabel}>HANDICAP HISTORY</Text>
+            <Text style={s.sectionLabel}>{t('league.membersMisc.hcpHistory')}</Text>
             <View style={s.card}>
               {history.map((ev, i) => (
                 <View key={ev.id} style={[s.historyRow, i < history.length - 1 && s.rowDivider]}>
@@ -466,17 +466,17 @@ export default function LeagueMembersScreen({ navigation, route }) {
           </>
         )}
 
-        <Text style={s.sectionLabel}>INVITE</Text>
+        <Text style={s.sectionLabel}>{t('league.membersMisc.invite')}</Text>
         <View style={s.card}>
           <Text style={s.link} selectable>{link}</Text>
           <View style={s.inviteBtns}>
             <TouchableOpacity style={[s.secondaryBtn, { flex: 1 }]} onPress={copyLink} activeOpacity={0.8}>
               <Feather name={copied ? 'check' : 'link'} size={16} color={theme.accent.primary} style={{ marginRight: 8 }} />
-              <Text style={s.secondaryText}>{copied ? 'Copied' : 'Copy link'}</Text>
+              <Text style={s.secondaryText}>{t(copied ? 'league.membersMisc.copied' : 'league.membersMisc.copyLink')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.primaryBtn, { flex: 1 }]} onPress={shareLink} activeOpacity={0.8}>
               <Feather name="share-2" size={16} color={theme.text.inverse} style={{ marginRight: 8 }} />
-              <Text style={s.primaryText}>Share invite</Text>
+              <Text style={s.primaryText}>{t('league.membersMisc.shareInvite')}</Text>
             </TouchableOpacity>
           </View>
           {isAdmin && !archived && (
@@ -491,17 +491,17 @@ export default function LeagueMembersScreen({ navigation, route }) {
       <BottomSheet visible={!!target} onClose={() => setTarget(null)} sheetStyle={s.sheet}>
         <View style={s.handle} />
         <Text style={s.sheetTitle}>{target ? memberLabel(target, meId) : ''}</Text>
-        <Text style={s.sheetSub}>{`League handicap, max ${league.handicapCap}`}</Text>
+        <Text style={s.sheetSub}>{t('league.membersMisc.sheetSub', { cap: league.handicapCap })}</Text>
         <TextInput
           style={s.input}
           value={hcpText}
           onChangeText={setHcpText}
           keyboardType="decimal-pad"
-          placeholder="e.g. 18.0"
+          placeholder={t('league.membersMisc.hcpPlaceholder')}
           placeholderTextColor={theme.text.muted}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor={theme.accent.primary}
-          accessibilityLabel="New league handicap"
+          accessibilityLabel={t('league.membersMisc.newHcpA11y')}
         />
         {isAdmin && (
           <TouchableOpacity
@@ -510,7 +510,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
             onPress={() => run(() => setLeagueHandicap(leagueId, target.userId, proposed))}
             activeOpacity={0.8}
           >
-            <Text style={s.primaryText}>Set handicap</Text>
+            <Text style={s.primaryText}>{t('league.membersMisc.setHandicap')}</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity
@@ -519,7 +519,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
           onPress={() => run(() => openHandicapVote(leagueId, target.userId, proposed))}
           activeOpacity={0.8}
         >
-          <Text style={s.secondaryText}>{`Open a vote (needs ${needed} of ${active.length})`}</Text>
+          <Text style={s.secondaryText}>{t('league.membersMisc.openVoteBtn', { needed, total: active.length })}</Text>
         </TouchableOpacity>
         {isAdmin && !archived && target && target.userId !== meId && (
           <TouchableOpacity
