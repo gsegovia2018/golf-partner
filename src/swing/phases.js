@@ -18,7 +18,9 @@ export const CHECKPOINT_KEYS = [
 ];
 export const LEVEL_TOL_DEG = 5; // "arm level": within 5 degrees of the shoulder's height
 export const FINISH_HOLD_S = 0.15; // grip and head stopped this long
-const BALL_GONE_SLACK_S = 0.02; // the pose impact's sampling slack
+// The ball may leave this long after the grip bottoms out: with an iron the hands lead and the
+// grip's lowest frame comes a few frames before contact (25 ms on a 240 fps clip, 2026-10-14).
+const BALL_GONE_SLACK_S = 0.05;
 const ONSET_SUSTAIN_S = 0.02; // clubhead motion at address must last this long (detect.py)
 const PRE_IMPACT_S = 0.025; // preImpact = impact - 25 ms
 const POST_IMPACT_FRAMES = 10;
