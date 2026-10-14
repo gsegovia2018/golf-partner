@@ -62,7 +62,7 @@ function toDate(input) {
 
 // Styles: 'short' "Sat 4 Oct" / "sáb 4 oct"; 'day' "4 Oct" / "4 oct";
 // 'long' "Saturday 4 October 2026" / "sábado, 4 de octubre de 2026";
-// 'month' "October 2026" / "octubre de 2026"; 'monthName' "October" / "octubre"; 'monthShort' "Oct" / "oct". Invalid input gives ''.
+// 'month' "October 2026" / "octubre de 2026"; 'monthName' "October" / "octubre"; 'weekday' "Saturday" / "sábado"; 'weekdayShort' "Sat" / "sáb"; 'monthShort' "Oct" / "oct". Invalid input gives ''.
 export function formatDate(input, style = 'short', lang = getLanguage()) {
   const d = toDate(input);
   if (Number.isNaN(d.getTime())) return '';
@@ -78,6 +78,8 @@ export function formatDate(input, style = 'short', lang = getLanguage()) {
       : `${wd.long[d.getDay()]} ${day} ${mo.long[d.getMonth()]} ${year}`;
     case 'monthName': return mo.long[d.getMonth()];
     case 'monthShort': return mo.short[d.getMonth()];
+    case 'weekday': return wd.long[d.getDay()];
+    case 'weekdayShort': return wd.short[d.getDay()];
     case 'month': return l === 'es'
       ? `${mo.long[d.getMonth()]} de ${year}` : `${mo.long[d.getMonth()]} ${year}`;
     default: return `${wd.short[d.getDay()]} ${day} ${mo.short[d.getMonth()]}`;

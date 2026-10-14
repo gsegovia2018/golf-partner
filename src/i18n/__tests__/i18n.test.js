@@ -187,6 +187,9 @@ describe('formatDate / formatTime', () => {
     expect(formatDate('2026-10-04', 'short', 'en')).toBe('Sun 4 Oct');
     expect(formatDate('2026-10-04', 'short', 'es')).toBe('dom 4 oct');
     expect(formatDate('2026-10-04', 'day', 'es')).toBe('4 oct');
+    expect(formatDate('2026-10-03', 'weekday', 'en')).toBe('Saturday');
+    expect(formatDate('2026-10-03', 'weekday', 'es')).toBe('sábado');
+    expect(formatDate('2026-10-03', 'weekdayShort', 'es')).toBe('sáb');
     expect(formatDate('2026-10-04', 'long', 'es')).toBe('domingo, 4 de octubre de 2026');
     expect(formatDate('2026-10-04', 'long', 'en')).toBe('Sunday 4 October 2026');
     expect(formatDate('2026-10-04', 'month', 'es')).toBe('octubre de 2026');

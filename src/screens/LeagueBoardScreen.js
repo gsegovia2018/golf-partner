@@ -9,6 +9,8 @@ import PullToRefresh from '../components/PullToRefresh';
 import LeaderboardCard from '../components/LeaderboardCard';
 import DeadlineLine, { countdownText } from '../components/league/DeadlineLine';
 import LeagueShareSheet from '../components/league/LeagueShareSheet';
+import MonthClosingBanner from '../components/league/MonthClosingBanner';
+import { ghostSection, closeInfo } from '../components/league/graceText';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +18,7 @@ import { useLeague } from '../hooks/useLeague';
 import { useMinuteClock } from '../hooks/useMinuteClock';
 import { isMissed, needsApproval, deadlineInfo, isMonthClosed, monthClosesAt } from '../store/leagueRules';
 import { seasonTable, monthResults } from '../store/leagueStandings';
+import { graceMonth } from '../store/leagueGrace';
 import {
   formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard, rankNotes, placeLabel,
   leaguePointsText, monthStanding,
@@ -117,7 +120,10 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const archived = !!league.archivedAt;
   const activeScope = scope ?? (archived ? 'season' : curKey);
   const monthScope = activeScope === curKey && !archived;
-  const pastScopes = scoredMonths.filter((m) => m !== curKey);
+  // R12: the previous month stays open for 3 days; its chip stays while cards wait.
+  const grace = archived ? null : graceMonth(data, now, meId);
+  const graceKey = grace?.monthKey ?? null;
+  const pastScopes = [...(graceKey ? [graceKey] : []), ...scoredMonths.filter((m) => m !== curKey && m !== graceKey)];
 
   // ---- Standings card ------------------------------------------------------
 
@@ -304,7 +310,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
     const canOpen = viewable(activeScope);
     const results = monthResults(cardsByMonth[activeScope], active, league.pointsTable, { participationPoints: league.participationPoints });
     const ranked = results.filter((r) => r.place != null || r.unrated);
-    const absent = results.filter((r) => r.place == null && !r.unrated);
+    const inGrace = !!grace && activeScope === graceKey;
+    const waitingIds = new Set(inGrace ? grace.pending.map((p) => p.userId) : []);
+    const absent = results.filter((r) => r.place == null && !r.unrated && !waitingIds.has(r.userId));
     boardSections = [
       ranked.length > 0 && {
         key: 'results',
@@ -340,6 +348,12 @@ export default function LeagueBoardScreen({ navigation, route }) {
     if (unrated.length > 0) boardFooter = unratedNote(unrated);
     else if (ranked.some((r) => r.floored)) boardFooter = t('league.board.footPast', { points: formatNumber(league.participationPoints) });
     else boardFooter = t('league.board.footPastTies');
+    if (inGrace) {
+      const close = closeInfo(grace.closesAt, now);
+      boardTitle = t('league.grace.boardTitle', { month: monthLong(graceKey), when: `${close.weekdayShort} ${close.clock}` });
+      boardSections.push(ghostSection(grace, t, { nameOf, now, onOpen: (userId) => openCard(graceKey, userId) }));
+      boardFooter = t('league.grace.footer', { weekday: close.weekday });
+    }
   }
 
   const chipKeys = [...(archived ? [] : [curKey]), 'season', ...pastScopes];
@@ -358,7 +372,10 @@ export default function LeagueBoardScreen({ navigation, route }) {
             accessibilityState={{ selected: on }}
           >
             {key === curKey && <View style={[s.chipDot, on && s.chipDotOn]} />}
-            <Text style={[s.chipText, on && s.chipTextOn]}>{key === 'season' ? t('league.public.season') : monthShort(key)}</Text>
+            <Text style={[s.chipText, key === graceKey && !on && s.chipTextGrace, on && s.chipTextOn]}>
+              {key === 'season' ? t('league.public.season')
+                : key === graceKey ? t('league.grace.chip', { month: monthShort(key) }) : monthShort(key)}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -578,7 +595,18 @@ export default function LeagueBoardScreen({ navigation, route }) {
           </View>
         )}
 
-        {!!finalMonth && (
+        {!!grace && (
+          <MonthClosingBanner
+            grace={grace}
+            navigation={navigation}
+            leagueId={leagueId}
+            nameOf={nameOf}
+            now={now}
+            onSeeMonth={() => setScope(graceKey)}
+          />
+        )}
+
+        {!!finalMonth && !grace && (
           <View style={s.finalBanner}>
             <View style={s.finalHead}>
               <Feather name="award" size={18} color={theme.accent.primary} />
@@ -669,6 +697,7 @@ function makeStyles(theme) {
     chipOn: { backgroundColor: 'rgba(255,255,255,0.9)' },
     chipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.72)', fontSize: 12 },
     chipTextOn: { color: theme.bg.deep },
+    chipTextGrace: { color: semantic.winner.dark },
 
     staleBanner: {
       flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.bg.secondary,
