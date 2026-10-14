@@ -231,6 +231,11 @@ describe('league notifications', () => {
         .toEqual({ screen: 'LeagueBoard', params: { leagueId: 'L1' } }));
   });
 
+  test('"Ranking updated" opens the board on that month\'s "is final" banner', () => {
+    expect(notificationLink('league_ranking_updated', { league_id: 'L1', month: '2026-09-01' }))
+      .toEqual({ screen: 'LeagueBoard', params: { leagueId: 'L1', finalMonth: '2026-09' } });
+  });
+
   test('invite links to JoinLeague with the code', () => {
     expect(notificationLink('league_invite', { invite_code: 'ABC' }))
       .toEqual({ screen: 'JoinLeague', params: { code: 'ABC' } });

@@ -332,11 +332,15 @@ export function notificationLink(type, data = {}) {
     case 'league_marker_request':
       return data.token ? { screen: 'LeagueMarkerConfirm', params: { token: data.token } }
         : { screen: 'Notifications' };
+    // The board opens on that month's "is final" banner (Share the results).
+    case 'league_ranking_updated': {
+      const m = /^\d{4}-\d{2}/.exec(String(data.month ?? ''));
+      return { screen: 'LeagueBoard', params: { leagueId: data.league_id, ...(m ? { finalMonth: m[0] } : {}) } };
+    }
     case 'league_card_announced':
     case 'league_tee_off':
     case 'league_card_confirmed':
     case 'league_marker_confirmed':
-    case 'league_ranking_updated':
     case 'league_month_reminder':
     case 'league_post_reminder':
     case 'league_vote_opened':

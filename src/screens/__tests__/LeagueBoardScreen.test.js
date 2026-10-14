@@ -11,6 +11,7 @@ jest.mock('../../components/PullToRefresh', () => {
 jest.mock('../../store/leagueStore', () => ({
   getLeague: jest.fn(),
   getLeagueCached: jest.fn(() => Promise.resolve(null)),
+  getLeagueShareLink: jest.fn(() => Promise.resolve('tok12345678901234567890')),
 }));
 
 jest.mock('../../store/tournamentStore', () => ({ getTournamentSnapshot: jest.fn(() => null) }));
@@ -453,6 +454,41 @@ describe('LeagueBoardScreen', () => {
     await waitFor(() => getByText(/^Your .* card$/));
     const json = JSON.stringify(toJSON());
     expect(json.indexOf('Play with the app')).toBeLessThan(json.indexOf('SO FAR'));
+  });
+
+  test('header: "Share standings" opens the share sheet on the month so far, with the live board link', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: { [THIS_MONTH]: [card('javi', 'confirmed', 36, { course: { name: 'Golf Olivar' } })] },
+    }));
+    const { getByLabelText, findByText, getAllByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    fireEvent.press(await waitFor(() => getByLabelText('Share standings')));
+    expect(await findByText('Share to the group')).toBeTruthy();
+    await waitFor(() => expect(store.getLeagueShareLink).toHaveBeenCalledWith('L1'));
+    await waitFor(() => {
+      const text = getByLabelText('Message preview').props.children;
+      expect(text).toMatch(/^\*El Club\*\n\w+ so far · (\d+ days? left|last day)\n\n1\. Javi · 36 pts · Golf Olivar\n2 still to post\.\n\nLive board: https:\/\/golf-partner\.vercel\.app\/league-board\/tok12345678901234567890$/);
+    });
+    // Without the link: the same text, no URL.
+    fireEvent(getByLabelText('Add the live board link'), 'valueChange', false);
+    expect(getByLabelText('Message preview').props.children).not.toMatch(/league-board/);
+    // The sheet's Season chip is the last "Season" on screen (the board has one too).
+    const seasons = getAllByText('Season');
+    fireEvent.press(seasons[seasons.length - 1]);
+    expect(getByLabelText('Message preview').props.children).toMatch(/^\*El Club\*\nSeason after /);
+  });
+
+  test('a month that is final: the banner shares the results with places and league points', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: { [PAST_MONTH]: [card('javi', 'confirmed', 38), card('me', 'confirmed', 34)] },
+    }));
+    const { getByText, getByLabelText, findByText } = render(wrap(
+      <LeagueBoardScreen navigation={makeNav()} route={{ params: { leagueId: 'L1', finalMonth: PAST_MONTH } }} />,
+    ));
+    expect(await findByText('September is final')).toBeTruthy();
+    fireEvent.press(getByText('Share the results'));
+    await waitFor(() => expect(getByLabelText('Message preview').props.children).toMatch(
+      /^\*El Club\*\nSeptember results\n\n1\. Javi · 38 pts · \+500\n2\. Marcos · 34 pts · \+300\n\nSeason: 1\. Javi 500 · 2\. Marcos 300/,
+    ));
   });
 
   test('header: Stats and Settings, no Members icon', async () => {

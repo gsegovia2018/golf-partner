@@ -23,7 +23,7 @@ const RUN = {
 };
 
 export default function LeagueCardActions({
-  card, who, monthLabel, isOwner, items, menuOpen, onMenuClose, onDone,
+  card, who, monthLabel, isOwner, items, menuOpen, onMenuClose, onDone, onShare,
 }) {
   const { theme } = useTheme();
   const t = useT();
@@ -59,7 +59,9 @@ export default function LeagueCardActions({
     if (!item.enabled) return;
     setError(null);
     onMenuClose?.();
-    setOpen(item.kind);
+    // "Share card" opens the share sheet, not a confirm sheet.
+    if (item.kind === 'share') onShare?.();
+    else setOpen(item.kind);
   }
 
   return (

@@ -8,6 +8,7 @@ import IconButton from '../components/ui/IconButton';
 import PullToRefresh from '../components/PullToRefresh';
 import DateField from '../components/DateField';
 import DeleteLeagueSheet from '../components/DeleteLeagueSheet';
+import BottomSheet from '../components/BottomSheet';
 import PointsForPlaying from '../components/league/PointsForPlaying';
 import { useT, formatNumber } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
@@ -17,7 +18,10 @@ import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings } from '../store/settingsStore';
 import {
   updateLeagueRules, setLeagueFeePaid, setLeagueRole, archiveLeague, leaveLeague, deleteLeague,
+  getLeagueShareLink, setLeaguePublicBoard, rotateLeaguePublicBoard,
 } from '../store/leagueStore';
+import { publicBoardUrl } from '../store/leagueShare';
+import { shareOrigin } from '../lib/shareOrigin';
 import {
   parseIsoDate, parsePointsTable, formatPointsTable, parseFeeCents,
 } from '../store/leagueDraft';
@@ -72,6 +76,12 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
   const seededRef = useRef(false);
+  // The admin's "Sharing" section: { enabled, token } once loaded; busy while a
+  // switch or a new link is in flight; notice/error under the rows.
+  const [board, setBoard] = useState(null);
+  const [boardBusy, setBoardBusy] = useState(false);
+  const [boardNote, setBoardNote] = useState(null);
+  const [rotateOpen, setRotateOpen] = useState(false);
 
   // Seed the form once, from the first snapshot (cache or live). Later
   // refreshes must not overwrite what the admin is typing.
@@ -110,6 +120,39 @@ export default function LeagueSettingsScreen({ navigation, route }) {
     const off = navigation?.addListener?.('focus', onFocus);
     return () => { alive = false; unsub(); if (typeof off === 'function') off(); };
   }, [navigation, leagueId, reload]);
+
+  // The public board link, for admins: the token (created on first ask) while
+  // it is on. Loaded once the snapshot says I'm an admin.
+  const amAdmin = !!data?.members?.some((m) => m.userId === meId && !m.leftAt && m.role === 'admin');
+  useEffect(() => {
+    if (!amAdmin || board) return undefined;
+    let alive = true;
+    getLeagueShareLink(leagueId)
+      .then((token) => { if (alive) setBoard({ enabled: !!token, token }); })
+      // Retry (or pull to refresh) clears it and loads again.
+      .catch(() => { if (alive) setBoard({ failed: true }); });
+    return () => { alive = false; };
+  }, [amAdmin, board, leagueId]);
+
+  function onRefresh() {
+    if (board?.failed) setBoard(null);
+    return refresh();
+  }
+
+  async function boardAction(run, doneKey = null) {
+    if (boardBusy) return;
+    setBoardBusy(true);
+    setBoardNote(null);
+    try {
+      const next = await run();
+      setBoard(next);
+      if (doneKey) setBoardNote({ key: doneKey });
+    } catch {
+      setBoardNote({ key: 'league.share.settings.failed', error: true });
+    } finally {
+      setBoardBusy(false);
+    }
+  }
 
   const header = (
     <View style={s.header}>
@@ -287,7 +330,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {header}
-      <PullToRefresh style={{ flex: 1 }} contentContainerStyle={s.content} refreshing={refreshing} onRefresh={refresh}>
+      <PullToRefresh style={{ flex: 1 }} contentContainerStyle={s.content} refreshing={refreshing} onRefresh={onRefresh}>
         <Text style={s.sectionLabel}>LEAGUE</Text>
         <View style={[s.card, { paddingVertical: 4 }]}>
           {linkRows.map((r, i) => (
@@ -379,6 +422,81 @@ export default function LeagueSettingsScreen({ navigation, route }) {
               ))}
             </View>
           </>
+        )}
+
+        {isAdmin && (
+          <>
+            <Text style={s.sectionLabel}>{t('league.share.settings.section')}</Text>
+            <View style={s.card}>
+              <View style={[s.adminRow, board?.enabled && s.rowDivider]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.readLabel}>{t('league.share.settings.switch')}</Text>
+                  <Text style={board?.failed ? s.errorText : s.readValue}>
+                    {t(board?.failed ? 'league.share.settings.loadFailed'
+                      : board?.enabled === false ? 'league.share.settings.off' : 'league.share.settings.on')}
+                  </Text>
+                </View>
+                {board?.failed ? (
+                  <TouchableOpacity style={s.retryBtn} onPress={() => setBoard(null)} accessibilityRole="button">
+                    <Text style={s.secondaryText}>{t('common.retry')}</Text>
+                  </TouchableOpacity>
+                ) : board ? (
+                  <Switch
+                    value={!!board.enabled}
+                    onValueChange={(v) => boardAction(() => setLeaguePublicBoard(leagueId, v))}
+                    disabled={boardBusy}
+                    accessibilityLabel={t('league.share.settings.switch')}
+                    trackColor={{ true: theme.accent.primary }}
+                  />
+                ) : <ActivityIndicator color={theme.accent.primary} />}
+              </View>
+              {!!board?.enabled && !!board.token && (
+                <>
+                  <View style={[s.readRow, s.rowDivider]}>
+                    <Text selectable style={s.linkValue}>
+                      {publicBoardUrl(shareOrigin(), board.token)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={s.linkRow}
+                    onPress={() => setRotateOpen(true)}
+                    disabled={boardBusy}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                  >
+                    <Feather name="refresh-cw" size={16} color={theme.text.primary} style={{ marginRight: 12 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.readLabel}>{t('league.share.settings.rotate')}</Text>
+                      <Text style={s.readValue}>{t('league.share.settings.rotateSub')}</Text>
+                    </View>
+                    {boardBusy && <ActivityIndicator color={theme.accent.primary} />}
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+            {!!boardNote && (
+              <Text style={boardNote.error ? s.errorText : s.hint} accessibilityRole="alert">{t(boardNote.key)}</Text>
+            )}
+          </>
+        )}
+        {isAdmin && (
+          <BottomSheet visible={rotateOpen} onClose={() => setRotateOpen(false)} sheetStyle={s.sheet}>
+            <Text style={s.sheetTitle} accessibilityRole="header">{t('league.share.settings.rotateTitle')}</Text>
+            <Text style={s.sheetText}>{t('league.share.settings.rotateBody')}</Text>
+            <TouchableOpacity
+              style={s.primaryBtn}
+              onPress={() => {
+                setRotateOpen(false);
+                boardAction(() => rotateLeaguePublicBoard(leagueId), 'league.share.settings.rotated');
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={s.primaryText}>{t('league.share.settings.rotateConfirm')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.secondaryBtn, { marginTop: 10 }]} onPress={() => setRotateOpen(false)} accessibilityRole="button">
+              <Text style={s.secondaryText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </BottomSheet>
         )}
 
         {/* Notification preferences. The switches save to profiles.settings
@@ -479,6 +597,16 @@ function makeStyles(theme) {
     readRow: { paddingVertical: 12 },
     readLabel: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14 },
     readValue: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
+    linkValue: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 13 },
+    retryBtn: {
+      minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: theme.border.default,
+      paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center',
+    },
+    sheet: {
+      backgroundColor: theme.bg.primary, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32,
+    },
+    sheetTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, lineHeight: 28, color: theme.text.primary, marginBottom: 8 },
+    sheetText: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 14, lineHeight: 20, color: theme.text.secondary, marginBottom: 16 },
 
     adminHead: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8, gap: 12 },
     colHead: {

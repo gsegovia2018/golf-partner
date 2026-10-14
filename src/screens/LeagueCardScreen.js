@@ -7,6 +7,7 @@ import { makeOffAppStyles } from '../components/league/offAppStyles';
 import CardHoleGrid from '../components/league/CardHoleGrid';
 import DeadlineLine from '../components/league/DeadlineLine';
 import LeagueCardActions from '../components/league/LeagueCardActions';
+import LeagueShareSheet from '../components/league/LeagueShareSheet';
 import CardTimeline from '../components/league/CardTimeline';
 import { stamp } from '../components/league/stamp';
 import { useTheme } from '../theme/ThemeContext';
@@ -19,6 +20,7 @@ import { semantic } from '../theme/tokens';
 import { getLeagueProofUrl } from '../store/leagueStore';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
 import { isMissed, needsApproval, isMonthClosed } from '../store/leagueRules';
+import { shareCardAction } from '../store/leagueShare';
 import {
   monthName, netDiffTone, memberName, cardBreakdown, monthStanding, standingCells, currentMonthKey,
   monthCardsView, cardActions, voidedNote,
@@ -38,6 +40,7 @@ export default function LeagueCardScreen({ navigation, route }) {
   const { data, loading, error, reload } = useLeague(navigation, leagueId);
   const [shownUser, setShownUser] = useState(userId);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [version, setVersion] = useState(0);
   const [notice, setNotice] = useState(null);
 
@@ -54,10 +57,11 @@ export default function LeagueCardScreen({ navigation, route }) {
   const isOwner = !!card && card.userId === meId;
   const isAdmin = !!data?.members.find((m) => m.userId === meId && !m.leftAt && m.role === 'admin');
   const otherAdmin = !!data?.members.some((m) => m.userId !== meId && !m.leftAt && m.role === 'admin');
-  const items = useMemo(
-    () => cardActions(card, { isOwner, isAdmin, otherAdmin }, data?.league, now, { when: stamp, clock: timeLabel }),
-    [card, isOwner, isAdmin, otherAdmin, data?.league, now],
-  );
+  const items = useMemo(() => {
+    const share = shareCardAction(card, isOwner);
+    const rest = cardActions(card, { isOwner, isAdmin, otherAdmin }, data?.league, now, { when: stamp, clock: timeLabel });
+    return share ? [share, ...rest] : rest;
+  }, [card, isOwner, isAdmin, otherAdmin, data?.league, now]);
 
   const header = (
     <View style={s.header}>
@@ -76,7 +80,7 @@ export default function LeagueCardScreen({ navigation, route }) {
   );
 
   // A flick to another card closes anything open for this one.
-  const flickTo = (step) => { setMenuOpen(false); setNotice(null); setShownUser(cards[idx + step].userId); };
+  const flickTo = (step) => { setMenuOpen(false); setShareOpen(false); setNotice(null); setShownUser(cards[idx + step].userId); };
   const afterAction = async (kind) => {
     setNotice(kind === 'withdraw' || kind === 'void' ? `league.actions.${kind}.done` : null);
     setVersion((v) => v + 1);
@@ -244,6 +248,17 @@ export default function LeagueCardScreen({ navigation, route }) {
           menuOpen={menuOpen}
           onMenuClose={() => setMenuOpen(false)}
           onDone={afterAction}
+          onShare={() => setShareOpen(true)}
+        />
+        <LeagueShareSheet
+          visible={shareOpen}
+          onClose={() => setShareOpen(false)}
+          leagueId={leagueId}
+          snapshot={data}
+          meId={meId}
+          mode="card"
+          card={isOwner ? card : null}
+          now={now}
         />
 
         <CardTimeline

@@ -40,6 +40,30 @@ export function cardMonth(dateOrIso) {
   return madridMonthManual(date);
 }
 
+// The Europe/Madrid calendar day of an instant: { year, month (1-12), day },
+// null for an invalid date. Same zone rule and fallback as cardMonth.
+export function madridDay(dateOrIso) {
+  const date = dateOrIso instanceof Date ? dateOrIso : new Date(dateOrIso);
+  if (Number.isNaN(date.getTime())) return null;
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: MADRID, year: 'numeric', month: '2-digit', day: '2-digit' })
+      .formatToParts(date);
+    const get = (type) => Number(parts.find((p) => p.type === type)?.value);
+    const year = get('year');
+    const month = get('month');
+    const day = get('day');
+    if (year && month && day) return { year, month, day };
+  } catch {
+    // No timeZone support in this runtime: use the manual offset below.
+  }
+  const y = date.getUTCFullYear();
+  const start = Date.UTC(y, 2, lastSunday(y, 2), 1);
+  const end = Date.UTC(y, 9, lastSunday(y, 9), 1);
+  const t = date.getTime();
+  const shifted = new Date(t + ((t >= start && t < end) ? 2 : 1) * 3600000);
+  return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1, day: shifted.getUTCDate() };
+}
+
 // Does this card use up its month? Every card does except a void one, and an
 // admin's void still does (R15b, 20261016000000), as does a withdrawn card
 // that was played anyway ('withdrawn_after_play'): only a withdrawal (by hand

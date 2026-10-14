@@ -106,6 +106,9 @@ export function rowToLeague(r) {
     // Season points every counting card earns at least (R2). A server without
     // the column (before 20261015000000) has no such rule: 0.
     participationPoints: r.participation_points == null ? 0 : Number(r.participation_points),
+    // The public board link (/league-board/<token>) is on unless an admin
+    // switched it off (20261017000000). The token comes from getLeagueShareLink.
+    publicBoardEnabled: r.public_board_enabled !== false,
   };
 }
 
@@ -612,6 +615,27 @@ export async function rotateLeagueInviteCode(leagueId) {
 // Hints: 'not_claimed', 'use_leave' (your own spot), 'last_admin'.
 export async function releaseLeagueInvitee(leagueId, inviteeId) {
   await rpc('release_league_invitee', { p_league: leagueId, p_invitee: inviteeId });
+}
+
+// Members. The public board's token (created on first ask), or null while an
+// admin has the public board switched off. Build the link with
+// leagueShare.publicBoardUrl.
+export async function getLeagueShareLink(leagueId) {
+  return (await rpc('get_league_share_link', { p_league: leagueId })) ?? null;
+}
+
+// Admin. Switch the public board on or off; switching it back on revives the
+// same link. Returns { enabled, token } (token null while off).
+export async function setLeaguePublicBoard(leagueId, enabled) {
+  const d = await rpc('set_league_public_board', { p_league: leagueId, p_enabled: !!enabled });
+  return { enabled: !!d?.enabled, token: d?.token ?? null };
+}
+
+// Admin. A new public board link; the old one stops working. Returns
+// { enabled, token } (token null while off).
+export async function rotateLeaguePublicBoard(leagueId) {
+  const d = await rpc('rotate_league_public_board', { p_league: leagueId });
+  return { enabled: !!d?.enabled, token: d?.token ?? null };
 }
 
 // Members. The membership log, oldest first (removed / spot claimed /
