@@ -305,7 +305,7 @@ describe('SwingResultsScreen: a stored swing', () => {
     expect(getByText(T.practiseTitle)).toBeTruthy();
     expect(getByText('The chair')).toBeTruthy();
     expect(queryByText('Club behind the heels')).toBeNull();
-    fireEvent.press(getByLabelText(T.moreDrills(1)));
+    fireEvent.press(getByLabelText(T.moreDrills(2)));
     expect(getByText('Club behind the heels')).toBeTruthy();
   });
 

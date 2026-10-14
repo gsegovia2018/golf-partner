@@ -89,7 +89,7 @@ function SwingPattern({ s, tone, checks, onPick }) {
   const cells = PATTERN.map((id) => checks.find((c) => c.id === id)).filter(Boolean);
   if (!cells.length) return null;
   return (
-    <View style={s.card} testID="results-swing-pattern">
+    <View style={s.inner} testID="results-swing-pattern">
       <Text style={s.overlineDark}>{T.patternTitle}</Text>
       <View style={s.patternRow}>
         {cells.map((c) => {
@@ -319,7 +319,7 @@ export function SwingResultsView({
   const selFix = focusOn ? fixCopy(selected) : null;
   const groups = useMemo(() => prioritizeChecks(checks), [checks]);
   const drills = ready && analysis.main ? drillsForMain(analysis.main) : [];
-  const shownDrills = allDrills ? drills : drills.slice(0, 2);
+  const shownDrills = allDrills ? drills : drills.slice(0, 1);
   const openEdit = (k) => onEditMarks?.(k);
 
   // A neutral loader while a stored swing is read: no results chrome until it is ready.
@@ -427,9 +427,9 @@ export function SwingResultsView({
                       <Text style={s.drillProgress}>{progression()}</Text>
                     </View>
                   ))}
-                  {drills.length > 2 ? (
-                    <PressableScale onPress={() => setAllDrills((v) => !v)} accessibilityRole="button" accessibilityLabel={allDrills ? T.lessDrills : T.moreDrills(drills.length - 2)}>
-                      <Text style={s.link}>{allDrills ? T.lessDrills : T.moreDrills(drills.length - 2)}</Text>
+                  {drills.length > 1 ? (
+                    <PressableScale onPress={() => setAllDrills((v) => !v)} accessibilityRole="button" accessibilityLabel={allDrills ? T.lessDrills : T.moreDrills(drills.length - 1)}>
+                      <Text style={s.link}>{allDrills ? T.lessDrills : T.moreDrills(drills.length - 1)}</Text>
                     </PressableScale>
                   ) : null}
                 </>
