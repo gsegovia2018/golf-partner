@@ -11,7 +11,7 @@ import { analyze } from '../../swing/analyze';
 import { SWING_STRINGS } from '../../swing/strings';
 import { emptyMarks, frameLabel, withFrame } from '../../swing/labels';
 import { fixesFor, fixCopy } from '../../swing/fixes';
-import { homeOf } from '../../swing/checkpointChecks';
+import { homeOf, prioritizeChecks } from '../../swing/checkpointChecks';
 import { fixtureNative, TRUTH, W, H } from '../../swing/__tests__/helpers';
 
 const lab = require('../../swing/__tests__/fixtures/lab-d15-pass1.json');
@@ -88,6 +88,7 @@ function setup({ row = ROW, analysis = MARKED, marks = OWNER_MARKS } = {}) {
 
 const labelOf = (id) => SWING_STRINGS.checkLabel[id];
 const FIXES = fixesFor(MARKED);
+const openDetail = (u) => fireEvent.press(u.getByTestId('results-detail-toggle')); // the position cards are folded away
 const VERDICT = `${MARKED.main.label}.`; // D21: 'Posture at address.' on the owner swing
 
 beforeEach(() => {
@@ -99,21 +100,49 @@ beforeEach(() => {
 describe('SwingResultsScreen: coaching', () => {
   const F = T.fixes;
 
-  test('the fixes card lists the headlines of fixesFor, in order', async () => {
+  test('the priority card lists red, then yellow, then unknown, each in swing order; greens are folded', async () => {
+    const { findByText, getByTestId, queryByLabelText } = setup();
+    await findByText(VERDICT);
+    const card = within(getByTestId('results-priority'));
+    expect(card.getByText(T.priorityTitle)).toBeTruthy();
+    const groups = prioritizeChecks(MARKED.checks);
+    const nameOf = (c) => (c.cp && T.cpSuffix[c.cp] ? `${c.label}, ${T.cpSuffix[c.cp]}` : c.label);
+    const expected = [...groups.red, ...groups.yellow, ...groups.unknown].map(nameOf);
+    const labels = card.getAllByLabelText(/./).filter((n) => n.props.accessibilityRole === 'button' && !n.props.testID).map((n) => n.props.accessibilityLabel);
+    const rows = labels.filter((l) => expected.some((e) => l.startsWith(`${e},`)));
+    expect(rows.map((l) => expected.find((e) => l.startsWith(`${e},`)))).toEqual(expected);
+    expect(groups.green.length).toBeGreaterThan(0);
+    expect(queryByLabelText(new RegExp(`^${nameOf(groups.green[0])},`))).toBeNull();
+    expect(card.getAllByText(SWING_STRINGS.statusWord.red).length).toBeGreaterThan(0); // the group header
+  });
+
+  test('greens stay hidden until the fold row is pressed, and it says how many', async () => {
     const { findByText, getByTestId } = setup();
     await findByText(VERDICT);
-    expect(FIXES.length).toBeGreaterThan(0);
-    const card = within(getByTestId('results-fixes'));
-    expect(card.getByText(FIXES[0].check.status === 'red' ? F.titleFix : F.titleWatch)).toBeTruthy();
-    const heads = card.getAllByText(new RegExp(FIXES.map((f) => f.copy.headline.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')));
-    expect(heads.map((n) => n.props.children)).toEqual(FIXES.map((f) => f.copy.headline));
+    const green = prioritizeChecks(MARKED.checks).green;
+    const fold = getByTestId('results-good-fold');
+    expect(within(fold).getByText(T.goodFold(green.length))).toBeTruthy();
+    expect(fold.props.accessibilityState).toMatchObject({ expanded: false });
+    const row = () => within(getByTestId('results-priority')).queryAllByLabelText(new RegExp(`^${green[0].label}`));
+    expect(row()).toHaveLength(0);
+    fireEvent.press(fold);
+    expect(getByTestId('results-good-fold').props.accessibilityState).toMatchObject({ expanded: true });
+    expect(row().length).toBeGreaterThan(0);
+  });
+
+  test('opens on the main fault: its check is selected and its peek is under the timeline', async () => {
+    const { findByText, getByTestId, getByLabelText } = setup();
+    await findByText(VERDICT);
+    const ev = MARKED.main.evidence;
+    const first = ev.find((c) => c.status === 'red') ?? ev[0];
+    expect(getByLabelText(new RegExp(`^${SWING_STRINGS.checkpoint[homeOf(first)]}(,|$)`))).toBeTruthy();
+    expect(within(getByTestId('results-fix-peek')).getByText(fixCopy(first).cue)).toBeTruthy();
   });
 
   test('tapping a fix opens the sheet with its steps; Next fix advances; the last says Done', async () => {
     const { findByText, getByTestId, getByLabelText, queryByTestId, getByText } = setup();
     await findByText(VERDICT);
-    const card = within(getByTestId('results-fixes'));
-    fireEvent.press(card.getByLabelText(new RegExp(`^1\\. `)));
+    fireEvent.press(within(getByTestId('results-fix-peek')).getByLabelText(F.howLink));
     const sheet = within(getByTestId('fix-sheet'));
     FIXES[0].copy.steps.forEach((t) => expect(sheet.getByText(t)).toBeTruthy());
     expect(sheet.getByText(F.sheetOverline(1, FIXES.length, SWING_STRINGS.checkpoint[homeOf(FIXES[0].check)]))).toBeTruthy();
@@ -130,22 +159,25 @@ describe('SwingResultsScreen: coaching', () => {
   test('See on swing closes the sheet and selects the check at its checkpoint', async () => {
     const { findByText, getByTestId, getByLabelText, getByText } = setup();
     await findByText(VERDICT);
-    fireEvent.press(within(getByTestId('results-fixes')).getByLabelText(new RegExp('^1\\. ')));
+    fireEvent.press(within(getByTestId('results-fix-peek')).getByLabelText(F.howLink));
     fireEvent.press(getByLabelText(F.seeOnSwing));
+    openDetail({ getByTestId });
     expect(getByText(T.atCheckpoint(SWING_STRINGS.checkpoint[homeOf(FIXES[0].check)]))).toBeTruthy();
   });
 
   test('the selected red / yellow check opens its row with the cue, and its link opens the sheet', async () => {
     const { findByText, getByTestId, getAllByLabelText, queryByTestId } = setup();
     await findByText(VERDICT);
+    openDetail({ getByTestId });
     const sel = MARKED.checks.find((c) => homeOf(c) === 'impact' && fixCopy(c));
     expect(sel).toBeTruthy();
-    fireEvent.press(getAllByLabelText(new RegExp(`^${SWING_STRINGS.checkLabel[sel.id]}`))[0]);
+    fireEvent.press(getAllByLabelText(new RegExp(`^${SWING_STRINGS.checkLabel[sel.id]}`))[0]); // the priority row jumps to impact
+    expect(getAllByLabelText(new RegExp(`^${SWING_STRINGS.checkLabel[sel.id]}`))).toHaveLength(2); // priority list + the "At impact" card
     const peek = within(getByTestId('results-fix-peek'));
     expect(peek.getByText(fixCopy(sel).cue)).toBeTruthy();
     expect(peek.getByText(F.tryThis)).toBeTruthy();
     expect(queryByTestId('fix-sheet')).toBeNull();
-    expect(getAllByLabelText(new RegExp(`^${SWING_STRINGS.checkLabel[sel.id]}`))[0].props.accessibilityState).toMatchObject({ selected: true, expanded: true });
+    expect(getAllByLabelText(new RegExp(`^${SWING_STRINGS.checkLabel[sel.id]}`)).pop().props.accessibilityState).toMatchObject({ selected: true, expanded: true });
     fireEvent.press(peek.getByLabelText(F.howLink));
     expect(within(getByTestId('fix-sheet')).getByText(fixCopy(sel).headline)).toBeTruthy();
   });
@@ -153,29 +185,35 @@ describe('SwingResultsScreen: coaching', () => {
 
 describe('SwingResultsScreen: a stored swing', () => {
   test('shows the verdict, counts, the seven-step timeline and the checks at the opening checkpoint', async () => {
-    const { findByText, getByLabelText, queryByLabelText, getAllByText } = setup();
+    const u = setup();
+    const { findByText, getByLabelText, queryByLabelText, getAllByText } = u;
     expect(await findByText(VERDICT)).toBeTruthy();
     expect(getAllByText(new RegExp(`^${MARKED.counts.red} fix$`)).length).toBeGreaterThan(0);
-    expect(getAllByText(/^\d+ fps$/).length).toBeGreaterThan(0);
+    expect(queryByLabelText(/^\d+ fps$/)).toBeNull(); // the fps and swing-name chips are gone
     ['Address', 'Lead arm', 'Top', 'Shaft down', 'Impact', 'Shaft through', 'Finish']
       .forEach((n) => expect(getByLabelText(new RegExp(`^${n}(,|$)`))).toBeTruthy());
     ['Takeaway', 'Transition', 'Trail arm'].forEach((n) => expect(queryByLabelText(new RegExp(`^${n}(,|$)`))).toBeNull());
     expect(getByLabelText(/^Impact, Fix/)).toBeTruthy(); // worst status dot + word (D14)
+    openDetail(u);
+    fireEvent.press(getByLabelText(/^Impact(,|$)/));
     expect(getAllByText(T.atCheckpoint('Impact')).length).toBe(1);
     expect(getAllByText(labelOf('spine_loss')).length).toBeGreaterThan(0);
   });
 
-  test('lists all 15 check rows in the flat "All checks" list, with approx. only where flagged', async () => {
-    const { findByText, getAllByLabelText } = setup();
-    await findByText(T.allChecks);
-    const rows = getAllByLabelText(/^(Posture at address|Hands between the planes|Halfway back|Shaft direction|Downswing path|Clubhead on the plane|Hands height|Hands toward|Shaft angle|Spine angle|Hips hold|Head stays|Tempo|Finish balance)/);
-    // each check appears once in the list; the ones at impact also appear in the "At impact" card
+  test('the priority list and the folded greens together show every check once', async () => {
+    const { findByText, getByTestId } = setup();
+    await findByText(VERDICT);
+    fireEvent.press(getByTestId('results-good-fold'));
+    const rows = within(getByTestId('results-priority')).getAllByLabelText(/^(Posture at address|Hands between the planes|Halfway back|Shaft direction|Downswing path|Clubhead on the plane|Hands height|Hands toward|Shaft angle|Spine angle|Hips hold|Head stays|Tempo|Finish balance)/);
     expect(rows.length).toBeGreaterThanOrEqual(15);
   });
 
   test('tapping a timeline step shows that checkpoint and resets the nudge', async () => {
-    const { findByText, getByLabelText, getByText } = setup();
+    const u = setup();
+    const { findByText, getByLabelText, getByText } = u;
     await findByText(VERDICT);
+    openDetail(u);
+    fireEvent.press(getByLabelText(/^Impact(,|$)/));
     fireEvent.press(getByLabelText(/^Address(,|$)/));
     expect(getByText(T.atCheckpoint('Address'))).toBeTruthy();
     fireEvent.press(getByLabelText(T.nextFrame));
@@ -195,19 +233,21 @@ describe('SwingResultsScreen: a stored swing', () => {
   });
 
   test('tapping a check selects it', async () => {
-    const { findByText, getAllByLabelText } = setup();
+    const u = setup();
+    const { findByText, getAllByLabelText } = u;
     await findByText(VERDICT);
-    const spine = getAllByLabelText(/^Spine angle kept/)[0];
-    fireEvent.press(spine);
-    expect(getAllByLabelText(/^Spine angle kept/)[0].props.accessibilityState.selected).toBe(true);
+    openDetail(u);
+    fireEvent.press(getAllByLabelText(/^Spine angle kept/).pop());
+    expect(getAllByLabelText(/^Spine angle kept/).pop().props.accessibilityState.selected).toBe(true);
   });
 
-  test('a row in "All checks" jumps to its checkpoint', async () => {
-    const { findByText, getByLabelText, getAllByLabelText, getByText } = setup();
+  test('a row in the priority list jumps to its checkpoint', async () => {
+    const u = setup();
+    const { findByText, getByLabelText, getAllByLabelText, getByText } = u;
     await findByText(VERDICT);
+    openDetail(u);
     fireEvent.press(getByLabelText(/^Address(,|$)/));
-    const rows = getAllByLabelText(/^Hands height at impact/);
-    fireEvent.press(rows[rows.length - 1]);
+    fireEvent.press(getAllByLabelText(/^Hands height at impact/)[0]); // the priority list
     expect(getByText(T.atCheckpoint('Impact'))).toBeTruthy();
   });
 
@@ -240,6 +280,7 @@ describe('SwingResultsScreen: a stored swing', () => {
   test('D23: the swing pattern row shows back, down and through; a cell opens its checkpoint', async () => {
     const { findByText, getByTestId, getByLabelText, getByText } = setup();
     await findByText(VERDICT);
+    openDetail({ getByTestId });
     expect(getByTestId('results-swing-pattern')).toBeTruthy();
     expect(getByText(T.patternTitle)).toBeTruthy();
     // owner swing: flat halfway back (Fix), the shaft-down head hidden, nothing placed at shaft through
@@ -261,7 +302,7 @@ describe('SwingResultsScreen: a stored swing', () => {
     const ee = { ...MARKED, main: { ...MARKED.main, fault: 'early_extension', label: 'Early extension', evidence, consequences: [] } };
     const { findByText, getByText, queryByText, getByLabelText } = setup({ analysis: ee });
     await findByText('Early extension.');
-    expect(getByText(T.drillsTitle('Early extension'))).toBeTruthy();
+    expect(getByText(T.practiseTitle)).toBeTruthy();
     expect(getByText('The chair')).toBeTruthy();
     expect(queryByText('Club behind the heels')).toBeNull();
     fireEvent.press(getByLabelText(T.moreDrills(1)));
@@ -301,7 +342,7 @@ describe('SwingResultsScreen: a stored swing', () => {
     const { findByText, getByLabelText, getByPlaceholderText, navigation } = setup();
     await findByText(VERDICT);
     fireEvent.press(getByLabelText(T.editMarks));
-    expect(navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'impact' });
+    expect(navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'address' }); // the screen opens on the main fault
     fireEvent.press(getByLabelText(T.menu));
     fireEvent.press(getByLabelText(T.rename));
     fireEvent.changeText(getByPlaceholderText(T.renamePlaceholder), 'Range · 7-iron');
@@ -328,9 +369,10 @@ describe('SwingResultsScreen: a stored swing', () => {
     const { findByText, getByLabelText } = setup();
     await findByText(VERDICT);
     await waitFor(() => expect(ensureStills).toHaveBeenCalled());
-    const frame = MARKED.checkpoints.impact.i;
-    expect(ensureStills).toHaveBeenCalledWith('s1', [frame - 2, frame - 1, frame, frame + 1, frame + 2]);
-    await waitFor(() => expect(getByLabelText(new RegExp(`^Impact still, frame ${frame}`)).props.source).toEqual({ uri: 'file:///doc/swings/s1/frames/556.jpg' }));
+    const first = MARKED.checkpoints.impact.i; // the first paint, before the screen moves to the main fault
+    expect(ensureStills).toHaveBeenCalledWith('s1', [first - 2, first - 1, first, first + 1, first + 2]);
+    const frame = MARKED.checkpoints.address.i;
+    await waitFor(() => expect(getByLabelText(new RegExp(`^Address still, frame ${frame}`)).props.source).toEqual({ uri: 'file:///doc/swings/s1/frames/556.jpg' }));
   });
 
   test('reloads the analysis when it comes back into focus (after Edit marks)', async () => {
@@ -344,37 +386,11 @@ describe('SwingResultsScreen: a stored swing', () => {
 });
 
 describe('SwingResultsScreen: the club chip (D19)', () => {
-  test('shows Iron for a swing from before the picker, with Driver one tap away', async () => {
-    const { findByText, getByLabelText } = setup();
+  test('the club picker is gone from a ready swing', async () => {
+    const { findByText, queryByTestId, queryByLabelText } = setup();
     await findByText(VERDICT);
-    expect(MARKED.club).toBe('iron');
-    expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(true);
-    expect(getByLabelText('Driver').props.accessibilityState.selected).toBe(false);
-  });
-
-  test('changing it re-scores from the stored pose and marks (no native run), saves, and redraws the verdict', async () => {
-    const { findByText, getByLabelText, getAllByText } = setup();
-    await findByText(VERDICT);
-    const redBefore = MARKED.counts.red;
-    expect(getAllByText(T.fix(redBefore)).length).toBeGreaterThan(0);
-    store.readAnalysis.mockClear();
-    await act(async () => { fireEvent.press(getByLabelText('Driver')); });
-    await waitFor(() => expect(store.saveAnalysis).toHaveBeenCalledTimes(1));
-    const [id, saved] = store.saveAnalysis.mock.calls[0];
-    expect(id).toBe('s1');
-    expect(saved.club).toBe('driver');
-    expect(saved.counts.red).toBeLessThan(redBefore); // hands height and butt end soften to Watch
-    expect(runAnalysis).not.toHaveBeenCalled();
-    await waitFor(() => expect(getByLabelText('Driver').props.accessibilityState.selected).toBe(true));
-    expect(getAllByText(T.fix(saved.counts.red)).length).toBeGreaterThan(0);
-    expect(getByLabelText('Iron').props.accessibilityState.selected).toBe(false);
-  });
-
-  test('pressing the club already selected does nothing', async () => {
-    const { findByText, getByLabelText } = setup();
-    await findByText(VERDICT);
-    await act(async () => { fireEvent.press(getByLabelText('Iron')); });
-    expect(store.saveAnalysis).not.toHaveBeenCalled();
+    expect(queryByTestId('results-club-picker')).toBeNull();
+    expect(queryByLabelText('Driver')).toBeNull();
   });
 });
 
@@ -404,6 +420,7 @@ describe('SwingResultsScreen: after the marking pass (D26)', () => {
   test('the marks card shows the six chapters with their status; a chapter opens the canvas there in edit mode', async () => {
     const u = setup({ marks: { ...OWNER_MARKS, pass: { state: 'done', skipped: ['shaftThrough'] } } });
     await u.findByText(VERDICT);
+    openDetail(u);
     const card = u.getByTestId('results-marks');
     expect(within(card).getByText(SWING_STRINGS.mark.counts(0, 1, 5))).toBeTruthy(); // OWNER_MARKS predate the confirmed flag
     fireEvent.press(within(card).getByTestId('chapter-top'));
@@ -413,6 +430,7 @@ describe('SwingResultsScreen: after the marking pass (D26)', () => {
   test('"Finish frame looks wrong? Fix it" opens the canvas at the automatic finish', async () => {
     const u = setup();
     await u.findByText(VERDICT);
+    openDetail(u);
     fireEvent.press(u.getByTestId('results-fix-finish'));
     expect(u.navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'finish' });
   });

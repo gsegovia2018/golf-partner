@@ -13,7 +13,6 @@ import BottomSheet from '../components/BottomSheet';
 import SwingOverlay from '../components/swing/SwingOverlay';
 import SwingTimeline from '../components/swing/SwingTimeline';
 import SwingCheckRow from '../components/swing/SwingCheckRow';
-import SwingFixesCard from '../components/swing/SwingFixesCard';
 import SwingFixPeek from '../components/swing/SwingFixPeek';
 import SwingFixSheet from '../components/swing/SwingFixSheet';
 import { useSwingTone, focusTone } from '../components/swing/swingTone';
@@ -22,11 +21,9 @@ import { semantic, hud } from '../theme/tokens';
 import { withAlpha } from '../theme/alpha';
 import {
   subscribeSwings, getSwingsVersion, getSwing, hydrateSwings, renameSwing, readAnalysis, readPose,
-  markSwingFailed, deleteSwing, swingVideoUri, readProbe, readMarks, saveAnalysis, getSwingProfile, setPracticeOpen,
+  markSwingFailed, deleteSwing, swingVideoUri, readMarks, getSwingProfile, setPracticeOpen,
 } from '../store/swingStore';
 import { runAnalysis } from '../swing/runAnalysis';
-import { reanalyzeForClub } from '../swing/reanalyze';
-import ClubPicker from '../components/swing/ClubPicker';
 import MarkChapters from '../components/swing/MarkChapters';
 import {
   MARK_TOTAL, MARKED_KEYS, statusFromMarks, markedFromMarks, passDone,
@@ -36,7 +33,7 @@ import { nativeApi, getStill, ensureStills } from '../swing/frames';
 import { poseAtFrame } from '../swing/poseAt';
 import { highlightFor } from '../swing/highlights';
 import {
-  checksAt, worstByCheckpoint, unplacedCheckpoint, CHECK_KEY, homeOf, frameOfKey,
+  checksAt, worstByCheckpoint, unplacedCheckpoint, prioritizeChecks, CHECK_KEY, homeOf, frameOfKey,
 } from '../swing/checkpointChecks';
 import { CHECKPOINT_KEYS } from '../swing/phases';
 import { drillsForMain, progression } from '../swing/drills';
@@ -52,7 +49,7 @@ const MAX_NUDGE = 2; // stills exist for the checkpoint frame +-2 (D4)
 // --- Sections --------------------------------------------------------------------------------
 
 function Hero({
-  s, analysis, row, loading, onClubChange, unconfirmed = 0,
+  s, analysis, loading, unconfirmed = 0,
 }) {
   const main = analysis?.main;
   const c = analysis?.counts;
@@ -71,21 +68,16 @@ function Hero({
       <View style={s.chips}>
         {loading ? <View style={s.chip}><Text style={s.chipText}>{T.reading}</Text></View> : (
           <>
-            <View style={s.chip}><Text style={s.chipText}>{T.good(c.green)}</Text></View>
-            <View style={s.chip}><Text style={s.chipText}>{T.watch(c.yellow)}</Text></View>
-            <View style={s.chip}><Text style={s.chipText}>{T.fix(c.red)}</Text></View>
-            <View style={s.chip}><Text style={s.chipText}>{T.fpsChip(analysis.fps.effective)}</Text></View>
-            {analysis.approximate ? <View style={s.chip}><Text style={s.chipText}>{T.approxChip}</Text></View> : null}
+            {[[T.fix(c.red), semantic.destructive.dark], [T.watch(c.yellow), semantic.warning.dark], [T.good(c.green), hud.accent]].map(([text, color]) => (
+              <View key={text} style={[s.chip, s.chipTone]}>
+                <View style={[s.chipDot, { backgroundColor: color }]} />
+                <Text style={s.chipText}>{text}</Text>
+              </View>
+            ))}
             {unconfirmed ? <View style={[s.chip, s.chipWarn]} testID="results-unconfirmed"><Text style={s.chipText}>{T.unconfirmedChip(unconfirmed)}</Text></View> : null}
-            <View style={s.chip}><Text style={s.chipText}>{row.name}</Text></View>
           </>
         )}
       </View>
-      {loading ? null : (
-        <View style={s.clubLine}>
-          <ClubPicker value={analysis.club} onChange={onClubChange} onDark compact testID="results-club-picker" />
-        </View>
-      )}
     </View>
   );
 }
@@ -122,12 +114,12 @@ function SwingPattern({ s, tone, checks, onPick }) {
 }
 
 /** D24: a 60-minute range session, collapsible; the main fault's first drill fills the Block slot. */
-function PracticeCard({
+function PracticePlan({
   s, theme, open, onToggle, drill,
 }) {
   const P = T.practice;
   return (
-    <View style={s.card} testID="results-practice">
+    <View style={s.plan} testID="results-practice">
       <PressableScale
         style={s.practiceHead}
         onPress={onToggle}
@@ -149,6 +141,26 @@ function PracticeCard({
         </View>
       )) : null}
     </View>
+  );
+}
+
+/** A collapsed-by-default section header: label on the left, Show / Hide on the right. */
+function DisclosureRow({
+  s, theme, style, open, onToggle, label, testID, children,
+}) {
+  return (
+    <PressableScale
+      style={style}
+      onPress={onToggle}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ expanded: open }}
+      testID={testID}
+    >
+      {children}
+      <Text style={s.disclosureWord}>{open ? T.hide : T.show}</Text>
+      <Feather name={open ? 'chevron-up' : 'chevron-down'} size={18} color={theme.text.secondary} />
+    </PressableScale>
   );
 }
 
@@ -242,7 +254,7 @@ function PlayerBody({ uri, onClose, s }) {
 
 export function SwingResultsView({
   row, phase, analysis, pose, progress, error, stillTick = 0, stillFor, markStatus = {},
-  onBack, onCancel, onDelete, onRetry, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport, onClubChange,
+  onBack, onCancel, onDelete, onRetry, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport,
   practiceOpen = false, onPracticeToggle,
 }) {
   const { theme } = useTheme();
@@ -256,6 +268,8 @@ export function SwingResultsView({
   const [off, setOff] = useState(0);
   const [selKey, setSelKey] = useState(null);
   const [allDrills, setAllDrills] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [goodOpen, setGoodOpen] = useState(false);
   const [sheet, setSheet] = useState(null); // null | 'menu' | 'rename'
   const [fixSheet, setFixSheet] = useState({ list: [], index: 0, open: false });
   const [nameDraft, setNameDraft] = useState('');
@@ -264,6 +278,16 @@ export function SwingResultsView({
   const checks = useMemo(() => analysis?.checks ?? [], [analysis]);
   const here = ready ? checksAt(checks, cp) : [];
   const selected = here.find((c) => CHECK_KEY(c) === selKey) ?? checks.find((c) => CHECK_KEY(c) === selKey) ?? here[0] ?? null;
+
+  // Open on the main fault: its first red check (else its first), once per screen.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!ready || opened.current) return;
+    opened.current = true;
+    const ev = analysis.main?.evidence ?? [];
+    const first = ev.find((c) => c.status === 'red') ?? ev[0];
+    if (first) { setCp(homeOf(first)); setSelKey(CHECK_KEY(first)); }
+  }, [ready, analysis]);
 
   const baseFrame = ready ? frameOfKey(analysis, cp) : 0;
   const frame = baseFrame + off;
@@ -292,6 +316,8 @@ export function SwingResultsView({
   const pickCp = useCallback((k) => { setCp(k); setOff(0); setSelKey(null); }, []);
   const jumpToCheck = (c) => { pickCp(homeOf(c)); setSelKey(CHECK_KEY(c)); scroll.current?.scrollTo?.({ y: 0, animated: true }); };
   const tSec = ready ? (frame / analysis.fps.capture).toFixed(3) : '';
+  const selFix = focusOn ? fixCopy(selected) : null;
+  const groups = useMemo(() => prioritizeChecks(checks), [checks]);
   const drills = ready && analysis.main ? drillsForMain(analysis.main) : [];
   const shownDrills = allDrills ? drills : drills.slice(0, 2);
   const openEdit = (k) => onEditMarks?.(k);
@@ -349,8 +375,7 @@ export function SwingResultsView({
 
         {ready ? (
           <>
-            <Hero s={s} analysis={analysis} row={row} onClubChange={onClubChange} unconfirmed={MARK_TOTAL - (row?.marked?.count ?? MARK_TOTAL)} />
-            <SwingFixesCard fixes={fixes} onOpen={(i) => openFixes(fixes, i)} />
+            <Hero s={s} analysis={analysis} unconfirmed={MARK_TOTAL - (row?.marked?.count ?? MARK_TOTAL)} />
             {analysis.approximate ? (
               <View style={s.banner}>
                 <Feather name="alert-triangle" size={16} color={tone.yellow} />
@@ -388,86 +413,136 @@ export function SwingResultsView({
               canNext={off < MAX_NUDGE}
             />
 
-            <View style={s.card}>
-              <View style={s.cardHead}>
-                <Text style={s.overlineDark}>{T.atCheckpoint(SWING_STRINGS.checkpoint[cp])}</Text>
-                {here.length ? <Text style={s.hintInline}>{T.tapToDraw}</Text> : null}
-              </View>
-              {here.length ? here.map((c) => {
-                const isSel = !!selected && CHECK_KEY(selected) === CHECK_KEY(c);
-                const copy = fixCopy(c);
-                return (
-                  <React.Fragment key={CHECK_KEY(c)}>
+            {selFix ? <SwingFixPeek copy={selFix} onOpen={() => openFixFor(selected)} /> : null}
+
+            <View style={s.card} testID="results-practise">
+              <Text style={s.overlineDark}>{T.practiseTitle}</Text>
+              {drills.length ? (
+                <>
+                  {shownDrills.map((d) => (
+                    <View key={d.id} style={s.drill}>
+                      <Text style={s.drillTitle}>{d.title}</Text>
+                      <Text style={s.drillBody}>{d.instruction}</Text>
+                      <Text style={s.drillPass}>{T.passTarget(d.passTarget)}</Text>
+                      <Text style={s.drillProgress}>{progression()}</Text>
+                    </View>
+                  ))}
+                  {drills.length > 2 ? (
+                    <PressableScale onPress={() => setAllDrills((v) => !v)} accessibilityRole="button" accessibilityLabel={allDrills ? T.lessDrills : T.moreDrills(drills.length - 2)}>
+                      <Text style={s.link}>{allDrills ? T.lessDrills : T.moreDrills(drills.length - 2)}</Text>
+                    </PressableScale>
+                  ) : null}
+                </>
+              ) : !analysis.main && !analysis.counts.red && !analysis.counts.yellow ? (
+                <View style={s.drill}>
+                  <Text style={s.drillTitle}>{T.fixes.emptyTitle}</Text>
+                  <Text style={s.drillBody}>{T.fixes.emptyBody}</Text>
+                </View>
+              ) : null}
+              <PracticePlan s={s} theme={theme} open={practiceOpen} onToggle={onPracticeToggle} drill={drills[0] ?? null} />
+            </View>
+
+            <View style={s.card} testID="results-priority">
+              <Text style={s.overlineDark}>{T.priorityTitle}</Text>
+              {[['red', SWING_STRINGS.statusWord.red], ['yellow', SWING_STRINGS.statusWord.yellow], ['unknown', T.notMeasured]].map(([status, name]) => (
+                groups[status].length ? (
+                  <React.Fragment key={status}>
+                    <View style={s.groupHead}>
+                      <View style={[s.chipDot, { backgroundColor: tone[status] }]} />
+                      <Text style={s.groupName}>{name}</Text>
+                      <Text style={s.groupCount}>{groups[status].length}</Text>
+                    </View>
+                    {groups[status].map((c) => (
+                      <SwingCheckRow
+                        key={CHECK_KEY(c)}
+                        check={c}
+                        onPress={jumpToCheck}
+                        onPlace={openEdit}
+                        placeAt={unplacedCheckpoint(c, analysis.clubMarks)}
+                      />
+                    ))}
+                  </React.Fragment>
+                ) : null
+              ))}
+              {groups.green.length ? (
+                <>
+                  <DisclosureRow
+                    s={s}
+                    theme={theme}
+                    style={s.fold}
+                    open={goodOpen}
+                    onToggle={() => setGoodOpen((v) => !v)}
+                    label={T.goodFold(groups.green.length)}
+                    testID="results-good-fold"
+                  >
+                    <View style={s.foldIcon}><Feather name="check" size={12} color={theme.text.inverse} /></View>
+                    <Text style={[s.foldText, s.flex]}>{T.goodFold(groups.green.length)}</Text>
+                  </DisclosureRow>
+                  {goodOpen ? groups.green.map((c) => (
                     <SwingCheckRow
+                      key={CHECK_KEY(c)}
                       check={c}
-                      selected={isSel}
-                      expanded={copy ? isSel : undefined}
-                      onPress={() => setSelKey(CHECK_KEY(c))}
+                      onPress={jumpToCheck}
                       onPlace={openEdit}
                       placeAt={unplacedCheckpoint(c, analysis.clubMarks)}
                     />
-                    {isSel && copy ? <SwingFixPeek copy={copy} onOpen={() => openFixFor(c)} /> : null}
-                  </React.Fragment>
-                );
-              }) : <Text style={s.hint}>{T.noChecksAt}</Text>}
+                  )) : null}
+                </>
+              ) : null}
             </View>
 
-            <SwingPattern s={s} tone={tone} checks={checks} onPick={jumpToCheck} />
-
-            {drills.length ? (
-              <View style={s.card}>
-                <Text style={s.overlineDark}>{T.drillsTitle(SWING_STRINGS.fault[analysis.main.fault] ?? analysis.main.label)}</Text>
-                {shownDrills.map((d) => (
-                  <View key={d.id} style={s.drill}>
-                    <Text style={s.drillTitle}>{d.title}</Text>
-                    <Text style={s.drillBody}>{d.instruction}</Text>
-                    <Text style={s.drillPass}>{T.passTarget(d.passTarget)}</Text>
-                    <Text style={s.drillProgress}>{progression()}</Text>
+            <View style={s.card} testID="results-detail">
+              <DisclosureRow s={s} theme={theme} style={s.detailHead} open={detailOpen} onToggle={() => setDetailOpen((v) => !v)} label={T.detailTitle} testID="results-detail-toggle">
+                <Text style={[s.overlineDark, s.flex, s.detailLabel]}>{T.detailTitle}</Text>
+              </DisclosureRow>
+              {detailOpen ? (
+                <>
+                  <View style={s.inner}>
+                    <View style={s.cardHead}>
+                      <Text style={s.overlineDark}>{T.atCheckpoint(SWING_STRINGS.checkpoint[cp])}</Text>
+                      {here.length ? <Text style={s.hintInline}>{T.tapToDraw}</Text> : null}
+                    </View>
+                    {here.length ? here.map((c) => {
+                      const isSel = !!selected && CHECK_KEY(selected) === CHECK_KEY(c);
+                      return (
+                        <SwingCheckRow
+                          key={CHECK_KEY(c)}
+                          check={c}
+                          selected={isSel}
+                          expanded={fixCopy(c) ? isSel : undefined}
+                          onPress={() => setSelKey(CHECK_KEY(c))}
+                          onPlace={openEdit}
+                          placeAt={unplacedCheckpoint(c, analysis.clubMarks)}
+                        />
+                      );
+                    }) : <Text style={s.hint}>{T.noChecksAt}</Text>}
                   </View>
-                ))}
-                {drills.length > 2 ? (
-                  <PressableScale onPress={() => setAllDrills((v) => !v)} accessibilityRole="button" accessibilityLabel={allDrills ? T.lessDrills : T.moreDrills(drills.length - 2)}>
-                    <Text style={s.link}>{allDrills ? T.lessDrills : T.moreDrills(drills.length - 2)}</Text>
-                  </PressableScale>
-                ) : null}
-              </View>
-            ) : null}
 
-            <PracticeCard s={s} theme={theme} open={practiceOpen} onToggle={onPracticeToggle} drill={drills[0] ?? null} />
+                  <SwingPattern s={s} tone={tone} checks={checks} onPick={jumpToCheck} />
 
-            <View style={s.card}>
-              <Text style={s.overlineDark}>{T.allChecks}</Text>
-              {checks.map((c) => (
-                <SwingCheckRow
-                  key={CHECK_KEY(c)}
-                  check={c}
-                  onPress={jumpToCheck}
-                  onPlace={openEdit}
-                  placeAt={unplacedCheckpoint(c, analysis.clubMarks)}
-                />
-              ))}
-            </View>
-
-            <View style={s.card} testID="results-marks">
-              <Text style={s.overlineDark}>{T.marksTitle}</Text>
-              <MarkChapters themed mirror={analysis.handedness === 'left'} status={markStatus} onSelect={openEdit} testID="results-chapters" />
-              <Text style={[s.hint, s.marksHint]}>{T.marksHint}</Text>
-              <View style={s.finishRow}>
-                <Text style={[s.hint, s.flex]}>{T.finishAuto}</Text>
-                <PressableScale onPress={() => openEdit('finish')} style={s.fixLink} accessibilityRole="button" accessibilityLabel={SWING_STRINGS.mark.fixFinish} testID="results-fix-finish">
-                  <Text style={s.fixText}>{SWING_STRINGS.mark.fixFinish}</Text>
-                </PressableScale>
-              </View>
+                  <View style={s.inner} testID="results-marks">
+                    <Text style={s.overlineDark}>{T.marksTitle}</Text>
+                    <MarkChapters themed mirror={analysis.handedness === 'left'} status={markStatus} onSelect={openEdit} testID="results-chapters" />
+                    <Text style={[s.hint, s.marksHint]}>{T.marksHint}</Text>
+                    <View style={s.finishRow}>
+                      <Text style={[s.hint, s.flex]}>{T.finishAuto}</Text>
+                      <PressableScale onPress={() => openEdit('finish')} style={s.fixLink} accessibilityRole="button" accessibilityLabel={SWING_STRINGS.mark.fixFinish} testID="results-fix-finish">
+                        <Text style={s.fixText}>{SWING_STRINGS.mark.fixFinish}</Text>
+                      </PressableScale>
+                    </View>
+                  </View>
+                </>
+              ) : null}
             </View>
 
             <View style={s.btnRow}>
+              <PressableScale style={[s.btn, s.btnPrimary, s.flex]} onPress={onPlay} accessibilityRole="button" accessibilityLabel={T.play}>
+                <Feather name="play" size={16} color={theme.text.inverse} />
+                <Text style={s.btnPrimaryText}>{T.play}</Text>
+              </PressableScale>
               <PressableScale style={[s.btn, s.btnSecondary, s.flex]} onPress={() => openEdit(cp)} accessibilityRole="button" accessibilityLabel={T.editMarks}>
                 <Feather name="edit-2" size={16} color={theme.text.primary} />
                 <Text style={s.btnSecondaryText}>{T.editMarks}</Text>
-              </PressableScale>
-              <PressableScale style={[s.btn, s.btnSecondary, s.flex]} onPress={onPlay} accessibilityRole="button" accessibilityLabel={T.play}>
-                <Feather name="play" size={16} color={theme.text.primary} />
-                <Text style={s.btnSecondaryText}>{T.play}</Text>
               </PressableScale>
             </View>
           </>
@@ -632,23 +707,6 @@ export default function SwingResultsScreen({ navigation, route }) {
     if (alive.current && Object.values(got).some(Boolean)) setStillTick((t) => t + 1);
   }, [swingId]);
 
-  // D19: another club re-scores the stored pose and marks (no native call) and saves.
-  const onClubChange = useCallback(async (club) => {
-    const cur = data.analysis;
-    if (!cur || started.current) return;
-    const [pose, probe, marks] = await Promise.all([
-      poseRef.current ?? readPose(swingId), readProbe(swingId), readMarks(swingId),
-    ]);
-    if (!pose) return;
-    const next = reanalyzeForClub({
-      pose, probe, marks, analysis: cur,
-    }, club);
-    if (next.error) return;
-    await saveAnalysis(swingId, next);
-    poseRef.current = pose;
-    await load();
-  }, [data.analysis, swingId, load]);
-
   const onCancel = () => {
     cancelled.current = true;
     try { nativeApi()?.cancelAnalysis?.(); } catch { /* best effort */ }
@@ -699,7 +757,6 @@ export default function SwingResultsScreen({ navigation, route }) {
         onEditMarks={(checkpoint) => navigation.navigate('SwingEditMarks', { swingId, checkpoint })}
         onRename={(name) => renameSwing(swingId, name)}
         onExport={onExport}
-        onClubChange={onClubChange}
         onPlay={() => setPlaying(true)}
         onNeedStills={onNeedStills}
         practiceOpen={practiceOpen}
@@ -734,8 +791,9 @@ const makeStyles = (theme) => StyleSheet.create({
   also: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12.5, lineHeight: 18, color: '#ffffff', marginTop: 2 },
   skelHero: { height: 26, width: '60%', borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.18)', marginVertical: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  clubLine: { marginTop: 8 },
   chip: { backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  chipTone: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  chipDot: { width: 8, height: 8, borderRadius: 4 },
   chipWarn: { backgroundColor: withAlpha(semantic.warning.dark, 0.3) }, // the amber of a skipped chapter, on the green hero
   chipText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, color: '#ffffff' },
 
@@ -768,10 +826,24 @@ const makeStyles = (theme) => StyleSheet.create({
   drillBody: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12.5, lineHeight: 18, color: theme.text.secondary },
   drillPass: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, color: theme.accent.primary },
   drillProgress: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11.5, lineHeight: 16, color: theme.text.secondary, fontStyle: 'italic' },
+  plan: { marginTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border.subtle },
   practiceHead: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingRight: 4 },
   practiceRow: { flexDirection: 'row', gap: 12, paddingVertical: 8, paddingHorizontal: 4 },
   practiceTime: { width: 64, fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.text.secondary, fontVariant: ['tabular-nums'], paddingTop: 2 },
   link: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.accent.primary, paddingVertical: 12, paddingHorizontal: 4 },
+  groupHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingTop: 10, paddingBottom: 2 },
+  groupName: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12.5, color: theme.text.primary },
+  groupCount: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: theme.text.secondary, fontVariant: ['tabular-nums'] },
+  fold: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingHorizontal: 12, borderRadius: 10,
+    backgroundColor: theme.bg.secondary, marginTop: 10,
+  },
+  foldIcon: { width: 20, height: 20, borderRadius: 10, backgroundColor: theme.accent.primary, alignItems: 'center', justifyContent: 'center' },
+  foldText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13.5, color: theme.text.primary },
+  disclosureWord: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12.5, color: theme.accent.primary, marginRight: 4 },
+  detailHead: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingRight: 4 },
+  detailLabel: { paddingBottom: 0 },
+  inner: { paddingTop: 6, gap: 2 },
   marksHint: { paddingHorizontal: 4, paddingTop: 6 },
   finishRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4, marginTop: 6, paddingTop: 6,

@@ -50,6 +50,18 @@ export const worstByCheckpoint = (checks) => Object.fromEntries(CHECKPOINT_KEYS.
 export const homeOf = (check) => (HOME[check.id] || ['impact'])[0];
 
 /**
+ * The checks grouped for the priority list: red, yellow, unknown (not measured), green. Each group
+ * is in swing order (the position of the check's home among the checkpoints), ties keep their order.
+ */
+export function prioritizeChecks(checks) {
+  const out = { red: [], yellow: [], unknown: [], green: [] };
+  checks.forEach((c) => out[c.status in out ? c.status : 'unknown'].push(c));
+  const at = (c) => CHECKPOINT_KEYS.indexOf(homeOf(c));
+  Object.values(out).forEach((g) => g.sort((a, b) => at(a) - at(b)));
+  return out;
+}
+
+/**
  * The checkpoint whose clubhead the user still has to place for this check (D16), or null
  * when the check is not waiting on a placement. Only an `unplaced` unknown qualifies: a
  * hidden mark is a decision, not a gap.

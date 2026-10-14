@@ -369,6 +369,14 @@ export const SWING_STRINGS = build({
       noDrill: L,
     },
     allChecks: L,
+    // Design B: one thing to work on, then the rest by priority.
+    practiseTitle: L,
+    priorityTitle: L,
+    notMeasured: L,
+    goodFold: (n) => t('swing.results.goodFold', { count: n }),
+    show: L,
+    hide: L,
+    detailTitle: L,
     // Plain-language coaching: the fixes card, the open row under a selected check and the fix sheet.
     fixes: {
       legendYou: L,
