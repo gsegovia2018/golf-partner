@@ -8,16 +8,16 @@ import { SWING_STRINGS } from '../../swing/strings';
 import { CHECKPOINT_KEYS } from '../../swing/phases';
 
 const T = SWING_STRINGS.results;
-const NAMED = ['Address', 'Top', 'Impact', 'Finish']; // the anchors, under steps 1, 4, 7 and 10
+const NAMED = ['address', 'top', 'impact', 'finish']; // the anchors that carry their name under their step
 
 /**
- * The ten checkpoints as a stepper (D10, D22): a dot per step in the worst status measured there,
+ * The checkpoints (all ten, or the `keys` given) as a stepper (D10, D22): a dot per step in the worst status measured there,
  * the checkpoint's name and frame underneath, and the +-1 frame nudge. `worst` maps
  * checkpoint -> 'green' | 'yellow' | 'red' | 'none'. Steps are 44 px tall tap targets.
  * With `skeleton` the dots are neutral (the result is still being calculated).
  */
 export default function SwingTimeline({
-  current, title, worst = {}, onSelect, frameLine, onPrev, onNext, canPrev = true, canNext = true, skeleton = false,
+  current, title, worst = {}, keys = CHECKPOINT_KEYS, onSelect, frameLine, onPrev, onNext, canPrev = true, canNext = true, skeleton = false,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
@@ -25,8 +25,8 @@ export default function SwingTimeline({
   return (
     <View style={s.wrap}>
       <View style={s.steps}>
-        <View style={s.track} />
-        {CHECKPOINT_KEYS.map((k) => {
+        <View style={[s.track, { left: `${50 / keys.length}%`, right: `${50 / keys.length}%` }]} />
+        {keys.map((k) => {
           const on = k === current;
           const name = SWING_STRINGS.checkpoint[k];
           return (
@@ -48,7 +48,11 @@ export default function SwingTimeline({
         })}
       </View>
       <View style={s.names}>
-        {NAMED.map((n) => <Text key={n} style={s.name}>{n}</Text>)}
+        {keys.map((k) => (
+          <View key={k} style={s.nameCell}>
+            {NAMED.includes(k) ? <Text style={s.name} numberOfLines={1}>{SWING_STRINGS.checkpoint[k]}</Text> : null}
+          </View>
+        ))}
       </View>
       <View style={s.cur}>
         <PressableScale
@@ -91,8 +95,9 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   dotRingOn: { borderColor: theme.text.primary },
   dot: { width: 12, height: 12, borderRadius: 6 },
-  names: { flexDirection: 'row', justifyContent: 'space-between', marginTop: -4, paddingHorizontal: 6 },
-  name: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, color: theme.text.secondary },
+  names: { flexDirection: 'row', marginTop: -4 },
+  nameCell: { flex: 1, alignItems: 'center' },
+  name: { width: 56, textAlign: 'center', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, color: theme.text.secondary },
   cur: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
   nudge: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   nudgeOff: { opacity: 0.3 },
