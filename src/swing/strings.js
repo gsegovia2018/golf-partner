@@ -307,7 +307,31 @@ export const SWING_STRINGS = {
       drillIn: (title) => `Drill: ${title}`,
       noDrill: 'Drill: the position you most want to own.',
     },
-    allChecks: 'All checks',
+    allChecks: 'All measurements',
+    // Plain-language coaching: the fixes card, the open row under a selected check and the fix sheet.
+    fixes: {
+      legendYou: 'You',
+      legendTarget: 'Target',
+      titleFix: 'Your fixes, in order',
+      titleWatch: 'Keep an eye on',
+      emptyTitle: 'Nothing to fix on this swing',
+      emptyBody: 'Every check is in the good range. Film another to be sure it repeats.',
+      rowLabel: (n, headline, cp, word) => `${n}. ${headline}, ${cp}, ${word}`,
+      subline: (cp, word) => `${cp} · ${word}`,
+      sheetOverline: (n, total, cp) => `Fix ${n} of ${total} · ${cp}`,
+      saw: (text) => `What we saw: ${text}`,
+      whyTitle: 'Why it matters',
+      howTitle: 'How to fix it',
+      drill: (title) => `Drill: ${title}`,
+      goal: (target) => `Goal: ${target}`,
+      seeOnSwing: 'See on swing',
+      next: 'Next fix',
+      done: 'Done',
+      close: 'Close',
+      tryThis: 'Try this',
+      howLink: 'How to fix it',
+      stepLabel: (n, text) => `Step ${n}: ${text}`,
+    },
     // D26: the marks behind these results.
     unconfirmedChip: (n) => `${n} position${n === 1 ? '' : 's'} not confirmed`,
     marksTitle: 'Your marks',
@@ -464,6 +488,283 @@ export const SWING_STRINGS = {
       if (quiet) return 'Held still, but weight is not over the lead leg';
       if (balanced) return 'Weight over the lead leg, but the finish was not held still';
       return 'Finish was not held still and weight is not over the lead leg';
+    },
+  },
+
+  // Plain-language coaching per check and direction (see fixes.js for how the key is chosen).
+  // headline: what the golfer does; cost: what it does to the ball; cue: one feel; steps: how to fix it.
+  fixCopy: {
+    posture_address: {
+      tall: {
+        headline: 'You stand too upright at address',
+        cost: 'Your arms have no room to swing, so you stand up through the shot. Expect thin shots and slices.',
+        cue: 'Push your hips back and tilt until your chest points at the ball.',
+        steps: ['Stand tall with your feet shoulder-width apart.', 'Push your hips back and tilt your chest toward the ball.', 'Soften your knees and let your arms hang.'],
+      },
+      over: {
+        headline: 'You bend over too far at address',
+        cost: 'Your weight falls onto your toes and your back rounds. Expect toe strikes and pulls.',
+        cue: 'Lift your chest until your back feels long and flat.',
+        steps: ['Stand tall, then push your hips back a little less.', 'Keep your back long with your chest up.', 'Let your weight settle in the middle of your feet.'],
+      },
+    },
+    hands_under_shoulders: {
+      out: {
+        headline: "You're reaching for the ball",
+        cost: 'Your weight goes onto your toes and the swing gets pulled outside. Expect toe strikes and pulls.',
+        cue: 'Let your arms hang loose, then grip where your hands fall.',
+        steps: ['Stand tall, club straight out in front.', 'Tilt from the hips until the club touches the ground.', 'Let your arms hang loose and grip where your hands fall.'],
+      },
+      in: {
+        headline: 'Your hands are tucked in too close',
+        cost: 'Your arms get cramped and the swing turns steep. Expect fat shots and pulls.',
+        cue: 'Give your arms room: let them hang, then grip where they land.',
+        steps: ['Stand tall, club straight out in front.', 'Tilt from the hips until the club touches the ground.', 'Let your arms hang loose and grip where your hands fall.'],
+      },
+    },
+    waist_bend: {
+      over: {
+        headline: 'You bend too far from the hips',
+        cost: 'You tip forward onto your toes and your back rounds. Expect toe strikes and pulls.',
+        cue: 'Push your hips back only until your chest points at the ball.',
+        steps: ['Stand tall with your hands on the creases of your thighs.', 'Push your hips back until your chest points at the ball.', 'Add a small knee flex and keep your back long.'],
+      },
+      tall: {
+        headline: 'You stand too tall at address',
+        cost: 'Your arms have no room, so you stand up as you swing. Expect thin shots and slices.',
+        cue: 'Hinge at the hips and send your backside back.',
+        steps: ['Stand tall with your hands on the creases of your thighs.', 'Push your hips back further, until your chest points at the ball.', 'Add a small knee flex and keep your back long.'],
+      },
+    },
+    back_line: {
+      dropped: {
+        headline: 'Your head and upper back sag',
+        cost: 'Your spine rounds, which cuts your turn. Expect fat shots and weak slices.',
+        cue: 'Lift your chest so your back is one straight line to your head.',
+        steps: ['Hold a club along your back, touching head and tailbone.', 'Tilt from the hips and keep the club in contact.', 'Copy that back line when you take your grip.'],
+      },
+      up: {
+        headline: 'You lift your head at address',
+        cost: 'Your neck cranes up, which blocks your shoulder turn. Expect thin shots and pushes.',
+        cue: 'Keep your neck in line with your back and look down at the ball.',
+        steps: ['Hold a club along your back, touching head and tailbone.', 'Tilt from the hips and keep the club in contact.', 'Drop your eyes to the ball without bending your neck.'],
+      },
+    },
+    hand_gap: {
+      close: {
+        headline: 'Your hands sit too close to your body',
+        cost: 'Your arms are cramped, so the swing gets steep and stuck. Expect hooks and pulls.',
+        cue: "Leave a hand's width between the grip and your thigh.",
+        steps: ['Take your grip, then spread your trail hand flat.', 'Fit it between the grip end and your lead thigh.', 'Check this gap before every shot until it feels normal.'],
+      },
+      far: {
+        headline: 'Your hands sit too far from your body',
+        cost: 'You reach for the ball and your weight drifts to your toes. Expect toe strikes and slices.',
+        cue: "Bring your hands in until a hand's width shows.",
+        steps: ['Take your grip, then spread your trail hand flat.', 'Fit it between the grip end and your lead thigh.', 'Check this gap before every shot until it feels normal.'],
+      },
+    },
+    hands_between_planes: {
+      steep: {
+        headline: 'You lift the club up too steeply',
+        cost: 'The club ends up high and outside, so you come over the top. Expect slices and pulls.',
+        cue: 'Turn your chest and let your hands go back around you.',
+        steps: ['Turn your shoulders until your back faces the target.', 'Keep your hands in front of your chest as you go back.', 'Stop with the lead arm level; the club should match your setup angle.'],
+      },
+      flat: {
+        headline: 'Your hands drop behind you going back',
+        cost: 'The club gets stuck behind you and has to be thrown out. Expect blocks and hooks.',
+        cue: 'Feel your hands lift in front of your chest as you turn.',
+        steps: ['Point your trail elbow at the ground as you go back.', 'Keep your hands in front of your chest.', 'Stop with the lead arm level and check the toe points to the sky.'],
+      },
+    },
+    butt_extension: {
+      flat: {
+        headline: 'The club goes back too flat',
+        cost: 'The club gets behind you, then has to be thrown back out. Expect blocks and hooks.',
+        cue: 'Keep the clubhead outside your hands until the shaft is level.',
+        steps: ['Start the club back with one turn of chest and arms.', 'Let the clubhead stay outside your hands as it rises.', 'Pause at lead arm level; the grip end should aim at the ball.'],
+      },
+      steep: {
+        headline: 'The club goes back too steeply',
+        cost: 'The club lifts too upright and you must swing out over it. Expect pulls, slices and fat shots.',
+        cue: 'Turn your chest and let the club swing back low and wide.',
+        steps: ['Start the club back low and wide with your chest turning.', 'Let your hands rise in front of your chest as you turn.', 'Pause at lead arm level; the grip end should aim at the ball.'],
+      },
+    },
+    top_direction: {
+      across: {
+        headline: 'Your club points right at the top',
+        cost: 'The club crosses the line and has to reroute on the way down. Expect hooks, pulls and uneven contact.',
+        cue: 'Feel the club pointing at the target at the top.',
+        steps: ['Make a slow backswing and pause at the top.', 'Check in a mirror that the shaft aims near the target.', 'Shorten your backswing until the position holds.'],
+      },
+      laid_off: {
+        headline: 'Your club points left at the top',
+        cost: 'The club lays off behind you, so you must adjust on the way down. Expect pulls and thin shots.',
+        cue: 'Feel the club pointing at the target at the top.',
+        steps: ['Make a slow backswing and pause at the top.', 'Check in a mirror that the shaft aims near the target.', 'Keep your trail elbow under the club at the top.'],
+      },
+    },
+    hands_over_heels: {
+      deep: {
+        headline: 'Your hands go too deep behind you',
+        cost: 'The club gets stuck behind you and comes in from too far inside. Expect hooks and blocks.',
+        cue: 'Keep your hands in front of your chest at the top.',
+        steps: ['Turn your chest to start the backswing.', 'Pause at the top and look: hands over your trail heel.', 'Shorten the swing until they stay there.'],
+      },
+      shallow: {
+        headline: "Your hands don't go back far enough",
+        cost: 'You lack width and turn, so you come over the top. Expect slices and pulls.',
+        cue: 'Turn your back to the target until your hands sit above your trail heel.',
+        steps: ['Turn your shoulders until your back faces the target.', 'Let your hands rise over the trail heel.', 'Pause at the top and check it from behind.'],
+      },
+    },
+    lead_arm_shoulder_plane: {
+      above: {
+        headline: 'Your lead arm goes up too steeply',
+        cost: 'The club ends too upright and you come over the top. Expect slices and pulls.',
+        cue: 'Turn your shoulders more and let the arm follow their tilt.',
+        steps: ['Rest an alignment stick along your shoulder line from the ball.', 'Swing to the top and keep your arm under the stick.', 'Turn your chest until your back faces the target.'],
+      },
+      below: {
+        headline: 'Your lead arm falls too flat at the top',
+        cost: 'The club gets behind you and must be thrown out. Expect hooks and blocks.',
+        cue: 'Feel your lead arm rise in front of your chest.',
+        steps: ['Rest an alignment stick along your shoulder line from the ball.', 'Swing to the top and raise the arm until it sits just under it.', 'Keep your hands in front of your chest as you turn.'],
+      },
+    },
+    downswing_path: {
+      out: {
+        headline: 'You come over the top',
+        cost: 'The club cuts across the ball from outside. Expect slices and pulls.',
+        cue: 'Start down by letting your hands drop, then turn.',
+        steps: ['Pause for a second at the top.', 'Start down by dropping your hands toward your trail hip.', 'Then turn your chest and swing through.'],
+      },
+    },
+    shaft_down_shallow: {
+      steep: {
+        headline: 'You swing down from too steep',
+        cost: 'The club comes at the ball from above and across. Expect slices, pulls and fat shots.',
+        cue: 'Let the club drop behind you first, then turn.',
+        steps: ['Pause at the top.', 'Let your hands drop and the club fall behind you.', 'Turn your hips while your arms stay relaxed.'],
+      },
+      shallow: {
+        headline: 'Your club drops too far behind you',
+        cost: 'The club comes from far inside the line. Expect blocks and hooks.',
+        cue: 'Start down by turning your hips before the arms drop.',
+        steps: ['Pause at the top.', 'Turn your hips first and let the arms follow.', 'Keep the clubhead in front of your trail hand.'],
+      },
+    },
+    shaft_through_steep: {
+      flat: {
+        headline: 'You flip the club through impact',
+        cost: 'The clubhead passes your hands, so the face opens or shuts at random. Expect thin shots, hooks and blocks.',
+        cue: 'Keep your hands ahead of the clubhead past the ball.',
+        steps: ['Hit half shots and stop when the shaft is level after impact.', 'Check the grip end points between your toes and the ball.', 'Hold your lead wrist firm and turn your chest through.'],
+      },
+    },
+    clubhead_vs_plane: {
+      steep: {
+        headline: 'Your clubhead comes in from above',
+        cost: 'You come down steeply on the ball. Expect fat shots, slices and pulls.',
+        cue: 'Let the club drop down the line it started on.',
+        steps: ['Lay a club on the ground along your address shaft line.', 'Swing down so the clubhead follows that line.', 'Start down with your hands dropping, then turn.'],
+      },
+      under: {
+        headline: 'Your clubhead drops too far inside',
+        cost: 'You come from too far inside the line. Expect blocks, hooks and thin shots.',
+        cue: 'Feel the club travel down the line it started on.',
+        steps: ['Push an alignment stick in the ground behind you.', 'Swing down so the clubhead stays outside the stick.', 'Hit slow shots until you miss the stick every time.'],
+      },
+    },
+    hands_height_impact: {
+      up: {
+        headline: 'Your hands rise before impact',
+        cost: 'You stand up through the ball, so the club bottoms out early. Expect thin shots and tops.',
+        cue: 'Keep your chest over the ball and your hands at address height.',
+        steps: ['Set up with your backside touching a wall or chair.', 'Swing at half speed and keep that contact through the ball.', 'Feel your chest stay over the ball at impact.'],
+      },
+      down: {
+        headline: 'Your hands sink before impact',
+        cost: 'Your hands drop below address height, so the club digs. Expect fat shots and pulls.',
+        cue: 'Keep your chest tall and your hands at address height.',
+        steps: ['Make half swings and stop at impact.', 'Check your hands are level with where they started.', 'Keep your legs working so your body keeps turning.'],
+      },
+    },
+    hands_out_impact: {
+      in: {
+        headline: 'Your hands get pushed out to the ball',
+        cost: 'Your body stands up and pushes the hands out. Expect toe strikes, blocks and hooks.',
+        cue: 'Keep your backside back so your hands stay where they started.',
+        steps: ['Set up with your backside touching a wall or chair.', 'Swing at half speed and keep that contact through the ball.', 'Check your hands pass through where they started.'],
+      },
+      out: {
+        headline: 'Your hands pull in toward your body',
+        cost: 'Your arms collapse in close and the club swings inside. Expect pulls and hooks.',
+        cue: 'Let your arms stay long through the ball.',
+        steps: ['Make half swings with your arms long through the ball.', 'Check your hands end up where they were at address.', 'Keep your chest turning so the arms can stay long.'],
+      },
+    },
+    shaft_angle_impact: {
+      up: {
+        headline: 'Your shaft stands up at impact',
+        cost: 'The club is more upright than at address. Expect thin shots, blocks and hooks.',
+        cue: 'Let the shaft return to the angle it had at address.',
+        steps: ['Set up and note the angle of the shaft.', 'Make half swings and stop at impact.', 'Check the shaft matches the angle you started with.'],
+      },
+      down: {
+        headline: 'Your shaft leans flatter at impact',
+        cost: 'The grip end sits lower than at address, so the club digs. Expect heavy shots and pulls.',
+        cue: 'Let the shaft return to the angle it had at address.',
+        steps: ['Set up and note the angle of the shaft.', 'Make half swings and stop at impact.', 'Check the shaft matches the angle you started with.'],
+      },
+    },
+    spine_loss: {
+      lost: {
+        headline: 'You stand up through the shot',
+        cost: 'Your chest rises, so the club has to reach for the ball. Expect thin shots, blocks and hooks.',
+        cue: 'Keep your chest pointing at the ball until it is gone.',
+        steps: ['Tilt from the hips and hold that angle in the backswing.', 'Swing at half speed and keep your chest down through impact.', 'Turn up to your finish only after the ball has left.'],
+      },
+    },
+    hip_drift: {
+      toward: {
+        headline: 'Your hips move toward the ball',
+        cost: 'You stand up through the shot, so your arms have no room. Expect blocks, hooks and thin shots.',
+        cue: 'Keep your backside back through impact, as if sitting against a wall.',
+        steps: ['Set up with your backside touching a wall.', 'Swing at half speed and keep touching it until impact.', 'Feel your hips turn around instead of moving forward.'],
+      },
+    },
+    head_drift: {
+      moved: {
+        headline: 'Your head moves during the swing',
+        cost: 'The low point of your swing moves with it. Expect a mix of fat and thin shots.',
+        cue: 'Keep your eyes on the ball and your head quiet until it leaves.',
+        steps: ['Film yourself with a vertical line through your head.', 'Make half backswings that keep your head inside the line.', 'Turn your shoulders around a steady head.'],
+      },
+    },
+    tempo: {
+      fast: {
+        headline: 'You rush the swing from the top',
+        cost: 'You snatch the club down before your body is ready. Expect pulls, slices and uneven contact.',
+        cue: 'Count one-two-three on the way back and one on the way down.',
+        steps: ['Count three beats for the backswing.', 'Count one beat for the downswing.', 'Film it and check the swing looks smooth.'],
+      },
+      slow: {
+        headline: 'You slow down at the top',
+        cost: 'A long, sleepy backswing and a steered downswing leave no speed. Expect weak shots and blocks.',
+        cue: 'Make your normal backswing, then let the downswing go.',
+        steps: ['Take a normal backswing at the same pace.', 'Start down without pausing or steering.', 'Swing through to a full finish.'],
+      },
+    },
+    finish_balance: {
+      off: {
+        headline: 'You lose your balance at the finish',
+        cost: 'An unsteady finish often means your weight was out of place earlier. Expect uneven contact.',
+        cue: 'Finish on your lead leg and hold it for three seconds.',
+        steps: ['Swing at a pace you can control.', 'Finish with your belt toward the target, weight on the lead foot.', 'Hold the pose for three seconds before you move.'],
+      },
     },
   },
 };

@@ -48,4 +48,45 @@ describe('SwingOverlay', () => {
     );
     expect(svgTexts(r)).toEqual(expect.arrayContaining(['Shaft plane 52°', 'Shoulder plane 67°', '+10 cm']));
   });
+
+  describe('focus mode', () => {
+    const hl = [
+      { t: 'line', a: [0.4, 0.2], b: [0.4, 0.6], dash: true, role: 'target' },
+      { t: 'line', a: [0.4, 0.6], b: [0.5, 0.6], dash: true },
+      { t: 'label', at: [0.5, 0.6], text: '+8 cm' },
+    ];
+    const lines = (r) => r.UNSAFE_root.findAll((n) => n.type === 'RNSVGLine');
+    const circles = (r) => r.UNSAFE_root.findAll((n) => n.type === 'RNSVGCircle');
+    const full = { ...props, pose: lm(), club: { hands: [0.4, 0.5], head: [0.5, 0.7], hidden: false, source: 'edge' }, ball: [0.57, 0.59, 0.012], highlight: hl, reference: { ball: [0.57, 0.59], handsAddress: [0.44, 0.5], trailShoulder: [0.4, 0.3], shaftPlaneDeg: 52, shoulderPlaneDeg: 67 } };
+
+    test('off: no legend, planes and the estimated label stay', () => {
+      const r = render(<SwingOverlay {...full} />);
+      expect(r.queryByTestId('overlay-legend')).toBeNull();
+      expect(svgTexts(r)).toEqual(expect.arrayContaining(['Shaft plane 52°', 'estimated']));
+    });
+
+    test('on: legend, no planes or clubhead chrome, labels and the ball kept', () => {
+      const r = render(<SwingOverlay {...full} focus tone="#e0b24d" />);
+      expect(r.getByTestId('overlay-legend')).toBeTruthy();
+      expect(r.getByText('You')).toBeTruthy();
+      expect(r.getByText('Target')).toBeTruthy();
+      const texts = svgTexts(r);
+      expect(texts).toContain('+8 cm');
+      expect(texts).not.toContain('Shaft plane 52°');
+      expect(texts).not.toContain('estimated');
+      expect(circles(r)).toHaveLength(1); // the ball only: no joints, nose ring or head marker
+    });
+
+    test('on: target is the accent and dashed, you is the tone and solid', () => {
+      const r = render(<SwingOverlay {...full} focus tone="#e0b24d" pose={null} club={null} />);
+      const [target, you] = lines(r);
+      const rgb = (n) => n.props.stroke.payload & 0xffffff; // react-native-svg packs colours as ARGB numbers
+      expect(rgb(target)).toBe(0x4fae8a);
+      expect(target.props.strokeWidth).toBe(2.5);
+      expect(target.props.strokeDasharray).toEqual(['4', '3']);
+      expect(rgb(you)).toBe(0xe0b24d);
+      expect(you.props.strokeWidth).toBe(3);
+      expect(you.props.strokeDasharray).toBeUndefined();
+    });
+  });
 });

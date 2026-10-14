@@ -13,7 +13,10 @@ import BottomSheet from '../components/BottomSheet';
 import SwingOverlay from '../components/swing/SwingOverlay';
 import SwingTimeline from '../components/swing/SwingTimeline';
 import SwingCheckRow from '../components/swing/SwingCheckRow';
-import { useSwingTone } from '../components/swing/swingTone';
+import SwingFixesCard from '../components/swing/SwingFixesCard';
+import SwingFixPeek from '../components/swing/SwingFixPeek';
+import SwingFixSheet from '../components/swing/SwingFixSheet';
+import { useSwingTone, focusTone } from '../components/swing/swingTone';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic, hud } from '../theme/tokens';
 import { withAlpha } from '../theme/alpha';
@@ -26,7 +29,7 @@ import { reanalyzeForClub } from '../swing/reanalyze';
 import ClubPicker from '../components/swing/ClubPicker';
 import MarkChapters from '../components/swing/MarkChapters';
 import {
-  MARK_TOTAL, statusFromMarks, markedFromMarks, passDone,
+  MARK_TOTAL, MARKED_KEYS, statusFromMarks, markedFromMarks, passDone,
 } from '../swing/markPass';
 import { shareSwingExport } from '../swing/shareExport';
 import { nativeApi, getStill, ensureStills } from '../swing/frames';
@@ -37,10 +40,12 @@ import {
 } from '../swing/checkpointChecks';
 import { CHECKPOINT_KEYS } from '../swing/phases';
 import { drillsForMain, PROGRESSION } from '../swing/drills';
+import { fixesFor, fixCopy, drillForCheck } from '../swing/fixes';
 import { SWING_STRINGS } from '../swing/strings';
 
 const T = SWING_STRINGS.results;
 const H = SWING_STRINGS.home; // the delete confirm is shared with the swings list
+const TIMELINE_KEYS = [...MARKED_KEYS, 'finish']; // the seven positions Results shows
 const MAX_NUDGE = 2; // stills exist for the checkpoint frame +-2 (D4)
 
 // --- Sections --------------------------------------------------------------------------------
@@ -251,6 +256,7 @@ export function SwingResultsView({
   const [selKey, setSelKey] = useState(null);
   const [allDrills, setAllDrills] = useState(false);
   const [sheet, setSheet] = useState(null); // null | 'menu' | 'rename'
+  const [fixSheet, setFixSheet] = useState({ list: [], index: 0, open: false });
   const [nameDraft, setNameDraft] = useState('');
   const scroll = useRef(null);
 
@@ -272,6 +278,14 @@ export function SwingResultsView({
   const highlight = useMemo(() => (ready && selected ? highlightFor(selected, {
     analysis, poseAt: (f) => poseAtFrame(pose, f), frameOf: (k) => frameOfKey(analysis, k),
   }) : []), [ready, selected, analysis, pose]);
+  const fixes = useMemo(() => (ready ? fixesFor(analysis) : []), [ready, analysis]);
+  const focusOn = !!selected && (selected.status === 'red' || selected.status === 'yellow');
+  const openFixes = (list, index) => setFixSheet({ list, index, open: true });
+  const openFixFor = (check) => {
+    const i = fixes.findIndex((f) => CHECK_KEY(f.check) === CHECK_KEY(check));
+    if (i >= 0) openFixes(fixes, i);
+    else openFixes([{ check, copy: fixCopy(check), drill: drillForCheck(check) }], 0);
+  };
   const worst = useMemo(() => (ready ? worstByCheckpoint(checks) : {}), [ready, checks]);
 
   const pickCp = useCallback((k) => { setCp(k); setOff(0); setSelKey(null); }, []);
@@ -335,6 +349,7 @@ export function SwingResultsView({
         {ready ? (
           <>
             <Hero s={s} analysis={analysis} row={row} onClubChange={onClubChange} unconfirmed={MARK_TOTAL - (row?.marked?.count ?? MARK_TOTAL)} />
+            <SwingFixesCard fixes={fixes} onOpen={(i) => openFixes(fixes, i)} />
             {analysis.approximate ? (
               <View style={s.banner}>
                 <Feather name="alert-triangle" size={16} color={tone.yellow} />
@@ -354,6 +369,8 @@ export function SwingResultsView({
                 ball={ball}
                 reference={analysis.reference}
                 highlight={highlight}
+                focus={focusOn}
+                tone={focusTone(selected?.status)}
                 label={`${SWING_STRINGS.checkpoint[cp]} still, frame ${frame}`}
               />
             </View>
@@ -361,6 +378,7 @@ export function SwingResultsView({
             <SwingTimeline
               current={cp}
               worst={worst}
+              keys={TIMELINE_KEYS}
               onSelect={pickCp}
               frameLine={T.frameLine(frame, tSec, off)}
               onPrev={() => setOff((o) => Math.max(-MAX_NUDGE, o - 1))}
@@ -374,16 +392,23 @@ export function SwingResultsView({
                 <Text style={s.overlineDark}>{T.atCheckpoint(SWING_STRINGS.checkpoint[cp])}</Text>
                 {here.length ? <Text style={s.hintInline}>{T.tapToDraw}</Text> : null}
               </View>
-              {here.length ? here.map((c) => (
-                <SwingCheckRow
-                  key={CHECK_KEY(c)}
-                  check={c}
-                  selected={selected && CHECK_KEY(selected) === CHECK_KEY(c)}
-                  onPress={() => setSelKey(CHECK_KEY(c))}
-                  onPlace={openEdit}
-                  placeAt={unplacedCheckpoint(c, analysis.clubMarks)}
-                />
-              )) : <Text style={s.hint}>{T.noChecksAt}</Text>}
+              {here.length ? here.map((c) => {
+                const isSel = !!selected && CHECK_KEY(selected) === CHECK_KEY(c);
+                const copy = fixCopy(c);
+                return (
+                  <React.Fragment key={CHECK_KEY(c)}>
+                    <SwingCheckRow
+                      check={c}
+                      selected={isSel}
+                      expanded={copy ? isSel : undefined}
+                      onPress={() => setSelKey(CHECK_KEY(c))}
+                      onPlace={openEdit}
+                      placeAt={unplacedCheckpoint(c, analysis.clubMarks)}
+                    />
+                    {isSel && copy ? <SwingFixPeek copy={copy} onOpen={() => openFixFor(c)} /> : null}
+                  </React.Fragment>
+                );
+              }) : <Text style={s.hint}>{T.noChecksAt}</Text>}
             </View>
 
             <SwingPattern s={s} tone={tone} checks={checks} onPick={jumpToCheck} />
@@ -447,6 +472,22 @@ export function SwingResultsView({
           </>
         ) : null}
       </ScrollView>
+
+      {ready ? (
+        <SwingFixSheet
+          visible={fixSheet.open}
+          fixes={fixSheet.list}
+          index={fixSheet.index}
+          onIndex={(i) => setFixSheet((f) => ({ ...f, index: i }))}
+          onClose={() => setFixSheet((f) => ({ ...f, open: false }))}
+          onSeeOnSwing={(c) => { setFixSheet((f) => ({ ...f, open: false })); jumpToCheck(c); }}
+          stillFor={stillFor}
+          onNeedStills={onNeedStills}
+          analysis={analysis}
+          pose={pose}
+          width={Math.min(winW, 480) - 40}
+        />
+      ) : null}
 
       <BottomSheet visible={sheet !== null} onClose={() => setSheet(null)} sheetStyle={s.sheet}>
         {sheet === 'rename' ? (
