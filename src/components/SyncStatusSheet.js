@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 import BottomSheet from './BottomSheet';
 import IconButton from './ui/IconButton';
 import {
@@ -11,13 +12,6 @@ import {
 import { syncQueue } from '../store/syncQueue';
 import { retrySync } from '../store/syncWorker';
 
-const STATE_LABEL = {
-  idle: 'Al día',
-  syncing: 'Sincronizando',
-  pending: 'Pendiente',
-  error: 'Error',
-};
-
 const STATE_COLOR = {
   idle: '#4a7c4a',
   syncing: '#c0a15c',
@@ -25,18 +19,18 @@ const STATE_COLOR = {
   error: '#b33a3a',
 };
 
-function formatRelative(ts) {
-  if (!ts) return 'nunca';
+function formatRelative(ts, t) {
+  if (!ts) return t('shared.sync.never');
   const diffMs = Date.now() - ts;
-  if (diffMs < 0) return 'hace instantes';
+  if (diffMs < 0) return t('shared.sync.justNow');
   const sec = Math.floor(diffMs / 1000);
-  if (sec < 60) return `hace ${sec}s`;
+  if (sec < 60) return t('shared.sync.secondsAgo', { n: sec });
   const min = Math.floor(sec / 60);
-  if (min < 60) return `hace ${min} min`;
+  if (min < 60) return t('shared.sync.minutesAgo', { n: min });
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `hace ${hr} h`;
+  if (hr < 24) return t('shared.sync.hoursAgo', { n: hr });
   const day = Math.floor(hr / 24);
-  return `hace ${day} d`;
+  return t('shared.sync.daysAgo', { n: day });
 }
 
 // `status` / `lastError` / `cardsPending` / `unsentHole` are supplied by the
@@ -47,6 +41,7 @@ export default function SyncStatusSheet({
   status: statusOverride, lastError = null, cardsPending = false, unsentHole = null,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const [storeStatus, setStoreStatus] = useState('idle');
   const [lastSyncAt, setLastSyncAt] = useState(null);
@@ -74,27 +69,27 @@ export default function SyncStatusSheet({
     <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
       <View style={s.handle} />
         <View style={s.header}>
-          <Text style={s.title}>Sincronización</Text>
+          <Text style={s.title}>{t('shared.sync.title')}</Text>
           <IconButton icon="x" onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} />
         </View>
         <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
-          <Text style={s.sectionTitle}>Estado</Text>
+          <Text style={s.sectionTitle}>{t('shared.sync.status')}</Text>
           <View style={s.row}>
             <View style={[s.dot, { backgroundColor: STATE_COLOR[status] }]} />
-            <Text style={s.stateLabel}>{STATE_LABEL[status]}</Text>
+            <Text style={s.stateLabel}>{t(`shared.sync.state.${status}`)}</Text>
           </View>
-          <Text style={s.meta}>Pendientes: {pending}</Text>
-          <Text style={s.meta}>Último sync: {formatRelative(lastSyncAt)}</Text>
+          <Text style={s.meta}>{t('shared.sync.pending', { count: pending })}</Text>
+          <Text style={s.meta}>{t('shared.sync.lastSync', { when: formatRelative(lastSyncAt, t) })}</Text>
           {unsentHole != null && (
             <Text style={s.meta}>
-              {`Hoyo ${unsentHole} sin enviar — sal del hoyo para enviarlo`}
+              {t('shared.sync.unsentHole', { hole: unsentHole })}
             </Text>
           )}
-          {cardsPending && <Text style={s.meta}>Tarjeta pendiente de enviar</Text>}
-          {!!lastError?.message && <Text style={s.meta}>{`Error: ${lastError.message}`}</Text>}
+          {cardsPending && <Text style={s.meta}>{t('shared.sync.cardPending')}</Text>}
+          {!!lastError?.message && <Text style={s.meta}>{t('shared.sync.errorLine', { message: lastError.message })}</Text>}
           {(status === 'error' || status === 'pending') && (
             <TouchableOpacity onPress={onRetry} style={s.retry}>
-              <Text style={s.retryLabel}>Reintentar</Text>
+              <Text style={s.retryLabel}>{t('common.retry')}</Text>
             </TouchableOpacity>
           )}
         </ScrollView>

@@ -9,6 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber } from '../i18n';
 import {
   loadCourseLibrary, upsertCourse, defaultHoles, saveCourseHoles,
   toggleFavoriteCourse, deleteCourse,
@@ -23,6 +24,7 @@ import {
 
 export default function CoursePickerScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const { roundIndex } = route.params;
@@ -105,9 +107,9 @@ export default function CoursePickerScreen({ navigation, route }) {
       const i = prev.findIndex((p) => p.kind === kind && p.id === id);
       if (i !== -1) return prev.filter((_, idx) => idx !== i);
       if (maxSelectable != null && prev.length >= maxSelectable) {
-        const msg = `You can pick at most ${maxSelectable} course${maxSelectable !== 1 ? 's' : ''}.`;
+        const msg = t('courses.picker.limitMessage', { count: maxSelectable });
         if (Platform.OS === 'web') window.alert(msg);
-        else Alert.alert('Selection limit', msg);
+        else Alert.alert(t('courses.picker.limitTitle'), msg);
         return prev;
       }
       return [...prev, { kind, id }];
@@ -132,8 +134,8 @@ export default function CoursePickerScreen({ navigation, route }) {
           <Text style={s.courseMeta}>
             {[c.city, c.province].filter(Boolean).join(', ')}
             {(c.city || c.province) ? '  ·  ' : ''}
-            Par {c.holes.reduce((sum, h) => sum + h.par, 0)}
-            {c.slope ? `  ·  Slope ${c.slope}` : ''}
+            {t('courses.picker.par', { par: formatNumber(c.holes.reduce((sum, h) => sum + h.par, 0)) })}
+            {c.slope ? `  ·  ${t('courses.picker.slope', { slope: formatNumber(c.slope) })}` : ''}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -171,7 +173,7 @@ export default function CoursePickerScreen({ navigation, route }) {
           <Text style={s.courseMeta}>
             {[club.city, club.province].filter(Boolean).join(', ')}
             {(club.city || club.province) ? '  ·  ' : ''}
-            {layouts.length} layouts
+            {t('courses.picker.layouts', { count: layouts.length })}
           </Text>
         </TouchableOpacity>
         {picked
@@ -186,12 +188,12 @@ export default function CoursePickerScreen({ navigation, route }) {
     const doRename = async () => {
       const current = course.name;
       const next = Platform.OS === 'web'
-        ? window.prompt('Rename course', current)
+        ? window.prompt(t('courses.manage.renamePrompt'), current)
         : await new Promise((resolve) => {
             Alert.prompt
-              ? Alert.prompt('Rename course', null, [
-                  { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
-                  { text: 'Save', onPress: (v) => resolve(v) },
+              ? Alert.prompt(t('courses.manage.renamePrompt'), null, [
+                  { text: t('courses.cancel'), style: 'cancel', onPress: () => resolve(null) },
+                  { text: t('courses.save'), onPress: (v) => resolve(v) },
                 ], 'plain-text', current)
               : resolve(null);
           });
@@ -202,7 +204,7 @@ export default function CoursePickerScreen({ navigation, route }) {
         setCourses((prev) => prev.map((c) => (c.id === course.id ? { ...c, name: trimmed } : c)));
         return updated;
       } catch (err) {
-        Alert.alert('Error', err?.message ?? 'Could not rename course');
+        Alert.alert(t('courses.errorTitle'), err?.message ?? t('courses.manage.renameFailed'));
       }
     };
 
@@ -210,11 +212,11 @@ export default function CoursePickerScreen({ navigation, route }) {
     // question to pick the action — asking again would double-confirm.
     const doDelete = async (skipConfirm = false) => {
       const confirmed = skipConfirm || (Platform.OS === 'web'
-        ? window.confirm(`Delete "${course.name}" from the library?`)
+        ? window.confirm(t('courses.manage.deleteConfirm', { name: course.name }))
         : await new Promise((resolve) => Alert.alert(
-            'Delete course', `Delete "${course.name}" from the library?`,
-            [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-             { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }],
+            t('courses.manage.deleteTitle'), t('courses.manage.deleteConfirm', { name: course.name }),
+            [{ text: t('courses.cancel'), style: 'cancel', onPress: () => resolve(false) },
+             { text: t('courses.delete'), style: 'destructive', onPress: () => resolve(true) }],
           )));
       if (!confirmed) return;
       try {
@@ -222,22 +224,22 @@ export default function CoursePickerScreen({ navigation, route }) {
         setCourses((prev) => prev.filter((c) => c.id !== course.id));
         setSelected((prev) => prev.filter((p) => !(p.kind === 'course' && p.id === course.id)));
       } catch (err) {
-        Alert.alert('Error', err?.message ?? 'Could not delete course');
+        Alert.alert(t('courses.errorTitle'), err?.message ?? t('courses.deleteFailed'));
       }
     };
 
     if (Platform.OS === 'web') {
-      if (window.confirm(`Edit "${course.name}"?\n\nOK = Rename, Cancel = more options`)) {
+      if (window.confirm(t('courses.manage.webPrompt', { name: course.name }))) {
         doRename();
-      } else if (window.confirm(`Delete "${course.name}" from the library?`)) {
+      } else if (window.confirm(t('courses.manage.deleteConfirm', { name: course.name }))) {
         doDelete(true);
       }
       return;
     }
-    Alert.alert(course.name, 'Manage this library course', [
-      { text: 'Rename', onPress: doRename },
-      { text: 'Delete', style: 'destructive', onPress: doDelete },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(course.name, t('courses.manage.message'), [
+      { text: t('courses.manage.rename'), onPress: doRename },
+      { text: t('courses.delete'), style: 'destructive', onPress: doDelete },
+      { text: t('courses.cancel'), style: 'cancel' },
     ]);
   }
 
@@ -276,7 +278,7 @@ export default function CoursePickerScreen({ navigation, route }) {
       await toggleFavoriteCourse(courseId);
     } catch (err) {
       setFavorites(prev);
-      Alert.alert('Error', err.message ?? 'Could not update favorite');
+      Alert.alert(t('courses.errorTitle'), err.message ?? t('courses.favoriteFailed'));
     }
   }
 
@@ -299,7 +301,7 @@ export default function CoursePickerScreen({ navigation, route }) {
         return [...prev, { kind: 'course', id: course.id }];
       });
     } catch (e) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('courses.errorTitle'), e.message);
     } finally {
       setSaving(false);
     }
@@ -309,7 +311,7 @@ export default function CoursePickerScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Select Courses</Text>
+        <Text style={s.headerTitle}>{t('courses.picker.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
@@ -318,7 +320,7 @@ export default function CoursePickerScreen({ navigation, route }) {
           <Feather name="search" size={16} color={theme.text.muted} style={s.searchIcon} />
           <TextInput
             style={s.searchInput}
-            placeholder="Search name, city or region"
+            placeholder={t('courses.searchPlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -332,11 +334,11 @@ export default function CoursePickerScreen({ navigation, route }) {
           ) : null}
         </View>
 
-        <Text style={s.sectionTitle}>New Course</Text>
+        <Text style={s.sectionTitle}>{t('courses.picker.newSection')}</Text>
         <View style={s.form}>
           <TextInput
             style={[s.input, s.flex]}
-            placeholder="Course name"
+            placeholder={t('courses.namePlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -345,17 +347,17 @@ export default function CoursePickerScreen({ navigation, route }) {
           />
           <TouchableOpacity style={s.addBtn} onPress={() => addAndSelect()} disabled={saving || !newName.trim() || usingCachedData}>
             <Feather name="plus" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-            <Text style={s.addBtnText}>Add</Text>
+            <Text style={s.addBtnText}>{t('courses.add')}</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={s.sectionTitle}>Library</Text>
+        <Text style={s.sectionTitle}>{t('courses.picker.librarySection')}</Text>
         {loading ? (
           <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
         ) : loadError ? (
           <View style={s.errorBox}>
             <Feather name="wifi-off" size={44} color={theme.destructive} />
-            <Text style={s.errorTitle}>Couldn't load courses</Text>
+            <Text style={s.errorTitle}>{t('courses.loadFailedTitle')}</Text>
             <Text style={s.errorMsg}>{loadError}</Text>
             <TouchableOpacity
               style={s.retryBtn}
@@ -363,14 +365,14 @@ export default function CoursePickerScreen({ navigation, route }) {
               activeOpacity={0.7}
             >
               <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-              <Text style={s.retryBtnText}>Retry</Text>
+              <Text style={s.retryBtnText}>{t('courses.retry')}</Text>
             </TouchableOpacity>
           </View>
         ) : courses.length === 0 ? (
-          <Text style={s.empty}>No courses in library yet.</Text>
+          <Text style={s.empty}>{t('courses.picker.empty')}</Text>
         ) : items.length === 0 ? (
           <>
-            <Text style={s.empty}>No courses match "{query}"</Text>
+            <Text style={s.empty}>{t('courses.noMatch', { query })}</Text>
             {query.trim() && !usingCachedData ? (
               <TouchableOpacity
                 style={s.createCta}
@@ -379,7 +381,7 @@ export default function CoursePickerScreen({ navigation, route }) {
                 activeOpacity={0.7}
               >
                 <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
-                <Text style={s.createCtaText}>Create "{query.trim()}"</Text>
+                <Text style={s.createCtaText}>{t('courses.picker.create', { query: query.trim() })}</Text>
               </TouchableOpacity>
             ) : null}
           </>
@@ -395,7 +397,7 @@ export default function CoursePickerScreen({ navigation, route }) {
         <View style={s.footer}>
           <TouchableOpacity style={s.confirmBtn} onPress={confirm}>
             <Text style={s.confirmBtnText}>
-              Add {selected.length} Round{selected.length !== 1 ? 's' : ''}
+              {t('courses.picker.addRounds', { count: selected.length })}
             </Text>
           </TouchableOpacity>
         </View>

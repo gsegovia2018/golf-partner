@@ -1,3 +1,5 @@
+import { t } from '../../i18n';
+
 const DEFAULT_MIN_SAMPLE = 6;
 
 function isNumber(value) {
@@ -9,7 +11,7 @@ function isLowSample(sample, minSample = DEFAULT_MIN_SAMPLE) {
 }
 
 function lowSampleLabel(sample, minSample = DEFAULT_MIN_SAMPLE) {
-  return isLowSample(sample, minSample) ? 'low sample' : null;
+  return isLowSample(sample, minSample) ? t('stats.my.lowSample') : null;
 }
 
 function comparisonMeta(basis, parts = [], { sample, minSample = DEFAULT_MIN_SAMPLE } = {}) {

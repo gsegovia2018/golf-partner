@@ -10,7 +10,7 @@ import { teamColor } from './teamModel';
 import { ShotDetailSection } from './ShotDetailSection';
 import PressableScale from '../ui/PressableScale';
 import { haptic } from '../../lib/haptics';
-import { useT } from '../../i18n';
+import { useT, formatNumber } from '../../i18n';
 
 // Unified per-player score card. Every game mode renders this exact card —
 // solo, Stableford, Match Play, Sindicato and Best Ball. It is the former
@@ -111,12 +111,12 @@ export const PlayerCard = React.memo(function PlayerCard({
   const heroCardProps = conflicted
     ? {
       onPress: () => onOpenConflict?.(player.id, hole.number),
-      accessibilityLabel: `Resolve ${player.name}'s conflicting score on hole ${hole.number}`,
+      accessibilityLabel: tx('scorecard.player.resolveConflict', { name: player.name, hole: formatNumber(hole.number) }),
     }
     : officialTappable
       ? {
         onPress: () => onOpenDiscrepancy?.(player.id, hole.number),
-        accessibilityLabel: `Resolve ${player.name}'s score on hole ${hole.number}`,
+        accessibilityLabel: tx('scorecard.player.resolve', { name: player.name, hole: formatNumber(hole.number) }),
       }
       : {};
 
@@ -168,7 +168,9 @@ export const PlayerCard = React.memo(function PlayerCard({
             )}
           </View>
           <Text style={s.soloHeroHcp}>
-            HCP {handicap}{extraShots > 0 ? `  ·  +${extraShots} on this hole` : ''}
+            {extraShots > 0
+              ? tx('scorecard.player.hcpExtra', { handicap, extra: formatNumber(extraShots) })
+              : tx('scorecard.player.hcp', { handicap })}
           </Text>
         </View>
         {/* Pickup toggle is a write action — hide on read-only cards. */}
@@ -180,7 +182,9 @@ export const PlayerCard = React.memo(function PlayerCard({
             hitSlop={9}
             accessibilityRole="button"
             accessibilityState={{ selected: isPickup }}
-            accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes — tap to clear` : `Pickup at ${pickup} strokes`}
+            accessibilityLabel={isPickup
+              ? tx('scorecard.player.pickedUpA11y', { count: formatNumber(pickup) })
+              : tx('scorecard.player.pickupA11y', { count: formatNumber(pickup) })}
           >
             <Feather
               name="arrow-up-circle"
@@ -219,8 +223,12 @@ export const PlayerCard = React.memo(function PlayerCard({
           delayLongPress={350}
           accessibilityLabel={
             ghostVisible
-              ? `Hole ${hole.number}, ${player.name}: ${ghost.value} entered by ${ghost.authorName}, not verified by you${ghostAcceptable ? ' — tap to accept' : ''}`
-              : `Strokes on hole ${hole.number}${canEdit && !conflicted && strokes != null ? ' — long-press to clear' : ''}`
+              ? (ghostAcceptable
+                ? tx('scorecard.player.ghostAcceptA11y', { hole: formatNumber(hole.number), name: player.name, value: formatNumber(ghost.value), author: ghost.authorName })
+                : tx('scorecard.player.ghostA11y', { hole: formatNumber(hole.number), name: player.name, value: formatNumber(ghost.value), author: ghost.authorName }))
+              : (canEdit && !conflicted && strokes != null
+                ? tx('scorecard.player.strokesClearA11y', { hole: formatNumber(hole.number) })
+                : tx('scorecard.player.strokesA11y', { hole: formatNumber(hole.number) }))
           }
         >
           <Animated.View style={[s.soloScoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
@@ -234,15 +242,15 @@ export const PlayerCard = React.memo(function PlayerCard({
             </Text>
             <Text style={[s.soloScoreLabel, conflicted && { color: semantic.conflict.base }]}>
               {conflicted
-                ? 'TAP TO RESOLVE'
+                ? tx('scorecard.player.tapResolve')
                 : strokes == null
-                  ? (ghostAcceptable ? 'TAP TO ACCEPT' : ghostVisible ? 'NOT VERIFIED' : 'STROKES')
-                  : canEdit ? 'HOLD TO CLEAR' : 'STROKES'}
+                  ? (ghostAcceptable ? tx('scorecard.player.tapAccept') : ghostVisible ? tx('scorecard.player.notVerified') : tx('scorecard.player.strokes'))
+                  : canEdit ? tx('scorecard.player.holdClear') : tx('scorecard.player.strokes')}
             </Text>
             {/* Attribution for the ghost preview — who entered this value,
                 so it reads as theirs, not the viewer's own verified entry. */}
             {ghostVisible && (
-              <Text style={s.ghostAttribution} numberOfLines={1}>{`by ${ghost.authorName}`}</Text>
+              <Text style={s.ghostAttribution} numberOfLines={1}>{tx('scorecard.player.byAuthor', { name: ghost.authorName })}</Text>
             )}
           </Animated.View>
         </Pressable>
@@ -261,7 +269,7 @@ export const PlayerCard = React.memo(function PlayerCard({
       {points != null && !conflicted && (
         <View style={[s.soloPtsBadge, { borderColor: ptsColor }]}>
           <Text style={[s.soloPtsText, { color: ptsColor }]}>
-            {points} {points === 1 ? 'point' : 'points'}
+            {tx('scorecard.player.points', { count: points })}
           </Text>
         </View>
       )}
@@ -269,24 +277,24 @@ export const PlayerCard = React.memo(function PlayerCard({
       {conflicted && (
         <View style={s.soloConflictHint}>
           <Feather name="alert-circle" size={14} color={semantic.conflict.ink} />
-          <Text style={s.soloConflictHintText}>Tap to resolve</Text>
+          <Text style={s.soloConflictHintText}>{tx('scorecard.player.tapToResolve')}</Text>
         </View>
       )}
 
       {showRunning && !conflicted && (
         <View style={s.soloStatsRow}>
           <View style={s.soloStatItem}>
-            <Text style={s.soloStatLabel}>STROKES</Text>
+            <Text style={s.soloStatLabel}>{tx('scorecard.player.statStrokes')}</Text>
             <Text style={s.soloStatValue}>{t.str || '—'}</Text>
           </View>
           <View style={s.soloStatDivider} />
           <View style={s.soloStatItem}>
-            <Text style={s.soloStatLabel}>POINTS</Text>
+            <Text style={s.soloStatLabel}>{tx('scorecard.player.statPoints')}</Text>
             <Text style={[s.soloStatValue, { color: theme.accent.primary }]}>{t.pts}</Text>
           </View>
           <View style={s.soloStatDivider} />
           <View style={s.soloStatItem}>
-            <Text style={s.soloStatLabel}>vs PAR</Text>
+            <Text style={s.soloStatLabel}>{tx('scorecard.player.statVsPar')}</Text>
             <Text style={[s.soloStatValue, { color: vsParColor }]}>{vsParLabel}</Text>
           </View>
         </View>

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from '../ui/PressableScale';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 import { light as lightTokens } from '../../theme/tokens';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import {
@@ -27,6 +28,7 @@ const MAX_ACCURACY_M = 25; // same usable-fix bar as the scorecard header
 // saves via logMeasuredShot. With no usable fix, tap ① opens the hole map —
 // the manual flow. The header distance block never shows this carry.
 export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters, offTee = false, onOpenMap }) {
+  const tl = useT();
   // Tolerate a missing ThemeProvider (render tests mount this bare) — fall
   // back to the light tokens, matching BottomSheet's theme-defensiveness.
   const theme = useTheme()?.theme ?? lightTokens;
@@ -86,7 +88,7 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
       roundId, roundIndex, holeNumber: armedHoleNumber, start, end: pos, club,
     });
     haptic('success');
-    setSaved({ label: club ? clubLabel(club) : 'Shot', meters: dist, ...r });
+    setSaved({ label: club ? clubLabel(club) : tl('shots.measure.shot'), meters: dist, ...r });
   };
 
   const undo = () => {
@@ -111,9 +113,9 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
       {saved && (
         <View style={s.toast}>
           <Feather name="check" size={14} color={theme.accent.primary} />
-          <Text style={s.toastText}>{`${saved.label} · ${fmt(saved.meters)} saved`}</Text>
-          <Pressable onPress={undo} hitSlop={8} accessibilityLabel="Undo measured shot">
-            <Text style={s.toastUndo}>Undo</Text>
+          <Text style={s.toastText}>{tl('shots.measure.saved', { label: saved.label, meters: fmt(saved.meters) })}</Text>
+          <Pressable onPress={undo} hitSlop={8} accessibilityLabel={tl('shots.measure.undoA11y')}>
+            <Text style={s.toastUndo}>{tl('shots.measure.undo')}</Text>
           </Pressable>
         </View>
       )}
@@ -122,18 +124,18 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
         <Pressable
           onPress={finish}
           style={[s.card, dist < MIN_SAVE_M && s.cardDim]}
-          accessibilityLabel="Ball is here — save the measured shot"
+          accessibilityLabel={tl('shots.measure.saveA11y')}
         >
           <View style={s.cardTop}>
             <Pressable onPress={() => setWheelOpen(true)} hitSlop={6}>
               <Text style={s.cardClub}>
-                {armed.club ? clubLabel(armed.club).toUpperCase() : 'CLUB?'}
+                {armed.club ? clubLabel(armed.club).toUpperCase() : tl('shots.measure.clubUnknown')}
                 <Text style={s.cardChg}>  ⌄</Text>
               </Text>
             </Pressable>
             <Pressable
               onPress={() => { setArmed(null); setConfirmOver(false); }}
-              hitSlop={8} style={s.cardX} accessibilityLabel="Cancel measuring"
+              hitSlop={8} style={s.cardX} accessibilityLabel={tl('shots.measure.cancelA11y')}
             >
               <Feather name="x" size={14} color="rgba(255,255,255,0.6)" />
             </Pressable>
@@ -144,16 +146,16 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
           </Text>
           <Text style={s.cardSub}>
             {confirmOver ? (dist > MAX_PLAIN_M
-              ? `Over ${formatDistance(MAX_PLAIN_M, units)}${unitSuffix(units)} — tap again to save`
-              : `GPS loose ±${Math.round(fix?.accuracy ?? 0)} m — tap again to save`)
-              : dist < MIN_SAVE_M ? 'Start marked — hit, then walk'
-              : "Tap when you're at the ball"}
+              ? tl('shots.measure.over', { distance: `${formatDistance(MAX_PLAIN_M, units)}${unitSuffix(units)}` })
+              : tl('shots.measure.gpsLoose', { meters: Math.round(fix?.accuracy ?? 0) }))
+              : dist < MIN_SAVE_M ? tl('shots.measure.startMarked')
+              : tl('shots.measure.atBall')}
           </Text>
-          {fix?.accuracy != null && <Text style={s.cardAcc}>{`GPS ±${Math.round(fix.accuracy)} m`}</Text>}
+          {fix?.accuracy != null && <Text style={s.cardAcc}>{tl('shots.measure.gps', { meters: Math.round(fix.accuracy) })}</Text>}
         </Pressable>
       ) : (
         <View style={s.fabCol}>
-          <PressableScale onPress={arm} style={s.fab} accessibilityLabel="Measure my shot">
+          <PressableScale onPress={arm} style={s.fab} accessibilityLabel={tl('shots.measure.fabA11y')}>
             <ClubIcon size={25} color={theme.text.inverse} />
           </PressableScale>
         </View>
@@ -164,7 +166,7 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
         clubs={wheelClubs}
         value={armed?.club ?? null}
         units={units}
-        seqLabel="Club"
+        seqLabel={tl('shots.wheel.club')}
         carryMeters={null}
         toPinMeters={targetMeters ?? null}
         onSelect={(club) => { if (club) setArmed((a) => (a ? { ...a, club } : a)); setWheelOpen(false); }}

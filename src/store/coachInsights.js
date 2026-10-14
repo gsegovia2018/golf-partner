@@ -1,4 +1,5 @@
 import { drillsForInsight } from './coachDrills';
+import { msg, n, lower, raw } from './statsMsg';
 
 const EMPTY_BOARD = {
   fixFirst: [],
@@ -63,6 +64,50 @@ const SG_CATEGORY_TITLES = {
 
 const round2 = (value) => Math.round(value * 100) / 100;
 
+// Display descriptors (docs/i18n.md). Every insight keeps its English
+// title/reason/metric/basis strings, which ids, drills and saved focuses key
+// off, and also carries the same text as titleMsg/reasonMsg/metricMsg/basisMsg
+// for the screen to render in the active language.
+const SG_CATEGORY_KEYS = {
+  offTheTee: 'stats.my.sgCategory.offTheTee',
+  approach: 'stats.my.sgCategory.approach',
+  aroundGreen: 'stats.my.sgCategory.aroundGreen',
+  putting: 'stats.my.sgCategory.putting',
+  penalties: 'stats.my.sgCategory.penalties',
+};
+const BASIS_KEYS = {
+  'vs your avg': 'stats.my.basis.vsAvg',
+  'vs target hcp': 'stats.my.basis.vsTarget',
+  'recent vs previous': 'stats.my.basis.recentVsPrevious',
+  'opening vs closing': 'stats.my.basis.openingVsClosing',
+  'front vs back': 'stats.my.basis.frontVsBack',
+  'tracked sample': 'stats.my.basis.tracked',
+};
+const UNIT_KEYS = {
+  pts: 'stats.my.unit.pts',
+  'pts / hole': 'stats.my.unit.ptsHole',
+  'pts / round': 'stats.my.unit.ptsRound',
+  'SG / shot': 'stats.my.unit.sgShot',
+  'SG / putt': 'stats.my.unit.sgPutt',
+  'SG / round': 'stats.my.unit.sgRound',
+};
+const ACROSS_KEYS = {
+  rounds: 'stats.my.coach.across.rounds',
+  drives: 'stats.my.coach.across.drives',
+  holes: 'stats.my.coach.across.holes',
+  putts: 'stats.my.coach.across.putts',
+  shots: 'stats.my.coach.across.shots',
+  samples: 'stats.my.coach.across.samples',
+};
+const basisMsg = (basis) => (BASIS_KEYS[basis] ? msg(BASIS_KEYS[basis]) : raw(basis));
+const unitMsg = (unit) => (UNIT_KEYS[unit] ? msg(UNIT_KEYS[unit]) : raw(unit));
+const signedN = (value, opts = {}) => (
+  Number.isFinite(value) ? n(round2(value), { signed: true, ...opts }) : '0'
+);
+const metricMsg = (value, unit, opts) => msg('stats.my.coach.metric', { value: signedN(value, opts), unit: unitMsg(unit) });
+const plainMetricMsg = (value, unit) => msg('stats.my.coach.metric', { value: n(round2(value)), unit: unitMsg(unit) });
+const areaMsg = (area) => msg(`stats.my.area.${area}`);
+
 function normalizeArea(area) {
   const key = String(area || '')
     .replace(/[^a-zA-Z]/g, '')
@@ -121,6 +166,22 @@ function samplePhrase(sample, unit, sampleUnit) {
   return `across ${sample} samples`;
 }
 
+function samplePhraseMsg(sample, unit, sampleUnit) {
+  if (!Number.isFinite(sample) || sample <= 0) return msg('stats.my.coach.across.tracked');
+  if (sampleUnit) {
+    return ACROSS_KEYS[sampleUnit]
+      ? msg(ACROSS_KEYS[sampleUnit], { count: sample })
+      : msg('stats.my.coach.across.other', { count: sample, unit: sampleUnit });
+  }
+  const normalizedUnit = String(unit || '').toLowerCase();
+  if (normalizedUnit.includes('round')) return msg(ACROSS_KEYS.rounds, { count: sample });
+  if (normalizedUnit.includes('drive')) return msg(ACROSS_KEYS.drives, { count: sample });
+  if (normalizedUnit.includes('hole')) return msg(ACROSS_KEYS.holes, { count: sample });
+  if (normalizedUnit.includes('putt')) return msg(ACROSS_KEYS.putts, { count: sample });
+  if (normalizedUnit.includes('shot')) return msg(ACROSS_KEYS.shots, { count: sample });
+  return msg(ACROSS_KEYS.samples, { count: sample });
+}
+
 function valueFormUnit(metric) {
   if (VALUE_FORM_UNITS[metric?.key]) return VALUE_FORM_UNITS[metric.key];
   const unit = String(metric?.unit || '');
@@ -141,6 +202,10 @@ function makeInsight({
   tone,
   priority = 0,
   pointsPerRound,
+  titleMsg,
+  reasonMsg,
+  metricMsg: metricDescriptor,
+  basisMsg: basisDescriptor,
 }) {
   const normalizedArea = normalizeArea(area);
   return {
@@ -151,9 +216,12 @@ function makeInsight({
     title,
     reason,
     metric,
+    titleMsg: titleMsg ?? raw(title),
+    reasonMsg: reasonMsg ?? raw(reason),
+    ...(metricDescriptor ? { metricMsg: metricDescriptor } : {}),
     ...(Number.isFinite(impact) ? { impact: round2(impact) } : {}),
     ...(Number.isFinite(sample) ? { sample } : {}),
-    ...(basis ? { basis } : {}),
+    ...(basis ? { basis, basisMsg: basisDescriptor ?? basisMsg(basis) } : {}),
     ...(Number.isFinite(pointsPerRound) ? { pointsPerRound: round2(pointsPerRound) } : {}),
     confidence: confidence || confidenceForSample(sample),
     tone,
@@ -169,6 +237,14 @@ function actionItemInsight(item, group, tone) {
   const reason = tone === 'good'
     ? `${item.label} is gaining ${metric} ${samplePhrase(sample, item.unit, item.sampleUnit)}.`
     : `${item.label} is costing ${metric.replace('-', '')} ${samplePhrase(sample, item.unit, item.sampleUnit)}.`;
+  const itemUnit = item.unit || 'pts';
+  const labelMsg = item.labelMsg ?? raw(item.label);
+  const phrase = samplePhraseMsg(sample, item.unit, item.sampleUnit);
+  const reasonMsg = tone === 'good'
+    ? msg('stats.my.coach.reason.gaining', { label: labelMsg, metric: metricMsg(item.score, itemUnit), phrase })
+    : msg('stats.my.coach.reason.costing', {
+      label: labelMsg, metric: metricMsg(item.score, itemUnit, { noMinus: true }), phrase,
+    });
   const isSgPerRound = String(item.unit || '') === 'SG / round';
   return makeInsight({
     group,
@@ -176,6 +252,9 @@ function actionItemInsight(item, group, tone) {
     title: item.label,
     reason,
     metric,
+    titleMsg: labelMsg,
+    reasonMsg,
+    metricMsg: metricMsg(item.score, itemUnit),
     impact: item.score,
     sample,
     basis: actionItemBasis(item),
@@ -215,6 +294,14 @@ function formInsight(metric) {
     title: metric.label,
     reason: `${metric.label} moved from ${metric.history} to ${metric.recent} ${unit}.`,
     metric: `${formatSigned(metric.delta)} ${unit}`,
+    titleMsg: metric.labelKey ? msg(metric.labelKey) : raw(metric.label),
+    reasonMsg: msg('stats.my.coach.reason.moved', {
+      label: metric.labelKey ? msg(metric.labelKey) : raw(metric.label),
+      history: n(metric.history, { maxDecimals: 4 }),
+      recent: n(metric.recent, { maxDecimals: 4 }),
+      unit: unitMsg(unit),
+    }),
+    metricMsg: metricMsg(metric.delta, unit),
     impact: metric.delta,
     basis: 'recent vs previous',
     confidence: 'medium',
@@ -231,6 +318,12 @@ function rankingWeaknessInsight(item) {
     title: item.label,
     reason: `${item.label} is below your scoring baseline by ${formatSigned(item.deviation)} points.`,
     metric: `${round2(item.avgPoints || 0)} pts / hole`,
+    titleMsg: item.labelMsg ?? raw(item.label),
+    reasonMsg: msg('stats.my.coach.reason.belowBaseline', {
+      label: item.labelMsg ?? raw(item.label),
+      value: signedN(item.deviation),
+    }),
+    metricMsg: plainMetricMsg(item.avgPoints || 0, 'pts / hole'),
     impact: item.deviation,
     sample,
     basis: 'vs your avg',
@@ -250,6 +343,10 @@ function strokesGainedCategoryInsights(stats) {
     const tone = value > 0 ? 'good' : 'bad';
     const title = SG_CATEGORY_TITLES[category] || AREA_LABELS[normalizeArea(category)];
     const sampleCopy = samplePhrase(sample, 'SG / round', 'holes');
+    const titleMsg = SG_CATEGORY_KEYS[category]
+      ? msg(SG_CATEGORY_KEYS[category])
+      : areaMsg(normalizeArea(category));
+    const phrase = samplePhraseMsg(sample, 'SG / round', 'holes');
     const insight = makeInsight({
       group: value > 0 ? 'keepDoing' : 'fixFirst',
       area: category,
@@ -258,6 +355,11 @@ function strokesGainedCategoryInsights(stats) {
         ? `${title} is gaining ${formatSigned(value)} SG / round versus your target handicap ${sampleCopy}.`
         : `${title} is costing ${formatSigned(value).replace('-', '')} SG / round versus your target handicap ${sampleCopy}.`,
       metric: `${formatSigned(value)} SG / round`,
+      titleMsg,
+      reasonMsg: value > 0
+        ? msg('stats.my.coach.reason.sgGaining', { title: titleMsg, value: signedN(value), phrase })
+        : msg('stats.my.coach.reason.sgCosting', { title: titleMsg, value: signedN(value, { noMinus: true }), phrase }),
+      metricMsg: metricMsg(value, 'SG / round'),
       impact: value,
       sample,
       basis: 'vs target hcp',
@@ -294,6 +396,9 @@ function roundShapeInsights(stats) {
         title: 'Closing 3 holes',
         reason: `The closing stretch is ${formatSigned(gap)} points per hole versus your warmup holes.`,
         metric: `${round2(closing.avgPoints)} pts / hole`,
+        titleMsg: msg('stats.my.coach.closing.title'),
+        reasonMsg: msg('stats.my.coach.reason.closing', { value: signedN(gap) }),
+        metricMsg: plainMetricMsg(closing.avgPoints, 'pts / hole'),
         impact: gap,
         sample: closing.holes,
         basis: 'opening vs closing',
@@ -313,6 +418,9 @@ function roundShapeInsights(stats) {
         title: 'Back nine scoring',
         reason: `The back nine is ${formatSigned(gap)} points compared with the front nine.`,
         metric: `${round2(frontBack.backAvg)} pts`,
+        titleMsg: msg('stats.my.coach.backNine.title'),
+        reasonMsg: msg('stats.my.coach.reason.backNine', { value: signedN(gap) }),
+        metricMsg: plainMetricMsg(frontBack.backAvg, 'pts'),
         impact: gap,
         sample: frontBack.rounds?.length,
         basis: 'front vs back',
@@ -410,6 +518,18 @@ function practiceTitle(prefix, insight) {
   return insight ? `${prefix}: ${insight.title}` : prefix;
 }
 
+const insightTitleMsg = (insight) => insight.titleMsg ?? raw(insight.title);
+
+function practiceTitleMsg(roleKey, insight) {
+  return insight
+    ? msg('stats.my.practice.titleWith', { prefix: msg(roleKey), title: insightTitleMsg(insight) })
+    : msg(roleKey);
+}
+
+function practiceReasonMsg(insight, fallbackKey) {
+  return insight?.reason ? (insight.reasonMsg ?? raw(insight.reason)) : msg(fallbackKey);
+}
+
 function practiceReason(insight, fallback) {
   return insight?.reason || fallback;
 }
@@ -454,10 +574,15 @@ function buildPracticePlan(board) {
       id: 'practice-first',
       role: 'practiceFirst',
       title: practiceTitle('Practice first', first),
+      titleMsg: practiceTitleMsg('stats.my.practice.role.practiceFirst', first),
       instruction: first
         ? `Spend the first block on ${first.title.toLowerCase()} with a simple make-or-miss target.`
         : 'Log one complete round with scores and shot details.',
+      instructionMsg: first
+        ? msg('stats.my.practice.first.instruction', { title: lower(insightTitleMsg(first)) })
+        : msg('stats.my.practice.first.instructionNone'),
       reason: practiceReason(first, 'More complete scoring data will make the next coach view sharper.'),
+      reasonMsg: practiceReasonMsg(first, 'stats.my.practice.first.reasonNone'),
       ...(first ? { sourceInsightId: first.id } : {}),
       ...practiceExtras(first),
     },
@@ -465,10 +590,15 @@ function buildPracticePlan(board) {
       id: 'secondary-focus',
       role: 'secondaryFocus',
       title: practiceTitle('Secondary focus', secondary),
+      titleMsg: practiceTitleMsg('stats.my.practice.role.secondaryFocus', secondary),
       instruction: secondary
         ? `Use a shorter second block for ${secondary.title.toLowerCase()} so one area does not dominate practice.`
         : 'Review the strongest recent form trend and keep the same pre-shot routine.',
+      instructionMsg: secondary
+        ? msg('stats.my.practice.second.instruction', { title: lower(insightTitleMsg(secondary)) })
+        : msg('stats.my.practice.second.instructionNone'),
       reason: practiceReason(secondary, 'Balancing practice keeps the plan from overfitting one category.'),
+      reasonMsg: practiceReasonMsg(secondary, 'stats.my.practice.second.reasonNone'),
       ...(secondary ? { sourceInsightId: secondary.id } : {}),
       ...practiceExtras(secondary),
     },
@@ -476,10 +606,15 @@ function buildPracticePlan(board) {
       id: 'on-course-cue',
       role: 'onCourseCue',
       title: practiceTitle('On-course cue', cue),
+      titleMsg: practiceTitleMsg('stats.my.practice.role.onCourseCue', cue),
       instruction: cue
         ? `Before those shots, choose the conservative target and commit to the same tempo.`
         : 'Capture fairways, greens, putts, and basic shot outcomes during the next round.',
+      instructionMsg: cue
+        ? msg('stats.my.practice.cue.instruction')
+        : msg('stats.my.practice.cue.instructionNone'),
       reason: practiceReason(cue, 'The selector needs shot data to separate real leaks from noise.'),
+      reasonMsg: practiceReasonMsg(cue, 'stats.my.practice.cue.reasonNone'),
       ...(cue ? { sourceInsightId: cue.id } : {}),
       ...practiceExtras(cue),
     },

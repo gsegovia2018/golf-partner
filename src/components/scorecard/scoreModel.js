@@ -19,6 +19,12 @@ import {
 import { playersMeFirst } from '../../lib/playerOrder';
 import { resolvePairs, holeCountOf } from '../../store/scoring';
 
+// Text the summary shows is a message descriptor ({ key, params }), rendered
+// with tr() by RoundSummary, so the view-model stays pure and language-free.
+const msg = (key, params) => ({ key, params });
+const eyebrow = (name) => msg(`scoring.summary.eyebrow.${name}`);
+// Statuses with "N to play" take the holes left as `count` (plural entry).
+
 // Points for every player on one hole. Returns { [playerId]: number|null };
 // null means the player has not scored the hole yet.
 export function holePoints({ mode, hole, players, scores, handicaps, round }) {
@@ -139,7 +145,7 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
     const { str = 0, pts = 0, parPlayed = 0 } = totals.get(me.id) ?? {};
     return {
       variant: 'solo',
-      eyebrow: 'ROUND TOTALS',
+      eyebrow: eyebrow('roundTotals'),
       solo: { str, pts, vsParLabel: vsParLabel(str, parPlayed) },
       status: null,
       decided: false,
@@ -159,9 +165,9 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
         const decided = tally.holesLeft === 0;
         return {
           variant: 'solo',
-          eyebrow: 'TEAM SCRAMBLE',
+          eyebrow: eyebrow('teamScramble'),
           solo: { str: row.strokes, pts: row.points, vsParLabel: vsParLabel(row.strokes, parPlayed) },
-          status: decided ? `${row.unit.name} finished on ${row.points} pts` : null,
+          status: decided ? msg('scoring.summary.finishedOn', { name: row.unit.name, points: row.points }) : null,
           decided,
         };
       }
@@ -182,15 +188,15 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
       const leaderRow = tally.leaderIdx != null ? tally.totals[tally.leaderIdx] : null;
       let status;
       if (tally.clinched && leaderRow) {
-        status = `${leaderRow.unit.name} have won the round`;
+        status = msg('scoring.summary.roundWon', { name: leaderRow.unit.name });
       } else if (leaderRow) {
-        status = `${leaderRow.unit.name} lead by ${tally.lead} · ${tally.holesLeft} to play`;
+        status = msg('scoring.summary.teamLead', { name: leaderRow.unit.name, lead: tally.lead, count: tally.holesLeft });
       } else {
-        status = `All square · ${tally.holesLeft} to play`;
+        status = msg('scoring.summary.allSquare', { count: tally.holesLeft });
       }
       return {
         variant: 'pairs',
-        eyebrow: 'SCRAMBLE',
+        eyebrow: eyebrow('scramble'),
         pairs: units.map((u, index) => ({
           index,
           name: u.name,
@@ -219,15 +225,15 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
       const winnerIdx = tally.team1 > tally.team2 ? 0 : tally.team2 > tally.team1 ? 1 : null;
       let status;
       if (decided && winnerIdx != null) {
-        status = `${names[winnerIdx]} have won the match`;
+        status = msg('scoring.summary.matchWonPair', { name: names[winnerIdx] });
       } else if (tally.leaderIdx != null) {
-        status = `${names[tally.leaderIdx]} lead by ${tally.lead} · ${tally.holesLeft} to play`;
+        status = msg('scoring.summary.teamLead', { name: names[tally.leaderIdx], lead: tally.lead, count: tally.holesLeft });
       } else {
-        status = `All square · ${tally.holesLeft} to play`;
+        status = msg('scoring.summary.allSquare', { count: tally.holesLeft });
       }
       return {
         variant: 'pairs',
-        eyebrow: 'PAIRS MATCH PLAY',
+        eyebrow: eyebrow('pairsMatchPlay'),
         pairs: [tally.team1, tally.team2].map((pts, index) => ({
           index,
           name: names[index],
@@ -257,11 +263,11 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
 
     let status;
     if (decided && leader) {
-      status = `${firstName(leader)} wins the match`;
+      status = msg('scoring.summary.matchWonSolo', { name: firstName(leader) });
     } else if (lead > 0 && leader) {
-      status = `${firstName(leader)} leads by ${lead} · ${holesLeft} to play`;
+      status = msg('scoring.summary.playerLead', { name: firstName(leader), lead: lead, count: holesLeft });
     } else {
-      status = `All square · ${holesLeft} to play`;
+      status = msg('scoring.summary.allSquare', { count: holesLeft });
     }
 
     const chips = ordered.map((p) => ({
@@ -272,7 +278,7 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
       isMe: p.id === meId,
       isWinner: decided && !!leader && p.id === leader.id,
     }));
-    return { variant: 'players', eyebrow: 'MATCH PLAY', chips, status, decided };
+    return { variant: 'players', eyebrow: eyebrow('matchPlay'), chips, status, decided };
   }
 
   // --- pairs (best ball only) --------------------------------------------
@@ -315,16 +321,16 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
 
     let status;
     if (decided && winnerName) {
-      status = `${winnerName} have won the round`;
+      status = msg('scoring.summary.roundWon', { name: winnerName });
     } else if (roundWinner === 0) {
-      status = `All square · ${holesRemaining} to play`;
+      status = msg('scoring.summary.allSquare', { count: holesRemaining });
     } else {
-      status = `${winnerName} lead by ${lead} · ${holesRemaining} to play`;
+      status = msg('scoring.summary.teamLead', { name: winnerName, lead: lead, count: holesRemaining });
     }
 
     return {
       variant: 'pairs',
-      eyebrow: 'BEST BALL',
+      eyebrow: eyebrow('bestBall'),
       pairs: [
         {
           index: 0,
@@ -359,12 +365,15 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
     const holesLeft = tally?.holesLeft ?? 0;
     let status;
     if (decided && leader) {
-      status = `${firstName(leader)} has clinched`;
+      status = msg('scoring.summary.clinched', { name: firstName(leader) });
     } else if (leader) {
-      status = `${firstName(leader)} leads by ${tally.lead}`
-        + (holesLeft > 0 ? ` · ${holesLeft} to play` : '');
+      status = holesLeft > 0
+        ? msg('scoring.summary.playerLead', { name: firstName(leader), lead: tally.lead, count: holesLeft })
+        : msg('scoring.summary.playerLeadDone', { name: firstName(leader), lead: tally.lead });
     } else {
-      status = `All level${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`;
+      status = holesLeft > 0
+        ? msg('scoring.summary.allLevelToPlay', { count: holesLeft })
+        : msg('scoring.summary.allLevel');
     }
     const chips = ordered.map((p) => ({
       id: p.id,
@@ -374,7 +383,7 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
       isMe: p.id === meId,
       isWinner: decided && !!leader && p.id === leader.id,
     }));
-    return { variant: 'players', eyebrow: 'SINDICATO', chips, status, decided };
+    return { variant: 'players', eyebrow: eyebrow('sindicato'), chips, status, decided };
   }
 
   // Stableford — leader is the sole points leader, null when tied.
@@ -415,9 +424,9 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
   if (decided) {
     if (winnerLabel) {
       const isPair = winnerIds.length > 1;
-      status = `${winnerLabel} ${isPair ? 'have' : 'has'} won`;
+      status = msg(isPair ? 'scoring.summary.wonPair' : 'scoring.summary.wonSolo', { name: winnerLabel });
     } else {
-      status = 'All level';
+      status = msg('scoring.summary.allLevel');
     }
   } else if (hasTwoPairs) {
     // Live random-partner Stableford — name the leading pair.
@@ -427,18 +436,18 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
     if (pairLb.length >= 2 && pairLb[0].combinedPoints !== pairLb[1].combinedPoints) {
       const lbLead = pairLb[0].combinedPoints - pairLb[1].combinedPoints;
       const lbName = pairLb[0].members.map((m) => firstName(m.player)).join(' & ');
-      status = `${lbName} lead by ${lbLead} · ${holesLeft} to play`;
+      status = msg('scoring.summary.teamLead', { name: lbName, lead: lbLead, count: holesLeft });
     } else {
-      status = `All level · ${holesLeft} to play`;
+      status = msg('scoring.summary.allLevelToPlay', { count: holesLeft });
     }
   } else {
     const holesLeft = holes.filter((h) => (
       !playerList.every((p) => scores?.[p.id]?.[h.number] != null)
     )).length;
     if (leaderEntry && !tiedTop) {
-      status = `${firstName(leaderEntry.p)} leads by ${leadAmount} · ${holesLeft} to play`;
+      status = msg('scoring.summary.playerLead', { name: firstName(leaderEntry.p), lead: leadAmount, count: holesLeft });
     } else {
-      status = `All level · ${holesLeft} to play`;
+      status = msg('scoring.summary.allLevelToPlay', { count: holesLeft });
     }
   }
 
@@ -451,5 +460,5 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
     isWinner: decided && winnerIds.includes(p.id),
   }));
 
-  return { variant: 'players', eyebrow: 'STABLEFORD', chips, status, decided };
+  return { variant: 'players', eyebrow: eyebrow('stableford'), chips, status, decided };
 }

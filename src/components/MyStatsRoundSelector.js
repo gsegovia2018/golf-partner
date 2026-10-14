@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatDate, formatNumber } from '../i18n';
 import { resolveSelection } from '../store/personalStats';
 import BottomSheet from './BottomSheet';
 
@@ -10,7 +11,7 @@ function formatRoundDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return formatDate(d, 'day');
 }
 
 // Bottom-sheet round selector. Rounds are grouped by tournament, newest-first.
@@ -19,6 +20,7 @@ function formatRoundDate(iso) {
 // the next map.
 export default function MyStatsRoundSelector({ visible, myRounds, overrides, onChange, onClose }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [collapsed, setCollapsed] = useState(() => new Set());
 
@@ -79,13 +81,13 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
     <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
       <View style={s.handle} />
           <View style={s.titleRow}>
-            <Text style={s.title}>Rounds counted</Text>
+            <Text style={s.title}>{t('stats.my.selector.title')}</Text>
             <View style={s.bulkRow}>
               <TouchableOpacity onPress={() => setAll(true)}>
-                <Text style={s.bulkBtn}>Select all</Text>
+                <Text style={s.bulkBtn}>{t('stats.my.selector.selectAll')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setAll(false)}>
-                <Text style={s.bulkBtn}>Clear all</Text>
+                <Text style={s.bulkBtn}>{t('stats.my.selector.clearAll')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -106,7 +108,7 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
                       activeOpacity={0.7}
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked: selCount === 0 ? false : allOn ? true : 'mixed' }}
-                      accessibilityLabel={`${g.name}, toggle all rounds`}
+                      accessibilityLabel={t('stats.my.selector.toggleAll', { name: g.name })}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <Feather
@@ -140,7 +142,9 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
                         activeOpacity={0.7}
                         accessibilityRole="checkbox"
                         accessibilityState={{ checked: on }}
-                        accessibilityLabel={`Round ${r.roundIndex + 1}, ${r.courseName}${r.isComplete ? `, ${r.points} points` : `, partial, ${r.holesPlayed} holes`}`}
+                        accessibilityLabel={r.isComplete
+                          ? t('stats.my.selector.roundA11y', { n: r.roundIndex + 1, course: r.courseName, points: formatNumber(r.points, { maxDecimals: 4 }) })
+                          : t('stats.my.selector.roundA11yPartial', { n: r.roundIndex + 1, course: r.courseName, count: r.holesPlayed })}
                       >
                         <Feather
                           name={on ? 'check-square' : 'square'}
@@ -148,11 +152,11 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
                           color={on ? theme.accent.primary : theme.text.muted}
                         />
                         <Text style={s.rowText} numberOfLines={1}>
-                          Round {r.roundIndex + 1} · {r.courseName}
+                          {t('stats.my.selector.row', { n: r.roundIndex + 1, course: r.courseName })}
                         </Text>
                         {r.isComplete
-                          ? <Text style={s.pts}>{r.points} pts</Text>
-                          : <Text style={s.tag}>{`partial · ${r.holesPlayed} hole${r.holesPlayed === 1 ? '' : 's'}`}</Text>}
+                          ? <Text style={s.pts}>{t('stats.my.selector.pts', { points: formatNumber(r.points, { maxDecimals: 4 }) })}</Text>
+                          : <Text style={s.tag}>{t('stats.my.selector.partial', { count: r.holesPlayed })}</Text>}
                       </TouchableOpacity>
                     );
                   })}
@@ -162,10 +166,10 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
           </ScrollView>
 
           <Text style={s.footer}>
-            {selectedKeys.size} of {myRounds.length} rounds
+            {t('stats.my.selector.footer', { selected: selectedKeys.size, total: myRounds.length })}
           </Text>
           <TouchableOpacity style={s.doneBtn} onPress={onClose}>
-            <Text style={s.doneText}>Done</Text>
+            <Text style={s.doneText}>{t('common.done')}</Text>
           </TouchableOpacity>
     </BottomSheet>
   );

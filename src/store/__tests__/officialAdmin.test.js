@@ -1,4 +1,5 @@
 import { createOfficialTournament } from '../officialAdmin';
+import { setLanguagePref } from '../../i18n';
 
 // mockState is read inside the jest.mock factory; the `mock` prefix is what
 // lets jest's hoisted factory reference it.
@@ -57,5 +58,15 @@ describe('createOfficialTournament', () => {
   test('throws when no user is signed in', async () => {
     mockState.user = null;
     await expect(createOfficialTournament({ name: 'X' })).rejects.toThrow('Not signed in');
+  });
+
+  test('the error is Spanish when the app is', async () => {
+    await setLanguagePref('es');
+    mockState.user = null;
+    try {
+      await expect(createOfficialTournament({ name: 'X' })).rejects.toThrow('No has iniciado sesión');
+    } finally {
+      await setLanguagePref('en');
+    }
   });
 });

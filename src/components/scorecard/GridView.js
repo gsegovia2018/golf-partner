@@ -5,7 +5,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, useWindowDimensions } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
-import { useT } from '../../i18n';
+import { useT, t as tNow } from '../../i18n';
+import { unitText } from '../../lib/pointsText';
 import { playersMeFirst } from '../../lib/playerOrder';
 import { calcExtraShots, scrambleUnits, matchPlayEffectiveHandicaps } from '../../store/tournamentStore';
 import { holeCountOf } from '../../store/scoring';
@@ -103,7 +104,7 @@ function getSoloColumns(blockWidth) {
 // Player label for the scorecard row: "You" for solo, 3-letter uppercase
 // abbreviation for multi-player (classic scorecard convention).
 function shortPlayerLabel(player, isSolo) {
-  if (isSolo) return 'You';
+  if (isSolo) return tNow('shared.you');
   const name = player.name?.trim() ?? '';
   if (!name) return '—';
   return name.slice(0, 3).toUpperCase();
@@ -236,7 +237,7 @@ function NineBlock({
                   <TextInput
                     ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
                     style={[s.soloNineStrokeInput, rawScore == null && s.soloNineStrokeInputEmpty, digitOnSolid]}
-                    accessibilityLabel={`Strokes for ${player.name} on hole ${h.number}`}
+                    accessibilityLabel={t('shared.grid.strokesFor', { name: player.name, hole: h.number })}
                     keyboardType="numeric"
                     keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                     selectionColor={theme.accent.primary}
@@ -512,9 +513,9 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
           </View>
           <View style={s.multiTotalColHeader}>
             <Text style={[s.multiTotalColHeaderLabel, { flex: 1 }]} />
-            <Text style={[s.multiTotalColHeaderLabel, { width: 48, textAlign: 'right' }]}>STR</Text>
+            <Text style={[s.multiTotalColHeaderLabel, { width: 48, textAlign: 'right' }]}>{t('shared.unit.str').toUpperCase()}</Text>
             <Text style={[s.multiTotalColHeaderLabel, { width: 40, textAlign: 'right' }]}>{t('scorecard.grid.vsPar')}</Text>
-            <Text style={[s.multiTotalColHeaderLabel, { width: 46, textAlign: 'right' }]}>PTS</Text>
+            <Text style={[s.multiTotalColHeaderLabel, { width: 46, textAlign: 'right' }]}>{unitText('pts').toUpperCase()}</Text>
           </View>
           {playerTotals.map(({ player, str, pts, vsParLabel }) => {
             const isLeader = leader && player.id === leader.player.id && leader.pts > 0;
@@ -578,6 +579,7 @@ export function GridView({ round, roundIndex, players, scores, isBestBall, bbRes
 
 function LiveMatchStrip({ bbResult, settings, players }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
 
   if (!bbResult) return null;
@@ -590,7 +592,7 @@ function LiveMatchStrip({ bbResult, settings, players }) {
   const roundWinner = p1Round > p2Round ? 1 : p2Round > p1Round ? 2 : 0;
   return (
     <View style={s.liveMatch}>
-      <Text style={s.liveMatchTitle}>Match Score</Text>
+      <Text style={s.liveMatchTitle}>{t('shared.grid.matchScore')}</Text>
       <View style={s.liveRow}>
         <Text style={[s.liveName, roundWinner === 1 && s.liveWin]}>{p1Name}</Text>
         <Text style={[s.liveScore, roundWinner === 1 && s.liveWin]}>{p1Round}</Text>

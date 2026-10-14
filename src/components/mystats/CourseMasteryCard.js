@@ -6,6 +6,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
 import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import { scalePoints } from './chartGeometry';
@@ -23,12 +24,13 @@ const SPARK_PAD = 4;
 // round at any course yet.
 export default function CourseMasteryCard({ courses, onInfo, onSelectCourse }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const rows = courses ?? [];
   if (rows.length === 0) return null;
 
   return (
-    <SectionCard title="Course Mastery" infoKey="courseMastery" onInfo={onInfo}>
+    <SectionCard title={t('stats.my.course.title')} infoKey="courseMastery" onInfo={onInfo}>
       <View style={s.rows}>
         {rows.map((course) => (
           <CourseCard
@@ -36,6 +38,7 @@ export default function CourseMasteryCard({ courses, onInfo, onSelectCourse }) {
             course={course}
             s={s}
             theme={theme}
+            t={t}
             onPress={course.courseKey && onSelectCourse
               ? () => onSelectCourse(course)
               : null}
@@ -46,24 +49,25 @@ export default function CourseMasteryCard({ courses, onInfo, onSelectCourse }) {
   );
 }
 
-function CourseCard({ course, s, theme, onPress }) {
+function CourseCard({ course, s, theme, t, onPress }) {
   const body = (
     <>
       <View style={s.avgBlock}>
-        <Text style={s.avg}>{course.avgStrokes}</Text>
-        <Text style={s.avgLabel}>AVG SCORE</Text>
+        <Text style={s.avg}>{formatNumber(course.avgStrokes, { maxDecimals: 4 })}</Text>
+        <Text style={s.avgLabel}>{t('stats.my.course.avgScore')}</Text>
       </View>
       <View style={s.copy}>
         <Text style={s.courseName} numberOfLines={2}>{course.courseName}</Text>
         <Text style={s.meta}>
-          {`${course.rounds} round${course.rounds === 1 ? '' : 's'}`}
           {/* Strokes are a round TOTAL, so a nine's ~40 avg would read as the
               best course on the list without saying it was half the golf.
               Only non-18 lengths are called out — 18 is the assumption. */}
-          {course.holeCount != null && course.holeCount !== 18
-            ? ` · ${course.holeCount} holes`
-            : ''}
-          {` · best ${course.bestStrokes} · ${course.avgPoints} pts avg`}
+          {t(course.holeCount != null && course.holeCount !== 18 ? 'stats.my.course.metaHoles' : 'stats.my.course.meta', {
+            rounds: t('stats.my.course.rounds', { count: course.rounds }),
+            holes: course.holeCount,
+            best: formatNumber(course.bestStrokes, { maxDecimals: 4 }),
+            pts: formatNumber(course.avgPoints, { maxDecimals: 4 }),
+          })}
         </Text>
       </View>
       <Sparkline points={course.recentStrokes} theme={theme} s={s} />
@@ -77,7 +81,7 @@ function CourseCard({ course, s, theme, onPress }) {
       onPress={onPress}
       activeScale={0.97}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${course.courseName} stats`}
+      accessibilityLabel={t('stats.my.course.open', { name: course.courseName })}
     >
       {body}
     </PressableScale>

@@ -13,18 +13,42 @@ import SGReconciliationCard from '../SGReconciliationCard';
 import BreakdownRow from '../BreakdownRow';
 import ScoreMixBar from '../ScoreMixBar';
 import TargetMeterRow from '../TargetMeterRow';
+import { useT, t, formatNumber as formatLocaleNumber } from '../../../i18n';
 import {
-  comparisonMeta,
+  isLowSample,
   toneFromComparison,
   toneFromSigned,
 } from '../metricTone';
-import { APPROACH_BUCKETS, PUTT_BUCKETS, sampleText, signed } from '../shotMetrics';
+import { APPROACH_BUCKETS, PUTT_BUCKETS } from '../shotMetrics';
 
-const TARGET_BASIS = 'vs target hcp';
 const YD_TO_M = 0.9144;
+
+// Local twins of shotMetrics.signed / sampleText and metricTone.comparisonMeta
+// so the words come from the catalogue. They call t() when a row is built (at
+// render), never at module load, so a language switch is picked up.
+function signed(value) {
+  if (value == null) return '-';
+  return value > 0 ? `+${formatLocaleNumber(value)}` : formatLocaleNumber(value);
+}
+
+function sampleText(value, unit) {
+  if (value == null) return undefined;
+  return t(`stats.tab.sample.${unit}`, { count: value });
+}
+
+function comparisonMeta(basis, parts = [], { sample, minSample = 6 } = {}) {
+  return [
+    basis,
+    ...parts,
+    isLowSample(sample, minSample) ? t('stats.tab.lowSample') : null,
+  ].filter(Boolean).join(' · ');
+}
+
+const targetText = (value) => t('stats.tab.shots.target', { value });
 
 // Memoised — see the note in CoachTab.
 function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
+  useT(); // re-render on language change; the row builders below call t() directly
   const { theme } = useTheme();
   const { units } = useAppSettings();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -44,9 +68,9 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
   if (!hasAnyShotData) {
     return (
       <View style={s.wrap}>
-        <SectionCard title="Strokes Gained">
+        <SectionCard title={t('stats.tab.shots.strokesGained')}>
           <Text style={s.note}>
-            Log putts and drives during a round to unlock tee-shot, putting and driving stats.
+            {t('stats.tab.shots.noData')}
           </Text>
         </SectionCard>
       </View>
@@ -93,16 +117,16 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
       />
 
       {groupRows.length ? (
-        <SectionCard title="Vs the group" infoKey="sgVsGroup" onInfo={onInfo}>
-          <ShotRowsBlock title="Strokes gained vs playing partners" rows={groupRows} s={s} first />
+        <SectionCard title={t('stats.tab.shots.vsGroup')} infoKey="sgVsGroup" onInfo={onInfo}>
+          <ShotRowsBlock title={t('stats.tab.shots.sgVsPartners')} rows={groupRows} s={s} first />
         </SectionCard>
       ) : null}
 
       {scoringRows.length ? (
-        <SectionCard title="Scoring" infoKey="sgScoring" onInfo={onInfo}>
+        <SectionCard title={t('stats.tab.shots.scoring')} infoKey="sgScoring" onInfo={onInfo}>
           {scoringSummary.length ? (
             <View style={s.targetBlock}>
-              <Text style={s.targetOverline}>Scoring vs target</Text>
+              <Text style={s.targetOverline}>{t('stats.tab.shots.scoringVsTarget')}</Text>
               <View>
                 {scoringSummary.map((item, index) => (
                   <TargetMeterRow
@@ -124,12 +148,12 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
           ) : null}
           {grossMixTotal > 0 ? (
             <View style={s.detailBlock}>
-              <Text style={s.mixOverline}>Score mix · gross</Text>
+              <Text style={s.mixOverline}>{t('stats.tab.shots.scoreMixGross')}</Text>
               <ScoreMixBar distribution={grossMix} />
             </View>
           ) : null}
           <ShotRowsBlock
-            title="Scoring detail"
+            title={t('stats.tab.shots.scoringDetail')}
             rows={scoringRows}
             s={s}
             first={grossMixTotal === 0}
@@ -138,19 +162,19 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
       ) : null}
 
       {drivingTargetRows.length ? (
-        <SectionCard title="Driving vs target" infoKey="sgDriving" onInfo={onInfo}>
-          <ShotRowsBlock title="Driver accuracy" rows={drivingTargetRows} s={s} first />
+        <SectionCard title={t('stats.tab.shots.drivingVsTarget')} infoKey="sgDriving" onInfo={onInfo}>
+          <ShotRowsBlock title={t('stats.tab.shots.driverAccuracy')} rows={drivingTargetRows} s={s} first />
         </SectionCard>
       ) : null}
 
       {(teeClubRows.length || realDistRows.length) ? (
-        <SectionCard title="Off the tee — by club" infoKey="teeClubAccuracy" onInfo={onInfo}>
+        <SectionCard title={t('stats.tab.shots.offTheTeeByClub')} infoKey="teeClubAccuracy" onInfo={onInfo}>
           {teeClubRows.length ? (
-            <ShotRowsBlock title="Fairways by tee club" rows={teeClubRows} s={s} first />
+            <ShotRowsBlock title={t('stats.tab.shots.fairwaysByClub')} rows={teeClubRows} s={s} first />
           ) : null}
           {realDistRows.length ? (
             <ShotRowsBlock
-              title="Real carry distance · GPS"
+              title={t('stats.tab.shots.realCarry')}
               rows={realDistRows}
               s={s}
               first={!teeClubRows.length}
@@ -160,14 +184,14 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
       ) : null}
 
       {(approachTargetRows.length || approachTendencyRows.length || shots.hasData) ? (
-        <SectionCard title="Approach vs target" infoKey="sgApproach" onInfo={onInfo}>
+        <SectionCard title={t('stats.tab.shots.approachVsTarget')} infoKey="sgApproach" onInfo={onInfo}>
           {approachTargetRows.length ? (
-            <ShotRowsBlock title="Approach distance SG" rows={approachTargetRows} s={s} first />
+            <ShotRowsBlock title={t('stats.tab.shots.approachDistanceSg')} rows={approachTargetRows} s={s} first />
           ) : null}
 
           {girRows.length ? (
             <ShotRowsBlock
-              title="GIR volume"
+              title={t('stats.tab.shots.girVolume')}
               rows={girRows}
               s={s}
               first={!approachTargetRows.length}
@@ -176,7 +200,7 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
 
           {approachTendencyRows.length ? (
             <ShotRowsBlock
-              title="Miss tendency"
+              title={t('stats.tab.shots.missTendency')}
               rows={approachTendencyRows}
               s={s}
               first={!approachTargetRows.length && !girRows.length}
@@ -184,36 +208,36 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
           ) : null}
 
           {approachCostRows.length ? (
-            <ShotRowsBlock title="What each finish costs" rows={approachCostRows} s={s} />
+            <ShotRowsBlock title={t('stats.tab.shots.finishCosts')} rows={approachCostRows} s={s} />
           ) : null}
 
           {approachByDistRows.length ? (
-            <ShotRowsBlock title="Miss pattern by distance" rows={approachByDistRows} s={s} />
+            <ShotRowsBlock title={t('stats.tab.shots.missByDistance')} rows={approachByDistRows} s={s} />
           ) : null}
         </SectionCard>
       ) : null}
 
       {scramblingRows.length ? (
-        <SectionCard title="Short game — scrambling" infoKey="scramblingByMiss" onInfo={onInfo}>
-          <ShotRowsBlock title="Save rate by miss" rows={scramblingRows} s={s} first />
+        <SectionCard title={t('stats.tab.shots.shortGame')} infoKey="scramblingByMiss" onInfo={onInfo}>
+          <ShotRowsBlock title={t('stats.tab.shots.saveRate')} rows={scramblingRows} s={s} first />
         </SectionCard>
       ) : null}
 
       {par5Rows.length ? (
-        <SectionCard title="Par 5s" infoKey="par5" onInfo={onInfo}>
-          <ShotRowsBlock title="Reachable-hole scoring" rows={par5Rows} s={s} first />
+        <SectionCard title={t('stats.tab.par5')} infoKey="par5" onInfo={onInfo}>
+          <ShotRowsBlock title={t('stats.tab.shots.reachable')} rows={par5Rows} s={s} first />
         </SectionCard>
       ) : null}
 
       {(shots.hasData || puttingTargetRows.length) ? (
-        <SectionCard title="Putting vs target" infoKey="sgPutting" onInfo={onInfo}>
+        <SectionCard title={t('stats.tab.shots.puttingVsTarget')} infoKey="sgPutting" onInfo={onInfo}>
           {shots.hasData ? (
-            <ShotRowsBlock title="Aggregate putting" rows={puttingVolumeRows} s={s} first />
+            <ShotRowsBlock title={t('stats.tab.shots.aggregatePutting')} rows={puttingVolumeRows} s={s} first />
           ) : null}
 
           {puttingTargetRows.length ? (
             <ShotRowsBlock
-              title="Distance putting SG"
+              title={t('stats.tab.shots.distancePuttingSg')}
               rows={puttingTargetRows}
               s={s}
               first={!shots.hasData}
@@ -325,9 +349,9 @@ function makeScoringRows(stats, shotBenchmark) {
   const parType = stats?.parType ?? {};
 
   [
-    ['par3AvgScore', 'Par 3 avg score', parType.par3, shotBenchmark.par3AvgScore],
-    ['par4AvgScore', 'Par 4 avg score', parType.par4, shotBenchmark.par4AvgScore],
-    ['par5AvgScore', 'Par 5 avg score', parType.par5, shotBenchmark.par5AvgScore],
+    ['par3AvgScore', t('stats.tab.shots.par3Avg'), parType.par3, shotBenchmark.par3AvgScore],
+    ['par4AvgScore', t('stats.tab.shots.par4Avg'), parType.par4, shotBenchmark.par4AvgScore],
+    ['par5AvgScore', t('stats.tab.shots.par5Avg'), parType.par5, shotBenchmark.par5AvgScore],
   ].forEach(([key, label, row, target]) => {
     if (!row || row.holes === 0 || !isNumber(row.avgStrokes)) return;
     rows.push({
@@ -339,7 +363,7 @@ function makeScoringRows(stats, shotBenchmark) {
       barGroup: 'avg',
       secondary: targetSecondary([
         sampleText(row.holes, 'holes'),
-        `target ${formatBenchmarkNumber(target)}`,
+        targetText(formatBenchmarkNumber(target)),
       ], row.holes, 6),
       tone: toneFromComparison({
         value: row.avgStrokes,
@@ -356,7 +380,7 @@ function makeScoringRows(stats, shotBenchmark) {
     rows.push(
       scoringCountRow({
         key: 'birdiesPerRound',
-        label: 'Birdies / round',
+        label: t('stats.tab.shots.birdiesPerRound'),
         count: (distribution.eagles ?? 0) + (distribution.birdies ?? 0),
         total,
         target: shotBenchmark.birdiesPerRound,
@@ -364,7 +388,7 @@ function makeScoringRows(stats, shotBenchmark) {
       }),
       scoringCountRow({
         key: 'parsPerRound',
-        label: 'Pars / round',
+        label: t('stats.tab.shots.parsPerRound'),
         count: distribution.pars ?? 0,
         total,
         target: shotBenchmark.parsPerRound,
@@ -372,7 +396,7 @@ function makeScoringRows(stats, shotBenchmark) {
       }),
       scoringCountRow({
         key: 'bogeysPerRound',
-        label: 'Bogeys / round',
+        label: t('stats.tab.shots.bogeysPerRound'),
         count: distribution.bogeys ?? 0,
         total,
         target: shotBenchmark.bogeysPerRound,
@@ -380,7 +404,7 @@ function makeScoringRows(stats, shotBenchmark) {
       }),
       scoringCountRow({
         key: 'doublesOrWorsePerRound',
-        label: 'Doubles+ / round',
+        label: t('stats.tab.shots.doublesPerRound'),
         count: (distribution.doubles ?? 0) + (distribution.worse ?? 0),
         total,
         target: shotBenchmark.doublesOrWorsePerRound,
@@ -404,9 +428,9 @@ function scoringCountRow({
     target,
     barGroup: 'count',
     secondary: targetSecondary([
-      `${count} total`,
+      t('stats.tab.total', { count }),
       sampleText(total, 'holes'),
-      `target ${formatBenchmarkNumber(target)}`,
+      targetText(formatBenchmarkNumber(target)),
     ], total, 18),
     tone: toneFromComparison({
       value,
@@ -422,10 +446,10 @@ function scoringCountRow({
 function makeScoringSummary(scoringRows) {
   const byKey = new Map(scoringRows.map((row) => [row.key, row]));
   const priority = [
-    ['par3AvgScore', 'Par 3s'],
-    ['par4AvgScore', 'Par 4s'],
-    ['par5AvgScore', 'Par 5s'],
-    ['doublesOrWorsePerRound', 'Damage control'],
+    ['par3AvgScore', t('stats.tab.par3')],
+    ['par4AvgScore', t('stats.tab.par4')],
+    ['par5AvgScore', t('stats.tab.par5')],
+    ['doublesOrWorsePerRound', t('stats.tab.shots.damageControl')],
   ];
   const summary = priority
     .map(([key, label]) => {
@@ -459,14 +483,14 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
   return [
     {
       key: 'fairways',
-      label: 'Fairways hit',
+      label: t('stats.tab.shots.fairwaysHit'),
       value: `${shots?.drives?.fairwayPct ?? 0}%`,
       magnitude: shots?.drives?.fairwayPct ?? 0,
       target: shotBenchmark.fairwayPct,
       barGroup: 'pct',
       secondary: targetSecondary([
         sampleText(recorded, 'drives'),
-        `target ${formatBenchmarkPercent(shotBenchmark.fairwayPct)}`,
+        targetText(formatBenchmarkPercent(shotBenchmark.fairwayPct)),
       ], recorded, 6),
       tone: toneFromComparison({
         value: shots?.drives?.fairwayPct,
@@ -480,14 +504,14 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
     },
     {
       key: 'leftMissPct',
-      label: 'Left miss %',
+      label: t('stats.tab.shots.leftMissPct'),
       value: `${leftPct}%`,
       magnitude: leftPct,
       target: shotBenchmark.leftMissPct,
       barGroup: 'pct',
       secondary: targetSecondary([
-        `${distribution.left ?? 0} drives`,
-        `target ${formatBenchmarkPercent(shotBenchmark.leftMissPct)}`,
+        sampleText(distribution.left ?? 0, 'drives'),
+        targetText(formatBenchmarkPercent(shotBenchmark.leftMissPct)),
       ], recorded, 6),
       tone: toneFromComparison({
         value: leftPct,
@@ -501,14 +525,14 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
     },
     {
       key: 'rightMissPct',
-      label: 'Right miss %',
+      label: t('stats.tab.shots.rightMissPct'),
       value: `${rightPct}%`,
       magnitude: rightPct,
       target: shotBenchmark.rightMissPct,
       barGroup: 'pct',
       secondary: targetSecondary([
-        `${distribution.right ?? 0} drives`,
-        `target ${formatBenchmarkPercent(shotBenchmark.rightMissPct)}`,
+        sampleText(distribution.right ?? 0, 'drives'),
+        targetText(formatBenchmarkPercent(shotBenchmark.rightMissPct)),
       ], recorded, 6),
       tone: toneFromComparison({
         value: rightPct,
@@ -522,14 +546,14 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
     },
     {
       key: 'teePenaltyPct',
-      label: 'Tee penalty %',
+      label: t('stats.tab.shots.teePenaltyPct'),
       value: `${teePenaltyPct}%`,
       magnitude: teePenaltyPct,
       target: shotBenchmark.teePenaltyPct,
       barGroup: 'pct',
       secondary: targetSecondary([
-        `${shots?.penalties?.teeOnDriveHoles ?? 0} penalties`,
-        `target ${formatBenchmarkPercent(shotBenchmark.teePenaltyPct)}`,
+        sampleText(shots?.penalties?.teeOnDriveHoles ?? 0, 'penalties'),
+        targetText(formatBenchmarkPercent(shotBenchmark.teePenaltyPct)),
       ], recorded, 6),
       tone: toneFromComparison({
         value: teePenaltyPct,
@@ -543,14 +567,16 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
     },
     driveDistance?.drives > 0 ? {
       key: 'driveDistance',
-      label: 'Driver distance',
+      label: t('stats.tab.shots.driverDistance'),
       value: `~${formatDistance(driveDistance.avgDistance, units)} ${unitSuffix(units)}`,
       magnitude: driveDistance.avgDistance,
       target: Math.round(shotBenchmark.driverDistance * YD_TO_M),
       barGroup: 'dist',
       secondary: targetSecondary([
         sampleText(driveDistance.drives, 'drives'),
-        `target ~${formatDistance(Math.round(shotBenchmark.driverDistance * YD_TO_M), units)} ${unitSuffix(units)}`,
+        t('stats.tab.shots.targetApprox', {
+          value: `${formatDistance(Math.round(shotBenchmark.driverDistance * YD_TO_M), units)} ${unitSuffix(units)}`,
+        }),
       ], driveDistance.drives, 6),
       tone: toneFromComparison({
         value: driveDistance.avgDistance,
@@ -563,14 +589,16 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       dim: false,
     } : {
       key: 'driveDistance',
-      label: 'Driver distance',
+      label: t('stats.tab.shots.driverDistance'),
       value: '—',
       magnitude: 0,
       target: Math.round(shotBenchmark.driverDistance * YD_TO_M),
       barGroup: 'dist',
       secondary: targetSecondary([
-        `target ~${formatDistance(Math.round(shotBenchmark.driverDistance * YD_TO_M), units)} ${unitSuffix(units)}`,
-        'log drive distance on the scorecard to track this',
+        t('stats.tab.shots.targetApprox', {
+          value: `${formatDistance(Math.round(shotBenchmark.driverDistance * YD_TO_M), units)} ${unitSuffix(units)}`,
+        }),
+        t('stats.tab.shots.logDriveDistance'),
       ], 0, 6),
       tone: 'neutral',
       dim: true,
@@ -585,16 +613,20 @@ function makeApproachTargetRows(approachTarget) {
     return {
       key: bucket,
       bucket,
-      label: `${bucket} m approaches`,
-      value: row.yourStrokes != null ? `you ≈ ${row.yourStrokes}` : signed(row.avgSg),
+      label: t('stats.tab.approachesAt', { bucket }),
+      value: row.yourStrokes != null
+        ? t('stats.tab.shots.youApprox', { value: formatLocaleNumber(row.yourStrokes) })
+        : signed(row.avgSg),
       raw: row.avgSg,
       // Bars normalize within the bucket group by |SG| max; the tone
       // (positive good/green, negative bad/red) colors the fill.
       magnitude: isNumber(row.avgSg) ? row.avgSg : null,
       barGroup: 'sg',
       secondary: targetSecondary([
-        row.targetStrokes != null ? `target ≈ ${row.targetStrokes}` : null,
-        `${formatPercent(row.greenRate ?? row.girRate)} green`,
+        row.targetStrokes != null
+          ? t('stats.tab.shots.targetStrokes', { value: formatLocaleNumber(row.targetStrokes) })
+          : null,
+        t('stats.tab.shots.greenRate', { value: formatPercent(row.greenRate ?? row.girRate) }),
         sampleText(row.holes, 'shots'),
       ].filter(Boolean), row.holes, 6),
       sample: row.holes,
@@ -608,7 +640,7 @@ function makeApproachTargetRows(approachTarget) {
 // directional misses, and the greenside-bunker rate. Descriptive (no
 // benchmark target) — bars use the absolute 'pct' scale and stay neutral in
 // tone, since a miss direction is a pattern to learn from, not good/bad.
-function makeApproachTendencyRows(t) {
+function makeApproachTendencyRows(tend) {
   const rows = [];
   const pctRow = (key, label, value, secondary) => ({
     key,
@@ -622,26 +654,26 @@ function makeApproachTendencyRows(t) {
   });
 
   rows.push(pctRow(
-    'greensHit', 'Greens hit', t.greenRate,
-    `${t.greens}/${t.attempts} approaches`,
+    'greensHit', t('stats.tab.shots.greensHit'), tend.greenRate,
+    t('stats.tab.shots.greensOfAttempts', { greens: tend.greens, attempts: tend.attempts }),
   ));
 
-  if (t.directionKnown > 0) {
-    const dir = t.byDirection;
+  if (tend.directionKnown > 0) {
+    const dir = tend.byDirection;
     [
-      ['missShort', 'Missed short', t.shortRate, dir.short],
-      ['missLong', 'Missed long', t.longRate, dir.long],
-      ['missLeft', 'Missed left', t.leftRate, dir.left],
-      ['missRight', 'Missed right', t.rightRate, dir.right],
+      ['missShort', t('stats.tab.shots.missedShort'), tend.shortRate, dir.short],
+      ['missLong', t('stats.tab.shots.missedLong'), tend.longRate, dir.long],
+      ['missLeft', t('stats.tab.shots.missedLeft'), tend.leftRate, dir.left],
+      ['missRight', t('stats.tab.shots.missedRight'), tend.rightRate, dir.right],
     ].forEach(([key, label, value, count]) => {
-      rows.push(pctRow(key, label, value, `${count} of ${t.directionKnown} directional misses`));
+      rows.push(pctRow(key, label, value, t('stats.tab.shots.directionalMisses', { count, total: tend.directionKnown })));
     });
   }
 
-  if (t.misses > 0) {
+  if (tend.misses > 0) {
     rows.push(pctRow(
-      'missBunker', 'Into a bunker', t.bunkerRate,
-      `${t.bunker} of ${t.misses} misses`,
+      'missBunker', t('stats.tab.shots.intoBunker'), tend.bunkerRate,
+      t('stats.tab.shots.bunkerOfMisses', { count: tend.bunker, total: tend.misses }),
     ));
   }
 
@@ -652,11 +684,11 @@ function makeApproachTendencyRows(t) {
 // Descriptive delta (signed SG); tone greens a positive gap, reds a negative.
 function makeGroupRows(sg) {
   const CATS = [
-    ['total', 'Total'],
-    ['offTheTee', 'Off the tee'],
-    ['approach', 'Approach'],
-    ['aroundGreen', 'Around green'],
-    ['putting', 'Putting'],
+    ['total', t('stats.tab.shots.group.total')],
+    ['offTheTee', t('stats.tab.shots.group.offTheTee')],
+    ['approach', t('stats.tab.shots.group.approach')],
+    ['aroundGreen', t('stats.tab.shots.group.aroundGreen')],
+    ['putting', t('stats.tab.shots.group.putting')],
   ];
   return CATS.map(([key, label]) => {
     const c = sg.categories?.[key];
@@ -668,7 +700,9 @@ function makeGroupRows(sg) {
       raw: c.delta,
       magnitude: c.delta,
       barGroup: 'sg',
-      secondary: `you ${signed(c.you)} · group ${signed(c.group)} · ${sampleText(c.rounds, 'rounds')}`,
+      secondary: t('stats.tab.shots.youVsGroup', {
+        you: signed(c.you), group: signed(c.group), sample: sampleText(c.rounds, 'rounds'),
+      }),
       sample: c.rounds,
       tone: toneFromSigned(c.delta, { sample: c.rounds, minSample: 3 }),
     };
@@ -679,8 +713,9 @@ function makeGroupRows(sg) {
 // strokes-vs-par in the subtext. Neutral tone (it's a diagnostic, not a grade).
 function makeApproachCostRows(cost) {
   const FIN = [
-    ['green', 'On green'], ['short', 'Short'], ['long', 'Long'],
-    ['left', 'Left'], ['right', 'Right'], ['bunker', 'Bunker'],
+    ['green', t('stats.tab.shots.finish.green')], ['short', t('stats.tab.shots.finish.short')],
+    ['long', t('stats.tab.shots.finish.long')], ['left', t('stats.tab.shots.finish.left')],
+    ['right', t('stats.tab.shots.finish.right')], ['bunker', t('stats.tab.shots.finish.bunker')],
   ];
   return FIN.map(([key, label]) => {
     const e = cost.byFinish?.[key];
@@ -688,10 +723,10 @@ function makeApproachCostRows(cost) {
     return {
       key: `cost-${key}`,
       label,
-      value: e.avgPoints == null ? '—' : `${e.avgPoints} pts`,
+      value: e.avgPoints == null ? '—' : t('stats.tab.pts', { value: formatLocaleNumber(e.avgPoints) }),
       magnitude: isNumber(e.avgPoints) ? e.avgPoints : null,
       barGroup: 'avg',
-      secondary: `${signed(e.avgVsPar)} vs par · ${sampleText(e.holes, 'holes')}`,
+      secondary: `${t('stats.tab.vsPar', { value: signed(e.avgVsPar) })} · ${sampleText(e.holes, 'holes')}`,
       tone: 'neutral',
       dim: e.avgPoints == null,
     };
@@ -705,13 +740,13 @@ function makeApproachByDistanceRows(abd) {
     const e = abd.buckets?.[bucket];
     if (!e || e.attempts === 0) return null;
     const parts = [];
-    if (isNumber(e.shortRate)) parts.push(`short ${e.shortRate}%`);
-    if (isNumber(e.longRate)) parts.push(`long ${e.longRate}%`);
-    if (isNumber(e.bunkerRate)) parts.push(`bunker ${e.bunkerRate}%`);
+    if (isNumber(e.shortRate)) parts.push(t('stats.tab.shots.shortPct', { value: e.shortRate }));
+    if (isNumber(e.longRate)) parts.push(t('stats.tab.shots.longPct', { value: e.longRate }));
+    if (isNumber(e.bunkerRate)) parts.push(t('stats.tab.shots.bunkerPct', { value: e.bunkerRate }));
     return {
       key: `abd-${bucket}`,
-      label: `${bucket} m`,
-      value: e.missRate == null ? '—' : `${e.missRate}% miss`,
+      label: t('stats.tab.shots.bucketMetres', { bucket }),
+      value: e.missRate == null ? '—' : t('stats.tab.shots.missRate', { value: e.missRate }),
       magnitude: isNumber(e.missRate) ? e.missRate : null,
       barGroup: 'pct',
       secondary: [sampleText(e.attempts, 'approaches'), ...parts].filter(Boolean).join(' · '),
@@ -722,18 +757,27 @@ function makeApproachByDistanceRows(abd) {
 }
 
 // Fairway rate per club hit off the tee — the "less driver?" diagnostic.
-const TEE_CLUB_LABEL = { driver: 'Driver', wood: 'Wood', hybrid: 'Hybrid', iron: 'Iron' };
+const TEE_CLUB_KEY = {
+  driver: 'stats.tab.shots.club.driver',
+  wood: 'stats.tab.shots.club.wood',
+  hybrid: 'stats.tab.shots.club.hybrid',
+  iron: 'stats.tab.shots.club.iron',
+};
 function makeTeeClubRows(acc) {
   return (acc.order || []).map((club) => {
     const e = acc.byClub?.[club];
     if (!e || e.holes === 0) return null;
     return {
       key: `tc-${club}`,
-      label: TEE_CLUB_LABEL[club] ?? club,
+      label: TEE_CLUB_KEY[club] ? t(TEE_CLUB_KEY[club]) : club,
       value: e.fairwayPct == null ? '—' : `${e.fairwayPct}%`,
       magnitude: isNumber(e.fairwayPct) ? e.fairwayPct : null,
       barGroup: 'pct',
-      secondary: `${e.penaltyPct ?? 0}% penalty · ${signed(e.avgVsPar)} vs par · ${sampleText(e.holes, 'drives')}`,
+      secondary: [
+        t('stats.tab.shots.penaltyPct', { value: e.penaltyPct ?? 0 }),
+        t('stats.tab.vsPar', { value: signed(e.avgVsPar) }),
+        sampleText(e.holes, 'drives'),
+      ].join(' · '),
       tone: 'neutral',
       dim: e.fairwayPct == null,
     };
@@ -756,8 +800,9 @@ function makeRealDistanceRows(rcd, units) {
 // Save rate on missed greens, split by where the approach finished.
 function makeScramblingRows(scr) {
   const TYPES = [
-    ['short', 'Short'], ['long', 'Long'], ['left', 'Left'],
-    ['right', 'Right'], ['bunker', 'Bunker'],
+    ['short', t('stats.tab.shots.finish.short')], ['long', t('stats.tab.shots.finish.long')],
+    ['left', t('stats.tab.shots.finish.left')], ['right', t('stats.tab.shots.finish.right')],
+    ['bunker', t('stats.tab.shots.finish.bunker')],
   ];
   return TYPES.map(([key, label]) => {
     const e = scr.byType?.[key];
@@ -768,7 +813,7 @@ function makeScramblingRows(scr) {
       value: e.rate == null ? '—' : `${e.rate}%`,
       magnitude: isNumber(e.rate) ? e.rate : null,
       barGroup: 'pct',
-      secondary: `${e.saves}/${e.attempts} saved`,
+      secondary: t('stats.tab.shots.saved', { saves: e.saves, attempts: e.attempts }),
       tone: 'neutral',
       dim: e.rate == null,
     };
@@ -780,31 +825,33 @@ function makePar5Rows(p5) {
   return [
     {
       key: 'p5-birdie',
-      label: 'Birdie or better',
+      label: t('stats.tab.shots.birdieOrBetter'),
       value: p5.birdieRate == null ? '—' : `${p5.birdieRate}%`,
       magnitude: isNumber(p5.birdieRate) ? p5.birdieRate : null,
       barGroup: 'pct',
-      secondary: `${p5.eaglesPlus + p5.birdies} of ${sampleText(p5.holes, 'par 5s')}`,
+      secondary: t('stats.tab.shots.countOfSample', {
+        count: p5.eaglesPlus + p5.birdies, sample: sampleText(p5.holes, 'par5s'),
+      }),
       tone: 'neutral',
       dim: p5.birdieRate == null,
     },
     {
       key: 'p5-vspar',
-      label: 'Avg vs par',
+      label: t('stats.tab.shots.avgVsPar'),
       value: signed(p5.avgVsPar),
       magnitude: isNumber(p5.avgVsPar) ? p5.avgVsPar : null,
       barGroup: 'avg',
-      secondary: sampleText(p5.holes, 'par 5s'),
+      secondary: sampleText(p5.holes, 'par5s'),
       tone: 'neutral',
       dim: p5.avgVsPar == null,
     },
     {
       key: 'p5-gir',
-      label: 'On in regulation',
+      label: t('stats.tab.shots.onInReg'),
       value: p5.girRate == null ? '—' : `${p5.girRate}%`,
       magnitude: isNumber(p5.girRate) ? p5.girRate : null,
       barGroup: 'pct',
-      secondary: 'reached in 3 · needs putts logged',
+      secondary: t('stats.tab.shots.reachedInThree'),
       tone: 'neutral',
       dim: p5.girRate == null,
     },
@@ -815,14 +862,14 @@ function makeGirRows(shots, shotBenchmark) {
   return [
     {
       key: 'gir',
-      label: 'Greens in reg %',
+      label: t('stats.tab.shots.girPct'),
       value: `${shots.gir.pct}%`,
       magnitude: shots.gir.pct,
       target: shotBenchmark.girPct,
       barGroup: 'pct',
       secondary: targetSecondary([
         sampleText(shots.gir.eligible, 'holes'),
-        `target ${formatBenchmarkPercent(shotBenchmark.girPct)}`,
+        targetText(formatBenchmarkPercent(shotBenchmark.girPct)),
       ], shots.gir.eligible, 6),
       tone: toneFromComparison({
         value: shots.gir.pct,
@@ -846,14 +893,14 @@ function makePuttingVolumeRows(shots, shotBenchmark) {
   return [
     {
       key: 'puttsPerRound',
-      label: 'Putts / round',
-      value: puttsPer18,
+      label: t('stats.tab.puttsPerRound'),
+      value: formatLocaleNumber(puttsPer18),
       magnitude: puttsPer18,
       target: shotBenchmark.puttsPerRound,
       barGroup: 'count',
       secondary: targetSecondary([
         sampleText(shots.putts.holes, 'holes'),
-        `target ${formatBenchmarkNumber(shotBenchmark.puttsPerRound)} / 18 holes`,
+        t('stats.tab.shots.targetPer18', { value: formatBenchmarkNumber(shotBenchmark.puttsPerRound) }),
       ], shots.putts.holes, 9),
       tone: toneFromComparison({
         value: puttsPer18,
@@ -867,17 +914,17 @@ function makePuttingVolumeRows(shots, shotBenchmark) {
     },
     {
       key: 'threePutts',
-      label: '3-putts / round',
-      value: threePuttsPer18,
+      label: t('stats.tab.threePuttsPerRound'),
+      value: formatLocaleNumber(threePuttsPer18),
       magnitude: threePuttsPer18,
       target: shotBenchmark.threePuttsPerRound,
       barGroup: 'count',
       secondary: targetSecondary([
-        `${shots.putts.threePuttPlus} total`,
+        t('stats.tab.total', { count: shots.putts.threePuttPlus }),
         // The value is normalized off logged holes to an 18-hole rate, so
         // the sample shown is holes (the actual basis), not raw rounds.
         sampleText(shots.putts.holes, 'holes'),
-        `target ${formatBenchmarkNumber(shotBenchmark.threePuttsPerRound)} / 18 holes`,
+        t('stats.tab.shots.targetPer18', { value: formatBenchmarkNumber(shotBenchmark.threePuttsPerRound) }),
       ], shots.putts.holes, 9),
       tone: toneFromComparison({
         value: threePuttsPer18,
@@ -899,15 +946,17 @@ function makePuttingTargetRows(puttingTarget) {
     return {
       key: bucket,
       bucket,
-      label: `${bucket} m putts`,
+      label: t('stats.tab.shots.puttsAt', { bucket }),
       value: signed(row.sgPerPutt),
       raw: row.sgPerPutt,
       // Same bucket-group |SG| normalization as the approach buckets.
       magnitude: isNumber(row.sgPerPutt) ? row.sgPerPutt : null,
       barGroup: 'sg',
       secondary: targetSecondary([
-        `${formatNumber(row.avgPutts)} avg vs ${formatNumber(row.expectedPutts)} target`,
-        `${formatPercent(row.threePuttRate)} 3-putt`,
+        t('stats.tab.shots.avgVsExpected', {
+          avg: formatNumber(row.avgPutts), expected: formatNumber(row.expectedPutts),
+        }),
+        t('stats.tab.shots.threePuttRate', { value: formatPercent(row.threePuttRate) }),
         sampleText(row.attempts, 'putts'),
       ], row.attempts, 6),
       sample: row.attempts,
@@ -935,33 +984,34 @@ function summaryMetric(label, row) {
 }
 
 function meterMeta(secondary) {
-  if (!secondary) return 'No sample yet';
+  if (!secondary) return t('stats.tab.noSample');
+  const targetWord = t('stats.tab.shots.targetWord');
   const parts = secondary
     .split(' · ')
-    .filter((part) => part !== TARGET_BASIS && !part.startsWith('target '));
+    .filter((part) => part !== t('stats.tab.shots.targetBasis') && !part.startsWith(`${targetWord} `));
   return parts.join(' · ') || null;
 }
 
 function targetSecondary(parts, sample, minSample) {
-  return comparisonMeta(TARGET_BASIS, parts, { sample, minSample });
+  return comparisonMeta(t('stats.tab.shots.targetBasis'), parts, { sample, minSample });
 }
 
 function formatPercent(value) {
-  return value == null ? '-' : `${value}%`;
+  return value == null ? '-' : `${formatLocaleNumber(value)}%`;
 }
 
 function formatBenchmarkPercent(value) {
   if (!isNumber(value)) return '-';
-  return `${Math.round(value)}%`;
+  return `${formatLocaleNumber(Math.round(value))}%`;
 }
 
 function formatBenchmarkNumber(value) {
   if (!isNumber(value)) return '-';
-  return Number.isInteger(value) ? `${value}` : value.toFixed(1);
+  return formatLocaleNumber(value, { decimals: Number.isInteger(value) ? 0 : 1 });
 }
 
 function formatNumber(value) {
-  return value == null ? '-' : value;
+  return value == null ? '-' : formatLocaleNumber(value);
 }
 
 function round1(value) {
@@ -1044,6 +1094,7 @@ function makeStyles(theme) {
 const NUDGE_KEY = 'sgTargetNudgeDismissed';
 
 function SGTargetNudge({ onTap }) {
+  const tl = useT();
   const { theme } = useTheme();
   const [dismissed, setDismissed] = useState(true);
   useEffect(() => {
@@ -1061,7 +1112,7 @@ function SGTargetNudge({ onTap }) {
     }}>
       <PressableScale onPress={onTap} style={{ flex: 1 }}>
         <Text style={{ color: theme.text.primary, fontSize: 13 }}>
-          ⓘ Tip: set a target handicap to see where you would improve most.
+          {tl('stats.tab.shots.nudge')}
         </Text>
       </PressableScale>
       <PressableScale

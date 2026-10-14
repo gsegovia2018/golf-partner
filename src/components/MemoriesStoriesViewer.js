@@ -10,6 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { findParForHole } from '../lib/memoriesGalleryData';
+import { useT } from '../i18n';
 
 const PHOTO_MS = 4000;
 const TICK_MS = 50;
@@ -53,6 +54,7 @@ export default function MemoriesStoriesViewer({
   onClose,
 }) {
   const insets = useSafeAreaInsets();
+  const t = useT();
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -190,8 +192,8 @@ export default function MemoriesStoriesViewer({
     current.holeIndex == null
       ? null
       : par != null
-        ? `Hole ${current.holeIndex + 1} · Par ${par}`
-        : `Hole ${current.holeIndex + 1}`;
+        ? t('memories.stories.hole', { hole: current.holeIndex + 1, par })
+        : t('memories.stories.holeOnly', { hole: current.holeIndex + 1 });
   const time = (() => {
     try {
       return new Date(current.createdAt).toLocaleTimeString([], {
@@ -255,7 +257,7 @@ export default function MemoriesStoriesViewer({
             onPressOut={onPressOut}
             delayLongPress={180}
             accessibilityRole="button"
-            accessibilityLabel="Previous story"
+            accessibilityLabel={t('memories.stories.prev')}
           />
           <Pressable
             style={s.tapRight}
@@ -264,7 +266,7 @@ export default function MemoriesStoriesViewer({
             onPressOut={onPressOut}
             delayLongPress={180}
             accessibilityRole="button"
-            accessibilityLabel="Next story"
+            accessibilityLabel={t('memories.stories.next')}
           />
         </View>
 
@@ -296,7 +298,7 @@ export default function MemoriesStoriesViewer({
           <TouchableOpacity
             onPress={onClose}
             style={s.closeBtn}
-            accessibilityLabel="Close"
+            accessibilityLabel={t('memories.stories.close')}
             hitSlop={12}
           >
             <Feather name="x" size={22} color="#fff" />

@@ -130,6 +130,7 @@ export const APPROACH_LIE_LABELS = { fairway: 'Fairway', rough: 'Rough', sand: '
 // impossible rather than merely fixed.
 export const CELEBRATION_TIERS = {
   BIRDIE: {
+    key: 'birdie',
     eyebrow: 'A BIRDIE',
     accent: semantic.rank.gold,
     glow: 'rgba(212,175,55,0.35)',
@@ -139,6 +140,7 @@ export const CELEBRATION_TIERS = {
     haptic: 'light',
   },
   EAGLE: {
+    key: 'eagle',
     eyebrow: 'AN EAGLE',
     accent: semantic.winner.dark, // Augusta gold
     glow: 'rgba(255,215,0,0.45)',
@@ -148,6 +150,7 @@ export const CELEBRATION_TIERS = {
     haptic: 'success',
   },
   ALBATROSS: {
+    key: 'albatross',
     eyebrow: 'AN ALBATROSS',
     accent: '#ffffff',
     glow: 'rgba(255,255,255,0.55)',
@@ -157,6 +160,7 @@ export const CELEBRATION_TIERS = {
     haptic: 'success',
   },
   'HOLE IN ONE': {
+    key: 'holeInOne',
     eyebrow: 'A HOLE IN ONE',
     accent: semantic.winner.dark,
     glow: 'rgba(255,215,0,0.65)',
@@ -170,6 +174,7 @@ export const CELEBRATION_TIERS = {
     // A double bogey among friends is a dry aside, not a red alert.
     // The eyebrow is deliberately left as-is: the toast does not render one, so
     // changing the copy would be churn on a string only the fallback path sees.
+    key: 'noelada',
     eyebrow: 'WHAT A NOELADA!',
     accent: '#c9a08f',
     glow: 'rgba(201,160,143,0.22)',

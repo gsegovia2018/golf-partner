@@ -7,19 +7,38 @@ import CourseMasteryCard from '../CourseMasteryCard';
 import CareerMilestonesCard from '../CareerMilestonesCard';
 import BreakdownRow from '../BreakdownRow';
 import ScoreMixBar from '../ScoreMixBar';
+import { useT, t, formatNumber as formatLocaleNumber } from '../../../i18n';
 import {
-  comparisonMeta,
+  isLowSample,
   toneFromComparison,
   toneFromDelta,
   toneFromRate,
 } from '../metricTone';
 import {
   APPROACH_BUCKETS,
-  DRIVE_LABELS,
   DRIVE_ORDER,
-  sampleText,
-  signed,
 } from '../shotMetrics';
+
+// Local twins of shotMetrics.signed / sampleText and metricTone.comparisonMeta
+// so the words come from the catalogue. They call t() when a row is built (at
+// render), never at module load, so a language switch is picked up.
+function signed(value) {
+  if (value == null) return '-';
+  return value > 0 ? `+${formatLocaleNumber(value)}` : formatLocaleNumber(value);
+}
+
+function sampleText(value, unit) {
+  if (value == null) return undefined;
+  return t(`stats.tab.sample.${unit}`, { count: value });
+}
+
+function comparisonMeta(basis, parts = [], { sample, minSample = 6 } = {}) {
+  return [
+    basis,
+    ...parts,
+    isLowSample(sample, minSample) ? t('stats.tab.lowSample') : null,
+  ].filter(Boolean).join(' · ');
+}
 
 const EMPTY_DISTRIBUTION = {
   eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubles: 0, worse: 0, total: 0,
@@ -38,11 +57,10 @@ const EMPTY_WARMUP = {
   warmup: { holes: 0, avgPoints: 0 },
   closing: { holes: 0, avgPoints: 0 },
 };
-const OWN_AVG_BASIS = 'vs your avg';
-const SAMPLE_BASIS = 'tracked sample';
 
 // Memoised — see the note in CoachTab.
 function BreakdownTab({ stats, onInfo, onSelectCourse }) {
+  useT(); // re-render on language change; the row builders below call t() directly
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const {
@@ -101,21 +119,21 @@ function BreakdownTab({ stats, onInfo, onSelectCourse }) {
     cards.push({
       key: 'scoreMix',
       node: (
-        <SectionCard title="Score mix" infoKey="scoreDistribution" onInfo={onInfo}>
+        <SectionCard title={t('stats.tab.breakdown.scoreMix')} infoKey="scoreDistribution" onInfo={onInfo}>
           <ScoreMixBar distribution={distribution} />
         </SectionCard>
       ),
     });
   }
   const patternCards = [
-    { key: 'scoring', title: 'Scoring patterns', infoKey: 'scoreDistribution', rows: scoringRows },
-    { key: 'course', title: 'Course scoring patterns', infoKey: 'parType', rows: courseRows },
-    { key: 'timing', title: 'Round timing patterns', infoKey: 'roundShape', rows: timingRows },
-    { key: 'tee', title: 'Tee result patterns', infoKey: 'teeShot', rows: teePatternRows },
-    { key: 'drive', title: 'Drive bucket patterns', infoKey: 'driveBuckets', rows: drivePatternRows },
-    { key: 'approach', title: 'Approach distance patterns', infoKey: 'approachDistance', rows: approachPatternRows },
-    { key: 'putting', title: 'Putting patterns', infoKey: 'puttingDriving', rows: puttingPatternRows },
-    { key: 'recovery', title: 'Recovery patterns', infoKey: 'recovery', rows: recoveryRows },
+    { key: 'scoring', title: t('stats.tab.breakdown.scoringPatterns'), infoKey: 'scoreDistribution', rows: scoringRows },
+    { key: 'course', title: t('stats.tab.breakdown.coursePatterns'), infoKey: 'parType', rows: courseRows },
+    { key: 'timing', title: t('stats.tab.breakdown.timingPatterns'), infoKey: 'roundShape', rows: timingRows },
+    { key: 'tee', title: t('stats.tab.breakdown.teePatterns'), infoKey: 'teeShot', rows: teePatternRows },
+    { key: 'drive', title: t('stats.tab.breakdown.drivePatterns'), infoKey: 'driveBuckets', rows: drivePatternRows },
+    { key: 'approach', title: t('stats.tab.breakdown.approachPatterns'), infoKey: 'approachDistance', rows: approachPatternRows },
+    { key: 'putting', title: t('stats.tab.breakdown.puttingPatterns'), infoKey: 'puttingDriving', rows: puttingPatternRows },
+    { key: 'recovery', title: t('stats.tab.breakdown.recoveryPatterns'), infoKey: 'recovery', rows: recoveryRows },
   ];
   patternCards.forEach(({ key, title, infoKey, rows }) => {
     if (!rows.length) return;
@@ -244,7 +262,7 @@ function makeScoringPatternRows({ distribution, stats }) {
   return [
     countPatternRow({
       key: 'birdies',
-      label: 'Birdies+ / round',
+      label: t('stats.tab.breakdown.birdiesPerRound'),
       count: (distribution.eagles ?? 0) + (distribution.birdies ?? 0),
       rounds,
       total,
@@ -252,7 +270,7 @@ function makeScoringPatternRows({ distribution, stats }) {
     }),
     countPatternRow({
       key: 'pars',
-      label: 'Pars / round',
+      label: t('stats.tab.breakdown.parsPerRound'),
       count: distribution.pars ?? 0,
       rounds,
       total,
@@ -260,7 +278,7 @@ function makeScoringPatternRows({ distribution, stats }) {
     }),
     countPatternRow({
       key: 'bogeys',
-      label: 'Bogeys / round',
+      label: t('stats.tab.breakdown.bogeysPerRound'),
       count: distribution.bogeys ?? 0,
       rounds,
       total,
@@ -268,7 +286,7 @@ function makeScoringPatternRows({ distribution, stats }) {
     }),
     countPatternRow({
       key: 'doubles',
-      label: 'Doubles+ / round',
+      label: t('stats.tab.breakdown.doublesPerRound'),
       count: (distribution.doubles ?? 0) + (distribution.worse ?? 0),
       rounds,
       total,
@@ -287,8 +305,8 @@ function countPatternRow({
     value: formatNumber(perRound),
     magnitude: isNumber(perRound) ? perRound : null,
     barGroup: 'count',
-    secondary: comparisonMeta('your score mix', [
-      `${count} total`,
+    secondary: comparisonMeta(t('stats.tab.breakdown.yourScoreMix'), [
+      t('stats.tab.total', { count }),
       sampleText(total, 'holes'),
     ], { sample: total, minSample: 18 }),
     tone,
@@ -298,12 +316,12 @@ function countPatternRow({
 
 function makeCoursePatternRows({ parType, difficulty, baseline }) {
   return [
-    pointPatternRow('par3', 'Par 3s', parType.par3, baseline),
-    pointPatternRow('par4', 'Par 4s', parType.par4, baseline),
-    pointPatternRow('par5', 'Par 5s', parType.par5, baseline),
-    pointPatternRow('hard', 'Hard holes (hardest third)', difficulty.hard, baseline),
-    pointPatternRow('mid', 'Mid holes (middle third)', difficulty.mid, baseline),
-    pointPatternRow('easy', 'Easy holes (easiest third)', difficulty.easy, baseline),
+    pointPatternRow('par3', t('stats.tab.par3'), parType.par3, baseline),
+    pointPatternRow('par4', t('stats.tab.par4'), parType.par4, baseline),
+    pointPatternRow('par5', t('stats.tab.par5'), parType.par5, baseline),
+    pointPatternRow('hard', t('stats.tab.breakdown.hardHoles'), difficulty.hard, baseline),
+    pointPatternRow('mid', t('stats.tab.breakdown.midHoles'), difficulty.mid, baseline),
+    pointPatternRow('easy', t('stats.tab.breakdown.easyHoles'), difficulty.easy, baseline),
   ].filter(Boolean);
 }
 
@@ -312,13 +330,13 @@ function makeTimingPatternRows({ frontBack, warmupClosing, baseline }) {
   const fbHoles = frontBack ? (frontBack.rounds?.length ?? 0) * 9 : 0;
   if (frontBack) {
     rows.push(
-      timingNineRow('front', 'Front nine', frontBack.frontAvg, fbHoles, baseline),
-      timingNineRow('back', 'Back nine', frontBack.backAvg, fbHoles, baseline)
+      timingNineRow('front', t('stats.tab.breakdown.frontNine'), frontBack.frontAvg, fbHoles, baseline),
+      timingNineRow('back', t('stats.tab.breakdown.backNine'), frontBack.backAvg, fbHoles, baseline)
     );
   }
   rows.push(
-    pointPatternRow('opening3', 'Opening 3', warmupClosing.warmup, baseline),
-    pointPatternRow('closing3', 'Closing 3', warmupClosing.closing, baseline)
+    pointPatternRow('opening3', t('stats.tab.breakdown.opening3'), warmupClosing.warmup, baseline),
+    pointPatternRow('closing3', t('stats.tab.breakdown.closing3'), warmupClosing.closing, baseline)
   );
   return rows.filter(Boolean);
 }
@@ -328,11 +346,11 @@ function timingNineRow(key, label, value, holesCount, baseline) {
   return {
     key,
     label,
-    value: `${formatNumber(value)} pts/hole`,
+    value: t('stats.tab.breakdown.ptsPerHole', { value: formatNumber(value) }),
     magnitude: isNumber(value) ? value : 0,
     secondary: holesCount > 0
       ? comparisonSecondary(holesCount, baseline, delta)
-      : 'No sample yet',
+      : t('stats.tab.noSample'),
     tone: toneFromDelta(delta, { sample: holesCount, minSample: 6 }),
     dim: holesCount === 0,
     target: isNumber(baseline) ? baseline : undefined,
@@ -342,12 +360,12 @@ function timingNineRow(key, label, value, holesCount, baseline) {
 function makeTeePatternRows(teeShot, baseline) {
   if (!teeShot?.hasData) return [];
   const rows = [
-    pointPatternRow('fairway', 'Fairway found', teeShot.fairway, baseline),
-    pointPatternRow('missed', 'Fairway missed', teeShot.missed, baseline),
-    pointPatternRow('left', 'Miss left', teeShot.byDirection?.left, baseline),
-    pointPatternRow('right', 'Miss right', teeShot.byDirection?.right, baseline),
-    pointPatternRow('short', 'Miss short', teeShot.byDirection?.short, baseline),
-    pointPatternRow('teePenalty', 'After tee penalty', teeShot.teePenalty, baseline),
+    pointPatternRow('fairway', t('stats.tab.breakdown.fairwayFound'), teeShot.fairway, baseline),
+    pointPatternRow('missed', t('stats.tab.breakdown.fairwayMissed'), teeShot.missed, baseline),
+    pointPatternRow('left', t('stats.tab.breakdown.missLeft'), teeShot.byDirection?.left, baseline),
+    pointPatternRow('right', t('stats.tab.breakdown.missRight'), teeShot.byDirection?.right, baseline),
+    pointPatternRow('short', t('stats.tab.breakdown.missShort'), teeShot.byDirection?.short, baseline),
+    pointPatternRow('teePenalty', t('stats.tab.breakdown.afterTeePenalty'), teeShot.teePenalty, baseline),
   ];
 
   if ((teeShot.teePenalty?.holes ?? 0) > 0) {
@@ -356,11 +374,11 @@ function makeTeePatternRows(teeShot, baseline) {
     // PENALTY_DRAG_SCALE instead of the section's pts max.
     rows.push({
       key: 'penaltyDrag',
-      label: 'Penalty drag',
+      label: t('stats.tab.breakdown.penaltyDrag'),
       value: formatNumber(teeShot.penaltyDrag),
       magnitude: isNumber(teeShot.penaltyDrag) ? teeShot.penaltyDrag : null,
       barGroup: 'drag',
-      secondary: `${sampleText(teeShot.teePenalty.holes, 'holes')} · points lost after tee penalties`,
+      secondary: t('stats.tab.breakdown.penaltyDragMeta', { sample: sampleText(teeShot.teePenalty.holes, 'holes') }),
       tone: toneFromComparison({
         value: teeShot.penaltyDrag,
         target: 0,
@@ -382,10 +400,14 @@ function makeDrivePatternRows(driveImpact, baseline) {
     const delta = isNumber(baseline) ? row.avgPoints - baseline : null;
     return {
       key: bucket,
-      label: DRIVE_LABELS[bucket],
-      value: `${formatNumber(row.avgPoints)} pts`,
+      label: t(`stats.tab.breakdown.drive.${bucket}`),
+      value: t('stats.tab.pts', { value: formatNumber(row.avgPoints) }),
       magnitude: isNumber(row.avgPoints) ? row.avgPoints : 0,
-      secondary: `${signed(row.avgVsPar)} vs par · ${formatPercent(row.penaltyRate)} pen · ${comparisonSecondary(row.holes, baseline, delta)}`,
+      secondary: [
+        t('stats.tab.vsPar', { value: signed(row.avgVsPar) }),
+        t('stats.tab.breakdown.pen', { value: formatPercent(row.penaltyRate) }),
+        comparisonSecondary(row.holes, baseline, delta),
+      ].join(' · '),
       tone: toneFromDelta(delta, { sample: row.holes, minSample: 6 }),
       target: isNumber(baseline) ? baseline : undefined,
     };
@@ -400,10 +422,14 @@ function makeApproachPatternRows(approachImpact, baseline) {
     const delta = isNumber(baseline) ? row.avgPoints - baseline : null;
     return {
       key: bucket,
-      label: `${bucket} m approaches`,
-      value: `${formatNumber(row.avgPoints)} pts`,
+      label: t('stats.tab.approachesAt', { bucket }),
+      value: t('stats.tab.pts', { value: formatNumber(row.avgPoints) }),
       magnitude: isNumber(row.avgPoints) ? row.avgPoints : 0,
-      secondary: `${signed(row.avgVsPar)} vs par · ${formatPercent(row.girRate)} GIR · ${comparisonSecondary(row.holes, baseline, delta)}`,
+      secondary: [
+        t('stats.tab.vsPar', { value: signed(row.avgVsPar) }),
+        t('stats.tab.breakdown.gir', { value: formatPercent(row.girRate) }),
+        comparisonSecondary(row.holes, baseline, delta),
+      ].join(' · '),
       tone: toneFromDelta(delta, { sample: row.holes, minSample: 6 }),
       target: isNumber(baseline) ? baseline : undefined,
     };
@@ -426,20 +452,20 @@ function makePuttingPatternRows({ shots, puttDive }) {
     rows.push(
       {
         key: 'puttsPerRound',
-        label: 'Putts / round',
+        label: t('stats.tab.puttsPerRound'),
         value: formatNumber(shots.putts.perRound),
         magnitude: isNumber(shots.putts.perRound) ? shots.putts.perRound : null,
         barGroup: 'count',
         secondary: sampleSecondary([
           sampleText(shots.putts.holes, 'holes'),
-          puttsTotal != null ? `${puttsTotal} total` : null,
+          puttsTotal != null ? t('stats.tab.total', { count: puttsTotal }) : null,
         ], shots.putts.holes, 9),
         tone: 'neutral',
         dim: shots.putts.holes === 0,
       },
       {
         key: 'onePutts',
-        label: '1-putts',
+        label: t('stats.tab.breakdown.onePutts'),
         value: formatNumber(shots.putts.onePutts),
         magnitude: isNumber(shots.putts.onePutts) ? shots.putts.onePutts : null,
         barGroup: 'count',
@@ -455,12 +481,12 @@ function makePuttingPatternRows({ shots, puttDive }) {
       },
       {
         key: 'threePutts',
-        label: '3-putts / round',
+        label: t('stats.tab.threePuttsPerRound'),
         value: formatNumber(threePuttsPerRound),
         magnitude: isNumber(threePuttsPerRound) ? threePuttsPerRound : null,
         barGroup: 'count',
         secondary: sampleSecondary([
-          `${shots.putts.threePuttPlus} total`,
+          t('stats.tab.total', { count: shots.putts.threePuttPlus }),
           sampleText(shots.roundsWithPuttData, 'rounds'),
         ], shots.putts.holes, 9),
         tone: toneFromComparison({
@@ -481,7 +507,7 @@ function makePuttingPatternRows({ shots, puttDive }) {
     rows.push(
       {
         key: 'twoPuttRate',
-        label: '2-putt rate',
+        label: t('stats.tab.breakdown.twoPuttRate'),
         value: `${puttDive.twoPuttPct}%`,
         magnitude: isNumber(puttDive.twoPuttPct) ? puttDive.twoPuttPct : null,
         barGroup: 'pct',
@@ -498,7 +524,7 @@ function makePuttingPatternRows({ shots, puttDive }) {
       },
       {
         key: 'girPutts',
-        label: 'Putts on GIR',
+        label: t('stats.tab.breakdown.puttsOnGir'),
         value: formatNumber(puttDive.girPuttsAvg),
         magnitude: isNumber(puttDive.girPuttsAvg) ? puttDive.girPuttsAvg : null,
         barGroup: 'avg',
@@ -515,7 +541,7 @@ function makePuttingPatternRows({ shots, puttDive }) {
       },
       {
         key: 'nonGirPutts',
-        label: 'Putts off GIR',
+        label: t('stats.tab.breakdown.puttsOffGir'),
         value: formatNumber(puttDive.nonGirPuttsAvg),
         magnitude: isNumber(puttDive.nonGirPuttsAvg) ? puttDive.nonGirPuttsAvg : null,
         barGroup: 'avg',
@@ -532,7 +558,7 @@ function makePuttingPatternRows({ shots, puttDive }) {
       },
       {
         key: 'onePuttSave',
-        label: '1-putt save',
+        label: t('stats.tab.breakdown.onePuttSave'),
         value: `${puttDive.onePuttSave?.pct ?? 0}%`,
         magnitude: puttDive.onePuttSave?.pct ?? 0,
         barGroup: 'pct',
@@ -564,11 +590,11 @@ function makeRecoveryRows({
   return [
     bounceBack ? {
       key: 'bounceBack',
-      label: 'Bounce-back rate',
+      label: t('stats.tab.breakdown.bounceBack'),
       value: `${bounceBack.rate}%`,
       magnitude: isNumber(bounceBack.rate) ? bounceBack.rate : null,
       barGroup: 'pct',
-      secondary: sampleSecondary([`${bounceBack.opportunities} chances`], bounceBack.opportunities, 6),
+      secondary: sampleSecondary([sampleText(bounceBack.opportunities, 'chances')], bounceBack.opportunities, 6),
       tone: toneFromComparison({
         value: bounceBack.rate,
         target: 30,
@@ -581,11 +607,11 @@ function makeRecoveryRows({
     } : null,
     scrambling ? {
       key: 'scrambling',
-      label: 'Scrambling',
+      label: t('stats.tab.breakdown.scrambling'),
       value: `${scrambling.pct}%`,
       magnitude: isNumber(scrambling.pct) ? scrambling.pct : null,
       barGroup: 'pct',
-      secondary: sampleSecondary([`${scrambling.missedGir} missed GIR`], scrambling.missedGir, 6),
+      secondary: sampleSecondary([t('stats.tab.breakdown.missedGir', { count: scrambling.missedGir })], scrambling.missedGir, 6),
       tone: toneFromComparison({
         value: scrambling.pct,
         target: 35,
@@ -598,7 +624,7 @@ function makeRecoveryRows({
     } : null,
     sandSaves ? {
       key: 'sandSaves',
-      label: 'Sand-save rate',
+      label: t('stats.tab.breakdown.sandSave'),
       value: rateValue(sandSaves.saves, sandSaves.attempts, sandSaves.rate),
       magnitude: isNumber(sandSaves.rate) ? sandSaves.rate * 100 : null,
       barGroup: 'pct',
@@ -616,7 +642,7 @@ function makeRecoveryRows({
       // often unset) to gate that denominator to real around-the-green
       // shots, so this is presented as a scrambling-family metric rather
       // than the classic "up and down" (see statsEngine.js upAndDownRate).
-      label: 'Scrambling (1-putt saves)',
+      label: t('stats.tab.breakdown.scramblingOnePutt'),
       value: rateValue(upAndDown.conversions, upAndDown.attempts, upAndDown.rate),
       magnitude: isNumber(upAndDown.rate) ? upAndDown.rate * 100 : null,
       barGroup: 'pct',
@@ -627,12 +653,14 @@ function makeRecoveryRows({
     } : null,
     bunkerVisits ? {
       key: 'bunkerVisits',
-      label: 'Bunker visits',
-      value: bunkerVisits.avgPerRound > 0 ? `${bunkerVisits.avgPerRound.toFixed(1)} / round` : '-',
+      label: t('stats.tab.breakdown.bunkerVisits'),
+      value: bunkerVisits.avgPerRound > 0
+        ? t('stats.tab.breakdown.perRound', { value: formatLocaleNumber(bunkerVisits.avgPerRound, { decimals: 1 }) })
+        : '-',
       magnitude: isNumber(bunkerVisits.avgPerRound) ? bunkerVisits.avgPerRound : null,
       barGroup: 'count',
       secondary: bunkerVisits.holesWithSand != null
-        ? sampleSecondary([`${bunkerVisits.holesWithSand} holes`], bunkerVisits.holesWithSand, 6)
+        ? sampleSecondary([sampleText(bunkerVisits.holesWithSand, 'holes')], bunkerVisits.holesWithSand, 6)
         : undefined,
       tone: toneFromComparison({
         value: bunkerVisits.avgPerRound,
@@ -655,11 +683,11 @@ function pointPatternRow(key, label, row, baseline) {
   return {
     key,
     label,
-    value: `${formatNumber(avgPoints ?? 0)} pts`,
+    value: t('stats.tab.pts', { value: formatNumber(avgPoints ?? 0) }),
     magnitude: isNumber(avgPoints) ? avgPoints : 0,
     secondary: holesCount > 0
       ? comparisonSecondary(holesCount, baseline, delta)
-      : 'No sample yet',
+      : t('stats.tab.noSample'),
     tone: toneFromDelta(delta, { sample: holesCount, minSample: 6 }),
     dim: holesCount === 0,
     target: isNumber(baseline) ? baseline : undefined,
@@ -669,7 +697,7 @@ function pointPatternRow(key, label, row, baseline) {
 function comparisonSecondary(holesCount, baseline, delta) {
   const sample = sampleText(holesCount, 'holes');
   const average = averageLabel(baseline);
-  return comparisonMeta(OWN_AVG_BASIS, [
+  return comparisonMeta(t('stats.tab.breakdown.ownAvgBasis'), [
     sample,
     average,
     isNumber(delta) ? formatDelta(delta) : null,
@@ -677,31 +705,33 @@ function comparisonSecondary(holesCount, baseline, delta) {
 }
 
 function sampleSecondary(parts, sample, minSample) {
-  return comparisonMeta(SAMPLE_BASIS, parts, { sample, minSample });
+  return comparisonMeta(t('stats.tab.breakdown.sampleBasis'), parts, { sample, minSample });
 }
 
 function averageLabel(baseline) {
-  return isNumber(baseline) ? `avg ${formatNumber(baseline)} pts/hole` : 'avg unavailable';
+  return isNumber(baseline)
+    ? t('stats.tab.breakdown.avgPtsPerHole', { value: formatNumber(baseline) })
+    : t('stats.tab.breakdown.avgUnavailable');
 }
 
 function rateValue(made, attempts, rate) {
   if (rate == null) return '-';
-  return `${made} of ${attempts} · ${Math.round(rate * 100)}%`;
+  return t('stats.tab.breakdown.madeOf', { made, attempts, pct: Math.round(rate * 100) });
 }
 
 function formatDelta(value) {
   if (!isNumber(value)) return '0';
-  return `${value >= 0 ? '+' : ''}${round1(value)}`;
+  return `${value >= 0 ? '+' : ''}${formatLocaleNumber(round1(value), { maxDecimals: 1 })}`;
 }
 
 function formatPercent(value) {
-  return value == null ? '-' : `${value}%`;
+  return value == null ? '-' : `${formatLocaleNumber(value)}%`;
 }
 
 function formatNumber(value) {
   if (value == null) return '-';
   if (!isNumber(value)) return value;
-  return round2(value);
+  return formatLocaleNumber(round2(value));
 }
 
 function round1(value) {

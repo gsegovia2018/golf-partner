@@ -23,6 +23,8 @@
 // and the first hole stands in. A hole re-published later (a score fix)
 // moves only that hole's ts, which the min/max over 18 holes absorbs.
 
+import { t } from '../i18n';
+
 const MIN_ROUND_MS = 10 * 60 * 1000;
 const MAX_ROUND_MS = 10 * 60 * 60 * 1000;
 const START_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -104,6 +106,6 @@ export function formatRoundDuration(ms) {
   const mins = Math.round(ms / 60000);
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  if (h === 0) return `${m}m`;
-  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  if (h === 0) return t('shared.duration.minutes', { m });
+  return m === 0 ? t('shared.duration.hours', { h }) : t('shared.duration.hoursMinutes', { h, m });
 }

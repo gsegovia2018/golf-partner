@@ -1,6 +1,7 @@
 import React, { useMemo, useSyncExternalStore } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useT, formatNumber } from '../../i18n';
 import { holeFeatures } from '../../lib/geo';
 import { useCourseGeometry } from '../../hooks/useCourseGeometry';
 import { hud } from '../../theme/tokens';
@@ -20,6 +21,7 @@ export function ShotReplaySheet({
 }) {
   const geometry = useCourseGeometry(courseName);
   const { units } = useAppSettings();
+  const tl = useT();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geometry]);
 
@@ -33,7 +35,7 @@ export function ShotReplaySheet({
   const data = useMemo(() => (feat ? {
     mode: 'replay',
     holeKey: `${courseName}#${holeNumber}#replay#${roundId}:${roundIndex}`,
-    holeLabel: `Hole ${holeNumber}`,
+    holeLabel: tl('map.hole', { hole: formatNumber(holeNumber) }),
     courseKey: courseKeyFor(courseName),
     green: feat.green || null,
     greenFront: feat.greenFront || null,
@@ -47,13 +49,13 @@ export function ShotReplaySheet({
     shots,
     showRec: false,
     lastShot: null,
-  } : null), [feat, courseName, holeNumber, roundId, roundIndex, units, shots]);
+  } : null), [feat, courseName, holeNumber, roundId, roundIndex, units, shots, tl]);
 
   if (!visible) return null;
 
   const meta = [
-    par != null ? `Par ${par}` : null,
-    strokeIndex != null ? `SI ${strokeIndex}` : null,
+    par != null ? tl('map.par', { par: formatNumber(par) }) : null,
+    strokeIndex != null ? tl('map.si', { si: formatNumber(strokeIndex) }) : null,
     courseName || null,
   ].filter(Boolean).join(' · ');
 
@@ -64,14 +66,14 @@ export function ShotReplaySheet({
           style={s.backdropTouch}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Close hole map"
+          accessibilityLabel={tl('map.close')}
         />
         <View style={s.sheet}>
           <View style={s.grabber} />
           <View style={s.header}>
             <View style={s.titleWrap}>
               <Text style={s.title} numberOfLines={1}>
-                {feat ? `Hole ${holeNumber}` : 'No map data'}
+                {feat ? tl('map.hole', { hole: formatNumber(holeNumber) }) : tl('map.noData')}
               </Text>
               {(caption || meta) ? (
                 <Text style={s.subtitle} numberOfLines={1}>{caption || meta}</Text>
@@ -83,7 +85,7 @@ export function ShotReplaySheet({
               hitSlop={10}
               testID="replay-close"
               accessibilityRole="button"
-              accessibilityLabel="Close hole map"
+              accessibilityLabel={tl('map.close')}
             >
               <Feather name="x" size={22} color={hud.text} />
             </Pressable>
@@ -92,7 +94,7 @@ export function ShotReplaySheet({
             <HoleMapView data={data} shots={shots} style={s.map} />
           ) : (
             <View style={s.center}>
-              <Text style={s.muted}>This course has no green geometry yet.</Text>
+              <Text style={s.muted}>{tl('map.noGeometry')}</Text>
             </View>
           )}
         </View>

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
 import Reveal from '../ui/Reveal';
 import SectionCard from './SectionCard';
 import CountUpText from './CountUpText';
@@ -22,33 +23,34 @@ const NEAR_ZERO = 0.05;
 
 export default function SGReconciliationCard({ reconciliation, targetHandicap }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const reduced = useReducedMotion();
   if (!reconciliation || reconciliation.rounds === 0) return null;
 
   const targetOverline = targetHandicap == null || targetHandicap === 0
-    ? 'EXPECTED · SCRATCH'
-    : `EXPECTED · ${targetHandicap} HCP`;
+    ? t('stats.my.recon.expectedScratch')
+    : t('stats.my.recon.expectedHcp', { target: formatNumber(targetHandicap) });
   const rows = [
     ...SG_CATEGORIES.map((c) => ({
-      key: c.key, label: c.label, cost: -(reconciliation.byCategoryAvg[c.key] ?? 0),
+      key: c.key, label: t(c.labelKey), cost: -(reconciliation.byCategoryAvg[c.key] ?? 0),
     })),
-    { key: 'residual', label: 'In-between & untracked', cost: -reconciliation.residualAvg, muted: true },
+    { key: 'residual', label: t('stats.my.recon.residual'), cost: -reconciliation.residualAvg, muted: true },
   ];
   // The actual total counts up LAST — after the line-item cascade lands.
   const totalDelay = rows.length * LINE_STAGGER_MS + LINE_MS;
   const gapCost = -reconciliation.gapAvg;
 
   return (
-    <SectionCard title="Where your strokes go">
+    <SectionCard title={t('stats.my.recon.title')}>
       <View style={s.receipt}>
         <View style={s.receiptHead}>
           <View>
             <Text style={s.expectedOverline}>{targetOverline}</Text>
-            <Text style={s.expectedValue}>{reconciliation.expectedAvg.toFixed(1)}</Text>
+            <Text style={s.expectedValue}>{formatNumber(reconciliation.expectedAvg, { decimals: 1 })}</Text>
           </View>
           <Text style={s.metaOverline}>
-            {`AVG OF ${reconciliation.rounds} ${reconciliation.rounds === 1 ? 'ROUND' : 'ROUNDS'}`}
+            {t('stats.my.recon.avgOf', { count: reconciliation.rounds })}
           </Text>
         </View>
         {rows.map((row, index) => (
@@ -63,7 +65,7 @@ export default function SGReconciliationCard({ reconciliation, targetHandicap })
           </Reveal>
         ))}
         <View style={s.totalRow}>
-          <Text style={s.totalLabel}>Your round</Text>
+          <Text style={s.totalLabel}>{t('stats.my.recon.yourRound')}</Text>
           <Text style={s.totalValue}>
             <CountUpText
               value={reconciliation.actualAvg}
@@ -76,7 +78,7 @@ export default function SGReconciliationCard({ reconciliation, targetHandicap })
         </View>
       </View>
       <Text style={s.footnote}>
-        {`Average per round across ${reconciliation.rounds} rounds. The line items sum to the ${formatSignedFixed(gapCost)}-stroke gap between expected and your round.`}
+        {t('stats.my.recon.footnote', { rounds: reconciliation.rounds, gap: formatSignedFixed(gapCost) })}
       </Text>
     </SectionCard>
   );

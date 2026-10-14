@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, Modal, Pressable, ActivityIndicator, Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useT, formatNumber } from '../../i18n';
 import { holeFeatures } from '../../lib/geo';
 import { useCourseGeometry } from '../../hooks/useCourseGeometry';
 import { supabase } from '../../lib/supabase';
@@ -12,10 +13,10 @@ import { courseKeyFor } from '../../store/tileCache';
 import { HoleMapView } from './HoleMapView';
 
 const FIELDS = [
-  { key: 'front', label: 'Front', color: '#ffd166' },
-  { key: 'center', label: 'Center', color: '#ffffff' },
-  { key: 'back', label: 'Back', color: '#ef8a5b' },
-  { key: 'tee', label: 'Tee', color: '#2f6bff' },
+  { key: 'front', labelKey: 'map.point.front', color: '#ffd166' },
+  { key: 'center', labelKey: 'map.point.center', color: '#ffffff' },
+  { key: 'back', labelKey: 'map.point.back', color: '#ef8a5b' },
+  { key: 'tee', labelKey: 'map.point.tee', color: '#2f6bff' },
 ];
 
 // Admin-only editor over the interactive satellite map. Tap to place the
@@ -23,6 +24,7 @@ const FIELDS = [
 // golf_hole. Center is required; the rest optional. Prefilled from existing
 // geometry. Pan/zoom the map freely; tapping drops the active point.
 export function HoleGeoEditor({ courseName, holeNumber, visible, onClose, onSaved }) {
+  const tl = useT();
   const geometry = useCourseGeometry(courseName);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geometry]);
@@ -74,7 +76,7 @@ export function HoleGeoEditor({ courseName, holeNumber, visible, onClose, onSave
   };
 
   const save = async () => {
-    if (!pts.center) { Alert.alert('Center required', 'Tap to set at least the green center.'); return; }
+    if (!pts.center) { Alert.alert(tl('map.center.required'), tl('map.center.requiredBody')); return; }
     setSaving(true);
     try {
       const { error } = await supabase.from('golf_hole').update({
@@ -85,7 +87,7 @@ export function HoleGeoEditor({ courseName, holeNumber, visible, onClose, onSave
       onSaved?.();
       onClose?.();
     } catch (err) {
-      Alert.alert('Save failed', err?.message ?? 'Could not save geometry.');
+      Alert.alert(tl('map.saveFailed'), err?.message ?? tl('map.saveFailedBody'));
     } finally {
       setSaving(false);
     }
@@ -95,26 +97,26 @@ export function HoleGeoEditor({ courseName, holeNumber, visible, onClose, onSave
     <Modal visible animationType="slide" onRequestClose={onClose}>
       <View style={s.root}>
         <View style={s.header}>
-          <Text style={s.title}>Edit Hole {holeNumber}</Text>
+          <Text style={s.title}>{tl('map.edit.title', { hole: formatNumber(holeNumber) })}</Text>
           <Pressable onPress={onClose} hitSlop={8}><Feather name="x" size={22} color={hud.text} /></Pressable>
         </View>
 
         {!feat ? (
-          <View style={s.center}><Text style={s.muted}>No base geometry for this hole.</Text></View>
+          <View style={s.center}><Text style={s.muted}>{tl('map.noBase')}</Text></View>
         ) : (
           <>
             <View style={s.seg}>
               {FIELDS.map((f, i) => (
                 <Pressable key={f.key} onPress={() => setActive(i)} style={[s.segBtn, i === active && s.segOn]}>
                   <View style={[s.dot, { backgroundColor: f.color }]} />
-                  <Text style={[s.segTxt, i === active && s.segTxtOn]}>{f.label}</Text>
+                  <Text style={[s.segTxt, i === active && s.segTxtOn]}>{tl(f.labelKey)}</Text>
                   <Feather name={pts[f.key] ? 'check' : 'plus'} size={13} color={i === active ? hud.onAccent : (pts[f.key] ? hud.accent : hud.textMuted)} />
                 </Pressable>
               ))}
             </View>
             <HoleMapView data={data} activeField={FIELDS[active].key} onPoint={onPoint} style={s.map} />
             <Pressable style={[s.save, saving && s.saveOff]} onPress={save} disabled={saving}>
-              {saving ? <ActivityIndicator color={hud.onAccent} /> : <Text style={s.saveTxt}>Save hole {holeNumber}</Text>}
+              {saving ? <ActivityIndicator color={hud.onAccent} /> : <Text style={s.saveTxt}>{tl('map.save', { hole: formatNumber(holeNumber) })}</Text>}
             </Pressable>
           </>
         )}

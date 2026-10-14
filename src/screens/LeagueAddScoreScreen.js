@@ -9,6 +9,7 @@ import { makeOffAppStyles } from '../components/league/offAppStyles';
 import { ScorecardTable } from '../components/scorecard/GridView';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useT, tr } from '../i18n';
 import { useLeague } from '../hooks/useLeague';
 import { scoreCard } from '../store/leagueRules';
 import { parseIsoDate } from '../store/leagueDraft';
@@ -37,6 +38,7 @@ function findCard(data, cardId) {
 export default function LeagueAddScoreScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
+  const t = useT();
   const s = makeOffAppStyles(theme);
   const leagueId = route?.params?.leagueId;
   const cardId = route?.params?.cardId ?? null;
@@ -95,7 +97,7 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
 
   function next() {
     setProblem(null);
-    if (!playedOn) { setProblem('Pick the date you played.'); return; }
+    if (!playedOn) { setProblem(t('league.addScore.pickDate')); return; }
     navigation.navigate('LeagueAddProof', {
       leagueId, cardId, snapshot, playedOn, strokes, leagueHandicap,
     });
@@ -103,8 +105,8 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
 
   const header = (
     <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel="Back" />
-      <Text style={s.headerTitle}>{cardId ? 'Add your score' : 'Add a card'}</Text>
+      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
+      <Text style={s.headerTitle}>{cardId ? t('league.addScore.titleCard') : t('league.addScore.titleNew')}</Text>
     </View>
   );
 
@@ -114,7 +116,7 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
         {header}
         <View style={s.center}>
           {loading ? <ActivityIndicator color={theme.accent.primary} /> : (
-            <Text style={s.text}>{error || 'This card is no longer available.'}</Text>
+            <Text style={s.text}>{error || t('league.addScore.unavailable')}</Text>
           )}
         </View>
       </ScreenContainer>
@@ -122,8 +124,8 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
   }
 
   const noteText = cardId
-    ? `League card · announced ${timeLabel(card.announcedAt)}`
-    : "You didn't announce this round, so it won't count until an admin approves it.";
+    ? t('league.addScore.noteAnnounced', { time: timeLabel(card.announcedAt) })
+    : t('league.addScore.noteUnannounced');
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -136,9 +138,9 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
 
         {!cardId && <CourseTeePicker navigation={navigation} value={pick} onChange={setPick} />}
 
-        <Text style={s.fieldLabel}>Date played</Text>
+        <Text style={s.fieldLabel}>{t('league.addScore.datePlayed')}</Text>
         <DateField
-          label="Date played"
+          label={t('league.addScore.datePlayed')}
           value={dateText}
           onChange={setDateText}
           min={playMonthStart}
@@ -148,8 +150,8 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
         {course && (
           <>
             {/* With the picker on screen, the unrated tee already has its own note. */}
-            {!!courseProblem(course) && (cardId || courseProblem(course) !== UNRATED_TEE_PROBLEM)
-              && <Text style={s.errorText}>{courseProblem(course)}</Text>}
+            {!!courseProblem(course) && (cardId || courseProblem(course).key !== UNRATED_TEE_PROBLEM.key)
+              && <Text style={s.errorText}>{tr(courseProblem(course))}</Text>}
             <ScorecardTable
               round={{
                 holes: course.holes,
@@ -157,7 +159,7 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
                 scoringMode: 'stableford',
                 playerHandicaps: { [ME]: playingHandicap },
               }}
-              players={[{ id: ME, name: 'You', handicap: playingHandicap }]}
+              players={[{ id: ME, name: t('league.addScore.you'), handicap: playingHandicap }]}
               scores={{ [ME]: strokes }}
               onSetScore={(_playerId, holeNumber, text) => setStrokes((prev) => applyStrokeText(prev, holeNumber, text))}
               editable={() => true}
@@ -176,11 +178,11 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
           accessibilityRole="button"
           accessibilityState={{ disabled: !ready }}
         >
-          <Text style={s.primaryText}>Next: add proof</Text>
+          <Text style={s.primaryText}>{t('league.addScore.next')}</Text>
         </TouchableOpacity>
         {!ready && !!course && (
           <Text style={[s.hint, { textAlign: 'center', marginTop: 8 }]}>
-            Every hole needs a whole number of strokes, 1 to 30.
+            {t('league.addScore.wholeHint')}
           </Text>
         )}
       </ScrollView>

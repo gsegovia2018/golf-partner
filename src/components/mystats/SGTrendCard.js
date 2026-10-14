@@ -1,31 +1,33 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
 import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import TrendLineChart from './TrendLineChart';
 import { SG_CATEGORIES } from './shotMetrics';
 
-const CHIPS = [{ key: 'total', label: 'Total' }, ...SG_CATEGORIES.map(({ key, label }) => ({ key, label }))];
+const CHIPS = [{ key: 'total', labelKey: 'stats.my.sgTrend.total' }, ...SG_CATEGORIES.map(({ key, labelKey }) => ({ key, labelKey }))];
 
 // Per-round strokes-gained trend. Answers "am I actually getting better?"
 // per category — the season averages on the dashboard can't show direction.
 export default function SGTrendCard({ strokesGained }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [active, setActive] = useState('total');
   const perRound = strokesGained?.perRound ?? [];
   if (perRound.length < 2) return null;
 
   const series = perRound.map((entry) => ({
-    label: `R${entry.index + 1}`,
+    label: t('stats.my.roundShort', { n: entry.index + 1 }),
     value: active === 'total'
       ? entry.total
       : (entry.byCategory?.[active] ?? null),
   }));
 
   return (
-    <SectionCard title="SG Trend">
+    <SectionCard title={t('stats.my.sgTrend.title')}>
       <View style={s.chipRow}>
         {CHIPS.map((chip) => {
           const selected = chip.key === active;
@@ -35,10 +37,10 @@ export default function SGTrendCard({ strokesGained }) {
               style={[s.chip, selected && s.chipActive]}
               onPress={() => setActive(chip.key)}
               accessibilityRole="button"
-              accessibilityLabel={`SG trend ${chip.label}`}
+              accessibilityLabel={t('stats.my.sgTrend.chip', { label: t(chip.labelKey) })}
               accessibilityState={{ selected }}
             >
-              <Text style={[s.chipText, selected && s.chipTextActive]}>{chip.label}</Text>
+              <Text style={[s.chipText, selected && s.chipTextActive]}>{t(chip.labelKey)}</Text>
             </PressableScale>
           );
         })}
@@ -47,8 +49,8 @@ export default function SGTrendCard({ strokesGained }) {
         series={series}
         color={theme.accent.primary}
         labelColor={theme.text.secondary}
-        caption="Strokes gained per round vs target"
-        formatValue={(v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}`}
+        caption={t('stats.my.sgTrend.caption')}
+        formatValue={(v) => `${v >= 0 ? '+' : ''}${formatNumber(v, { decimals: 1 })}`}
       />
     </SectionCard>
   );

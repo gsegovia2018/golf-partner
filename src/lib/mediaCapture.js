@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { enqueueMedia } from '../store/mediaQueue';
 import { kickUploadWorker } from './uploadWorker';
 import { MAX_VIDEO_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_LABEL } from './mediaLimits';
+import { t } from '../i18n';
 
 const PHOTO_PICKER_QUALITY = 0.9;
 const VIDEO_PICKER_QUALITY = 0.7;
@@ -21,17 +22,17 @@ function uuid() {
 async function ensurePermissions(source) {
   if (source === 'camera') {
     const cam = await ImagePicker.requestCameraPermissionsAsync();
-    if (!cam.granted) throw new Error('Camera permission denied.');
+    if (!cam.granted) throw new Error(t('shared.error.cameraDenied'));
   } else {
     const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!lib.granted) throw new Error('Photo library permission denied.');
+    if (!lib.granted) throw new Error(t('shared.error.libraryDenied'));
   }
 }
 
 function sizeErrorMessage(source) {
-  if (source === 'library') return `Gallery videos must be ${MAX_VIDEO_UPLOAD_LABEL} or smaller.`;
-  if (source === 'camera') return `Videos recorded with the camera must be ${MAX_VIDEO_UPLOAD_LABEL} or smaller.`;
-  return `Videos must be ${MAX_VIDEO_UPLOAD_LABEL} or smaller.`;
+  if (source === 'library') return t('shared.media.sizeGallery', { size: MAX_VIDEO_UPLOAD_LABEL });
+  if (source === 'camera') return t('shared.media.sizeCamera', { size: MAX_VIDEO_UPLOAD_LABEL });
+  return t('shared.media.size', { size: MAX_VIDEO_UPLOAD_LABEL });
 }
 
 // The web picker (and, in principle, any future picker) can omit fileSize —

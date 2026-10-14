@@ -1,12 +1,14 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Image, StyleSheet } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 
 const CIRCLE = 56;
 const CELL = 66;
 
 export default function MemoriesRoundRow({ entries, onOpenRound }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   return (
@@ -24,7 +26,9 @@ export default function MemoriesRoundRow({ entries, onOpenRound }) {
             activeOpacity={empty ? 1 : 0.7}
             onPress={() => { if (!empty) onOpenRound(entry); }}
             disabled={empty}
-            accessibilityLabel={`Ronda ${entry.roundIndex + 1}${empty ? ', sin recuerdos' : ''}`}
+            accessibilityLabel={empty
+              ? t('memories.round.a11yEmpty', { round: entry.roundIndex + 1 })
+              : t('memories.round.a11y', { round: entry.roundIndex + 1 })}
           >
             <View style={s.avatar}>
               {!empty && entry.cover?.thumbUrl ? (
@@ -36,7 +40,7 @@ export default function MemoriesRoundRow({ entries, onOpenRound }) {
               <Text style={[s.label, empty && s.labelEmpty]}>R{entry.roundIndex + 1}</Text>
             </View>
             <Text style={[s.course, empty && s.courseEmpty]} numberOfLines={1}>
-              {entry.courseName || (empty ? 'Sin fotos' : '')}
+              {entry.courseName || (empty ? t('memories.round.noPhotos') : '')}
             </Text>
           </TouchableOpacity>
         );

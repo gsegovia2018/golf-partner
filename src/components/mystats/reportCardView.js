@@ -3,11 +3,15 @@
 // direction with polarity applied, per-chapter normalized bar ratio) and
 // the collapsed-chapter preview line. No theme, no React — unit-testable.
 
+import { t, formatNumber } from '../../i18n';
+import { num } from './msg';
+import { cellKey, groupKey } from './reportKeys';
+
 // "+1.2" / "-0.4" / "0" / "—".
 export function fmtDelta(v) {
   if (v == null) return '—';
-  if (v > 0) return `+${v}`;
-  return `${v}`;
+  if (v > 0) return `+${formatNumber(v)}`;
+  return formatNumber(v);
 }
 
 // Display delta for a cell: career average when available, else the fixed
@@ -26,15 +30,15 @@ function goodOf(cell) {
 const PCT_RE = / %$/;
 
 function valueTextOf(cell) {
-  return PCT_RE.test(cell.label) ? `${cell.value}%` : `${cell.value}`;
+  return PCT_RE.test(cell.label) ? `${num(cell.value)}%` : num(cell.value);
 }
 
 function subOf(groupKey, cell) {
   if (groupKey === 'course' || groupKey === 'timing') {
-    return `${Number(cell.value).toFixed(2)} / hole`;
+    return t('stats.my.report.perHole', { value: formatNumber(Number(cell.value), { decimals: 2 }) });
   }
-  if (groupKey === 'distribution') return `${cell.value} this round`;
-  return `${valueTextOf(cell)} this round`;
+  if (groupKey === 'distribution') return t('stats.my.report.thisRound', { value: num(cell.value) });
+  return t('stats.my.report.thisRound', { value: valueTextOf(cell) });
 }
 
 function previewOf(rows) {
@@ -42,7 +46,9 @@ function previewOf(rows) {
   if (scored.length > 0) {
     const best = scored.reduce((a, b) => (b.good > a.good ? b : a));
     const worst = scored.reduce((a, b) => (b.good < a.good ? b : a));
-    return `Best: ${best.label} ${fmtDelta(best.delta)} · Worst: ${worst.label} ${fmtDelta(worst.delta)}`;
+    return t('stats.my.report.preview', {
+      best: best.label, bestDelta: fmtDelta(best.delta), worst: worst.label, worstDelta: fmtDelta(worst.delta),
+    });
   }
   return rows.slice(0, 2)
     .map((r) => `${r.valueText} ${r.label.toLowerCase()}`)
@@ -54,7 +60,7 @@ function previewOf(rows) {
 // falls back to the benchmark even when career history exists.
 export function buildChapterVM(group, _opts = {}) {
   const rows = group.cells.map((cell) => ({
-    label: cell.label.replace(PCT_RE, ''),
+    label: cellKey(cell.label) ? t(cellKey(cell.label)) : cell.label.replace(PCT_RE, ''),
     valueText: valueTextOf(cell),
     sub: subOf(group.key, cell),
     delta: displayDelta(cell),
@@ -66,7 +72,7 @@ export function buildChapterVM(group, _opts = {}) {
   }
   return {
     key: group.key,
-    label: group.label,
+    label: groupKey(group.key) ? t(groupKey(group.key)) : group.label,
     rows,
     preview: previewOf(rows),
     hasDeltas: rows.some((r) => r.good != null),
@@ -77,6 +83,7 @@ export function buildChapterVM(group, _opts = {}) {
 // Callout component used.
 export function calloutSub(cell) {
   const delta = cell.deltaVsAvg != null ? cell.deltaVsAvg : cell.deltaVs2;
-  const vs = cell.deltaVsAvg != null ? 'your avg' : 'the 2.0 mark';
-  return `${cell.value} / hole · ${fmtDelta(delta)} vs ${vs}`;
+  return t(cell.deltaVsAvg != null ? 'stats.my.report.calloutAvg' : 'stats.my.report.calloutMark', {
+    value: num(cell.value), delta: fmtDelta(delta), mark: formatNumber(2, { decimals: 1 }),
+  });
 }

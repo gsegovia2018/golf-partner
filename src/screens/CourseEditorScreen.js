@@ -8,6 +8,7 @@ import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber } from '../i18n';
 import { updateCourseFromEditor } from '../store/libraryStore';
 import TeesEditor from '../components/TeesEditor';
 import { canSaveCourse } from '../lib/courseLibrary';
@@ -23,6 +24,7 @@ function defaultHoles() {
 
 export default function CourseEditorScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const {
@@ -90,24 +92,24 @@ export default function CourseEditorScreen({ navigation, route }) {
       {/* Header */}
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Course Editor</Text>
+        <Text style={s.headerTitle}>{t('courses.editor.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
       <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
         <View>
-          <Text style={s.title}>{courseName || `Round ${roundIndex + 1}`}</Text>
-          <Text style={s.subtitle}>Total par: {totalPar}</Text>
+          <Text style={s.title}>{courseName || t('courses.editor.roundFallback', { n: formatNumber(roundIndex + 1) })}</Text>
+          <Text style={s.subtitle}>{t('courses.editor.totalPar', { par: formatNumber(totalPar) })}</Text>
         </View>
 
         <TeesEditor tees={tees} onChange={setTees} theme={theme} />
 
         {/* Hole table */}
         <View>
-          <Text style={s.sectionTitle}>Holes</Text>
+          <Text style={s.sectionTitle}>{t('courses.editor.holes')}</Text>
 
           <View style={s.toolRow}>
-            <Text style={s.toolLabel}>Par presets</Text>
+            <Text style={s.toolLabel}>{t('courses.editor.parPresets')}</Text>
             {[3, 4, 5].map((p) => (
               <TouchableOpacity
                 key={p}
@@ -115,15 +117,15 @@ export default function CourseEditorScreen({ navigation, route }) {
                 onPress={() => setAllPar(p)}
                 activeOpacity={0.7}
               >
-                <Text style={s.toolBtnText}>All par {p}</Text>
+                <Text style={s.toolBtnText}>{t('courses.editor.allPar', { par: p })}</Text>
               </TouchableOpacity>
             ))}
           </View>
           <View style={s.toolRow}>
-            <Text style={s.toolLabel}>Stroke index</Text>
+            <Text style={s.toolLabel}>{t('courses.editor.strokeIndex')}</Text>
             <TouchableOpacity style={s.toolBtn} onPress={autoNumberSI} activeOpacity={0.7}>
               <Feather name="hash" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
-              <Text style={s.toolBtnText}>Auto-number 1–18</Text>
+              <Text style={s.toolBtnText}>{t('courses.editor.autoNumber')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -131,20 +133,20 @@ export default function CourseEditorScreen({ navigation, route }) {
             <View style={s.warnBox}>
               <Feather name="alert-triangle" size={14} color={theme.destructive} style={{ marginRight: 8, marginTop: 1 }} />
               <View style={{ flex: 1 }}>
-                <Text style={s.warnTitle}>Stroke index needs attention</Text>
+                <Text style={s.warnTitle}>{t('courses.editor.siTitle')}</Text>
                 {siIssues.map((issue) => (
                   <Text key={issue} style={s.warnText}>{issue}</Text>
                 ))}
-                <Text style={s.warnText}>Each hole must use a unique SI from 1 to 18.</Text>
+                <Text style={s.warnText}>{t('courses.editor.siHint')}</Text>
               </View>
             </View>
           )}
 
           <View style={s.tableCard}>
             <View style={s.headerRow}>
-              <Text style={[s.col, s.holeCol, s.headerText]}>Hole</Text>
-              <Text style={[s.col, s.parCol, s.headerText]}>Par</Text>
-              <Text style={[s.col, s.siCol, s.headerText]}>SI</Text>
+              <Text style={[s.col, s.holeCol, s.headerText]}>{t('courses.col.hole')}</Text>
+              <Text style={[s.col, s.parCol, s.headerText]}>{t('courses.col.par')}</Text>
+              <Text style={[s.col, s.siCol, s.headerText]}>{t('courses.col.si')}</Text>
             </View>
 
             {holes.map((hole, i) => (
@@ -184,8 +186,8 @@ export default function CourseEditorScreen({ navigation, route }) {
             onPress={async () => {
               if (!canSave) {
                 Alert.alert(
-                  'Fix course data before saving',
-                  [...siIssues, ...(dupes.length > 0 ? [`Duplicate tee labels: ${dupes.join(', ')}`] : [])].join('\n'),
+                  t('courses.fixData'),
+                  [...siIssues, ...(dupes.length > 0 ? [t('courses.dupeTees', { labels: dupes.join(', ') })] : [])].join('\n'),
                 );
                 return;
               }
@@ -195,8 +197,8 @@ export default function CourseEditorScreen({ navigation, route }) {
                 } catch (err) {
                   // Keep the user on the editor so their edits aren't lost.
                   Alert.alert(
-                    'Could not save course',
-                    err?.message ?? 'Your changes were not saved. Please try again.',
+                    t('courses.editor.saveFailed'),
+                    err?.message ?? t('courses.editor.saveFailedBody'),
                   );
                   return;
                 }
@@ -205,7 +207,7 @@ export default function CourseEditorScreen({ navigation, route }) {
             }}
           >
             <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
-            <Text style={s.btnText}>Done</Text>
+            <Text style={s.btnText}>{t('courses.done')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

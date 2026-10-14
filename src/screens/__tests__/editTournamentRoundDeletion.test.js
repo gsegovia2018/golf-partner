@@ -39,9 +39,10 @@ describe('edit tournament round deletion helpers', () => {
       players,
       tournament: { rounds: [round, completeRound('r2')] },
     })).toEqual({
-      title: 'Delete history round',
-      message: 'Delete Round 1 from history? This permanently removes its scores and stats.',
-      confirmLabel: 'Delete history round',
+      titleKey: 'setup.edit.delHistory.title',
+      messageKey: 'setup.edit.delHistory.message',
+      confirmKey: 'setup.edit.delHistory.confirm',
+      params: { n: 1, count: 4 },
     });
   });
 
@@ -53,7 +54,7 @@ describe('edit tournament round deletion helpers', () => {
       roundIndex: 0,
       players,
       tournament: { finishedAt: 123, rounds: [round, completeRound('r2')] },
-    }).confirmLabel).toBe('Delete history round');
+    }).confirmKey).toBe('setup.edit.delHistory.confirm');
   });
 
   test('keeps entered-score warning for partial rounds', () => {
@@ -65,9 +66,10 @@ describe('edit tournament round deletion helpers', () => {
       players,
       tournament: { rounds: [round, completeRound('r2')] },
     })).toEqual({
-      title: 'Remove round',
-      message: 'Round 1 has scores entered for 1 hole. Removing it will permanently delete those scores.',
-      confirmLabel: 'Delete round & scores',
+      titleKey: 'setup.edit.delScores.title',
+      messageKey: 'setup.edit.delScores.message',
+      confirmKey: 'setup.edit.delScores.confirm',
+      params: { n: 1, count: 1 },
     });
   });
 });

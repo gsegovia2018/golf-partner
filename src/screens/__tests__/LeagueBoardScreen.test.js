@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import LeagueBoardScreen from '../LeagueBoardScreen';
 
@@ -576,5 +576,65 @@ describe('LeagueBoardScreen', () => {
     expect(getByText('unrated')).toBeTruthy();
     expect(getByText('not ranked')).toBeTruthy();
     expect(getByText('Your card has no slope or rating. Shown, not ranked.')).toBeTruthy();
+  });
+});
+
+describe('LeagueBoardScreen in Spanish', () => {
+  const { setLanguagePref, formatDate } = require('../../i18n');
+  const mes = formatDate(`${THIS_MONTH}-01`, 'monthName', 'es');
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    store.getLeagueCached.mockResolvedValue(null);
+    await act(async () => { await setLanguagePref('es'); });
+  });
+  afterEach(async () => { await act(async () => { await setLanguagePref('en'); }); });
+
+  test('groups, reasons, my card and the month in Spanish', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      members: [
+        member('me', 'Marcos'), member('javi', 'Javi'), member('nacho', 'Nacho'), member('pablo', 'Pablo'),
+      ],
+      cardsByMonth: {
+        [THIS_MONTH]: [
+          card('javi', 'confirmed', 38, { confirmation: 'qr', course: { name: 'Olivar' } }),
+          card('nacho', 'submitted', 35, { course: { name: 'Olivar' } }),
+        ],
+      },
+    }));
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('Confirmadas · 1'));
+    expect(getByText(new RegExp(`^${mes.toUpperCase()} HASTA AHORA · `))).toBeTruthy();
+    expect(getByText('Olivar · marcador por QR')).toBeTruthy();
+    expect(getByText('Pendientes de confirmación · 1')).toBeTruthy();
+    expect(getByText('Olivar · el marcador aún no ha escaneado el QR')).toBeTruthy();
+    expect(getByText('Sin tarjeta · 2')).toBeTruthy();
+    expect(getByText('Tú, Pablo')).toBeTruthy();
+    // Mid-sentence the month is lower case.
+    expect(getByText(`Tu tarjeta de ${mes}`)).toBeTruthy();
+  });
+
+  test('a shared place shows decimal league points with a comma, and the floor reads "puntos por jugar"', async () => {
+    const snap = snapshot({
+      members: [
+        member('me', 'Marcos'), member('javi', 'Javi'), member('nacho', 'Nacho'),
+        member('lucia', 'Lucía'), member('pablo', 'Pablo'),
+      ],
+      cardsByMonth: {
+        [THIS_MONTH]: [
+          card('javi', 'confirmed', 38), card('me', 'confirmed', 34, { course: { name: 'Olivar' } }),
+          card('nacho', 'confirmed', 34), card('lucia', 'confirmed', 34), card('pablo', 'confirmed', 30),
+        ],
+      },
+    });
+    snap.league.participationPoints = 100;
+    store.getLeague.mockResolvedValue(snap);
+    const { getByText, getAllByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('Confirmadas · 5'));
+    // 2nd-4th share (300 + 190 + 0) / 3 = 163.3 each.
+    expect(getAllByText('+163,3')).toHaveLength(3);
+    expect(getAllByText('Comparte 2.º–4.º')).toHaveLength(2);
+    expect(getByText('+100')).toBeTruthy();
+    expect(getByText('Puntos por jugar')).toBeTruthy();
+    expect(getByText('34 ptos · T2.º de momento · +163,3 ptos de liga · Olivar')).toBeTruthy();
   });
 });

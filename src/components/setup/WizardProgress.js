@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 
 // Wizard header: back chevron, "STEP X OF N" label, and a segmented progress
 // bar. Purely presentational — all behaviour comes from props.
@@ -11,15 +12,16 @@ import { useTheme } from '../../theme/ThemeContext';
 //   totalSteps total number of steps
 //   onBack     called when the chevron is tapped
 export default function WizardProgress({ step, totalSteps, onBack }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = makeStyles(theme);
   return (
     <View style={s.wrap}>
       <View style={s.row}>
-        <TouchableOpacity onPress={onBack} style={s.backBtn} accessibilityLabel="Go back">
+        <TouchableOpacity onPress={onBack} style={s.backBtn} accessibilityLabel={t('setup.wizard.goBack')}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
-        <Text style={s.label}>{`STEP ${step + 1} OF ${totalSteps}`}</Text>
+        <Text style={s.label}>{t('setup.wizard.step', { step: step + 1, total: totalSteps })}</Text>
         <View style={{ width: 36 }} />
       </View>
       <View style={s.bar}>

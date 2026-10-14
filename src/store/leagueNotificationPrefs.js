@@ -5,20 +5,21 @@
 // send-push reads the push keys (P9); send-email will read the email keys
 // (P10), until then those switches only save the choice.
 
-// Order and wording follow the League settings design. `type` is the
+// Order follows the League settings design; `labelKey` is the catalogue key
+// of the row's text. `type` is the
 // notifications.type value the server inserts.
 export const LEAGUE_NOTIFICATION_ROWS = [
-  { type: 'league_card_announced', label: 'Someone announces a card' },
-  { type: 'league_tee_off', label: 'Someone tees off' },
-  { type: 'league_card_confirmed', label: 'A card is confirmed' },
-  { type: 'league_ranking_updated', label: 'Ranking updated' },
-  { type: 'league_month_reminder', label: '3 days left, no card yet' },
-  { type: 'league_post_reminder', label: '2 hours left to post' },
-  { type: 'league_vote_opened', label: 'A handicap vote opens' },
+  { type: 'league_card_announced', labelKey: 'league.notifPrefs.cardAnnounced' },
+  { type: 'league_tee_off', labelKey: 'league.notifPrefs.teeOff' },
+  { type: 'league_card_confirmed', labelKey: 'league.notifPrefs.cardConfirmed' },
+  { type: 'league_ranking_updated', labelKey: 'league.notifPrefs.rankingUpdated' },
+  { type: 'league_month_reminder', labelKey: 'league.notifPrefs.monthReminder' },
+  { type: 'league_post_reminder', labelKey: 'league.notifPrefs.postReminder' },
+  { type: 'league_vote_opened', labelKey: 'league.notifPrefs.voteOpened' },
   // 20261016000000 (R10, R15).
-  { type: 'league_card_voided', label: 'An admin voids, reopens or approves a card' },
-  { type: 'league_handicap_changed', label: 'A league handicap changes' },
-  { type: 'league_spot_claimed', label: 'Members are removed or spots claimed' },
+  { type: 'league_card_voided', labelKey: 'league.notifPrefs.cardVoided' },
+  { type: 'league_handicap_changed', labelKey: 'league.notifPrefs.handicapChanged' },
+  { type: 'league_spot_claimed', labelKey: 'league.notifPrefs.spotClaimed' },
 ];
 
 // Types with no switch of their own share a row's: the row's choice applies

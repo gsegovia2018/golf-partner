@@ -4,6 +4,7 @@ import CaptureMenuSheet from '../components/CaptureMenuSheet';
 import AttachMediaSheet from '../components/AttachMediaSheet';
 import BatchAttachSheet from '../components/BatchAttachSheet';
 import { pickMedia, attachMedia, attachManyMedia } from '../lib/mediaCapture';
+import { t } from '../i18n';
 
 // One hook per screen that offers media uploads. Owns the capture-menu →
 // pick → attach orchestration that FeedScreen, GalleryScreen and
@@ -42,7 +43,7 @@ export default function useMediaAttachFlow({
         setSingleAsset(result);
       }
     } catch (e) {
-      Alert.alert("Couldn't capture", String(e?.message ?? e));
+      Alert.alert(t('shared.media.captureFailed'), String(e?.message ?? e));
     }
   }, [allowBatch]);
 
@@ -54,7 +55,7 @@ export default function useMediaAttachFlow({
     if (!asset || !tournament) return;
     const resolvedRoundId = roundId ?? tournament.rounds?.[roundIndex]?.id;
     if (!resolvedRoundId) {
-      Alert.alert("Couldn't attach", 'This round is no longer available.');
+      Alert.alert(t('shared.media.attachFailed'), t('shared.media.roundGone'));
       return;
     }
     try {
@@ -73,7 +74,7 @@ export default function useMediaAttachFlow({
       });
       onAttached?.();
     } catch (e) {
-      Alert.alert("Couldn't attach", String(e?.message ?? e));
+      Alert.alert(t('shared.media.attachFailed'), String(e?.message ?? e));
     }
   }, [singleAsset, tournament, onAttached]);
 
@@ -84,7 +85,7 @@ export default function useMediaAttachFlow({
       await attachManyMedia({ tournamentId: tournament.id, items: payload });
       onAttached?.();
     } catch (e) {
-      Alert.alert("Couldn't attach", String(e?.message ?? e));
+      Alert.alert(t('shared.media.attachFailed'), String(e?.message ?? e));
     }
   }, [tournament, onAttached]);
 

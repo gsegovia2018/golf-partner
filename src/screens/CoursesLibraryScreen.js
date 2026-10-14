@@ -10,6 +10,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber } from '../i18n';
 import {
   deleteCourse, fetchCourses, upsertCourse,
   fetchFavoriteCourseIds, toggleFavoriteCourse,
@@ -20,6 +21,7 @@ const normalize = (value) =>
 
 export default function CoursesLibraryScreen({ navigation }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const [courses, setCourses] = useState([]);
@@ -58,7 +60,7 @@ export default function CoursesLibraryScreen({ navigation }) {
       setCourses(list);
       setFavorites(favs);
     } catch (err) {
-      setLoadError(err?.message ?? 'Could not load courses');
+      setLoadError(err?.message ?? t('courses.loadFailed'));
     } finally {
       hasLoadedOnceRef.current = true;
       setLoading(false);
@@ -74,8 +76,8 @@ export default function CoursesLibraryScreen({ navigation }) {
       await toggleFavoriteCourse(courseId);
     } catch (err) {
       setFavorites(prev);
-      if (Platform.OS === 'web') window.alert(err.message ?? 'Could not update favorite');
-      else Alert.alert('Error', err.message ?? 'Could not update favorite');
+      if (Platform.OS === 'web') window.alert(err.message ?? t('courses.favoriteFailed'));
+      else Alert.alert(t('courses.errorTitle'), err.message ?? t('courses.favoriteFailed'));
     }
   }
 
@@ -88,7 +90,7 @@ export default function CoursesLibraryScreen({ navigation }) {
       navigation.navigate('CourseLibraryDetail', { courseId: course.id, courseName: course.name });
       await load();
     } catch (e) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('courses.errorTitle'), e.message);
     } finally {
       setSaving(false);
     }
@@ -96,19 +98,19 @@ export default function CoursesLibraryScreen({ navigation }) {
 
   async function remove(c) {
     const confirmed = Platform.OS === 'web'
-      ? window.confirm(`Remove "${c.name}" from the library?`)
+      ? window.confirm(t('courses.library.removeConfirm', { name: c.name }))
       : await new Promise((resolve) => Alert.alert(
-          'Remove Course', `Remove "${c.name}" from the library?`,
-          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-           { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }],
+          t('courses.library.removeTitle'), t('courses.library.removeConfirm', { name: c.name }),
+          [{ text: t('courses.cancel'), style: 'cancel', onPress: () => resolve(false) },
+           { text: t('courses.library.remove'), style: 'destructive', onPress: () => resolve(true) }],
         ));
     if (!confirmed) return;
     try {
       await deleteCourse(c.id);
       await load();
     } catch (err) {
-      if (Platform.OS === 'web') window.alert(err.message ?? 'Could not delete course');
-      else Alert.alert('Error', err.message ?? 'Could not delete course');
+      if (Platform.OS === 'web') window.alert(err.message ?? t('courses.deleteFailed'));
+      else Alert.alert(t('courses.errorTitle'), err.message ?? t('courses.deleteFailed'));
     }
   }
 
@@ -116,20 +118,22 @@ export default function CoursesLibraryScreen({ navigation }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Courses</Text>
+        <Text style={s.headerTitle}>{t('courses.library.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
         <Text style={s.sectionTitle}>
-          {`All courses · ${filteredCourses.length}${query && filteredCourses.length !== courses.length ? ` of ${courses.length}` : ''}`}
+          {query && filteredCourses.length !== courses.length
+            ? t('courses.library.countOf', { count: filteredCourses.length, total: courses.length })
+            : t('courses.library.countAll', { count: filteredCourses.length })}
         </Text>
 
         <View style={s.searchRow}>
           <Feather name="search" size={14} color={theme.text.muted} style={s.searchIcon} />
           <TextInput
             style={s.searchInput}
-            placeholder="Search name, city or region"
+            placeholder={t('courses.searchPlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -139,15 +143,15 @@ export default function CoursesLibraryScreen({ navigation }) {
             autoCapitalize="none"
           />
           {query ? (
-            <IconButton icon="x" onPress={() => setQuery('')} style={s.searchClear} accessibilityLabel="Clear search" />
+            <IconButton icon="x" onPress={() => setQuery('')} style={s.searchClear} accessibilityLabel={t('courses.library.clearSearch')} />
           ) : null}
         </View>
 
-        <Text style={s.sectionTitle}>Add course</Text>
+        <Text style={s.sectionTitle}>{t('courses.library.addSection')}</Text>
         <View style={s.form}>
           <TextInput
             style={[s.input, s.flex]}
-            placeholder="New course name"
+            placeholder={t('courses.library.newNamePlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -159,7 +163,7 @@ export default function CoursesLibraryScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        <Text style={s.sectionTitle}>List</Text>
+        <Text style={s.sectionTitle}>{t('courses.library.listSection')}</Text>
 
         {loading
           ? <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
@@ -167,11 +171,11 @@ export default function CoursesLibraryScreen({ navigation }) {
             ? (
               <View style={s.errorBox}>
                 <Feather name="wifi-off" size={44} color={theme.destructive} />
-                <Text style={s.errorTitle}>Couldn't load courses</Text>
+                <Text style={s.errorTitle}>{t('courses.loadFailedTitle')}</Text>
                 <Text style={s.errorMsg}>{loadError}</Text>
                 <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.7}>
                   <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-                  <Text style={s.retryBtnText}>Retry</Text>
+                  <Text style={s.retryBtnText}>{t('courses.retry')}</Text>
                 </TouchableOpacity>
               </View>
             )
@@ -179,16 +183,16 @@ export default function CoursesLibraryScreen({ navigation }) {
             ? (
               <View style={s.emptyState}>
                 <Feather name="map" size={44} color={theme.text.muted} />
-                <Text style={s.emptyTitle}>No courses yet</Text>
-                <Text style={s.emptySubtitle}>Add golf courses to set up your rounds</Text>
+                <Text style={s.emptyTitle}>{t('courses.library.empty')}</Text>
+                <Text style={s.emptySubtitle}>{t('courses.library.emptySub')}</Text>
               </View>
             )
             : filteredCourses.length === 0
             ? (
               <View style={s.emptyState}>
                 <Feather name="search" size={44} color={theme.text.muted} />
-                <Text style={s.emptyTitle}>No matches</Text>
-                <Text style={s.emptySubtitle}>No courses match "{query}"</Text>
+                <Text style={s.emptyTitle}>{t('courses.library.noMatches')}</Text>
+                <Text style={s.emptySubtitle}>{t('courses.noMatch', { query })}</Text>
               </View>
             )
             : (
@@ -204,9 +208,9 @@ export default function CoursesLibraryScreen({ navigation }) {
                       <Text style={s.courseMeta}>
                         {[c.city, c.province].filter(Boolean).join(', ')}
                         {(c.city || c.province) ? '  ·  ' : ''}
-                        Par {c.holes.reduce((sum, h) => sum + h.par, 0)}
-                        {c.slope ? `  ·  Slope ${c.slope}` : ''}
-                        {c.rating ? `  ·  CR ${c.rating}` : ''}
+                        {t('courses.picker.par', { par: formatNumber(c.holes.reduce((sum, h) => sum + h.par, 0)) })}
+                        {c.slope ? `  ·  ${t('courses.picker.slope', { slope: formatNumber(c.slope) })}` : ''}
+                        {c.rating ? `  ·  ${t('courses.library.rating', { rating: formatNumber(c.rating) })}` : ''}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity

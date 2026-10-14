@@ -534,3 +534,40 @@ describe('LeagueCardScreen', () => {
     await waitFor(() => getByText('No card to show'));
   });
 });
+
+describe('LeagueCardScreen in Spanish', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    mockMe = 'me';
+    store.getLeagueCached.mockResolvedValue(null);
+    store.getLeagueCardEvents.mockResolvedValue([]);
+    await act(async () => { await setLanguagePref('es'); });
+  });
+  afterEach(async () => { await act(async () => { await setLanguagePref('en'); }); });
+
+  test('title, pager, strip and differential read in Spanish, with comma decimals', async () => {
+    store.getLeague.mockResolvedValue(snapshot([card('javi', 'confirmed', 38), card('nacho', 'submitted', 30)]));
+    const { getByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
+    await waitFor(() => getByText('Javi · tarjeta de octubre'));
+    expect(getByText('1 de 2 tarjetas de liga de octubre')).toBeTruthy();
+    expect(getByText('Hándicap de juego 18 · Bruto 90')).toBeTruthy();
+    expect(getByText('1.º')).toBeTruthy();
+    expect(getByText('de 1 tarjeta')).toBeTruthy();
+    expect(getByText('2,4 mejor que el hándicap de liga 18,0. Se guarda como referencia; la clasificación usa puntos.')).toBeTruthy();
+  });
+
+  test('my own card is titled "Tú", and the floor reads "puntos por jugar"', async () => {
+    const snap = snapshot([
+      card('javi', 'confirmed', 40), card('nacho', 'confirmed', 38), card('x', 'confirmed', 36),
+      card('me', 'confirmed', 20),
+    ]);
+    snap.league = { id: 'L1', name: 'El Club', pointsTable: [500, 300, 190], participationPoints: 10 };
+    snap.members.push(member('x', 'Xavi'));
+    store.getLeague.mockResolvedValue(snap);
+    const { getByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('me')} />));
+    await waitFor(() => getByText('Tú · tarjeta de octubre'));
+    expect(getByText('4.º')).toBeTruthy();
+    expect(getByText('+10')).toBeTruthy();
+    expect(getByText('puntos por jugar')).toBeTruthy();
+  });
+});

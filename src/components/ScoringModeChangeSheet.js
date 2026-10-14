@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 import { SCORING_MODES, isScoringModeAllowed } from './scoringModes';
 import BottomSheet from './BottomSheet';
 
@@ -18,9 +19,10 @@ export default function ScoringModeChangeSheet({
   defaultMode,
   onConfirm,
   onCancel,
-  title = 'Choose a scoring mode',
+  title,
   subtitle,
 }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const [selected, setSelected] = useState(defaultMode);
@@ -33,7 +35,7 @@ export default function ScoringModeChangeSheet({
 
   return (
     <BottomSheet visible={visible} onClose={onCancel} sheetStyle={s.sheet}>
-      <Text style={s.title}>{title}</Text>
+      <Text style={s.title}>{title ?? t('setup.scoringSheet.title')}</Text>
       {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
       <View style={s.list}>
         {allowed.map((mode) => {
@@ -48,8 +50,8 @@ export default function ScoringModeChangeSheet({
             >
               <Feather name={mode.icon} size={20} color={theme.accent.primary} />
               <View style={s.rowText}>
-                <Text style={s.rowLabel}>{mode.label}</Text>
-                <Text style={s.rowSubtitle}>{mode.subtitle}</Text>
+                <Text style={s.rowLabel}>{t(mode.labelKey)}</Text>
+                <Text style={s.rowSubtitle}>{t(mode.subtitleKey)}</Text>
               </View>
               {isSelected ? (
                 <Feather name="check" size={14} color={theme.accent.primary} />
@@ -60,14 +62,14 @@ export default function ScoringModeChangeSheet({
       </View>
       <View style={s.actions}>
         <TouchableOpacity style={s.cancelBtn} onPress={onCancel}>
-          <Text style={s.cancelText}>Cancel</Text>
+          <Text style={s.cancelText}>{t('setup.scoringSheet.cancel')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[s.confirmBtn, !selected && s.confirmBtnDisabled]}
           onPress={() => selected && onConfirm(selected)}
           disabled={!selected}
         >
-          <Text style={s.confirmText}>Continue</Text>
+          <Text style={s.confirmText}>{t('setup.scoringSheet.continue')}</Text>
         </TouchableOpacity>
       </View>
     </BottomSheet>

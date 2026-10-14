@@ -8,6 +8,7 @@ import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber } from '../i18n';
 import { fetchCourses, updateCourseFromEditor, upsertCourse } from '../store/libraryStore';
 import { propagateCourseToTournaments } from '../store/tournamentStore';
 import TeesEditor from '../components/TeesEditor';
@@ -27,6 +28,7 @@ function defaultHoles() {
 export default function CourseLibraryDetailScreen({ navigation, route }) {
   const { courseId, courseName: initialName } = route.params;
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const [name, setName] = useState(initialName ?? '');
@@ -58,17 +60,19 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           }
         }
       } catch (err) {
-        if (!cancelled) setLoadError(err?.message ?? 'Could not load course');
+        if (!cancelled) setLoadError(err?.message ?? t('courses.detail.loadFailed'));
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
+    // t is read once per fetch; a language switch should not refetch the course.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, reloadKey]);
 
   useEffect(() => {
-    navigation.setOptions({ title: name || initialName || 'Course' });
-  }, [navigation, name, initialName]);
+    navigation.setOptions({ title: name || initialName || t('courses.defaultTitle') });
+  }, [navigation, name, initialName, t]);
 
   // Offline map: visible only for courses with per-hole ('holes'-mode) mapped
   // geometry — the satellite tile prefetch needs a bbox per hole.
@@ -93,8 +97,8 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
   const downloaded = mine && !prefetch.running && prefetch.total > 0 && prefetch.ok === prefetch.total;
   const finishedIncomplete = mine && !prefetch.running && prefetch.total > 0 && prefetch.ok < prefetch.total;
   const downloadLabel = busy
-    ? `Downloading ${prefetch.done}/${prefetch.total}`
-    : finishedIncomplete ? 'Retry' : 'Download';
+    ? t('courses.detail.downloading', { done: prefetch.done, total: prefetch.total })
+    : finishedIncomplete ? t('courses.retry') : t('courses.detail.download');
   const onDownloadTiles = useCallback(() => {
     prefetchCourseTiles(name, { force: true }).catch(() => {});
   }, [name]);
@@ -107,8 +111,8 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
     const { ok, siIssues, dupes } = canSaveCourse(holes, tees);
     if (!ok) {
       Alert.alert(
-        'Fix course data before saving',
-        [...siIssues, ...(dupes.length > 0 ? [`Duplicate tee labels: ${dupes.join(', ')}`] : [])].join('\n'),
+        t('courses.fixData'),
+        [...siIssues, ...(dupes.length > 0 ? [t('courses.dupeTees', { labels: dupes.join(', ') })] : [])].join('\n'),
       );
       return;
     }
@@ -119,7 +123,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
       await propagateCourseToTournaments(courseId, { holes, tees });
       navigation.goBack();
     } catch (e) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('courses.errorTitle'), e.message);
     } finally {
       setSaving(false);
     }
@@ -159,7 +163,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
       <ScreenContainer style={s.centered} edges={['top', 'bottom']}>
         <View style={s.errorBox}>
           <Feather name="wifi-off" size={44} color={theme.destructive} />
-          <Text style={s.errorTitle}>Couldn't load course</Text>
+          <Text style={s.errorTitle}>{t('courses.detail.loadFailedTitle')}</Text>
           <Text style={s.errorMsg}>{loadError}</Text>
           <TouchableOpacity
             style={s.retryBtn}
@@ -167,7 +171,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
             activeOpacity={0.7}
           >
             <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-            <Text style={s.retryBtnText}>Retry</Text>
+            <Text style={s.retryBtnText}>{t('courses.retry')}</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -178,7 +182,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Course Details</Text>
+        <Text style={s.headerTitle}>{t('courses.detail.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
@@ -187,7 +191,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           style={s.nameInput}
           value={name}
           onChangeText={setName}
-          placeholder="Course name"
+          placeholder={t('courses.namePlaceholder')}
           placeholderTextColor={theme.text.muted}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor={theme.accent.primary}
@@ -198,7 +202,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
         <View style={s.locationRow}>
           <TextInput
             style={[s.locationInput, s.flex]}
-            placeholder="City"
+            placeholder={t('courses.detail.city')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -207,7 +211,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           />
           <TextInput
             style={[s.locationInput, { width: 100 }]}
-            placeholder="Province"
+            placeholder={t('courses.detail.province')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -216,14 +220,14 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           />
         </View>
 
-        <Text style={s.sectionTitle}>Holes  ·  Par {totalPar}</Text>
+        <Text style={s.sectionTitle}>{t('courses.detail.holesTitle', { par: formatNumber(totalPar) })}</Text>
 
         <View>
           <View style={s.tableCard}>
             <View style={s.tableHeaderRow}>
-              <Text style={[s.col, s.holeCol, s.tableHeaderText]}>Hole</Text>
-              <Text style={[s.col, s.parCol, s.tableHeaderText]}>Par</Text>
-              <Text style={[s.col, s.siCol, s.tableHeaderText]}>SI</Text>
+              <Text style={[s.col, s.holeCol, s.tableHeaderText]}>{t('courses.col.hole')}</Text>
+              <Text style={[s.col, s.parCol, s.tableHeaderText]}>{t('courses.col.par')}</Text>
+              <Text style={[s.col, s.siCol, s.tableHeaderText]}>{t('courses.col.si')}</Text>
             </View>
 
             {holes.map((hole, i) => (
@@ -259,14 +263,14 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
 
         {!!geometry?.holes?.length && (
           <>
-            <Text style={s.sectionTitle}>Offline map</Text>
+            <Text style={s.sectionTitle}>{t('courses.detail.offlineSection')}</Text>
             <View style={[s.tableCard, s.offlineMapCard]}>
               <View style={s.offlineMapInfo}>
-                <Text style={s.offlineMapSubtitle}>~{sizeMb} MB satellite imagery</Text>
-                {downloaded && <Text style={s.offlineMapStatus}>Downloaded</Text>}
+                <Text style={s.offlineMapSubtitle}>{t('courses.detail.offlineSize', { size: formatNumber(sizeMb) })}</Text>
+                {downloaded && <Text style={s.offlineMapStatus}>{t('courses.detail.downloaded')}</Text>}
                 {finishedIncomplete && (
                   <Text style={s.offlineMapStatusWarn}>
-                    Incomplete — {prefetch.ok}/{prefetch.total} tiles
+                    {t('courses.detail.incomplete', { ok: prefetch.ok, total: prefetch.total })}
                   </Text>
                 )}
               </View>
@@ -276,7 +280,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
                   onPress={onDownloadTiles}
                   disabled={busy}
                   activeOpacity={0.7}
-                  accessibilityLabel="Download offline map"
+                  accessibilityLabel={t('courses.detail.downloadA11y')}
                 >
                   <Feather name="download" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 6 }} />
                   <Text style={s.offlineMapDownloadBtnText}>{downloadLabel}</Text>
@@ -285,9 +289,9 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
                   onPress={onDeleteTiles}
                   activeOpacity={0.7}
                   style={s.offlineMapDeleteBtn}
-                  accessibilityLabel="Delete offline map"
+                  accessibilityLabel={t('courses.detail.deleteMapA11y')}
                 >
-                  <Text style={s.offlineMapDeleteBtnText}>Delete</Text>
+                  <Text style={s.offlineMapDeleteBtnText}>{t('courses.delete')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -301,7 +305,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           activeOpacity={0.7}
         >
           <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
-          <Text style={s.saveBtnText}>{saving ? 'Saving...' : 'Save course'}</Text>
+          <Text style={s.saveBtnText}>{saving ? t('courses.detail.saving') : t('courses.detail.saveCourse')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </ScreenContainer>

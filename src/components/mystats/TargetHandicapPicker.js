@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, TextInput, Pressable } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 import PressableScale from '../ui/PressableScale';
 
 export function TargetHandicapPicker({
@@ -11,6 +12,7 @@ export function TargetHandicapPicker({
   onCancel,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const [text, setText] = useState(
     currentValue == null ? '' : String(currentValue)
   );
@@ -25,7 +27,8 @@ export function TargetHandicapPicker({
       onSave(null);
       return;
     }
-    const n = parseFloat(trimmed);
+    // A Spanish keyboard types the decimal comma (12,5).
+    const n = parseFloat(trimmed.replace(',', '.'));
     if (Number.isNaN(n) || n < 0 || n > 36) {
       return;
     }
@@ -43,14 +46,14 @@ export function TargetHandicapPicker({
           style={{ backgroundColor: theme.bg.card, borderRadius: 12, padding: 20 }}
         >
           <Text style={{ fontSize: 16, fontWeight: '600', color: theme.text.primary, marginBottom: 12 }}>
-            Set your target
+            {t('stats.my.target.set')}
           </Text>
 
           <TextInput
             value={text}
             onChangeText={setText}
             keyboardType="decimal-pad"
-            placeholder="e.g. 12.5"
+            placeholder={t('stats.my.target.placeholder')}
             placeholderTextColor={theme.text.muted}
             style={{
               borderWidth: 1,
@@ -64,8 +67,8 @@ export function TargetHandicapPicker({
 
           <Text style={{ marginTop: 12, color: theme.text.secondary, fontSize: 13 }}>
             {text.trim() === ''
-              ? 'Leave blank to compare against scratch.'
-              : `Compared against a handicap-${text.trim()} golfer.`}
+              ? t('stats.my.target.blank')
+              : t('stats.my.target.comparedWith', { value: text.trim() })}
           </Text>
 
           {currentHandicap != null && (
@@ -74,7 +77,7 @@ export function TargetHandicapPicker({
               style={{ marginTop: 12 }}
             >
               <Text style={{ color: theme.accent.primary, fontSize: 13 }}>
-                ⓘ Use my current handicap ({currentHandicap})
+                {t('stats.my.target.useCurrent', { value: currentHandicap })}
               </Text>
             </PressableScale>
           )}
@@ -82,12 +85,12 @@ export function TargetHandicapPicker({
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20, gap: 12 }}>
             <PressableScale onPress={onCancel}>
               <Text style={{ color: theme.text.secondary, fontSize: 14, fontWeight: '600', padding: 8 }}>
-                Cancel
+                {t('common.cancel')}
               </Text>
             </PressableScale>
             <PressableScale onPress={handleSave}>
               <Text style={{ color: theme.accent.primary, fontSize: 14, fontWeight: '600', padding: 8 }}>
-                Save
+                {t('common.save')}
               </Text>
             </PressableScale>
           </View>

@@ -14,24 +14,25 @@ import {
   listNotifications, overrideMarker,
 } from '../store/officialAdmin';
 import { cardDiscrepancyHoles, activeMarkerChain } from '../store/officialScoring';
+import { useT, formatDate } from '../i18n';
 
-function showError(message) {
-  const msg = message || 'Something went wrong';
+function showError(t, message) {
+  const msg = message || t('official.admin.genericError');
   if (Platform.OS === 'web') window.alert(msg);
-  else Alert.alert('Error', msg);
+  else Alert.alert(t('official.admin.errorTitle'), msg);
 }
 
 // Human-friendly timestamp for the notifications feed.
-function formatTime(iso) {
+function formatTime(t, iso) {
   if (!iso) return '';
   const then = new Date(iso);
   const diffMs = Date.now() - then.getTime();
   const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 1) return t('official.admin.justNow');
+  if (diffMin < 60) return t('official.admin.minutesAgo', { n: diffMin });
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  return then.toLocaleDateString();
+  if (diffHr < 24) return t('official.admin.hoursAgo', { n: diffHr });
+  return formatDate(then, 'short');
 }
 
 // Clamp a stroke count into the valid 1-15 range.
@@ -42,6 +43,7 @@ function clampStrokes(n) {
 
 export default function OfficialAdminScreen({ route, navigation }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const { tournamentId } = route.params ?? {};
@@ -118,7 +120,7 @@ export default function OfficialAdminScreen({ route, navigation }) {
             .map((m) => ({
               roster_id: m.roster_id,
               seat: m.seat,
-              display_name: m.tournament_roster?.display_name ?? 'Unknown',
+              display_name: m.tournament_roster?.display_name ?? t('official.admin.unknown'),
               withdrawn: !!m.tournament_roster?.withdrawn,
             })),
         }));
@@ -143,7 +145,7 @@ export default function OfficialAdminScreen({ route, navigation }) {
       hasLoadedOnceRef.current = true;
       if (mountedRef.current) setLoading(false);
     }
-  }, [tournamentId]);
+  }, [tournamentId, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -160,10 +162,10 @@ export default function OfficialAdminScreen({ route, navigation }) {
   }
 
   function partyStatusLine(party) {
-    if (party.locked) return 'Locked';
+    if (party.locked) return t('official.admin.locked');
     const n = partyDiscrepancyCount(party);
-    if (n > 0) return `${n} discrepanc${n === 1 ? 'y' : 'ies'} open`;
-    return 'Scoring';
+    if (n > 0) return t('official.admin.discrepancies', { count: n });
+    return t('official.admin.scoring');
   }
 
   // Run a mutation with the in-flight guard, then reload all screen data.
@@ -176,7 +178,7 @@ export default function OfficialAdminScreen({ route, navigation }) {
       await load();
     } catch (e) {
       if (!mountedRef.current) return;
-      showError(e?.message);
+      showError(t, e?.message);
     } finally {
       if (mountedRef.current) setBusy(false);
     }
@@ -234,14 +236,14 @@ export default function OfficialAdminScreen({ route, navigation }) {
       }
     });
     if (Platform.OS === 'web') {
-      if (window.confirm(`Withdraw ${member.display_name}?`)) confirm();
+      if (window.confirm(t('official.admin.withdrawConfirmWeb', { name: member.display_name }))) confirm();
     } else {
       Alert.alert(
-        'Withdraw player',
-        `Withdraw ${member.display_name} from the tournament?`,
+        t('official.admin.withdrawTitle'),
+        t('official.admin.withdrawMessage', { name: member.display_name }),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Withdraw', style: 'destructive', onPress: confirm },
+          { text: t('official.admin.cancel'), style: 'cancel' },
+          { text: t('official.admin.withdraw'), style: 'destructive', onPress: confirm },
         ],
       );
     }
@@ -251,13 +253,13 @@ export default function OfficialAdminScreen({ route, navigation }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Admin Monitor</Text>
+        <Text style={s.headerTitle}>{t('official.admin.title')}</Text>
         <View style={s.refreshBtn}>
           <IconButton
             icon="refresh-cw"
             onPress={() => !busy && load()}
             disabled={busy || loading}
-            accessibilityLabel="Refresh"
+            accessibilityLabel={t('official.admin.refresh')}
           />
         </View>
       </View>
@@ -268,38 +270,38 @@ export default function OfficialAdminScreen({ route, navigation }) {
         </View>
       ) : loadError ? (
         <View style={s.centered}>
-          <Text style={s.errorText}>Could not load this tournament.</Text>
+          <Text style={s.errorText}>{t('official.admin.loadError')}</Text>
           <TouchableOpacity style={s.secondaryBtn} onPress={load}>
-            <Text style={s.secondaryBtnText}>Retry</Text>
+            <Text style={s.secondaryBtnText}>{t('official.admin.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <ScrollView style={s.container} contentContainerStyle={s.content}>
           {!round ? (
-            <Text style={s.hint}>No rounds exist for this tournament yet.</Text>
+            <Text style={s.hint}>{t('official.admin.noRounds')}</Text>
           ) : (
             <>
               <Text style={s.subtitle}>
-                {`Round ${round.round_index + 1} · ${round.status}`}
+                {t('official.admin.roundStatus', { n: round.round_index + 1, status: round.status })}
               </Text>
               {!hasLiveRound && (
                 <View style={s.noticeCard}>
                   <Feather name="info" size={14} color={theme.text.muted} style={{ marginRight: 6 }} />
                   <Text style={s.noticeText}>
-                    No live round — showing the most recent round.
+                    {t('official.admin.noLive')}
                   </Text>
                 </View>
               )}
 
               {/* Parties */}
-              <Text style={s.sectionTitle}>Parties</Text>
+              <Text style={s.sectionTitle}>{t('official.admin.parties')}</Text>
               {parties.length === 0 && (
-                <Text style={s.hint}>No parties set up for this round.</Text>
+                <Text style={s.hint}>{t('official.admin.noParties')}</Text>
               )}
               {parties.map((party) => (
                 <View key={party.id} style={s.partyCard}>
                   <View style={s.partyHeader}>
-                    <Text style={s.partyTitle}>{`Party ${party.number}`}</Text>
+                    <Text style={s.partyTitle}>{t('official.admin.partyN', { n: party.number })}</Text>
                     <Text style={[
                       s.partyStatus,
                       party.locked && s.partyStatusLocked,
@@ -321,7 +323,7 @@ export default function OfficialAdminScreen({ route, navigation }) {
                           ]}
                           >
                             {member.display_name}
-                            {member.withdrawn ? '  •  Withdrawn' : ''}
+                            {member.withdrawn ? t('official.admin.withdrawnSuffix') : ''}
                           </Text>
                           {!member.withdrawn && (
                             <TouchableOpacity
@@ -330,7 +332,7 @@ export default function OfficialAdminScreen({ route, navigation }) {
                               disabled={busy}
                             >
                               <Feather name="user-x" size={14} color={theme.destructive} />
-                              <Text style={s.miniBtnTextDanger}>Withdraw</Text>
+                              <Text style={s.miniBtnTextDanger}>{t('official.admin.withdraw')}</Text>
                             </TouchableOpacity>
                           )}
                         </View>
@@ -347,18 +349,18 @@ export default function OfficialAdminScreen({ route, navigation }) {
                                   color={theme.destructive}
                                   style={{ marginRight: 6 }}
                                 />
-                                <Text style={s.discText}>{`Hole ${hole} — scores disagree`}</Text>
+                                <Text style={s.discText}>{t('official.admin.holeDisagree', { hole })}</Text>
                                 <TouchableOpacity
                                   style={[s.miniBtn, busy && s.btnDisabled]}
                                   onPress={() => openResolvePicker(party, member, hole)}
                                   disabled={busy}
                                 >
-                                  <Text style={s.miniBtnText}>Force resolve</Text>
+                                  <Text style={s.miniBtnText}>{t('official.admin.forceResolve')}</Text>
                                 </TouchableOpacity>
                               </View>
                               {openPicker === key && (
                                 <View style={s.picker}>
-                                  <Text style={s.pickerLabel}>Agreed strokes</Text>
+                                  <Text style={s.pickerLabel}>{t('official.admin.agreedStrokes')}</Text>
                                   <View style={s.stepperRow}>
                                     <TouchableOpacity
                                       style={s.stepBtn}
@@ -381,7 +383,7 @@ export default function OfficialAdminScreen({ route, navigation }) {
                                   >
                                     {busy
                                       ? <ActivityIndicator size="small" color={theme.text.inverse} />
-                                      : <Text style={s.confirmBtnText}>Confirm</Text>}
+                                      : <Text style={s.confirmBtnText}>{t('official.admin.confirm')}</Text>}
                                   </TouchableOpacity>
                                 </View>
                               )}
@@ -399,22 +401,22 @@ export default function OfficialAdminScreen({ route, navigation }) {
                       disabled={busy}
                     >
                       <Feather name="lock" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-                      <Text style={s.finalizeBtnText}>Force finalize party</Text>
+                      <Text style={s.finalizeBtnText}>{t('official.admin.forceFinalize')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
               ))}
 
               {/* Notifications */}
-              <Text style={s.sectionTitle}>Notifications</Text>
+              <Text style={s.sectionTitle}>{t('official.admin.notifications')}</Text>
               {notifications.length === 0 ? (
-                <Text style={s.hint}>No notifications.</Text>
+                <Text style={s.hint}>{t('official.admin.noNotifications')}</Text>
               ) : (
                 notifications.map((n) => (
                   <View key={n.id} style={s.notifCard}>
                     <View style={s.notifTop}>
                       <Text style={s.notifKind}>{n.kind}</Text>
-                      <Text style={s.notifTime}>{formatTime(n.created_at)}</Text>
+                      <Text style={s.notifTime}>{formatTime(t, n.created_at)}</Text>
                     </View>
                     <Text style={s.notifBody}>{n.body}</Text>
                   </View>

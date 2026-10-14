@@ -5,16 +5,18 @@ import {
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber, formatDate } from '../i18n';
 import { loadProfile } from '../store/profileStore';
 import { getLeagueByCode, getLeagueInvitee, joinLeague } from '../store/leagueStore';
 import { defaultMemberHandicap, parseMemberHandicap } from '../store/leagueDraft';
-import { formatEuros, monthName, currentMonthKey } from '../store/leagueView';
+import { formatEuros, currentMonthKey } from '../store/leagueView';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { attachEmailToGuest, isEmailTakenError } from '../lib/guestAccount';
 import { consumeJustJoined, requestLoginTab } from '../lib/leagueJoinHandoff';
 import GuestIdentityFields, { guestIdentityErrors } from '../components/league/GuestIdentityFields';
 import InitialsAvatar from '../components/league/InitialsAvatar';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
 // /league/:code. Shows the league, the rules in brief and the league handicap
 // the admin proposed (the member can propose another), then Join. When the
@@ -26,6 +28,7 @@ import InitialsAvatar from '../components/league/InitialsAvatar';
 export default function JoinLeagueScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
+  const t = useT();
   const code = route?.params?.code ?? '';
   const authUser = useAuth()?.user ?? null;
   const isGuest = !!authUser?.is_anonymous;
@@ -79,7 +82,7 @@ export default function JoinLeagueScreen({ navigation, route }) {
         setState('ready');
       } catch (e) {
         if (cancelled) return;
-        setErrorText(e?.message || 'Could not load this league.');
+        setErrorText(leagueErrorText(e) || '');
         setState('error');
       }
     })();
@@ -91,12 +94,12 @@ export default function JoinLeagueScreen({ navigation, route }) {
   // app's confirm; src/lib/webAlert.js makes it a real confirm on web.)
   function confirmLogIn() {
     Alert.alert(
-      'Log in to your account?',
-      "You're playing as a guest on this phone. Logging in leaves the guest session, and anything you did as a guest stays behind.",
+      t('league.join.loginTitle'),
+      t('league.join.loginBody'),
       [
-        { text: 'Stay as guest', style: 'cancel' },
+        { text: t('league.join.stayGuest'), style: 'cancel' },
         {
-          text: 'Log in',
+          text: t('league.join.logIn'),
           onPress: () => { requestLoginTab(); supabase.auth.signOut().catch(() => {}); },
         },
       ],
@@ -120,7 +123,7 @@ export default function JoinLeagueScreen({ navigation, route }) {
       if (!mountedRef.current) return;
       if (!found || found.claimed) {
         setLeague((l) => ({ ...l, invitees: l.invitees.filter((i) => i.id !== invitee.id) }));
-        setJoinError(`Someone already joined as ${invitee.name}.`);
+        setJoinError(t('league.join.spotTaken', { name: invitee.name }));
         return;
       }
       setSpot(found);
@@ -129,7 +132,7 @@ export default function JoinLeagueScreen({ navigation, route }) {
       // A guest who already has a name keeps it; the spot name only fills a blank.
       if (isGuest) setGuestName((n) => n || found.name);
     } catch (e) {
-      if (mountedRef.current) setJoinError(e?.message || "Couldn't load that spot. Please try again.");
+      if (mountedRef.current) setJoinError(leagueErrorText(e) || t('league.join.spotLoadFailed'));
     } finally {
       if (mountedRef.current) setSpotBusyId(null);
     }
@@ -163,7 +166,7 @@ export default function JoinLeagueScreen({ navigation, route }) {
       navigation.replace('LeagueBoard', { leagueId });
     } catch (e) {
       joiningRef.current = false;
-      setJoinError(e?.message || 'Could not join. Please try again.');
+      setJoinError(leagueErrorText(e) || t('league.join.joinFailed'));
       // Someone else took the spot meanwhile: drop it from the list.
       if (spot && /^Someone already joined as/.test(e?.message ?? '')) {
         const gone = spot.id;
@@ -190,12 +193,12 @@ export default function JoinLeagueScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.center}>
           <Feather name={notFound ? 'help-circle' : 'cloud-off'} size={40} color={theme.text.muted} />
-          <Text style={s.emptyTitle}>{notFound ? "This invite code isn't valid" : "Couldn't load the league"}</Text>
+          <Text style={s.emptyTitle}>{notFound ? t('league.join.invalidCode') : t('league.join.couldntLoad')}</Text>
           <Text style={s.emptyText}>
-            {notFound ? 'Check the code or ask for the link again.' : errorText}
+            {notFound ? t('league.join.checkCode') : (errorText || t('league.join.loadFailed'))}
           </Text>
           <TouchableOpacity style={s.secondaryBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
-            <Text style={s.secondaryText}>Go back</Text>
+            <Text style={s.secondaryText}>{t('league.join.goBack')}</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -212,41 +215,43 @@ export default function JoinLeagueScreen({ navigation, route }) {
     </View>
   );
 
-  const proposedBy = league.adminName ? `Proposed by ${league.adminName}.` : 'Proposed by the admin.';
+  const proposedBy = league.adminName ? t('league.join.proposedBy', { name: league.adminName }) : t('league.join.proposedByAdmin');
   const hcpValue = parseMemberHandicap(hcpText, league.handicapCap);
   const canJoin = !league.archived && !busy;
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} accessibilityLabel="Go back">
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} accessibilityLabel={t('league.join.goBack')}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Join league</Text>
+        <Text style={s.headerTitle}>{t('league.join.title')}</Text>
         <View style={{ width: 36 }} />
       </View>
 
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
         <View style={s.hero}>
           <Text style={s.heroOverline}>
-            {league.adminName ? `${league.adminName.toUpperCase()} INVITED YOU` : 'YOU ARE INVITED'}
+            {league.adminName ? t('league.join.invitedYou', { name: league.adminName.toUpperCase() }) : t('league.join.youAreInvited')}
           </Text>
           <Text style={s.heroName}>{league.name}</Text>
           <View style={s.chipRow}>
             <View style={s.chip}>
-              <Text style={s.chipText}>{`${league.memberCount} member${league.memberCount === 1 ? '' : 's'}`}</Text>
+              <Text style={s.chipText}>{t('league.join.members', { count: league.memberCount })}</Text>
             </View>
-            <View style={s.chip}><Text style={s.chipText}>{`${monthName(currentMonthKey())} open`}</Text></View>
+            <View style={s.chip}><Text style={s.chipText}>{t('league.join.monthOpen', { month: formatDate(`${currentMonthKey()}-01`, 'monthName') })}</Text></View>
           </View>
         </View>
 
-        <Text style={s.overline}>HOW IT WORKS</Text>
+        <Text style={s.overline}>{t('league.join.howItWorks')}</Text>
         <View style={s.card}>
-          {rule('calendar', 'One card a month', 'Announce before the first shot. That card counts.')}
-          {rule('target', 'Net Stableford, league handicap', `Max ${league.handicapCap}. The group can lower it by vote.`)}
-          {rule('check-circle', 'A marker confirms every card', 'In the app, by QR, or a photo of the signed card.')}
-          {rule('award', league.entryFeeCents > 0 ? `Entry ${formatEuros(league.entryFeeCents)}` : 'No entry fee',
-            league.entryFeeCents > 0 ? `Paid to ${league.adminName ?? 'the admin'}. Pot to the top of the season.` : 'Just play.', true)}
+          {rule('calendar', t('league.join.ruleOneCard'), t('league.join.ruleOneCardSub'))}
+          {rule('target', t('league.join.ruleNet'), t('league.join.ruleNetSub', { cap: formatNumber(league.handicapCap) }))}
+          {rule('check-circle', t('league.join.ruleMarker'), t('league.join.ruleMarkerSub'))}
+          {rule('award', league.entryFeeCents > 0 ? t('league.join.ruleFee', { fee: formatEuros(league.entryFeeCents) }) : t('league.join.ruleNoFee'),
+            league.entryFeeCents > 0
+              ? (league.adminName ? t('league.join.rulePaid', { name: league.adminName }) : t('league.join.rulePaidAdmin'))
+              : t('league.join.ruleJustPlay'), true)}
         </View>
 
         {league.isMember ? (
@@ -255,14 +260,14 @@ export default function JoinLeagueScreen({ navigation, route }) {
             onPress={() => navigation.replace('LeagueBoard', { leagueId: league.id })}
             activeOpacity={0.8}
           >
-            <Text style={s.primaryText}>You're in. Open the league</Text>
+            <Text style={s.primaryText}>{t('league.join.youreIn')}</Text>
           </TouchableOpacity>
         ) : (
           <>
             {(league.invitees ?? []).length > 0 && (
               <View style={s.spotBlock}>
-                <Text style={s.overline}>ARE YOU ONE OF THESE?</Text>
-                <Text style={s.spotHint}>{`Pick your name to keep the handicap ${league.adminName ?? 'the admin'} set.`}</Text>
+                <Text style={s.overline}>{t('league.join.spotsTitle')}</Text>
+                <Text style={s.spotHint}>{league.adminName ? t('league.join.spotHint', { name: league.adminName }) : t('league.join.spotHintAdmin')}</Text>
                 <View style={s.spotCard}>
                   {league.invitees.map((i) => {
                     const on = spot?.id === i.id;
@@ -294,7 +299,7 @@ export default function JoinLeagueScreen({ navigation, route }) {
                     accessibilityState={{ selected: !spot }}
                   >
                     <Text style={s.spotName} numberOfLines={2}>
-                      {myName ? `None of these, I'm ${myName}` : 'None of these'}
+                      {myName ? t('league.join.noneOfThese', { name: myName }) : t('league.join.noneOfTheseBare')}
                     </Text>
                     <View style={[s.radio, !spot && s.radioOn]}>{!spot && <View style={s.radioDot} />}</View>
                   </TouchableOpacity>
@@ -303,35 +308,40 @@ export default function JoinLeagueScreen({ navigation, route }) {
             )}
 
             <View style={s.hcpCard}>
-              <Text style={s.overline}>YOUR LEAGUE HANDICAP</Text>
+              <Text style={s.overline}>{t('league.join.hcpTitle')}</Text>
               {proposing ? (
                 <TextInput
                   style={s.hcpInput}
                   value={hcpText}
                   onChangeText={setHcpText}
                   keyboardType="decimal-pad"
-                  placeholder="e.g. 22.5"
+                  placeholder={t('league.join.hcpPh')}
                   placeholderTextColor={theme.text.muted}
                   keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                   selectionColor={theme.accent.primary}
-                  accessibilityLabel="Proposed league handicap"
+                  accessibilityLabel={t('league.join.hcpProposedA11y')}
                 />
               ) : (
-                <Text style={s.hcpValue}>{hcpValue == null ? 'Not set' : hcpValue.toFixed(1)}</Text>
+                <Text style={s.hcpValue}>{hcpValue == null ? t('league.join.hcpNotSet') : formatNumber(hcpValue, { decimals: 1 })}</Text>
               )}
               <Text style={s.hcpSub}>
-                {`${spot?.handicap != null ? `Saved for you by ${league.adminName ?? 'the admin'}.` : league.proposedHandicap != null ? proposedBy : 'The admin will set it.'}${profileHcp != null ? ` Your index is ${profileHcp}.` : ''}`}
+                {[
+                  spot?.handicap != null
+                    ? (league.adminName ? t('league.join.savedBy', { name: league.adminName }) : t('league.join.savedByAdmin'))
+                    : league.proposedHandicap != null ? proposedBy : t('league.join.adminWillSet'),
+                  profileHcp != null ? t('league.join.yourIndex', { hcp: formatNumber(profileHcp) }) : null,
+                ].filter(Boolean).join(' ')}
               </Text>
               {!proposing && (
                 <TouchableOpacity onPress={() => setProposing(true)} activeOpacity={0.7}>
-                  <Text style={s.proposeLink}>Propose another</Text>
+                  <Text style={s.proposeLink}>{t('league.join.proposeAnother')}</Text>
                 </TouchableOpacity>
               )}
             </View>
 
             {isGuest && (
               <View style={s.hcpCard}>
-                <Text style={s.overline}>{"WHO'S JOINING"}</Text>
+                <Text style={s.overline}>{t('league.join.whoJoining')}</Text>
                 <View style={{ alignSelf: 'stretch' }}>
                   <GuestIdentityFields
                     name={guestName}
@@ -342,27 +352,27 @@ export default function JoinLeagueScreen({ navigation, route }) {
                     emailError={submitted ? emailError : null}
                   />
                 </View>
-                <Text style={s.hcpSub}>We email you a link to keep the account and sign in on other devices.</Text>
+                <Text style={s.hcpSub}>{t('league.join.emailLinkLong')}</Text>
                 <TouchableOpacity onPress={confirmLogIn} activeOpacity={0.7}>
-                  <Text style={s.proposeLink}>I have an account — log in</Text>
+                  <Text style={s.proposeLink}>{t('league.join.haveAccountLogIn')}</Text>
                 </TouchableOpacity>
               </View>
             )}
 
             {emailTaken && (
               <Text style={s.errorText}>
-                That email already has a Golf Partner account.{' '}
+                {t('league.join.emailTaken')}{' '}
                 <Text
                   style={s.errorLink}
                   accessibilityRole="link"
                   onPress={confirmLogIn}
                 >
-                  Log in instead
+                  {t('league.join.logInInstead')}
                 </Text>
               </Text>
             )}
             {!!joinError && <Text style={s.errorText}>{joinError}</Text>}
-            {league.archived && <Text style={s.errorText}>This league is archived and can't be joined.</Text>}
+            {league.archived && <Text style={s.errorText}>{t('league.join.archived')}</Text>}
 
             <TouchableOpacity
               style={[s.primaryBtn, !canJoin && { opacity: 0.5 }]}
@@ -371,7 +381,7 @@ export default function JoinLeagueScreen({ navigation, route }) {
               activeOpacity={0.8}
             >
               {busy && <ActivityIndicator color={theme.text.inverse} style={{ marginRight: 8 }} />}
-              <Text style={s.primaryText}>{`Join ${league.name}`}</Text>
+              <Text style={s.primaryText}>{t('league.join.joinNamed', { name: league.name })}</Text>
             </TouchableOpacity>
           </>
         )}

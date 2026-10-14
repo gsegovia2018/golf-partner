@@ -2,9 +2,11 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
 import Reveal from '../ui/Reveal';
 import CountUpText from './CountUpText';
 import { fmtDelta } from './reportCardView';
+import { verdictKey } from './reportKeys';
 
 // Filled verdict hero (hybrid option B): tone-colored card, inverse Playfair
 // verdict, count-up points top-right, chips for per-hole / vs-avg /
@@ -17,24 +19,27 @@ function heroBg(theme, tone) {
 
 export default function ReportVerdictHero({ headline, round, hasHistory, durationLabel = null }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const reduced = useReducedMotion();
   const bg = heroBg(theme, headline.tone ?? 'neutral');
 
-  const chips = [`${headline.perHole} / hole`];
-  if (headline.vsAvg != null) chips.push(`${fmtDelta(headline.vsAvg)} vs your avg`);
-  chips.push(headline.clearedBenchmark ? '✓ above 2.0 mark' : 'below 2.0 mark');
-  if (!round.complete) chips.push(`through ${round.holesPlayed} holes`);
-  if (durationLabel) chips.push(`${durationLabel} on course`);
+  const mark = formatNumber(2, { decimals: 1 });
+  const chips = [t('stats.my.report.perHole', { value: formatNumber(headline.perHole) })];
+  if (headline.vsAvg != null) chips.push(t('stats.my.report.vsAvgChip', { delta: fmtDelta(headline.vsAvg) }));
+  chips.push(t(headline.clearedBenchmark ? 'stats.my.report.aboveMark' : 'stats.my.report.belowMark', { mark }));
+  if (!round.complete) chips.push(t('stats.my.report.through', { count: round.holesPlayed }));
+  if (durationLabel) chips.push(t('stats.my.report.onCourse', { duration: durationLabel }));
+  const verdict = verdictKey(headline.verdict) ? t(verdictKey(headline.verdict)) : headline.verdict;
 
   return (
     <View testID="report-card-verdict" style={[s.hero, { backgroundColor: bg }]}>
       <View style={s.topRow}>
         <View style={s.topCopy}>
-          <Text style={s.ov}>Round verdict</Text>
+          <Text style={s.ov}>{t('stats.my.report.roundVerdict')}</Text>
           <Reveal dy={9} duration={400}>
             <Text testID="report-card-verdict-phrase" style={s.verdict}>
-              {headline.verdict}.
+              {verdict}.
             </Text>
           </Reveal>
         </View>
@@ -43,7 +48,7 @@ export default function ReportVerdictHero({ headline, round, hasHistory, duratio
             <Text style={s.bignumN}>
               <CountUpText value={headline.points} duration={500} disabled={reduced} />
             </Text>
-            <Text style={s.bignumU}>points</Text>
+            <Text style={s.bignumU}>{t('stats.my.report.points')}</Text>
           </View>
         </Reveal>
       </View>
@@ -53,7 +58,7 @@ export default function ReportVerdictHero({ headline, round, hasHistory, duratio
         ))}
       </View>
       {!hasHistory && (
-        <Text style={s.note}>The vs-your-average comparison appears once you have more rounds.</Text>
+        <Text style={s.note}>{t('stats.my.report.noHistory')}</Text>
       )}
     </View>
   );

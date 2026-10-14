@@ -3,8 +3,10 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
 import { semantic } from '../../theme/tokens';
 import CountUpText from './CountUpText';
+import { renderMsg } from './msg';
 
 // Career-wide feats as an "honours board" — a plain white card with
 // info-blue chrome: records are information, not performance. See
@@ -31,32 +33,32 @@ const COUNT_MS = 500;
 // back to the playing handicap — labelled "shots" so it is never misread as
 // an index.
 const era = (index, handicap) => {
-  if (index != null) return `off ${index}`;
-  if (handicap != null) return `off ${handicap} shots`;
+  if (index != null) return { key: 'stats.my.milestones.eraIndex', params: { index: formatNumber(index) } };
+  if (handicap != null) return { key: 'stats.my.milestones.eraShots', params: { shots: formatNumber(handicap) } };
   return null;
 };
 
 // Order matters: the gold "Best round" cell is last so its count-up lands
 // last in the stagger.
 const CELLS = [
-  { key: 'birdies', label: 'Birdies', get: (m) => m.birdies ?? 0 },
-  { key: 'eagles', label: 'Eagles', get: (m) => m.eagles ?? 0 },
-  { key: 'par-streak', label: 'Best par streak', get: (m) => m.longestParStreak ?? 0 },
+  { key: 'birdies', label: 'stats.my.milestones.birdies', get: (m) => m.birdies ?? 0 },
+  { key: 'eagles', label: 'stats.my.milestones.eagles', get: (m) => m.eagles ?? 0 },
+  { key: 'par-streak', label: 'stats.my.milestones.parStreak', get: (m) => m.longestParStreak ?? 0 },
   {
     key: 'best-nine',
-    label: 'Best nine',
+    label: 'stats.my.milestones.bestNine',
     get: (m) => m.bestNine,
-    suffix: ' pts',
+    suffix: 'stats.my.milestones.ptsSuffix',
     note: (m) => era(m.bestNineIndex, m.bestNineHandicap),
   },
   // The only non-integer cell — differentials are reported to one decimal,
   // so it counts up in tenths rather than flashing a rounded whole number.
-  { key: 'best-diff', label: 'Best differential', get: (m) => m.bestDifferential, decimals: 1 },
+  { key: 'best-diff', label: 'stats.my.milestones.bestDiff', get: (m) => m.bestDifferential, decimals: 1 },
   {
     key: 'best-round',
-    label: 'Best round',
+    label: 'stats.my.milestones.bestRound',
     get: (m) => m.bestRound,
-    suffix: ' pts',
+    suffix: 'stats.my.milestones.ptsSuffix',
     gold: true,
     // The handicap that round was scored off — without it a career-best
     // point total silently invites comparison with rounds played off a
@@ -67,10 +69,11 @@ const CELLS = [
 
 // Matches what CountUpText renders, so the accessibility label and the
 // visible number never disagree on precision.
-const fmt = (value, cell) => (cell.decimals ? value.toFixed(cell.decimals) : `${value}`);
+const fmt = (value, cell) => (cell.decimals ? formatNumber(value, { decimals: cell.decimals }) : formatNumber(value));
 
 export default function CareerMilestonesCard({ milestones, onInfo }) {
   const { theme } = useTheme();
+  const t = useT();
   const reduced = useReducedMotion();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const m = milestones ?? {};
@@ -78,13 +81,13 @@ export default function CareerMilestonesCard({ milestones, onInfo }) {
   return (
     <View style={s.board} testID="career-milestones-board">
       <View style={s.head}>
-        <Text style={s.kicker}>Career Milestones</Text>
+        <Text style={s.kicker}>{t('stats.my.milestones.title')}</Text>
         {onInfo ? (
           <TouchableOpacity
             onPress={() => onInfo('careerMilestones')}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityRole="button"
-            accessibilityLabel="What is Career Milestones"
+            accessibilityLabel={t('stats.my.whatIs', { name: t('stats.my.milestones.title') })}
           >
             <Feather name="info" size={14} color={theme.text.muted} />
           </TouchableOpacity>
@@ -94,13 +97,20 @@ export default function CareerMilestonesCard({ milestones, onInfo }) {
         {CELLS.map((cell, i) => {
           const value = cell.get(m);
           const has = Number.isFinite(value);
-          const note = has && cell.note ? cell.note(m) : null;
+          const noteMsg = has && cell.note ? cell.note(m) : null;
+          const note = noteMsg ? renderMsg(noteMsg) : null;
+          const label = t(cell.label);
+          const suffix = cell.suffix ? t(cell.suffix) : '';
           return (
             <View
               key={cell.key}
               style={[s.cell, has && value === 0 && s.cellZero]}
               accessible
-              accessibilityLabel={`${cell.label}: ${has ? `${fmt(value, cell)}${cell.suffix ?? ''}${note ? ` ${note}` : ''}` : 'no complete round yet'}`}
+              accessibilityLabel={!has
+                ? t('stats.my.milestones.a11yNone', { label })
+                : t(note ? 'stats.my.milestones.a11yNote' : 'stats.my.milestones.a11yPlain', {
+                  label, value: fmt(value, cell), suffix, note,
+                })}
               testID={`milestone-${cell.key}`}
             >
               <Text style={[s.number, cell.gold && s.numberGold]} testID={`milestone-${cell.key}-value`}>
@@ -115,9 +125,9 @@ export default function CareerMilestonesCard({ milestones, onInfo }) {
                     />
                   )
                   : '-'}
-                {has && cell.suffix ? <Text style={s.suffix}>{cell.suffix}</Text> : null}
+                {has && cell.suffix ? <Text style={s.suffix}>{suffix}</Text> : null}
               </Text>
-              <Text style={s.label}>{cell.label}</Text>
+              <Text style={s.label}>{label}</Text>
               {note ? (
                 <Text style={s.note} testID={`milestone-${cell.key}-note`}>{note}</Text>
               ) : null}
@@ -125,12 +135,7 @@ export default function CareerMilestonesCard({ milestones, onInfo }) {
           );
         })}
       </View>
-      <Text style={s.footnote}>
-        Birdies, eagles and streaks are gross — real strokes against par, no handicap shots.
-        Best nine and best round are net points, each shown with the handicap it was scored
-        off. Rounds played before the app started recording your index show the shots you
-        received instead.
-      </Text>
+      <Text style={s.footnote}>{t('stats.my.milestones.footnote')}</Text>
     </View>
   );
 }

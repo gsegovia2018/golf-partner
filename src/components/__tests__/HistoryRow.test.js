@@ -2,6 +2,7 @@ import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import HistoryRow from '../HistoryRow';
+import { setLanguagePref } from '../../i18n';
 
 jest.mock('@expo/vector-icons', () => ({ Feather: 'Feather' }));
 
@@ -180,5 +181,19 @@ describe('HistoryRow', () => {
     expect(getAllByTestId('history-avatar-image')).toHaveLength(1);
     expect(queryByText('MA')).toBeNull(); // photo replaces the initials
     getByText('NO'); // no photo → initials fallback
+  });
+});
+
+describe('HistoryRow in Spanish', () => {
+  beforeEach(async () => { await setLanguagePref('es'); });
+  afterEach(async () => { await setLanguagePref('en'); });
+
+  test('result badge, champion strip and placement are Spanish', async () => {
+    const { getByText } = await renderRow(<HistoryRow model={wonModel} onPress={() => {}} />);
+    expect(getByText('GANADA')).toBeTruthy();
+    expect(getByText('104 ptos')).toBeTruthy();
+    expect(getByText(/Campeón/)).toBeTruthy();
+    expect(getByText('Tú')).toBeTruthy();
+    expect(getByText('1st de 8')).toBeTruthy();
   });
 });

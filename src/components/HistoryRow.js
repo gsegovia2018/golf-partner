@@ -4,12 +4,15 @@ import { Feather } from '@expo/vector-icons';
 import PressableScale from './ui/PressableScale';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
+import { useT } from '../i18n';
+import { pointsText, unitText } from '../lib/pointsText';
 
 // One History timeline row (game or tournament) rendered from a
 // historyEntryModel. Tournaments with a resolved champion grow a footer
 // strip naming the winner and the viewer's placement.
 export default function HistoryRow({ model, onPress, onLongPress }) {
   const { theme } = useTheme();
+  const t = useT();
   const gold = theme.isDark ? semantic.winner.dark : semantic.winner.light;
   const goldBg = theme.isDark ? 'rgba(255,215,0,0.12)' : '#f7f0dd';
   const s = useMemo(() => makeStyles(theme, gold, goldBg), [theme, gold, goldBg]);
@@ -24,7 +27,7 @@ export default function HistoryRow({ model, onPress, onLongPress }) {
       onLongPress={onLongPress}
       accessibilityRole="button"
       accessibilityLabel={model.title}
-      accessibilityHint={model.isOwner ? 'Opens the event. Long press to delete.' : 'Opens the event.'}
+      accessibilityHint={t(model.isOwner ? 'shared.history.openHintOwner' : 'shared.history.openHint')}
     >
       <View style={s.main}>
         <View style={[s.dateBox, model.kind === 'tournament' && s.dateBoxTournament]}>
@@ -75,33 +78,33 @@ export default function HistoryRow({ model, onPress, onLongPress }) {
             <>
               <View style={s.wonBadge}>
                 <Feather name="award" size={10} color={gold} />
-                <Text style={s.wonBadgeText}>WON</Text>
+                <Text style={s.wonBadgeText}>{t('shared.history.won')}</Text>
               </View>
-              <Text style={s.resultCaption}>{`${result.points} ${result.unit ?? 'pts'}`}</Text>
+              <Text style={s.resultCaption}>{pointsText(result.points, result.unit)}</Text>
             </>
           )}
           {result.kind === 'placement' && (
             <>
               <Text style={s.resultBig}>{result.label}</Text>
-              <Text style={s.resultCaption}>{`${result.points} ${result.unit ?? 'pts'}`}</Text>
+              <Text style={s.resultCaption}>{pointsText(result.points, result.unit)}</Text>
             </>
           )}
           {result.kind === 'points' && (
             <>
               <Text style={s.resultBig}>{String(result.points)}</Text>
-              <Text style={s.resultCaption}>pts</Text>
+              <Text style={s.resultCaption}>{unitText('pts')}</Text>
             </>
           )}
           {result.kind === 'team' && (
             <>
               <Text style={s.resultBig}>—</Text>
-              <Text style={s.resultCaption}>team</Text>
+              <Text style={s.resultCaption}>{t('shared.history.team')}</Text>
             </>
           )}
           {result.kind === 'none' && (
             <>
               <Text style={s.resultBig}>—</Text>
-              <Text style={s.resultCaption}>pts</Text>
+              <Text style={s.resultCaption}>{unitText('pts')}</Text>
             </>
           )}
         </View>
@@ -114,9 +117,9 @@ export default function HistoryRow({ model, onPress, onLongPress }) {
           <View style={s.champ}>
             <Feather name="award" size={12} color={gold} />
             <Text style={s.champText} numberOfLines={1}>
-              {'Champion · '}
-              <Text style={s.champName}>{champion.isMe ? 'You' : champion.name}</Text>
-              {` · ${champion.points} ${champion.unit}`}
+              {`${t('shared.history.champion')} · `}
+              <Text style={s.champName}>{champion.isMe ? t('shared.you') : champion.name}</Text>
+              {` · ${pointsText(champion.points, champion.unit)}`}
             </Text>
           </View>
           {myPlacement && (
@@ -130,7 +133,7 @@ export default function HistoryRow({ model, onPress, onLongPress }) {
                 myPlacement.won ? s.placePillTextWon : (myPlacement.podium ? s.placePillTextPodium : null),
               ]}
               >
-                {`${myPlacement.label} of ${myPlacement.fieldSize}`}
+                {t('shared.history.placeOf', { place: myPlacement.label, total: myPlacement.fieldSize })}
               </Text>
             </View>
           )}

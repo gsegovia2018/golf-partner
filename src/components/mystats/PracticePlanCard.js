@@ -1,46 +1,50 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { msgText, drillText, drillLocation } from './msg';
+import { useT, formatNumber } from '../../i18n';
 import SectionCard from './SectionCard';
 
+// Catalogue keys; render with t(ROLE_LABELS[role]).
 const ROLE_LABELS = {
-  practiceFirst: 'Practice first',
-  secondaryFocus: 'Secondary focus',
-  onCourseCue: 'On-course cue',
+  practiceFirst: 'stats.my.practice.role.practiceFirst',
+  secondaryFocus: 'stats.my.practice.role.secondaryFocus',
+  onCourseCue: 'stats.my.practice.role.onCourseCue',
 };
 
 const ROLE_ORDER = ['practiceFirst', 'secondaryFocus', 'onCourseCue'];
 
 export default function PracticePlanCard({ plan, onInfo }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const items = ROLE_ORDER.map((role) => plan?.find((item) => item.role === role)).filter(Boolean);
 
   return (
-    <SectionCard title="Practice Plan" infoKey="coachPractice" onInfo={onInfo}>
+    <SectionCard title={t('stats.my.practice.title')} infoKey="coachPractice" onInfo={onInfo}>
       {items.length ? items.map((item) => (
         <View key={item.id ?? item.role} style={s.item}>
-          <Text style={s.role}>{ROLE_LABELS[item.role] ?? 'Practice'}</Text>
-          <Text style={s.title}>{item.title}</Text>
+          <Text style={s.role}>{t(ROLE_LABELS[item.role] ?? 'stats.my.practice.role.default')}</Text>
+          <Text style={s.title}>{msgText(item.titleMsg, item.title)}</Text>
           {item.drill ? (
             <View style={s.drillBlock}>
               <View style={s.drillHead}>
-                <Text style={s.drillTitle}>{item.drill.title}</Text>
-                <Text style={s.drillLocation}>{item.drill.location}</Text>
+                <Text style={s.drillTitle}>{drillText(item.drill, 'title')}</Text>
+                <Text style={s.drillLocation}>{drillLocation(item.drill.location)}</Text>
               </View>
-              <Text style={s.instruction}>{item.drill.instruction}</Text>
-              <Text style={s.passTarget}>{`Pass: ${item.drill.passTarget}`}</Text>
+              <Text style={s.instruction}>{drillText(item.drill, 'instruction')}</Text>
+              <Text style={s.passTarget}>{t('stats.my.practice.pass', { target: drillText(item.drill, 'pass') })}</Text>
             </View>
           ) : (
-            item.instruction ? <Text style={s.instruction}>{item.instruction}</Text> : null
+            item.instruction ? <Text style={s.instruction}>{msgText(item.instructionMsg, item.instruction)}</Text> : null
           )}
           {Number.isFinite(item.payoffPointsPerRound) ? (
-            <Text style={s.payoff}>{`worth ≈ ${item.payoffPointsPerRound} pts / round`}</Text>
+            <Text style={s.payoff}>{t('stats.my.practice.worth', { value: formatNumber(item.payoffPointsPerRound) })}</Text>
           ) : null}
-          {item.reason ? <Text style={s.reason}>{item.reason}</Text> : null}
+          {item.reason ? <Text style={s.reason}>{msgText(item.reasonMsg, item.reason)}</Text> : null}
         </View>
       )) : (
-        <Text style={s.empty}>No practice plan yet. Play more rounds to unlock focused practice cues.</Text>
+        <Text style={s.empty}>{t('stats.my.practice.empty')}</Text>
       )}
     </SectionCard>
   );

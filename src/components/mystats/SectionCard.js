@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 
 // Card shell with a title and an optional (i) button. The button does not own
 // any sheet — it just calls onInfo(infoKey). `right` renders extra header
@@ -12,6 +13,7 @@ export default function SectionCard({
   title, infoKey, onInfo, right, tone = 'default', titleVariant = 'overline', children, style, testID,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const hero = tone === 'hero';
   const overline = titleVariant !== 'heading';
@@ -26,7 +28,7 @@ export default function SectionCard({
               onPress={() => onInfo(infoKey)}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityRole="button"
-              accessibilityLabel={`What is ${title}`}
+              accessibilityLabel={t('stats.my.whatIs', { name: title })}
             >
               <Feather name="info" size={14} color={hero ? 'rgba(255,255,255,0.85)' : theme.text.muted} />
             </TouchableOpacity>

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { EMAIL_RE } from '../../lib/email';
+import { t, useT } from '../../i18n';
 
 export const NAME_MAX = 60;
 
@@ -9,8 +10,8 @@ export const NAME_MAX = 60;
 // lets the guest keep the account.
 export function guestIdentityErrors({ name, email }) {
   return {
-    nameError: String(name ?? '').trim() ? null : 'Enter your name',
-    emailError: EMAIL_RE.test(String(email ?? '').trim()) ? null : 'Enter a valid email address',
+    nameError: String(name ?? '').trim() ? null : t('league.join.guestNameError'),
+    emailError: EMAIL_RE.test(String(email ?? '').trim()) ? null : t('league.join.guestEmailError'),
   };
 }
 
@@ -39,11 +40,12 @@ export function LabeledField({ label, error, inputStyle, ...inputProps }) {
 export default function GuestIdentityFields({
   name, onChangeName, email, onChangeEmail, nameError, emailError, onBlurName, onBlurEmail,
 }) {
+  const tt = useT();
   return (
     <>
       <LabeledField
-        label="Name"
-        placeholder="First and last name"
+        label={tt('league.join.guestNameLabel')}
+        placeholder={tt('league.join.guestNamePh')}
         value={name}
         onChangeText={onChangeName}
         onBlur={onBlurName}
@@ -54,8 +56,8 @@ export default function GuestIdentityFields({
         error={nameError}
       />
       <LabeledField
-        label="Email"
-        placeholder="you@example.com"
+        label={tt('league.join.guestEmailLabel')}
+        placeholder={tt('league.join.guestEmailPh')}
         value={email}
         onChangeText={onChangeEmail}
         onBlur={onBlurEmail}

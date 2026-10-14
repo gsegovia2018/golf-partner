@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { t } from '../i18n';
 
 // Friendships are a mutual request/accept graph (see
 // supabase/migrations/20260515_friends_and_feed.sql). This module is the
@@ -186,8 +187,8 @@ async function resolveExistingRow(row, targetUserId) {
 // have, so the loser never sees a duplicate row or a thrown error.
 export async function sendRequest(targetUserId) {
   const me = await currentUserId();
-  if (!me) throw new Error('Not signed in');
-  if (targetUserId === me) throw new Error('You cannot add yourself');
+  if (!me) throw new Error(t('shared.error.notSignedIn'));
+  if (targetUserId === me) throw new Error(t('shared.error.addSelf'));
 
   const existingRow = await existingFriendshipRow(me, targetUserId);
   if (existingRow) return resolveExistingRow(existingRow, targetUserId);
@@ -234,7 +235,7 @@ export async function declineRequest(friendshipId) {
 // pair, so delete by the unordered match.
 export async function removeFriend(friendUserId) {
   const me = await currentUserId();
-  if (!me) throw new Error('Not signed in');
+  if (!me) throw new Error(t('shared.error.notSignedIn'));
   const { error } = await supabase
     .from('friendships')
     .delete()

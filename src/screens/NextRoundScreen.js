@@ -144,16 +144,16 @@ export default function NextRoundScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
           <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-          <Text style={s.headerTitle}>Next Round</Text>
+          <Text style={s.headerTitle}>{t('rounds.next.title')}</Text>
           <View style={{ width: 22 }} />
         </View>
         <View style={s.loadingBody}>
           <Feather name="alert-circle" size={44} color={theme.text.muted} />
-          <Text style={s.errorTitle}>Couldn't load the next round</Text>
-          <Text style={s.loadingText}>Check your connection and try again.</Text>
+          <Text style={s.errorTitle}>{t('rounds.next.loadErrorTitle')}</Text>
+          <Text style={s.loadingText}>{t('rounds.next.loadErrorBody')}</Text>
           <TouchableOpacity style={s.retryBtn} onPress={retryLoad} activeOpacity={0.8}>
             <Feather name="rotate-ccw" size={14} color={theme.text.inverse} />
-            <Text style={s.retryBtnText}>Retry</Text>
+            <Text style={s.retryBtnText}>{t('rounds.next.retry')}</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -166,12 +166,12 @@ export default function NextRoundScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
           <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-          <Text style={s.headerTitle}>Next Round</Text>
+          <Text style={s.headerTitle}>{t('rounds.next.title')}</Text>
           <View style={{ width: 22 }} />
         </View>
         <View style={s.loadingBody}>
           <ActivityIndicator color={theme.accent.primary} />
-          <Text style={s.loadingText}>Loading…</Text>
+          <Text style={s.loadingText}>{t('rounds.next.loading')}</Text>
         </View>
       </ScreenContainer>
     );
@@ -329,7 +329,7 @@ export default function NextRoundScreen({ navigation, route }) {
   function showMutationError(err, fallbackMessage) {
     const msg = err?.message ?? fallbackMessage;
     if (Platform.OS === 'web') window.alert(msg);
-    else Alert.alert('Error', msg);
+    else Alert.alert(t('rounds.next.error'), msg);
   }
 
   async function reshuffle() {
@@ -349,7 +349,7 @@ export default function NextRoundScreen({ navigation, route }) {
       setPhase('reveal');
       revealPairs();
     } catch (err) {
-      showMutationError(err, 'Could not reshuffle teams. Please try again.');
+      showMutationError(err, t('rounds.next.reshuffleError'));
     } finally {
       setBusy(false);
     }
@@ -384,7 +384,7 @@ export default function NextRoundScreen({ navigation, route }) {
       }
       navigation.replace('Home');
     } catch (err) {
-      showMutationError(err, 'Could not start the round. Please try again.');
+      showMutationError(err, t('rounds.next.startError'));
     } finally {
       setBusy(false);
     }
@@ -399,7 +399,7 @@ export default function NextRoundScreen({ navigation, route }) {
             activeOpacity={1}
             style={s.countdownTapTarget}
             onPress={finishRevealInstant}
-            accessibilityLabel="Skip the countdown"
+            accessibilityLabel={t('rounds.next.skipCountdownLabel')}
           >
             <View style={s.countdownCircle}>
               <Animated.Text
@@ -414,7 +414,7 @@ export default function NextRoundScreen({ navigation, route }) {
                 {countdownNum}
               </Animated.Text>
             </View>
-            <Text style={s.skipHint}>Tap to skip</Text>
+            <Text style={s.skipHint}>{t('rounds.next.tapToSkip')}</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -435,7 +435,7 @@ export default function NextRoundScreen({ navigation, route }) {
             return (
               <React.Fragment key={i}>
               {i > 0 && (
-                <Text style={s.vsDivider}>vs</Text>
+                <Text style={s.vsDivider}>{t('rounds.next.vs')}</Text>
               )}
               <Animated.View
                 style={[
@@ -449,7 +449,7 @@ export default function NextRoundScreen({ navigation, route }) {
                 ]}
               >
                 <Text style={[s.revealPairLabel, { color }]}>
-                  {pair.length === 1 ? `SOLO ${i + 1}` : `PAIR ${i + 1}`}
+                  {pair.length === 1 ? t('rounds.next.solo', { n: i + 1 }) : t('rounds.next.pair', { n: i + 1 })}
                 </Text>
                 {pair.map((p, j) => {
                   const live = tournament.players?.find((x) => x.id === p.id);
@@ -480,7 +480,7 @@ export default function NextRoundScreen({ navigation, route }) {
           {canReshuffle && (
             <TouchableOpacity style={s.btnSecondary} onPress={reshuffle} disabled={busy}>
               <Feather name="shuffle" size={14} color={theme.accent.primary} style={{ marginRight: 8 }} />
-              <Text style={s.btnSecondaryText}>Re-shuffle</Text>
+              <Text style={s.btnSecondaryText}>{t('rounds.next.reshuffle')}</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity style={s.btnPrimary} onPress={handleConfirm} disabled={busy}>
@@ -491,7 +491,7 @@ export default function NextRoundScreen({ navigation, route }) {
               style={{ marginRight: 8 }}
             />
             <Text style={s.btnPrimaryText}>
-              {revealOnly ? "Let's Play!" : `Start Round ${roundIndex + 1}`}
+              {revealOnly ? t('rounds.next.letsPlay') : t('rounds.next.startRound', { n: roundIndex + 1 })}
             </Text>
           </TouchableOpacity>
         </View>
@@ -504,12 +504,12 @@ export default function NextRoundScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Next Round</Text>
+        <Text style={s.headerTitle}>{t('rounds.next.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
       <View style={s.body}>
-        <Text style={s.roundLabel}>Round {roundIndex + 1}</Text>
+        <Text style={s.roundLabel}>{t('rounds.next.roundLabel', { n: roundIndex + 1 })}</Text>
         <Text style={s.course}>{round.courseName}</Text>
 
         {manualTeamsPending ? (
@@ -517,20 +517,20 @@ export default function NextRoundScreen({ navigation, route }) {
             style={s.revealBtn}
             onPress={() => navigation.navigate('EditTeams', { roundIndex, tournamentId: tournament.id })}
           >
-            <Text style={s.revealBtnText}>Set Teams</Text>
+            <Text style={s.revealBtnText}>{t('rounds.next.setTeams')}</Text>
           </TouchableOpacity>
         ) : (
           <>
             <TouchableOpacity style={s.revealBtn} onPress={startReveal}>
-              <Text style={s.revealBtnText}>{usesTeams ? 'Reveal Teams' : 'Reveal Round'}</Text>
+              <Text style={s.revealBtnText}>{usesTeams ? t('rounds.next.revealTeams') : t('rounds.next.revealRound')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={s.skipBtn}
               onPress={finishRevealInstant}
-              accessibilityLabel="Skip the reveal animation"
+              accessibilityLabel={t('rounds.next.skipRevealLabel')}
             >
-              <Text style={s.skipBtnText}>Skip</Text>
+              <Text style={s.skipBtnText}>{t('rounds.next.skip')}</Text>
             </TouchableOpacity>
           </>
         )}

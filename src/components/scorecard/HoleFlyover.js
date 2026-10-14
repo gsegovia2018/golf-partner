@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, Modal, Pressable, Animated, PanResponder,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useT, formatNumber } from '../../i18n';
 import {
   holeFeatures, haversineMeters, pointInPolygon,
 } from '../../lib/geo';
@@ -30,6 +31,7 @@ export function HoleFlyover({
 }) {
   const geometry = useCourseGeometry(courseName);
   const appSettings = useAppSettings();
+  const tl = useT();
   const { units } = appSettings;
   const cond = usePlayConditions(courseName);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,7 +85,7 @@ export function HoleFlyover({
   const data = useMemo(() => (feat ? {
     mode: 'view',
     holeKey: `${courseName}#${holeNumber}#view`,
-    holeLabel: `Hole ${holeNumber}`,
+    holeLabel: tl('map.hole', { hole: formatNumber(holeNumber) }),
     courseKey: courseKeyFor(courseName),
     green: feat.green || null,
     greenFront: feat.greenFront || null,
@@ -97,7 +99,7 @@ export function HoleFlyover({
     shots: shotPins, // initial paint; live marks arrive via the shots prop below
     showRec: appSettings.showLastShot, // gates the top-left last-shot-to-green card
     lastShot, // initial paint; live updates arrive via the lastShot prop below
-  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins, appSettings.showLastShot, lastShot]);
+  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins, appSettings.showLastShot, lastShot, tl]);
 
   // Latest aim state reported by the map: { pos, rings } — pos is the ring
   // nearest the green (for "Add shot" fallback), rings is the full
@@ -138,23 +140,23 @@ export function HoleFlyover({
           style={s.backdropTouch}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Close hole map"
+          accessibilityLabel={tl('map.close')}
         />
         <Animated.View style={[s.sheet, { transform: [{ translateY: dragY }] }]}>
           <View {...pan.panHandlers}>
             <View style={s.grabber} testID="flyover-grabber" />
             <View style={s.header}>
               <View style={s.titleWrap}>
-                <Text style={s.title} numberOfLines={1}>{feat ? `Hole ${holeNumber}` : 'No map data'}</Text>
+                <Text style={s.title} numberOfLines={1}>{feat ? tl('map.hole', { hole: formatNumber(holeNumber) }) : tl('map.noData')}</Text>
                 {par != null && strokeIndex != null && (
-                  <Text style={s.subtitle}>{`Par ${par} · SI ${strokeIndex}`}</Text>
+                  <Text style={s.subtitle}>{tl('map.parSi', { par: formatNumber(par), si: formatNumber(strokeIndex) })}</Text>
                 )}
               </View>
               <View style={s.hbtns}>
                 {onEdit && feat && (
                   <Pressable onPress={onEdit} style={s.editBtn} hitSlop={8}>
                     <Feather name="edit-2" size={14} color={hud.onAccent} />
-                    <Text style={s.editTxt}>Edit</Text>
+                    <Text style={s.editTxt}>{tl('map.edit')}</Text>
                   </Pressable>
                 )}
                 <Pressable
@@ -163,7 +165,7 @@ export function HoleFlyover({
                   hitSlop={10}
                   testID="flyover-close"
                   accessibilityRole="button"
-                  accessibilityLabel="Close hole map"
+                  accessibilityLabel={tl('map.close')}
                 >
                   <Feather name="x" size={22} color={hud.text} />
                 </Pressable>
@@ -205,7 +207,7 @@ export function HoleFlyover({
               )}
             </View>
           ) : (
-            <View style={s.center}><Text style={s.muted}>This course has no green geometry yet.</Text></View>
+            <View style={s.center}><Text style={s.muted}>{tl('map.noGeometry')}</Text></View>
           )}
         </Animated.View>
       </View>

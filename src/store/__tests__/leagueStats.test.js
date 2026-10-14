@@ -1,6 +1,13 @@
 import {
   cardHoleStats, monthHonours, monthSummary, statLeaders, seasonGrid, pointsBand, rivals, rivalMonths,
 } from '../leagueStats';
+import { t } from '../../i18n';
+
+// Message descriptors (params may be descriptors too) -> English text.
+const render = (m) => (m && typeof m === 'object'
+  ? t(m.key, Object.fromEntries(Object.entries(m.params ?? {}).map(([k, v]) => [k, render(v)])))
+  : (m ?? ''));
+const honours = (...args) => monthHonours(...args).map((h) => ({ ...h, title: render(h.title), text: render(h.text) }));
 
 const PARS = [4, 4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 3, 5, 4, 4, 3, 4, 5];
 const course = (name = 'Los Arqueros') => ({
@@ -62,15 +69,16 @@ describe('monthSummary', () => {
       card('a'), card('b', { course: course('El Saler') }), card('c', { status: 'submitted' }),
       card('a', { status: 'void' }),
     ];
-    expect(monthSummary(cards)).toMatchObject({ cards: 2, courses: 2, text: '2 cards · 2 courses' });
-    expect(monthSummary([card('a')]).text).toBe('1 card · 1 course');
+    expect(monthSummary(cards)).toMatchObject({ cards: 2, courses: 2 });
+    expect(render(monthSummary(cards).msg)).toBe('2 cards · 2 courses');
+    expect(render(monthSummary([card('a')]).msg)).toBe('1 card · 1 course');
   });
 });
 
 describe('monthHonours', () => {
   test('fewer than 3 confirmed cards: no honours (unconfirmed and void do not count)', () => {
     const cards = [card('a'), card('b'), card('c', { status: 'submitted' }), card('c', { status: 'void' })];
-    expect(monthHonours(cards, members)).toEqual([]);
+    expect(honours(cards, members)).toEqual([]);
   });
 
   test('card, hole, closer, birdies, snowman from the confirmed cards', () => {
@@ -82,7 +90,7 @@ describe('monthHonours', () => {
       // An unconfirmed card never wins anything.
       card('c', { status: 'submitted', points: 44, netDifferential: -9, holes: strokes({ 1: 1 }) }),
     ];
-    const byKey = Object.fromEntries(monthHonours(cards, members).map((h) => [h.key, h]));
+    const byKey = Object.fromEntries(honours(cards, members).map((h) => [h.key, h]));
     expect(byKey.card).toMatchObject({ userId: 'a', text: 'Ana, 36 pts at Los Arqueros' });
     // Beto's 3 on the par-5 13th is 4 pts, ahead of Ana's 3 pts on the 7th.
     expect(byKey.hole).toMatchObject({ userId: 'b', text: 'Beto, a 3 on the par-5 13th at Los Arqueros · 4 pts' });
@@ -97,10 +105,10 @@ describe('monthHonours', () => {
       card('b', { points: 30, netDifferential: -2.4 }),
       card('c', { points: 33, netDifferential: 1.1 }),
     ];
-    expect(monthHonours(cards, members).find((h) => h.key === 'card'))
+    expect(honours(cards, members).find((h) => h.key === 'card'))
       .toMatchObject({ userId: 'c', text: 'Cris, 33 pts at Los Arqueros' });
     const unscored = [card('a', { points: null }), card('b', { points: null }), card('c', { points: null })];
-    expect(monthHonours(unscored, members).map((h) => h.key)).not.toContain('card');
+    expect(honours(unscored, members).map((h) => h.key)).not.toContain('card');
   });
 
   test('hole of the month mentions the stroke received', () => {
@@ -108,8 +116,8 @@ describe('monthHonours', () => {
       card('a', { playingHandicap: 2, holes: strokes({ 1: 2 }, 1) }),
       card('b'), card('c'),
     ];
-    const hole = monthHonours(cards, members).find((h) => h.key === 'hole');
-    expect(monthHonours(cards, members, hole.userId).find((h) => h.key === 'hole').text).toMatch(/^You, /);
+    const hole = honours(cards, members).find((h) => h.key === 'hole');
+    expect(honours(cards, members, hole.userId).find((h) => h.key === 'hole').text).toMatch(/^You, /);
     expect(hole.text).toBe('Ana, a 2 on the par-4 1st at Los Arqueros with a stroke · 5 pts');
   });
 
@@ -119,12 +127,12 @@ describe('monthHonours', () => {
       card('b', { holes: strokes({ 9: 9 }) }), // blob on 9: runs 1-8 and 10-18
       card('c'),
     ];
-    const streak = monthHonours(cards, members).find((h) => h.key === 'streak');
+    const streak = honours(cards, members).find((h) => h.key === 'streak');
     expect(streak).toMatchObject({ userId: 'a', text: 'Ana, 12 holes at 2+ pts, holes 7-18' });
   });
 
   test('no snowman when nobody is 3 over, and missing tee times or dates skip those honours', () => {
-    const keys = monthHonours([card('a'), card('b'), card('c')], members).map((h) => h.key);
+    const keys = honours([card('a'), card('b'), card('c')], members).map((h) => h.key);
     expect(keys).not.toContain('snowman');
     expect(keys).not.toContain('early');
     expect(keys).not.toContain('last');
@@ -137,7 +145,7 @@ describe('monthHonours', () => {
       card('b', { teeTime: at(7, 42, 20), playedOn: '2026-09-20' }),
       card('c', { teeTime: at(9, 0, 28), playedOn: '2026-09-28' }),
     ];
-    const byKey = Object.fromEntries(monthHonours(cards, members).map((h) => [h.key, h]));
+    const byKey = Object.fromEntries(honours(cards, members).map((h) => [h.key, h]));
     expect(byKey.early.userId).toBe('b');
     expect(byKey.early.text).toMatch(/^Beto, out at .*7:42.* on Sun 20 Sep$/);
     expect(byKey.last).toMatchObject({ userId: 'c', text: 'Cris, played on Mon 28 Sep' });
@@ -146,10 +154,10 @@ describe('monthHonours', () => {
   test('9-hole and handicap-less cards still count for card/last but not hole honours', () => {
     const nine = { name: 'Short', holes: course().holes.slice(0, 9) };
     const cards = [card('a', { course: nine, points: 20, netDifferential: 0.5 }), card('b', { playingHandicap: null }), card('c')];
-    const keys = monthHonours(cards, members).map((h) => h.key);
+    const keys = honours(cards, members).map((h) => h.key);
     expect(keys).toContain('card');
-    const hole = monthHonours(cards, members).find((h) => h.key === 'hole');
-    expect(monthHonours(cards, members, hole.userId).find((h) => h.key === 'hole').text).toMatch(/^You, /);
+    const hole = honours(cards, members).find((h) => h.key === 'hole');
+    expect(honours(cards, members, hole.userId).find((h) => h.key === 'hole').text).toMatch(/^You, /);
     expect(hole.userId).toBe('c');
   });
 });
@@ -165,7 +173,8 @@ describe('statLeaders', () => {
     const rows = statLeaders(season, members, 'avg');
     expect(rows.map((r) => r.userId)).toEqual(['a', 'b', 'c']);
     expect(rows[0]).toMatchObject({ value: 34, display: '34.0', cards: 3 });
-    expect(rows[2]).toMatchObject({ value: null, display: 'needs 3 cards', cards: 1 });
+    expect(rows[2]).toMatchObject({ value: null, cards: 1 });
+    expect(render(rows[2].display)).toBe('needs 3 cards');
   });
 
   test('ignores unconfirmed and void cards', () => {

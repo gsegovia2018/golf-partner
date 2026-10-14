@@ -8,17 +8,12 @@ import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { listRoster, saveParties, startRound, overrideMarker } from '../store/officialAdmin';
 import {
   autoBalanceParties, balancePartiesFromPairs, assignRoundRobinMarkers,
 } from '../store/officialScoring';
-
-function showError(message) {
-  const msg = message || 'Something went wrong';
-  if (Platform.OS === 'web') window.alert(msg);
-  else Alert.alert('Error', msg);
-}
 
 // Map listRoster rows -> objects autoBalanceParties expects (rosterId/handicap).
 function toRosterObjects(roster, ids) {
@@ -31,7 +26,14 @@ function toRosterObjects(roster, ids) {
 
 export default function PartyBoardScreen({ route, navigation }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
+
+  function showError(message) {
+    const msg = message || t('partyBoard.error.generic');
+    if (Platform.OS === 'web') window.alert(msg);
+    else Alert.alert(t('common.error'), msg);
+  }
 
   const { tournamentId, roundId } = route.params ?? {};
 
@@ -236,16 +238,13 @@ export default function PartyBoardScreen({ route, navigation }) {
     try {
       await persist();
       if (!mountedRef.current) return;
-      if (Platform.OS === 'web') window.alert('Parties saved');
-      else Alert.alert('Saved', 'Parties saved.');
+      if (Platform.OS === 'web') window.alert(t('partyBoard.saved.web'));
+      else Alert.alert(t('partyBoard.saved.title'), t('partyBoard.saved.body'));
     } catch {
       if (!mountedRef.current) return;
       // persist() is non-atomic, but a plain retry of Save is self-healing
       // because saveParties does a full delete + re-insert.
-      showError(
-        "Couldn't fully save the parties. Some changes may not have been "
-        + 'stored — tap Save to try again.',
-      );
+      showError(t('partyBoard.saveFail'));
     } finally {
       if (mountedRef.current) setSaving(false);
     }
@@ -258,11 +257,11 @@ export default function PartyBoardScreen({ route, navigation }) {
     // undone from this screen. Withdrawn players may stay unassigned.
     const unassignedActive = unassigned.filter((r) => !r.withdrawn);
     if (unassignedActive.length > 0) {
-      showError('Assign every player to a party before starting the round.');
+      showError(t('partyBoard.err.unassigned'));
       return;
     }
     if (parties.some((p) => p.length === 0)) {
-      showError('Remove empty parties before starting the round.');
+      showError(t('partyBoard.err.empty'));
       return;
     }
 
@@ -276,10 +275,7 @@ export default function PartyBoardScreen({ route, navigation }) {
       if (!mountedRef.current) return;
       // persist() is non-atomic, but a plain retry of Save is self-healing
       // because saveParties does a full delete + re-insert.
-      showError(
-        "Couldn't fully save the parties. Some changes may not have been "
-        + 'stored — tap Save to try again.',
-      );
+      showError(t('partyBoard.saveFail'));
     } finally {
       if (mountedRef.current) setStarting(false);
     }
@@ -308,7 +304,7 @@ export default function PartyBoardScreen({ route, navigation }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Party & Markers</Text>
+        <Text style={s.headerTitle}>{t('partyBoard.title')}</Text>
         <View style={{ width: 64 }} />
       </View>
 
@@ -318,26 +314,26 @@ export default function PartyBoardScreen({ route, navigation }) {
         </View>
       ) : loadError ? (
         <View style={s.centered}>
-          <Text style={s.errorText}>Could not load this round.</Text>
+          <Text style={s.errorText}>{t('partyBoard.loadError')}</Text>
           <TouchableOpacity style={s.secondaryBtn} onPress={load}>
-            <Text style={s.secondaryBtnText}>Retry</Text>
+            <Text style={s.secondaryBtnText}>{t('partyBoard.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <ScrollView style={s.container} contentContainerStyle={s.content}>
           <Text style={s.subtitle}>
-            {`${roundFormat} format · ${roster.length} player${roster.length !== 1 ? 's' : ''}`}
+            {t('partyBoard.subtitle', { format: roundFormat, count: roster.length })}
             {roundStatus !== 'setup' ? `  •  ${roundStatus}` : ''}
           </Text>
 
           {/* Pairing method */}
-          <Text style={s.sectionTitle}>Pairing method</Text>
+          <Text style={s.sectionTitle}>{t('partyBoard.pairing')}</Text>
           <View style={s.methodRow}>
             {[
-              { key: 'manual', label: 'Manual' },
-              { key: 'handicap', label: 'Auto by handicap' },
-              { key: 'random', label: 'Random' },
-              { key: 'reroll', label: 'Re-roll' },
+              { key: 'manual', label: t('partyBoard.method.manual') },
+              { key: 'handicap', label: t('partyBoard.method.handicap') },
+              { key: 'random', label: t('partyBoard.method.random') },
+              { key: 'reroll', label: t('partyBoard.method.reroll') },
             ].map((m) => (
               <TouchableOpacity
                 key={m.key}
@@ -356,14 +352,13 @@ export default function PartyBoardScreen({ route, navigation }) {
             ))}
           </View>
           <Text style={s.hint}>
-            Auto/Random fill the parties; you can still move any player by hand.
-            Markers default to round-robin (↓) — tap a marker to override.
+            {t('partyBoard.hint')}
           </Text>
 
           {/* Unassigned */}
-          <Text style={s.sectionTitle}>{`Unassigned (${unassigned.length})`}</Text>
+          <Text style={s.sectionTitle}>{t('partyBoard.unassigned', { count: unassigned.length })}</Text>
           {unassigned.length === 0 ? (
-            <Text style={s.hint}>All players assigned.</Text>
+            <Text style={s.hint}>{t('partyBoard.allAssigned')}</Text>
           ) : (
             unassigned.map((r) => (
               <View key={r.id} style={s.playerCard}>
@@ -373,7 +368,9 @@ export default function PartyBoardScreen({ route, navigation }) {
                       {r.display_name}
                     </Text>
                     <Text style={s.playerMeta}>
-                      Handicap {r.handicap}{r.withdrawn ? '  •  Withdrawn' : ''}
+                      {r.withdrawn
+                        ? t('partyBoard.handicapWithdrawn', { hcp: r.handicap })
+                        : t('partyBoard.handicap', { hcp: r.handicap })}
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -382,7 +379,7 @@ export default function PartyBoardScreen({ route, navigation }) {
                     disabled={busy}
                   >
                     <Feather name="corner-up-right" size={14} color={theme.accent.primary} />
-                    <Text style={s.miniBtnText}>Move</Text>
+                    <Text style={s.miniBtnText}>{t('partyBoard.move')}</Text>
                   </TouchableOpacity>
                 </View>
                 {openMoveMenu === r.id && (
@@ -393,12 +390,12 @@ export default function PartyBoardScreen({ route, navigation }) {
                         style={s.menuItem}
                         onPress={() => movePlayer(r.id, idx)}
                       >
-                        <Text style={s.menuItemText}>{`Party ${idx + 1}`}</Text>
+                        <Text style={s.menuItemText}>{t('partyBoard.party', { n: idx + 1 })}</Text>
                       </TouchableOpacity>
                     ))}
                     <TouchableOpacity style={s.menuItem} onPress={handleAddParty}>
                       <Text style={[s.menuItemText, { color: theme.accent.primary }]}>
-                        + New party
+                        {t('partyBoard.newParty')}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -408,20 +405,20 @@ export default function PartyBoardScreen({ route, navigation }) {
           )}
 
           {/* Party cards */}
-          <Text style={s.sectionTitle}>Parties</Text>
+          <Text style={s.sectionTitle}>{t('partyBoard.parties')}</Text>
           {parties.length === 0 && (
             <Text style={s.hint}>
-              No parties yet. Pick a pairing method, or add one below.
+              {t('partyBoard.noParties')}
             </Text>
           )}
           {parties.map((partyIds, idx) => (
             <View key={idx} style={s.partyCard}>
               <View style={s.partyHeader}>
-                <Text style={s.partyTitle}>{`Party ${idx + 1}`}</Text>
-                <Text style={s.partyAvg}>{`Avg hcp ${avgHandicap(partyIds).toFixed(1)}`}</Text>
+                <Text style={s.partyTitle}>{t('partyBoard.party', { n: idx + 1 })}</Text>
+                <Text style={s.partyAvg}>{t('partyBoard.avgHcp', { avg: formatNumber(avgHandicap(partyIds), { decimals: 1 }) })}</Text>
               </View>
               {partyIds.length === 0 ? (
-                <Text style={s.emptyParty}>No players — move someone here.</Text>
+                <Text style={s.emptyParty}>{t('partyBoard.emptyParty')}</Text>
               ) : (
                 partyIds.map((rid, seatIdx) => {
                   const info = markerInfo(partyIds, rid, seatIdx);
@@ -431,15 +428,18 @@ export default function PartyBoardScreen({ route, navigation }) {
                         <View style={{ flex: 1 }}>
                           <Text style={s.memberName}>
                             {nameOf(rid)}
-                            <Text style={s.memberHcp}>{`  hcp ${handicapOf(rid)}`}</Text>
+                            <Text style={s.memberHcp}>{t('partyBoard.memberHcp', { hcp: handicapOf(rid) })}</Text>
                           </Text>
                           <Text style={s.markerLine}>
-                            {info.loops ? '↳' : '↓'} marks {nameOf(info.target)}
-                            {info.loops ? ' (loops)' : ''}
-                            {info.isOverride ? '  • overridden' : ''}
+                            {t('partyBoard.marksLine', {
+                              arrow: info.loops ? '↳' : '↓',
+                              name: nameOf(info.target),
+                              loop: info.loops ? t('partyBoard.loopTag') : '',
+                              overridden: info.isOverride ? t('partyBoard.overriddenTag') : '',
+                            })}
                           </Text>
                         </View>
-                        <Text style={s.seatLabel}>{`seat ${seatIdx + 1}`}</Text>
+                        <Text style={s.seatLabel}>{t('partyBoard.seat', { n: seatIdx + 1 })}</Text>
                       </View>
                       <View style={s.memberActions}>
                         <TouchableOpacity
@@ -451,7 +451,7 @@ export default function PartyBoardScreen({ route, navigation }) {
                           disabled={busy}
                         >
                           <Feather name="edit-2" size={14} color={theme.accent.primary} />
-                          <Text style={s.miniBtnText}>Marker</Text>
+                          <Text style={s.miniBtnText}>{t('partyBoard.marker')}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={s.miniBtn}
@@ -462,7 +462,7 @@ export default function PartyBoardScreen({ route, navigation }) {
                           disabled={busy}
                         >
                           <Feather name="corner-up-right" size={14} color={theme.accent.primary} />
-                          <Text style={s.miniBtnText}>Move</Text>
+                          <Text style={s.miniBtnText}>{t('partyBoard.move')}</Text>
                         </TouchableOpacity>
                       </View>
                       {openMarkerMenu === rid && (
@@ -473,7 +473,7 @@ export default function PartyBoardScreen({ route, navigation }) {
                               style={s.menuItem}
                               onPress={() => setMarker(rid, other)}
                             >
-                              <Text style={s.menuItemText}>{`Marks ${nameOf(other)}`}</Text>
+                              <Text style={s.menuItemText}>{t('partyBoard.marksOption', { name: nameOf(other) })}</Text>
                             </TouchableOpacity>
                           ))}
                           {info.isOverride && (
@@ -482,7 +482,7 @@ export default function PartyBoardScreen({ route, navigation }) {
                               onPress={() => clearMarker(rid)}
                             >
                               <Text style={[s.menuItemText, { color: theme.accent.primary }]}>
-                                Reset to round-robin
+                                {t('partyBoard.resetRoundRobin')}
                               </Text>
                             </TouchableOpacity>
                           )}
@@ -497,7 +497,7 @@ export default function PartyBoardScreen({ route, navigation }) {
                                 style={s.menuItem}
                                 onPress={() => movePlayer(rid, tIdx)}
                               >
-                                <Text style={s.menuItemText}>{`Move to Party ${tIdx + 1}`}</Text>
+                                <Text style={s.menuItemText}>{t('partyBoard.moveTo', { n: tIdx + 1 })}</Text>
                               </TouchableOpacity>
                             )
                           ))}
@@ -509,7 +509,7 @@ export default function PartyBoardScreen({ route, navigation }) {
                             }}
                           >
                             <Text style={[s.menuItemText, { color: theme.accent.primary }]}>
-                              Move to new party
+                              {t('partyBoard.moveNew')}
                             </Text>
                           </TouchableOpacity>
                           <TouchableOpacity
@@ -517,7 +517,7 @@ export default function PartyBoardScreen({ route, navigation }) {
                             onPress={() => movePlayer(rid, null)}
                           >
                             <Text style={[s.menuItemText, { color: theme.destructive }]}>
-                              Unassign
+                              {t('partyBoard.unassign')}
                             </Text>
                           </TouchableOpacity>
                         </View>
@@ -531,7 +531,7 @@ export default function PartyBoardScreen({ route, navigation }) {
 
           <TouchableOpacity style={s.addPartyBtn} onPress={handleAddParty} disabled={busy}>
             <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 8 }} />
-            <Text style={s.addPartyBtnText}>Add Party</Text>
+            <Text style={s.addPartyBtnText}>{t('partyBoard.addParty')}</Text>
           </TouchableOpacity>
 
           {/* Save / Start */}
@@ -542,7 +542,7 @@ export default function PartyBoardScreen({ route, navigation }) {
           >
             {saving
               ? <ActivityIndicator size="small" color={theme.accent.primary} />
-              : <Text style={s.secondaryBtnText}>Save</Text>}
+              : <Text style={s.secondaryBtnText}>{t('common.save')}</Text>}
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.primaryBtn, busy && s.btnDisabled]}
@@ -551,7 +551,7 @@ export default function PartyBoardScreen({ route, navigation }) {
           >
             {starting
               ? <ActivityIndicator size="small" color={theme.text.inverse} />
-              : <Text style={s.primaryBtnText}>Start Round — locks parties</Text>}
+              : <Text style={s.primaryBtnText}>{t('partyBoard.start')}</Text>}
           </TouchableOpacity>
         </ScrollView>
       )}

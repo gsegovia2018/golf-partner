@@ -22,21 +22,21 @@ import {
 } from '../store/leagueDraft';
 import { formatEuros } from '../store/leagueView';
 import PointsForPlaying from '../components/league/PointsForPlaying';
-import { useT } from '../i18n';
+import { useT, t as translate, formatNumber, formatDate } from '../i18n';
 import { shareOrigin } from '../lib/shareOrigin';
 import { NAME_MAX } from '../components/league/GuestIdentityFields';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
 function showError(message) {
-  const msg = message || 'Something went wrong';
+  const msg = message || translate('league.create.errorGeneric');
   if (Platform.OS === 'web') window.alert(msg);
-  else Alert.alert('Error', msg);
+  else Alert.alert(translate('league.create.errorTitle'), msg);
 }
 
 const fmtDate = (iso) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
   if (!m) return iso || '';
-  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${Number(m[3])} ${names[Number(m[2]) - 1]} ${m[1]}`;
+  return `${formatDate(iso, 'day')} ${m[1]}`;
 };
 
 // Create-a-league wizard: name and season, rules, members, review. Online
@@ -145,7 +145,7 @@ export default function LeagueCreateScreen({ navigation }) {
       if (mountedRef.current) setCreated(result);
     } catch (e) {
       creatingRef.current = false;
-      showError(e?.message || "Couldn't create the league. Please try again.");
+      showError(leagueErrorText(e) || t('league.create.createFailed'));
     } finally {
       if (mountedRef.current) setBusy(false);
     }
@@ -182,9 +182,9 @@ export default function LeagueCreateScreen({ navigation }) {
   async function shareLink() {
     if (!link) return;
     try {
-      await Share.share({ message: `Join "${name.trim()}" on Golf Partner:\n${link}` });
+      await Share.share({ message: t('league.create.shareMessage', { name: name.trim(), link }) });
     } catch (err) {
-      showError(err?.message ?? 'Could not share the invite link');
+      showError(err?.message ?? t('league.create.shareFailed'));
     }
   }
 
@@ -209,17 +209,17 @@ export default function LeagueCreateScreen({ navigation }) {
 
   const renderNameStep = () => (
     <>
-      <Text style={s.stepOverline}>LEAGUE</Text>
-      <Text style={s.stepPrompt}>What's the league called?</Text>
-      <Text style={s.stepSubtitle}>Members see this name on the board, in the feed and in emails.</Text>
-      <Text style={s.fieldLabel}>League name</Text>
-      {input({ placeholder: 'El Club del Mulligan', value: name, onChangeText: setName, autoFocus: false })}
-      <Text style={s.fieldLabel}>Season starts</Text>
-      <DateField label="Season starts" value={seasonStart} onChange={setSeasonStart} quickDates={false} />
-      <Text style={s.fieldLabel}>Season ends</Text>
-      <DateField label="Season ends" value={seasonEnd} onChange={setSeasonEnd} quickDates={false} min={startIso || undefined} />
+      <Text style={s.stepOverline}>{t('league.create.overlineLeague')}</Text>
+      <Text style={s.stepPrompt}>{t('league.create.namePrompt')}</Text>
+      <Text style={s.stepSubtitle}>{t('league.create.nameSubtitle')}</Text>
+      <Text style={s.fieldLabel}>{t('league.create.leagueName')}</Text>
+      {input({ placeholder: t('league.create.leagueNamePh'), value: name, onChangeText: setName, autoFocus: false })}
+      <Text style={s.fieldLabel}>{t('league.create.seasonStarts')}</Text>
+      <DateField label={t('league.create.seasonStarts')} value={seasonStart} onChange={setSeasonStart} quickDates={false} />
+      <Text style={s.fieldLabel}>{t('league.create.seasonEnds')}</Text>
+      <DateField label={t('league.create.seasonEnds')} value={seasonEnd} onChange={setSeasonEnd} quickDates={false} min={startIso || undefined} />
       {startIso && endIso && startIso > endIso && (
-        <Text style={s.errorText}>The season must end after it starts.</Text>
+        <Text style={s.errorText}>{t('league.create.seasonOrder')}</Text>
       )}
     </>
   );
@@ -236,56 +236,56 @@ export default function LeagueCreateScreen({ navigation }) {
 
   const renderRulesStep = () => (
     <>
-      <Text style={s.stepOverline}>RULES</Text>
-      <Text style={s.stepPrompt}>How does it work?</Text>
-      <Text style={s.stepSubtitle}>Set up like your group's rules.</Text>
+      <Text style={s.stepOverline}>{t('league.create.overlineRules')}</Text>
+      <Text style={s.stepPrompt}>{t('league.create.rulesPrompt')}</Text>
+      <Text style={s.stepSubtitle}>{t('league.create.rulesSubtitle')}</Text>
       <View style={s.card}>
-        {ruleRow('calendar', 'One card a month', '18 holes, any rated course. Announce before the first shot.')}
-        {ruleRow('target', t('league.rules.formatTitle'), t('league.rules.formatBody', { cap: effectiveCap }), true)}
+        {ruleRow('calendar', t('league.join.ruleOneCard'), t('league.create.ruleOneCardSub'))}
+        {ruleRow('target', t('league.rules.formatTitle'), t('league.rules.formatBody', { cap: formatNumber(effectiveCap) }), true)}
       </View>
 
-      <Text style={s.fieldLabel}>Points table (1st, 2nd, 3rd…)</Text>
+      <Text style={s.fieldLabel}>{t('league.create.pointsTable')}</Text>
       {input({ value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none', keyboardType: 'numbers-and-punctuation' })}
       <Text style={s.hint}>{t('league.rules.tieHint')}</Text>
-      {!pointsTable && <Text style={s.errorText}>Enter whole numbers separated by commas.</Text>}
+      {!pointsTable && <Text style={s.errorText}>{t('league.create.pointsError')}</Text>}
 
       <PointsForPlaying value={participationPoints} onChange={setParticipationPoints} pointsTable={pointsTable} />
 
-      <Text style={s.fieldLabel}>Handicap cap</Text>
+      <Text style={s.fieldLabel}>{t('league.create.handicapCap')}</Text>
       {input({ value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}
       {!(Number.isFinite(cap) && cap >= 0 && cap <= 54) && (
-        <Text style={s.errorText}>The cap must be between 0 and 54.</Text>
+        <Text style={s.errorText}>{t('league.create.capError')}</Text>
       )}
 
-      <Text style={s.fieldLabel}>Entry fee (€)</Text>
+      <Text style={s.fieldLabel}>{t('league.create.entryFee')}</Text>
       {input({ placeholder: '0', value: feeText, onChangeText: setFeeText, keyboardType: 'decimal-pad' })}
-      <Text style={s.hint}>Tracking only: the admin marks who has paid. Nothing is charged in the app.</Text>
-      {feeCents == null && <Text style={s.errorText}>Enter an amount like 30 or 12,50.</Text>}
+      <Text style={s.hint}>{t('league.create.feeHint')}</Text>
+      {feeCents == null && <Text style={s.errorText}>{t('league.create.feeError')}</Text>}
     </>
   );
 
   const renderMembersStep = () => (
     <>
-      <Text style={s.stepOverline}>MEMBERS</Text>
-      <Text style={s.stepPrompt}>Who's playing?</Text>
+      <Text style={s.stepOverline}>{t('league.create.overlineMembers')}</Text>
+      <Text style={s.stepPrompt}>{t('league.create.membersPrompt')}</Text>
       <Text style={s.stepSubtitle}>
-        {`Set each league handicap (max ${effectiveCap}). Members can propose a change when they join. Others can join later from the invite link.`}
+        {t('league.create.membersSubtitle', { cap: formatNumber(effectiveCap) })}
       </Text>
 
       <View style={s.memberCard}>
         <View style={{ flex: 1 }}>
-          <Text style={s.memberName}>{`You${profile?.displayName ? ` (${profile.displayName})` : ''}`}</Text>
-          <Text style={s.memberSub}>Admin</Text>
+          <Text style={s.memberName}>{profile?.displayName ? t('league.create.youNamed', { name: profile.displayName }) : t('league.create.you')}</Text>
+          <Text style={s.memberSub}>{t('league.create.admin')}</Text>
         </View>
         <TextInput
           style={s.hcpInput}
           value={myHcpText}
           onChangeText={setMyHcpText}
-          placeholder="HCP"
+          placeholder={t('league.create.hcpPh')}
           placeholderTextColor={theme.text.muted}
           keyboardType="decimal-pad"
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-          accessibilityLabel="Your league handicap"
+          accessibilityLabel={t('league.create.yourHcpA11y')}
         />
       </View>
 
@@ -293,7 +293,7 @@ export default function LeagueCreateScreen({ navigation }) {
       {!friendsLoading && friends.length === 0 && (
         <View style={s.emptyHint}>
           <Feather name="users" size={14} color={theme.text.muted} style={{ marginRight: 8 }} />
-          <Text style={s.emptyHintText}>No friends yet. Create the league and share the invite link.</Text>
+          <Text style={s.emptyHintText}>{t('league.create.noFriends')}</Text>
         </View>
       )}
       {friends.map((f) => {
@@ -313,7 +313,7 @@ export default function LeagueCreateScreen({ navigation }) {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.memberName} numberOfLines={1}>{f.displayName}</Text>
-                <Text style={s.memberSub}>{f.handicap != null ? `Profile HCP ${f.handicap}` : 'From your friends'}</Text>
+                <Text style={s.memberSub}>{f.handicap != null ? t('league.create.profileHcp', { hcp: formatNumber(f.handicap) }) : t('league.create.fromFriends')}</Text>
               </View>
             </TouchableOpacity>
             {on && (
@@ -321,39 +321,39 @@ export default function LeagueCreateScreen({ navigation }) {
                 style={s.hcpInput}
                 value={picked[f.userId]}
                 onChangeText={(text) => setPicked((prev) => ({ ...prev, [f.userId]: text }))}
-                placeholder="HCP"
+                placeholder={t('league.create.hcpPh')}
                 placeholderTextColor={theme.text.muted}
                 keyboardType="decimal-pad"
                 keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                accessibilityLabel={`${f.displayName} league handicap`}
+                accessibilityLabel={t('league.create.memberHcpA11y', { name: f.displayName })}
               />
             )}
           </View>
         );
       })}
 
-      <Text style={[s.stepOverline, { marginTop: 14 }]}>NOT IN THE APP</Text>
+      <Text style={[s.stepOverline, { marginTop: 14 }]}>{t('league.create.notInApp')}</Text>
       {invitees.map((i) => (
         <View key={i.key} style={s.memberCard}>
           <View style={{ flex: 1 }}>
             <Text style={s.memberName} numberOfLines={1}>{i.name}</Text>
-            <Text style={s.memberSub}>Joins from the link</Text>
+            <Text style={s.memberSub}>{t('league.create.joinsFromLink')}</Text>
           </View>
           <TextInput
             style={s.hcpInput}
             value={i.hcpText}
             onChangeText={(text) => setInvitees((prev) => prev.map((p) => (p.key === i.key ? { ...p, hcpText: text } : p)))}
-            placeholder="HCP"
+            placeholder={t('league.create.hcpPh')}
             placeholderTextColor={theme.text.muted}
             keyboardType="decimal-pad"
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            accessibilityLabel={`${i.name} league handicap`}
+            accessibilityLabel={t('league.create.memberHcpA11y', { name: i.name })}
           />
           <TouchableOpacity
             style={s.removeBtn}
             onPress={() => setInvitees((prev) => prev.filter((p) => p.key !== i.key))}
             accessibilityRole="button"
-            accessibilityLabel={`Remove ${i.name}`}
+            accessibilityLabel={t('league.create.removeA11y', { name: i.name })}
           >
             <Feather name="x" size={18} color={theme.text.muted} />
           </TouchableOpacity>
@@ -365,21 +365,21 @@ export default function LeagueCreateScreen({ navigation }) {
           value={newName}
           onChangeText={setNewName}
           onSubmitEditing={addInvitee}
-          placeholder="Name, e.g. Nacho Pérez"
+          placeholder={t('league.create.newNamePh')}
           placeholderTextColor={theme.text.muted}
           autoCapitalize="words"
           returnKeyType="done"
           maxLength={NAME_MAX}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor={theme.accent.primary}
-          accessibilityLabel="Name of someone not in the app"
+          accessibilityLabel={t('league.create.newNameA11y')}
         />
         <TouchableOpacity
           style={[s.addBtn, !newName.trim() && { opacity: 0.5 }]}
           onPress={addInvitee}
           disabled={!newName.trim()}
           accessibilityRole="button"
-          accessibilityLabel="Add to the league"
+          accessibilityLabel={t('league.create.addA11y')}
         >
           <Feather name="plus" size={20} color={theme.text.inverse} />
         </TouchableOpacity>
@@ -390,28 +390,28 @@ export default function LeagueCreateScreen({ navigation }) {
   const renderReviewStep = () => (
     <>
       <View style={s.hero}>
-        <Text style={s.heroOverline}>REVIEW & CONFIRM</Text>
+        <Text style={s.heroOverline}>{t('league.create.reviewOverline')}</Text>
         <TextInput
           style={s.heroName}
           value={name}
           onChangeText={setName}
-          placeholder="League name"
+          placeholder={t('league.create.leagueName')}
           placeholderTextColor="rgba(255,255,255,0.5)"
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor="#ffffff"
         />
         <View style={s.chipRow}>
-          <View style={s.chip}><Text style={s.chipText}>{`${memberCount} member${memberCount === 1 ? '' : 's'}`}</Text></View>
-          <View style={s.chip}><Text style={s.chipText}>Net Stableford</Text></View>
+          <View style={s.chip}><Text style={s.chipText}>{t('league.join.members', { count: memberCount })}</Text></View>
+          <View style={s.chip}><Text style={s.chipText}>{t('league.create.netStableford')}</Text></View>
         </View>
       </View>
 
-      <Text style={s.stepOverline}>TAP TO EDIT</Text>
+      <Text style={s.stepOverline}>{t('league.create.tapToEdit')}</Text>
       <View style={s.card}>
         <TouchableOpacity style={[s.reviewRow, s.rowDivider]} onPress={() => goToStep('name')}>
           <Feather name="calendar" size={14} color={theme.text.primary} style={s.reviewIcon} />
           <View style={{ flex: 1 }}>
-            <Text style={s.ruleTitle}>Season</Text>
+            <Text style={s.ruleTitle}>{t('league.create.season')}</Text>
             <Text style={s.ruleSub}>{`${fmtDate(startIso)} – ${fmtDate(endIso)}`}</Text>
           </View>
           <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -419,9 +419,13 @@ export default function LeagueCreateScreen({ navigation }) {
         <TouchableOpacity style={[s.reviewRow, s.rowDivider]} onPress={() => goToStep('rules')}>
           <Feather name="list" size={14} color={theme.text.primary} style={s.reviewIcon} />
           <View style={{ flex: 1 }}>
-            <Text style={s.ruleTitle}>Rules</Text>
+            <Text style={s.ruleTitle}>{t('league.create.rules')}</Text>
             <Text style={s.ruleSub} numberOfLines={2}>
-              {`One card a month · cap ${effectiveCap} · ${feeCents ? `entry ${formatEuros(feeCents)}` : 'no entry fee'} · ${formatPointsTable(pointsTable)}`}
+              {t('league.create.rulesSummary', {
+                cap: formatNumber(effectiveCap),
+                fee: feeCents ? t('league.join.entryFee', { fee: formatEuros(feeCents) }) : t('league.join.noEntryFee'),
+                table: formatPointsTable(pointsTable),
+              })}
             </Text>
           </View>
           <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -429,12 +433,12 @@ export default function LeagueCreateScreen({ navigation }) {
         <TouchableOpacity style={s.reviewRow} onPress={() => goToStep('members')}>
           <Feather name="users" size={14} color={theme.text.primary} style={s.reviewIcon} />
           <View style={{ flex: 1 }}>
-            <Text style={s.ruleTitle}>Members</Text>
+            <Text style={s.ruleTitle}>{t('league.create.membersRow')}</Text>
             <Text style={s.ruleSub}>
               {friendCount === 0
-                ? (invitees.length > 0 ? 'You' : 'Just you for now')
-                : `You and ${friendCount} friend${friendCount === 1 ? '' : 's'}`}
-              {invitees.length > 0 && ` · ${invitees.length} not in the app yet`}
+                ? (invitees.length > 0 ? t('league.create.you') : t('league.create.justYou'))
+                : t('league.create.youAndFriends', { count: friendCount })}
+              {invitees.length > 0 && ` · ${t('league.create.notInAppYet', { count: invitees.length })}`}
             </Text>
           </View>
           <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -450,41 +454,41 @@ export default function LeagueCreateScreen({ navigation }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <ScrollView contentContainerStyle={s.content}>
           <View style={s.hero}>
-            <Text style={s.heroOverline}>LEAGUE CREATED</Text>
+            <Text style={s.heroOverline}>{t('league.create.created')}</Text>
             <Text style={[s.heroName, { paddingVertical: 4 }]}>{name.trim()}</Text>
             <View style={s.chipRow}>
-              <View style={s.chip}><Text style={s.chipText}>{`${memberCount} member${memberCount === 1 ? '' : 's'}`}</Text></View>
+              <View style={s.chip}><Text style={s.chipText}>{t('league.join.members', { count: memberCount })}</Text></View>
               <View style={s.chip}><Text style={s.chipText}>{`${fmtDate(startIso)} – ${fmtDate(endIso)}`}</Text></View>
-              <View style={s.chip}><Text style={s.chipText}>Net Stableford</Text></View>
+              <View style={s.chip}><Text style={s.chipText}>{t('league.create.netStableford')}</Text></View>
             </View>
           </View>
 
-          <Text style={s.stepOverline}>INVITE CODE</Text>
+          <Text style={s.stepOverline}>{t('league.create.inviteCode')}</Text>
           <View style={s.codeBox}>
             <Text style={s.code} selectable>{created.inviteCode}</Text>
           </View>
           <Text style={s.hint}>
-            Friends join from the link or with Join with code. Show them the QR if they are next to you.
+            {t('league.create.inviteHint')}
           </Text>
 
           <TouchableOpacity style={s.secondaryBtn} onPress={copyLink} activeOpacity={0.8}>
             <Feather name={copied ? 'check' : 'link'} size={16} color={theme.accent.primary} style={{ marginRight: 8 }} />
-            <Text style={s.secondaryText}>{copied ? 'Copied' : 'Copy link'}</Text>
+            <Text style={s.secondaryText}>{copied ? t('league.create.copied') : t('league.create.copyLink')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.secondaryBtn} onPress={() => setShowQr(true)} activeOpacity={0.8}>
             <Feather name="grid" size={16} color={theme.accent.primary} style={{ marginRight: 8 }} />
-            <Text style={s.secondaryText}>Show QR</Text>
+            <Text style={s.secondaryText}>{t('league.create.showQr')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.primaryBtn} onPress={shareLink} activeOpacity={0.8}>
             <Feather name="share-2" size={16} color={theme.text.inverse} style={{ marginRight: 8 }} />
-            <Text style={s.primaryText}>Share invite</Text>
+            <Text style={s.primaryText}>{t('league.create.shareInvite')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={s.linkBtn}
             onPress={() => navigation.replace('LeagueBoard', { leagueId: created.id })}
             activeOpacity={0.7}
           >
-            <Text style={s.linkText}>Open the league</Text>
+            <Text style={s.linkText}>{t('league.create.openLeague')}</Text>
           </TouchableOpacity>
         </ScrollView>
 
@@ -495,8 +499,8 @@ export default function LeagueCreateScreen({ navigation }) {
           error={null}
           onRequestClose={() => setShowQr(false)}
           onShare={shareLink}
-          title="Invite to the league"
-          subtitle="Show this QR to friends, or share the link. They see the league and its rules, then join."
+          title={t('league.create.qrTitle')}
+          subtitle={t('league.create.qrSubtitle')}
         />
       </ScreenContainer>
     );
@@ -517,7 +521,7 @@ export default function LeagueCreateScreen({ navigation }) {
         isFirstStep={step === 0}
         isLastStep={isLastStep}
         nextEnabled={nextEnabled}
-        nextLabel={isLastStep ? 'Create league' : 'Next'}
+        nextLabel={isLastStep ? t('league.create.createLeague') : t('common.next')}
         onBack={handleBack}
         onNext={handleNext}
       />

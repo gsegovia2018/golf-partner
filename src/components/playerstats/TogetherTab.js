@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber, formatDate } from '../../i18n';
 import PressableScale from '../ui/PressableScale';
 import StatTile from '../mystats/StatTile';
 
@@ -8,10 +9,10 @@ function fmtDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
+  return `${formatDate(d, 'day')} ${String(d.getFullYear()).slice(-2)}`;
 }
 
-const fmtSigned1 = (v) => (v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1));
+const fmtSigned1 = (v) => (v > 0 ? `+${formatNumber(v, { decimals: 1 })}` : formatNumber(v, { decimals: 1 }));
 
 // Rounds you and this friend have both played, most recent first, with a
 // head-to-head summary up top. All numbers come from `shared`/`h2h` — no
@@ -19,6 +20,7 @@ const fmtSigned1 = (v) => (v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1));
 export default function TogetherTab({ shared = [], h2h, name, navigation }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
+  const t = useT();
 
   const ptsEdge = h2h && h2h.n > 0 ? h2h.avgMe - h2h.avgThem : null;
   const rows = useMemo(() => [...shared].reverse(), [shared]); // most recent first
@@ -26,9 +28,9 @@ export default function TogetherTab({ shared = [], h2h, name, navigation }) {
   if (!shared || shared.length === 0) {
     return (
       <View style={s.empty}>
-        <Text style={s.emptyTitle}>No shared rounds yet</Text>
+        <Text style={s.emptyTitle}>{t('stats.player.together.emptyTitle')}</Text>
         <Text style={s.emptyText}>
-          {`Play a tournament together and it'll show up here.`}
+          {t('stats.player.together.emptyBody')}
         </Text>
       </View>
     );
@@ -37,10 +39,10 @@ export default function TogetherTab({ shared = [], h2h, name, navigation }) {
   return (
     <View style={s.wrap}>
       <View style={s.tiles}>
-        <StatTile value={h2h?.n ?? shared.length} caption="Rounds together" />
+        <StatTile value={h2h?.n ?? shared.length} caption={t('stats.player.together.roundsTogether')} />
         <StatTile
           value={ptsEdge == null ? '—' : fmtSigned1(ptsEdge)}
-          caption="Points edge / rnd"
+          caption={t('stats.player.together.pointsEdge')}
           tone={ptsEdge > 0 ? 'up' : ptsEdge < 0 ? 'down' : 'default'}
         />
       </View>
@@ -60,11 +62,11 @@ export default function TogetherTab({ shared = [], h2h, name, navigation }) {
           >
             <View style={s.rowHead}>
               <Text style={s.rowTitle} numberOfLines={1}>
-                {round.courseName || `Round ${round.roundIndex + 1}`}
+                {round.courseName || t('stats.player.together.roundFallback', { n: round.roundIndex + 1 })}
               </Text>
               {round.partners ? (
                 <View style={s.partnersTag}>
-                  <Text style={s.partnersTagText}>Partners</Text>
+                  <Text style={s.partnersTagText}>{t('stats.player.together.partners')}</Text>
                 </View>
               ) : null}
             </View>
@@ -74,7 +76,7 @@ export default function TogetherTab({ shared = [], h2h, name, navigation }) {
             <View style={s.scoreRow}>
               <View style={s.scoreCol}>
                 <Text style={[s.scoreValue, winner === 'me' && s.scoreValueWin]}>{round.mePoints}</Text>
-                <Text style={s.scoreLabel}>You</Text>
+                <Text style={s.scoreLabel}>{t('stats.player.together.you')}</Text>
               </View>
               <Text style={s.scoreDivider}>{'–'}</Text>
               <View style={s.scoreCol}>

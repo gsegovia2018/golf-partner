@@ -1,4 +1,5 @@
 import { collectMyRounds } from '../personalStats';
+import { t } from '../../i18n';
 import {
   sharedRounds, headToHead, buildFriendSummary, friendVerdict,
 } from '../friendStats';
@@ -315,24 +316,36 @@ function mkSummary(over = {}) {
   };
 }
 
+// friendVerdict returns a descriptor with nested descriptors; render it the way
+// SummaryTab does so the assertions below read as sentences.
+const sentence = (msg, lang = 'en') => {
+  if (!msg) return msg;
+  const params = {};
+  Object.entries(msg.params ?? {}).forEach(([k, v]) => {
+    params[k] = v && typeof v === 'object' ? sentence(v, lang) : v;
+  });
+  return t(msg.key, params, lang);
+};
+const verdictOf = (...args) => sentence(friendVerdict(...args));
+
 describe('friendVerdict', () => {
   test('gap band: at the index', () => {
-    expect(friendVerdict(mkSummary({ gap: 0.4 }), { gender: 'male' }))
+    expect(verdictOf(mkSummary({ gap: 0.4 }), { gender: 'male' }))
       .toBe('Playing right to the 12.4 the app rates him — and holding steady.');
   });
 
   test('gap band: a touch over', () => {
-    expect(friendVerdict(mkSummary({ gap: 2 }), { gender: 'female' }))
+    expect(verdictOf(mkSummary({ gap: 2 }), { gender: 'female' }))
       .toBe('A touch over the 12.4 the app rates her — and holding steady.');
   });
 
   test('gap band: well over, quoting the gap', () => {
-    expect(friendVerdict(mkSummary({ gap: 4.2 }), { name: 'Noé' }))
+    expect(verdictOf(mkSummary({ gap: 4.2 }), { name: 'Noé' }))
       .toBe('Averaging 4.2 strokes over the 12.4 the app rates them — and holding steady.');
   });
 
   test('picks the trait with the largest absolute deviation', () => {
-    const verdict = friendVerdict(mkSummary({
+    const verdict = verdictOf(mkSummary({
       strengths: [{ label: 'Par 5s', avgPoints: 3, sample: 54, deviation: 0.6 }],
       weaknesses: [{ label: 'Tee shot missing the fairway', avgPoints: 1, sample: 40, deviation: -1.2 }],
     }), { gender: 'male' });
@@ -342,17 +355,17 @@ describe('friendVerdict', () => {
   });
 
   test('ignores thin samples and unmapped labels', () => {
-    expect(friendVerdict(mkSummary({
+    expect(verdictOf(mkSummary({
       strengths: [{ label: 'Par 5s', avgPoints: 3, sample: 12, deviation: 2 }],
       weaknesses: [{ label: 'Easy holes', avgPoints: 1, sample: 90, deviation: -1.5 }],
     }), {})).toBe('Playing right to the 12.4 the app rates them — and holding steady.');
   });
 
   test('weak-only phrases never read as a strength', () => {
-    expect(friendVerdict(mkSummary({
+    expect(verdictOf(mkSummary({
       strengths: [{ label: 'Par 3s', avgPoints: 3, sample: 40, deviation: 0.9 }],
     }), {})).toBe('Playing right to the 12.4 the app rates them — and holding steady.');
-    expect(friendVerdict(mkSummary({
+    expect(verdictOf(mkSummary({
       weaknesses: [{ label: 'Par 3s', avgPoints: 1, sample: 40, deviation: -0.9 }],
     }), {})).toBe(
       'Playing right to the 12.4 the app rates them, par 3s are the leak — and holding steady.',
@@ -360,7 +373,7 @@ describe('friendVerdict', () => {
   });
 
   test('form clause follows the differential delta', () => {
-    const tail = (delta, gender) => friendVerdict(
+    const tail = (delta, gender) => verdictOf(
       mkSummary({ form: { recent: null, history: null, delta, chip: 'steady' } }),
       { gender },
     ).split('— and ')[1];
@@ -374,12 +387,32 @@ describe('friendVerdict', () => {
   });
 
   test('returns null under three rated rounds', () => {
-    expect(friendVerdict(mkSummary({ ratedCount: 2 }), {})).toBeNull();
-    expect(friendVerdict(null, {})).toBeNull();
+    expect(verdictOf(mkSummary({ ratedCount: 2 }), {})).toBeNull();
+    expect(verdictOf(null, {})).toBeNull();
   });
 
   test('returns null without an index to compare against', () => {
-    expect(friendVerdict(mkSummary({ gap: null, index: { value: null, move3m: null } }), {}))
+    expect(verdictOf(mkSummary({ gap: null, index: { value: null, move3m: null } }), {}))
       .toBeNull();
+  });
+});
+
+describe('friendVerdict descriptor', () => {
+  test('returns keys and raw numbers, not text', () => {
+    const msg = friendVerdict(mkSummary({
+      gap: 4.2,
+      strengths: [{ label: 'Par 5s', avgPoints: 3, sample: 54, deviation: 0.6 }],
+    }), { gender: 'female' });
+    expect(msg.key).toBe('stats.player.verdict.withTrait');
+    expect(msg.params.level).toEqual({
+      key: 'stats.player.verdict.level.over.female', params: { gap: 4.2, idx: 12.4 },
+    });
+    expect(msg.params.trait.key).toBe('stats.player.verdict.trait.par5');
+    expect(msg.params.form.key).toBe('stats.player.verdict.form.steady');
+  });
+
+  test('renders in Spanish', () => {
+    expect(sentence(friendVerdict(mkSummary({ gap: 0.4 }), {}), 'es'))
+      .toBe('Juega justo al 12.4 que le da la app — y se mantiene estable.');
   });
 });

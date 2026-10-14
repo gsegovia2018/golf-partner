@@ -3,6 +3,7 @@ import {
   Image, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 
 function coverForStory(story) {
   return story?.mediaList?.find((m) => m.thumbUrl || m.url) ?? null;
@@ -20,6 +21,7 @@ function initialsForLabel(label) {
 
 export default function RoundStoriesRail({ stories = [], onPressStory }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   if (!stories.length) return null;
 
@@ -33,7 +35,7 @@ export default function RoundStoriesRail({ stories = [], onPressStory }) {
     >
       {stories.map((story) => {
         const cover = coverForStory(story);
-        const countLabel = story.viewed ? 'seen' : story.countLabel;
+        const countLabel = story.viewed ? t('shared.stories.seen') : story.countLabel;
         return (
           <TouchableOpacity
             key={story.key}
@@ -41,7 +43,7 @@ export default function RoundStoriesRail({ stories = [], onPressStory }) {
             onPress={() => onPressStory?.(story)}
             activeOpacity={0.82}
             accessibilityRole="button"
-            accessibilityLabel={`Open ${story.roundLabel} story, ${countLabel}`}
+            accessibilityLabel={t('shared.stories.open', { round: story.roundLabel, count: countLabel })}
           >
             <View
               testID={`round-story-ring-${story.key}`}

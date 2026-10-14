@@ -5,6 +5,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 import ReportDeltaRow from './ReportDeltaRow';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
@@ -16,6 +17,7 @@ export default function ReportChapter({
   icon, title, preview, rows, hasDeltas, initiallyOpen = false, testID,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [open, setOpen] = useState(initiallyOpen);
   const reduced = useReducedMotion();
@@ -57,8 +59,8 @@ export default function ReportChapter({
         <View style={s.body}>
           {hasDeltas && (
             <View style={s.legend}>
-              <Text style={[s.legendText, { color: theme.destructive }]}>◂ COST YOU</Text>
-              <Text style={[s.legendText, { color: theme.accent.primary }]}>GAINED ▸</Text>
+              <Text style={[s.legendText, { color: theme.destructive }]}>{t('stats.my.report.legendCost')}</Text>
+              <Text style={[s.legendText, { color: theme.accent.primary }]}>{t('stats.my.report.legendGained')}</Text>
             </View>
           )}
           {rows.map((row, i) => (

@@ -5,6 +5,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, t as tNow, formatNumber } from '../../i18n';
 import { semantic } from '../../theme/tokens';
 import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
@@ -85,6 +86,7 @@ function CategoryIconDisc({ tone, icon }) {
 
 function BoardRow({ category, strokesGained, footnote, index }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const sample = strokesGained?.sampleHolesByCategory?.[category.key] ?? 0;
 
@@ -94,8 +96,8 @@ function BoardRow({ category, strokesGained, footnote, index }) {
         <CategoryIconDisc tone="locked" icon="lock" />
         <View style={s.boardBody}>
           <View style={s.nameLine}>
-            <Text style={s.name}>{category.label}</Text>
-            <Text style={s.lockNote}>{`needs ${MIN_SG_CATEGORY_SAMPLE - sample} more holes`}</Text>
+            <Text style={s.name}>{t(category.labelKey)}</Text>
+            <Text style={s.lockNote}>{t('stats.my.shots.needsMore', { count: MIN_SG_CATEGORY_SAMPLE - sample })}</Text>
           </View>
           <LockProgress pct={(sample / MIN_SG_CATEGORY_SAMPLE) * 100} index={index} />
         </View>
@@ -118,7 +120,7 @@ function BoardRow({ category, strokesGained, footnote, index }) {
       <CategoryIconDisc tone={tone} icon={CATEGORY_ICONS[category.key] ?? 'circle'} />
       <View style={s.boardBody}>
         <View style={s.nameLine}>
-          <Text style={s.name}>{category.label}</Text>
+          <Text style={s.name}>{t(category.labelKey)}</Text>
           <Text style={s.sample}>{sampleText(sample, 'holes')}</Text>
         </View>
         <SGBarTrack value={value ?? 0} style={s.boardTrack} />
@@ -130,11 +132,11 @@ function BoardRow({ category, strokesGained, footnote, index }) {
           <View
             accessible
             style={[s.deltaChip, { backgroundColor: withAlpha(deltaColor, 0.1) }]}
-            accessibilityLabel={`${up ? 'Up' : 'Down'} ${Math.abs(delta.delta)} strokes gained vs your previous rounds`}
+            accessibilityLabel={t(up ? 'stats.my.shots.deltaUp' : 'stats.my.shots.deltaDown', { value: formatNumber(Math.abs(delta.delta), { maxDecimals: 4 }) })}
           >
             <Feather name={up ? 'trending-up' : 'trending-down'} size={11} color={deltaColor} />
             <Text style={[s.deltaChipText, { color: deltaColor }]}>
-              {`${delta.delta > 0 ? '+' : ''}${delta.delta}`}
+              {`${delta.delta > 0 ? '+' : ''}${formatNumber(delta.delta, { maxDecimals: 4 })}`}
             </Text>
           </View>
         ) : null}
@@ -147,13 +149,13 @@ function BoardRow({ category, strokesGained, footnote, index }) {
 // gated, otherwise confirm the tracked base.
 function evidenceMeta(strokesGained) {
   const samples = strokesGained?.sampleHolesByCategory;
-  if (!samples) return 'Bucketed from logged shots.';
+  if (!samples) return tNow('stats.my.shots.bucketed');
   const gated = SG_CATEGORIES
-    .map((c) => ({ label: c.label, sample: samples[c.key] ?? 0 }))
+    .map((c) => ({ label: tNow(c.labelKey), sample: samples[c.key] ?? 0 }))
     .filter((c) => c.sample < MIN_SG_CATEGORY_SAMPLE)
     .sort((a, b) => a.sample - b.sample);
-  if (gated.length === 0) return 'All five categories sampled.';
-  return `${gated[0].label}: needs ${MIN_SG_CATEGORY_SAMPLE - gated[0].sample} more holes`;
+  if (gated.length === 0) return tNow('stats.my.shots.allSampled');
+  return tNow('stats.my.shots.gatedMeta', { label: gated[0].label, count: MIN_SG_CATEGORY_SAMPLE - gated[0].sample });
 }
 
 // Fold buildShotSignals output into the board: each category keeps its single
@@ -177,23 +179,28 @@ function mapSignalsToBoard(signals) {
     footnotes: Object.fromEntries(
       Object.entries(byCategory).map(([key, sig]) => [key, `${sig.title}: ${sig.metric}`])
     ),
-    extras: extras.slice(0, 2).map((sig) => `${sig.area} · ${sig.title}: ${sig.metric}`),
+    extras: extras.slice(0, 2).map((sig) => `${sig.areaKey ? tNow(sig.areaKey) : sig.area} · ${sig.title}: ${sig.metric}`),
   };
 }
 
 export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, onInfo, TargetNudge }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const strokesGained = stats?.strokesGained;
   const hasStrokesGained = strokesGained?.total != null;
-  const signals = useMemo(() => buildShotSignals(stats), [stats]);
+  // The signal titles are built in the active language, so rebuild on a switch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const signals = useMemo(() => buildShotSignals(stats), [stats, t]);
   const board = useMemo(() => mapSignalsToBoard(signals), [signals]);
   const targetCopy = targetTitle(targetHandicap);
   const sample = sampleText(strokesGained?.sampleHoles, 'holes') ?? trackedSample(stats);
 
   return (
     <SectionCard
-      title={`Strokes gained · vs ${targetLabel(targetHandicap)}`}
+      title={targetHandicap == null || targetHandicap === 0
+        ? t('stats.my.shots.titleScratch')
+        : t('stats.my.shots.titleHcp', { target: formatNumber(targetHandicap) })}
       infoKey="strokesGained"
       onInfo={onInfo}
       right={
@@ -202,7 +209,7 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
             onPress={onChangeTarget}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Change target handicap"
+            accessibilityLabel={t('stats.my.snapshot.changeTarget')}
           >
             <Feather name="edit-2" size={14} color={theme.text.secondary} />
           </PressableScale>
@@ -210,13 +217,13 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
       }
     >
       <View style={s.hero} testID="sg-hero-surface">
-        <Text style={s.heroKicker}>Target gap</Text>
+        <Text style={s.heroKicker}>{t('stats.my.snapshot.targetGap')}</Text>
         <Text style={[s.heroValue, hasStrokesGained && { color: theme.isDark ? semantic.winner.dark : semantic.winner.light }]}>
-          {hasStrokesGained ? `${formatSignedFixed(strokesGained.total)} / round` : '-'}
+          {hasStrokesGained ? t('stats.my.shots.perRound', { value: formatSignedFixed(strokesGained.total) }) : '-'}
         </Text>
-        <Text style={s.heroMeta}>{hasStrokesGained ? targetCopy : 'Log putt distance and regulation approach shots.'}</Text>
+        <Text style={s.heroMeta}>{hasStrokesGained ? targetCopy : t('stats.my.shots.logPutts')}</Text>
         <View style={s.heroGrid}>
-          <StatTile value={sample ?? 'Tracked data'} caption="Evidence" />
+          <StatTile value={sample ?? t('stats.my.shots.tracked')} caption={t('stats.my.shots.evidence')} />
         </View>
         <Text style={s.heroFootnote}>{evidenceMeta(strokesGained)}</Text>
       </View>
@@ -253,15 +260,10 @@ function withAlpha(hex, alpha) {
 }
 
 function targetTitle(targetHandicap) {
-  if (targetHandicap == null || targetHandicap === 0) return 'Strokes gained vs scratch';
-  return `Strokes gained vs ${targetHandicap}-handicap target`;
+  if (targetHandicap == null || targetHandicap === 0) return tNow('stats.my.snapshot.sgScratch');
+  return tNow('stats.my.shots.targetHcp', { target: formatNumber(targetHandicap) });
 }
 
-// Short form for the card header, e.g. "12-hcp target" / "scratch target".
-function targetLabel(targetHandicap) {
-  if (targetHandicap == null || targetHandicap === 0) return 'scratch target';
-  return `${targetHandicap}-hcp target`;
-}
 
 function trackedSample(stats) {
   if (stats?.shots?.putts?.holes != null) return sampleText(stats.shots.putts.holes, 'holes');
@@ -285,8 +287,9 @@ function buildShotSignals(stats) {
     push({
       id: `sg-${category.key}`,
       area: category.area,
-      title: category.signalTitle ?? category.label,
-      metric: `${formatSignedFixed(value)} SG/rnd`,
+      areaKey: category.areaKey,
+      title: tNow(category.signalTitleKey ?? category.labelKey),
+      metric: tNow('stats.my.shots.sgRnd', { value: formatSignedFixed(value) }),
       detail: `${sampleText(stats?.strokesGained?.sampleHoles, 'holes') ?? 'Tracked holes'} against target.`,
       score: value,
     });
@@ -300,8 +303,9 @@ function buildShotSignals(stats) {
     push({
       id: `putt-${bucket}`,
       area: 'Putting',
-      title: `${bucket} m putts`,
-      metric: `${formatSignedFixed(perRound)} SG/rnd`,
+      areaKey: 'stats.my.area.putting',
+      title: tNow('stats.my.label.puttBucket', { bucket }),
+      metric: tNow('stats.my.shots.sgRnd', { value: formatSignedFixed(perRound) }),
       detail: `${row.avgPutts} avg vs ${row.expectedPutts} target · ${sampleText(row.attempts, 'putts')}`,
       score: perRound,
     });
@@ -315,8 +319,9 @@ function buildShotSignals(stats) {
     push({
       id: `approach-${bucket}`,
       area: 'Approach',
-      title: `${bucket} m approaches`,
-      metric: `${formatSignedFixed(perRound)} SG/rnd`,
+      areaKey: 'stats.my.area.approach',
+      title: tNow('stats.my.label.approachBucket', { bucket }),
+      metric: tNow('stats.my.shots.sgRnd', { value: formatSignedFixed(perRound) }),
       detail: `${row.greenRate ?? row.girRate}% green · ${sampleText(row.holes, 'shots')}`,
       score: perRound,
     });

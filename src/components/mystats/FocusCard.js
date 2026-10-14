@@ -2,21 +2,24 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { msgText, areaText, drillText, drillLocation } from './msg';
+import { useT } from '../../i18n';
 import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import { drillsForInsight } from '../../store/coachDrills';
 
 const VERDICT_COPY = {
-  improving: { icon: 'trending-up', text: 'Improving since you committed', tone: 'good' },
-  flat: { icon: 'minus', text: 'Holding steady since you committed', tone: 'neutral' },
-  worse: { icon: 'trending-down', text: 'Getting worse since you committed', tone: 'bad' },
-  resolved: { icon: 'check-circle', text: 'No longer flagged — nice work', tone: 'good' },
+  improving: { icon: 'trending-up', textKey: 'stats.my.focus.improving', tone: 'good' },
+  flat: { icon: 'minus', textKey: 'stats.my.focus.flat', tone: 'neutral' },
+  worse: { icon: 'trending-down', textKey: 'stats.my.focus.worse', tone: 'bad' },
+  resolved: { icon: 'check-circle', textKey: 'stats.my.focus.resolved', tone: 'good' },
 };
 
 // The player's committed focus: what they promised to work on, whether the
 // numbers actually moved since, and the drill to keep working it.
 export default function FocusCard({ focus, verdict, onEndFocus }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   if (!focus) return null;
 
@@ -24,49 +27,50 @@ export default function FocusCard({ focus, verdict, onEndFocus }) {
   const copy = verdict?.state === 'needs-more-rounds'
     ? {
       icon: 'clock',
-      text: `Play ${verdict.roundsNeeded} more round${verdict.roundsNeeded === 1 ? '' : 's'} for a verdict`,
+      text: t('stats.my.focus.needMore', { count: verdict.roundsNeeded }),
       tone: 'neutral',
     }
     : VERDICT_COPY[verdict?.state] ?? null;
+  const copyText = copy ? (copy.text ?? t(copy.textKey)) : null;
   const toneColor = copy?.tone === 'good' ? theme.scoreColor('good')
     : copy?.tone === 'bad' ? theme.destructive : theme.text.secondary;
 
   return (
-    <SectionCard title="Your Focus">
+    <SectionCard title={t('stats.my.focus.title')}>
       <View style={s.head}>
         <View style={s.copy}>
-          <Text style={s.area}>{focus.areaLabel ?? focus.area}</Text>
-          <Text style={s.title}>{focus.title}</Text>
+          <Text style={s.area}>{areaText(focus)}</Text>
+          <Text style={s.title}>{msgText(focus.titleMsg, focus.title)}</Text>
         </View>
         <PressableScale
           onPress={onEndFocus}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="End focus"
+          accessibilityLabel={t('stats.my.focus.end')}
           style={s.endBtn}
         >
-          <Text style={s.endBtnText}>End focus</Text>
+          <Text style={s.endBtnText}>{t('stats.my.focus.end')}</Text>
         </PressableScale>
       </View>
       {copy ? (
         <View style={s.verdictRow}>
           <Feather name={copy.icon} size={15} color={toneColor} />
-          <Text style={[s.verdictText, { color: toneColor }]}>{copy.text}</Text>
+          <Text style={[s.verdictText, { color: toneColor }]}>{copyText}</Text>
         </View>
       ) : null}
       {verdict?.currentMetric && focus.metric ? (
-        <Text style={s.metricLine}>{`${focus.metric} → ${verdict.currentMetric}`}</Text>
+        <Text style={s.metricLine}>{`${msgText(focus.metricMsg, focus.metric)} → ${msgText(verdict.currentMetricMsg, verdict.currentMetric)}`}</Text>
       ) : (
-        focus.metric ? <Text style={s.metricLine}>{`Committed at ${focus.metric}`}</Text> : null
+        focus.metric ? <Text style={s.metricLine}>{t('stats.my.focus.committedAt', { metric: msgText(focus.metricMsg, focus.metric) })}</Text> : null
       )}
       {drill ? (
         <View style={s.drillBlock}>
           <View style={s.drillHead}>
-            <Text style={s.drillTitle}>{drill.title}</Text>
-            <Text style={s.drillLocation}>{drill.location}</Text>
+            <Text style={s.drillTitle}>{drillText(drill, 'title')}</Text>
+            <Text style={s.drillLocation}>{drillLocation(drill.location)}</Text>
           </View>
-          <Text style={s.drillInstruction}>{drill.instruction}</Text>
-          <Text style={s.passTarget}>{`Pass: ${drill.passTarget}`}</Text>
+          <Text style={s.drillInstruction}>{drillText(drill, 'instruction')}</Text>
+          <Text style={s.passTarget}>{t('stats.my.practice.pass', { target: drillText(drill, 'pass') })}</Text>
         </View>
       ) : null}
     </SectionCard>

@@ -6,6 +6,7 @@ import { fetchTournament as repoFetchTournament, fetchMyTournaments } from './to
 import { syncQueue } from './syncQueue';
 import { runExclusiveForTournament } from './tournamentMutex';
 import { isOnline } from '../lib/connectivity';
+import { t } from '../i18n';
 import { teeByLabel, resolveTeeForPlayer } from './tees';
 // Pure scoring & handicap math lives in ./scoring. Imported here for this
 // module's own use and re-exported below so existing call sites that do
@@ -2042,7 +2043,7 @@ export async function removeTournamentMember(tournamentId, userId) {
 
 export async function joinTournamentByCode(code) {
   const userId = await getCurrentUserId();
-  if (!userId) throw new Error('Must be signed in to join');
+  if (!userId) throw new Error(t('shared.error.joinSignedIn'));
 
   // Redemption runs server-side via the redeem_invite_code SECURITY DEFINER
   // RPC: it validates the code (revoked / expired / usage cap), records the
@@ -2053,7 +2054,7 @@ export async function joinTournamentByCode(code) {
     .rpc('redeem_invite_code', { p_code: String(code ?? '').toUpperCase().trim() });
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
-  if (!row) throw new Error('Invalid code — check with the tournament owner');
+  if (!row) throw new Error(t('shared.error.invalidCode'));
   return { tournamentId: row.tournament_id, role: row.role ?? 'editor' };
 }
 
@@ -2167,11 +2168,14 @@ export function tournamentNounCapitalized(tournament) {
 // object so it serves both full tournament objects and the flattened
 // feed-item shape. roundIndex is zero-based; the label shows roundIndex + 1.
 export function formatRoundLabel({ kind, courseName, roundIndex }) {
-  if (kind === 'game') return courseName || 'Round';
+  if (kind === 'game') return courseName || t('shared.round.plain');
   // Multi-round tournaments: keep the ordinal for sequencing context and
   // append the course when known (each round is usually a different course).
-  const ordinal = `Round ${roundIndex + 1}`;
-  return courseName ? `${ordinal} · ${courseName}` : ordinal;
+  // Finished text in the language active now: call it at render time.
+  const n = roundIndex + 1;
+  return courseName
+    ? t('shared.round.numberedCourse', { n, course: courseName })
+    : t('shared.round.numbered', { n });
 }
 
 // Atomic player-slot claim. Wraps the claim_tournament_player RPC (migration

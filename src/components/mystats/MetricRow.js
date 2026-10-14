@@ -2,11 +2,13 @@ import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 
 // A label + primary value, with an optional secondary value (e.g. "36 holes")
 // and an optional (i) button. `dim` greys a zero-sample row.
 export default function MetricRow({ label, value, secondary, infoKey, onInfo, dim = false }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   return (
@@ -18,7 +20,7 @@ export default function MetricRow({ label, value, secondary, infoKey, onInfo, di
             onPress={() => onInfo(infoKey)}
             hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
             accessibilityRole="button"
-            accessibilityLabel={`What is ${label}`}
+            accessibilityLabel={t('stats.my.whatIs', { name: label })}
           >
             <Feather name="info" size={14} color={theme.text.muted} />
           </TouchableOpacity>

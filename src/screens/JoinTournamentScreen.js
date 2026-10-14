@@ -11,9 +11,11 @@ import {
 } from '../store/tournamentStore';
 import { leagueCodeExists } from '../store/leagueStore';
 import { supabase } from '../lib/supabase';
+import { useT } from '../i18n';
 
 export default function JoinTournamentScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   // Deep-link / share URLs deliver the code via route.params.code; manual
@@ -39,10 +41,10 @@ export default function JoinTournamentScreen({ navigation, route }) {
       }
       // Editor: if a slot is already bound to this account (a friend the
       // creator added from their friends list), skip the picker.
-      const [t, { data: { user } }] = await Promise.all([
+      const [tournament, { data: { user } }] = await Promise.all([
         getTournament(tournamentId), supabase.auth.getUser(),
       ]);
-      const mine = findClaimedSlot(t?.players ?? [], user?.id);
+      const mine = findClaimedSlot(tournament?.players ?? [], user?.id);
       if (mine) {
         navigation.replace('Tournament', { tournamentId });
       } else {
@@ -57,7 +59,7 @@ export default function JoinTournamentScreen({ navigation, route }) {
         return;
       }
       setAutoJoining(false);
-      Alert.alert('Error', err.message ?? 'Could not join');
+      Alert.alert(t('home.join.errorTitle'), err.message ?? t('home.join.errorGeneric'));
     } finally {
       setLoading(false);
     }
@@ -77,22 +79,22 @@ export default function JoinTournamentScreen({ navigation, route }) {
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Join</Text>
+        <Text style={s.headerTitle}>{t('home.join.header')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
       {autoJoining ? (
         <View style={s.content}>
           <ActivityIndicator size="large" color={theme.accent.primary} />
-          <Text style={[s.subtitle, { marginTop: 16 }]}>Joining…</Text>
+          <Text style={[s.subtitle, { marginTop: 16 }]}>{t('home.join.joining')}</Text>
         </View>
       ) : (
         <View style={s.content}>
           <View style={s.icon}>
             <Feather name="link" size={32} color={theme.accent.primary} />
           </View>
-          <Text style={s.title}>Enter Invite Code</Text>
-          <Text style={s.subtitle}>Ask the organiser for their invite code (tournament or league).</Text>
+          <Text style={s.title}>{t('home.join.title')}</Text>
+          <Text style={s.subtitle}>{t('home.join.subtitle')}</Text>
 
           <TextInput
             style={s.codeInput}
@@ -119,7 +121,7 @@ export default function JoinTournamentScreen({ navigation, route }) {
               : (
                 <>
                   <Feather name="log-in" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-                  <Text style={s.btnText}>Join</Text>
+                  <Text style={s.btnText}>{t('home.join.button')}</Text>
                 </>
               )}
           </TouchableOpacity>

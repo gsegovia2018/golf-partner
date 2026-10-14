@@ -16,6 +16,7 @@ import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
+import { useT, t as tNow, formatNumber } from '../i18n';
 import { useAuth } from '../context/AuthContext';
 import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
 import { loadProfile, upsertProfile } from '../store/profileStore';
@@ -35,7 +36,7 @@ import FormTab from '../components/mystats/tabs/FormTab';
 import BreakdownTab from '../components/mystats/tabs/BreakdownTab';
 import ShotsTab from '../components/mystats/tabs/ShotsTab';
 import HandicapTab from '../components/mystats/tabs/HandicapTab';
-import { statExplainers } from '../components/mystats/statExplainers';
+import { resolveStatExplainer } from '../components/mystats/statExplainers';
 import { loadFocus, saveFocus, clearFocus, archiveFocus, makeFocusCommit, focusVerdict } from '../store/coachFocus';
 
 const SELECTION_PREFIX = '@mystats_round_selection:';
@@ -52,15 +53,15 @@ function buildInfoRows(key, stats) {
   const perRound = stats.strokesGained.perRound;
   const last10 = perRound.slice(-10);
   const rows = [
-    { key: 'section-trend', section: true, label: 'Last 10 rounds', rightLabel: 'SG total' },
+    { key: 'section-trend', section: true, label: tNow('stats.my.screen.last10'), rightLabel: tNow('stats.my.screen.sgTotal') },
   ];
   last10.forEach((r, i) => {
     const n = perRound.length - last10.length + i + 1;
-    const val = r.total >= 0 ? `+${r.total.toFixed(2)}` : r.total.toFixed(2);
+    const val = r.total >= 0 ? `+${formatNumber(r.total, { decimals: 2 })}` : formatNumber(r.total, { decimals: 2 });
     rows.push({
       key: `sg-round-${n}`,
-      primary: `Round ${n}`,
-      secondary: `${r.sampleHoles} holes`,
+      primary: tNow('stats.my.mix.roundName', { n }),
+      secondary: tNow('stats.my.count.holes', { count: r.sampleHoles }),
       rightPrimary: val,
       tone: r.total >= 0 ? 'good' : 'poor',
     });
@@ -69,12 +70,12 @@ function buildInfoRows(key, stats) {
 }
 
 const ALL_TABS = [
-  { key: 'reportCard', label: 'Report Card' },
-  { key: 'coach', label: 'Coach' },
-  { key: 'shots',     label: 'Strokes Gained' },
-  { key: 'form',      label: 'Form' },
-  { key: 'breakdown', label: 'Breakdown' },
-  { key: 'handicap', label: 'Handicap' },
+  { key: 'reportCard', labelKey: 'stats.my.screen.tab.reportCard' },
+  { key: 'coach', labelKey: 'stats.my.screen.tab.coach' },
+  { key: 'shots',     labelKey: 'stats.my.screen.tab.shots' },
+  { key: 'form',      labelKey: 'stats.my.screen.tab.form' },
+  { key: 'breakdown', labelKey: 'stats.my.screen.tab.breakdown' },
+  { key: 'handicap', labelKey: 'stats.my.screen.tab.handicap' },
 ];
 
 // Captured by the pager's scroll worklet, which must not reach into the
@@ -87,6 +88,7 @@ const TAB_COUNT = ALL_TABS.length;
 // gliding while the label waited on the JS thread, which read as the colour
 // lagging the pill. Interpolating here keeps the two exactly in step.
 function TabPill({ index, item, active, scrollX, pageWidthSV, theme, s, onPress, onLayout }) {
+  const t = useT();
   const textStyle = useAnimatedStyle(() => {
     const w = pageWidthSV.value > 0 ? pageWidthSV.value : 1;
     // How many pages away the pager currently sits from this pill.
@@ -103,9 +105,9 @@ function TabPill({ index, item, active, scrollX, pageWidthSV, theme, s, onPress,
       onLayout={onLayout}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
-      accessibilityLabel={item.label}
+      accessibilityLabel={t(item.labelKey)}
     >
-      <Animated.Text style={[s.tabText, textStyle]}>{item.label}</Animated.Text>
+      <Animated.Text style={[s.tabText, textStyle]}>{t(item.labelKey)}</Animated.Text>
     </PressableScale>
   );
 }
@@ -119,6 +121,7 @@ function normalizeStatsTab(value) {
 export default function MyStatsScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   const [myRounds, setMyRounds] = useState(null);   // null = loading
@@ -529,21 +532,22 @@ export default function MyStatsScreen({ navigation, route }) {
     });
   }, [myRounds, reportRoundKey, navigation]);
 
-  const activeExplainer = useMemo(() => {
-    const rawExplainer = infoKey ? statExplainers[infoKey] : null;
-    return typeof rawExplainer === 'function' ? rawExplainer(targetHandicap) : rawExplainer;
-  }, [infoKey, targetHandicap]);
+  const activeExplainer = useMemo(
+    () => (infoKey ? resolveStatExplainer(infoKey, { targetHandicap }) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t changes with the language
+    [infoKey, targetHandicap, t],
+  );
 
   const Header = (
     <View style={s.header}>
       {!isTabPresentation && (
         <IconButton
           icon="chevron-left"
-          accessibilityLabel="Back"
+          accessibilityLabel={t('common.back')}
           onPress={() => navigation.goBack()}
         />
       )}
-      <Text style={s.headerTitle}>My Stats</Text>
+      <Text style={s.headerTitle}>{t('stats.my.screen.title')}</Text>
       <PressableScale
         onPress={() => setSelectorOpen(true)}
         style={s.roundsBtn}
@@ -551,7 +555,7 @@ export default function MyStatsScreen({ navigation, route }) {
       >
         <Feather name="sliders" size={14} color={theme.accent.primary} />
         <Text style={s.roundsBtnText}>
-          {myRounds ? `${selected.length} of ${myRounds.length}` : '—'}
+          {myRounds ? t('stats.my.screen.roundsCount', { selected: selected.length, total: myRounds.length }) : '—'}
         </Text>
       </PressableScale>
     </View>
@@ -621,12 +625,12 @@ export default function MyStatsScreen({ navigation, route }) {
         {Header}
         <View style={s.center}>
           <Feather name="wifi-off" size={44} color={theme.text.muted} />
-          <Text style={s.emptyText}>Could not load your stats.</Text>
+          <Text style={s.emptyText}>{t('stats.my.screen.loadFailed')}</Text>
           <PressableScale
             style={s.retryBtn}
             onPress={() => { setMyRounds(null); setError(false); setLoadNonce((v) => v + 1); }}
           >
-            <Text style={s.retryText}>Retry</Text>
+            <Text style={s.retryText}>{t('stats.my.screen.retry')}</Text>
           </PressableScale>
         </View>
       </ScreenContainer>
@@ -640,7 +644,7 @@ export default function MyStatsScreen({ navigation, route }) {
         {Header}
         <View style={s.center}>
           <Feather name="bar-chart-2" size={44} color={theme.text.muted} />
-          <Text style={s.emptyText}>Play and score a round to see your stats.</Text>
+          <Text style={s.emptyText}>{t('stats.my.screen.empty')}</Text>
         </View>
       </ScreenContainer>
     );
@@ -662,9 +666,9 @@ export default function MyStatsScreen({ navigation, route }) {
       return (
         <View style={[s.page, { width: pageWidth }, s.pageEmpty]}>
           <Feather name="filter" size={44} color={theme.text.muted} />
-          <Text style={s.emptyText}>No rounds selected.</Text>
+          <Text style={s.emptyText}>{t('stats.my.screen.noneSelected')}</Text>
           <PressableScale style={s.retryBtn} onPress={() => setSelectorOpen(true)}>
-            <Text style={s.retryText}>Choose rounds</Text>
+            <Text style={s.retryText}>{t('stats.my.screen.choose')}</Text>
           </PressableScale>
         </View>
       );

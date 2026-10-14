@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 import SectionCard from './SectionCard';
 import CoachInsightRow from './CoachInsightRow';
 import { GROUP_LABELS } from './CoachHero';
@@ -8,40 +9,21 @@ import { ROLE_LABELS } from './PracticePlanCard';
 
 const GROUP_ORDER = ['fixFirst', 'keepDoing', 'gettingBetter', 'gettingWorse', 'nextGains', 'watch'];
 const BOARD_SECTIONS = [
-  {
-    key: 'improve',
-    title: 'Improve now',
-    description: 'Biggest leaks and smaller gains to chase next.',
-    groups: ['fixFirst', 'nextGains'],
-  },
-  {
-    key: 'protect',
-    title: 'Protect',
-    description: 'What is already helping your score.',
-    groups: ['keepDoing'],
-  },
-  {
-    key: 'trends',
-    title: 'Trends',
-    description: 'What changed lately, split into better and worse.',
-    groups: ['gettingBetter', 'gettingWorse'],
-  },
-  {
-    key: 'monitor',
-    title: 'Monitor',
-    description: 'Signals to watch before making them the main practice block.',
-    groups: ['watch'],
-  },
+  { key: 'improve', groups: ['fixFirst', 'nextGains'] },
+  { key: 'protect', groups: ['keepDoing'] },
+  { key: 'trends', groups: ['gettingBetter', 'gettingWorse'] },
+  { key: 'monitor', groups: ['watch'] },
 ];
 
 export default function CoachBoard({ board, practicePlan = [], excludeInsightIds = [] }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const excluded = useMemo(() => new Set(excludeInsightIds), [excludeInsightIds]);
   const practiceByInsight = useMemo(() => new Map(
     (practicePlan ?? [])
       .filter((item) => item.sourceInsightId)
-      .map((item) => [item.sourceInsightId, ROLE_LABELS[item.role] ?? 'Practice'])
+      .map((item) => [item.sourceInsightId, ROLE_LABELS[item.role] ?? 'stats.my.practice.role.default'])
   ), [practicePlan]);
   const sections = BOARD_SECTIONS.map((section) => ({
     ...section,
@@ -54,13 +36,13 @@ export default function CoachBoard({ board, practicePlan = [], excludeInsightIds
   })).filter((section) => section.groups.length > 0);
 
   return (
-    <SectionCard title="Coach Board">
+    <SectionCard title={t('stats.my.coach.board.title')}>
       {sections.length ? sections.map((section, index) => (
         <View key={section.key} style={[s.section, index === 0 && s.sectionFirst]}>
           <View style={s.sectionHead}>
             <View style={s.sectionCopy}>
-              <Text style={s.sectionTitle}>{section.title}</Text>
-              <Text style={s.sectionDescription}>{section.description}</Text>
+              <Text style={s.sectionTitle}>{t(`stats.my.coach.board.${section.key}.title`)}</Text>
+              <Text style={s.sectionDescription}>{t(`stats.my.coach.board.${section.key}.description`)}</Text>
             </View>
             <View style={s.countPill}>
               <Text style={s.countText}>
@@ -70,19 +52,19 @@ export default function CoachBoard({ board, practicePlan = [], excludeInsightIds
           </View>
           {section.groups.map((group) => (
             <View key={group.key} style={s.group}>
-              <Text style={s.groupTitle}>{GROUP_LABELS[group.key]}</Text>
+              <Text style={s.groupTitle}>{t(GROUP_LABELS[group.key])}</Text>
               {group.insights.map((insight) => (
                 <CoachInsightRow
                   key={insight.id}
                   insight={insight}
-                  practiceRole={practiceByInsight.get(insight.id)}
+                  practiceRole={practiceByInsight.has(insight.id) ? t(practiceByInsight.get(insight.id)) : undefined}
                 />
               ))}
             </View>
           ))}
         </View>
       )) : (
-        <Text style={s.empty}>No coach insights yet. Play more rounds to build a clearer pattern.</Text>
+        <Text style={s.empty}>{t('stats.my.coach.board.empty')}</Text>
       )}
     </SectionCard>
   );
