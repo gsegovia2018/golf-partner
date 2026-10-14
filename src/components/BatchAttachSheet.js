@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, TextInput, ScrollView, Image, StyleSheet 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 import BottomSheet from './BottomSheet';
 import WheelPicker from './WheelPicker';
 import IconButton from './ui/IconButton';
@@ -18,6 +19,7 @@ export default function BatchAttachSheet({
   onConfirm,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const [roundIndex, setRoundIndex] = useState(defaultRoundIndex ?? 0);
@@ -43,18 +45,18 @@ export default function BatchAttachSheet({
 
   const roundItems = useMemo(() => (rounds ?? []).map((r, i) => ({
     key: r.id ?? String(i),
-    label: `R${i + 1}`,
+    label: t('shared.media.roundShort', { n: i + 1 }),
     sublabel: r.courseName || undefined,
-  })), [rounds]);
+  })), [rounds, t]);
 
   const holeItems = useMemo(() => [
-    { key: 'none', label: 'No hole' },
+    { key: 'none', label: t('shared.media.noHole') },
     ...holes.map((h, i) => ({
       key: String(i),
-      label: `Hole ${i + 1}`,
-      sublabel: h?.par ? `Par ${h.par}` : undefined,
+      label: t('shared.media.hole', { n: i + 1 }),
+      sublabel: h?.par ? t('shared.media.par', { par: h.par }) : undefined,
     })),
-  ], [holes]);
+  ], [holes, t]);
 
   const onRoundChange = (i) => {
     setRoundIndex(i);
@@ -104,12 +106,12 @@ export default function BatchAttachSheet({
   return (
     <BottomSheet visible={visible} onClose={onCancel} sheetStyle={s.sheet}>
       <View style={s.header}>
-            <Text style={s.title}>Attach {assets.length} {assets.length === 1 ? 'memory' : 'memories'}</Text>
-            <IconButton icon="x" onPress={onCancel} accessibilityLabel="Cancel" />
+            <Text style={s.title}>{t('shared.media.attachCount', { count: assets.length })}</Text>
+            <IconButton icon="x" onPress={onCancel} accessibilityLabel={t('common.cancel')} />
           </View>
 
           <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
-            <Text style={s.sectionLabel}>Apply to all — round &amp; hole</Text>
+            <Text style={s.sectionLabel}>{t('shared.media.applyRoundHole')}</Text>
             <View style={s.wheels}>
               {(rounds?.length ?? 0) > 1 ? (
                 <WheelPicker
@@ -127,25 +129,25 @@ export default function BatchAttachSheet({
               />
             </View>
 
-            <Text style={s.sectionLabel}>Apply to all — caption</Text>
+            <Text style={s.sectionLabel}>{t('shared.media.applyCaption')}</Text>
             <TextInput
               style={s.input}
               value={batchCaption}
               onChangeText={setBatchCaption}
-              placeholder="e.g. Sunday on 18"
+              placeholder={t('shared.media.batchCaptionPlaceholder')}
               placeholderTextColor={theme.text.muted}
             />
 
-            <Text style={s.sectionLabel}>Your name (optional)</Text>
+            <Text style={s.sectionLabel}>{t('shared.media.nameOptional')}</Text>
             <TextInput
               style={s.input}
               value={uploader}
               onChangeText={setUploader}
-              placeholder="e.g. Noé"
+              placeholder={t('shared.media.namePlaceholder')}
               placeholderTextColor={theme.text.muted}
             />
 
-            <Text style={[s.sectionLabel, { marginTop: 18 }]}>Per-photo detail</Text>
+            <Text style={[s.sectionLabel, { marginTop: 18 }]}>{t('shared.media.perPhoto')}</Text>
             {effective.map((e, i) => (
               <View key={i} style={s.itemRow}>
                 <Image source={{ uri: e.asset.localUri }} style={s.itemThumb} />
@@ -155,7 +157,7 @@ export default function BatchAttachSheet({
                 <View style={s.itemMain}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
                     <Chip
-                      label={e.holeIndex == null ? 'No hole' : `Hole ${e.holeIndex + 1}`}
+                      label={e.holeIndex == null ? t('shared.media.noHole') : t('shared.media.hole', { n: e.holeIndex + 1 })}
                       active={e.holeOverridden}
                       muted={!e.holeOverridden}
                       onPress={() => {
@@ -172,7 +174,7 @@ export default function BatchAttachSheet({
                   </ScrollView>
                   {e.holeOverridden && (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
-                      <Chip label="No hole" active={e.holeIndex == null} onPress={() => setItemHole(i, null)} theme={theme} small />
+                      <Chip label={t('shared.media.noHole')} active={e.holeIndex == null} onPress={() => setItemHole(i, null)} theme={theme} small />
                       {holes.map((_, h) => (
                         <Chip
                           key={h}
@@ -190,7 +192,7 @@ export default function BatchAttachSheet({
                       style={[s.input, s.captionInput, e.captionOverridden && s.inputOverridden]}
                       value={e.caption ?? ''}
                       onChangeText={(v) => setItemCaption(i, v)}
-                      placeholder="Caption for this one"
+                      placeholder={t('shared.media.captionThis')}
                       placeholderTextColor={theme.text.muted}
                     />
                     {e.captionOverridden && (
@@ -205,7 +207,7 @@ export default function BatchAttachSheet({
           </ScrollView>
 
           <TouchableOpacity style={s.saveBtn} onPress={submit}>
-            <Text style={s.saveLabel}>Save {assets.length}</Text>
+            <Text style={s.saveLabel}>{t('shared.media.saveCount', { count: assets.length })}</Text>
           </TouchableOpacity>
     </BottomSheet>
   );

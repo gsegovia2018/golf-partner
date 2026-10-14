@@ -7,6 +7,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import * as Sharing from 'expo-sharing';
 import { File as FsFile, Paths } from 'expo-file-system';
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatDate, formatTime } from '../i18n';
 import { deleteMedia } from '../store/mediaStore';
 import { removeQueueEntry } from '../store/mediaQueue';
 
@@ -30,6 +31,7 @@ function mediaFileMeta(item) {
 
 export default function MediaLightbox({ visible, items, initialIndex, onClose }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const insets = useSafeAreaInsets();
   const listRef = useRef(null);
@@ -45,7 +47,7 @@ export default function MediaLightbox({ visible, items, initialIndex, onClose })
     try {
       if (Platform.OS === 'web') {
         const res = await fetch(current.url);
-        if (!res.ok) throw new Error(`No se pudo descargar (${res.status})`);
+        if (!res.ok) throw new Error(t('shared.media.downloadFailed', { status: res.status }));
         const blob = await res.blob();
         const file = new File([blob], filename, { type: blob.type || mimeType });
         // Native share sheet (WhatsApp, etc.) when the browser can share files;
@@ -70,7 +72,7 @@ export default function MediaLightbox({ visible, items, initialIndex, onClose })
       // just a link to the Supabase URL.
       const target = new FsFile(Paths.cache, filename);
       const downloaded = await FsFile.downloadFileAsync(current.url, target, { overwrite: true });
-      await Sharing.shareAsync(downloaded.uri, { mimeType, dialogTitle: 'Compartir' });
+      await Sharing.shareAsync(downloaded.uri, { mimeType, dialogTitle: t('shared.media.share') });
     } catch (e) {
       // A user-cancelled share sheet is not an error worth surfacing.
       if (e?.name === 'AbortError' || /cancel/i.test(e?.message ?? '')) return;
@@ -88,22 +90,22 @@ export default function MediaLightbox({ visible, items, initialIndex, onClose })
         }
         onClose();
       } catch (e) {
-        Alert.alert('Error', String(e?.message ?? e));
+        Alert.alert(t('common.error'), String(e?.message ?? e));
       }
     };
     if (Platform.OS === 'web') {
       // eslint-disable-next-line no-alert
-      if (window.confirm('¿Borrar este recuerdo? No se puede deshacer.')) proceed();
+      if (window.confirm(t('shared.media.deleteConfirm'))) proceed();
     } else {
-      Alert.alert('Borrar recuerdo', 'No se puede deshacer.', [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Borrar', style: 'destructive', onPress: proceed },
+      Alert.alert(t('shared.media.deleteTitle'), t('shared.media.deleteBody'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('shared.media.delete'), style: 'destructive', onPress: proceed },
       ]);
     }
   };
 
-  const formatHole = (i) => (i == null ? null : `Hoyo ${i + 1}`);
-  const formatDate = (iso) => new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+  const formatHole = (i) => (i == null ? null : t('shared.media.hole', { n: i + 1 }));
+  const formatStamp = (iso) => `${formatDate(iso, 'short')} ${formatTime(iso)}`;
 
   return (
     <Modal statusBarTranslucent hardwareAccelerated visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -127,16 +129,16 @@ export default function MediaLightbox({ visible, items, initialIndex, onClose })
         />
 
         <View style={[s.topBar, { top: insets.top + 12 }]}>
-          <TouchableOpacity onPress={onClose} style={s.iconBtn} accessibilityLabel="Cerrar">
+          <TouchableOpacity onPress={onClose} style={s.iconBtn} accessibilityLabel={t('shared.media.close')}>
             <Feather name="x" size={24} color="#fff" />
           </TouchableOpacity>
           <View style={s.topActions}>
             {current.status === 'uploaded' && (
-              <TouchableOpacity onPress={onShare} style={s.iconBtn} accessibilityLabel="Compartir">
+              <TouchableOpacity onPress={onShare} style={s.iconBtn} accessibilityLabel={t('shared.media.share')}>
                 <Feather name="share-2" size={22} color="#fff" />
               </TouchableOpacity>
             )}
-            <TouchableOpacity onPress={onDelete} style={s.iconBtn} accessibilityLabel="Borrar">
+            <TouchableOpacity onPress={onDelete} style={s.iconBtn} accessibilityLabel={t('shared.media.delete')}>
               <Feather name="trash-2" size={22} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -146,7 +148,7 @@ export default function MediaLightbox({ visible, items, initialIndex, onClose })
           {formatHole(current.holeIndex) && <Text style={s.hole}>{formatHole(current.holeIndex)}</Text>}
           {current.caption && <Text style={s.caption}>{current.caption}</Text>}
           <Text style={s.meta}>
-            {formatDate(current.createdAt)}
+            {formatStamp(current.createdAt)}
             {current.uploaderLabel ? ` · ${current.uploaderLabel}` : ''}
           </Text>
         </View>

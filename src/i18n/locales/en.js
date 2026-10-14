@@ -17,8 +17,10 @@ import onboarding from './en/onboarding';
 import players from './en/players';
 import profile from './en/profile';
 import scorecard from './en/scorecard';
+import scoring from './en/scoring';
 import settings from './en/settings';
 import shots from './en/shots';
+import shared from './en/shared';
 import tour from './en/tour';
 import statsScreen from './en/statsScreen';
 import statExplainers from './en/statExplainers';
@@ -48,8 +50,10 @@ export const AREAS = {
   players,
   profile,
   scorecard,
+  scoring,
   settings,
   shots,
+  shared,
   tour,
   home,
   setup,
@@ -79,8 +83,10 @@ export default {
   ...players,
   ...profile,
   ...scorecard,
+  ...scoring,
   ...settings,
   ...shots,
+  ...shared,
   ...tour,
   ...home,
   ...setup,

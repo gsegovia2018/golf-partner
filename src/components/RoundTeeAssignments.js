@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { calcPlayingHandicap, lastTeeForPlayerOnCourse } from '../store/tournamentStore';
 import { holeCountOf } from '../store/scoring';
 import { middleTee, resolveTeeForPlayer } from '../store/tees';
+import { useT, formatNumber } from '../i18n';
 
 // Common golf tee colours, matched against the tee label by keyword —
 // covers both English ("White") and Spanish ("Blancas") naming, singular
@@ -74,6 +75,7 @@ export function resolvePlayerTee(existing, lastUsed, tees, gender) {
 // Hosts MUST pass key={round.id} (and, where base indexes can change, fold a
 // base-index signature into the key) so the component remounts and re-resolves.
 export default function RoundTeeAssignments({ round, players = [], onChange, theme }) {
+  const tl = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const tees = round?.tees ?? [];
   const holes = round?.holes ?? [];
@@ -277,7 +279,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
   }
 
   if (players.length === 0) {
-    return <Text style={s.emptyText}>Add players first.</Text>;
+    return <Text style={s.emptyText}>{tl('shared.tees.addPlayersFirst')}</Text>;
   }
 
   const anyManual = Object.values(manualHandicaps).some(Boolean);
@@ -286,14 +288,14 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
     <View>
       <Text style={s.hint}>
         {hasNamedTees
-          ? 'Tap a player to set their tee. Handicaps auto-calculate.'
-          : 'Playing handicaps auto-calculate — tap a player to adjust.'}
+          ? tl('shared.tees.hintNamed')
+          : tl('shared.tees.hintPlain')}
       </Text>
       {anyManual && (
         <TouchableOpacity style={s.resetBtn} onPress={resetAllToAuto} activeOpacity={0.7}
-          accessibilityRole="button" accessibilityLabel="Reset all handicaps to auto">
+          accessibilityRole="button" accessibilityLabel={tl('shared.tees.resetAllA11y')}>
           <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-          <Text style={s.resetBtnText}>Reset all to auto</Text>
+          <Text style={s.resetBtnText}>{tl('shared.tees.resetAll')}</Text>
         </TouchableOpacity>
       )}
       {players.map((p) => {
@@ -320,7 +322,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                 setExpandedId(expanded ? null : p.id);
               }}
               accessibilityRole="button"
-              accessibilityLabel={`${p.name}, index ${p.handicap}${teeLabel ? `, ${teeLabel} tee` : showPickPrompt ? ', no tee selected' : ''}, playing handicap ${valueStr || 'unset'}`}
+              accessibilityLabel={tl(teeLabel ? 'shared.tees.rowA11yTee' : showPickPrompt ? 'shared.tees.rowA11yNoTee' : 'shared.tees.rowA11y', { name: p.name, index: p.handicap, tee: teeLabel, value: valueStr || tl('shared.tees.unset') })}
               accessibilityState={{ expanded }}
             >
               <View style={s.avatar}>
@@ -329,23 +331,23 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
               <View style={{ flex: 1 }}>
                 <Text style={s.name}>{p.name}</Text>
                 <Text style={s.indexText}>
-                  Index {indexChanged ? `${indexStr} · base ${p.handicap}` : p.handicap}
+                  {indexChanged ? tl('shared.tees.indexBase', { value: indexStr, base: p.handicap }) : tl('shared.tees.index', { value: p.handicap })}
                 </Text>
                 {(teeLabel || showPickPrompt || overridden) && (
                   <View style={s.teeSummary}>
                     {teeLabel && (
                       <>
                         <View style={[s.teeDot, { backgroundColor: dotColor || theme.bg.secondary }]} />
-                        <Text style={s.teeSummaryText}>{teeLabel} tee</Text>
+                        <Text style={s.teeSummaryText}>{tl('shared.tees.teeName', { tee: teeLabel })}</Text>
                       </>
                     )}
-                    {showPickPrompt && <Text style={s.teeSummaryMuted}>Pick a tee</Text>}
-                    {overridden && <Text style={s.editedTag}>· Edited</Text>}
+                    {showPickPrompt && <Text style={s.teeSummaryMuted}>{tl('shared.tees.pickTee')}</Text>}
+                    {overridden && <Text style={s.editedTag}>{tl('shared.tees.edited')}</Text>}
                   </View>
                 )}
               </View>
               <View style={s.hcpPill}>
-                <Text style={s.hcpPillLabel}>PLAY</Text>
+                <Text style={s.hcpPillLabel}>{tl('shared.tees.play')}</Text>
                 <Text style={s.hcpPillText}>{valueStr || '—'}</Text>
               </View>
               <Feather
@@ -360,7 +362,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
               <View style={s.editor}>
                 {hasNamedTees && (
                   <>
-                    <Text style={s.editorLabel}>TEE</Text>
+                    <Text style={s.editorLabel}>{tl('shared.tees.editorTee')}</Text>
                     <View style={s.teePills}>
                       {namedTees.map((tee) => {
                         const selected = playerTees[p.id]?.label === tee.label;
@@ -372,7 +374,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                             onPress={() => setPlayerTee(p.id, tee)}
                             activeOpacity={0.7}
                             accessibilityRole="button"
-                            accessibilityLabel={`${tee.label} tee`}
+                            accessibilityLabel={tl('shared.tees.teeName', { tee: tee.label })}
                             accessibilityState={{ selected }}
                           >
                             <View style={[s.teeDot, { backgroundColor: tColor || theme.bg.secondary }]} />
@@ -386,12 +388,12 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                   </>
                 )}
                 <View style={s.editorLabelRow}>
-                  <Text style={s.editorLabel}>INDEX · THIS ROUND</Text>
+                  <Text style={s.editorLabel}>{tl('shared.tees.indexThisRound')}</Text>
                   {indexChanged && (
                     <TouchableOpacity onPress={() => resetIndex(p.id)} activeOpacity={0.7}
                       accessibilityRole="button"
-                      accessibilityLabel={`Reset ${p.name} index to base ${p.handicap}`}>
-                      <Text style={s.indexResetText}>Reset to {p.handicap}</Text>
+                      accessibilityLabel={tl('shared.tees.resetA11y', { name: p.name, base: p.handicap })}>
+                      <Text style={s.indexResetText}>{tl('shared.tees.resetTo', { value: p.handicap })}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -406,16 +408,15 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                   placeholder={String(p.handicap)}
                   placeholderTextColor={theme.text.muted}
                   onChangeText={(v) => setIndexValue(p.id, v)}
-                  accessibilityLabel={`${p.name} handicap index for this round`}
+                  accessibilityLabel={tl('shared.tees.indexA11y', { name: p.name })}
                 />
                 <Text style={s.indexHint}>
-                  Changing the index recalculates this round&apos;s playing handicap only —
-                  the player&apos;s saved index is unchanged.
+                  {tl('shared.tees.indexHint')}
                 </Text>
 
                 <View style={s.editorLabelRow}>
-                  <Text style={s.editorLabel}>PLAYING HANDICAP</Text>
-                  <Text style={s.indexRef}>Index {effIndex(p)}</Text>
+                  <Text style={s.editorLabel}>{tl('shared.tees.playingHandicap')}</Text>
+                  <Text style={s.indexRef}>{tl('shared.tees.index', { value: effIndex(p) })}</Text>
                 </View>
                 <View style={s.stepper}>
                   <TouchableOpacity
@@ -423,7 +424,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                     onPress={() => stepHandicap(p.id, -1)}
                     activeOpacity={0.7}
                     accessibilityRole="button"
-                    accessibilityLabel={`Decrease ${p.name} handicap`}
+                    accessibilityLabel={tl('shared.tees.decrease', { name: p.name })}
                   >
                     <Feather name="minus" size={14} color={theme.accent.primary} />
                   </TouchableOpacity>
@@ -447,7 +448,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                       onPress={() => setEditingHandicapId(p.id)}
                       activeOpacity={0.7}
                       accessibilityRole="button"
-                      accessibilityLabel={`Edit ${p.name} handicap, currently ${valueStr || '0'}`}
+                      accessibilityLabel={tl('shared.tees.editA11y', { name: p.name, value: valueStr || '0' })}
                     >
                       <Text style={s.stepValue}>{valueStr || '0'}</Text>
                       <Feather name="edit-2" size={14} color={theme.text.muted} style={{ marginLeft: 6 }} />
@@ -458,7 +459,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                     onPress={() => stepHandicap(p.id, 1)}
                     activeOpacity={0.7}
                     accessibilityRole="button"
-                    accessibilityLabel={`Increase ${p.name} handicap`}
+                    accessibilityLabel={tl('shared.tees.increase', { name: p.name })}
                   >
                     <Feather name="plus" size={14} color={theme.accent.primary} />
                   </TouchableOpacity>

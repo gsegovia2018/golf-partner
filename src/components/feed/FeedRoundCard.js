@@ -7,6 +7,8 @@ import { useTheme } from '../../theme/ThemeContext';
 import { formatRoundDuration } from '../../store/roundDuration';
 import { semantic } from '../../theme/tokens';
 import { getScoringMode } from '../scoringModes';
+import { t, useT } from '../../i18n';
+import { unitText } from '../../lib/pointsText';
 
 function Avatar({ item, theme }) {
   const initial = (item.actorName || '?').trim().charAt(0).toUpperCase();
@@ -60,7 +62,9 @@ function onHoleFor(result, live, totalHoles) {
 // Solo & partner Stableford (individual/stableford) read correctly as-is.
 function modeBadgeLabel(scoringMode) {
   if (!scoringMode || scoringMode === 'individual' || scoringMode === 'stableford') return null;
-  return getScoringMode(scoringMode).label;
+  const mode = getScoringMode(scoringMode);
+  // labelKey (catalogue key) when the mode carries one, else its English label.
+  return mode.labelKey ? t(mode.labelKey) : mode.label;
 }
 
 // The round's headline achievement, as one chip label. The player's name is
@@ -74,27 +78,26 @@ function highlightLabel(highlight) {
 }
 
 function roundTitle(item, roundLabel) {
-  return roundLabel || item.courseName || 'Round';
+  return roundLabel || item.courseName || t('shared.round.plain');
 }
 
 function leaderSummary(leader, second) {
-  if (!leader) return 'No scores recorded yet';
+  if (!leader) return t('shared.feed.noScores');
   const points = statValue(leader.points);
   if (!second) {
-    return `${leader.name || 'Player'} scored ${points} pts`;
+    return t('shared.feed.scored', { name: leader.name || t('shared.player'), points });
   }
   const margin = Number.isFinite(leader.points) && Number.isFinite(second?.points)
     ? leader.points - second.points
     : null;
   if (margin != null && margin > 0) {
-    return `${leader.name || 'Leader'} led by ${margin} with ${points} pts`;
+    return t('shared.feed.ledBy', { name: leader.name || t('shared.leader'), margin, points });
   }
-  return `${leader.name || 'Leader'} led with ${points} pts`;
+  return t('shared.feed.led', { name: leader.name || t('shared.leader'), points });
 }
 
 function playerCountLabel(count) {
-  if (count === 1) return '1 player';
-  return `${count} players`;
+  return t('shared.feed.players', { count });
 }
 
 function mediaResizeMode(media) {
@@ -111,6 +114,7 @@ export default function FeedRoundCard({
   children,
 }) {
   const { theme } = useTheme();
+  useT(); // re-render when the language changes; text uses t()
   const { width } = useWindowDimensions();
   const s = makeStyles(theme);
   const allResults = item.results ?? [];
@@ -125,8 +129,8 @@ export default function FeedRoundCard({
   const leader = results[0] ?? null;
   const second = results[1] ?? null;
   const scrollScores = results.length > 3;
-  const contextLabel = item.withMe || item.isMine ? 'Your round' : 'Friends round';
-  const mediaLabel = item.mediaCountLabel || (item.mediaCount ? `${item.mediaCount} photos` : null);
+  const contextLabel = item.withMe || item.isMine ? t('shared.feed.yourRound') : t('shared.feed.friendsRound');
+  const mediaLabel = item.mediaCountLabel || (item.mediaCount ? t('shared.media.photos', { count: item.mediaCount }) : null);
   const mediaList = Array.isArray(item.mediaList) && item.mediaList.length > 0
     ? item.mediaList
     : (item.mediaCoverUrl ? [{
@@ -163,11 +167,11 @@ export default function FeedRoundCard({
             <Text style={s.rank}>{index + 1}</Text>
           </View>
           {onHole != null ? (
-            <View style={s.holeBadge} accessibilityLabel={`On hole ${onHole}`}>
-              <Text style={s.holeBadgeText}>H{onHole}</Text>
+            <View style={s.holeBadge} accessibilityLabel={t('shared.onHole', { hole: onHole })}>
+              <Text style={s.holeBadgeText}>{t('shared.holeShort', { hole: onHole })}</Text>
             </View>
           ) : result.handicap != null ? (
-            <Text style={s.hcpText}>HCP {result.handicap}</Text>
+            <Text style={s.hcpText}>{t('shared.hcp', { value: result.handicap })}</Text>
           ) : null}
         </View>
         {canOpen(result) ? (
@@ -175,28 +179,28 @@ export default function FeedRoundCard({
             onPress={() => onPressPlayer(result)}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             accessibilityRole="button"
-            accessibilityLabel={`Open ${result.name || 'player'}'s stats`}
+            accessibilityLabel={t('shared.feed.openStats', { name: result.name || t('shared.player') })}
           >
-            <Text style={[s.resultName, s.resultNameLink]} numberOfLines={1}>{result.name || 'Player'}</Text>
+            <Text style={[s.resultName, s.resultNameLink]} numberOfLines={1}>{result.name || t('shared.player')}</Text>
           </TouchableOpacity>
         ) : (
-          <Text style={s.resultName} numberOfLines={1}>{result.name || 'Player'}</Text>
+          <Text style={s.resultName} numberOfLines={1}>{result.name || t('shared.player')}</Text>
         )}
         <View style={s.pointsLine}>
           <Text style={s.statValue}>{statValue(result.points)}</Text>
-          <Text style={s.statLabel}>pts</Text>
+          <Text style={s.statLabel}>{unitText('pts')}</Text>
           {result.strokes != null ? (
-            <Text style={s.strokesText}>{statValue(result.strokes)} str</Text>
+            <Text style={s.strokesText}>{statValue(result.strokes)} {t('shared.unit.str')}</Text>
           ) : null}
         </View>
         {vp != null ? (
           <Text style={[s.vsParText, { color: vsParColor(result.vsPar, result.vsParAllowed, theme) }]}>
-            {vp} vs par
+            {t('shared.feed.vsPar', { value: vp })}
           </Text>
         ) : null}
         {result.holes > 0 ? (
           <Text style={s.thruText}>
-            {live ? `thru ${result.holes}/${totalHoles}` : `${result.holes} holes`}
+            {live ? t('shared.feed.thru', { holes: result.holes, total: totalHoles }) : t('shared.feed.holes', { count: result.holes })}
           </Text>
         ) : null}
       </View>
@@ -213,9 +217,9 @@ export default function FeedRoundCard({
       <View style={s.kickerRow}>
         <View style={s.kickerLeft}>
           {live ? (
-            <View style={s.livePill} accessibilityLabel="Live round in progress">
+            <View style={s.livePill} accessibilityLabel={t('shared.feed.liveA11y')}>
               <View style={s.liveDot} />
-              <Text style={s.liveText}>LIVE</Text>
+              <Text style={s.liveText}>{t('shared.live')}</Text>
             </View>
           ) : (
             <View style={s.statusPill}>
@@ -241,7 +245,7 @@ export default function FeedRoundCard({
         <View style={s.heroText}>
           <Text style={s.title} numberOfLines={2}>{roundTitle(item, roundLabel)}</Text>
           <Text style={s.meta} numberOfLines={1}>
-            {item.tournamentName || 'Golf activity'}
+            {item.tournamentName || t('shared.feed.golfActivity')}
           </Text>
         </View>
       </View>
@@ -256,7 +260,7 @@ export default function FeedRoundCard({
               onPressMedia?.(mediaList[0]);
             }}
             accessibilityRole="imagebutton"
-            accessibilityLabel="Open round photo"
+            accessibilityLabel={t('shared.feed.openPhoto')}
           >
             <Image
               source={{ uri: mediaList[0].thumbUrl || mediaList[0].url }}
@@ -293,7 +297,7 @@ export default function FeedRoundCard({
                   onPressMedia?.(media);
                 }}
                 accessibilityRole="imagebutton"
-                accessibilityLabel={`Open round photo ${index + 1} of ${mediaList.length}`}
+                accessibilityLabel={t('shared.feed.openPhotoN', { n: index + 1, total: mediaList.length })}
               >
                 <Image
                   source={{ uri: media.thumbUrl || media.url }}
@@ -319,7 +323,7 @@ export default function FeedRoundCard({
           <TouchableOpacity
             onPress={() => onPressPlayer(leader)}
             accessibilityRole="button"
-            accessibilityLabel={`Open ${leader.name || 'player'}'s stats`}
+            accessibilityLabel={t('shared.feed.openStats', { name: leader.name || t('shared.player') })}
           >
             <Avatar item={{ ...item, actorName: leader?.name || item.actorName }} theme={theme} />
           </TouchableOpacity>
@@ -383,7 +387,7 @@ export default function FeedRoundCard({
           {hiddenCount > 0 ? (
             <View style={s.overflowRow}>
               <Text style={s.overflowText}>
-                +{hiddenCount} more player{hiddenCount === 1 ? '' : 's'}
+                {t('shared.feed.morePlayers', { count: hiddenCount })}
               </Text>
             </View>
           ) : null}

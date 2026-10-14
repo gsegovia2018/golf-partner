@@ -20,6 +20,7 @@ import { loadMediaForTournaments } from './mediaStore';
 import { roundFinalizedAt, roundEndedAt, roundStartedAt } from './finishStamp';
 import { roundDurationMs } from './roundDuration';
 import { isRoundLive } from './liveRound';
+import { t } from '../i18n';
 import { buildRoundHighlights, selectAchievements } from './roundAchievements';
 import { listFriends, getCachedFriends } from './friendStore';
 
@@ -185,8 +186,7 @@ function mediaTs(media) {
 }
 
 function mediaCountLabel(count, hasVideo) {
-  if (count === 1) return hasVideo ? '1 memory' : '1 photo';
-  return hasVideo ? `${count} memories` : `${count} photos`;
+  return t(hasVideo ? 'shared.media.memories' : 'shared.media.photos', { count });
 }
 
 function roundLabelForStory(tournament, roundId) {
@@ -201,7 +201,7 @@ function roundLabelForStory(tournament, roundId) {
         kind: tournament?.kind,
         courseName: round?.courseName,
         roundIndex: index,
-      }) : tournament?.name || 'Tournament photos'),
+      }) : tournament?.name || t('shared.stories.tournamentPhotos')),
   };
 }
 

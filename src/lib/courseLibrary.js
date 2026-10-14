@@ -6,6 +6,7 @@
 //   { kind: 'course', course }                 — standalone or single-layout
 //   { kind: 'club', club, layouts: course[] }   — a club with 2+ layouts
 import { holeCountOf } from '../store/scoring';
+import { t } from '../i18n';
 
 // Lowercase + strip diacritics, for accent-insensitive search/sort.
 export function normalizeText(value) {
@@ -118,7 +119,7 @@ export function filterCourseLibraryItems(items, query) {
 // where N is the card's own length — 9 on a nine-hole course (whose SIs run
 // 1-9 and whose strokes are allocated over nine holes, see
 // store/scoring.js#calcExtraShots), 18 otherwise. Returns a human-readable
-// list of problems (empty when valid).
+// list of problems in the active language (empty when valid).
 export function computeSiIssues(holes) {
   const issues = [];
   const seen = new Map();
@@ -126,18 +127,18 @@ export function computeSiIssues(holes) {
   (holes ?? []).forEach((h) => {
     const si = h.strokeIndex;
     if (!si || si < 1 || si > max) {
-      issues.push(`Hole ${h.number}: SI must be 1–${max}`);
+      issues.push(t('shared.course.siRange', { hole: h.number, max }));
     }
     if (si) seen.set(si, (seen.get(si) ?? 0) + 1);
   });
   const dupeSI = [...seen.entries()].filter(([, n]) => n > 1).map(([si]) => si);
   if (dupeSI.length > 0) {
-    issues.push(`Duplicate SI: ${dupeSI.sort((a, b) => a - b).join(', ')}`);
+    issues.push(t('shared.course.siDuplicate', { list: dupeSI.sort((a, b) => a - b).join(', ') }));
   }
   const missing = [];
   for (let i = 1; i <= max; i += 1) if (!seen.has(i)) missing.push(i);
   if (missing.length > 0 && missing.length < max) {
-    issues.push(`Missing SI: ${missing.join(', ')}`);
+    issues.push(t('shared.course.siMissing', { list: missing.join(', ') }));
   }
   return issues;
 }

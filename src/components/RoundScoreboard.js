@@ -5,6 +5,7 @@ import { semantic } from '../theme/tokens';
 import { roundTotals } from '../store/tournamentStore';
 import { isScrambleMode, scrambleRoundTally } from '../store/scoring';
 import { playersMeFirst } from '../lib/playerOrder';
+import { useT, formatNumber } from '../i18n';
 
 // Universal round scoreboard — the same player stat cards in every scoring
 // mode. Home shows it unranked (me first, no standings); the round summary
@@ -17,6 +18,7 @@ export default function RoundScoreboard({
   scoringMode = null,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   const holes = round?.holes ?? [];
@@ -103,7 +105,7 @@ export default function RoundScoreboard({
               <View style={s.gamePlayerHeader}>
                 <View
                   style={s.gamePlayerNameWrap}
-                  accessibilityLabel={ranked ? `Rank ${i + 1}: ${r.player.name}` : undefined}
+                  accessibilityLabel={ranked ? t('shared.scoreboard.rank', { rank: i + 1, name: r.player.name }) : undefined}
                 >
                   {ranked && (
                     <View style={s.rankBadge}>
@@ -115,33 +117,33 @@ export default function RoundScoreboard({
                 </View>
                 <View style={s.gamePlayerHeaderRight}>
                   {onHole != null && (
-                    <View style={s.holeBadge} accessibilityLabel={`On hole ${onHole}`}>
-                      <Text style={s.holeBadgeText}>HOLE {onHole}</Text>
+                    <View style={s.holeBadge} accessibilityLabel={t('shared.onHole', { hole: onHole })}>
+                      <Text style={s.holeBadgeText}>{t('shared.holeBadge', { hole: onHole })}</Text>
                     </View>
                   )}
                   <Text style={s.gamePlayerHcp}>
-                    HCP {Number.isFinite(r.handicap) ? r.handicap : '—'}
+                    {t('shared.hcp', { value: Number.isFinite(r.handicap) ? formatNumber(r.handicap) : '—' })}
                   </Text>
                 </View>
               </View>
               <View style={s.gameStatsRow}>
                 <View style={s.gameStatCell}>
                   <Text style={s.gameStatValue}>{showRunning ? r.points : '—'}</Text>
-                  <Text style={s.gameStatLabel}>Points</Text>
+                  <Text style={s.gameStatLabel}>{t('shared.scoreboard.points')}</Text>
                 </View>
                 <View style={s.gameStatDivider} />
                 <View style={s.gameStatCell}>
                   <Text style={s.gameStatValue}>
                     {showRunning && r.played > 0 ? r.strokes : '—'}
                   </Text>
-                  <Text style={s.gameStatLabel}>Strokes</Text>
+                  <Text style={s.gameStatLabel}>{t('shared.scoreboard.strokes')}</Text>
                 </View>
                 <View style={s.gameStatDivider} />
                 <View style={s.gameStatCell}>
                   <Text style={[s.gameStatValue, showRunning && { color: vsParColor(r) }]}>
                     {showRunning ? vsParText(r) : '—'}
                   </Text>
-                  <Text style={s.gameStatLabel}>vs Par</Text>
+                  <Text style={s.gameStatLabel}>{t('shared.scoreboard.vsPar')}</Text>
                 </View>
               </View>
             </View>

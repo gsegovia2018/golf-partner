@@ -1,6 +1,7 @@
 import {
   estimateTempC, tempFactor, altitudeFactor, conditionFactor, playsLike, describeConditions,
 } from '../playConditions';
+import { setLanguagePref } from '../../i18n';
 
 describe('estimateTempC', () => {
   it('reads the monthly curve at sea level', () => {
@@ -55,5 +56,26 @@ describe('describeConditions', () => {
     const d = describeConditions({ month: 6, altitudeM: 620 });
     expect(d.pct).toBeGreaterThan(0);
     expect(d.text).toMatch(/shorter/);
+  });
+});
+
+describe('describeConditions in Spanish', () => {
+  beforeEach(async () => { await setLanguagePref('es'); });
+  afterEach(async () => { await setLanguagePref('en'); });
+
+  it('describes a warm, high course in Spanish', () => {
+    const d = describeConditions({ month: 6, altitudeM: 620 });
+    expect(d.text).toBe(`los hoyos se juegan ~${d.pct} % más cortos`);
+  });
+  it('describes a cold sea-level day as longer, and neutral as marked', () => {
+    const cold = describeConditions({ month: 0, altitudeM: 0 });
+    expect(cold.text).toMatch(/más largos$/);
+    expect(describeConditions({ month: 4, altitudeM: 0, }).text).toBeTruthy();
+  });
+});
+
+describe('describeConditions text keys', () => {
+  it('resolves in English', () => {
+    expect(describeConditions({ month: 6, altitudeM: 620 }).text).toMatch(/^holes play ~\d+% shorter$/);
   });
 });

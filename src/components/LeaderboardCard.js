@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
+import { useT } from '../i18n';
 
 // The deep-green leaderboard card: the tournament leaderboard on Play and the
 // season standings on the league board.
@@ -34,13 +35,14 @@ import { semantic } from '../theme/tokens';
 //   more         optional { label, onPress }: a text button under the rows (Show all 18)
 export default function LeaderboardCard({ title, headerRight, subheader, rows = [], sections, footer, more }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const rankColors = [semantic.winner.dark, '#c0c8d4', '#daa06d'];
 
   const renderRow = (row, i, list, cols) => {
     if (row.gap) {
       return (
-        <View key={row.key} style={s.mastersGap} accessibilityLabel="More players">
+        <View key={row.key} style={s.mastersGap} accessibilityLabel={t('shared.leaderboard.morePlayers')}>
           <Feather name="more-horizontal" size={16} color="rgba(255,255,255,0.4)" />
         </View>
       );
@@ -54,7 +56,7 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
     return (
       <Row
         key={row.key ?? `${row.place}-${row.name}-${i}`}
-        {...(row.onPress ? { onPress: row.onPress, activeOpacity: 0.7, accessibilityRole: 'button', accessibilityLabel: row.isMe ? 'Your card' : `${row.name}'s card` } : {})}
+        {...(row.onPress ? { onPress: row.onPress, activeOpacity: 0.7, accessibilityRole: 'button', accessibilityLabel: row.isMe ? t('shared.leaderboard.yourCard') : t('shared.leaderboard.cardOf', { name: row.name }) } : {})}
         style={[s.mastersRow, row.compact && s.mastersRowCompact, isFirstPlace && s.mastersRowFirst, row.isMe && s.mastersRowMe, i === list.length - 1 && { borderBottomWidth: 0 }]}
       >
         <View style={[s.mastersRankBadge, { backgroundColor: rankBg }, row.unranked && s.mastersRankUnranked]}>

@@ -227,3 +227,11 @@ describe('formatOrdinal', () => {
     expect(formatOrdinal(null, 'en')).toBe('');
   });
 });
+
+describe('formatDate monthShort', () => {
+  test('short month name in each language', () => {
+    expect(formatDate('2026-10-04', 'monthShort', 'en')).toBe('Oct');
+    expect(formatDate('2026-10-04', 'monthShort', 'es')).toBe('oct');
+    expect(formatDate('2026-06-07', 'monthShort', 'es').toUpperCase()).toBe('JUN');
+  });
+});

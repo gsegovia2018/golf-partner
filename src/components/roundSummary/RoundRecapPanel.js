@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 
 function statValue(value, fallback = '0') {
   return value == null || value === '' ? fallback : String(value);
@@ -17,15 +18,16 @@ export default function RoundRecapPanel({
   durationLabel = null,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const holesLabel = live
-    ? `${statValue(recap?.holesPlayed)}/${totalHoles} holes`
-    : `${statValue(recap?.holesPlayed)} holes`;
+    ? t('shared.recap.holesLive', { played: statValue(recap?.holesPlayed), total: totalHoles })
+    : t('shared.feed.holes', { count: statValue(recap?.holesPlayed) });
   const playerCount = Number(recap?.playerCount) || 0;
-  const playersLabel = `${playerCount} player${playerCount === 1 ? '' : 's'}`;
+  const playersLabel = t('shared.feed.players', { count: playerCount });
 
   const winnerLabel = recap?.winnerName
-    ? `${live ? 'Leading' : 'Winner'}: ${recap.winnerName}`
+    ? t(live ? 'shared.recap.leading' : 'shared.recap.winner', { name: recap.winnerName })
     : null;
 
   return (

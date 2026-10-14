@@ -6,7 +6,7 @@ import React, { useMemo } from 'react';
 import { View, Text } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
-import { useT, formatNumber } from '../../i18n';
+import { tr, useT, formatNumber } from '../../i18n';
 import { semantic } from '../../theme/tokens';
 import { makeScorecardStyles } from './styles';
 import { teamColor } from './teamModel';
@@ -33,7 +33,7 @@ export const RoundSummary = React.memo(function RoundSummary({
 
   return (
     <View style={s.summaryCard}>
-      <Text style={s.summaryEyebrow}>{state.eyebrow}</Text>
+      <Text style={s.summaryEyebrow}>{tr(state.eyebrow)}</Text>
 
       {state.variant === 'pairs' && (
         <View>
@@ -112,7 +112,7 @@ export const RoundSummary = React.memo(function RoundSummary({
 
       {state.status != null && (
         <Text style={[s.summaryStatus, state.decided && s.summaryStatusWinner]}>
-          {state.status}
+          {tr(state.status)}
         </Text>
       )}
     </View>
