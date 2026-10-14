@@ -8,6 +8,7 @@
 
 import { LM } from './geometry';
 import { homeOf } from './checkpointChecks';
+import { t } from '../i18n';
 
 /** "10 cm", "7°", "1.8:1", "0.12 H": a check's value as it is shown (D14: in ink). */
 export function valueText(check) {
@@ -17,7 +18,7 @@ export function valueText(check) {
     case 'cm': return `${check.value} cm`;
     case ':1': return `${check.value}:1`;
     case 'H': return `${check.value} H`;
-    case 'of 2': return `${check.value} of 2`;
+    case 'of 2': return t('swing.value.ofTwo', { n: check.value });
     default: return `${check.value}${check.unit ? ` ${check.unit}` : ''}`;
   }
 }
