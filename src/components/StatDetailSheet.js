@@ -6,6 +6,7 @@ import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
+import { useT } from '../i18n';
 import BottomSheet from './BottomSheet';
 import IconButton from './ui/IconButton';
 
@@ -62,6 +63,7 @@ ShareableStatCard.displayName = 'ShareableStatCard';
 
 export default function StatDetailSheet({ visible, onClose, title, subtitle, explainer, rows = [], shareable = true }) {
   const { theme } = useTheme();
+  const t = useT();
   const insets = useSafeAreaInsets();
   // Size the sheet from the real window width — never a percentage of a
   // container, which can resolve wider than the screen and clip the sheet.
@@ -110,13 +112,14 @@ export default function StatDetailSheet({ visible, onClose, title, subtitle, exp
         {canShare ? (
           <IconButton
             icon="share-2"
+            accessibilityLabel={t('stats.explainer.sheet.share')}
             onPress={onShare}
             disabled={sharing}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={[s.shareBtn, sharing && { opacity: 0.4 }]}
           />
         ) : null}
-        <IconButton icon="x" onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} />
+        <IconButton icon="x" accessibilityLabel={t('stats.explainer.sheet.close')} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} />
       </View>
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
         {explainer ? (
@@ -128,7 +131,7 @@ export default function StatDetailSheet({ visible, onClose, title, subtitle, exp
         {rows.length === 0 ? (
           // An explainer-only sheet has nothing more to show — don't print
           // a misleading "no details" line under a perfectly good explainer.
-          explainer ? null : <Text style={s.empty}>No details available.</Text>
+          explainer ? null : <Text style={s.empty}>{t('stats.explainer.sheet.noDetails')}</Text>
         ) : rows.map(r => {
           if (r.section) {
             return (

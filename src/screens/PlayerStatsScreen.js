@@ -7,11 +7,12 @@ import PressableScale from '../components/ui/PressableScale';
 import PersonAvatar from '../components/ui/PersonAvatar';
 import StatDetailSheet from '../components/StatDetailSheet';
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber } from '../i18n';
 import { loadFriendStatsData, getCachedFriends } from '../store/friendStore';
 import {
   sharedRounds, headToHead, buildFriendSummary, friendVerdict,
 } from '../store/friendStats';
-import { statExplainers } from '../components/mystats/statExplainers';
+import { resolveStatExplainer } from '../components/mystats/statExplainers';
 import SummaryTab from '../components/playerstats/SummaryTab';
 import TogetherTab from '../components/playerstats/TogetherTab';
 import FormTab from '../components/mystats/tabs/FormTab';
@@ -19,11 +20,11 @@ import BreakdownTab from '../components/mystats/tabs/BreakdownTab';
 import HandicapTab from '../components/mystats/tabs/HandicapTab';
 
 const TABS = [
-  { key: 'summary', label: 'Summary' },
-  { key: 'form', label: 'Form' },
-  { key: 'handicap', label: 'Handicap' },
-  { key: 'breakdown', label: 'Breakdown' },
-  { key: 'together', label: 'Together' },
+  { key: 'summary', labelKey: 'stats.player.tab.summary' },
+  { key: 'form', labelKey: 'stats.player.tab.form' },
+  { key: 'handicap', labelKey: 'stats.player.tab.handicap' },
+  { key: 'breakdown', labelKey: 'stats.player.tab.breakdown' },
+  { key: 'together', labelKey: 'stats.player.tab.together' },
 ];
 
 // A friend's game, read-only: Summary (new), the existing Form/Handicap/
@@ -33,6 +34,7 @@ const TABS = [
 export default function PlayerStatsScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
+  const t = useT();
   const paramFriend = route?.params?.friend;
   // Callers that only know a player's id/name/avatar (the feed) pass a
   // partial person; fill username, gender and handicap from the friends
@@ -87,19 +89,18 @@ export default function PlayerStatsScreen({ navigation, route }) {
   const h2h = useMemo(() => headToHead(shared), [shared]);
 
   const onInfo = useCallback((key) => setInfoKey(key), []);
-  const activeExplainer = infoKey ? statExplainers[infoKey] : null;
-  const explainer = typeof activeExplainer === 'function' ? activeExplainer() : activeExplainer;
+  const explainer = infoKey ? resolveStatExplainer(infoKey) : null;
 
   const Header = (
     <View style={s.header}>
-      <IconButton icon="chevron-left" accessibilityLabel="Back" onPress={() => navigation.goBack()} />
+      <IconButton icon="chevron-left" accessibilityLabel={t('common.back')} onPress={() => navigation.goBack()} />
       {friend ? <PersonAvatar person={friend} theme={theme} size={40} /> : null}
       <View style={s.headerText}>
-        <Text style={s.headerTitle} numberOfLines={1}>{friend?.displayName ?? 'Player'}</Text>
+        <Text style={s.headerTitle} numberOfLines={1}>{friend?.displayName ?? t('stats.player.fallbackName')}</Text>
         {friend ? (
           <Text style={s.headerSub} numberOfLines={1}>
             {friend.username ? `@${friend.username}` : ''}
-            {summary?.index?.value != null ? ` · HCP ${summary.index.value.toFixed(1)}` : ''}
+            {summary?.index?.value != null ? ` · ${t('stats.player.headerHcp', { value: formatNumber(summary.index.value, { decimals: 1 }) })}` : ''}
           </Text>
         ) : null}
       </View>
@@ -111,7 +112,7 @@ export default function PlayerStatsScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
-          <Text style={s.emptyText}>No player selected.</Text>
+          <Text style={s.emptyText}>{t('stats.player.noneSelected')}</Text>
         </View>
       </ScreenContainer>
     );
@@ -124,17 +125,17 @@ export default function PlayerStatsScreen({ navigation, route }) {
       style={s.tabScroll}
       contentContainerStyle={s.tabBar}
     >
-      {TABS.map((t) => {
-        const active = tab === t.key;
+      {TABS.map((tabItem) => {
+        const active = tab === tabItem.key;
         return (
           <PressableScale
-            key={t.key}
+            key={tabItem.key}
             style={[s.tabPill, active && s.tabPillOn]}
-            onPress={() => setTab(t.key)}
+            onPress={() => setTab(tabItem.key)}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
           >
-            <Text style={[s.tabText, active && s.tabTextOn]}>{t.label}</Text>
+            <Text style={[s.tabText, active && s.tabTextOn]}>{t(tabItem.labelKey)}</Text>
           </PressableScale>
         );
       })}
@@ -160,12 +161,12 @@ export default function PlayerStatsScreen({ navigation, route }) {
         {Header}
         <View style={s.center}>
           <Feather name="wifi-off" size={44} color={theme.text.muted} />
-          <Text style={s.emptyText}>{`Could not load ${friend.displayName}'s stats.`}</Text>
+          <Text style={s.emptyText}>{t('stats.player.loadFailed', { name: friend.displayName })}</Text>
           <PressableScale
             style={s.retryBtn}
             onPress={() => { setData(null); setError(false); setLoadNonce((v) => v + 1); }}
           >
-            <Text style={s.retryText}>Retry</Text>
+            <Text style={s.retryText}>{t('stats.player.retry')}</Text>
           </PressableScale>
         </View>
       </ScreenContainer>
@@ -179,7 +180,7 @@ export default function PlayerStatsScreen({ navigation, route }) {
         {Header}
         <View style={s.center}>
           <Feather name="bar-chart-2" size={44} color={theme.text.muted} />
-          <Text style={s.emptyText}>No rounds yet.</Text>
+          <Text style={s.emptyText}>{t('stats.player.noRounds')}</Text>
         </View>
       </ScreenContainer>
     );
@@ -189,7 +190,7 @@ export default function PlayerStatsScreen({ navigation, route }) {
   // again there would be a duplicate.
   const footer = tab !== 'summary' ? (
     <Text style={s.footer}>
-      {`Based on ${summary?.roundCount ?? 0} rounds you can see · 9-hole and unfinished rounds don't count toward differentials`}
+      {t('stats.player.footer', { count: summary?.roundCount ?? 0 })}
     </Text>
   ) : null;
 

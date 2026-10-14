@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
+import { useT, getLanguage, formatNumber, formatDate } from '../../../i18n';
 import PressableScale from '../../ui/PressableScale';
 import Reveal from '../../ui/Reveal';
 import SectionCard from '../SectionCard';
@@ -12,12 +13,10 @@ import {
 } from '../../../store/handicapIndex';
 import { upsertProfile } from '../../../store/profileStore';
 
-// "12 May" — short date for a ledger row.
-function fmtDate(iso) {
+// "12 May" / "12 may" — short date for a ledger row.
+function fmtDate(iso, lang) {
   if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return formatDate(iso, 'day', lang);
 }
 
 // "9 May ’26" — date with year, for the personal-low fact.
@@ -25,24 +24,30 @@ function fmtDateYr(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  const day = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  return `${day} ’${String(d.getFullYear()).slice(-2)}`;
+  return `${formatDate(iso, 'day')} ’${String(d.getFullYear()).slice(-2)}`;
 }
 
 // "Apr ’25" — month labels for the chart axis and the plate header.
-function fmtMonthYr(iso) {
+function fmtMonthYr(iso, lang) {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return `${d.toLocaleDateString('en-GB', { month: 'short' })} ’${String(d.getFullYear()).slice(-2)}`;
+  const month = formatDate(iso, 'day', lang).split(' ').pop();
+  return `${month} ’${String(d.getFullYear()).slice(-2)}`;
 }
 
-const fmt1 = (n) => n.toFixed(1);
+const fmt1 = (n) => formatNumber(n, { decimals: 1 });
 const round1 = (n) => Math.round(n * 10) / 10;
 
-const reasonLabel = (row) => (
-  row.reason === 'nine-holes' ? '9-hole round' : 'no slope/rating'
-);
+// Renders a whole translated sentence with **bold** and ^^accent bold^^ runs,
+// so the emphasis stays inside one catalogue string per sentence.
+function rich(text, strongStyle, accentStyle) {
+  return text.split(/(\*\*.+?\*\*|\^\^.+?\^\^)/).filter(Boolean).map((part, i) => {
+    if (part.startsWith('**')) return <Text key={i} style={strongStyle}>{part.slice(2, -2)}</Text>;
+    if (part.startsWith('^^')) return <Text key={i} style={[strongStyle, accentStyle]}>{part.slice(2, -2)}</Text>;
+    return part;
+  });
+}
 
 const LEDGER_VISIBLE = 12;
 
@@ -50,6 +55,8 @@ const LEDGER_VISIBLE = 12;
 function HandicapTab({
   myRounds, profileHandicap, onInfo, onApplied, excludedKeys, onToggleExcluded, readOnly = false,
 }) {
+  const t = useT();
+  const lang = getLanguage(); // memo key for the date labels below
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const result = useMemo(
@@ -98,8 +105,8 @@ function HandicapTab({
       const d = r?.tournamentDate;
       if (d && (min == null || String(d) < String(min))) min = d;
     });
-    return min ? fmtMonthYr(min) : null;
-  }, [myRounds]);
+    return min ? fmtMonthYr(min, lang) : null;
+  }, [myRounds, lang]);
 
   // Net change over the last five qualifying rounds + per-round form strip.
   const last5 = useMemo(() => {
@@ -121,31 +128,31 @@ function HandicapTab({
     const prev = [...series].reverse().find((p) => p.date && String(p.date) < jan1);
     const hasThisYear = series.some((p) => p.date && String(p.date) >= jan1);
     if (prev && hasThisYear) {
-      return { label: 'This year', delta: round1(last.value - prev.value), from: prev.value };
+      return { labelKey: 'stats.tab.handicap.thisYear', delta: round1(last.value - prev.value), from: prev.value };
     }
     const cutoff = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString();
     const base = [...series].reverse().find((p) => p.date && String(p.date) <= cutoff);
     if (base) {
-      return { label: 'Last 12 months', delta: round1(last.value - base.value), from: base.value };
+      return { labelKey: 'stats.tab.handicap.last12Months', delta: round1(last.value - base.value), from: base.value };
     }
     return null;
   }, [series]);
 
   const roundChart = useMemo(() => series.map((p) => ({
     value: p.value,
-    label: fmtMonthYr(p.date),
-    detail: [p.courseName, fmtDate(p.date)].filter(Boolean).join(' · '),
+    label: fmtMonthYr(p.date, lang),
+    detail: [p.courseName, fmtDate(p.date, lang)].filter(Boolean).join(' · '),
     isLow: lowKey != null && p.key === lowKey,
-  })), [series, lowKey]);
+  })), [series, lowKey, lang]);
   const monthChart = useMemo(() => monthly.map((m) => {
-    const label = fmtMonthYr(`${m.ym}-15`);
+    const label = fmtMonthYr(`${m.ym}-15`, lang);
     return {
       value: m.value,
       played: m.played,
       label,
-      detail: m.played ? label : `${label} · no qualifying rounds`,
+      detail: m.played ? label : t('stats.tab.handicap.noQualifying', { label }),
     };
-  }), [monthly]);
+  }), [monthly, t, lang]);
 
   // Newest-first merged list: the included last-20 window, every excluded
   // round (so it can be re-added), and every ineligible round (so the
@@ -184,10 +191,10 @@ function HandicapTab({
   };
 
   const toggleLabel = (d) => {
-    const roundName = `${d.courseName ?? 'round'} ${fmtDate(d.date)}`.trim();
+    const roundName = `${d.courseName ?? t('stats.tab.handicap.roundWord')} ${fmtDate(d.date)}`.trim();
     return d.type === 'excluded'
-      ? `Include ${roundName} in handicap`
-      : `Exclude ${roundName} from handicap`;
+      ? t('stats.tab.handicap.include', { name: roundName })
+      : t('stats.tab.handicap.exclude', { name: roundName });
   };
 
   // "▼ 0.5" in green / "▲ 0.2" in red / "— 0.0" muted; shape + color together.
@@ -199,7 +206,7 @@ function HandicapTab({
       delta === 0 && { color: theme.text.muted },
     ]}
     >
-      {delta < 0 ? `▼ ${fmt1(-delta)}` : delta > 0 ? `▲ ${fmt1(delta)}` : '— 0.0'}
+      {delta < 0 ? `▼ ${fmt1(-delta)}` : delta > 0 ? `▲ ${fmt1(delta)}` : `— ${fmt1(0)}`}
     </Text>
   );
 
@@ -215,19 +222,19 @@ function HandicapTab({
       onPress={() => onInfo('handicapIndex')}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       accessibilityRole="button"
-      accessibilityLabel="What is Handicap Index"
+      accessibilityLabel={t('stats.tab.handicap.whatIsIndex')}
     >
       <Feather name="info" size={14} color={theme.text.muted} />
     </TouchableOpacity>
   ) : null;
 
   const ledgerCard = rows.length > 0 ? (
-    <SectionCard title="Score differentials" infoKey="handicapIndex" onInfo={onInfo}>
+    <SectionCard title={t('stats.tab.handicap.differentials')} infoKey="handicapIndex" onInfo={onInfo}>
       <View style={s.lHead}>
-        <Text style={[s.lHeadText, s.colDate]}>Date</Text>
-        <Text style={[s.lHeadText, s.colCourse]}>Course</Text>
-        <Text style={[s.lHeadText, s.colDiff]}>Diff</Text>
-        <Text style={[s.lHeadText, s.colAfter]}>{'→ Index'}</Text>
+        <Text style={[s.lHeadText, s.colDate]}>{t('stats.tab.handicap.colDate')}</Text>
+        <Text style={[s.lHeadText, s.colCourse]}>{t('stats.tab.handicap.colCourse')}</Text>
+        <Text style={[s.lHeadText, s.colDiff]}>{t('stats.tab.handicap.colDiff')}</Text>
+        <Text style={[s.lHeadText, s.colAfter]}>{t('stats.tab.handicap.colIndex')}</Text>
         {onToggleExcluded ? <View style={s.colAct} /> : null}
       </View>
       {visibleRows.map((d) => {
@@ -237,7 +244,7 @@ function HandicapTab({
               <Text style={[s.lDate, s.colDate]}>{fmtDate(d.date)}</Text>
               <View style={s.colCourse}>
                 <Text style={s.lCourseMuted} numberOfLines={1}>{d.courseName}</Text>
-                <Text style={s.lWhy}>{`doesn’t qualify — ${reasonLabel(d)}`}</Text>
+                <Text style={s.lWhy}>{d.reason === 'nine-holes' ? t('stats.tab.handicap.notQualifyNine') : t('stats.tab.handicap.notQualifyRating')}</Text>
               </View>
               <Text style={[s.lDiff, s.colDiff]}>{'—'}</Text>
               <Text style={[s.lAfter, s.colAfter]}>{'—'}</Text>
@@ -263,7 +270,7 @@ function HandicapTab({
                     style={s.readd}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text style={s.readdText}>Re-add</Text>
+                    <Text style={s.readdText}>{t('stats.tab.handicap.readd')}</Text>
                   </PressableScale>
                 ) : <Text style={s.lAfter}>{'—'}</Text>}
               </View>
@@ -278,7 +285,7 @@ function HandicapTab({
             <View style={s.colCourse}>
               <Text style={s.lCourse} numberOfLines={1}>{d.courseName}</Text>
               {d.key === lowKey && (
-                <Text style={[s.lWhy, { color: goldText }]}>{'★ personal low'}</Text>
+                <Text style={[s.lWhy, { color: goldText }]}>{t('stats.tab.handicap.personalLowFlag')}</Text>
               )}
             </View>
             <View style={[s.colDiff, s.lDiffWrap]}>
@@ -311,13 +318,12 @@ function HandicapTab({
       })}
       {rows.length > LEDGER_VISIBLE && !showAll && (
         <PressableScale onPress={() => setShowAll(true)} accessibilityRole="button">
-          <Text style={s.moreText}>{`Show ${rows.length - LEDGER_VISIBLE} earlier rounds`}</Text>
+          <Text style={s.moreText}>{t('stats.tab.handicap.showEarlier', { count: rows.length - LEDGER_VISIBLE })}</Text>
         </PressableScale>
       )}
       <Text style={s.legend}>
         <Text style={{ color: gold }}>{'●'}</Text>
-        {' gold — counts toward your index today'}
-        {onToggleExcluded ? ' · struck — excluded' : ''}
+        {` ${onToggleExcluded ? t('stats.tab.handicap.legendExcluded') : t('stats.tab.handicap.legend')}`}
       </Text>
     </SectionCard>
   ) : null;
@@ -327,16 +333,15 @@ function HandicapTab({
     const emptyHero = (
       <View style={s.plate}>
         <View style={s.plateTitleWrap}>
-          <Text style={s.emptyTitle}>Not enough qualifying rounds yet</Text>
+          <Text style={s.emptyTitle}>{t('stats.tab.handicap.notEnough')}</Text>
           {infoBtn}
         </View>
         <Text style={s.note}>
-          {`You need ${MIN_DIFFERENTIALS} qualifying rounds to calculate an index — ${missing} more to go. `}
-          {'A round qualifies when it is a complete 18-hole round (no scrambles) on a tee with a slope and course rating.'}
+          {`${t('stats.tab.handicap.needRounds', { min: MIN_DIFFERENTIALS, missing })} ${t('stats.tab.handicap.qualifyRule')}`}
         </Text>
         {result.excludedCount > 0 && (
           <Text style={s.note}>
-            {`${result.excludedCount} excluded round${result.excludedCount === 1 ? ' is' : 's are'} not counted — add them back below.`}
+            {t('stats.tab.handicap.excludedNotCounted', { count: result.excludedCount })}
           </Text>
         )}
       </View>
@@ -363,13 +368,13 @@ function HandicapTab({
     <View style={s.plate}>
       <View style={s.plateTop}>
         <View style={s.plateTitleWrap}>
-          <Text style={s.plateTitle}>Season Ledger</Text>
+          <Text style={s.plateTitle}>{t('stats.tab.handicap.seasonLedger')}</Text>
           {infoBtn}
         </View>
         <Text style={s.plateEst}>
           {estLabel
-            ? `est. ${estLabel} · ${result.totalCount} rounds recorded`
-            : `${result.totalCount} rounds recorded`}
+            ? t('stats.tab.handicap.estRecorded', { est: estLabel, count: result.totalCount })
+            : t('stats.tab.handicap.recorded', { count: result.totalCount })}
         </Text>
       </View>
 
@@ -377,18 +382,20 @@ function HandicapTab({
         <View style={s.plateIdx}>
           <Text style={s.plateVal}>{fmt1(result.index)}</Text>
           <View style={[s.goldRule, { backgroundColor: goldText }]} />
-          <Text style={s.plateCap}>{`best ${result.usedCount} of last ${result.windowCount}`}</Text>
+          <Text style={s.plateCap}>{t('stats.tab.handicap.bestOfLast', { used: result.usedCount, window: result.windowCount })}</Text>
         </View>
         <View style={s.plateFacts}>
           <View style={s.pfact}>
-            <Text style={s.pfactK}>Personal low</Text>
+            <Text style={s.pfactK}>{t('stats.tab.handicap.personalLow')}</Text>
             <Text style={[s.pfactV, { color: goldText }]}>
-              {`${fmt1(outlook.low)} · ${lowNow ? 'now' : fmtDateYr(outlook.lowDate)}`}
+              {lowNow
+                ? t('stats.tab.handicap.lowNow', { value: fmt1(outlook.low) })
+                : `${fmt1(outlook.low)} · ${fmtDateYr(outlook.lowDate)}`}
             </Text>
           </View>
           {last5 && (
             <View style={s.pfact}>
-              <Text style={s.pfactK}>Last 5 rounds</Text>
+              <Text style={s.pfactK}>{t('stats.tab.handicap.last5')}</Text>
               <Text style={s.pfactV}>
                 <Text style={s.strip}>
                   {last5.moves.map((m, i) => (
@@ -407,10 +414,10 @@ function HandicapTab({
           )}
           {yearFact && (
             <View style={[s.pfact, s.pfactLast]}>
-              <Text style={s.pfactK}>{yearFact.label}</Text>
+              <Text style={s.pfactK}>{t(yearFact.labelKey)}</Text>
               <Text style={s.pfactV}>
                 {deltaText(yearFact.delta, s.pfactV)}
-                <Text style={s.pfactFrom}>{` · from ${fmt1(yearFact.from)}`}</Text>
+                <Text style={s.pfactFrom}>{` · ${t('stats.tab.handicap.from', { value: fmt1(yearFact.from) })}`}</Text>
               </Text>
             </View>
           )}
@@ -418,15 +425,15 @@ function HandicapTab({
       </View>
 
       {isPlus && (
-        <Text style={s.note}>A negative index means you play better than scratch.</Text>
+        <Text style={s.note}>{t('stats.tab.handicap.plusNote')}</Text>
       )}
 
       {series.length >= 2 && (
         <>
           <View style={s.chartRow}>
-            <Text style={s.chartTitle}>Index history</Text>
+            <Text style={s.chartTitle}>{t('stats.tab.handicap.indexHistory')}</Text>
             <View style={s.seg}>
-              {[['round', 'By round'], ['month', 'By month']].map(([mode, label]) => {
+              {[['round', t('stats.tab.handicap.byRound')], ['month', t('stats.tab.handicap.byMonth')]].map(([mode, label]) => {
                 const on = chartMode === mode;
                 return (
                   <PressableScale
@@ -445,12 +452,12 @@ function HandicapTab({
           <IndexHistoryChart
             data={chartMode === 'round' ? roundChart : monthChart}
             mode={chartMode}
-            lowLabel={lowNow ? null : `low ${fmt1(outlook.low)} · ${fmtDate(outlook.lowDate)}`}
+            lowLabel={lowNow ? null : t('stats.tab.handicap.lowLabel', { value: fmt1(outlook.low), date: fmtDate(outlook.lowDate) })}
           />
           <Text style={s.chartCap}>
             {chartMode === 'round'
-              ? 'Recomputed after every qualifying round · oldest → newest'
-              : 'End-of-month index · dashes bridge months without a qualifying round'}
+              ? t('stats.tab.handicap.chartCapRound')
+              : t('stats.tab.handicap.chartCapMonth')}
           </Text>
         </>
       )}
@@ -465,17 +472,17 @@ function HandicapTab({
           >
             <Text style={s.applyText}>
               {applyState === 'done'
-                ? 'Saved to profile ✓'
-                : `Set ${fmt1(applyValue)} as my handicap`}
+                ? t('stats.tab.handicap.savedToProfile')
+                : t('stats.tab.handicap.setAsMine', { value: fmt1(applyValue) })}
             </Text>
           </PressableScale>
           {applyState === 'error' && (
-            <Text style={s.errorText}>{'Could not save — try again.'}</Text>
+            <Text style={s.errorText}>{t('stats.tab.handicap.saveFailed')}</Text>
           )}
           <Text style={s.profileNote}>
             {profileHandicap != null
-              ? `Profile today: ${profileHandicap} — saving updates it to ${fmt1(applyValue)}`
-              : 'No handicap on your profile yet.'}
+              ? t('stats.tab.handicap.profileToday', { current: formatNumber(profileHandicap), next: fmt1(applyValue) })
+              : t('stats.tab.handicap.noProfileHandicap')}
           </Text>
         </>
       )}
@@ -489,19 +496,14 @@ function HandicapTab({
       icon: 'target',
       text: (
         <Text style={s.factText}>
-          {'Beat a differential of '}
-          <Text style={s.factStrong}>{fmt1(outlook.dropThreshold)}</Text>
-          {' and your index drops'}
-          {outlook.dropGross != null
-            ? (
-              <>
-                {' — that’s about '}
-                <Text style={s.factStrong}>{`${outlook.dropGross} gross`}</Text>
-                {` at ${outlook.dropCourse}`}
-              </>
-            )
-            : null}
-          .
+          {rich(
+            outlook.dropGross != null
+              ? t('stats.tab.handicap.dropGross', {
+                value: fmt1(outlook.dropThreshold), gross: outlook.dropGross, course: outlook.dropCourse,
+              })
+              : t('stats.tab.handicap.drop', { value: fmt1(outlook.dropThreshold) }),
+            s.factStrong,
+          )}
         </Text>
       ),
     });
@@ -512,13 +514,13 @@ function HandicapTab({
       icon: 'flag',
       text: (
         <Text style={s.factText}>
-          {'A '}
-          <Text style={s.factStrong}>{`${fmt1(outlook.newLowThreshold)} or better`}</Text>
-          {' sets a new personal low: '}
-          <Text style={[s.factStrong, { color: theme.accent.primary }]}>{fmt1(outlook.newLowIndex)}</Text>
-          {'.'}
+          {rich(
+            t('stats.tab.handicap.newLow', { value: fmt1(outlook.newLowThreshold), index: fmt1(outlook.newLowIndex) }),
+            s.factStrong,
+            { color: theme.accent.primary },
+          )}
           {lastPosted != null && lastPosted <= outlook.newLowThreshold
-            ? ` You posted ${fmt1(lastPosted)} last time.`
+            ? ` ${t('stats.tab.handicap.posted', { value: fmt1(lastPosted) })}`
             : ''}
         </Text>
       ),
@@ -530,9 +532,7 @@ function HandicapTab({
       icon: 'shield',
       text: (
         <Text style={s.factText}>
-          {'No downside this week — a bad round '}
-          <Text style={s.factStrong}>{'can’t raise'}</Text>
-          {' your index.'}
+          {rich(t('stats.tab.handicap.safe'), s.factStrong)}
         </Text>
       ),
     });
@@ -542,20 +542,24 @@ function HandicapTab({
       icon: 'shield',
       text: (
         <Text style={s.factText}>
-          {outlook.leaving?.counting
-            ? `Your ${fmt1(outlook.leaving.differential)} at ${outlook.leaving.courseName} leaves the 20-round window — at `
-            : 'At '}
-          <Text style={s.factStrong}>{`${fmt1(outlook.riseAt)} or worse`}</Text>
-          {' your index rises, to '}
-          <Text style={s.factStrong}>{fmt1(outlook.worstCase)}</Text>
-          {' at worst.'}
+          {rich(
+            outlook.leaving?.counting
+              ? t('stats.tab.handicap.riskLeaving', {
+                diff: fmt1(outlook.leaving.differential),
+                course: outlook.leaving.courseName,
+                riseAt: fmt1(outlook.riseAt),
+                worst: fmt1(outlook.worstCase),
+              })
+              : t('stats.tab.handicap.risk', { riseAt: fmt1(outlook.riseAt), worst: fmt1(outlook.worstCase) }),
+            s.factStrong,
+          )}
         </Text>
       ),
     });
   }
 
   const nextCard = nextFacts.length > 0 && !readOnly ? (
-    <SectionCard title="Your next round" titleVariant="heading">
+    <SectionCard title={t('stats.tab.handicap.nextRound')} titleVariant="heading">
       {nextFacts.map((f) => (
         <View key={f.key} style={s.fact}>
           <View style={s.factIcon}>

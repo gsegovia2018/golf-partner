@@ -20,6 +20,11 @@ import scorecard from './en/scorecard';
 import settings from './en/settings';
 import shots from './en/shots';
 import tour from './en/tour';
+import statsScreen from './en/statsScreen';
+import statExplainers from './en/statExplainers';
+import statsTabs from './en/statsTabs';
+import myStats from './en/myStats';
+import playerStats from './en/playerStats';
 
 import home from './en/home';
 import setup from './en/setup';
@@ -50,6 +55,11 @@ export const AREAS = {
   setup,
   rounds,
   official,
+  statsScreen,
+  statExplainers,
+  statsTabs,
+  myStats,
+  playerStats,
 };
 
 export default {
@@ -76,4 +86,9 @@ export default {
   ...setup,
   ...rounds,
   ...official,
+  ...statsScreen,
+  ...statExplainers,
+  ...statsTabs,
+  ...myStats,
+  ...playerStats,
 };

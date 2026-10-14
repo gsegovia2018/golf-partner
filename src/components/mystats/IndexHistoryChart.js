@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import Svg, { Path, Line, Circle, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
 
 // Index-history chart for the Handicap tab. Two modes share one frame:
 //  - 'round': a step line, one step per qualifying round (the index is a
@@ -20,6 +21,7 @@ import { useTheme } from '../../theme/ThemeContext';
 // the value and the round behind it; tapping the same point again hides it.
 export default function IndexHistoryChart({ data = [], mode = 'round', lowLabel }) {
   const { theme } = useTheme();
+  const t = useT();
   const [width, setWidth] = useState(0);
   const [sel, setSel] = useState(null);
 
@@ -58,8 +60,9 @@ export default function IndexHistoryChart({ data = [], mode = 'round', lowLabel 
   const lowIdx = data.findIndex((p) => p.isLow);
   const last = data[n - 1];
 
-  const a11y = `Handicap index history, ${mode === 'round' ? 'by round' : 'by month'}: `
-    + `from ${data[0].value.toFixed(1)} to ${last.value.toFixed(1)}`;
+  const a11y = t(mode === 'round' ? 'stats.my.index.a11yRound' : 'stats.my.index.a11yMonth', {
+    from: formatNumber(data[0].value, { decimals: 1 }), to: formatNumber(last.value, { decimals: 1 }),
+  });
 
   // One invisible hit strip per point (hover on web, tap on touch), split at
   // the midpoints between neighbours so the whole chart surface is live.
@@ -91,7 +94,7 @@ export default function IndexHistoryChart({ data = [], mode = 'round', lowLabel 
           onHoverOut={() => setSel((s) => (s === i ? null : s))}
           onPress={() => setSel((s) => (s === i ? null : i))}
           accessibilityRole="button"
-          accessibilityLabel={`${data[i].value.toFixed(1)}${data[i].detail ? ` — ${data[i].detail}` : ''}`}
+          accessibilityLabel={`${formatNumber(data[i].value, { decimals: 1 })}${data[i].detail ? ` — ${data[i].detail}` : ''}`}
         />
       ))}
       {selPoint && (
@@ -116,7 +119,7 @@ export default function IndexHistoryChart({ data = [], mode = 'round', lowLabel 
               color: theme.text.primary, fontVariant: ['tabular-nums'],
             }}
           >
-            {selPoint.value.toFixed(1)}
+            {formatNumber(selPoint.value, { decimals: 1 })}
           </Text>
           {selPoint.detail ? (
             <Text
@@ -169,7 +172,7 @@ export default function IndexHistoryChart({ data = [], mode = 'round', lowLabel 
               )
             ))}
             <SvgText x={sx(0)} y={sy(data[0].value) - 8} fontSize={10} fontWeight="700" fill={theme.text.muted} textAnchor="start">
-              {data[0].value.toFixed(1)}
+              {formatNumber(data[0].value, { decimals: 1 })}
             </SvgText>
             {lowIdx >= 0 && (
               <>

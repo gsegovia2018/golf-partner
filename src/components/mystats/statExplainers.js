@@ -1,385 +1,62 @@
 // Plain-language explainer copy for the My Stats (i) buttons. Each entry feeds
 // StatDetailSheet's title / subtitle / explainer props. Keyed by a stable
 // string used as `infoKey` on SectionCard / MetricRow / FormMetricBlock.
+// The copy lives in the catalogue (stats.explainer.<infoKey>.*); this module
+// only maps an infoKey to message descriptors, so it stays language-neutral.
+import { tr, formatNumber } from '../../i18n';
 
-const strokesGainedExplainer = (targetHandicap) => {
-  const isScratch = targetHandicap == null || targetHandicap === 0;
-  const title = isScratch
-    ? 'Strokes Gained'
-    : `Strokes Gained vs handicap ${targetHandicap}`;
-  const subtitle = isScratch
-    ? 'How you compare to a scratch golfer'
-    : `How you compare to a handicap-${targetHandicap} golfer`;
-  const reference = isScratch ? 'a scratch golfer' : `a handicap-${targetHandicap} golfer`;
-  const positiveCmp = isScratch ? 'scratch' : `your target`;
+export const statExplainerKeys = [
+  'recentForm', 'strengths', 'pointsPerRound', 'scoreDifferential', 'strokesVsPar',
+  'scoreMix', 'damage', 'steadyHoles', 'recentVsHistory', 'fairwaysHit', 'greensInReg',
+  'putts', 'threePutts', 'scoreDistribution', 'parType', 'holeDifficulty', 'roundShape',
+  'recovery', 'teeShot', 'driveBuckets', 'approachDistance', 'teeShotImpact',
+  'puttingDriving', 'sgScoring', 'sgDriving', 'sgApproach', 'sgPutting', 'sgVsGroup',
+  'teeClubAccuracy', 'scramblingByMiss', 'par5', 'coachPractice', 'playSmarter',
+  'strokesGained', 'courseMastery', 'careerMilestones', 'courseRecord', 'courseScoreMix',
+  'courseHighlights', 'courseShotDetail', 'courseHoleByHole', 'handicapIndex',
+];
+
+const KEY_SET = new Set(statExplainerKeys);
+
+// Returns { title, subtitle, explainer } message descriptors ({ key, params }),
+// or null for an unknown infoKey. Render each with tr().
+export function getStatExplainer(infoKey, { targetHandicap } = {}) {
+  if (!KEY_SET.has(infoKey)) return null;
+  const base = `stats.explainer.${infoKey}`;
+  if (infoKey === 'strokesGained' && targetHandicap != null && targetHandicap !== 0) {
+    const params = { handicap: formatNumber(targetHandicap, { maxDecimals: 2 }) };
+    return {
+      title: { key: `${base}.titleTarget`, params },
+      subtitle: { key: `${base}.subtitleTarget`, params },
+      explainer: { key: `${base}.explainerTarget`, params },
+    };
+  }
   return {
-    title,
-    subtitle,
-    explainer: `Strokes Gained tells you how your game compares to ${reference} from the same spots `
-      + `on the course. Positive means you played that part of the game better than ${positiveCmp}; `
-      + 'negative means worse.\n\n'
-      + 'Five categories: Off the tee compares each logged drive (distance + lie) against the typical '
-      + 'drive for your target on a standard-length hole — no course measurements needed. Approach, '
-      + 'short game and putting use the distance buckets you log; penalties compare your penalty count with the typical count for '
-      + `${reference}.\n\n`
-      + 'Recovery shots and lay-ups between the drive and the approach are not attributed to a '
-      + 'category — the "Where your strokes go" card shows them honestly as "In-between & untracked" '
-      + 'so everything always adds up to your real scores.\n\n'
-      + 'A category only shows a number once it has enough logged holes behind it. Because you log '
-      + "buckets instead of exact yardage, numbers are estimates built on Mark Broadie's published "
-      + 'baselines — accurate to about ±0.2 strokes per round.',
+    title: { key: `${base}.title` },
+    subtitle: { key: `${base}.subtitle` },
+    explainer: { key: `${base}.explainer` },
   };
-};
+}
 
-export const statExplainers = {
-  recentForm: {
-    title: 'Recent Form',
-    subtitle: 'Are you trending up or down?',
-    explainer: 'Compares your last few rounds against everything before them. '
-      + 'The line shows points scored in each selected round, oldest to newest. '
-      + 'Improving means your recent points-per-round average beats your earlier one.',
-  },
-  strengths: {
-    title: 'Strengths & Pain Points',
-    subtitle: 'Where you gain and lose points',
-    explainer: 'Every part of your game is scored as net Stableford points per hole '
-      + 'and compared to your overall average. Cells well above average are strengths; '
-      + 'well below are pain points. Only buckets with at least 12 holes are ranked, '
-      + 'so a couple of lucky holes will not show up here.',
-  },
-  pointsPerRound: {
-    title: 'Points per round',
-    subtitle: 'Total Stableford points each round',
-    explainer: 'Net Stableford points for every selected round, oldest to newest. Higher is better. '
-      + 'Points are net of the handicap you played off that day, so they record what you scored '
-      + 'but are not comparable between rounds played off different handicaps — the same golf is '
-      + 'worth fewer points as your handicap falls. Score differential is the figure to compare on.',
-  },
-  scoreDifferential: {
-    title: 'Score differential',
-    subtitle: 'How each round rates, independent of your handicap',
-    explainer: 'The World Handicap System measure of a round: your gross score (each hole capped '
-      + 'at net double bogey), adjusted for the slope and course rating of the tee you played. '
-      + 'Lower is better. Because it is gross, it does not move when your handicap does — so it '
-      + 'is the one figure here that compares a round today with a round from two years ago. It '
-      + 'also levels out course difficulty, so a good day on a hard course is not punished. '
-      + 'Rounds without a slope and course rating, and nine-hole rounds, have no differential and '
-      + 'leave a gap.',
-  },
-  strokesVsPar: {
-    title: 'Strokes vs par',
-    subtitle: 'Gross strokes above or below par',
-    explainer: 'Your total strokes minus the par of the holes you played. Lower is better; '
-      + 'a negative number means under par.',
-  },
-  scoreMix: {
-    title: 'Score mix',
-    subtitle: 'What kind of holes make up each round',
-    explainer: 'One column per round, split into five bands: birdie-or-better, par, bogey, '
-      + 'double bogey, and worse — all gross (actual strokes, no handicap adjustment), so a '
-      + 'triple is a triple whatever your handicap. A growing green band means more good '
-      + 'holes; red creeping in from the bottom means blow-up holes are deciding the round. '
-      + 'Tap a column to see that round’s date and blow-up counts.',
-  },
-  damage: {
-    title: 'Damage',
-    subtitle: 'Strokes lost past bogey',
-    explainer: 'Adds up every stroke beyond a gross bogey: a double bogey costs 1, a triple '
-      + 'costs 2, and so on — pars and bogeys cost nothing. Counted in actual strokes with '
-      + 'no handicap adjustment, so a blow-up hole reads the same whatever your handicap. '
-      + 'A triple costs 2 because the first stroke over par is survivable; everything past '
-      + 'the bogey is pure loss.\n\n'
-      + 'This is the number that separates scores: golfers at the same level make a similar '
-      + 'number of pars, but the rounds that get away are the ones with blow-up holes. The '
-      + 'headline shows your latest round next to the average of the other selected rounds — '
-      + 'green means you kept the card cleaner than usual.',
-  },
-  steadyHoles: {
-    title: 'Steady holes',
-    subtitle: 'Share of holes at bogey or better',
-    explainer: 'The percentage of your scored holes each round that finished at gross bogey '
-      + 'or better — actual strokes, no handicap adjustment — the holes that keep a '
-      + 'scorecard alive. It is the flip side of Damage: a steadier round has fewer holes '
-      + 'leaking strokes past bogey. Higher is better.',
-  },
-  recentVsHistory: {
-    title: 'Recent vs History',
-    subtitle: 'Recent rounds vs everything earlier',
-    explainer: 'Splits your selected rounds into the most recent few and all earlier ones, '
-      + 'then compares each metric. The mini chart shows that metric for every selected round.',
-  },
-  fairwaysHit: {
-    title: 'Fairways hit',
-    subtitle: 'Tee-shot accuracy',
-    explainer: 'The share of par-4 and par-5 tee shots that found the fairway. '
-      + 'Needs shot tracking logged during the round.',
-  },
-  greensInReg: {
-    title: 'Greens in regulation',
-    subtitle: 'Reaching the green with putts to spare',
-    explainer: 'A green is "in regulation" when you reach it with at least two strokes left '
-      + 'for putting. Needs shot tracking logged during the round.',
-  },
-  putts: {
-    title: 'Putts per round',
-    subtitle: 'Putting workload',
-    explainer: 'Total putts in the round. Fewer is better. Needs shot tracking logged during the round.',
-  },
-  threePutts: {
-    title: '3-putts per round',
-    subtitle: 'Costly putting holes',
-    explainer: 'Holes where you took three or more putts. Needs shot tracking logged during the round.',
-  },
-  scoreDistribution: {
-    title: 'Scoring patterns',
-    subtitle: 'Good and bad results per round',
-    explainer: 'Counts every scored hole by result — eagle-or-better through triple-bogey-or-worse — '
-      + 'across all selected rounds. The card converts those counts into per-round patterns so '
-      + 'you can see whether scoring chances or big numbers are driving the round.',
-  },
-  parType: {
-    title: 'Course scoring patterns',
-    subtitle: 'Where the course profile helps or hurts',
-    explainer: 'Average net Stableford points per hole, split by par 3 / 4 / 5 and by stroke-index '
-      + 'difficulty. Each row is compared with your own average points per hole.',
-  },
-  holeDifficulty: {
-    title: 'Hole difficulty',
-    subtitle: 'Net points by stroke index',
-    explainer: 'Average net points per hole, split into thirds by the printed stroke index: the '
-      + 'hardest third, the middle third, and the easiest third of holes (e.g. SI 1-6/7-12/13-18 '
-      + 'on an 18-hole round, SI 1-3/4-6/7-9 on a 9-hole round).',
-  },
-  roundShape: {
-    title: 'Round timing patterns',
-    subtitle: 'Front vs back, openers vs closers',
-    explainer: 'Average net points across the front and back nine, and across your opening and '
-      + 'closing three holes — useful for spotting slow starts or fades.',
-  },
-  recovery: {
-    title: 'Recovery patterns',
-    subtitle: 'Bouncing back and scrambling',
-    explainer: 'Bounce-back rate is how often you follow a bogey-or-worse with a birdie-or-better. '
-      + 'Scrambling, sand saves, 1-putt saves, and bunker visits show how well you limit damage '
-      + 'after missing the ideal route.',
-  },
-  teeShot: {
-    title: 'Tee result patterns',
-    subtitle: 'How tee outcomes change your points',
-    explainer: 'Average net Stableford points after each tee result, compared with your own average '
-      + 'points per hole. Good rows are outcomes that lift your scoring; bad rows are tee outcomes '
-      + 'that drag the hole below your normal level.',
-  },
-  driveBuckets: {
-    title: 'Drive bucket patterns',
-    subtitle: 'Direction and penalty impact',
-    explainer: 'Groups logged drives by result bucket and shows the average points, score versus par, '
-      + 'penalty rate, and gap versus your own average. This is pattern data, not target-handicap '
-      + 'benchmarking.',
-  },
-  approachDistance: {
-    title: 'Approach distance patterns',
-    subtitle: 'Which distances create scoring',
-    explainer: 'Groups approach shots by distance bucket and compares the average points from those '
-      + 'holes with your own scoring average. It highlights the distances that are producing points '
-      + 'and the ones that need practice.',
-  },
-  teeShotImpact: {
-    title: 'Tee shot impact',
-    subtitle: 'What your drive costs you',
-    explainer: 'Average net points on holes grouped by tee-shot result — fairway found, missed, '
-      + 'or after a tee penalty. Needs shot tracking logged during the round.',
-  },
-  puttingDriving: {
-    title: 'Putting & driving',
-    subtitle: 'Shot-tracking detail',
-    explainer: 'Putting and driving aggregates from holes where you logged shot detail.',
-  },
-  sgScoring: {
-    title: 'Scoring metrics',
-    subtitle: 'Score by hole type versus your target handicap',
-    explainer: 'Par 3, par 4, and par 5 average score show your gross strokes on each hole type '
-      + 'against the target-handicap benchmark. Birdies, pars, bogeys, and doubles+ are converted '
-      + 'to per-round rates so the result mix is comparable across different sample sizes.',
-  },
-  sgDriving: {
-    title: 'Driving vs target',
-    subtitle: 'Accuracy, misses, penalties, and benchmark distance',
-    explainer: 'Fairways hit, left misses, right misses, and tee penalties compare your logged '
-      + 'tee shots with the target-handicap benchmark. Driver distance averages the distance '
-      + 'buckets you log on the scorecard against the benchmark driver distance — holes where '
-      + 'you logged a different tee club are left out.',
-  },
-  sgApproach: {
-    title: 'Approach vs target',
-    subtitle: 'Regulation approach SG and green rate',
-    explainer: 'Approach rows use the logged bucket: hole distance on par 3s, '
-      + 'your 2nd shot on a par 4, or your 3rd shot on a par 5. Green rate uses '
-      + 'the logged finish when present, so approach shots stay separate from '
-      + 'short-game recovery shots.',
-  },
-  sgPutting: {
-    title: 'Putting vs target',
-    subtitle: 'Putting workload and distance-bucket strokes gained',
-    explainer: 'Putts per round and 3-putts per round compare your putting volume with the '
-      + 'target-handicap benchmark. Distance putting rows compare your average putts and '
-      + '3-putt rate from each first-putt distance bucket with the target expectation.',
-  },
-  sgVsGroup: {
-    title: 'Vs the group',
-    subtitle: 'Strokes gained against your playing partners',
-    explainer: 'For each round, your strokes gained per category is compared with the average '
-      + 'of the other scorers who logged shot detail in the same round. A positive number means '
-      + 'you gained strokes on the group; negative means they gained on you. A category only '
-      + 'counts in a round when you and at least one partner both have data for it.',
-  },
-  teeClubAccuracy: {
-    title: 'Off the tee — by club',
-    subtitle: 'Fairway rate per tee club, and real GPS carry',
-    explainer: 'Splits your non-par-3 tee shots by the club you hit: fairway rate, tee-penalty '
-      + 'rate, and average score vs par. Real carry distance comes from shots you marked on the '
-      + 'hole map (GPS), measured spot-to-spot — no bucket estimate.',
-  },
-  scramblingByMiss: {
-    title: 'Short game — scrambling',
-    subtitle: 'Save rate by where the approach missed',
-    explainer: 'Of greens you missed, how often you still got up and down — split by where the '
-      + 'approach finished (short, long, left, right, or a greenside bunker). A save is a par or '
-      + 'better after missing the green.',
-  },
-  par5: {
-    title: 'Par 5s',
-    subtitle: 'Scoring on the reachable holes',
-    explainer: 'Birdie-or-better rate, average score vs par, and how often you were on in '
-      + 'regulation (on the green in three) across your par 5s. Reaching in three needs putts '
-      + 'logged for the hole.',
-  },
-  coachPractice: {
-    title: 'Practice Plan',
-    subtitle: 'Drills matched to your biggest leaks',
-    explainer: 'Each block pairs your biggest measured leak with a specific drill and a pass '
-      + 'target, so a practice session is objectively passed or failed. The "worth" line uses '
-      + 'the approximation that 1 stroke gained ≈ 1 Stableford point per round.\n\n'
-      + 'The order comes from the Coach board: fix-first leaks get the first block, a second '
-      + 'area keeps practice balanced, and the on-course cue needs no range time at all.',
-  },
-  playSmarter: {
-    title: 'Play Smarter',
-    subtitle: 'Course decisions worth points without practice',
-    explainer: 'These tips come from fixed rules over your own tracked shots — laying up when '
-      + 'a distance band leaks, clubbing down when drives find trouble, lagging long putts, '
-      + 'guarding a one-sided miss, and avoiding short-side bunkers. A tip only appears once '
-      + 'there is enough data behind it, and each shows its payoff using the approximation '
-      + 'that 1 stroke gained ≈ 1 Stableford point per round.',
-  },
-  strokesGained: strokesGainedExplainer,
-  courseMastery: {
-    title: 'Course Mastery',
-    subtitle: 'How you score, course by course',
-    explainer: 'Rounds, average points, and best points per round at each course you\'ve '
-      + 'played — only fully-scored rounds count, so an early-finished game never drags '
-      + 'a course average down. Rounds are grouped by the course itself, so renaming a '
-      + 'course label keeps its history together. Trend compares your latest complete '
-      + 'round there with the one before it on GROSS strokes — every round in a row is on '
-      + 'the same course, so strokes compare directly and the arrow does not flip just '
-      + 'because your handicap changed. A course you\'ve only completed once shows '
-      + 'no trend yet.',
-  },
-  careerMilestones: {
-    title: 'Career Milestones',
-    subtitle: 'Your best feats across every selected round',
-    explainer: 'Birdies, eagles, and your longest streak of par-or-better holes are GROSS — real '
-      + 'strokes against par, with no handicap shots added. Counted net, an ordinary par on a '
-      + 'stroke-index-1 hole would be a "birdie" off a high handicap and stop being one as you '
-      + 'improved, so the total tracked your handicap instead of your golf. Gross counts are much '
-      + 'smaller, and they hold their meaning for life. They see every scored hole, including '
-      + 'holes from an early-finished round. Best nine and best round are net Stableford totals '
-      + 'from fully-scored rounds only, each shown with the handicap it was scored off — a '
-      + 'partial game can never claim a personal best. That label is your handicap index where '
-      + 'the round recorded one; rounds played before the app started freezing your index show '
-      + 'the shots you received that day instead, because the index behind them is no longer '
-      + 'recoverable. Best differential is the handicap-free version of best round, and the one '
-      + 'that compares fairly across the years.',
-  },
+// Same as getStatExplainer but rendered to plain strings in the active
+// language. Call at render time (never cache the result).
+export function resolveStatExplainer(infoKey, opts) {
+  const d = getStatExplainer(infoKey, opts);
+  if (!d) return null;
+  return { title: tr(d.title), subtitle: tr(d.subtitle), explainer: tr(d.explainer) };
+}
 
-  // ── Course drill-down screen (CourseStatsScreen) ──
-  courseRecord: {
-    title: 'Course record',
-    subtitle: 'Your rounds at this course',
-    explainer: 'Every figure counts only fully-scored rounds here — a game called early '
-      + 'never drags an average down. Best strokes is the real course record: your lowest '
-      + 'gross round. It is deliberately not a points record, because points are net of the '
-      + 'handicap you played off that day, so a points best belongs to whichever era your '
-      + 'handicap was highest and can become unbeatable once it falls. Average strokes is '
-      + 'gross too; average points is shown as the familiar figure, but it pools rounds '
-      + 'played off different handicaps, so read it loosely. The trend arrow compares your '
-      + 'latest complete round with the one before it on gross strokes — a swing under 2 '
-      + 'reads as flat. The front/back line is average gross strokes vs par on holes 1–9 vs '
-      + '10–18, counting only rounds where both nines were fully scored; it uses strokes '
-      + 'rather than points because a handicap hands its shots out by stroke index, and '
-      + 'those are not split evenly between the two nines.',
-  },
-  courseScoreMix: {
-    title: 'Score mix',
-    subtitle: 'What you actually shot, hole by hole',
-    explainer: 'Every scored hole you\'ve played at this course, including holes from '
-      + 'unfinished rounds. Each hole is classified by your GROSS score against par — '
-      + 'your handicap is not considered: eagle+ is two or more under, then birdie, par, '
-      + 'bogey, double, and worse. Bar heights compare how often each result happens; '
-      + 'the number is the count of holes.',
-  },
-  courseHighlights: {
-    title: 'Highlights',
-    subtitle: 'Your nemesis and best hole here',
-    explainer: 'Each hole\'s average gross strokes vs par, pooled across every round '
-      + 'you\'ve played it. The nemesis is the hole with the worst average, the best '
-      + 'hole the lowest. A hole only qualifies once you\'ve played it in at least two '
-      + 'rounds — one bad day is noise, not a nemesis.',
-  },
-  courseShotDetail: {
-    title: 'Shot detail',
-    subtitle: 'From the shots you logged at this course',
-    explainer: 'Only holes where you logged shot detail count — nothing is guessed for '
-      + 'unlogged holes.\n\n'
-      + 'Putts / 18 holes: total putts divided by holes with putts logged, scaled to 18 — '
-      + 'so a half-logged round can\'t deflate it. 3-putts / 18 uses the same scaling for '
-      + 'holes with three or more putts.\n\n'
-      + 'Penalties / 18: tee and other penalty strokes divided by holes with any logged '
-      + 'detail, scaled to 18.\n\n'
-      + 'GIR: of the holes with a score and putts logged, the share where you reached '
-      + 'the green in regulation (strokes minus putts is at least two under par).\n\n'
-      + 'The bars split every logged drive (par 3s excluded) by result — each bar shows '
-      + 'its percentage of all recorded drives, ordered short, left, fairway, super, right.',
-  },
-  courseHoleByHole: {
-    title: 'Hole by hole',
-    subtitle: 'Every hole, pooled across your rounds',
-    explainer: 'One row per hole, combining every round you\'ve scored it ("3x" = played '
-      + 'three times). Par and stroke index come from the most recent round, so course '
-      + 'edits show current values. Avg is your average gross strokes with the difference '
-      + 'to par under it; Best is your lowest gross score on the hole; Pts is your average '
-      + 'net (handicap-adjusted) Stableford points. Where you logged them, the small line '
-      + 'adds average putts (over the holes that logged putts) and total penalties.',
-  },
-  handicapIndex: {
-    title: 'Handicap Index',
-    subtitle: 'Your WHS index from real rounds',
-    explainer: 'Calculated with World Handicap System math from your complete 18-hole rounds. '
-      + 'Each round becomes a score differential: your gross score (capped at net double bogey '
-      + 'per hole) compared to the course rating, scaled by slope. Your index averages the best '
-      + '8 of your last 20 differentials — with fewer rounds, WHS uses fewer differentials and '
-      + 'a small safety deduction.\n\n'
-      + 'This always uses your most recent rounds, regardless of the rounds selected for the '
-      + 'other stats tabs. Rounds only qualify when they are complete 18-hole, non-scramble '
-      + 'rounds on a tee with a slope and course rating.\n\n'
-      + 'Playing-conditions adjustments, caps against your historical low index, and 9-hole '
-      + 'differentials are not applied — treat this as a strong estimate, not an official index.'
-      + '\n\nYou can exclude a round from the calculation — it is then treated '
-      + 'as never played, and an older round may re-enter the 20-round window. '
-      + 'The official WHS index always counts every qualifying round, so an '
-      + 'edited calculation is your personal estimate.\n\n'
-      + 'Grey rounds do not qualify and show why: partial (not all 18 holes '
-      + 'scored), not an 18-hole course, or no slope/course rating on the tee '
-      + 'you played. Scramble rounds never appear — they have no individual score.',
-  },
-};
+// Compat: `statExplainers[infoKey]` keeps working until consumers call
+// resolveStatExplainer. Entries are lazy getters (resolved at access time);
+// strokesGained stays a function of the target handicap, as before.
+export const statExplainers = {};
+statExplainerKeys.forEach((key) => {
+  if (key === 'strokesGained') {
+    statExplainers[key] = (targetHandicap) => resolveStatExplainer(key, { targetHandicap });
+    return;
+  }
+  Object.defineProperty(statExplainers, key, {
+    enumerable: true,
+    get: () => resolveStatExplainer(key),
+  });
+});

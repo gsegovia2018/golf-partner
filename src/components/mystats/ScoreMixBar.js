@@ -4,6 +4,7 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, Easing, useReducedMotion,
 } from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 
@@ -35,17 +36,18 @@ function GrowRow({ style, children }) {
 // so CourseStatsScreen passes it straight in as `distribution`.
 export default function ScoreMixBar({ distribution }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   const segments = useMemo(() => {
     const d = distribution ?? {};
     return [
-      { key: 'birdie', label: 'Birdie+', count: (d.eagles ?? 0) + (d.birdies ?? 0), color: theme.accent.primary },
-      { key: 'par', label: 'Par', count: d.pars ?? 0, color: '#7fb59f' },
-      { key: 'bogey', label: 'Bogey', count: d.bogeys ?? 0, color: '#e7d7b4' },
-      { key: 'double', label: 'Double+', count: (d.doubles ?? 0) + (d.worse ?? 0), color: theme.isDark ? '#b57070' : '#d9a29a' },
+      { key: 'birdie', label: t('stats.my.mix.birdiePlus'), count: (d.eagles ?? 0) + (d.birdies ?? 0), color: theme.accent.primary },
+      { key: 'par', label: t('stats.my.mix.par'), count: d.pars ?? 0, color: '#7fb59f' },
+      { key: 'bogey', label: t('stats.my.mix.bogey'), count: d.bogeys ?? 0, color: '#e7d7b4' },
+      { key: 'double', label: t('stats.my.mix.doublePlus'), count: (d.doubles ?? 0) + (d.worse ?? 0), color: theme.isDark ? '#b57070' : '#d9a29a' },
     ];
-  }, [distribution, theme]);
+  }, [distribution, theme, t]);
 
   const total = segments.reduce((sum, seg) => sum + seg.count, 0);
   if (total <= 0) return null;
@@ -55,7 +57,7 @@ export default function ScoreMixBar({ distribution }) {
   return (
     <View
       accessible
-      accessibilityLabel={`Score mix of ${total} holes: ${shown.map((seg) => `${seg.count} ${seg.label}`).join(', ')}`}
+      accessibilityLabel={t('stats.my.mix.a11y', { total, parts: shown.map((seg) => `${seg.count} ${seg.label}`).join(', ') })}
     >
       <View style={s.track}>
         <GrowRow style={s.segments}>

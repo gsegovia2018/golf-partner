@@ -27,7 +27,7 @@ import ScoreMixBar from '../components/mystats/ScoreMixBar';
 import HoleGrid from '../components/mystats/HoleGrid';
 import CountUpText from '../components/mystats/CountUpText';
 import { toneColor, toneFill } from '../components/mystats/metricTone';
-import { statExplainers } from '../components/mystats/statExplainers';
+import { resolveStatExplainer } from '../components/mystats/statExplainers';
 import StatDetailSheet from '../components/StatDetailSheet';
 
 // Clubhouse dark-green hero surface — same constants as CoachHero.js /
@@ -87,7 +87,7 @@ export default function CourseStatsScreen({ navigation, route }) {
   const [loadNonce, setLoadNonce] = useState(0);
   const [infoKey, setInfoKey] = useState(null);
   const [replay, setReplay] = useState(null); // { hole, carry } being shown on the map
-  const activeExplainer = infoKey ? statExplainers[infoKey] : null;
+  const activeExplainer = infoKey ? resolveStatExplainer(infoKey) : null;
 
   // Longest TEE carry per hole here, straight from the marked-shot log.
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);

@@ -5,6 +5,7 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing, useReducedMotion,
 } from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, t as tNow } from '../../i18n';
 import CountUpText from './CountUpText';
 import PressableScale from '../ui/PressableScale';
 import Reveal from '../ui/Reveal';
@@ -76,17 +77,18 @@ function damageDelta(damage) {
 export function DamageHeader({ damage = [], onInfo }) {
   const { theme } = useTheme();
   const reduced = useReducedMotion();
+  const t = useT();
   const s = useMemo(() => makeHeaderStyles(theme), [theme]);
   const { latest, delta } = damageDelta(damage);
   const level = delta != null && Math.abs(delta) < 0.5;
   const lower = delta != null && delta <= -0.5;
   const chipColor = level ? theme.text.muted : lower ? theme.accent.primary : theme.destructive;
   const chipText = level
-    ? 'level with your average'
-    : `${lower ? '▼' : '▲'} ${Math.round(Math.abs(delta))} vs your average`;
+    ? t('stats.my.mix.level')
+    : t('stats.my.mix.vsAverage', { arrow: lower ? '▼' : '▲', value: Math.round(Math.abs(delta)) });
   const chipA11y = level
-    ? 'Level with your average of the other rounds'
-    : `${Math.round(Math.abs(delta))} strokes ${lower ? 'below' : 'above'} your average of the other rounds`;
+    ? t('stats.my.mix.levelA11y')
+    : t(lower ? 'stats.my.mix.belowA11y' : 'stats.my.mix.aboveA11y', { value: Math.round(Math.abs(delta)) });
 
   return (
     <View style={s.wrap}>
@@ -95,8 +97,8 @@ export function DamageHeader({ damage = [], onInfo }) {
           style={s.value}
           testID="scoremix-damage-value"
           accessibilityLabel={latest == null
-            ? 'Damage: no data'
-            : `Damage: ${latest} strokes lost past bogey in the latest round`}
+            ? t('stats.my.mix.damageNone')
+            : t('stats.my.mix.damageA11y', { value: latest })}
         >
           {latest == null ? '—' : (
             <CountUpText value={latest} duration={500} disabled={reduced} />
@@ -107,7 +109,7 @@ export function DamageHeader({ damage = [], onInfo }) {
             onPress={() => onInfo('damage')}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityRole="button"
-            accessibilityLabel="What is Damage"
+            accessibilityLabel={t('stats.my.whatIs', { name: t('stats.my.mix.damage') })}
           >
             <Feather name="info" size={12} color={theme.text.muted} />
           </TouchableOpacity>
@@ -134,15 +136,16 @@ const DATE_PART = /^\d{1,2} \S{3,5}$/;
 export function columnDateLabel(label, index) {
   const parts = String(label ?? '').split(' · ');
   const last = parts[parts.length - 1];
-  return parts.length > 1 && DATE_PART.test(last) ? last : `R${index + 1}`;
+  return parts.length > 1 && DATE_PART.test(last) ? last : tNow('stats.my.roundShort', { n: index + 1 });
 }
 
 // Detail line for a selected column: full round label + that round's
 // blow-up counts and damage figure.
 function detailText(r, index, damageValue) {
-  const name = r.label || `Round ${index + 1}`;
-  return `${name} — ${r.double} double${r.double === 1 ? '' : 's'} · ${r.worse} worse`
-    + ` · damage ${damageValue ?? '—'}`;
+  const name = r.label || tNow('stats.my.mix.roundName', { n: index + 1 });
+  return tNow('stats.my.mix.detail', {
+    name, doubles: tNow('stats.my.mix.doubles', { count: r.double }), worse: r.worse, damage: damageValue ?? '—',
+  });
 }
 
 // "Score mix" card body: per-round stacked columns of the five-band GROSS
@@ -156,6 +159,7 @@ function detailText(r, index, damageValue) {
 //   damage: formSeries.damage    [{ label, value }] — for the detail line
 export default function ScoreMixColumns({ rounds = [], damage = [] }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [selected, setSelected] = useState(null);
   const C = {
@@ -167,7 +171,7 @@ export default function ScoreMixColumns({ rounds = [], damage = [] }) {
   };
 
   if (rounds.length < 2) {
-    return <Text style={s.empty}>Select two or more rounds to see the score mix.</Text>;
+    return <Text style={s.empty}>{t('stats.my.mix.selectMore')}</Text>;
   }
 
   return (
@@ -202,10 +206,10 @@ export default function ScoreMixColumns({ rounds = [], damage = [] }) {
                   isSelected && s.stackSelected,
                 ]}
                 testID={`scoremix-col-${i}`}
-                accessibilityLabel={
-                  `${r.label || `Round ${i + 1}`}: ${r.birdiePlus} birdie or better, ${r.par} par, `
-                  + `${r.bogey} bogey, ${r.double} double bogey, ${r.worse} worse`
-                }
+                accessibilityLabel={t('stats.my.mix.colA11y', {
+                  name: r.label || t('stats.my.mix.roundName', { n: i + 1 }),
+                  birdiePlus: r.birdiePlus, par: r.par, bogey: r.bogey, double: r.double, worse: r.worse,
+                })}
               >
                 {segs.map((seg, j) => (
                   <View
@@ -235,8 +239,8 @@ export default function ScoreMixColumns({ rounds = [], damage = [] }) {
 
       <View style={s.legend}>
         {[
-          ['Birdie+', C.birdiePlus], ['Par', C.par], ['Bogey', C.bogey],
-          ['Double', C.double], ['Worse', C.worse],
+          [t('stats.my.mix.birdiePlus'), C.birdiePlus], [t('stats.my.mix.par'), C.par], [t('stats.my.mix.bogey'), C.bogey],
+          [t('stats.my.mix.double'), C.double], [t('stats.my.mix.worse'), C.worse],
         ].map(([label, color]) => (
           <View key={label} style={s.lg}>
             <View style={[s.sw, { backgroundColor: color }]} />

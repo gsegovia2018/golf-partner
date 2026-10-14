@@ -15,7 +15,11 @@ export function makeFocusCommit(insight, stats, committedAt) {
     area: insight.area,
     areaLabel: insight.areaLabel ?? insight.area,
     title: insight.title,
+    // Descriptors saved with the focus so it reads in the language active
+    // now, not the one it was committed in (docs/i18n.md).
+    ...(insight.titleMsg ? { titleMsg: insight.titleMsg } : {}),
     metric: insight.metric ?? null,
+    ...(insight.metricMsg ? { metricMsg: insight.metricMsg } : {}),
     baselineImpact: Number.isFinite(insight.impact) ? insight.impact : null,
     committedAt: committedAt ?? new Date().toISOString(),
     roundCountAtCommit: stats?.roundCount ?? 0,
@@ -46,6 +50,7 @@ export function focusVerdict(focus, stats) {
     baseline: focus.baselineImpact,
     current: Number.isFinite(current?.impact) ? current.impact : null,
     currentMetric: current?.metric ?? null,
+    currentMetricMsg: current?.metricMsg ?? null,
   };
   if (roundsSince < MIN_VERDICT_ROUNDS) {
     return { ...base, state: 'needs-more-rounds', roundsNeeded: MIN_VERDICT_ROUNDS - roundsSince };
