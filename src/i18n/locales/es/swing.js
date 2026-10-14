@@ -94,6 +94,7 @@ export default {
   'swing.exportSwing.failed': 'No se pudo exportar este swing.',
   'swing.exportSwing.unavailable': 'Compartir no está disponible en este dispositivo.',
   'swing.exportSwing.dialogTitle': 'Exportar swing',
+  'swing.value.ofTwo': '{n} de 2',
   'swing.statusWord.green': 'Bien',
   'swing.statusWord.yellow': 'Vigilar',
   'swing.statusWord.red': 'Corregir',

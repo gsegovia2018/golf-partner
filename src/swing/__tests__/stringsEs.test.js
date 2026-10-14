@@ -3,10 +3,18 @@ import { SWING_STRINGS } from '../strings';
 import { cueFor } from '../checkpoints';
 import { DRILLS, progression } from '../drills';
 import { fixCopy } from '../fixes';
+import { valueText } from '../highlights';
 import { setLanguagePref } from '../../i18n';
 
 describe('SWING_STRINGS follows the active language', () => {
   afterEach(async () => { await act(async () => { await setLanguagePref('en'); }); });
+
+  test('the finish balance value reads in the active language', async () => {
+    const check = { id: 'finish_balance', value: 2, unit: 'of 2' };
+    expect(valueText(check)).toBe('2 of 2');
+    await act(async () => { await setLanguagePref('es'); });
+    expect(valueText(check)).toBe('2 de 2');
+  });
 
   test('English by default, Spanish after the switch, with the same shapes', async () => {
     expect(SWING_STRINGS.home.title).toBe('My swing');
