@@ -1,4 +1,4 @@
-import React, { useMemo, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Switch, TextInput, Alert,
 } from 'react-native';
@@ -7,6 +7,8 @@ import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import PressableScale from '../components/ui/PressableScale';
 import Reveal from '../components/ui/Reveal';
+import GappingChart, { GappingLegend } from '../components/bag/GappingChart';
+import ClubDistanceSheet from '../components/bag/ClubDistanceSheet';
 import { useTheme } from '../theme/ThemeContext';
 import { useT } from '../i18n';
 import { useAppSettings } from '../hooks/useAppSettings';
@@ -17,21 +19,23 @@ import {
 import {
   subscribeCourseGeometry, getCourseGeometryVersion, getCourseGeometry, hasCourseDetails,
 } from '../lib/geo';
-import { clubAverages } from '../lib/shotStats';
 import { describeConditions } from '../lib/playConditions';
 import {
-  CLUB_CATALOG, DEFAULT_BAG, isClubKey, clubNominal, clubOrder,
+  CLUB_CATALOG, DEFAULT_BAG, isClubKey, clubOrder,
 } from '../lib/clubs';
-import { formatDistance, unitSuffix, M_TO_YD } from '../lib/units';
+import { bagLadder, ladderMax } from '../lib/bagLadder';
 import { haptic } from '../lib/haptics';
 
 const REVEAL_STEP = 40;
 
-const TAG_KEYS = {
-  SET: 'courses.bag.tag.set',
-  MEASURED: 'courses.bag.tag.measured',
-  EST: 'courses.bag.tag.est',
-};
+// Catalog grouped the way a bag is packed, for the club picker.
+const GROUPS = [
+  ['woods', (k) => k === 'driver' || /^\dw$/.test(k)],
+  ['hybrids', (k) => /^\dh$/.test(k)],
+  ['irons', (k) => /^\di$/.test(k)],
+  ['wedges', (k) => ['pw', 'gw', 'sw', 'lw'].includes(k)],
+  ['putter', (k) => k === 'putter'],
+].map(([key, test]) => ({ key, clubs: CLUB_CATALOG.filter((c) => test(c.key)) }));
 
 // De-dupe geometry courses by display name, sorted A→Z.
 function dedupeCoursesByName(list) {
@@ -39,6 +43,38 @@ function dedupeCoursesByName(list) {
   return list
     .filter((c) => c?.name && !seen.has(c.name) && seen.add(c.name))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Course elevation field. Keeps its own draft and saves on blur, on the done
+// key and when the screen unmounts — onEndEditing alone never fires on web
+// and is skipped on Android when the keyboard is closed with back.
+function AltitudeInput({
+  name, value, onSave, style, placeholderTextColor, accessibilityLabel,
+}) {
+  const [draft, setDraft] = useState(value ? String(value) : '');
+  const latest = useRef({ draft, value, onSave });
+  latest.current = { draft, value, onSave };
+  const commit = () => {
+    const { draft: d, value: v, onSave: save } = latest.current;
+    const n = parseInt(d, 10);
+    const next = Number.isFinite(n) ? Math.max(0, n) : 0;
+    if (next !== (v || 0)) save(name, next);
+  };
+  useEffect(() => () => commit(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <TextInput
+      style={style}
+      keyboardType="number-pad"
+      value={draft}
+      onChangeText={setDraft}
+      onBlur={commit}
+      onSubmitEditing={commit}
+      placeholder="0"
+      placeholderTextColor={placeholderTextColor}
+      returnKeyType="done"
+      accessibilityLabel={accessibilityLabel}
+    />
+  );
 }
 
 export default function BagScreen({ navigation }) {
@@ -49,10 +85,10 @@ export default function BagScreen({ navigation }) {
   const {
     units, conditionsEnabled, courseAltitudes, clubDistances,
   } = appSettings;
+  const [editingClubs, setEditingClubs] = useState(false);
+  const [openRow, setOpenRow] = useState(null);
 
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const averages = useMemo(() => clubAverages(getShots()), [shotsVersion]);
 
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
   // Courses to offer an elevation input for, de-duped by name: only those
@@ -64,9 +100,8 @@ export default function BagScreen({ navigation }) {
   [geomVersion, courseAltitudes]);
   const month = new Date().getMonth();
 
-  const setAltitude = (name, text) => {
-    const n = parseInt(text, 10);
-    updateAppSettings({ courseAltitudes: { [name]: Number.isFinite(n) ? Math.max(0, n) : 0 } }).catch(() => {});
+  const setAltitude = (name, meters) => {
+    updateAppSettings({ courseAltitudes: { [name]: meters } }).catch(() => {});
   };
 
   // Editor selection respects an explicit (even empty) stored list; only a
@@ -83,50 +118,25 @@ export default function BagScreen({ navigation }) {
     updateAppSettings({ bag: [...next].sort((a, b) => clubOrder(a) - clubOrder(b)) }).catch(() => {});
   };
 
-  // Distance rows for the swing clubs currently in the bag. Effective distance
-  // is the manual override if set, else the measured playing distance (the
-  // average of the best logged strikes, outliers dropped), else nominal.
-  const rows = useMemo(() => (
-    [...bagSet]
-      .filter((k) => k !== 'putter')
-      .sort((a, b) => clubOrder(a) - clubOrder(b))
-      .map((club) => {
-        const measuredMeters = averages.get(club);
-        const measured = measuredMeters != null;
-        const ov = clubDistances?.[club];
-        const hasOverride = Number.isFinite(ov) && ov > 0;
-        const cat = CLUB_CATALOG.find((c) => c.key === club);
-        return {
-          club,
-          label: cat?.label ?? club,
-          distance: hasOverride ? ov : (measured ? measuredMeters : clubNominal(club)),
-          measuredMeters,
-          measured,
-          hasOverride,
-          tag: hasOverride ? 'SET' : (measured ? 'MEASURED' : 'EST'),
-        };
-      })
-  ), [bagSet, averages, clubDistances]);
-  const anyMeasured = rows.some((r) => r.measured);
-  // Reset is offered whenever there is anything to clear — a manual override
-  // on any club (bagged or not) or a single marked shot.
-  const canReset = Object.keys(clubDistances || {}).length > 0 || getShots().length > 0;
+  // An explicitly empty bag stays empty here (bagLadder would fall back to
+  // the default set).
+  const rows = useMemo(
+    () => (bag.length ? bagLadder({ bag, shots: getShots(), overrides: clubDistances }) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bag.join(','), clubDistances, shotsVersion],
+  );
+  const max = useMemo(() => ladderMax(rows), [rows]);
+  // Keep the open sheet's row in step with saves.
+  const sheetRow = openRow ? rows.find((r) => r.club === openRow) ?? null : null;
 
-  // Save a manual distance (entered in display units) → metres; 0/empty clears.
-  const setClubDistance = (club, text) => {
-    const val = parseFloat(String(text || '').replace(',', '.'));
-    const meters = Number.isFinite(val) && val > 0
-      ? Math.round(units === 'yards' ? val / M_TO_YD : val) : 0;
+  const saveClubDistance = (club, meters) => {
+    haptic('selection');
     updateAppSettings({ clubDistances: { [club]: meters } }).catch(() => {});
   };
 
-  // Seed every measured club's override from its measured playing distance.
-  const setAllToAverage = () => {
-    haptic('selection');
-    const map = {};
-    for (const r of rows) if (r.measured) map[r.club] = Math.round(r.measuredMeters);
-    if (Object.keys(map).length) updateAppSettings({ clubDistances: map }).catch(() => {});
-  };
+  // Reset is offered whenever there is anything to clear — a manual override
+  // on any club (bagged or not) or a single marked shot.
+  const canReset = Object.values(clubDistances || {}).some((v) => v > 0) || getShots().length > 0;
 
   // Full reset: drop every manual override AND wipe the marked-shot log the
   // measured averages are derived from, so each club really does go back to
@@ -170,149 +180,141 @@ export default function BagScreen({ navigation }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" accessibilityLabel={t('courses.back')} onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>{t('courses.bag.title')}</Text>
-        <View style={s.backBtn} />
+        <Text style={s.headerTitle}>{editingClubs ? t('courses.bag.editClubs') : t('courses.bag.title')}</Text>
+        <PressableScale
+          onPress={() => { haptic('selection'); setEditingClubs((v) => !v); }}
+          style={[s.headerBtn, editingClubs && s.headerBtnOn]}
+          accessibilityRole="button"
+          testID="bag-edit-clubs"
+        >
+          <Text style={[s.headerBtnText, editingClubs && s.headerBtnTextOn]}>
+            {editingClubs ? t('courses.bag.done') : t('courses.bag.editClubs')}
+          </Text>
+        </PressableScale>
       </View>
 
-      <ScrollView style={s.scroll} contentContainerStyle={s.content}>
-        <Reveal delay={0}>
-          <Text style={s.sectionLabel}>{t('courses.bag.clubsLabel')}</Text>
-          <Text style={s.sectionHint}>{t('courses.bag.clubsHint')}</Text>
-          <View style={s.chipWrap}>
-            {CLUB_CATALOG.map((c) => {
-              const on = bagSet.has(c.key);
-              return (
-                <PressableScale
-                  key={c.key}
-                  onPress={() => toggle(c.key)}
-                  style={[s.chip, on && s.chipOn]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                  accessibilityLabel={c.label}
-                >
-                  {on && <Feather name="check" size={13} color={theme.accent.primary} style={{ marginRight: 5 }} />}
-                  <Text style={[s.chipText, on && s.chipTextOn]}>{c.label}</Text>
-                </PressableScale>
-              );
-            })}
-          </View>
-        </Reveal>
-
-        <Reveal delay={REVEAL_STEP}>
-          <View style={s.condHead}>
-            <View style={s.condHeadText}>
-              <Text style={s.sectionLabel}>{t('courses.bag.distancesLabel')}</Text>
-              <Text style={s.sectionHint}>
-                {t('courses.bag.distancesHint')}
-              </Text>
+      <ScrollView style={s.scroll} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+        {editingClubs ? (
+          <Reveal delay={0}>
+            <Text style={s.sectionHint}>{t('courses.bag.clubsHint')}</Text>
+            <View style={s.groups}>
+              {GROUPS.map((g) => (
+                <View key={g.key} style={s.group}>
+                  <Text style={s.groupLabel}>{t(`courses.bag.group.${g.key}`)}</Text>
+                  <View style={s.chipWrap}>
+                    {g.clubs.map((c) => {
+                      const on = bagSet.has(c.key);
+                      return (
+                        <PressableScale
+                          key={c.key}
+                          onPress={() => toggle(c.key)}
+                          style={[s.chip, on && s.chipOn]}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: on }}
+                          accessibilityLabel={c.label}
+                        >
+                          {on && <Feather name="check" size={13} color={theme.text.inverse} style={{ marginRight: 4 }} />}
+                          <Text style={[s.chipText, on && s.chipTextOn]}>{c.label}</Text>
+                        </PressableScale>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
             </View>
-            <View style={s.distActions}>
-              {anyMeasured && (
-                <PressableScale
-                  onPress={setAllToAverage}
-                  style={s.avgBtn}
-                  accessibilityLabel={t('courses.bag.setAllA11y')}
-                >
-                  <Feather name="download" size={13} color={theme.accent.primary} />
-                  <Text style={s.avgBtnText}>{t('courses.bag.useAverages')}</Text>
-                </PressableScale>
-              )}
-              {canReset && (
-                <PressableScale
-                  onPress={resetDistances}
-                  style={s.resetBtn}
-                  accessibilityLabel={t('courses.bag.resetA11y')}
-                  testID="bag-reset-distances"
-                >
-                  <Feather name="rotate-ccw" size={13} color={theme.text.secondary} />
-                  <Text style={s.resetBtnText}>{t('courses.bag.reset')}</Text>
-                </PressableScale>
-              )}
-            </View>
-          </View>
-          <View style={s.groupCard}>
-            {rows.length === 0 ? (
-              <Text style={s.empty}>{t('courses.bag.noClubs')}</Text>
-            ) : rows.map((r, i) => (
-              <View key={r.club} style={[s.distRow, i > 0 && s.distRowDivider]}>
-                <Text style={s.distClub}>{r.label}</Text>
-                <View style={s.distRight}>
-                  <TextInput
-                    key={`${r.club}-${Math.round(r.distance)}`}
-                    style={s.distInput}
-                    keyboardType="number-pad"
-                    defaultValue={r.distance ? String(formatDistance(r.distance, units)) : ''}
-                    placeholder="—"
-                    placeholderTextColor={theme.text.muted}
-                    onEndEditing={(e) => setClubDistance(r.club, e.nativeEvent.text)}
-                    returnKeyType="done"
-                    accessibilityLabel={t('courses.bag.carryA11y', { club: r.label, unit: unitSuffix(units) })}
-                  />
-                  <Text style={s.distInputUnit}>{unitSuffix(units)}</Text>
-                  <Text style={[s.distTag, r.hasOverride ? s.distTagSet : r.measured ? s.distTagReal : s.distTagEst]}>
-                    {t(TAG_KEYS[r.tag])}
-                  </Text>
-                  <PressableScale
-                    onPress={() => navigation.navigate('ClubStat', { club: r.club })}
-                    hitSlop={8}
-                    accessibilityLabel={t('courses.bag.statsA11y', { club: r.label })}
-                  >
-                    <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </Reveal>
+        ) : (
+          <>
+            <Reveal delay={0}>
+              {rows.length === 0 ? (
+                <View style={s.empty}>
+                  <Text style={s.emptyTitle}>{t('courses.bag.emptyTitle')}</Text>
+                  <Text style={s.emptyText}>{t('courses.bag.emptyBody')}</Text>
+                  <PressableScale onPress={() => setEditingClubs(true)} style={s.addBtn} accessibilityRole="button">
+                    <Text style={s.addBtnText}>{t('courses.bag.addClubs')}</Text>
                   </PressableScale>
                 </View>
-              </View>
-            ))}
-          </View>
-        </Reveal>
-
-        <Reveal delay={REVEAL_STEP * 2}>
-          <View style={s.condHead}>
-            <View style={s.condHeadText}>
-              <Text style={s.sectionLabel}>{t('courses.bag.conditionsLabel')}</Text>
-              <Text style={s.sectionHint}>
-                {t('courses.bag.conditionsHint')}
-              </Text>
-            </View>
-            <Switch
-              value={!!conditionsEnabled}
-              onValueChange={(v) => { haptic('selection'); updateAppSettings({ conditionsEnabled: v }).catch(() => {}); }}
-              trackColor={{ true: theme.accent.primary }}
-            />
-          </View>
-
-          {conditionsEnabled && (
-            <View style={s.groupCard}>
-              {courses.length === 0 ? (
-                <Text style={s.empty}>{t('courses.bag.noCourses')}</Text>
-              ) : courses.map((c, i) => {
-                const alt = (courseAltitudes && courseAltitudes[c.name]) || 0;
-                const d = describeConditions({ month, altitudeM: alt });
-                return (
-                  <View key={c.name} style={[s.condRow, i > 0 && s.distRowDivider]}>
-                    <View style={s.condLeft}>
-                      <Text style={s.distClub} numberOfLines={1}>{c.name}</Text>
-                      <Text style={s.condMeta}>{`≈ ${d.tempC}°C · ${d.text}`}</Text>
-                    </View>
-                    <View style={s.condRight}>
-                      <TextInput
-                        style={s.altInput}
-                        keyboardType="number-pad"
-                        defaultValue={alt ? String(alt) : ''}
-                        placeholder="0"
-                        placeholderTextColor={theme.text.muted}
-                        onEndEditing={(e) => setAltitude(c.name, e.nativeEvent.text)}
-                        returnKeyType="done"
-                        accessibilityLabel={t('courses.bag.elevationA11y', { course: c.name })}
-                      />
-                      <Text style={s.altUnit}>m</Text>
-                    </View>
+              ) : (
+                <>
+                  <Text style={s.sectionHint}>{t('courses.bag.chartHint')}</Text>
+                  <GappingLegend />
+                  <View style={s.chartCard}>
+                    <GappingChart rows={rows} max={max} units={units} onPressRow={(r) => setOpenRow(r.club)} />
                   </View>
-                );
-              })}
-            </View>
-          )}
-        </Reveal>
+                </>
+              )}
+            </Reveal>
+
+            <Reveal delay={REVEAL_STEP}>
+              <View style={s.condHead}>
+                <View style={s.condHeadText}>
+                  <Text style={s.sectionLabel}>{t('courses.bag.conditionsLabel')}</Text>
+                  <Text style={s.sectionHint}>
+                    {t('courses.bag.conditionsHint')}
+                  </Text>
+                </View>
+                <Switch
+                  style={s.condSwitch}
+                  value={!!conditionsEnabled}
+                  onValueChange={(v) => { haptic('selection'); updateAppSettings({ conditionsEnabled: v }).catch(() => {}); }}
+                  trackColor={{ true: theme.accent.primary }}
+                />
+              </View>
+
+              {conditionsEnabled && (
+                <View style={s.groupCard}>
+                  {courses.length === 0 ? (
+                    <Text style={s.emptyText}>{t('courses.bag.noCourses')}</Text>
+                  ) : courses.map((c, i) => {
+                    const alt = (courseAltitudes && courseAltitudes[c.name]) || 0;
+                    const d = describeConditions({ month, altitudeM: alt });
+                    return (
+                      <View key={c.name} style={[s.condRow, i > 0 && s.rowDivider]}>
+                        <View style={s.condLeft}>
+                          <Text style={s.condName} numberOfLines={1}>{c.name}</Text>
+                          <Text style={s.condMeta}>{`≈ ${d.tempC}°C · ${d.text}`}</Text>
+                        </View>
+                        <View style={s.condRight}>
+                          <AltitudeInput
+                            name={c.name}
+                            value={alt}
+                            onSave={setAltitude}
+                            style={s.altInput}
+                            placeholderTextColor={theme.text.muted}
+                            accessibilityLabel={t('courses.bag.elevationA11y', { course: c.name })}
+                          />
+                          <Text style={s.altUnit}>m</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </Reveal>
+
+            {canReset && (
+              <PressableScale
+                onPress={resetDistances}
+                style={s.resetBtn}
+                accessibilityRole="button"
+                accessibilityLabel={t('courses.bag.resetA11y')}
+                testID="bag-reset-distances"
+              >
+                <Feather name="rotate-ccw" size={13} color={theme.destructive} />
+                <Text style={s.resetBtnText}>{t('courses.bag.resetAll')}</Text>
+              </PressableScale>
+            )}
+          </>
+        )}
       </ScrollView>
+
+      <ClubDistanceSheet
+        row={sheetRow}
+        units={units}
+        onSave={saveClubDistance}
+        onClose={() => setOpenRow(null)}
+        onOpenStats={(club) => navigation.navigate('ClubStat', { club })}
+      />
     </ScreenContainer>
   );
 }
@@ -323,86 +325,75 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
   },
-  backBtn: { width: 40, height: 40 },
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
+  headerBtn: {
+    minHeight: 36, paddingHorizontal: 12, borderRadius: 999, justifyContent: 'center',
+    backgroundColor: theme.accent.light,
+  },
+  headerBtnOn: { backgroundColor: theme.accent.primary },
+  headerBtnText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.accent.primary },
+  headerBtnTextOn: { color: theme.text.inverse },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingBottom: 40 },
+  content: { paddingHorizontal: 20, paddingBottom: 40, gap: 4 },
 
   sectionLabel: {
     fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 10,
-    letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 20, marginBottom: 6,
+    letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 24, marginBottom: 6,
   },
   sectionHint: {
-    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
-    fontSize: 11, marginBottom: 12,
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary,
+    fontSize: 12, lineHeight: 17, marginBottom: 10,
   },
 
+  chartCard: {
+    backgroundColor: theme.bg.card, borderRadius: theme.radius.lg,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
+    paddingHorizontal: 12, paddingVertical: 10, marginTop: 10,
+  },
+
+  groups: { gap: 16 },
+  group: { gap: 8 },
+  groupLabel: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 10,
+    letterSpacing: 1.4, textTransform: 'uppercase',
+  },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
-    flexDirection: 'row', alignItems: 'center',
-    borderRadius: 999, borderWidth: 1.5, borderColor: theme.border.default,
-    backgroundColor: theme.bg.card, paddingHorizontal: 14, paddingVertical: 9,
+    flexDirection: 'row', alignItems: 'center', minHeight: 36,
+    borderRadius: 999, backgroundColor: theme.bg.secondary,
+    paddingHorizontal: 13, paddingVertical: 8,
   },
-  chipOn: { borderColor: theme.accent.primary, backgroundColor: theme.accent.light },
+  chipOn: { backgroundColor: theme.accent.primary },
   chipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 13 },
-  chipTextOn: { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' },
+  chipTextOn: { color: theme.text.inverse, fontFamily: 'PlusJakartaSans-Bold' },
+
+  empty: { alignItems: 'center', paddingVertical: 48, gap: 10 },
+  emptyTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 16, color: theme.text.primary },
+  emptyText: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary, fontSize: 13,
+    textAlign: 'center', maxWidth: 260, paddingVertical: 4,
+  },
+  addBtn: {
+    backgroundColor: theme.accent.primary, borderRadius: 14, paddingHorizontal: 20, minHeight: 44,
+    justifyContent: 'center', marginTop: 6,
+  },
+  addBtnText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
 
   groupCard: {
     backgroundColor: theme.bg.card, borderRadius: theme.radius.lg,
     borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
     paddingHorizontal: 14,
   },
-  empty: {
-    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 13,
-    paddingVertical: 18, textAlign: 'center',
-  },
-  distRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 13,
-  },
-  distRowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border.subtle },
-  distClub: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
-  distRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  distValue: {
-    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15,
-    fontVariant: ['tabular-nums'],
-  },
-  distTag: {
-    fontFamily: 'PlusJakartaSans-Bold', fontSize: 8, letterSpacing: 1,
-    paddingHorizontal: 6, paddingVertical: 3, borderRadius: 5, overflow: 'hidden',
-  },
-  distTagReal: { color: theme.accent.primary, backgroundColor: theme.accent.light },
-  distTagSet: { color: theme.accent.primary, backgroundColor: theme.accent.light },
-  distTagEst: { color: theme.text.muted, backgroundColor: theme.border.subtle },
-  distInput: {
-    minWidth: 48, textAlign: 'right',
-    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15,
-    fontVariant: ['tabular-nums'],
-    borderBottomWidth: 1.5, borderBottomColor: theme.border.default,
-    paddingVertical: 2, paddingHorizontal: 2,
-  },
-  distInputUnit: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 13 },
-  distActions: { alignItems: 'flex-end', gap: 8, marginTop: 20 },
-  avgBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
-    backgroundColor: theme.accent.light,
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
-  },
-  avgBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 12 },
-  resetBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
-    borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
-  },
-  resetBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 12 },
-
+  rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border.subtle },
   condHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   condHeadText: { flex: 1 },
+  condSwitch: { marginTop: 18 },
   condRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 11, gap: 12,
   },
   condLeft: { flex: 1 },
+  condName: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
   condMeta: {
     fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 11,
     marginTop: 2,
@@ -416,4 +407,10 @@ const makeStyles = (theme) => StyleSheet.create({
     paddingVertical: 2, paddingHorizontal: 2,
   },
   altUnit: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 13 },
+
+  resetBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    alignSelf: 'center', minHeight: 44, paddingHorizontal: 12, marginTop: 28,
+  },
+  resetBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.destructive, fontSize: 13 },
 });
