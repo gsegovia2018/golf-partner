@@ -6,6 +6,7 @@ import { roundTotals } from '../store/tournamentStore';
 import { isScrambleMode, scrambleRoundTally } from '../store/scoring';
 import { playersMeFirst } from '../lib/playerOrder';
 import { useT, formatNumber } from '../i18n';
+import { teeDisplayName } from '../lib/teeName';
 
 // Universal round scoreboard — the same player stat cards in every scoring
 // mode. Home shows it unranked (me first, no standings); the round summary
@@ -99,7 +100,7 @@ export default function RoundScoreboard({
             ? r.played + 1
             : null;
           const isLeader = ranked && i === 0 && r.points > 0;
-          const tee = teeLabels?.[r.player.id]?.label;
+          const tee = teeDisplayName(teeLabels?.[r.player.id]?.label);
           return (
             <View key={r.player.id} style={[s.gamePlayerCard, isLeader && s.gamePlayerCardLeader]}>
               <View style={s.gamePlayerHeader}>

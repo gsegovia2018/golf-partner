@@ -146,6 +146,7 @@ export default {
   "home.roundMode.pairsmatchplay": "Pairs Match Play",
   "home.roundMode.scramble": "Scramble",
   "home.roundMode.sindicato": "Sindicato",
+  "home.roundMode.strokePlay": "Stroke Play",
   "home.roundMode.stableford": "Stableford",
   "home.settings.editPairs": "Edit Pairs",
   "home.settings.editRound": "Edit Round",

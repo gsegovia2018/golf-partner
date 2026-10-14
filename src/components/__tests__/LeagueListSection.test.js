@@ -51,7 +51,7 @@ describe('LeagueListSection', () => {
       }];
       const { getByText } = render(<LeagueListSection navigation={{}} meId="me" theme={theme} s={s} />);
       expect(getByText('4.º de 18 · 1.045 ptos de liga')).toBeTruthy();
-      expect(getByText('octubre: aún sin tarjeta · quedan 18 días')).toBeTruthy();
+      expect(getByText('Octubre: aún sin tarjeta · quedan 18 días')).toBeTruthy();
       expect(getByText('LIGAS')).toBeTruthy();
     });
   });

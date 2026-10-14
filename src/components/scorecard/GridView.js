@@ -5,7 +5,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, useWindowDimensions } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
-import { useT, t as tNow } from '../../i18n';
+import { useT, t as tNow, formatNumber } from '../../i18n';
 import { unitText } from '../../lib/pointsText';
 import { playersMeFirst } from '../../lib/playerOrder';
 import { calcExtraShots, scrambleUnits, matchPlayEffectiveHandicaps } from '../../store/tournamentStore';
@@ -537,6 +537,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
 }
 
 export function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, editable, refreshing, onRefresh, meId }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const { mode, rowPlayers, rowHandicaps, effectiveMeId } = resolveScorecardRows({
@@ -556,7 +557,7 @@ export function GridView({ round, roundIndex, players, scores, isBestBall, bbRes
       <View style={s.soloGridHeaderBar}>
         <View style={{ flex: 1 }}>
           <Text style={s.soloGridHeaderTitle} numberOfLines={1}>
-            {round.courseName} · Round {roundIndex + 1}
+            {t('scorecard.grid.courseRound', { course: round.courseName, n: formatNumber(roundIndex + 1) })}
           </Text>
         </View>
       </View>

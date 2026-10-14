@@ -5,6 +5,7 @@ import { calcPlayingHandicap, lastTeeForPlayerOnCourse } from '../store/tourname
 import { holeCountOf } from '../store/scoring';
 import { middleTee, resolveTeeForPlayer } from '../store/tees';
 import { useT, formatNumber } from '../i18n';
+import { teeDisplayName } from '../lib/teeName';
 
 // Common golf tee colours, matched against the tee label by keyword —
 // covers both English ("White") and Spanish ("Blancas") naming, singular
@@ -338,7 +339,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                     {teeLabel && (
                       <>
                         <View style={[s.teeDot, { backgroundColor: dotColor || theme.bg.secondary }]} />
-                        <Text style={s.teeSummaryText}>{tl('shared.tees.teeName', { tee: teeLabel })}</Text>
+                        <Text style={s.teeSummaryText}>{tl('shared.tees.teeName', { tee: teeDisplayName(teeLabel) })}</Text>
                       </>
                     )}
                     {showPickPrompt && <Text style={s.teeSummaryMuted}>{tl('shared.tees.pickTee')}</Text>}
@@ -374,12 +375,12 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                             onPress={() => setPlayerTee(p.id, tee)}
                             activeOpacity={0.7}
                             accessibilityRole="button"
-                            accessibilityLabel={tl('shared.tees.teeName', { tee: tee.label })}
+                            accessibilityLabel={tl('shared.tees.teeName', { tee: teeDisplayName(tee.label) })}
                             accessibilityState={{ selected }}
                           >
                             <View style={[s.teeDot, { backgroundColor: tColor || theme.bg.secondary }]} />
                             <Text style={[s.teePillText, selected && s.teePillTextActive]}>
-                              {tee.label}
+                              {teeDisplayName(tee.label)}
                             </Text>
                           </TouchableOpacity>
                         );

@@ -12,6 +12,7 @@ import BottomSheet from '../BottomSheet';
 import { leagueStrokes, setupPlayerTee } from '../../store/leagueSetup';
 import { cardMonth } from '../../store/leagueRules';
 import { monthWord } from './LeagueCardsList';
+import { teeDisplayName } from '../../lib/teeName';
 
 export default function LeagueOptInSheet({
   visible, league, round, meId, starterName = null, busy = false, error = null,
@@ -28,7 +29,7 @@ export default function LeagueOptInSheet({
     hcp != null
       ? t('league.optIn.strokes', { strokes: leagueStrokes(round, meId, hcp), hcp: formatNumber(hcp, { decimals: 1 }) })
       : null,
-    tee?.label && tee.slope != null ? t('league.optIn.tee', { tee: tee.label, slope: tee.slope }) : null,
+    tee?.label && tee.slope != null ? t('league.optIn.tee', { tee: teeDisplayName(tee.label), slope: tee.slope }) : null,
   ].filter(Boolean).join(' · ');
   const errorText = error === 'offline' ? t('league.optIn.offline') : error;
 

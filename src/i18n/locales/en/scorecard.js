@@ -1,5 +1,6 @@
 // English catalogue: Scorecard. See docs/i18n.md.
 export default {
+  'scorecard.grid.courseRound': '{course} · Round {n}',
   'scorecard.grid.strokes': 'Strokes',
   'scorecard.grid.points': 'Points',
   'scorecard.grid.frontNine': 'FRONT NINE',
@@ -128,6 +129,8 @@ export default {
 
   'scorecard.player.resolveConflict': "Resolve {name}'s conflicting score on hole {hole}",
   'scorecard.player.resolve': "Resolve {name}'s score on hole {hole}",
+  'scorecard.player.decreaseA11y': 'Decrease strokes on hole {hole}',
+  'scorecard.player.increaseA11y': 'Increase strokes on hole {hole}',
   'scorecard.player.hcp': 'HCP {handicap}',
   'scorecard.player.hcpExtra': 'HCP {handicap}  ·  +{extra} on this hole',
   'scorecard.player.pickedUpA11y': 'Picked up at {count} strokes — tap to clear',
@@ -165,6 +168,7 @@ export default {
   'scorecard.hole.holeLabel': 'HOLE',
   'scorecard.hole.par': 'PAR',
   'scorecard.hole.si': 'SI',
+  'scorecard.hole.edgeA11y': { one: '{name} gets {count} extra shot on this hole.', other: '{name} gets {count} extra shots on this hole.' },
   'scorecard.hole.slimBar': 'HOLE {hole} · PAR {par} · SI {si}',
   'scorecard.hole.someone': 'Someone',
   'scorecard.hole.mePickerTitle': 'Which player are you?',

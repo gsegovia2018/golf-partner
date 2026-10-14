@@ -1,5 +1,6 @@
 // Spanish catalogue: Scorecard. See docs/i18n.md.
 export default {
+  'scorecard.grid.courseRound': '{course} · Vuelta {n}',
   'scorecard.grid.strokes': 'Golpes',
   'scorecard.grid.points': 'Puntos',
   'scorecard.grid.frontNine': 'IDA',
@@ -128,6 +129,8 @@ export default {
 
   'scorecard.player.resolveConflict': 'Resolver el resultado en conflicto de {name} en el hoyo {hole}',
   'scorecard.player.resolve': 'Resolver el resultado de {name} en el hoyo {hole}',
+  'scorecard.player.decreaseA11y': 'Quitar un golpe en el hoyo {hole}',
+  'scorecard.player.increaseA11y': 'Sumar un golpe en el hoyo {hole}',
   'scorecard.player.hcp': 'HCP {handicap}',
   'scorecard.player.hcpExtra': 'HCP {handicap}  ·  +{extra} en este hoyo',
   'scorecard.player.pickedUpA11y': 'Retirado con {count} golpes — toca para borrar',
@@ -165,6 +168,7 @@ export default {
   'scorecard.hole.holeLabel': 'HOYO',
   'scorecard.hole.par': 'PAR',
   'scorecard.hole.si': 'HCP',
+  'scorecard.hole.edgeA11y': { one: '{name} recibe {count} golpe de ventaja en este hoyo.', other: '{name} recibe {count} golpes de ventaja en este hoyo.' },
   'scorecard.hole.slimBar': 'HOYO {hole} · PAR {par} · HCP {si}',
   'scorecard.hole.someone': 'Alguien',
   'scorecard.hole.mePickerTitle': '¿Quién eres?',

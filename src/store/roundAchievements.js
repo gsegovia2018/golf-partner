@@ -16,6 +16,9 @@
 //
 // A candidate is:
 //   { id, tone, rarity, title, subtitle, playerId, playerName, holes }
+// `title` and `subtitle` are message descriptors ({ key, params }, keys in
+// locales/*/achievements.js), never finished text: render them with tr() so a
+// card built before a language switch reads right after it (docs/i18n.md).
 // `tone` drives colour and the mix rule in selectAchievements; `rarity` is
 // the ranking weight (higher wins); `holes` is the hole numbers the claim is
 // about, for the UI to highlight.
@@ -38,6 +41,7 @@ import {
   syntheticDifferential, CANON_ID,
 } from './personalStats';
 import { roundCourseKey, filterRoundsToCourse } from './courseBreakdown';
+import { formatNumber } from '../i18n';
 import {
   isScrambleMode, roundScoringMode, holeCountOf, isFullLengthRound,
 } from './scoring';
@@ -103,6 +107,9 @@ const MIN_ABOVE_COURSE_AVG = 4;
 // inside selectAchievements, which cannot tell a record from a highlight.
 const MAX_RECORDS = 3;
 
+// Message descriptor; a param may itself be a descriptor (tr renders it first).
+const msg = (key, params = {}) => ({ key, params });
+
 function candidate(id, tone, rarity, title, subtitle, extra = {}) {
   return {
     id,
@@ -126,20 +133,20 @@ function holeNumbers(entries) {
 // scattered list needs holeListLabel, or "holes 1-6" would claim a clean run
 // where there were six separate holes.
 function holeSpanLabel(holes) {
-  if (holes.length === 0) return '';
-  if (holes.length === 1) return `hole ${holes[0]}`;
-  return `holes ${holes[0]}-${holes[holes.length - 1]}`;
+  if (holes.length === 0) return null;
+  if (holes.length === 1) return msg('achv.holes.one', { n: holes[0] });
+  return msg('achv.holes.span', { from: holes[0], to: holes[holes.length - 1] });
 }
 
 // "hole 7" / "holes 3, 8 and 14" / "holes 3, 8, 14 and 2 more" — a scattered
 // set, never implying the holes were consecutive.
 function holeListLabel(holes) {
-  if (holes.length === 0) return '';
-  if (holes.length === 1) return `hole ${holes[0]}`;
+  if (holes.length === 0) return null;
+  if (holes.length === 1) return msg('achv.holes.one', { n: holes[0] });
   if (holes.length <= 3) {
-    return `holes ${holes.slice(0, -1).join(', ')} and ${holes[holes.length - 1]}`;
+    return msg('achv.holes.list', { list: holes.slice(0, -1).join(', '), last: holes[holes.length - 1] });
   }
-  return `holes ${holes.slice(0, 3).join(', ')} and ${holes.length - 3} more`;
+  return msg('achv.holes.more', { list: holes.slice(0, 3).join(', '), count: holes.length - 3 });
 }
 
 // Every statsEngine detector below is tournament-wide; several take no
@@ -173,8 +180,8 @@ function streakCandidates(tournament, roundIndex) {
       // must still not outrank a career record in selectAchievements.
       out.push(candidate(
         'parStreak', 'great', 40 + Math.min(streak.bestParStreak, 6) * 8,
-        `${streak.bestParStreak} in a row`,
-        `Par or better on ${holeSpanLabel(holes)}`,
+        msg('achv.parStreak.title', { count: streak.bestParStreak }),
+        msg('achv.parStreak.sub', { holes: holeSpanLabel(holes) }),
         { playerId: p.id, playerName: p.name, holes },
       ));
     }
@@ -183,8 +190,8 @@ function streakCandidates(tournament, roundIndex) {
       const holes = holeNumbers(streak.birdieStreakHoles);
       out.push(candidate(
         'birdieStreak', 'great', 62 + streak.bestBirdieStreak * 8,
-        `${streak.bestBirdieStreak} birdies in a row`,
-        `Straight through ${holeSpanLabel(holes)}`,
+        msg('achv.birdieStreak.title', { count: streak.bestBirdieStreak }),
+        msg('achv.birdieStreak.sub', { holes: holeSpanLabel(holes) }),
         { playerId: p.id, playerName: p.name, holes },
       ));
     }
@@ -193,8 +200,8 @@ function streakCandidates(tournament, roundIndex) {
       const holes = holeNumbers(streak.bogeyOnlyStreakHoles);
       out.push(candidate(
         'bogeyTrain', 'fun', 38 + streak.bogeyOnlyStreak,
-        'The bogey train',
-        `${streak.bogeyOnlyStreak} bogeys in a row on ${holeSpanLabel(holes)}, nothing else`,
+        msg('achv.bogeyTrain.title'),
+        msg('achv.bogeyTrain.sub', { count: streak.bogeyOnlyStreak, holes: holeSpanLabel(holes) }),
         { playerId: p.id, playerName: p.name, holes },
       ));
     }
@@ -219,8 +226,8 @@ function scoringCandidates(tournament, roundIndex) {
       const holes = holeNumbers(gross.eagleHoles);
       out.push(candidate(
         'eagle', 'great', 95,
-        gross.eagles > 1 ? `${gross.eagles} eagles` : 'Eagle!',
-        `On ${holeListLabel(holes)}`,
+        msg('achv.eagles.title', { count: gross.eagles }),
+        msg('achv.on', { holes: holeListLabel(holes) }),
         { playerId: p.id, playerName: p.name, holes },
       ));
     }
@@ -228,8 +235,8 @@ function scoringCandidates(tournament, roundIndex) {
       const holes = holeNumbers(gross.birdieHoles);
       out.push(candidate(
         'birdies', 'great', gross.birdies >= 2 ? 44 + gross.birdies * 6 : 28,
-        gross.birdies === 1 ? 'Birdie' : `${gross.birdies} birdies`,
-        `On ${holeListLabel(holes)}`,
+        msg('achv.birdies.title', { count: gross.birdies }),
+        msg('achv.on', { holes: holeListLabel(holes) }),
         { playerId: p.id, playerName: p.name, holes },
       ));
     }
@@ -241,8 +248,8 @@ function scoringCandidates(tournament, roundIndex) {
       const worst = wrecks.reduce((a, b) => (b.vsPar > a.vsPar ? b : a));
       out.push(candidate(
         'blowUp', 'roast', 30 + worst.vsPar,
-        `Hole ${worst.holeNumber} happened`,
-        `${worst.strokes} strokes on a par ${worst.par}`,
+        msg('achv.blowUp.title', { hole: worst.holeNumber }),
+        msg('achv.blowUp.sub', { strokes: worst.strokes, par: worst.par }),
         { playerId: p.id, playerName: p.name, holes: [worst.holeNumber] },
       ));
     }
@@ -259,8 +266,8 @@ function par5Candidates(slice) {
     if (par5.holes < MIN_PAR5_HOLES || par5.avgPoints < MIN_PAR5_AVG) return;
     out.push(candidate(
       'par5Playground', 'good', 46 + Math.round((par5.avgPoints - PLAYED_TO_HANDICAP) * 10),
-      'Par 5s were a playground',
-      `${par5.totalPoints} points off ${par5.holes} par 5s`,
+      msg('achv.par5.title'),
+      msg('achv.par5.sub', { points: par5.totalPoints, count: par5.holes }),
       { playerId: p.id, playerName: p.name, holes: holeNumbers(par5.breakdown) },
     ));
   });
@@ -282,8 +289,8 @@ function handicapCandidates(tournament, roundIndex) {
     const over = hist.points - target;
     out.push(candidate(
       'playedToHandicap', 'good', 58 + Math.min(over, 12),
-      over > 0 ? `Beat handicap by ${over}` : 'Played to handicap',
-      `${hist.points} points off ${holeCount} holes`,
+      over > 0 ? msg('achv.handicap.beat', { over }) : msg('achv.handicap.played'),
+      msg('achv.handicap.sub', { points: hist.points, count: holeCount }),
       { playerId: p.id, playerName: p.name },
     ));
   });
@@ -296,8 +303,8 @@ function chaosCandidate(slice) {
   if (!worst || worst.range < MIN_CHAOS_RANGE) return null;
   return candidate(
     'chaosHole', 'fun', 40 + worst.range * 3,
-    `Hole ${worst.holeNumber} split the group`,
-    `${worst.minStrokes} to ${worst.maxStrokes} strokes on a par ${worst.par}`,
+    msg('achv.chaos.title', { hole: worst.holeNumber }),
+    msg('achv.chaos.sub', { min: worst.minStrokes, max: worst.maxStrokes, par: worst.par }),
     { holes: [worst.holeNumber] },
   );
 }
@@ -311,8 +318,8 @@ function nineSwingCandidate(slice) {
   if (swing < MIN_NINE_SWING) return null;
   return candidate(
     'backNineCharge', 'good', 45 + swing * 2,
-    'Back-nine charge',
-    `${best.frontTotal} points out, ${best.backTotal} points back`,
+    msg('achv.backNine.title'),
+    msg('achv.nines.sub', { front: best.frontTotal, back: best.backTotal }),
     { playerId: best.player.id, playerName: best.player.name },
   );
 }
@@ -326,8 +333,8 @@ function carryCandidate(slice) {
   // so a title that repeated it would read "Ana — Ana carried the pair".
   return candidate(
     'carriedThePair', 'fun', 42 + Math.round(top.imbalance * 30),
-    'Carried the pair',
-    `${Math.round(leader.share * 100)}% of the team's points`,
+    msg('achv.carry.title'),
+    msg('achv.carry.sub', { pct: Math.round(leader.share * 100) }),
     { playerId: leader.player.id, playerName: leader.player.name },
   );
 }
@@ -339,8 +346,8 @@ function bounceBackCandidate(slice) {
   if (!top) return null;
   return candidate(
     'bounceBack', 'good', 62,
-    'Never two in a row',
-    `Answered all ${top.opportunities} dropped shots with par or better`,
+    msg('achv.bounceBack.title'),
+    msg('achv.bounceBack.sub', { count: top.opportunities }),
     { playerId: top.player.id, playerName: top.player.name },
   );
 }
@@ -351,8 +358,8 @@ function clutchCandidate(slice) {
   if (!top || top.holesPlayed < CLUTCH_HOLES || top.avgPoints < PLAYED_TO_HANDICAP) return null;
   return candidate(
     'clutchOnHardest', 'good', 54 + Math.round((top.avgPoints - PLAYED_TO_HANDICAP) * 8),
-    'Owned the hard holes',
-    `${top.points} points across the ${CLUTCH_HOLES} toughest holes on the card`,
+    msg('achv.clutch.title'),
+    msg('achv.clutch.sub', { points: top.points, count: CLUTCH_HOLES }),
     { playerId: top.player.id, playerName: top.player.name, holes: holeNumbers(top.breakdown) },
   );
 }
@@ -364,8 +371,8 @@ function hotStretchCandidate(slice) {
   if (!top || top.points < MIN_HOT_STRETCH_POINTS) return null;
   return candidate(
     'hotStretch', 'good', 50 + (top.points - MIN_HOT_STRETCH_POINTS) * 3,
-    `${HOT_STRETCH_HOLES} holes on fire`,
-    `${top.points} points from hole ${top.startHole} to ${top.endHole}`,
+    msg('achv.hotStretch.title', { count: HOT_STRETCH_HOLES }),
+    msg('achv.hotStretch.sub', { points: top.points, start: top.startHole, end: top.endHole }),
     { playerId: top.player.id, playerName: top.player.name },
   );
 }
@@ -379,8 +386,8 @@ function skinsCandidate(slice) {
   if (board[1] && board[1].skins === top.skins) return null;
   return candidate(
     'skinsKing', 'good', 44 + top.skins * 2,
-    `Won ${top.skins} holes outright`,
-    'Best score on the hole, nobody alongside',
+    msg('achv.skins.title', { count: top.skins }),
+    msg('achv.skins.sub'),
     { playerId: top.player.id, playerName: top.player.name, holes: holeNumbers(top.breakdown) },
   );
 }
@@ -394,8 +401,8 @@ function collectiveCandidates(slice) {
     const h = disasters[0];
     out.push(candidate(
       'everyoneBlanked', 'fun', 46,
-      `Hole ${h.holeNumber} beat everyone`,
-      `Not one point between ${h.scores.length} players on a par ${h.par}`,
+      msg('achv.blanked.title', { hole: h.holeNumber }),
+      msg('achv.blanked.sub', { count: h.scores.length, par: h.par }),
       { holes: [h.holeNumber] },
     ));
   }
@@ -403,8 +410,8 @@ function collectiveCandidates(slice) {
     const h = gimmes[0];
     out.push(candidate(
       'everyoneScored', 'fun', 36,
-      `Hole ${h.holeNumber} gave itself away`,
-      `All ${h.scores.length} of you walked off with points`,
+      msg('achv.scored.title', { hole: h.holeNumber }),
+      msg('achv.scored.sub', { count: h.scores.length }),
       { holes: [h.holeNumber] },
     ));
   }
@@ -419,8 +426,8 @@ function metronomeCandidate(slice) {
   if (!top || top.stdev == null || top.stdev > MAX_METRONOME_STDEV) return null;
   return candidate(
     'metronome', 'fun', 44,
-    'Metronome',
-    `${top.mean} points a hole, and barely a wobble all day`,
+    msg('achv.metronome.title'),
+    msg('achv.metronome.sub', { mean: formatNumber(top.mean) }),
     { playerId: top.player.id, playerName: top.player.name },
   );
 }
@@ -434,8 +441,8 @@ function pickupCandidate(slice) {
   const holes = holeNumbers(top.breakdown);
   return candidate(
     'pickupKing', 'roast', 34 + champ.value,
-    `Picked up ${champ.value} times`,
-    `Pocket beat putter on ${holeListLabel(holes)}`,
+    msg('achv.pickup.title', { count: champ.value }),
+    msg('achv.pickup.sub', { holes: holeListLabel(holes) }),
     { playerId: top.player.id, playerName: top.player.name, holes },
   );
 }
@@ -449,8 +456,8 @@ function zeroHeroCandidate(slice) {
   const holes = holeNumbers(top.breakdown);
   return candidate(
     'zeroHero', 'roast', 32 + top.count,
-    `${top.count} holes worth nothing`,
-    `Zero points on ${holeListLabel(holes)}`,
+    msg('achv.zero.title', { count: top.count }),
+    msg('achv.zero.sub', { holes: holeListLabel(holes) }),
     { playerId: top.player.id, playerName: top.player.name, holes },
   );
 }
@@ -464,8 +471,8 @@ function fadeCandidate(slice) {
   const top = collapse.entries[0];
   return candidate(
     'frontNineFade', 'roast', 36 + top.drop,
-    'Ran out of golf',
-    `${top.front} points on the front, ${top.back} on the back`,
+    msg('achv.fade.title'),
+    msg('achv.fade.sub', { front: top.front, back: top.back }),
     { playerId: top.player.id, playerName: top.player.name },
   );
 }
@@ -479,8 +486,8 @@ function par3Candidate(slice) {
   const top = worst.entries[0];
   return candidate(
     'par3Trouble', 'roast', 30 + Math.round((worst.value - 4) * 4),
-    'Par 3s were not the free ones',
-    `${worst.value} strokes a hole across ${top.holes} of them`,
+    msg('achv.par3.title'),
+    msg('achv.par3.sub', { avg: formatNumber(worst.value), count: top.holes }),
     { playerId: top.player.id, playerName: top.player.name, holes: holeNumbers(top.breakdown) },
   );
 }
@@ -588,8 +595,10 @@ export function buildPersonalRecords(myRounds, roundKey) {
     if (bestRoundEver) {
       out.push(candidate(
         'bestRoundEver', 'great', 100,
-        'Best round ever',
-        `${thisHist.points} points — beats your ${milestones.bestRound} at ${milestones.bestRoundCourse ?? 'your old best'}`,
+        msg('achv.bestRound.title'),
+        milestones.bestRoundCourse
+          ? msg('achv.bestRound.sub', { points: thisHist.points, best: milestones.bestRound, course: milestones.bestRoundCourse })
+          : msg('achv.bestRound.subNoCourse', { points: thisHist.points, best: milestones.bestRound }),
       ));
     }
 
@@ -604,8 +613,10 @@ export function buildPersonalRecords(myRounds, roundKey) {
         && thisDiff.differential < milestones.bestDifferential) {
         out.push(candidate(
           'bestDifferentialEver', 'great', 96,
-          'Best round ever, handicap aside',
-          `${thisDiff.differential} differential — your best was ${milestones.bestDifferential}`,
+          msg('achv.bestDiff.title'),
+          msg('achv.bestDiff.sub', {
+            diff: formatNumber(thisDiff.differential), best: formatNumber(milestones.bestDifferential),
+          }),
         ));
       }
     }
@@ -623,8 +634,8 @@ export function buildPersonalRecords(myRounds, roundKey) {
       if (broke) {
         out.push(candidate(
           'brokeGross', 'great', 98,
-          `Broke ${broke} for the first time`,
-          `${thisHist.strokes} strokes — you had never been under ${broke}`,
+          msg('achv.broke.title', { mark: broke }),
+          msg('achv.broke.sub', { strokes: thisHist.strokes, mark: broke }),
         ));
       }
     }
@@ -635,8 +646,8 @@ export function buildPersonalRecords(myRounds, roundKey) {
     if (thisGross.eagles > 0 && milestones.eagles === 0) {
       out.push(candidate(
         'eagle', 'great', 99,
-        'Your first eagle',
-        `Hole ${thisGross.eagleHoles[0].holeNumber} — there was not one on your card before today`,
+        msg('achv.firstEagle.title'),
+        msg('achv.firstEagle.sub', { hole: thisGross.eagleHoles[0].holeNumber }),
         { holes: [thisGross.eagleHoles[0].holeNumber] },
       ));
     }
@@ -646,20 +657,20 @@ export function buildPersonalRecords(myRounds, roundKey) {
       // and reads far better as one.
       out.push(candidate(
         'longestStreakEver', 'great', 84,
-        'Longest run of pars yet',
+        msg('achv.longestStreak.title'),
         milestones.longestParStreak > 0
-          ? `${thisStreak} holes — your best was ${milestones.longestParStreak}`
-          : `${thisStreak} holes — the first run of pars on any card of yours`,
+          ? msg('achv.longestStreak.sub', { count: thisStreak, best: milestones.longestParStreak })
+          : msg('achv.longestStreak.subFirst', { count: thisStreak }),
       ));
     }
     const bestBirdies = bestBirdiesInARound(histSynth);
     if (fullLength && thisBirdies > bestBirdies && thisBirdies >= 2) {
       out.push(candidate(
         'mostBirdiesEver', 'great', 82,
-        `${thisBirdies} birdies — a new best`,
+        msg('achv.mostBirdies.title', { count: thisBirdies }),
         bestBirdies > 0
-          ? `Your record in one round was ${bestBirdies}`
-          : 'You had never made more than one in a round',
+          ? msg('achv.mostBirdies.sub', { best: bestBirdies })
+          : msg('achv.mostBirdies.subFirst'),
       ));
     }
 
@@ -672,8 +683,10 @@ export function buildPersonalRecords(myRounds, roundKey) {
       if (bestSide > milestones.bestNine) {
         out.push(candidate(
           'bestNineEver', 'great', 80,
-          'Best nine you have played',
-          `${bestSide} points on the ${backWasBetter ? 'back' : 'front'} — your best was ${milestones.bestNine}`,
+          msg('achv.bestNine.title'),
+          msg(backWasBetter ? 'achv.bestNine.subBack' : 'achv.bestNine.subFront', {
+            points: bestSide, best: milestones.bestNine,
+          }),
         ));
       }
     }
@@ -685,8 +698,8 @@ export function buildPersonalRecords(myRounds, roundKey) {
     if (rung) {
       out.push(candidate(
         'birdieMilestone', 'fun', 68,
-        `Career birdie number ${rung}`,
-        `${thisBirdies} today, ${birdiesBefore + thisBirdies} in the book`,
+        msg('achv.birdieMilestone.title', { rung }),
+        msg('achv.birdieMilestone.sub', { today: thisBirdies, total: birdiesBefore + thisBirdies }),
       ));
     }
   }
@@ -697,8 +710,8 @@ export function buildPersonalRecords(myRounds, roundKey) {
   if (courseKey != null && courseHistory.length === 0) {
     out.push(candidate(
       'newCourse', 'fun', 64,
-      `First time at ${selected.courseName}`,
-      'A new course in the book',
+      msg('achv.newCourse.title', { course: selected.courseName }),
+      msg('achv.newCourse.sub'),
     ));
   }
   if (courseKey != null && courseHistory.length >= MIN_COURSE_HISTORY) {
@@ -711,22 +724,22 @@ export function buildPersonalRecords(myRounds, roundKey) {
     if (sameLength && thisHist.strokes < mastery.bestStrokes) {
       out.push(candidate(
         'courseRecord', 'great', 92,
-        `Course record at ${selected.courseName}`,
-        `${thisHist.strokes} strokes — your best here was ${mastery.bestStrokes}`,
+        msg('achv.courseRecord.title', { course: selected.courseName }),
+        msg('achv.courseRecord.sub', { strokes: thisHist.strokes, best: mastery.bestStrokes }),
       ));
     } else if (sameLength && thisHist.points > mastery.bestPoints) {
       out.push(candidate(
         'bestAtCourse', 'great', 78,
-        `Best yet at ${selected.courseName}`,
-        `${thisHist.points} points — beats your ${mastery.bestPoints} here`,
+        msg('achv.bestAtCourse.title', { course: selected.courseName }),
+        msg('achv.bestAtCourse.sub', { points: thisHist.points, best: mastery.bestPoints }),
       ));
     } else if (sameLength && thisHist.points >= mastery.avgPoints + MIN_ABOVE_COURSE_AVG) {
       // Not a record, but well clear of what this course usually gets out of
       // you — the card that has something to say on an ordinary good day.
       out.push(candidate(
         'aboveCourseAverage', 'good', 60,
-        `Well above your ${selected.courseName} average`,
-        `${thisHist.points} points against your usual ${mastery.avgPoints} here`,
+        msg('achv.aboveAverage.title', { course: selected.courseName }),
+        msg('achv.aboveAverage.sub', { points: thisHist.points, avg: formatNumber(mastery.avgPoints) }),
       ));
     }
 
@@ -745,8 +758,8 @@ export function buildPersonalRecords(myRounds, roundKey) {
     if (slain) {
       out.push(candidate(
         'nemesisSlain', 'great', 76,
-        `Hole ${slain.holeNumber} finally paid out`,
-        `It had left you with nothing ${slain.rounds.length} times here`,
+        msg('achv.nemesis.title', { hole: slain.holeNumber }),
+        msg('achv.nemesis.sub', { count: slain.rounds.length }),
         { holes: [slain.holeNumber] },
       ));
     }
@@ -757,8 +770,8 @@ export function buildPersonalRecords(myRounds, roundKey) {
   if (roundNumber) {
     out.push(candidate(
       'roundMilestone', 'fun', 70,
-      `Your ${roundNumber}th round`,
-      'Logged in the app',
+      msg('achv.roundMilestone.title', { n: roundNumber }),
+      msg('achv.roundMilestone.sub'),
     ));
   }
   const courseNumber = courseKey != null
@@ -767,8 +780,8 @@ export function buildPersonalRecords(myRounds, roundKey) {
   if (courseNumber) {
     out.push(candidate(
       'courseMilestone', 'fun', 66,
-      `${courseNumber} rounds at ${selected.courseName}`,
-      'A proper home course by now',
+      msg('achv.courseMilestone.title', { n: courseNumber, course: selected.courseName }),
+      msg('achv.courseMilestone.sub'),
     ));
   }
 

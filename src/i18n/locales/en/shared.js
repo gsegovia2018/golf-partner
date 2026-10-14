@@ -180,6 +180,7 @@ export default {
   "shared.tees.unset": "unset",
   "shared.tees.index": "Index {value}",
   "shared.tees.indexBase": "Index {value} · base {base}",
+  "shared.tees.defaultTee": "Default",
   "shared.tees.teeName": "{tee} tee",
   "shared.tees.pickTee": "Pick a tee",
   "shared.tees.edited": "· Edited",

@@ -11,6 +11,7 @@ import { ShotDetailSection } from './ShotDetailSection';
 import PressableScale from '../ui/PressableScale';
 import { haptic } from '../../lib/haptics';
 import { useT, formatNumber } from '../../i18n';
+import { teeDisplayName } from '../../lib/teeName';
 
 // Unified per-player score card. Every game mode renders this exact card —
 // solo, Stableford, Match Play, Sindicato and Best Ball. It is the former
@@ -128,7 +129,7 @@ export const PlayerCard = React.memo(function PlayerCard({
             <Text style={s.soloHeroName}>{player.name}</Text>
             {/* Tee badge — from the round's per-player tee assignment. */}
             {teeLabel ? (
-              <Text style={s.teeBadge}>{teeLabel}</Text>
+              <Text style={s.teeBadge}>{teeDisplayName(teeLabel)}</Text>
             ) : null}
             {/* Team chip — only on two-pair rounds, in the team colour. */}
             {team ? (
@@ -204,7 +205,7 @@ export const PlayerCard = React.memo(function PlayerCard({
             style={s.soloStepBtn}
             onPress={() => onStep(player.id, hole.number, -1)}
             activeScale={0.97}
-            accessibilityLabel={`Decrease strokes on hole ${hole.number}`}
+            accessibilityLabel={tx('scorecard.player.decreaseA11y', { hole: formatNumber(hole.number) })}
           >
             <Feather name="minus" size={24} color={theme.text.primary} />
           </PressableScale>
@@ -259,7 +260,7 @@ export const PlayerCard = React.memo(function PlayerCard({
             style={s.soloStepBtn}
             onPress={() => onStep(player.id, hole.number, 1)}
             activeScale={0.97}
-            accessibilityLabel={`Increase strokes on hole ${hole.number}`}
+            accessibilityLabel={tx('scorecard.player.increaseA11y', { hole: formatNumber(hole.number) })}
           >
             <Feather name="plus" size={24} color={theme.text.primary} />
           </PressableScale>

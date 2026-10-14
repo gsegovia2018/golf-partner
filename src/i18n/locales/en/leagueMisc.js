@@ -169,7 +169,6 @@ export default {
   'league.membersMisc.youNamed': 'You ({name})',
   'league.membersMisc.me': 'me',
   'league.membersMisc.atCap': 'at the cap',
-  'league.membersMisc.adminLower': 'admin',
   'league.membersMisc.admin': 'Admin',
   'league.membersMisc.paid': 'Paid',
   'league.membersMisc.due': '{amount} due',

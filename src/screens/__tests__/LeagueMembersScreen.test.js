@@ -62,11 +62,13 @@ describe('LeagueMembersScreen', () => {
 
   test('lists members with handicap, paid state, admin badge, history and pot', async () => {
     store.getLeague.mockResolvedValue(snapshot());
-    const { getByText } = render(wrap(<LeagueMembersScreen navigation={navigation} route={route} />));
+    const { getByText, queryByText } = render(wrap(<LeagueMembersScreen navigation={navigation} route={route} />));
     await waitFor(() => getByText('You (Marcos)'));
     expect(getByText('3 MEMBERS · POT 60 €')).toBeTruthy();
     expect(getByText('Admin')).toBeTruthy();
+    // The role is the badge only; the stats line no longer repeats it.
     expect(getByText(/League hcp 30\.0 · at the cap/)).toBeTruthy();
+    expect(queryByText(/· admin$/)).toBeNull();
     expect(getByText('30 € due')).toBeTruthy();
     expect(getByText('Álvaro 33.0 → 30.0 · set by the admin · 12 Jun')).toBeTruthy();
     expect(getByText('https://golf-partner.vercel.app/league/MULL-7Q4')).toBeTruthy();

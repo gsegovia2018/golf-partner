@@ -1,6 +1,7 @@
 // English catalogue, assembled from the per-area modules in ./en/.
 // Flat keys, 'area.screen.what'. See docs/i18n.md. Add strings to an area module, not here.
 // A plural entry is { one, other } and reads {count}.
+import achievements from './en/achievements';
 import auth from './en/auth';
 import common from './en/common';
 import courses from './en/courses';
@@ -38,6 +39,7 @@ import rounds from './en/rounds';
 import official from './en/official';
 
 export const AREAS = {
+  achievements,
   auth,
   common,
   courses,
@@ -75,6 +77,7 @@ export const AREAS = {
 };
 
 export default {
+  ...achievements,
   ...auth,
   ...common,
   ...courses,

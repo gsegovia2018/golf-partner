@@ -9,6 +9,7 @@ import { defaultTee } from '../../store/leagueOffApp';
 import { isRatedTee } from '../../store/handicapIndex';
 import { fetchCourses } from '../../store/libraryStore';
 import { makeOffAppStyles } from './offAppStyles';
+import { teeDisplayName } from '../../lib/teeName';
 
 // Course + tee for an off-app league card. Uses the existing CoursePicker
 // round trip (the picker stashes its pick in the selection bridge and we
@@ -63,7 +64,7 @@ export default function CourseTeePicker({ navigation, value, onChange }) {
   const tees = course?.tees ?? [];
   const ratedTee = tees.find(isRatedTee) ?? null;
   const sub = course
-    ? [tee?.label ? tt('league.tee.teesSub', { tee: tee.label }) : null, tt('league.tee.holes', { count: course.holes?.length ?? 0 })].filter(Boolean).join(' · ')
+    ? [tee?.label ? tt('league.tee.teesSub', { tee: teeDisplayName(tee.label) }) : null, tt('league.tee.holes', { count: course.holes?.length ?? 0 })].filter(Boolean).join(' · ')
     : tt('league.tee.courseAndTee');
 
   return (
@@ -120,10 +121,10 @@ export default function CourseTeePicker({ navigation, value, onChange }) {
                   onPress={() => onChange({ course, tee: t })}
                   activeOpacity={0.7}
                   accessibilityRole="button"
-                  accessibilityLabel={rated ? tt('league.tee.a11yRated', { tee: t.label, slope, rating }) : tt('league.tee.a11yUnrated', { tee: t.label })}
+                  accessibilityLabel={rated ? tt('league.tee.a11yRated', { tee: teeDisplayName(t.label), slope, rating }) : tt('league.tee.a11yUnrated', { tee: teeDisplayName(t.label) })}
                   accessibilityState={{ selected: on }}
                 >
-                  <Text style={[s.chipText, on && (rated ? s.chipTextOn : l.chipTextUnratedOn)]}>{t.label}</Text>
+                  <Text style={[s.chipText, on && (rated ? s.chipTextOn : l.chipTextUnratedOn)]}>{teeDisplayName(t.label)}</Text>
                   <Text style={[l.chipSub, on && (rated ? s.chipTextOn : l.chipTextUnratedOn)]}>{sub}</Text>
                 </TouchableOpacity>
               );
@@ -131,7 +132,7 @@ export default function CourseTeePicker({ navigation, value, onChange }) {
           </View>
           {tee && !isRatedTee(tee) && (
             <View style={l.note} accessibilityRole="alert">
-              <Text style={l.noteTitle}>{tt('league.tee.unratedTitle', { tee: tee.label })}</Text>
+              <Text style={l.noteTitle}>{tt('league.tee.unratedTitle', { tee: teeDisplayName(tee.label) })}</Text>
               <Text style={l.noteBody}>
                 {tt('league.tee.unratedBody')}
               </Text>
@@ -155,7 +156,7 @@ export default function CourseTeePicker({ navigation, value, onChange }) {
                     activeOpacity={0.7}
                     accessibilityRole="button"
                   >
-                    <Text style={s.secondaryText}>{tt('league.tee.use', { tee: ratedTee.label })}</Text>
+                    <Text style={s.secondaryText}>{tt('league.tee.use', { tee: teeDisplayName(ratedTee.label) })}</Text>
                   </TouchableOpacity>
                 )}
               </View>

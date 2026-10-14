@@ -1,5 +1,12 @@
 // English catalogue: Shared words, account fields and the error boundary. See docs/i18n.md.
 export default {
+  'units.word.yards': 'yards',
+  'units.word.metres': 'metres',
+  'nav.tab.feed': 'Feed',
+  'nav.tab.stats': 'Stats',
+  'nav.tab.play': 'Play',
+  'nav.tab.history': 'History',
+  'nav.tab.profile': 'Profile',
   'common.cancel': 'Cancel',
   'common.retry': 'Try again',
   "common.back": "Back",

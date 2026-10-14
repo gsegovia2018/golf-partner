@@ -67,7 +67,7 @@ export default function LiveRoundCard({ onOpen }) {
     <Animated.View style={[s.card, { opacity, transform: [{ translateY }] }]}>
       <View style={s.row}>
         <View style={s.livePill}><View style={s.liveDot} /><Text style={s.liveText}>{tl('shared.live')}</Text></View>
-        <Text style={s.overline}>{summary.roundLabel.toUpperCase()}</Text>
+        <Text style={s.overline}>{(summary.roundNumber != null ? tl('shared.round.numbered', { n: summary.roundNumber }) : summary.roundLabel).toUpperCase()}</Text>
       </View>
       <Text style={s.name} numberOfLines={1}>{summary.name}</Text>
       <Text style={s.meta} numberOfLines={1}>

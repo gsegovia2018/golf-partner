@@ -35,6 +35,9 @@ export function liveRoundSummary(tournament) {
 
   return {
     name: tournament.name || 'Golf',
+    // The number travels too: the card renders its label at render time, so a
+    // summary computed before the language settled or switched stays right.
+    roundNumber: Number(tournament.currentRound) + 1,
     roundLabel: t('shared.round.numbered', { n: Number(tournament.currentRound) + 1 }),
     courseName: round.courseName || round.course?.name || '',
     myPoints,

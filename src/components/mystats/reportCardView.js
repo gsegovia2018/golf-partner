@@ -5,7 +5,7 @@
 
 import { t, formatNumber } from '../../i18n';
 import { num } from './msg';
-import { cellKey, groupKey } from './reportKeys';
+import { cellKey, groupKey, countKey } from './reportKeys';
 
 // "+1.2" / "-0.4" / "0" / "—".
 export function fmtDelta(v) {
@@ -51,7 +51,9 @@ function previewOf(rows) {
     });
   }
   return rows.slice(0, 2)
-    .map((r) => `${r.valueText} ${r.label.toLowerCase()}`)
+    .map((r) => (r.countKey
+      ? t(r.countKey, { count: r.count })
+      : `${r.valueText} ${r.label.toLowerCase()}`))
     .join(' · ');
 }
 
@@ -65,6 +67,8 @@ export function buildChapterVM(group, _opts = {}) {
     sub: subOf(group.key, cell),
     delta: displayDelta(cell),
     good: goodOf(cell),
+    countKey: countKey(cell.label),
+    count: Number(cell.value),
   }));
   const max = rows.reduce((m, r) => Math.max(m, r.good != null ? Math.abs(r.good) : 0), 0);
   for (const r of rows) {

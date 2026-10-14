@@ -386,7 +386,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
                     {m.userId === meId ? t('league.membersMisc.youNamed', { name: m.displayName ?? t('league.membersMisc.me') }) : memberLabel(m, meId)}
                   </Text>
                   <Text style={s.memberSub}>
-                    {[hcp, atCap ? t('league.membersMisc.atCap') : null, m.role === 'admin' ? t('league.membersMisc.adminLower') : null].filter(Boolean).join(' · ')}
+                    {[hcp, atCap ? t('league.membersMisc.atCap') : null].filter(Boolean).join(' · ')}
                   </Text>
                   {!!claim && <Text style={s.memberSub}>{t('league.members.claimedLineNoHcp', { when: formatDate(claim.at) })}</Text>}
                 </View>

@@ -868,7 +868,7 @@ export default function SetupScreen({ navigation, route }) {
                   </View>
                   <View style={s.courseStat}>
                     <Text style={s.courseStatValue}>{r.tees?.length ?? 0}</Text>
-                    <Text style={s.courseStatLabel}>{t('setup.screen.statTees')}</Text>
+                    <Text style={s.courseStatLabel}>{t('setup.screen.statTees', { count: r.tees?.length ?? 0 })}</Text>
                   </View>
                 </View>
 
