@@ -101,3 +101,22 @@ Canvas: https://claude.ai/artifact/3DV1qtXWUGzJ9Esq827kSq
   them (B1 backfill); any card whose recomputed points differ is listed in the PR.
 - `participation_points` defaults to 10 for existing leagues.
 - Cards of a closed month (R12) are untouched.
+
+## Status (2026-10-14)
+
+Shipped to production (web, and Android OTA to APK runtime `f9a55c47`, EAS build 9d5b8318):
+
+| Item | PR | Migration |
+|------|----|-----------|
+| B1 server scoring, Stableford ranking, points for playing, tee bounds, hand-entered tee approval | #157 | 20261015000000 |
+| C1 client gaps | #156, #158 (`/league` App Links) | — |
+| I1 i18n foundation | #155 | — |
+| B2 integrity, timeline, month close, member admin, cards per round | #159 | 20261016000000 |
+| D2 Stableford board | #162 | — |
+| D1 card actions + timeline | #164 | — |
+| D3 members admin | #165 | — |
+| D5 several cards per game, tournament rounds; scorecard strip removed (user request); refetch-loop fix | #166 | — |
+| D4 sharing + public board | #169, hotfix #171 | 20261017000000, 20261018000000 |
+| I2 Spanish, whole app except the swing analyzer | #163, #172, #180 | — |
+
+Open: i18n polish from the Spanish walkthrough; swing analyzer strings (wait for the swing work to settle); push copy in the recipient's language (`profiles.locale` + send-push); QA data cleanup and dropping the backup schemas (`backup_league_20261013`, `_20261013b`, `_20261014`, `league_cards_scoring_backup`). The Final stays out of scope.
