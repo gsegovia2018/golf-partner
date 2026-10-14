@@ -8,6 +8,10 @@ import en from '../../i18n/locales/en/leagueErrors';
 
 jest.mock('../../lib/supabase', () => ({ supabase: { rpc: jest.fn(), auth: { getUser: jest.fn() } } }));
 
+// Functions in those migrations that are not league functions (their errors
+// never reach leagueErrorText).
+const NOT_LEAGUE = new Set(['set_my_locale']);
+
 // Every RAISE EXCEPTION in the latest definition of each league function,
 // with its hint and a sample of what %-placeholders become.
 function serverRaises() {
@@ -15,7 +19,7 @@ function serverRaises() {
   const defs = {};
   for (const f of fs.readdirSync(dir).filter((x) => x >= '20261004').sort()) {
     const parts = fs.readFileSync(path.join(dir, f), 'utf8').split(/create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?([a-z_0-9]+)\s*\(/i);
-    for (let i = 1; i < parts.length; i += 2) defs[parts[i]] = parts[i + 1];
+    for (let i = 1; i < parts.length; i += 2) if (!NOT_LEAGUE.has(parts[i])) defs[parts[i]] = parts[i + 1];
   }
   const out = [];
   for (const body of Object.values(defs)) {

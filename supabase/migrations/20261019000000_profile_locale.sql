@@ -10,9 +10,9 @@
 --                      send-push then writes English, as it always did.
 --
 --   set_my_locale(p_locale text)   authenticated: sets the caller's own
---                      locale. Unsupported values are refused (22023,
---                      hint bad_locale); setting the same value again is a
---                      no-op (no row write). It touches no other column, so
+--                      locale. Unsupported values are refused (22023);
+--                      setting the same value again is a no-op (no row
+--                      write). It touches no other column, so
 --                      no profile trigger fires and updated_at is unchanged.
 --
 -- Read by: supabase/functions/send-push (service role). Written only through
@@ -49,7 +49,7 @@ BEGIN
     RAISE EXCEPTION 'Not signed in.' USING ERRCODE = '42501';
   END IF;
   IF p_locale IS NULL OR p_locale NOT IN ('es', 'en') THEN
-    RAISE EXCEPTION 'Unsupported locale.' USING ERRCODE = '22023', HINT = 'bad_locale';
+    RAISE EXCEPTION 'Unsupported locale.' USING ERRCODE = '22023';
   END IF;
   UPDATE public.profiles
      SET locale = p_locale

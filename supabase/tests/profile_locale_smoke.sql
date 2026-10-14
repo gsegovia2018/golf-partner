@@ -109,9 +109,9 @@ SELECT pg_temp.pl_ok('setting the same locale again writes nothing',
 SELECT public.set_my_locale('en');
 SELECT pg_temp.pl_ok('Ana switches to en', pg_temp.pl_locale('a') = 'en', pg_temp.pl_locale('a'));
 
-SELECT pg_temp.pl_refuses('set_my_locale refuses fr', 'SELECT public.set_my_locale(''fr'')', '22023', 'bad_locale');
-SELECT pg_temp.pl_refuses('set_my_locale refuses NULL', 'SELECT public.set_my_locale(NULL)', '22023', 'bad_locale');
-SELECT pg_temp.pl_refuses('set_my_locale refuses ES (case matters)', 'SELECT public.set_my_locale(''ES'')', '22023', 'bad_locale');
+SELECT pg_temp.pl_refuses('set_my_locale refuses fr', 'SELECT public.set_my_locale(''fr'')', '22023');
+SELECT pg_temp.pl_refuses('set_my_locale refuses NULL', 'SELECT public.set_my_locale(NULL)', '22023');
+SELECT pg_temp.pl_refuses('set_my_locale refuses ES (case matters)', 'SELECT public.set_my_locale(''ES'')', '22023');
 SELECT pg_temp.pl_ok('a refused call leaves the locale as it was', pg_temp.pl_locale('a') = 'en', pg_temp.pl_locale('a'));
 
 SELECT pg_temp.pl_as('b');
