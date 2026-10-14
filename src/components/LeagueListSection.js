@@ -124,7 +124,7 @@ function LeagueRow({ row, t, onPress }) {
 const DEEP = light.bg.deep;
 
 const st = StyleSheet.create({
-  section: { marginBottom: 6 },
+  section: { marginTop: 12 },
   hero: { backgroundColor: DEEP, borderRadius: 16, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, marginBottom: 10 },
   overRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 22 },
   overline: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: onDeep.faint },

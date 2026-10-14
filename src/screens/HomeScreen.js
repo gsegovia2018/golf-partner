@@ -1209,7 +1209,6 @@ export default function HomeScreen({ navigation, route }) {
           </TouchableOpacity>
         )}
         <LiveRoundCard onOpen={() => pushTournamentScorecard()} />
-        <LeagueListSection navigation={navigation} rows={leagueRows} />
         <Text style={s.startHeading}>{tx('home.list.startPlaying')}</Text>
         <View style={s.startTilesRow}>
           <PressableScale
@@ -1243,6 +1242,8 @@ export default function HomeScreen({ navigation, route }) {
             </View>
           </PressableScale>
         </View>
+
+        <LeagueListSection navigation={navigation} rows={leagueRows} />
 
         <TouchableOpacity
           style={s.joinTile}
