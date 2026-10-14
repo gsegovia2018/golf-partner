@@ -21,6 +21,8 @@ import {
 import { createSwing, getSwingProfile } from '../store/swingStore';
 import { pickSwingVideo } from '../swing/importVideo';
 import { SWING_STRINGS } from '../swing/strings';
+import { useT } from '../i18n';
+import { formatNumber } from '../i18n/format';
 
 const T = SWING_STRINGS.capture;
 const GUIDE_KEY = 'golf_swing_capture_guide.v1';
@@ -94,6 +96,7 @@ function HudButton({ label, icon, onPress, ghost, testID, disabled, style }) {
 }
 
 export default function SwingCaptureScreen({ navigation }) {
+  useT(); // the swing copy reads the language as it renders: re-render when it changes
   const insets = useSafeAreaInsets();
   const [state, dispatch] = useReducer(captureReducer, initialCaptureState);
   const [permission, requestPermission, getPermission] = useCameraPermissions();
@@ -371,7 +374,7 @@ export default function SwingCaptureScreen({ navigation }) {
         {phase === 'review' || phase === 'saving' ? (
           <View style={[styles.card, styles.reviewCard]} testID="capture-review">
             <Text style={styles.cardTitle}>
-              {T.review((take.durationMs / 1000).toFixed(1), take.fps, playbackRateFor(take.fps))}
+              {T.review(formatNumber(take.durationMs / 1000, { decimals: 1 }), take.fps, playbackRateFor(take.fps))}
             </Text>
             <View style={styles.btnRow}>
               <HudButton label={T.retake} icon="refresh-cw" ghost onPress={retake} disabled={phase === 'saving'} style={styles.flex1} testID="capture-retake" />

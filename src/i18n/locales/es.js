@@ -32,6 +32,11 @@ import statExplainers from './es/statExplainers';
 import statsTabs from './es/statsTabs';
 import myStats from './es/myStats';
 import playerStats from './es/playerStats';
+import swing from './es/swing';
+import swingChecks from './es/swingChecks';
+import swingCoach from './es/swingCoach';
+import swingCues from './es/swingCues';
+import swingDrills from './es/swingDrills';
 
 import home from './es/home';
 import setup from './es/setup';
@@ -74,6 +79,11 @@ export const AREAS = {
   statsTabs,
   myStats,
   playerStats,
+  swing,
+  swingChecks,
+  swingCoach,
+  swingCues,
+  swingDrills,
 };
 
 export default {
@@ -112,4 +122,9 @@ export default {
   ...statsTabs,
   ...myStats,
   ...playerStats,
+  ...swing,
+  ...swingChecks,
+  ...swingCoach,
+  ...swingCues,
+  ...swingDrills,
 };
