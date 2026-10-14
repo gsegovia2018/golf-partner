@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
+import { useT, formatNumber } from '../../../i18n';
 import PressableScale from '../../ui/PressableScale';
 import CoachHero from '../CoachHero';
 import CoachBoard from '../CoachBoard';
@@ -38,25 +39,26 @@ function CoachTab({ stats, onInfo, targetHandicap, onChangeTarget, focus, focusV
 
 // Mirrors ShotDashboard's target title so both tabs describe the same
 // baseline the SG and coach numbers are computed against.
-function targetBenchmarkCopy(targetHandicap) {
-  if (targetHandicap == null || targetHandicap === 0) return 'Benchmarks vs scratch';
-  return `Benchmarks vs ${targetHandicap}-handicap target`;
+function targetBenchmarkCopy(t, targetHandicap) {
+  if (targetHandicap == null || targetHandicap === 0) return t('stats.tab.coach.benchScratch');
+  return t('stats.tab.coach.benchTarget', { target: formatNumber(targetHandicap) });
 }
 
 function TargetBenchmarkRow({ targetHandicap, onChangeTarget }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   return (
     <View style={s.targetRow}>
       <Feather name="crosshair" size={14} color={theme.text.secondary} />
-      <Text style={s.targetText}>{targetBenchmarkCopy(targetHandicap)}</Text>
+      <Text style={s.targetText}>{targetBenchmarkCopy(t, targetHandicap)}</Text>
       {onChangeTarget ? (
         <PressableScale
           onPress={onChangeTarget}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Change target handicap"
+          accessibilityLabel={t('stats.tab.coach.changeTarget')}
         >
           <Feather name="edit-2" size={14} color={theme.text.secondary} />
         </PressableScale>
@@ -66,6 +68,7 @@ function TargetBenchmarkRow({ targetHandicap, onChangeTarget }) {
 }
 
 function FormTrendCard({ form = {}, formSeries = {}, metrics = {} }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   // Score differential, not points per round: points are net of the handicap
@@ -77,21 +80,24 @@ function FormTrendCard({ form = {}, formSeries = {}, metrics = {} }) {
   const color = toneColor(theme, tone);
   const series = formSeries.metrics?.avgDifferential ?? [];
   const delta = diffMetric?.delta;
-  const title = direction === 'up' ? 'Improving lately'
-    : direction === 'down' ? 'Trending down lately'
-      : 'Holding steady';
+  const title = direction === 'up' ? t('stats.tab.coach.improving')
+    : direction === 'down' ? t('stats.tab.coach.trendingDown')
+      : t('stats.tab.coach.steady');
+  const avgDiff = metrics.avgDifferential;
   const value = delta == null
-    ? `${metrics.avgDifferential ?? '-'} diff`
-    : `${delta > 0 ? '+' : ''}${delta} diff`;
+    ? t('stats.tab.coach.diff', { value: typeof avgDiff === 'number' ? formatNumber(avgDiff) : (avgDiff ?? '-') })
+    : t('stats.tab.coach.diff', { value: `${delta > 0 ? '+' : ''}${formatNumber(delta)}` });
   const meta = form.hasHistory
-    ? `Recent ${form.recentCount ?? 0} vs previous ${form.historyCount ?? 0} rounds`
-    : 'Select more rounds to compare recent form.';
+    ? t('stats.tab.coach.recentVsPrevious', {
+      recent: form.recentCount ?? 0, previous: form.historyCount ?? 0,
+    })
+    : t('stats.tab.coach.selectMore');
 
   const wash = toneWash(theme, tone);
 
   return (
     <SectionCard
-      title="Current form"
+      title={t('stats.tab.coach.currentForm')}
       testID="current-form-card"
       style={wash ? { backgroundColor: wash, borderColor: 'transparent' } : null}
     >
@@ -110,7 +116,7 @@ function FormTrendCard({ form = {}, formSeries = {}, metrics = {} }) {
         labelColor={theme.text.secondary}
         variant="compact"
         dropGaps
-        caption="Score differential"
+        caption={t('stats.tab.coach.scoreDifferential')}
       />
     </SectionCard>
   );

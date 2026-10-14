@@ -559,3 +559,21 @@ describe('handicap exclusion legacy migration', () => {
     expect(await view.findByText('Excluded count: 1')).toBeTruthy();
   });
 });
+
+describe('MyStatsScreen in Spanish', () => {
+  const { setLanguagePref } = require('../../i18n');
+  beforeEach(async () => { await act(async () => { await setLanguagePref('es'); }); });
+  afterEach(async () => { await act(async () => { await setLanguagePref('en'); }); });
+
+  test('translates the header, the tab bar and the round counter', async () => {
+    const { getByText, getByLabelText } = renderScreen();
+    await flush();
+
+    expect(getByText('Mis estadísticas')).toBeTruthy();
+    expect(getByLabelText('Atrás')).toBeTruthy();
+    expect(getByText('Informe de vuelta')).toBeTruthy();
+    expect(getByText('Golpes ganados')).toBeTruthy();
+    expect(getByText('Hándicap')).toBeTruthy();
+    expect(getByText('1 de 1')).toBeTruthy();
+  });
+});

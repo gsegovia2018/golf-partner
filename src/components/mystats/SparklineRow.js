@@ -6,6 +6,7 @@ import Animated, {
 import Svg, { Polyline, Circle } from 'react-native-svg';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
 import PressableScale from '../ui/PressableScale';
 import Reveal from '../ui/Reveal';
 import TrendLineChart from './TrendLineChart';
@@ -99,9 +100,11 @@ export default function SparklineRow({
   expanded = false, onToggle,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [width, setWidth] = useState(0);
-  const fmt = formatValue || ((v) => `${v}`);
+  const fmt = formatValue || ((v) => formatNumber(v, { maxDecimals: 4 }));
+  const label = metric.labelKey ? t(metric.labelKey) : metric.label;
   const toggleable = typeof onToggle === 'function';
 
   const data = dropGaps ? dropGapEntries(series) : series;
@@ -129,31 +132,31 @@ export default function SparklineRow({
     ? 'minus'
     : delta > 0 ? 'trending-up' : 'trending-down';
   const chipText = delta == null || delta === 0
-    ? 'level'
-    : `${delta > 0 ? '+' : ''}${delta}`;
+    ? t('stats.my.spark.level')
+    : `${delta > 0 ? '+' : ''}${formatNumber(delta, { maxDecimals: 4 })}`;
   const chipLabel = delta == null || delta === 0
-    ? `${metric.label}: level with your history`
-    : `${metric.label}: ${improved ? 'improved' : 'declined'} ${Math.abs(delta)} vs your history`;
+    ? t('stats.my.spark.chipLevel', { label })
+    : t(improved ? 'stats.my.spark.chipImproved' : 'stats.my.spark.chipDeclined', { label, value: formatNumber(Math.abs(delta), { maxDecimals: 4 }) });
 
   const sub = metric.history != null
-    ? `vs ${fmt(metric.history)} previous`
-    : 'No history to compare';
+    ? t('stats.my.spark.vsPrevious', { value: fmt(metric.history) })
+    : t('stats.my.spark.noHistory');
 
   const delay = index * STAGGER_MS;
 
-  const rowLabel = `${metric.label}: ${latestText}. ${expanded ? 'Hide' : 'Show'} round-by-round values.`;
+  const rowLabel = t(expanded ? 'stats.my.spark.hide' : 'stats.my.spark.show', { label, value: latestText });
 
   const rowContent = (
     <>
       <View style={s.copy}>
         <View style={s.nameWrap}>
-          <Text style={s.label} numberOfLines={2}>{metric.label}</Text>
+          <Text style={s.label} numberOfLines={2}>{label}</Text>
           {infoKey && onInfo ? (
             <TouchableOpacity
               onPress={() => onInfo(infoKey)}
               hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
               accessibilityRole="button"
-              accessibilityLabel={`What is ${metric.label}`}
+              accessibilityLabel={t('stats.my.whatIs', { name: label })}
             >
               <Feather name="info" size={13} color={theme.text.muted} />
             </TouchableOpacity>
@@ -238,7 +241,7 @@ export default function SparklineRow({
               variant="compact"
               formatValue={fmt}
               dropGaps={dropGaps}
-              caption="oldest → newest"
+              caption={t('stats.my.spark.caption')}
             />
           </Reveal>
         </View>

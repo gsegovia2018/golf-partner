@@ -6,6 +6,7 @@ import Animated, {
   Easing, useReducedMotion,
 } from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 import { semantic } from '../../theme/tokens';
 
 const AnimatedG = Animated.createAnimatedComponent(G);
@@ -27,8 +28,13 @@ export const SHORT_STUB_RADIUS = FAN_RADIUS * 0.2;
 // Spatial order across the fan, left of the fairway to right of it. `short`
 // is not part of the main fan — it renders as a stub arc at the tee.
 export const FAN_ORDER = ['left', 'fairway', 'super', 'right'];
+// Catalogue keys; render with t(BUCKET_LABELS[bucket]).
 export const BUCKET_LABELS = {
-  left: 'Left', fairway: 'Fairway', super: 'Super', right: 'Right', short: 'Short',
+  left: 'stats.my.fan.left',
+  fairway: 'stats.my.fan.fairway',
+  super: 'stats.my.fan.super',
+  right: 'stats.my.fan.right',
+  short: 'stats.my.fan.short',
 };
 
 // Polar → cartesian on the fan's coordinate system: 0° points straight up
@@ -124,6 +130,7 @@ function FadeWedge({ delay, reduced, children }) {
 // Callers should omit the component entirely when drives.recorded === 0.
 export default function FairwayFan({ drives }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const reduced = useReducedMotion();
 
@@ -215,7 +222,7 @@ export default function FairwayFan({ drives }) {
           return (
             <View key={row.key} style={s.legendRow} testID={`fan-legend-${row.key}`}>
               <View style={[s.legendDot, { backgroundColor: c.fill, opacity: c.opacity }]} />
-              <Text style={s.legendLabel}>{BUCKET_LABELS[row.key]}</Text>
+              <Text style={s.legendLabel}>{t(BUCKET_LABELS[row.key])}</Text>
               <Text style={s.legendPct}>{`${row.pct}%`}</Text>
             </View>
           );

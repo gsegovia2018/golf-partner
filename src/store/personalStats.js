@@ -25,6 +25,8 @@ import { buildStrategyTips } from './coachStrategy';
 import { shotBenchmarkForHandicap } from './shotBenchmarks';
 import { roundDifferential } from './handicapIndex';
 import { roundEndedAt, roundStartedAt } from './finishStamp';
+import { msg, raw } from './statsMsg';
+import { formatDate } from '../i18n';
 
 // Canonical player id used inside the synthetic tournament.
 export const CANON_ID = 'me';
@@ -292,12 +294,12 @@ export const FORM_METRICS = [
   // Points / round used to head this list. It was replaced by the score
   // differential because a points delta across an index change measures the
   // index change, not the golf — see the note above syntheticDifferential.
-  { key: 'avgDifferential',    label: 'Score differential', polarity: 'lower', shot: false },
-  { key: 'avgVsPar',           label: 'Strokes vs par',   polarity: 'lower',  shot: false },
-  { key: 'fairwayPct',         label: 'Fairways hit %',   polarity: 'higher', shot: true },
-  { key: 'girPct',             label: 'Greens in reg %',  polarity: 'higher', shot: true },
-  { key: 'puttsPerRound',      label: 'Putts / round',    polarity: 'lower',  shot: true },
-  { key: 'threePuttsPerRound', label: '3-putts / round',  polarity: 'lower',  shot: true },
+  { key: 'avgDifferential',    label: 'Score differential', labelKey: 'stats.my.metric.avgDifferential', polarity: 'lower', shot: false },
+  { key: 'avgVsPar',           label: 'Strokes vs par',   labelKey: 'stats.my.metric.avgVsPar', polarity: 'lower',  shot: false },
+  { key: 'fairwayPct',         label: 'Fairways hit %',   labelKey: 'stats.my.metric.fairwayPct', polarity: 'higher', shot: true },
+  { key: 'girPct',             label: 'Greens in reg %',  labelKey: 'stats.my.metric.girPct', polarity: 'higher', shot: true },
+  { key: 'puttsPerRound',      label: 'Putts / round',    labelKey: 'stats.my.metric.puttsPerRound', polarity: 'lower',  shot: true },
+  { key: 'threePuttsPerRound', label: '3-putts / round',  labelKey: 'stats.my.metric.threePuttsPerRound', polarity: 'lower',  shot: true },
 ];
 
 // ── resolveMyPlayer ──
@@ -413,15 +415,19 @@ const DRIVE_LABELS = {
   short: 'Short drives',
 };
 
+// Each cell also carries a `labelMsg` descriptor (docs/i18n.md); the English
+// `label` stays beside it because coach ids and the drill picker key off it.
+
 const round2 = (n) => Math.round(n * 100) / 100;
 
 function pushImpact(cells, {
-  area, label, score, sample, sampleUnit, unit, value, basis,
+  area, label, labelMsg, score, sample, sampleUnit, unit, value, basis,
 }) {
   if (!Number.isFinite(score) || sample < IMPACT_SAMPLE_MIN) return;
   cells.push({
     area,
     label,
+    ...(labelMsg ? { labelMsg } : {}),
     score: round2(score),
     sample,
     ...(sampleUnit ? { sampleUnit } : {}),
@@ -430,6 +436,14 @@ function pushImpact(cells, {
     ...(basis ? { basis } : {}),
   });
 }
+
+const SG_ACTION_KEYS = {
+  offTheTee: 'stats.my.sgAction.offTheTee',
+  approach: 'stats.my.sgAction.approach',
+  aroundGreen: 'stats.my.sgAction.aroundGreen',
+  putting: 'stats.my.sgAction.putting',
+  penalties: 'stats.my.sgAction.penalties',
+};
 
 export function buildActionPlan({
   driveImpact, approachTarget, puttingTarget, strokesGained,
@@ -447,6 +461,7 @@ export function buildActionPlan({
         pushImpact(cells, {
           area: 'Driving',
           label: DRIVE_LABELS[key] ?? `${key} drives`,
+          labelMsg: DRIVE_LABELS[key] ? msg(`stats.my.drive.${key}`) : raw(`${key} drives`),
           score: bucket.avgPoints - baseline,
           sample: bucket.holes,
           unit: 'pts / hole',
@@ -461,6 +476,7 @@ export function buildActionPlan({
     pushImpact(cells, {
       area: 'Approach',
       label: `${bucket} m approaches`,
+      labelMsg: msg('stats.my.label.approachBucket', { bucket }),
       score: row.avgSg,
       sample: row.holes,
       unit: 'SG / shot',
@@ -473,6 +489,7 @@ export function buildActionPlan({
     pushImpact(cells, {
       area: 'Putting',
       label: `${bucket} m putts`,
+      labelMsg: msg('stats.my.label.puttBucket', { bucket }),
       score: row.sgPerPutt,
       sample: row.attempts,
       unit: 'SG / putt',
@@ -489,12 +506,14 @@ export function buildActionPlan({
       putting: 'Putting',
       penalties: 'Penalties',
     }[key] ?? key;
+    const labelMsg = SG_ACTION_KEYS[key] ? msg(SG_ACTION_KEYS[key]) : raw(label);
     const categorySample = strokesGained.sampleHolesByCategory?.[key]
       ?? strokesGained.sampleHoles
       ?? 0;
     pushImpact(cells, {
       area: 'Strokes Gained',
       label,
+      labelMsg,
       score: value,
       sample: categorySample,
       sampleUnit: 'holes',
@@ -533,36 +552,38 @@ export function rankStrengths(synthetic) {
   }
 
   const cells = [];
-  const addCell = (label, avgPoints, holes) => {
+  const addCell = (label, avgPoints, holes, labelKey) => {
     if (holes >= HOLE_SAMPLE_MIN) {
-      cells.push({ label, avgPoints, sample: holes, unit: 'holes' });
+      cells.push({
+        label, labelMsg: msg(labelKey), avgPoints, sample: holes, unit: 'holes',
+      });
     }
   };
 
   const pt = parTypeSplit(synthetic, CANON_ID);
-  addCell('Par 3s', pt.par3.avgPoints, pt.par3.holes);
-  addCell('Par 4s', pt.par4.avgPoints, pt.par4.holes);
-  addCell('Par 5s', pt.par5.avgPoints, pt.par5.holes);
+  addCell('Par 3s', pt.par3.avgPoints, pt.par3.holes, 'stats.my.rank.par3');
+  addCell('Par 4s', pt.par4.avgPoints, pt.par4.holes, 'stats.my.rank.par4');
+  addCell('Par 5s', pt.par5.avgPoints, pt.par5.holes, 'stats.my.rank.par5');
 
   const diff = holeDifficultySplit(synthetic, CANON_ID);
-  addCell('Hard holes', diff.hard.avgPoints, diff.hard.holes);
-  addCell('Mid holes', diff.mid.avgPoints, diff.mid.holes);
-  addCell('Easy holes', diff.easy.avgPoints, diff.easy.holes);
+  addCell('Hard holes', diff.hard.avgPoints, diff.hard.holes, 'stats.my.rank.hard');
+  addCell('Mid holes', diff.mid.avgPoints, diff.mid.holes, 'stats.my.rank.mid');
+  addCell('Easy holes', diff.easy.avgPoints, diff.easy.holes, 'stats.my.rank.easy');
 
   const wc = warmupVsClosing(synthetic, CANON_ID);
-  addCell('Opening 3 holes', wc.warmup.avgPoints, wc.warmup.holes);
-  addCell('Closing 3 holes', wc.closing.avgPoints, wc.closing.holes);
+  addCell('Opening 3 holes', wc.warmup.avgPoints, wc.warmup.holes, 'stats.my.rank.opening');
+  addCell('Closing 3 holes', wc.closing.avgPoints, wc.closing.holes, 'stats.my.rank.closing');
 
   const fb = frontBackSplit(synthetic)[0];
   if (fb) {
-    addCell('Front nine', fb.frontAvg, fb.rounds.length * 9);
-    addCell('Back nine', fb.backAvg, fb.rounds.length * 9);
+    addCell('Front nine', fb.frontAvg, fb.rounds.length * 9, 'stats.my.rank.front');
+    addCell('Back nine', fb.backAvg, fb.rounds.length * 9, 'stats.my.rank.back');
   }
 
   const tee = teeShotImpact(synthetic, CANON_ID);
-  addCell('Tee shot on the fairway', tee.fairway.avgPoints, tee.fairway.holes);
-  addCell('Tee shot missing the fairway', tee.missed.avgPoints, tee.missed.holes);
-  addCell('After a tee penalty', tee.teePenalty.avgPoints, tee.teePenalty.holes);
+  addCell('Tee shot on the fairway', tee.fairway.avgPoints, tee.fairway.holes, 'stats.my.rank.teeFairway');
+  addCell('Tee shot missing the fairway', tee.missed.avgPoints, tee.missed.holes, 'stats.my.rank.teeMissed');
+  addCell('After a tee penalty', tee.teePenalty.avgPoints, tee.teePenalty.holes, 'stats.my.rank.teePenalty');
 
   const scored = cells.map((c) => ({
     ...c,
@@ -682,7 +703,7 @@ function shortDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return formatDate(d, 'day');
 }
 
 // ── computeFormSeries ──

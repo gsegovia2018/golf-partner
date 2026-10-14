@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, t as tNow, formatNumber } from '../../i18n';
 import { semantic } from '../../theme/tokens';
 import TrendLineChart from './TrendLineChart';
 
@@ -18,9 +19,9 @@ const GOLD = semantic.winner.dark;
 // polarity-aware ('up' always means improving). No new stats are invented
 // here.
 export function formVerdict(direction) {
-  if (direction === 'up') return 'Improving lately';
-  if (direction === 'down') return 'Trending down lately';
-  return 'Holding steady';
+  if (direction === 'up') return tNow('stats.my.form.improving');
+  if (direction === 'down') return tNow('stats.my.form.trendingDown');
+  return tNow('stats.my.form.steady');
 }
 
 // Form-tab hero: verdict + score-differential headline number in gold, with
@@ -37,6 +38,7 @@ export function formVerdict(direction) {
 //   metrics:    stats.metrics     (fallback values when form has no slice)
 export default function FormHero({ form = {}, formSeries = {}, metrics = {}, n, onInfo }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   const diffMetric = form.metrics?.find((m) => m.key === 'avgDifferential');
@@ -49,24 +51,24 @@ export default function FormHero({ form = {}, formSeries = {}, metrics = {}, n, 
   // the arrow is inverted relative to a points delta.
   const deltaPart = delta == null || delta === 0
     ? null
-    : `${delta < 0 ? '▲ ' : '▼ +'}${delta}`;
-  const ptsPart = metrics.avgPoints == null ? null : `${metrics.avgPoints} pts/rnd`;
+    : `${delta < 0 ? '▲ ' : '▼ +'}${formatNumber(delta)}`;
+  const ptsPart = metrics.avgPoints == null ? null : t('stats.my.form.ptsRnd', { value: formatNumber(metrics.avgPoints) });
   const meta = form.hasHistory
-    ? [`Score differential · recent ${form.recentCount ?? 0} vs previous ${form.historyCount ?? 0} rounds`, deltaPart, ptsPart]
+    ? [t('stats.my.form.metaHistory', { recent: form.recentCount ?? 0, previous: form.historyCount ?? 0 }), deltaPart, ptsPart]
       .filter(Boolean).join(' · ')
-    : ['Score differential · select more rounds to compare recent form.', ptsPart]
+    : [t('stats.my.form.metaSelectMore'), ptsPart]
       .filter(Boolean).join(' · ');
 
   return (
     <View style={s.card} testID="form-hero-surface">
       <View style={s.kickerRow}>
-        <Text style={s.kicker}>{`Current form · Last ${n}`}</Text>
+        <Text style={s.kicker}>{t('stats.my.form.kicker', { n })}</Text>
         {onInfo ? (
           <TouchableOpacity
             onPress={() => onInfo('scoreDifferential')}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityRole="button"
-            accessibilityLabel="What is Score differential"
+            accessibilityLabel={t('stats.my.whatIs', { name: t('stats.my.metric.avgDifferential') })}
           >
             <Feather name="info" size={14} color={CREAM_70} />
           </TouchableOpacity>
@@ -75,8 +77,8 @@ export default function FormHero({ form = {}, formSeries = {}, metrics = {}, n, 
       <View style={s.verdictRow}>
         <Text style={s.verdict}>{verdict}</Text>
         <Text style={s.pts} testID="form-hero-pts">
-          {diffValue == null ? '—' : `${diffValue}`}
-          <Text style={s.ptsSuffix}> diff</Text>
+          {diffValue == null ? '—' : formatNumber(diffValue, { maxDecimals: 4 })}
+          <Text style={s.ptsSuffix}>{t('stats.my.form.diffSuffix')}</Text>
         </Text>
       </View>
       <TrendLineChart

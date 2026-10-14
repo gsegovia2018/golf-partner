@@ -263,54 +263,58 @@ function homeCourseOf(mastery, diffs) {
 // Keyed by the side of the ledger the cell came from: every phrase only
 // reads correctly on one side ("deadly from the fairway" is not a weakness,
 // "par 3s are the leak" is not a compliment), so a cell landing on the
-// other side is simply skipped.
+// other side is simply skipped. Values are `stats.player.verdict.trait.*`
+// key suffixes; the screen renders them (see tr in SummaryTab).
 const TRAIT_PHRASES = {
   strength: {
-    'Tee shot on the fairway': 'deadly from the fairway',
-    'Opening 3 holes': 'fast out of the gate',
-    'Closing 3 holes': 'a closer',
-    'Par 5s': 'a par-5 specialist',
-    'Hard holes': 'thrives on the hard holes',
+    'Tee shot on the fairway': 'fairway',
+    'Opening 3 holes': 'opening',
+    'Closing 3 holes': 'closing',
+    'Par 5s': 'par5',
+    'Hard holes': 'hard',
   },
   weakness: {
-    'Tee shot missing the fairway': 'lives and dies by the tee shot',
-    'Par 3s': 'par 3s are the leak',
-    'After a tee penalty': 'one penalty ruins a hole',
-    'Back nine': 'fades after the turn',
-    'Front nine': 'slow to get going',
+    'Tee shot missing the fairway': 'missedFairway',
+    'Par 3s': 'par3',
+    'After a tee penalty': 'penalty',
+    'Back nine': 'backNine',
+    'Front nine': 'frontNine',
   },
 };
-
-const PRONOUNS = {
-  male: { possessive: 'his', object: 'him' },
-  female: { possessive: 'her', object: 'her' },
-};
-const NEUTRAL_PRONOUNS = { possessive: 'their', object: 'them' };
 
 const MIN_VERDICT_ROUNDS = 3;
 
+// Returns a message descriptor, not text: { key, params } where `level`,
+// `trait` and `form` params are themselves descriptors and the numbers
+// (`idx`, `gap`) are raw. SummaryTab renders the nesting with the active
+// language, so nothing here is frozen in the language it ran in.
 export function friendVerdict(summary, { gender } = {}) {
   if (!summary || summary.ratedCount < MIN_VERDICT_ROUNDS) return null;
   if (summary.gap == null || summary.index?.value == null) return null;
-  const { possessive, object } = PRONOUNS[gender] ?? NEUTRAL_PRONOUNS;
+  const who = gender === 'male' || gender === 'female' ? gender : 'neutral';
   const idx = summary.index.value;
 
   let level;
-  if (summary.gap <= 0.5) level = `playing right to the ${idx} the app rates ${object}`;
-  else if (summary.gap <= 2.5) level = `a touch over the ${idx} the app rates ${object}`;
-  else level = `averaging ${summary.gap} strokes over the ${idx} the app rates ${object}`;
+  if (summary.gap <= 0.5) level = { key: `stats.player.verdict.level.right.${who}`, params: { idx } };
+  else if (summary.gap <= 2.5) level = { key: `stats.player.verdict.level.touch.${who}`, params: { idx } };
+  else level = { key: `stats.player.verdict.level.over.${who}`, params: { gap: summary.gap, idx } };
 
   const trait = traitPhrase(summary);
 
   const delta = summary.form?.delta ?? null;
   let form;
-  if (delta != null && delta <= -3) form = `on ${possessive} hottest stretch yet`;
-  else if (delta != null && delta <= -1) form = 'trending the right way';
-  else if (delta != null && delta >= 1) form = 'grinding through a rough patch';
-  else form = 'holding steady';
+  if (delta != null && delta <= -3) form = `hot.${who}`;
+  else if (delta != null && delta <= -1) form = 'up';
+  else if (delta != null && delta >= 1) form = 'down';
+  else form = 'steady';
+  const formMsg = { key: `stats.player.verdict.form.${form}` };
 
-  const head = level.charAt(0).toUpperCase() + level.slice(1);
-  return trait ? `${head}, ${trait} — and ${form}.` : `${head} — and ${form}.`;
+  return trait
+    ? {
+      key: 'stats.player.verdict.withTrait',
+      params: { level, trait: { key: `stats.player.verdict.trait.${trait}` }, form: formMsg },
+    }
+    : { key: 'stats.player.verdict.noTrait', params: { level, form: formMsg } };
 }
 
 // The single most extreme ranked cell — strength or weakness — that has a

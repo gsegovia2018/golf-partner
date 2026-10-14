@@ -2,18 +2,21 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { msgText, areaText } from './msg';
+import { useT } from '../../i18n';
 import PressableScale from '../ui/PressableScale';
 import { semantic } from '../../theme/tokens';
 import { formatConfidence, formatSample, formatPointsPerRound } from './CoachInsightRow';
 
+// Catalogue keys; render with t(GROUP_LABELS[group]).
 const GROUP_LABELS = {
-  fixFirst: 'Fix first',
-  keepDoing: 'Keep doing',
-  gettingBetter: 'Getting better',
-  gettingWorse: 'Getting worse',
-  nextGain: 'Next gain',
-  nextGains: 'Next gain',
-  watch: 'Watch',
+  fixFirst: 'stats.my.coach.group.fixFirst',
+  keepDoing: 'stats.my.coach.group.keepDoing',
+  gettingBetter: 'stats.my.coach.group.gettingBetter',
+  gettingWorse: 'stats.my.coach.group.gettingWorse',
+  nextGain: 'stats.my.coach.group.nextGain',
+  nextGains: 'stats.my.coach.group.nextGain',
+  watch: 'stats.my.coach.group.watch',
 };
 
 // The coach hero is a plain white card — advice is information, so it wears
@@ -30,8 +33,9 @@ const RED_SURFACE_GROUPS = new Set(['gettingWorse']);
 
 export default function CoachHero({ insight, onCommitFocus, focusActive = false }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const proofs = [insight?.basis, formatSample(insight?.sample), formatConfidence(insight?.confidence)].filter(Boolean);
+  const proofs = [msgText(insight?.basisMsg, insight?.basis), formatSample(insight?.sample), formatConfidence(insight?.confidence)].filter(Boolean);
   const isRedSurface = Boolean(insight && RED_SURFACE_GROUPS.has(insight.group));
   const isFixFirst = insight?.group === 'fixFirst';
   const goldOnCard = theme.isDark ? semantic.winner.dark : semantic.winner.light;
@@ -41,9 +45,9 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
   if (!insight) {
     return (
       <View style={s.card} testID="coach-hero-surface">
-        <Text style={s.kicker}>Coach</Text>
-        <Text style={s.title}>No coach insight yet</Text>
-        <Text style={s.reason}>Play more scored rounds to unlock a useful practice priority.</Text>
+        <Text style={s.kicker}>{t('stats.my.coach.name')}</Text>
+        <Text style={s.title}>{t('stats.my.coach.hero.emptyTitle')}</Text>
+        <Text style={s.reason}>{t('stats.my.coach.hero.emptyReason')}</Text>
       </View>
     );
   }
@@ -54,19 +58,19 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
         {isFixFirst ? (
           <View style={s.fixFirstBadge} testID="fix-first-badge">
             <Feather name="target" size={10} color={goldOnCard} />
-            <Text style={s.fixFirstBadgeText}>{GROUP_LABELS.fixFirst}</Text>
+            <Text style={s.fixFirstBadgeText}>{t(GROUP_LABELS.fixFirst)}</Text>
           </View>
         ) : (
-          <Text style={[s.kicker, red && s.kickerRed]}>{GROUP_LABELS[insight.group] ?? 'Coach'}</Text>
+          <Text style={[s.kicker, red && s.kickerRed]}>{t(GROUP_LABELS[insight.group] ?? 'stats.my.coach.name')}</Text>
         )}
-        <Text style={[s.area, { color: areaColor }]}>{insight.areaLabel ?? insight.area}</Text>
+        <Text style={[s.area, { color: areaColor }]}>{areaText(insight)}</Text>
       </View>
-      <Text style={[s.title, red && s.titleRed]}>{insight.title}</Text>
-      {insight.reason ? <Text style={[s.reason, red && s.reasonRed]}>{insight.reason}</Text> : null}
+      <Text style={[s.title, red && s.titleRed]}>{msgText(insight.titleMsg, insight.title)}</Text>
+      {insight.reason ? <Text style={[s.reason, red && s.reasonRed]}>{msgText(insight.reasonMsg, insight.reason)}</Text> : null}
       <View style={s.bottomRow}>
         {insight.metric ? (
           <View style={{ flexShrink: 1 }}>
-            <Text style={[s.metric, red && s.titleRed]}>{insight.metric}</Text>
+            <Text style={[s.metric, red && s.titleRed]}>{msgText(insight.metricMsg, insight.metric)}</Text>
             {Number.isFinite(insight.pointsPerRound) ? (
               <Text style={[s.pointsCaption, red && s.kickerRed]}>{formatPointsPerRound(insight.pointsPerRound)}</Text>
             ) : null}
@@ -85,11 +89,11 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
         <PressableScale
           onPress={() => onCommitFocus(insight)}
           accessibilityRole="button"
-          accessibilityLabel="Make this my focus"
+          accessibilityLabel={t('stats.my.coach.hero.makeFocus')}
           style={[s.focusBtn, red && s.focusBtnRed]}
         >
           <Feather name="target" size={14} color={red ? RED : theme.text.inverse} />
-          <Text style={[s.focusBtnText, red && s.focusBtnTextRed]}>Make this my focus</Text>
+          <Text style={[s.focusBtnText, red && s.focusBtnTextRed]}>{t('stats.my.coach.hero.makeFocus')}</Text>
         </PressableScale>
       ) : null}
     </View>
