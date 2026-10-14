@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import BottomSheet from './BottomSheet';
 import { useTheme } from '../theme/ThemeContext';
 import { scoreCellState } from '../store/officialScoring';
+import { useT } from '../i18n';
 
 /**
  * Bottom-sheet for resolving a single flagged (discrepancy) hole in an
@@ -34,6 +35,7 @@ export default function DiscrepancySheet({
   selfStrokes, markerStrokes, markerName, editableSource, onChange,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   // Resolve automatically: once the two entries match, the discrepancy is
@@ -65,7 +67,7 @@ export default function DiscrepancySheet({
           <TouchableOpacity
             style={s.stepBtn}
             onPress={() => step(strokes, -1)}
-            accessibilityLabel={`Decrease ${label} strokes`}
+            accessibilityLabel={t('scorecard.discrepancy.decrease', { label })}
           >
             <Feather name="minus" size={14} color={theme.text.primary} />
           </TouchableOpacity>
@@ -73,7 +75,7 @@ export default function DiscrepancySheet({
           <TouchableOpacity
             style={s.stepBtn}
             onPress={() => step(strokes, 1)}
-            accessibilityLabel={`Increase ${label} strokes`}
+            accessibilityLabel={t('scorecard.discrepancy.increase', { label })}
           >
             <Feather name="plus" size={14} color={theme.text.primary} />
           </TouchableOpacity>
@@ -82,7 +84,7 @@ export default function DiscrepancySheet({
         <Text style={[s.entryValue, s.entryValueReadOnly]}>{value}</Text>
       )}
       <Text style={s.entryHint}>
-        {isEditable ? 'Your entry' : 'Read only'}
+        {isEditable ? t('scorecard.discrepancy.yourEntry') : t('scorecard.discrepancy.readOnly')}
       </Text>
     </View>
   );
@@ -92,21 +94,21 @@ export default function DiscrepancySheet({
       <View style={s.handle} />
           <View style={s.titleRow}>
             <Feather name="alert-circle" size={16} color={theme.destructive} />
-            <Text style={s.title}>Resolve hole {hole}</Text>
+            <Text style={s.title}>{t('scorecard.discrepancy.title', { hole })}</Text>
           </View>
           <Text style={s.subtitle}>
-            {subjectName ? `${subjectName}'s score` : 'Score'} doesn't match.
+            {subjectName ? t('scorecard.discrepancy.subtitleNamed', { name: subjectName }) : t('scorecard.discrepancy.subtitle')}
           </Text>
 
           <View style={s.entryRow}>
             {renderEntry(
-              subjectName || 'Player',
+              subjectName || t('scorecard.discrepancy.player'),
               selfValue,
               selfStrokes,
               editingSelf,
             )}
             {renderEntry(
-              markerName ? `${markerName} (marker)` : 'Marker',
+              markerName ? t('scorecard.discrepancy.markerNamed', { name: markerName }) : t('scorecard.discrepancy.marker'),
               markerValue,
               markerStrokes,
               editingMarker,
@@ -114,7 +116,7 @@ export default function DiscrepancySheet({
           </View>
 
           <Text style={s.resolveHint}>
-            Resolves automatically when both entries match.
+            {t('scorecard.discrepancy.hint')}
           </Text>
     </BottomSheet>
   );

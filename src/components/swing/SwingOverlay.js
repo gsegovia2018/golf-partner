@@ -108,8 +108,8 @@ export default function SwingOverlay({
             <>
               <Line x1={X(planes.b[0])} y1={Y(planes.b[1])} x2={X(planes.e1[0])} y2={Y(planes.e1[1])} stroke={ACCENT} strokeWidth={1.5} />
               <Line x1={X(planes.b[0])} y1={Y(planes.b[1])} x2={X(planes.e2[0])} y2={Y(planes.e2[1])} stroke={SOFT} strokeWidth={1.5} strokeDasharray="5 4" />
-              {reference.shaftPlaneDeg != null ? <PlaneLabel p={planes.e1} X={X} Y={Y} w={r.w} text={`Shaft plane ${Math.round(reference.shaftPlaneDeg)}°`} color={ACCENT} /> : null}
-              {reference.shoulderPlaneDeg != null ? <PlaneLabel p={planes.e2} X={X} Y={Y} w={r.w} text={`Shoulder plane ${Math.round(reference.shoulderPlaneDeg)}°`} color={SOFT} /> : null}
+              {reference.shaftPlaneDeg != null ? <PlaneLabel p={planes.e1} X={X} Y={Y} w={r.w} text={SWING_STRINGS.overlay.shaftPlane(reference.shaftPlaneDeg)} color={ACCENT} /> : null}
+              {reference.shoulderPlaneDeg != null ? <PlaneLabel p={planes.e2} X={X} Y={Y} w={r.w} text={SWING_STRINGS.overlay.shoulderPlane(reference.shoulderPlaneDeg)} color={SOFT} /> : null}
             </>
           ) : null}
 

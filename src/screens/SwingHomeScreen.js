@@ -21,10 +21,11 @@ import { defaultHeightCm } from '../swing/scale';
 import { normClub } from '../swing/checks';
 import { passDone, MARK_TOTAL } from '../swing/markPass';
 import { SWING_STRINGS } from '../swing/strings';
+import { useT } from '../i18n';
+import { formatDate, formatNumber } from '../i18n/format';
 
 const T = SWING_STRINGS.home;
 const P = SWING_STRINGS.profileSheet;
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 /** Swings (already newest first) grouped by month: [{ key, label, swings }]. */
 export function groupByMonth(swings) {
@@ -34,7 +35,8 @@ export function groupByMonth(swings) {
     const key = `${d.getFullYear()}-${d.getMonth()}`;
     let g = groups[groups.length - 1];
     if (!g || g.key !== key) {
-      g = { key, label: `${MONTHS[d.getMonth()]}${d.getFullYear() === new Date().getFullYear() ? '' : ` ${d.getFullYear()}`}`, swings: [] };
+      const label = formatDate(d, d.getFullYear() === new Date().getFullYear() ? 'monthName' : 'month');
+      g = { key, label: label.charAt(0).toUpperCase() + label.slice(1), swings: [] };
       groups.push(g);
     }
     g.swings.push(sw);
@@ -43,7 +45,7 @@ export function groupByMonth(swings) {
 }
 
 export function formatBytes(n) {
-  if (n >= 1024 * 1024 * 1024) return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  if (n >= 1024 * 1024 * 1024) return `${formatNumber(n / 1024 / 1024 / 1024, { decimals: 1 })} GB`;
   return `${Math.max(1, Math.round(n / 1024 / 1024))} MB`;
 }
 
@@ -51,6 +53,7 @@ export function formatBytes(n) {
 const fpsState = (fps) => (fps.approximate || fps.effective < 120 ? 'red' : fps.effective >= 240 ? 'green' : 'yellow');
 
 export default function SwingHomeScreen({ navigation }) {
+  useT(); // the swing copy reads the language as it renders: re-render when it changes
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const tone = useMemo(() => ({
@@ -162,7 +165,7 @@ export default function SwingHomeScreen({ navigation }) {
     const c = marking ? null : sw.counts;
     const clubName = SWING_STRINGS.club[normClub(sw.club)];
     return (
-      <SwipeToDelete key={sw.id} enabled={!selecting} onDelete={() => confirmDelete(sw)} borderRadius={0} accessibilityLabel={`Delete ${sw.name}`}>
+      <SwipeToDelete key={sw.id} enabled={!selecting} onDelete={() => confirmDelete(sw)} borderRadius={0} accessibilityLabel={T.deleteA11y(sw.name)}>
         <PressableScale
           style={s.row}
           onPress={() => onRowPress(sw)}
@@ -200,7 +203,7 @@ export default function SwingHomeScreen({ navigation }) {
               ) : null}
               {sw.fps ? (
                 <Text style={[s.fpsTag, { color: tone[fpsState(sw.fps)] }]}>
-                  {`${Math.round(sw.fps.effective)} FPS${sw.fps.approximate ? ' · APPROX' : ''}`}
+                  {T.fpsTag(Math.round(sw.fps.effective), sw.fps.approximate)}
                 </Text>
               ) : null}
             </View>

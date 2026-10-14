@@ -178,7 +178,7 @@ function FlagFinderContent({ courseName, holeNumber, onClose }) {
           <View style={s.centerWrap}>
             <Text style={s.chevronText}>
               {overlay.deltaDeg < 0
-                ? `◀ Flag · ${Math.round(Math.abs(overlay.deltaDeg))}° to your left`
+                ? tl('scorecard.flagFinder.left', { deg: formatNumber(Math.round(Math.abs(overlay.deltaDeg))) })
                 : tl('map.flag.right', { deg: formatNumber(Math.round(overlay.deltaDeg)) })}
             </Text>
           </View>

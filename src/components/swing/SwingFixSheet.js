@@ -10,7 +10,7 @@ import SwingOverlay from './SwingOverlay';
 import { focusTone } from './swingTone';
 import { useTheme } from '../../theme/ThemeContext';
 import { SWING_STRINGS } from '../../swing/strings';
-import { PROGRESSION } from '../../swing/drills';
+import { progression } from '../../swing/drills';
 import { highlightFor } from '../../swing/highlights';
 import { homeOf, frameOfKey } from '../../swing/checkpointChecks';
 import { CHECKPOINT_KEYS } from '../../swing/phases';
@@ -69,7 +69,7 @@ export default function SwingFixSheet({
               highlight={highlight}
               focus
               tone={focusTone(check.status)}
-              label={`${cpName} still, frame ${frame}`}
+              label={SWING_STRINGS.results.stillA11y(cpName, frame)}
             />
           </View>
           <Text style={s.saw}>{F.saw(check.text)}</Text>
@@ -91,7 +91,7 @@ export default function SwingFixSheet({
               <Text style={s.drillTitle}>{F.drill(fix.drill.title)}</Text>
               <Text style={s.goal}>{F.goal(fix.drill.passTarget)}</Text>
               <Text style={s.body}>{fix.drill.instruction}</Text>
-              <Text style={s.progress}>{PROGRESSION}</Text>
+              <Text style={s.progress}>{progression()}</Text>
             </View>
           ) : null}
           <View style={s.btnRow}>

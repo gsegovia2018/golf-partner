@@ -39,9 +39,10 @@ import {
   checksAt, worstByCheckpoint, unplacedCheckpoint, CHECK_KEY, homeOf, frameOfKey,
 } from '../swing/checkpointChecks';
 import { CHECKPOINT_KEYS } from '../swing/phases';
-import { drillsForMain, PROGRESSION } from '../swing/drills';
+import { drillsForMain, progression } from '../swing/drills';
 import { fixesFor, fixCopy, drillForCheck } from '../swing/fixes';
 import { SWING_STRINGS } from '../swing/strings';
+import { useT } from '../i18n';
 
 const T = SWING_STRINGS.results;
 const H = SWING_STRINGS.home; // the delete confirm is shared with the swings list
@@ -68,7 +69,7 @@ function Hero({
         </>
       )}
       <View style={s.chips}>
-        {loading ? <View style={s.chip}><Text style={s.chipText}>reading…</Text></View> : (
+        {loading ? <View style={s.chip}><Text style={s.chipText}>{T.reading}</Text></View> : (
           <>
             <View style={s.chip}><Text style={s.chipText}>{T.good(c.green)}</Text></View>
             <View style={s.chip}><Text style={s.chipText}>{T.watch(c.yellow)}</Text></View>
@@ -371,7 +372,7 @@ export function SwingResultsView({
                 highlight={highlight}
                 focus={focusOn}
                 tone={focusTone(selected?.status)}
-                label={`${SWING_STRINGS.checkpoint[cp]} still, frame ${frame}`}
+                label={T.stillA11y(SWING_STRINGS.checkpoint[cp], frame)}
               />
             </View>
 
@@ -421,7 +422,7 @@ export function SwingResultsView({
                     <Text style={s.drillTitle}>{d.title}</Text>
                     <Text style={s.drillBody}>{d.instruction}</Text>
                     <Text style={s.drillPass}>{T.passTarget(d.passTarget)}</Text>
-                    <Text style={s.drillProgress}>{PROGRESSION}</Text>
+                    <Text style={s.drillProgress}>{progression()}</Text>
                   </View>
                 ))}
                 {drills.length > 2 ? (
@@ -521,7 +522,7 @@ export function SwingResultsView({
               <Feather name="type" size={18} color={theme.text.primary} />
               <Text style={s.menuText}>{T.rename}</Text>
             </PressableScale>
-            <PressableScale style={s.menuRow} onPress={() => { setSheet(null); openEdit(cp); }} accessibilityRole="button" accessibilityLabel={`${T.editMarks} (menu)`}>
+            <PressableScale style={s.menuRow} onPress={() => { setSheet(null); openEdit(cp); }} accessibilityRole="button" accessibilityLabel={T.editMarksMenu(T.editMarks)}>
               <Feather name="edit-2" size={18} color={theme.text.primary} />
               <Text style={s.menuText}>{T.editMarks}</Text>
             </PressableScale>
@@ -546,6 +547,7 @@ export function SwingResultsView({
 // --- The screen (store, analysis run, navigation) -----------------------------------------------
 
 export default function SwingResultsScreen({ navigation, route }) {
+  useT(); // the swing copy reads the language as it renders: re-render when it changes
   const swingId = route.params?.swingId;
   useSyncExternalStore(subscribeSwings, getSwingsVersion);
   const row = getSwing(swingId);
