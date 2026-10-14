@@ -11,6 +11,7 @@ import {
 import { isRoundPlayed, isFullLengthRound, isRoundFullyScoredBy } from './scoring';
 import { parseHandicapIndex } from '../lib/handicap';
 import { findPlayerForIdentity } from './historyModel';
+import { t } from '../i18n';
 
 // One row per auth.users.id — created by a trigger on signup, edited from
 // ProfileScreen. `username` is a unique lowercase handle; `display_name`
@@ -67,7 +68,7 @@ export async function isUsernameAvailable(username) {
 // nothing else, so it used to wipe display_name / handicap / avatar_color.
 export async function upsertProfile(fields) {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not signed in');
+  if (!user) throw new Error(t('shared.error.notSignedIn'));
 
   const row = { user_id: user.id, updated_at: new Date().toISOString() };
   if (fields.displayName !== undefined) {
@@ -126,7 +127,7 @@ export async function upsertProfile(fields) {
 // 256px first so we're not shipping 4 MB originals around.
 export async function uploadAvatar(localUri) {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not signed in');
+  if (!user) throw new Error(t('shared.error.notSignedIn'));
 
   const resized = await ImageManipulator.manipulateAsync(
     localUri,

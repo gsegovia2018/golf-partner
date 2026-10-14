@@ -5,6 +5,7 @@ import {
   roundPairLeaderboard, rosterCap,
 } from '../tournamentStore';
 import { mutate } from '../mutate';
+import { setLanguagePref } from '../../i18n';
 
 // jest.mock calls are hoisted above these imports by babel-jest, so the mock
 // is in place before ../tournamentStore (and the supabase client it imports)
@@ -658,5 +659,22 @@ describe('roundPairLeaderboard', () => {
     const lb = roundPairLeaderboard(round, players);
     expect(lb[0].members.map((m) => m.player.id).sort()).toEqual(['a', 'b']);
     expect(lb[0].combinedPoints).toBeGreaterThan(lb[1].combinedPoints);
+  });
+});
+
+describe('formatRoundLabel in Spanish', () => {
+  beforeEach(async () => { await setLanguagePref('es'); });
+  afterEach(async () => { await setLanguagePref('en'); });
+
+  test('numbered rounds are "Vuelta N", with the course when known', () => {
+    expect(formatRoundLabel({ kind: 'tournament', courseName: 'Santa Clara', roundIndex: 2 }))
+      .toBe('Vuelta 3 · Santa Clara');
+    expect(formatRoundLabel({ kind: 'tournament', roundIndex: 0 })).toBe('Vuelta 1');
+  });
+
+  test('a game without a course falls back to "Vuelta"; a course name is untouched', () => {
+    expect(formatRoundLabel({ kind: 'game', roundIndex: 0 })).toBe('Vuelta');
+    expect(formatRoundLabel({ kind: 'game', courseName: 'Pebble Beach', roundIndex: 0 }))
+      .toBe('Pebble Beach');
   });
 });

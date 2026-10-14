@@ -12,7 +12,9 @@ import marker from './es/marker';
 import onboarding from './es/onboarding';
 import profile from './es/profile';
 import scorecard from './es/scorecard';
+import scoring from './es/scoring';
 import settings from './es/settings';
+import shared from './es/shared';
 import tour from './es/tour';
 
 export const AREAS = {
@@ -27,7 +29,9 @@ export const AREAS = {
   onboarding,
   profile,
   scorecard,
+  scoring,
   settings,
+  shared,
   tour,
 };
 
@@ -43,6 +47,8 @@ export default {
   ...onboarding,
   ...profile,
   ...scorecard,
+  ...scoring,
   ...settings,
+  ...shared,
   ...tour,
 };

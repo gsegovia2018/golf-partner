@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
+import { pointsText, unitText } from '../../lib/pointsText';
 
 // Round leaderboard for the summary page — same quiet card language as the
 // recap panel (radius-10 card, hairline border), ranked by Stableford
@@ -11,6 +13,7 @@ export default function RoundLeaderboard({
   entries, unit = 'pts', round, live = false,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const rows = Array.isArray(entries) ? entries : [];
   if (rows.length < 2) return null;
@@ -24,7 +27,7 @@ export default function RoundLeaderboard({
 
   return (
     <View style={s.card}>
-      <Text style={s.title}>LEADERBOARD</Text>
+      <Text style={s.title}>{t('shared.leaderboard.title')}</Text>
       {rows.map((entry, i) => {
         const isLeader = i === 0 && entry.points > 0;
         const played = playedFor(entry.player.id);
@@ -50,18 +53,18 @@ export default function RoundLeaderboard({
                   {entry.player.name}
                 </Text>
                 {onHole != null ? (
-                  <View style={s.holeBadge} accessibilityLabel={`On hole ${onHole}`}>
-                    <Text style={s.holeBadgeText}>HOLE {onHole}</Text>
+                  <View style={s.holeBadge} accessibilityLabel={t('shared.onHole', { hole: onHole })}>
+                    <Text style={s.holeBadgeText}>{t('shared.holeBadge', { hole: onHole })}</Text>
                   </View>
                 ) : null}
               </View>
-              {Number.isFinite(hcp) ? <Text style={s.rowSub}>HCP {hcp}</Text> : null}
+              {Number.isFinite(hcp) ? <Text style={s.rowSub}>{t('shared.hcp', { value: formatNumber(hcp) })}</Text> : null}
             </View>
             <Text style={[s.points, isLeader && s.pointsLead]}>
-              {entry.points} {unit}
+              {pointsText(entry.points, unit)}
             </Text>
             {entry.strokes != null ? (
-              <Text style={s.strokes}>{entry.strokes || '-'} str</Text>
+              <Text style={s.strokes}>{entry.strokes || '-'} {t('shared.unit.str')}</Text>
             ) : null}
           </View>
         );

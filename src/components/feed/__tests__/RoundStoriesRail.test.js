@@ -3,6 +3,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import RoundStoriesRail from '../RoundStoriesRail';
+import { setLanguagePref } from '../../../i18n';
 
 const stories = [
   {
@@ -138,5 +139,18 @@ describe('RoundStoriesRail', () => {
     fireEvent.press(getByLabelText('Open La Moraleja story, 7 photos'));
 
     expect(onPressStory).toHaveBeenCalledWith(stories[0]);
+  });
+});
+
+describe('RoundStoriesRail in Spanish', () => {
+  beforeEach(async () => { await setLanguagePref('es'); });
+  afterEach(async () => { await setLanguagePref('en'); });
+
+  test('a viewed story reads "vista" and the accessibility label is Spanish', async () => {
+    const { getByText, getByLabelText } = render(wrap(
+      <RoundStoriesRail stories={stories} onPressStory={() => {}} />,
+    ));
+    await waitFor(() => expect(getByText('vista')).toBeTruthy());
+    expect(getByLabelText('Abrir la historia de Santander, vista')).toBeTruthy();
   });
 });

@@ -5,30 +5,40 @@
 // logged shots yet; real recommendations come from the player's own data
 // (see shotStats.js).
 
+import { t } from '../i18n';
+
 // Order is longest → shortest, putter last. `nominal` is metres of carry.
-export const CLUB_CATALOG = [
-  { key: 'driver', label: 'Driver', nominal: 230 },
-  { key: '3w', label: '3 Wood', nominal: 210 },
-  { key: '5w', label: '5 Wood', nominal: 195 },
-  { key: '7w', label: '7 Wood', nominal: 180 },
-  { key: '2h', label: '2 Hybrid', nominal: 195 },
-  { key: '3h', label: '3 Hybrid', nominal: 185 },
-  { key: '4h', label: '4 Hybrid', nominal: 175 },
-  { key: '5h', label: '5 Hybrid', nominal: 165 },
-  { key: '2i', label: '2 Iron', nominal: 190 },
-  { key: '3i', label: '3 Iron', nominal: 180 },
-  { key: '4i', label: '4 Iron', nominal: 170 },
-  { key: '5i', label: '5 Iron', nominal: 160 },
-  { key: '6i', label: '6 Iron', nominal: 150 },
-  { key: '7i', label: '7 Iron', nominal: 140 },
-  { key: '8i', label: '8 Iron', nominal: 130 },
-  { key: '9i', label: '9 Iron', nominal: 118 },
-  { key: 'pw', label: 'Pitching Wedge', nominal: 105 },
-  { key: 'gw', label: 'Gap Wedge', nominal: 92 },
-  { key: 'sw', label: 'Sand Wedge', nominal: 80 },
-  { key: 'lw', label: 'Lob Wedge', nominal: 65 },
-  { key: 'putter', label: 'Putter', nominal: 0 },
+// `label` is a getter: club names resolve in the active language each time
+// they are read (key: shared.club.<key>).
+const CLUBS = [
+  { key: 'driver', nominal: 230 },
+  { key: '3w', nominal: 210 },
+  { key: '5w', nominal: 195 },
+  { key: '7w', nominal: 180 },
+  { key: '2h', nominal: 195 },
+  { key: '3h', nominal: 185 },
+  { key: '4h', nominal: 175 },
+  { key: '5h', nominal: 165 },
+  { key: '2i', nominal: 190 },
+  { key: '3i', nominal: 180 },
+  { key: '4i', nominal: 170 },
+  { key: '5i', nominal: 160 },
+  { key: '6i', nominal: 150 },
+  { key: '7i', nominal: 140 },
+  { key: '8i', nominal: 130 },
+  { key: '9i', nominal: 118 },
+  { key: 'pw', nominal: 105 },
+  { key: 'gw', nominal: 92 },
+  { key: 'sw', nominal: 80 },
+  { key: 'lw', nominal: 65 },
+  { key: 'putter', nominal: 0 },
 ];
+
+export const CLUB_CATALOG = CLUBS.map((c) => ({
+  key: c.key,
+  nominal: c.nominal,
+  get label() { return t(`shared.club.${c.key}`); },
+}));
 
 const BY_KEY = new Map(CLUB_CATALOG.map((c) => [c.key, c]));
 const ORDER = new Map(CLUB_CATALOG.map((c, i) => [c.key, i]));
@@ -40,7 +50,7 @@ export const DEFAULT_BAG = [
   'driver', '3w', '5w', '4h', '5i', '6i', '7i', '8i', '9i', 'pw', 'gw', 'sw', 'lw', 'putter',
 ];
 
-export function clubLabel(key) { return BY_KEY.get(key)?.label ?? key; }
+export function clubLabel(key) { return BY_KEY.has(key) ? t(`shared.club.${key}`) : key; }
 export function clubNominal(key) { return BY_KEY.get(key)?.nominal ?? null; }
 export function isClubKey(key) { return BY_KEY.has(key); }
 

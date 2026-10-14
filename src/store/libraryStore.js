@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { listFriends, getCachedFriends } from './friendStore';
 import { parseHandicapIndex } from '../lib/handicap';
+import { t } from '../i18n';
 
 // ── Players ──────────────────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ export async function upsertPlayer({ id, name, handicap, gender }) {
   // An empty field (reason 'required') keeps the existing "no handicap" ->
   // 0 default, since that's a deliberate blank, not a typo.
   if (!parsed.ok && parsed.reason === 'invalid') {
-    throw new Error('Handicap must be a number between 0 and 54, with up to one decimal place.');
+    throw new Error(t('shared.error.handicapRange'));
   }
   const row = { name, handicap: parsed.ok ? parsed.value : 0 };
   if (gender !== undefined) row.gender = gender === 'female' ? 'female' : 'male';

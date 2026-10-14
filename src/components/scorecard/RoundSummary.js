@@ -10,6 +10,7 @@ import { semantic } from '../../theme/tokens';
 import { makeScorecardStyles } from './styles';
 import { teamColor } from './teamModel';
 import { summaryState } from './scoreModel';
+import { tr, useT } from '../../i18n';
 
 export const RoundSummary = React.memo(function RoundSummary({
   mode,
@@ -21,6 +22,7 @@ export const RoundSummary = React.memo(function RoundSummary({
   meId,
 }) {
   const { theme } = useTheme();
+  useT(); // re-render when the language changes; text is rendered with tr()
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   // Soft gold washes out on the light theme's white summary card.
   const gold = theme.isDark ? semantic.winner.soft : semantic.winner.light;
@@ -31,7 +33,7 @@ export const RoundSummary = React.memo(function RoundSummary({
 
   return (
     <View style={s.summaryCard}>
-      <Text style={s.summaryEyebrow}>{state.eyebrow}</Text>
+      <Text style={s.summaryEyebrow}>{tr(state.eyebrow)}</Text>
 
       {state.variant === 'pairs' && (
         <View>
@@ -110,7 +112,7 @@ export const RoundSummary = React.memo(function RoundSummary({
 
       {state.status != null && (
         <Text style={[s.summaryStatus, state.decided && s.summaryStatusWinner]}>
-          {state.status}
+          {tr(state.status)}
         </Text>
       )}
     </View>

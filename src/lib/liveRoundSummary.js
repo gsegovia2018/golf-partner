@@ -1,4 +1,5 @@
 import { isRoundInProgress, roundLeaderboard } from '../store/tournamentStore';
+import { t } from '../i18n';
 
 // Summarize the tournament's live round for the Home "jump back in" hero
 // card, or return null when there is nothing live to show.
@@ -34,7 +35,7 @@ export function liveRoundSummary(tournament) {
 
   return {
     name: tournament.name || 'Golf',
-    roundLabel: `Round ${Number(tournament.currentRound) + 1}`,
+    roundLabel: t('shared.round.numbered', { n: Number(tournament.currentRound) + 1 }),
     courseName: round.courseName || round.course?.name || '',
     myPoints,
     thru,

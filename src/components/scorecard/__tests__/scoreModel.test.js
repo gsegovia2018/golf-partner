@@ -1,3 +1,4 @@
+import { tr, setLanguagePref } from '../../../i18n';
 import { holePoints, holeEdgeShots, roundTotals, summaryState } from '../scoreModel';
 
 const holes = [
@@ -146,7 +147,7 @@ describe('summaryState', () => {
       settings: {}, currentHole: 2, meId: 'b',
     });
     expect(s.variant).toBe('players');
-    expect(s.eyebrow).toBe('MATCH PLAY');
+    expect(s.eyebrow).toEqual({ key: 'scoring.summary.eyebrow.matchPlay' });
     expect(s.chips).toHaveLength(2);
     // me-first: Ben then Ana.
     expect(s.chips.map((c) => c.id)).toEqual(['b', 'a']);
@@ -180,7 +181,7 @@ describe('summaryState', () => {
       currentHole: 1, meId: 'p1',
     });
     expect(s.variant).toBe('pairs');
-    expect(s.eyebrow).toBe('BEST BALL');
+    expect(s.eyebrow).toEqual({ key: 'scoring.summary.eyebrow.bestBall' });
     expect(s.pairs).toHaveLength(2);
     expect(s.pairs[0].name).toBe('Ann & Bob');
     expect(s.pairs[1].name).toBe('Cam & Dan');
@@ -244,12 +245,13 @@ describe('summaryState', () => {
       scores, settings: {}, currentHole: 2, meId: 'p1',
     });
     expect(s.variant).toBe('players');
-    expect(s.eyebrow).toBe('STABLEFORD');
+    expect(s.eyebrow).toEqual({ key: 'scoring.summary.eyebrow.stableford' });
     expect(s.chips).toHaveLength(4);
     // me-first: p1 first
     expect(s.chips[0].id).toBe('p1');
     // pair1 combined = 10, pair2 combined = 6 -> lead 4, 1 hole to play
-    expect(s.status).toBe('Ana & Ben lead by 4 · 1 to play');
+    expect(s.status).toEqual({ key: 'scoring.summary.teamLead', params: { name: 'Ana & Ben', lead: 4, count: 1 } });
+    expect(tr(s.status)).toBe('Ana & Ben lead by 4 · 1 to play');
     // pair1 players are winners when decided; decided = false here (hole 3 not scored)
     expect(s.decided).toBe(false);
     // chip point values match individual totals
@@ -277,7 +279,8 @@ describe('summaryState', () => {
       scores, settings: {}, currentHole: 1, meId: 'p3',
     });
     expect(s.decided).toBe(true);
-    expect(s.status).toBe('Ana & Ben have won');
+    expect(s.status).toEqual({ key: 'scoring.summary.wonPair', params: { name: 'Ana & Ben' } });
+    expect(tr(s.status)).toBe('Ana & Ben have won');
     expect(s.chips.find((c) => c.id === 'p1').isWinner).toBe(true);
     expect(s.chips.find((c) => c.id === 'p2').isWinner).toBe(true);
     expect(s.chips.find((c) => c.id === 'p3').isWinner).toBe(false);
@@ -308,7 +311,7 @@ describe('summaryState', () => {
       settings: {}, currentHole: 2, meId: 'b',
     });
     expect(s.variant).toBe('players');
-    expect(s.eyebrow).toBe('SINDICATO');
+    expect(s.eyebrow).toEqual({ key: 'scoring.summary.eyebrow.sindicato' });
     expect(s.chips.map((c) => c.id)).toEqual(['b', 'a', 'c']);
     expect(s.chips.find((c) => c.id === 'a').points).toBe(8);
     expect(s.chips.find((c) => c.id === 'a').isLeader).toBe(true);
@@ -344,12 +347,13 @@ describe('pairsmatchplay', () => {
       settings: { scoringMode: 'pairsmatchplay' }, currentHole: 1, meId: 'p1',
     });
     expect(s.variant).toBe('pairs');
-    expect(s.eyebrow).toBe('PAIRS MATCH PLAY');
+    expect(s.eyebrow).toEqual({ key: 'scoring.summary.eyebrow.pairsMatchPlay' });
     expect(s.pairs[0].roundPts).toBe(1.5);
     expect(s.pairs[1].roundPts).toBe(0.5);
     expect(s.pairs[0].name).toBe('Ann & Bob');
     expect(s.decided).toBe(false);
-    expect(s.status).toMatch(/lead/i);
+    expect(s.status.key).toBe('scoring.summary.teamLead');
+    expect(tr(s.status)).toMatch(/lead/i);
   });
 });
 
@@ -372,7 +376,7 @@ describe('scramble', () => {
       settings: { scoringMode: 'scramblepairs' }, currentHole: 1, meId: 'p1',
     });
     expect(s.variant).toBe('pairs');
-    expect(s.eyebrow).toBe('SCRAMBLE');
+    expect(s.eyebrow).toEqual({ key: 'scoring.summary.eyebrow.scramble' });
     expect(s.pairs[0].roundPts).toBe(3); // birdie
     expect(s.pairs[1].roundPts).toBe(2); // par
   });
@@ -389,7 +393,7 @@ describe('scramble', () => {
       settings: { scoringMode: 'scramble4' }, currentHole: 1, meId: 'p1',
     });
     expect(s.variant).toBe('solo');
-    expect(s.eyebrow).toBe('TEAM SCRAMBLE');
+    expect(s.eyebrow).toEqual({ key: 'scoring.summary.eyebrow.teamScramble' });
     expect(s.solo.pts).toBe(3);
     expect(s.solo.str).toBe(3);
     expect(s.solo.vsParLabel).toBe('-1');
@@ -447,5 +451,52 @@ describe('holeEdgeShots', () => {
 
   test('empty roster yields no edge', () => {
     expect(holeEdgeShots({ players: [], handicaps: {}, strokeIndex: 5 })).toEqual([]);
+  });
+});
+
+describe('summaryState descriptors in Spanish', () => {
+  beforeEach(async () => { await setLanguagePref('es'); });
+  afterEach(async () => { await setLanguagePref('en'); });
+
+  test('every status shape renders in Spanish with its details', () => {
+    expect(tr({ key: 'scoring.summary.eyebrow.roundTotals' })).toBe('TOTALES DE LA VUELTA');
+    expect(tr({ key: 'scoring.summary.eyebrow.matchPlay' })).toBe('MATCH PLAY');
+    expect(tr({ key: 'scoring.summary.teamLead', params: { name: 'Ana & Ben', lead: 4, count: 1 } }))
+      .toBe('Ventaja de 4 para Ana & Ben · falta 1');
+    expect(tr({ key: 'scoring.summary.teamLead', params: { name: 'Ana & Ben', lead: 4, count: 3 } }))
+      .toBe('Ventaja de 4 para Ana & Ben · faltan 3');
+    expect(tr({ key: 'scoring.summary.playerLeadDone', params: { name: 'Ana', lead: 2 } }))
+      .toBe('Ventaja de 2 para Ana');
+    expect(tr({ key: 'scoring.summary.allSquare', params: { count: 5 } })).toBe('Igualados · faltan 5');
+    expect(tr({ key: 'scoring.summary.allLevel' })).toBe('Empate');
+    expect(tr({ key: 'scoring.summary.matchWonSolo', params: { name: 'Ana' } })).toBe('Ana gana el partido');
+    expect(tr({ key: 'scoring.summary.roundWon', params: { name: 'Ana & Ben' } })).toBe('Vuelta para Ana & Ben');
+    expect(tr({ key: 'scoring.summary.finishedOn', params: { name: 'Equipo', points: 41 } }))
+      .toBe('Equipo terminó con 41 ptos');
+  });
+
+  test('a real summary renders in Spanish', () => {
+    const solo = summaryState({
+      mode: 'stableford',
+      round: { holes, playerHandicaps: handicaps },
+      players: [players[0]],
+      scores: { a: { 1: 4 } },
+      settings: {},
+      currentHole: 1,
+      meId: 'a',
+    });
+    expect(tr(solo.eyebrow)).toBe('TOTALES DE LA VUELTA');
+
+    const duel = summaryState({
+      mode: 'matchplay',
+      round: { holes, playerHandicaps: handicaps },
+      players,
+      scores: { a: { 1: 3 }, b: { 1: 5 } },
+      settings: {},
+      currentHole: 1,
+      meId: 'a',
+    });
+    expect(tr(duel.eyebrow)).toBe('MATCH PLAY');
+    expect(tr(duel.status)).toMatch(/^Ventaja de 1 para Ana · falta/);
   });
 });

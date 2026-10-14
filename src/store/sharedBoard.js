@@ -47,6 +47,7 @@ import {
   holeCountOf,
 } from './scoring';
 import { supabase } from '../lib/supabase';
+import { t } from '../i18n';
 
 // How many holes, counting from hole 1, are fully entered for every scoring
 // unit (each player, or — for scramble modes — each team, keyed by captain
@@ -309,8 +310,7 @@ function publicUrl(path) {
 // formatting, not scoring math, so restating it here doesn't fork anything
 // that matters.
 function mediaCountLabel(count, hasVideo) {
-  if (count === 1) return hasVideo ? '1 memory' : '1 photo';
-  return hasVideo ? `${count} memories` : `${count} photos`;
+  return t(hasVideo ? 'shared.media.memories' : 'shared.media.photos', { count });
 }
 
 function mediaRowToItem(row) {

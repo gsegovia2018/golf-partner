@@ -2,6 +2,7 @@ import { tournamentLeaderboardResolved } from './tournamentStore';
 import { roundTotals, roundScoringMode, isScrambleMode } from './scoring';
 import { assignPlacements, comparatorForBoardMode } from './leaderboardPlacement';
 import { tournamentFinalizedAt } from './finishStamp';
+import { t, formatDate, formatOrdinal } from '../i18n';
 
 // Pure presentation models for the History tab. Everything the screen
 // renders per row is computed here so it stays unit-testable without UI.
@@ -36,14 +37,9 @@ export function findPlayerForIdentity(players, { userId, displayName } = {}) {
   return null;
 }
 
+// "2nd" / "2.º". Language comes from the i18n layer when it is called.
 export function placeLabel(place) {
-  const mod100 = place % 100;
-  if (mod100 >= 11 && mod100 <= 13) return `${place}th`;
-  const mod10 = place % 10;
-  if (mod10 === 1) return `${place}st`;
-  if (mod10 === 2) return `${place}nd`;
-  if (mod10 === 3) return `${place}rd`;
-  return `${place}th`;
+  return formatOrdinal(place);
 }
 
 // Finalization instant (shared with the feed, see finishStamp.js) >
@@ -61,7 +57,7 @@ function gameDateBox(when) {
   const d = new Date(when);
   return {
     top: String(d.getDate()),
-    bottom: d.toLocaleDateString('en-GB', { month: 'short' }).toUpperCase(),
+    bottom: formatDate(d, 'monthShort').toUpperCase(),
   };
 }
 
@@ -71,7 +67,7 @@ function tournamentSubtitle(tournament) {
   )];
   if (names.length === 0) return '';
   if (names.length === 1) return names[0];
-  return `${names.length} courses`;
+  return t('shared.history.courses', { count: names.length });
 }
 
 function gameResult(tournament, me) {
@@ -138,7 +134,7 @@ export function historyEntryModel(tournament, identity = {}) {
     return {
       ...base,
       dateBox: gameDateBox(when),
-      subtitle: rounds[0]?.courseName ?? 'Single round',
+      subtitle: rounds[0]?.courseName ?? t('shared.history.singleRound'),
       result: gameResult(tournament, me),
       champion: null,
       myPlacement: null,
@@ -162,7 +158,7 @@ export function historyEntryModel(tournament, identity = {}) {
     ...base,
     dateBox: {
       top: String(rounds.length),
-      bottom: rounds.length === 1 ? 'ROUND' : 'ROUNDS',
+      bottom: t('shared.history.roundsBox', { count: rounds.length }),
     },
     subtitle: tournamentSubtitle(tournament),
     result,
@@ -183,7 +179,7 @@ export function buildHistorySections(tournaments, identity = {}) {
     if (!current || current.key !== key) {
       current = {
         key,
-        label: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
+        label: formatDate(d, 'month'),
         items: [],
       };
       sections.push(current);

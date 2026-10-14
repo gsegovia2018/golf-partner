@@ -2,6 +2,7 @@ import React from 'react';
 import { render, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import { ShareableRoundCard, roundSummaryToText } from '../ShareableCard';
+import { setLanguagePref } from '../../i18n';
 
 // react-native-view-shot ships untransformed ESM (its main entry uses raw
 // `import`/`export`, and it isn't in jest.config.js's transformIgnorePatterns
@@ -89,5 +90,21 @@ describe('ShareableRoundCard', () => {
     ));
     await flush();
     expect(getByText('No winner yet')).toBeTruthy();
+  });
+});
+
+describe('roundSummaryToText in Spanish', () => {
+  beforeEach(async () => { await setLanguagePref('es'); });
+  afterEach(async () => { await setLanguagePref('en'); });
+
+  test('title, units and the fallback title are Spanish', () => {
+    const text = roundSummaryToText({
+      tournamentName: 'Copa', roundLabel: 'Vuelta 1', ranked, unit: 'pts',
+    });
+    expect(text.split('\n')[0]).toBe('🏌️ Vuelta 1 — Resumen de la vuelta');
+    expect(text).toContain('36 ptos');
+    const holes = roundSummaryToText({ ranked, unit: 'holes' });
+    expect(holes.split('\n')[0]).toBe('🏌️ Vuelta — Resumen de la vuelta');
+    expect(holes).toContain('36 hoyos');
   });
 });

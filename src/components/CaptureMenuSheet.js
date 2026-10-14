@@ -2,22 +2,24 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 import { MAX_VIDEO_UPLOAD_LABEL } from '../lib/mediaLimits';
 import BottomSheet from './BottomSheet';
 import IconButton from './ui/IconButton';
 
 export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActions = [] }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const options = [
-    { key: 'photo',   icon: 'camera', label: 'Take photo',        source: 'camera',  mediaTypes: 'photo' },
-    { key: 'video',   icon: 'video',  label: 'Record video',      source: 'camera',  mediaTypes: 'video' },
+    { key: 'photo',   icon: 'camera', label: t('shared.media.takePhoto'),        source: 'camera',  mediaTypes: 'photo' },
+    { key: 'video',   icon: 'video',  label: t('shared.media.recordVideo'),      source: 'camera',  mediaTypes: 'video' },
     {
       key: 'library',
       icon: 'image',
-      label: 'Choose from gallery',
-      detail: `Videos up to ${MAX_VIDEO_UPLOAD_LABEL}`,
+      label: t('shared.media.chooseGallery'),
+      detail: t('shared.media.videosUpTo', { size: MAX_VIDEO_UPLOAD_LABEL }),
       source: 'library',
       mediaTypes: 'all',
     },
@@ -26,8 +28,8 @@ export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActi
   return (
     <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
       <View style={s.header}>
-        <Text style={s.title}>Add a memory</Text>
-        <IconButton icon="x" onPress={onClose} accessibilityLabel="Cancel" />
+        <Text style={s.title}>{t('shared.media.addMemory')}</Text>
+        <IconButton icon="x" onPress={onClose} accessibilityLabel={t('common.cancel')} />
       </View>
 
       {options.map((o) => (
@@ -56,7 +58,7 @@ export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActi
       ))}
 
       <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
-        <Text style={s.cancelLabel}>Cancel</Text>
+        <Text style={s.cancelLabel}>{t('common.cancel')}</Text>
       </TouchableOpacity>
     </BottomSheet>
   );

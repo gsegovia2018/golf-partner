@@ -6,6 +6,7 @@ import { useReducedMotion } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
 import { loadTournament, subscribeTournamentChanges } from '../store/tournamentStore';
 import { liveRoundSummary } from '../lib/liveRoundSummary';
+import { useT } from '../i18n';
 
 const ENTRANCE_DURATION = 250;
 const ENTRANCE_EASING = Easing.bezier(0.23, 1, 0.32, 1);
@@ -14,6 +15,7 @@ const ENTRANCE_EASING = Easing.bezier(0.23, 1, 0.32, 1);
 // resume. Subscription pattern mirrors FloatingTabBar.js:18-39.
 export default function LiveRoundCard({ onOpen }) {
   const { theme } = useTheme();
+  const tl = useT();
   const reduced = useReducedMotion();
   const [summary, setSummary] = React.useState(null);
   // Entrance should only play the first time a summary appears (null → some
@@ -64,17 +66,17 @@ export default function LiveRoundCard({ onOpen }) {
   return (
     <Animated.View style={[s.card, { opacity, transform: [{ translateY }] }]}>
       <View style={s.row}>
-        <View style={s.livePill}><View style={s.liveDot} /><Text style={s.liveText}>LIVE</Text></View>
+        <View style={s.livePill}><View style={s.liveDot} /><Text style={s.liveText}>{tl('shared.live')}</Text></View>
         <Text style={s.overline}>{summary.roundLabel.toUpperCase()}</Text>
       </View>
       <Text style={s.name} numberOfLines={1}>{summary.name}</Text>
       <Text style={s.meta} numberOfLines={1}>
         {summary.courseName}
-        {summary.thru > 0 ? ` · ${summary.myPoints} pts thru ${summary.thru}` : ''}
+        {summary.thru > 0 ? ` · ${tl('shared.liveRound.thru', { points: summary.myPoints, thru: summary.thru })}` : ''}
       </Text>
-      <TouchableOpacity style={s.cta} onPress={onOpen} accessibilityRole="button" accessibilityLabel="Open scorecard">
+      <TouchableOpacity style={s.cta} onPress={onOpen} accessibilityRole="button" accessibilityLabel={tl('shared.liveRound.open')}>
         <Feather name="clipboard" size={14} color="#00553c" />
-        <Text style={s.ctaText}>Open scorecard</Text>
+        <Text style={s.ctaText}>{tl('shared.liveRound.open')}</Text>
       </TouchableOpacity>
     </Animated.View>
   );

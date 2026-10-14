@@ -4,6 +4,8 @@ import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
+import { t, useT, formatOrdinal } from '../i18n';
+import { unitText } from '../lib/pointsText';
 
 // Cross-platform themed alert. On web there is no Alert UI, so fall back to
 // window.alert; native uses the OS dialog.
@@ -53,11 +55,11 @@ function drawLeaderboardCanvas({ tournamentName, leaderboard, theme }) {
   ctx.fillStyle = text;
   ctx.font = '800 56px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText(truncate(ctx, tournamentName ?? 'Tournament', W - 80), 40, 90);
+  ctx.fillText(truncate(ctx, tournamentName ?? t('shared.share.tournament'), W - 80), 40, 90);
 
   ctx.fillStyle = accent;
   ctx.font = '600 18px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('LEADERBOARD', 40, 124);
+  ctx.fillText(t('shared.share.leaderboard'), 40, 124);
 
   // Divider
   ctx.fillStyle = border;
@@ -66,10 +68,10 @@ function drawLeaderboardCanvas({ tournamentName, leaderboard, theme }) {
   // Column labels
   ctx.fillStyle = muted;
   ctx.font = '700 16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('PLAYER', 120, 188);
+  ctx.fillText(t('shared.share.colPlayer'), 120, 188);
   ctx.textAlign = 'right';
-  ctx.fillText('PTS', 980, 188);
-  ctx.fillText('STRK', 1140, 188);
+  ctx.fillText(t('shared.share.colPts'), 980, 188);
+  ctx.fillText(t('shared.share.colStrk'), 1140, 188);
   ctx.textAlign = 'left';
 
   const RANK_BG = ['rgba(212,175,55,0.3)', 'rgba(148,163,184,0.3)', 'rgba(196,124,58,0.3)'];
@@ -105,7 +107,7 @@ function drawLeaderboardCanvas({ tournamentName, leaderboard, theme }) {
     ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = text;
     ctx.font = '700 30px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText(truncate(ctx, entry.player?.name ?? 'Unknown', 660), 140, y - 8);
+    ctx.fillText(truncate(ctx, entry.player?.name ?? t('shared.share.unknown'), 660), 140, y - 8);
 
     // pts
     ctx.textAlign = 'right';
@@ -171,7 +173,7 @@ function drawRoundCanvas({
   const ctx = canvas.getContext('2d');
 
   const { bg, card, text, sub, muted, border, accent } = cardPalette(theme);
-  const unitLabel = unit === 'holes' ? 'holes' : 'pts';
+  const unitLabel = unitText(unit);
 
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
@@ -180,7 +182,7 @@ function drawRoundCanvas({
   ctx.fillStyle = accent;
   ctx.font = '600 18px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText('ROUND SUMMARY', 40, 56);
+  ctx.fillText(t('shared.share.roundSummary'), 40, 56);
 
   ctx.fillStyle = text;
   ctx.font = '800 40px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -197,11 +199,11 @@ function drawRoundCanvas({
   // Winner hero
   ctx.fillStyle = muted;
   ctx.font = '700 16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('WINNER', 40, 196);
+  ctx.fillText(t('shared.share.winner'), 40, 196);
 
   ctx.fillStyle = text;
   ctx.font = '800 64px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText(truncate(ctx, recap?.winnerName || 'No winner yet', 700), 40, 264);
+  ctx.fillText(truncate(ctx, recap?.winnerName || t('shared.share.noWinner'), 700), 40, 264);
 
   ctx.fillStyle = accent;
   ctx.font = '800 48px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -231,7 +233,7 @@ function drawRoundCanvas({
     ctx.fillText(MEDALS[i] ?? `${i + 1}.`, x + 20, PODIUM_Y + 48);
 
     ctx.font = '700 24px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText(truncate(ctx, entry.player?.name ?? 'Unknown', COL_W - 40), x + 20, PODIUM_Y + 88);
+    ctx.fillText(truncate(ctx, entry.player?.name ?? t('shared.share.unknown'), COL_W - 40), x + 20, PODIUM_Y + 88);
 
     ctx.fillStyle = accent;
     ctx.font = '800 26px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -255,13 +257,13 @@ function drawRoundCanvas({
 }
 
 function leaderboardToText(tournamentName, leaderboard) {
-  const lines = [`🏌️ ${tournamentName} — Leaderboard`, ''];
+  const lines = [t('shared.share.leaderboardText', { name: tournamentName }), ''];
   (leaderboard ?? []).slice(0, 4).forEach((entry, i) => {
     const medal = ['🥇', '🥈', '🥉'][i] ?? `${i + 1}.`;
-    const name = entry.player?.name ?? 'Unknown';
+    const name = entry.player?.name ?? t('shared.share.unknown');
     const pts = entry.points ?? '-';
     const strokes = entry.strokes;
-    lines.push(`${medal} ${name} — ${pts} pts${strokes != null ? ` · ${strokes} strk` : ''}`);
+    lines.push(`${medal} ${name} — ${pts} ${unitText('pts')}${strokes != null ? ` · ${strokes} ${t('shared.share.colStrk').toLowerCase()}` : ''}`);
   });
   return lines.join('\n');
 }
@@ -272,12 +274,12 @@ function leaderboardToText(tournamentName, leaderboard) {
 export function roundSummaryToText({
   tournamentName, roundLabel, ranked, unit, boardUrl,
 } = {}) {
-  const unitLabel = unit === 'holes' ? 'holes' : 'pts';
-  const title = roundLabel || tournamentName || 'Round';
-  const lines = [`🏌️ ${title} — Round Summary`, ''];
+  const unitLabel = unitText(unit);
+  const title = roundLabel || tournamentName || t('shared.round.plain');
+  const lines = [t('shared.share.roundSummaryText', { title }), ''];
   (ranked ?? []).slice(0, 4).forEach((entry, i) => {
     const medal = ['🥇', '🥈', '🥉'][i] ?? `${i + 1}.`;
-    const name = entry.player?.name ?? 'Unknown';
+    const name = entry.player?.name ?? t('shared.share.unknown');
     const pts = entry.points ?? '-';
     lines.push(`${medal} ${name} — ${pts} ${unitLabel}`);
   });
@@ -341,11 +343,11 @@ export async function shareLeaderboard({
       const blob = await new Promise((resolve, reject) => {
         canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))), 'image/png');
       });
-      await shareBlobOrDownload(blob, fileName, tournamentName ?? 'Leaderboard', leaderboardToText(tournamentName, leaderboard));
+      await shareBlobOrDownload(blob, fileName, tournamentName ?? t('shared.share.leaderboardName'), leaderboardToText(tournamentName, leaderboard));
       return true;
     } catch (e) {
       console.warn('Web share failed:', e);
-      notify('Could not share', `Sharing failed: ${e?.message ?? e}`);
+      notify(t('shared.share.failedTitle'), t('shared.share.failed', { reason: e?.message ?? e }));
       return false;
     } finally {
       onBusy?.(false);
@@ -356,7 +358,7 @@ export async function shareLeaderboard({
     if (!viewRef?.current) throw new Error('Nothing to capture');
     const uri = await captureRef(viewRef, { format: 'png', quality: 1 });
     if (!(await Sharing.isAvailableAsync())) {
-      notify('Sharing unavailable', 'Sharing is not available on this device.');
+      notify(t('shared.share.unavailableTitle'), t('shared.share.unavailable'));
       return false;
     }
     await Sharing.shareAsync(uri);
@@ -365,7 +367,7 @@ export async function shareLeaderboard({
     // A user-cancelled share sheet is not an error worth surfacing.
     if (e?.message && /cancel/i.test(e.message)) return false;
     console.warn('Share failed:', e);
-    notify('Could not share', `Sharing failed: ${e?.message ?? e}`);
+    notify(t('shared.share.failedTitle'), t('shared.share.failed', { reason: e?.message ?? e }));
     return false;
   } finally {
     onBusy?.(false);
@@ -405,11 +407,11 @@ export async function shareRoundSummary({
       const fallbackText = roundSummaryToText({
         tournamentName, roundLabel, ranked, unit, boardUrl,
       });
-      await shareBlobOrDownload(blob, fileName, roundLabel ?? tournamentName ?? 'Round Summary', fallbackText);
+      await shareBlobOrDownload(blob, fileName, roundLabel ?? tournamentName ?? t('shared.share.roundSummaryName'), fallbackText);
       return true;
     } catch (e) {
       console.warn('Web share failed:', e);
-      notify('Could not share', `Sharing failed: ${e?.message ?? e}`);
+      notify(t('shared.share.failedTitle'), t('shared.share.failed', { reason: e?.message ?? e }));
       return false;
     } finally {
       onBusy?.(false);
@@ -420,7 +422,7 @@ export async function shareRoundSummary({
     if (!viewRef?.current) throw new Error('Nothing to capture');
     const uri = await captureRef(viewRef, { format: 'png', quality: 1 });
     if (!(await Sharing.isAvailableAsync())) {
-      notify('Sharing unavailable', 'Sharing is not available on this device.');
+      notify(t('shared.share.unavailableTitle'), t('shared.share.unavailable'));
       return false;
     }
     await Sharing.shareAsync(uri);
@@ -429,7 +431,7 @@ export async function shareRoundSummary({
     // A user-cancelled share sheet is not an error worth surfacing.
     if (e?.message && /cancel/i.test(e.message)) return false;
     console.warn('Share failed:', e);
-    notify('Could not share', `Sharing failed: ${e?.message ?? e}`);
+    notify(t('shared.share.failedTitle'), t('shared.share.failed', { reason: e?.message ?? e }));
     return false;
   } finally {
     onBusy?.(false);
@@ -440,7 +442,6 @@ export async function shareRoundSummary({
 // Rank badge helpers
 // ---------------------------------------------------------------------------
 const RANK_COLORS = [semantic.rank.gold, semantic.rank.silver, semantic.rank.bronze];
-const RANK_LABELS = ['1st', '2nd', '3rd'];
 
 function RankBadge({ index, theme }) {
   const isTop3 = index < 3;
@@ -455,7 +456,7 @@ function RankBadge({ index, theme }) {
           { color: badgeText, fontFamily: 'PlusJakartaSans-Bold' },
         ]}
       >
-        {isTop3 ? RANK_LABELS[index] : `${index + 1}th`}
+        {formatOrdinal(index + 1)}
       </Text>
     </View>
   );
@@ -467,6 +468,7 @@ function RankBadge({ index, theme }) {
 export const ShareableLeaderboard = React.forwardRef(
   ({ tournamentName, leaderboard = [] }, ref) => {
     const { theme } = useTheme();
+    useT(); // re-render when the language changes
     const pal = cardPalette(theme);
     const players = leaderboard.slice(0, 4);
 
@@ -506,7 +508,7 @@ export const ShareableLeaderboard = React.forwardRef(
               },
             ]}
           >
-            Leaderboard
+            {t('shared.share.leaderboardTitle')}
           </Text>
         </View>
 
@@ -522,7 +524,7 @@ export const ShareableLeaderboard = React.forwardRef(
               { color: pal.sub, fontFamily: 'PlusJakartaSans-SemiBold' },
             ]}
           >
-            Player
+            {t('shared.share.player')}
           </Text>
           <Text
             style={[
@@ -530,7 +532,7 @@ export const ShareableLeaderboard = React.forwardRef(
               { color: pal.sub, fontFamily: 'PlusJakartaSans-SemiBold' },
             ]}
           >
-            Pts
+            {t('shared.share.pts')}
           </Text>
           <Text
             style={[
@@ -538,7 +540,7 @@ export const ShareableLeaderboard = React.forwardRef(
               { color: pal.sub, fontFamily: 'PlusJakartaSans-SemiBold' },
             ]}
           >
-            Strk
+            {t('shared.share.strk')}
           </Text>
         </View>
 
@@ -566,7 +568,7 @@ export const ShareableLeaderboard = React.forwardRef(
               ]}
               numberOfLines={1}
             >
-              {entry.player?.name ?? 'Unknown'}
+              {entry.player?.name ?? t('shared.share.unknown')}
             </Text>
 
             <Text
@@ -624,9 +626,10 @@ export const ShareableRoundCard = React.forwardRef(
     tournamentName, roundLabel, courseName, recap, ranked = [], unit = 'pts',
   }, ref) => {
     const { theme } = useTheme();
+    useT(); // re-render when the language changes
     const pal = cardPalette(theme);
     const podium = ranked.slice(0, 3);
-    const unitLabel = unit === 'holes' ? 'holes' : 'pts';
+    const unitLabel = unitText(unit);
     const dateStr = new Date().toLocaleDateString();
 
     return (
@@ -649,7 +652,7 @@ export const ShareableRoundCard = React.forwardRef(
               { color: pal.accent, fontFamily: 'PlusJakartaSans-SemiBold' },
             ]}
           >
-            ROUND SUMMARY
+            {t('shared.share.roundSummary')}
           </Text>
           {tournamentName ? (
             <Text
@@ -687,7 +690,7 @@ export const ShareableRoundCard = React.forwardRef(
                 { color: pal.muted, fontFamily: 'PlusJakartaSans-SemiBold' },
               ]}
             >
-              WINNER
+              {t('shared.share.winner')}
             </Text>
             <Text
               style={[
@@ -696,7 +699,7 @@ export const ShareableRoundCard = React.forwardRef(
               ]}
               numberOfLines={1}
             >
-              {recap?.winnerName || 'No winner yet'}
+              {recap?.winnerName || t('shared.share.noWinner')}
             </Text>
           </View>
           <Text
@@ -727,7 +730,7 @@ export const ShareableRoundCard = React.forwardRef(
                 ]}
                 numberOfLines={1}
               >
-                {entry.player?.name ?? 'Unknown'}
+                {entry.player?.name ?? t('shared.share.unknown')}
               </Text>
               <Text
                 style={[

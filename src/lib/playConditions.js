@@ -6,6 +6,7 @@
 // Temperature itself is estimated from the month (a Spain-interior average
 // curve) and cooled by elevation (standard 6.5 °C / 1000 m lapse), so the only
 // thing a course needs set manually is its elevation. All distances in metres.
+import { t } from '../i18n';
 
 // Monthly mean air temp (°C), Spain interior baseline (Madrid-ish). Index 0=Jan.
 export const MONTHLY_TEMP_C = [6, 8, 11, 13, 17, 23, 26, 26, 21, 15, 10, 7];
@@ -57,6 +58,8 @@ export function describeConditions({ month, altitudeM = 0 } = {}) {
   const temp = estimateTempC(m, altitudeM);
   const factor = conditionFactor({ month: m, altitudeM });
   const pct = Math.round((factor - 1) * 100);
-  const dir = pct === 0 ? 'play as marked' : `play ~${Math.abs(pct)}% ${pct > 0 ? 'shorter' : 'longer'}`;
-  return { tempC: Math.round(temp), altitudeM: Math.round(altitudeM || 0), factor, pct, text: `holes ${dir}` };
+  let text;
+  if (pct === 0) text = t('shared.conditions.asMarked');
+  else text = t(pct > 0 ? 'shared.conditions.shorter' : 'shared.conditions.longer', { pct: Math.abs(pct) });
+  return { tempC: Math.round(temp), altitudeM: Math.round(altitudeM || 0), factor, pct, text };
 }

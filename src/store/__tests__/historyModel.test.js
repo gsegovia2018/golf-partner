@@ -2,6 +2,7 @@ import {
   playerInitials, findPlayerForIdentity, placeLabel,
   historyEntryModel, buildHistorySections,
 } from '../historyModel';
+import { setLanguagePref } from '../../i18n';
 
 const P = (id, name, extra = {}) => ({ id, name, handicap: 0, ...extra });
 const HOLE = { number: 1, par: 4, strokeIndex: 1 };
@@ -256,5 +257,29 @@ describe('buildHistorySections', () => {
     const sections = buildHistorySections([bare], identity);
     expect(sections).toHaveLength(1);
     expect(sections[0].items[0].when).toBe(1750000000000);
+  });
+});
+
+describe('history labels in Spanish', () => {
+  beforeEach(async () => { await setLanguagePref('es'); });
+  afterEach(async () => { await setLanguagePref('en'); });
+
+  test('ordinals, month names and round counts follow the language', () => {
+    expect(placeLabel(1)).toBe('1.º');
+    expect(placeLabel(12)).toBe('12.º');
+    expect(historyEntryModel(game, identity).dateBox).toEqual({ top: '7', bottom: 'JUN' });
+    const m = historyEntryModel(wonTournament, identity);
+    expect(m.dateBox).toEqual({ top: '2', bottom: 'VUELTAS' });
+    expect(m.subtitle).toBe('2 campos');
+    expect(m.myPlacement.label).toBe('1.º');
+    const single = { ...wonTournament, id: '1780000000006', rounds: [wonTournament.rounds[0]] };
+    expect(historyEntryModel(single, identity).dateBox).toEqual({ top: '1', bottom: 'VUELTA' });
+    const sections = buildHistorySections([lostTournament, game, wonTournament], identity);
+    expect(sections.map((x) => x.label)).toEqual(['junio de 2026', 'abril de 2026']);
+  });
+
+  test('a game with no course says it is a single round', () => {
+    const bare = { ...game, rounds: [{ ...game.rounds[0], courseName: undefined }] };
+    expect(historyEntryModel(bare, identity).subtitle).toBe('Una vuelta');
   });
 });
