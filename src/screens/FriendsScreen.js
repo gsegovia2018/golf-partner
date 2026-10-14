@@ -10,6 +10,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber } from '../i18n';
 import PullToRefresh from '../components/PullToRefresh';
 import {
   searchUsers, listFriends, listPendingRequests,
@@ -26,6 +27,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 
 export default function FriendsScreen({ navigation }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const [query, setQuery] = useState('');
@@ -53,12 +55,12 @@ export default function FriendsScreen({ navigation }) {
       setIncoming(p.incoming);
       setOutgoing(p.outgoing);
     } catch (err) {
-      alert('Error', err.message ?? 'Could not load friends');
+      alert(t('players.errorTitle'), err.message ?? t('players.friends.loadFailed'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   useFocusEffect(useCallback(() => { reload(); }, [reload]));
 
@@ -95,11 +97,11 @@ export default function FriendsScreen({ navigation }) {
       setResults(rows);
     } catch (err) {
       if (isAbortError(err) || seq !== searchSeqRef.current) return;
-      alert('Error', err.message ?? 'Search failed');
+      alert(t('players.errorTitle'), err.message ?? t('players.friends.searchFailed'));
     } finally {
       if (seq === searchSeqRef.current) setSearching(false);
     }
-  }, []);
+  }, [t]);
 
   // Debounced entry point bound to the input. Updates the visible text
   // immediately; defers the network call ~300ms.
@@ -131,7 +133,7 @@ export default function FriendsScreen({ navigation }) {
       await fn();
       await reload();
     } catch (err) {
-      alert('Error', err.message ?? 'Something went wrong');
+      alert(t('players.errorTitle'), err.message ?? t('players.friends.somethingWrong'));
     } finally {
       setBusyId(null);
     }
@@ -145,11 +147,11 @@ export default function FriendsScreen({ navigation }) {
   const onRemove = (person) => {
     const go = () => withBusy(person.userId, () => removeFriend(person.userId));
     if (Platform.OS === 'web') {
-      if (window.confirm(`Remove ${person.displayName} from friends?`)) go();
+      if (window.confirm(t('players.friends.removeWebConfirm', { name: person.displayName }))) go();
     } else {
-      Alert.alert('Remove friend', `Remove ${person.displayName}?`, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: go },
+      Alert.alert(t('players.friends.removeTitle'), t('players.friends.removeConfirm', { name: person.displayName }), [
+        { text: t('players.cancel'), style: 'cancel' },
+        { text: t('players.friends.remove'), style: 'destructive', onPress: go },
       ]);
     }
   };
@@ -168,7 +170,7 @@ export default function FriendsScreen({ navigation }) {
           <Text style={s.name}>{person.displayName}</Text>
           <Text style={s.sub}>
             @{person.username}
-            {person.handicap != null ? ` · HCP ${person.handicap}` : ''}
+            {person.handicap != null ? ` · ${t('players.hcp', { hcp: formatNumber(person.handicap) })}` : ''}
           </Text>
         </View>
         {right}
@@ -183,21 +185,21 @@ export default function FriendsScreen({ navigation }) {
     if (rel === 'friends') {
       return <Feather name="check-circle" size={14} color={theme.accent.primary} />;
     }
-    if (rel === 'outgoing') return <Text style={s.pendingTag}>Requested</Text>;
+    if (rel === 'outgoing') return <Text style={s.pendingTag}>{t('players.friends.requested')}</Text>;
     if (rel === 'incoming') {
       return (
         <TouchableOpacity style={s.primaryBtn} onPress={() => {
           const req = incoming.find((i) => i.person.userId === person.userId);
           if (req) onAccept(req);
         }}>
-          <Text style={s.primaryBtnText}>Accept</Text>
+          <Text style={s.primaryBtnText}>{t('players.friends.accept')}</Text>
         </TouchableOpacity>
       );
     }
     return (
       <TouchableOpacity style={s.primaryBtn} onPress={() => onAdd(person)}>
         <Feather name="user-plus" size={14} color={theme.text.inverse} />
-        <Text style={s.primaryBtnText}>Add</Text>
+        <Text style={s.primaryBtnText}>{t('players.add')}</Text>
       </TouchableOpacity>
     );
   };
@@ -206,7 +208,7 @@ export default function FriendsScreen({ navigation }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Friends</Text>
+        <Text style={s.headerTitle}>{t('players.friends.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
@@ -220,7 +222,7 @@ export default function FriendsScreen({ navigation }) {
           <Feather name="search" size={16} color={theme.text.muted} />
           <TextInput
             style={s.searchInput}
-            placeholder="Find golfers by username"
+            placeholder={t('players.friends.searchPlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -236,11 +238,11 @@ export default function FriendsScreen({ navigation }) {
 
         {query.trim().length >= 2 && (
           <>
-            <Text style={s.sectionLabel}>SEARCH RESULTS</Text>
+            <Text style={s.sectionLabel}>{t('players.friends.resultsLabel')}</Text>
             {searching ? (
               <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 12 }} />
             ) : results.length === 0 ? (
-              <Text style={s.empty}>No golfers match "{query.trim()}"</Text>
+              <Text style={s.empty}>{t('players.friends.noMatch', { query: query.trim() })}</Text>
             ) : (
               results.map((p) => renderPerson(p, searchButton(p)))
             )}
@@ -253,14 +255,14 @@ export default function FriendsScreen({ navigation }) {
           <>
             {incoming.length > 0 && (
               <>
-                <Text style={s.sectionLabel}>REQUESTS</Text>
+                <Text style={s.sectionLabel}>{t('players.friends.requestsLabel')}</Text>
                 {incoming.map((req) => renderPerson(req.person, (
                   busyId === req.friendshipId ? (
                     <ActivityIndicator color={theme.accent.primary} />
                   ) : (
                     <View style={s.actionPair}>
                       <TouchableOpacity style={s.primaryBtn} onPress={() => onAccept(req)}>
-                        <Text style={s.primaryBtnText}>Accept</Text>
+                        <Text style={s.primaryBtnText}>{t('players.friends.accept')}</Text>
                       </TouchableOpacity>
                       <IconButton icon="x" style={s.ghostBtn} onPress={() => onDecline(req)} />
                     </View>
@@ -271,13 +273,13 @@ export default function FriendsScreen({ navigation }) {
 
             {outgoing.length > 0 && (
               <>
-                <Text style={s.sectionLabel}>SENT</Text>
+                <Text style={s.sectionLabel}>{t('players.friends.sentLabel')}</Text>
                 {outgoing.map((req) => renderPerson(req.person, (
                   busyId === req.friendshipId ? (
                     <ActivityIndicator color={theme.accent.primary} />
                   ) : (
                     <TouchableOpacity style={s.ghostBtn} onPress={() => onDecline(req)}>
-                      <Text style={s.ghostBtnText}>Cancel</Text>
+                      <Text style={s.ghostBtnText}>{t('players.cancel')}</Text>
                     </TouchableOpacity>
                   )
                 )))}
@@ -285,14 +287,16 @@ export default function FriendsScreen({ navigation }) {
             )}
 
             <Text style={s.sectionLabel}>
-              MY FRIENDS{friends.length ? ` (${friends.length})` : ''}
+              {friends.length
+                ? t('players.friends.mineCount', { count: formatNumber(friends.length) })
+                : t('players.friends.mineLabel')}
             </Text>
             {friends.length === 0 ? (
               <View style={s.emptyState}>
                 <Feather name="users" size={44} color={theme.text.muted} />
-                <Text style={s.emptyTitle}>No friends yet</Text>
+                <Text style={s.emptyTitle}>{t('players.friends.noFriends')}</Text>
                 <Text style={s.emptySub}>
-                  Search for golfers above to send a friend request.
+                  {t('players.friends.noFriendsSub')}
                 </Text>
               </View>
             ) : (

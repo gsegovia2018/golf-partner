@@ -11,6 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import { v4 as uuidv4 } from 'uuid';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber } from '../i18n';
 import { semantic } from '../theme/tokens';
 import { fetchMyPlayers } from '../store/libraryStore';
 import { loadAllTournaments, rosterCap } from '../store/tournamentStore';
@@ -24,6 +25,7 @@ const normalize = (value) =>
 
 export default function PlayerPickerScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   // `kind` drives the roster cap (Task 3, audit-tier3): a tournament has no
@@ -109,7 +111,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
     // this only fires for actual typos.
     const parsedHcp = parseHandicapIndex(handicap);
     if (!parsedHcp.ok && parsedHcp.reason === 'invalid') {
-      Alert.alert('Invalid handicap', 'Handicap must be a number between 0 and 54, with up to one decimal place.');
+      Alert.alert(t('players.invalidHcpTitle'), t('players.invalidHcpBody'));
       return;
     }
     setSaving(true);
@@ -135,7 +137,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
         return [...prev, player.id];
       });
     } catch (e) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('players.errorTitle'), e.message);
     } finally {
       setSaving(false);
     }
@@ -145,7 +147,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Select Players</Text>
+        <Text style={s.headerTitle}>{t('players.picker.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
@@ -154,7 +156,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
           <Feather name="search" size={16} color={theme.text.muted} style={s.searchIcon} />
           <TextInput
             style={s.searchInput}
-            placeholder="Search players"
+            placeholder={t('players.picker.searchPlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -168,11 +170,11 @@ export default function PlayerPickerScreen({ navigation, route }) {
           ) : null}
         </View>
 
-        <Text style={s.sectionTitle}>New Player</Text>
+        <Text style={s.sectionTitle}>{t('players.picker.newSection')}</Text>
         <View style={s.form}>
           <TextInput
             style={[s.input, s.flex]}
-            placeholder="Name"
+            placeholder={t('players.namePlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -181,7 +183,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
           />
           <TextInput
             style={[s.input, s.hcpInput]}
-            placeholder="HCP"
+            placeholder={t('players.hcpPlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardType="decimal-pad"
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
@@ -191,16 +193,16 @@ export default function PlayerPickerScreen({ navigation, route }) {
           />
           <TouchableOpacity style={s.addBtn} onPress={() => addAndSelect()} disabled={saving || !newName.trim()}>
             <Feather name="plus" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-            <Text style={s.addBtnText}>Add</Text>
+            <Text style={s.addBtnText}>{t('players.add')}</Text>
           </TouchableOpacity>
         </View>
-        <Text style={s.sectionTitle}>Library</Text>
+        <Text style={s.sectionTitle}>{t('players.picker.librarySection')}</Text>
         {loading ? (
           <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
         ) : loadError ? (
           <View style={s.errorBox}>
             <Feather name="wifi-off" size={44} color={theme.destructive} />
-            <Text style={s.errorTitle}>Couldn't load players</Text>
+            <Text style={s.errorTitle}>{t('players.loadFailedTitle')}</Text>
             <Text style={s.errorMsg}>{loadError}</Text>
             <TouchableOpacity
               style={s.retryBtn}
@@ -208,14 +210,14 @@ export default function PlayerPickerScreen({ navigation, route }) {
               activeOpacity={0.7}
             >
               <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-              <Text style={s.retryBtnText}>Retry</Text>
+              <Text style={s.retryBtnText}>{t('players.retry')}</Text>
             </TouchableOpacity>
           </View>
         ) : players.length === 0 ? (
-          <Text style={s.empty}>No players in library yet.</Text>
+          <Text style={s.empty}>{t('players.picker.empty')}</Text>
         ) : filteredPlayers.length === 0 ? (
           <>
-            <Text style={s.empty}>No players match "{query}"</Text>
+            <Text style={s.empty}>{t('players.picker.noMatch', { query })}</Text>
             {query.trim() ? (
               <TouchableOpacity
                 style={s.createCta}
@@ -224,7 +226,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
                 activeOpacity={0.7}
               >
                 <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
-                <Text style={s.createCtaText}>Create "{query.trim()}"</Text>
+                <Text style={s.createCtaText}>{t('players.picker.create', { query: query.trim() })}</Text>
               </TouchableOpacity>
             ) : null}
           </>
@@ -252,14 +254,14 @@ export default function PlayerPickerScreen({ navigation, route }) {
                       {p.user_id ? (
                         <View style={s.linkedBadge}>
                           <Feather name="user-check" size={10} color={theme.accent.primary} />
-                          <Text style={s.linkedBadgeText}>App user</Text>
+                          <Text style={s.linkedBadgeText}>{t('players.picker.appUser')}</Text>
                         </View>
                       ) : null}
                     </View>
-                    <Text style={s.hcpLabel}>HCP {p.handicap}</Text>
+                    <Text style={s.hcpLabel}>{t('players.hcp', { hcp: formatNumber(p.handicap) })}</Text>
                   </View>
                   {alreadyAdded
-                    ? <Text style={s.addedBadge}>Added</Text>
+                    ? <Text style={s.addedBadge}>{t('players.picker.added')}</Text>
                     : picked
                       ? (
                         <View style={s.checkCircle}>
@@ -278,7 +280,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
         <View style={s.footer}>
           <TouchableOpacity style={s.confirmBtn} onPress={confirm}>
             <Text style={s.confirmBtnText}>
-              Add {pickedIds.length} Player{pickedIds.length !== 1 ? 's' : ''}
+              {t('players.picker.addPlayers', { count: pickedIds.length })}
             </Text>
           </TouchableOpacity>
         </View>

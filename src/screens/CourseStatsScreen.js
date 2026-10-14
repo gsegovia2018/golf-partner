@@ -9,6 +9,7 @@ import PressableScale from '../components/ui/PressableScale';
 import IconButton from '../components/ui/IconButton';
 import Reveal from '../components/ui/Reveal';
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber } from '../i18n';
 import { semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
@@ -61,10 +62,10 @@ const PENALTY_RING_SCALE = 9;
 // one. A strokes record is the course record for life. Avg pts stays as the
 // familiar figure, no longer as a record.
 const HERO_CELLS = [
-  { key: 'rounds', label: 'Rounds', get: (sum) => sum.rounds },
-  { key: 'avg-strokes', label: 'Avg strokes', get: (sum) => sum.avgStrokes },
-  { key: 'best-strokes', label: 'Best strokes', get: (sum) => sum.bestStrokes, gold: true },
-  { key: 'avg-pts', label: 'Avg pts', get: (sum) => sum.avgPoints },
+  { key: 'rounds', labelKey: 'courses.stats.hero.rounds', get: (sum) => sum.rounds },
+  { key: 'avg-strokes', labelKey: 'courses.stats.hero.avgStrokes', get: (sum) => sum.avgStrokes },
+  { key: 'best-strokes', labelKey: 'courses.stats.hero.bestStrokes', get: (sum) => sum.bestStrokes, gold: true },
+  { key: 'avg-pts', labelKey: 'courses.stats.hero.avgPts', get: (sum) => sum.avgPoints },
 ];
 
 // Per-course drill-down: personal stats on one course, down to hole level.
@@ -72,10 +73,11 @@ const HERO_CELLS = [
 // See docs/superpowers/specs/2026-07-15-course-breakdown-design.md
 export default function CourseStatsScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const { user } = useAuth();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const courseKey = route?.params?.courseKey ?? null;
-  const fallbackName = route?.params?.courseName ?? 'Course';
+  const fallbackName = route?.params?.courseName ?? t('courses.defaultTitle');
 
   const [breakdown, setBreakdown] = useState(undefined); // undefined = loading, null = no rounds
   // `${roundId}|${roundIndex}` for every round of THIS course — the filter that
@@ -124,7 +126,7 @@ export default function CourseStatsScreen({ navigation, route }) {
     <View style={s.header}>
       <IconButton
         icon="chevron-left"
-        accessibilityLabel="Back"
+        accessibilityLabel={t('courses.back')}
         onPress={() => navigation.goBack()}
       />
       <Text style={s.headerTitle} numberOfLines={1}>
@@ -148,13 +150,13 @@ export default function CourseStatsScreen({ navigation, route }) {
         {Header}
         <View style={s.center}>
           <Feather name="wifi-off" size={44} color={theme.text.muted} />
-          <Text style={s.emptyText}>Could not load course stats.</Text>
+          <Text style={s.emptyText}>{t('courses.stats.loadFailed')}</Text>
           <PressableScale
             accessibilityRole="button"
             style={s.retryBtn}
             onPress={() => { setBreakdown(undefined); setError(false); setLoadNonce((v) => v + 1); }}
           >
-            <Text style={s.retryText}>Retry</Text>
+            <Text style={s.retryText}>{t('courses.retry')}</Text>
           </PressableScale>
         </View>
       </ScreenContainer>
@@ -167,7 +169,7 @@ export default function CourseStatsScreen({ navigation, route }) {
         {Header}
         <View style={s.center}>
           <Feather name="map" size={44} color={theme.text.muted} />
-          <Text style={s.emptyText}>No rounds at this course yet.</Text>
+          <Text style={s.emptyText}>{t('courses.stats.noRounds')}</Text>
         </View>
       </ScreenContainer>
     );
@@ -186,7 +188,7 @@ export default function CourseStatsScreen({ navigation, route }) {
 
   if (summary.scoreMix.total > 0) {
     addCard('score-mix', (
-      <SectionCard title="Score mix" infoKey="courseScoreMix" onInfo={setInfoKey}>
+      <SectionCard title={t('courses.stats.scoreMix')} infoKey="courseScoreMix" onInfo={setInfoKey}>
         <ScoreMixBar distribution={summary.scoreMix} />
       </SectionCard>
     ));
@@ -194,7 +196,7 @@ export default function CourseStatsScreen({ navigation, route }) {
 
   if ((roundList ?? []).length > 0) {
     addCard('rounds', (
-      <SectionCard title="Latest rounds">
+      <SectionCard title={t('courses.stats.latestRounds')}>
         <RoundList
           rounds={roundList}
           onOpen={(r) => navigation.navigate('RoundSummary', {
@@ -209,20 +211,20 @@ export default function CourseStatsScreen({ navigation, route }) {
 
   if (highlights) {
     addCard('highlights', (
-      <SectionCard title="Highlights" infoKey="courseHighlights" onInfo={setInfoKey}>
+      <SectionCard title={t('courses.stats.highlights')} infoKey="courseHighlights" onInfo={setInfoKey}>
         <HighlightRow
           icon="alert-triangle"
           kind="nemesis"
-          label={`Nemesis · hole ${highlights.nemesis.holeNumber}`}
-          detail={`${signed(highlights.nemesis.avgVsPar)} vs par over ${highlights.nemesis.timesPlayed} rounds`}
+          label={t('courses.stats.nemesis', { hole: highlights.nemesis.holeNumber })}
+          detail={t('courses.stats.vsPar', { vs: signed(highlights.nemesis.avgVsPar), count: highlights.nemesis.timesPlayed })}
           s={s}
           theme={theme}
         />
         <HighlightRow
           icon="award"
           kind="best"
-          label={`Best · hole ${highlights.best.holeNumber}`}
-          detail={`${signed(highlights.best.avgVsPar)} vs par over ${highlights.best.timesPlayed} rounds`}
+          label={t('courses.stats.best', { hole: highlights.best.holeNumber })}
+          detail={t('courses.stats.vsPar', { vs: signed(highlights.best.avgVsPar), count: highlights.best.timesPlayed })}
           s={s}
           theme={theme}
         />
@@ -231,12 +233,12 @@ export default function CourseStatsScreen({ navigation, route }) {
   }
 
   addCard('shot-detail', shots ? (
-    <SectionCard title="Shot detail" infoKey="courseShotDetail" onInfo={setInfoKey}>
+    <SectionCard title={t('courses.stats.shotDetail')} infoKey="courseShotDetail" onInfo={setInfoKey}>
       <View style={s.ringRow}>
         <RingStat
           index={0}
           testID="ring-putts"
-          label="Putts / 18"
+          label={t('courses.stats.ringPutts')}
           value={shots.putts.per18}
           fill={shots.putts.per18 != null ? shots.putts.per18 / PUTTS_RING_BENCHMARK : null}
           color={shots.putts.per18 != null && shots.putts.per18 > PUTTS_RING_BENCHMARK
@@ -245,7 +247,7 @@ export default function CourseStatsScreen({ navigation, route }) {
         <RingStat
           index={1}
           testID="ring-three-putts"
-          label="3-putts / 18"
+          label={t('courses.stats.ringThreePutts')}
           value={shots.putts.threePuttPer18}
           fill={shots.putts.threePuttPer18 != null
             ? shots.putts.threePuttPer18 / THREE_PUTT_RING_SCALE : null}
@@ -254,7 +256,7 @@ export default function CourseStatsScreen({ navigation, route }) {
         <RingStat
           index={2}
           testID="ring-gir"
-          label="GIR"
+          label={t('courses.stats.ringGir')}
           value={shots.gir.eligible > 0 ? shots.gir.pct : null}
           suffix="%"
           fill={shots.gir.eligible > 0 ? shots.gir.pct / 100 : null}
@@ -263,7 +265,7 @@ export default function CourseStatsScreen({ navigation, route }) {
         <RingStat
           index={3}
           testID="ring-penalties"
-          label="Penalties / 18"
+          label={t('courses.stats.ringPenalties')}
           value={shots.penalties.per18}
           fill={shots.penalties.per18 != null ? shots.penalties.per18 / PENALTY_RING_SCALE : null}
           color={theme.destructive}
@@ -271,23 +273,23 @@ export default function CourseStatsScreen({ navigation, route }) {
       </View>
       {shots.drives.recorded > 0 ? (
         <View style={s.drivesBlock}>
-          <Text style={s.panelHeading}>Off the tee</Text>
+          <Text style={s.panelHeading}>{t('courses.stats.offTee')}</Text>
           <FairwayFan drives={shots.drives} />
           <Text style={s.metaLine}>
-            {`${shots.drives.recorded} drive${shots.drives.recorded === 1 ? '' : 's'} logged`}
+            {t('courses.stats.drivesLogged', { count: shots.drives.recorded })}
           </Text>
         </View>
       ) : null}
     </SectionCard>
   ) : (
-    <SectionCard title="Shot detail" infoKey="courseShotDetail" onInfo={setInfoKey}>
-      <Text style={s.metaLine}>No shot detail logged at this course yet.</Text>
+    <SectionCard title={t('courses.stats.shotDetail')} infoKey="courseShotDetail" onInfo={setInfoKey}>
+      <Text style={s.metaLine}>{t('courses.stats.noShotDetail')}</Text>
     </SectionCard>
   ));
 
   if (holes.length > 0) {
     addCard('holes', (
-      <SectionCard title="Hole by hole" infoKey="courseHoleByHole" onInfo={setInfoKey}>
+      <SectionCard title={t('courses.stats.holeByHole')} infoKey="courseHoleByHole" onInfo={setInfoKey}>
         <HoleGrid
           holes={holes}
           highlights={highlights}
@@ -314,7 +316,7 @@ export default function CourseStatsScreen({ navigation, route }) {
           strokeIndex={replay.hole.strokeIndex}
           roundId={replay.carry.roundId}
           roundIndex={replay.carry.roundIndex}
-          caption={`Longest drive · hole ${replay.hole.holeNumber} · ${breakdown.courseName}`}
+          caption={t('courses.stats.longestDrive', { hole: replay.hole.holeNumber, course: breakdown.courseName })}
         />
       ) : null}
       <StatDetailSheet
@@ -336,22 +338,27 @@ export default function CourseStatsScreen({ navigation, route }) {
 // frame to a whole number, so animating 100.5 would flash wrong values.
 function CourseRecordBoard({ summary, onInfo, s }) {
   const reduced = useReducedMotion();
+  const t = useT();
 
   const footnote = summary.frontBack
-    ? `Front ${signed(summary.frontBack.frontVsPar)} · back ${signed(summary.frontBack.backVsPar)} vs par across ${summary.frontBack.rounds} round${summary.frontBack.rounds === 1 ? '' : 's'}`
+    ? t('courses.stats.frontBack', {
+      front: signed(summary.frontBack.frontVsPar),
+      back: signed(summary.frontBack.backVsPar),
+      count: summary.frontBack.rounds,
+    })
     : summary.rounds === 0
-      ? 'No complete round here yet — hole stats below still count every scored hole.'
+      ? t('courses.stats.noCompleteRound')
       : null;
 
   return (
     <View style={s.board} testID="course-record-board">
       <View style={s.boardHead}>
-        <Text style={s.boardKicker}>Course Record</Text>
+        <Text style={s.boardKicker}>{t('courses.stats.recordKicker')}</Text>
         <TouchableOpacity
           onPress={() => onInfo('courseRecord')}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           accessibilityRole="button"
-          accessibilityLabel="What is Course record"
+          accessibilityLabel={t('courses.stats.recordInfo')}
         >
           <Feather name="info" size={14} color={CREAM_85} />
         </TouchableOpacity>
@@ -365,7 +372,10 @@ function CourseRecordBoard({ summary, onInfo, s }) {
               key={cell.key}
               style={s.boardCell}
               accessible
-              accessibilityLabel={`${cell.label}: ${has ? value : 'no data yet'}`}
+              accessibilityLabel={t('courses.stats.cellLabel', {
+                label: t(cell.labelKey),
+                value: has ? formatNumber(value) : t('courses.stats.noData'),
+              })}
               testID={`course-record-${cell.key}`}
             >
               <Text
@@ -375,9 +385,9 @@ function CourseRecordBoard({ summary, onInfo, s }) {
                 {!has ? '—'
                   : Number.isInteger(value)
                     ? <CountUpText value={value} duration={COUNT_MS} delay={i * STAGGER_MS} disabled={reduced} />
-                    : `${value}`}
+                    : formatNumber(value)}
               </Text>
-              <Text style={s.boardLabel}>{cell.label}</Text>
+              <Text style={s.boardLabel}>{t(cell.labelKey)}</Text>
             </View>
           );
         })}
@@ -392,15 +402,16 @@ function CourseRecordBoard({ summary, onInfo, s }) {
 // that screen, so it renders as a plain, unpressable row rather than a
 // chevron that goes nowhere.
 function RoundList({ rounds, onOpen, s, theme }) {
+  const t = useT();
   return (
     <View>
       {rounds.map((r, i) => {
         const canOpen = !!(r.tournamentId && r.roundId);
         const title = formatRoundDate(r.date) || r.tournamentName;
         const meta = [
-          `${r.strokes} strokes`,
-          `${r.holesPlayed} hole${r.holesPlayed === 1 ? '' : 's'}`,
-          r.isComplete ? null : 'unfinished',
+          t('courses.stats.strokes', { count: r.strokes }),
+          t('courses.stats.holesPlayed', { count: r.holesPlayed }),
+          r.isComplete ? null : t('courses.stats.unfinished'),
         ].filter(Boolean).join(' · ');
         const body = (
           <>
@@ -408,7 +419,7 @@ function RoundList({ rounds, onOpen, s, theme }) {
               <Text style={s.roundTitle} numberOfLines={1}>{title}</Text>
               <Text style={s.roundMeta} numberOfLines={1}>{meta}</Text>
             </View>
-            <Text style={s.roundPoints}>{`${r.points} pts`}</Text>
+            <Text style={s.roundPoints}>{t('courses.stats.points', { count: r.points })}</Text>
             <Feather
               name="chevron-right"
               size={16}
@@ -425,7 +436,7 @@ function RoundList({ rounds, onOpen, s, theme }) {
             onPress={() => onOpen(r)}
             activeScale={0.98}
             accessibilityRole="button"
-            accessibilityLabel={`Open round ${title}`}
+            accessibilityLabel={t('courses.stats.openRound', { title })}
           >
             {body}
           </PressableScale>
@@ -467,7 +478,7 @@ function HighlightRow({ icon, kind, label, detail, s, theme }) {
 }
 
 function signed(n) {
-  return n > 0 ? `+${n}` : `${n}`;
+  return n > 0 ? `+${formatNumber(n, { maxDecimals: 2 })}` : formatNumber(n, { maxDecimals: 2 });
 }
 
 function makeStyles(theme) {
