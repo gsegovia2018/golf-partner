@@ -11,6 +11,28 @@ const MASTERS_RED = '#c8102e';
 const DEEP_GREEN = '#00553c';
 const DEEP_INFO = '#2b4766';
 
+// Text, fills and hairlines that sit ON bg.deep (the deep-green hero surface:
+// leaderboard, league board, join hero). bg.deep is identical in both themes,
+// so this set is too. `silver`/`bronze` are the lighter podium tints that keep
+// contrast on deep green — semantic.rank.silver (#94a3b8) drops to ~3.3:1
+// there. `*Fill` values are the matching 15% rank-badge backgrounds.
+const onDeep = {
+  primary:      '#ffffff',
+  strong:       'rgba(255,255,255,0.9)',   // selected chip fill, high-emphasis secondary text
+  soft:         'rgba(255,255,255,0.75)',  // detail lines, column heads
+  faint:        'rgba(255,255,255,0.6)',   // overlines, placeholders
+  dim:          'rgba(255,255,255,0.45)',  // chevrons, unranked glyphs
+  border:       'rgba(255,255,255,0.12)',  // row dividers
+  borderStrong: 'rgba(255,255,255,0.3)',   // dashed "unranked" ring
+  fill:         'rgba(255,255,255,0.08)',  // chip / "me" row wash
+  chip:         'rgba(255,255,255,0.14)',  // hero chips
+  silver:       '#c0c8d4',
+  bronze:       '#daa06d',
+  goldFill:     'rgba(255,215,0,0.2)',
+  silverFill:   'rgba(192,200,212,0.15)',
+  bronzeFill:   'rgba(218,160,109,0.15)',
+};
+
 const light = {
   bg: {
     primary:   '#f6f3ee',
@@ -183,4 +205,4 @@ const fonts = {
 const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 };
 const radius  = { sm: 8, md: 10, lg: 14, xl: 20, pill: 20, full: 9999 };
 
-export { light, dark, semantic, hud, typography, fonts, spacing, radius };
+export { light, dark, semantic, hud, onDeep, typography, fonts, spacing, radius };
