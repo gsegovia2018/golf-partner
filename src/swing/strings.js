@@ -403,9 +403,6 @@ export const SWING_STRINGS = build({
     },
     // D26: the marks behind these results.
     unconfirmedChip: (n) => t('swing.results.unconfirmedChip', { count: n }),
-    marksTitle: L,
-    marksHint: L,
-    finishAuto: L,
     nextMarking: L,
     placeClubhead: L,
     placeClubheadHint: (where) => t('swing.results.placeClubheadHint', { where: where.toLowerCase() }),

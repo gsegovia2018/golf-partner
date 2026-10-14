@@ -432,22 +432,13 @@ describe('SwingResultsScreen: after the marking pass (D26)', () => {
     expect(all.queryByTestId('results-unconfirmed')).toBeNull();
   });
 
-  test('the marks card shows the six chapters with their status; a chapter opens the canvas there in edit mode', async () => {
-    const u = setup({ marks: { ...OWNER_MARKS, pass: { state: 'done', skipped: ['shaftThrough'] } } });
-    await u.findByText(VERDICT);
-    openDetail(u);
-    const card = u.getByTestId('results-marks');
-    expect(within(card).getByText(SWING_STRINGS.mark.counts(0, 1, 5))).toBeTruthy(); // OWNER_MARKS predate the confirmed flag
-    fireEvent.press(within(card).getByTestId('chapter-top'));
-    expect(u.navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'top' });
-  });
-
-  test('"Finish frame looks wrong? Fix it" opens the canvas at the automatic finish', async () => {
+  test('the results have no marks card: Edit marks is the way back to the canvas', async () => {
     const u = setup();
     await u.findByText(VERDICT);
     openDetail(u);
-    fireEvent.press(u.getByTestId('results-fix-finish'));
-    expect(u.navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'finish' });
+    expect(u.queryByTestId('results-marks')).toBeNull();
+    fireEvent.press(u.getByLabelText(T.editMarks));
+    expect(u.navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', expect.objectContaining({ swingId: 's1' }));
   });
 });
 
@@ -510,7 +501,6 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
     expect(queryByText(T.mainTitle)).toBeNull();
     expect(queryAllByText(SWING_STRINGS.checkpoint.impact)).toHaveLength(0);
     expect(queryByText(T.allChecks)).toBeNull();
-    expect(queryByText(T.marksTitle)).toBeNull();
     expect(queryByText(T.nextMarking)).toBeNull();
     expect(queryByTestId('results-club-picker')).toBeNull();
     expect(queryByTestId('results-marks')).toBeNull();

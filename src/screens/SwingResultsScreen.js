@@ -24,9 +24,8 @@ import {
   markSwingFailed, deleteSwing, swingVideoUri, readMarks, getSwingProfile, setPracticeOpen,
 } from '../store/swingStore';
 import { runAnalysis } from '../swing/runAnalysis';
-import MarkChapters from '../components/swing/MarkChapters';
 import {
-  MARK_TOTAL, MARKED_KEYS, statusFromMarks, markedFromMarks, passDone,
+  MARK_TOTAL, MARKED_KEYS, markedFromMarks, passDone,
 } from '../swing/markPass';
 import { shareSwingExport } from '../swing/shareExport';
 import { nativeApi, getStill, ensureStills } from '../swing/frames';
@@ -253,7 +252,7 @@ function PlayerBody({ uri, onClose, s }) {
 // --- The view (props in, pixels out) ----------------------------------------------------------
 
 export function SwingResultsView({
-  row, phase, analysis, pose, progress, error, stillTick = 0, stillFor, markStatus = {},
+  row, phase, analysis, pose, progress, error, stillTick = 0, stillFor,
   onBack, onCancel, onDelete, onRetry, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport,
   practiceOpen = false, onPracticeToggle,
 }) {
@@ -524,18 +523,6 @@ export function SwingResultsView({
                   </View>
 
                   <SwingPattern s={s} tone={tone} checks={checks} onPick={jumpToCheck} />
-
-                  <View style={s.inner} testID="results-marks">
-                    <Text style={s.overlineDark}>{T.marksTitle}</Text>
-                    <MarkChapters themed mirror={analysis.handedness === 'left'} status={markStatus} onSelect={openEdit} testID="results-chapters" />
-                    <Text style={[s.hint, s.marksHint]}>{T.marksHint}</Text>
-                    <View style={s.finishRow}>
-                      <Text style={[s.hint, s.flex]}>{T.finishAuto}</Text>
-                      <PressableScale onPress={() => openEdit('finish')} style={s.fixLink} accessibilityRole="button" accessibilityLabel={SWING_STRINGS.mark.fixFinish} testID="results-fix-finish">
-                        <Text style={s.fixText}>{SWING_STRINGS.mark.fixFinish}</Text>
-                      </PressableScale>
-                    </View>
-                  </View>
                 </>
               ) : null}
             </View>
@@ -753,7 +740,6 @@ export default function SwingResultsScreen({ navigation, route }) {
         progress={progress}
         error={error}
         stillTick={stillTick}
-        markStatus={statusFromMarks(data.marks)}
         onBack={() => navigation.goBack()}
         onCancel={onCancel}
         onDelete={onDelete}
@@ -849,13 +835,6 @@ const makeStyles = (theme) => StyleSheet.create({
   detailHead: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingRight: 4 },
   detailLabel: { paddingBottom: 0 },
   inner: { paddingTop: 6, gap: 2 },
-  marksHint: { paddingHorizontal: 4, paddingTop: 6 },
-  finishRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4, marginTop: 6, paddingTop: 6,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border.subtle,
-  },
-  fixLink: { minHeight: 44, justifyContent: 'center', maxWidth: '55%' },
-  fixText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12.5, color: theme.accent.primary },
 
   btnRow: { flexDirection: 'row', gap: 10 },
   btnStack: { gap: 10 },
