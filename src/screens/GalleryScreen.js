@@ -7,6 +7,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 import { useTournamentMedia } from '../hooks/useTournamentMedia';
 import { getTournament, getTournamentSnapshot } from '../store/tournamentStore';
 import MediaLightbox from '../components/MediaLightbox';
@@ -28,6 +29,7 @@ import {
 export default function GalleryScreen({ route, navigation }) {
   const { tournamentId, mediaId } = route.params ?? {};
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const openedMediaRef = useRef(null);
 
@@ -129,7 +131,7 @@ export default function GalleryScreen({ route, navigation }) {
       return (
         <View style={s.stateBox}>
           <ActivityIndicator color={theme.accent.primary} />
-          <Text style={s.stateText}>Loading memories…</Text>
+          <Text style={s.stateText}>{t('gallery.loading')}</Text>
         </View>
       );
     }
@@ -137,10 +139,10 @@ export default function GalleryScreen({ route, navigation }) {
       return (
         <View style={s.stateBox}>
           <Feather name="alert-triangle" size={44} color={theme.text.muted} />
-          <Text style={s.stateText}>Couldn't load this gallery.</Text>
+          <Text style={s.stateText}>{t('gallery.loadError')}</Text>
           <TouchableOpacity style={s.retryBtn} onPress={loadTournament} activeOpacity={0.85}>
             <Feather name="refresh-cw" size={14} color={theme.text.inverse} />
-            <Text style={s.retryText}>Retry</Text>
+            <Text style={s.retryText}>{t('gallery.retry')}</Text>
           </TouchableOpacity>
         </View>
       );
@@ -172,9 +174,9 @@ export default function GalleryScreen({ route, navigation }) {
         {isFirstMemory ? (
           <View style={s.empty}>
             <Feather name="camera" size={44} color={theme.text.muted} />
-            <Text style={s.emptyTitle}>No memories yet</Text>
+            <Text style={s.emptyTitle}>{t('gallery.empty.title')}</Text>
             <Text style={s.emptyText}>
-              Tap the + button below to add your first photo or video.
+              {t('gallery.empty.body')}
             </Text>
             <Feather
               name="arrow-down"
@@ -186,7 +188,7 @@ export default function GalleryScreen({ route, navigation }) {
         ) : filtered.length === 0 ? (
           <View style={s.empty}>
             <Feather name="image" size={44} color={theme.text.muted} />
-            <Text style={s.emptyText}>No memories for this filter.</Text>
+            <Text style={s.emptyText}>{t('gallery.empty.filter')}</Text>
           </View>
         ) : (
           <View style={s.mosaic}>
@@ -220,7 +222,7 @@ export default function GalleryScreen({ route, navigation }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.title}>Memories</Text>
+        <Text style={s.title}>{t('gallery.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
@@ -241,7 +243,7 @@ export default function GalleryScreen({ route, navigation }) {
         onClose={() => setStories({ visible: false, items: [], startIndex: 0 })}
       />
 
-      <TouchableOpacity style={s.fab} onPress={openCaptureMenu} accessibilityLabel="Add memory" activeOpacity={0.85}>
+      <TouchableOpacity style={s.fab} onPress={openCaptureMenu} accessibilityLabel={t('gallery.addA11y')} activeOpacity={0.85}>
         <Feather name="plus" size={26} color={theme.text.inverse} />
       </TouchableOpacity>
 

@@ -5,12 +5,14 @@ import auth from './en/auth';
 import common from './en/common';
 import courses from './en/courses';
 import holeMap from './en/holeMap';
+import feed from './en/feed';
 import leagueBoard from './en/leagueBoard';
 import leagueCards from './en/leagueCards';
 import leagueMembers from './en/leagueMembers';
 import leagueShare from './en/leagueShare';
 import leagueTimeline from './en/leagueTimeline';
 import marker from './en/marker';
+import notifications from './en/notifications';
 import onboarding from './en/onboarding';
 import players from './en/players';
 import profile from './en/profile';
@@ -29,12 +31,14 @@ export const AREAS = {
   common,
   courses,
   holeMap,
+  feed,
   leagueBoard,
   leagueCards,
   leagueMembers,
   leagueShare,
   leagueTimeline,
   marker,
+  notifications,
   onboarding,
   players,
   profile,
@@ -53,12 +57,14 @@ export default {
   ...common,
   ...courses,
   ...holeMap,
+  ...feed,
   ...leagueBoard,
   ...leagueCards,
   ...leagueMembers,
   ...leagueShare,
   ...leagueTimeline,
   ...marker,
+  ...notifications,
   ...onboarding,
   ...players,
   ...profile,

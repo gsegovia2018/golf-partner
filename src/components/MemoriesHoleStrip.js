@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 
 export default function MemoriesHoleStrip({
   maxHoles,
@@ -9,6 +10,7 @@ export default function MemoriesHoleStrip({
   onSelect,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const holes = Array.from(holesWithMedia).sort((a, b) => a - b);
@@ -18,7 +20,7 @@ export default function MemoriesHoleStrip({
   return (
     <View style={s.wrap}>
       <View style={s.header}>
-        <Text style={s.title}>POR HOYO</Text>
+        <Text style={s.title}>{t('memories.holes.title')}</Text>
         <Text style={s.count}>{holes.length} / {maxHoles}</Text>
       </View>
       <View style={s.grid}>
@@ -30,7 +32,9 @@ export default function MemoriesHoleStrip({
               style={[s.cell, on && s.cellOn]}
               activeOpacity={0.7}
               onPress={() => onSelect(on ? null : i)}
-              accessibilityLabel={`Hoyo ${i + 1}${on ? ', filtrado' : ''}`}
+              accessibilityLabel={on
+                ? t('memories.holes.a11yFiltered', { hole: i + 1 })
+                : t('memories.holes.a11y', { hole: i + 1 })}
             >
               <Text style={[s.cellLabel, on && s.cellLabelOn]}>{i + 1}</Text>
             </TouchableOpacity>
