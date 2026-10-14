@@ -26,7 +26,7 @@ import { shotBenchmarkForHandicap } from './shotBenchmarks';
 import { roundDifferential } from './handicapIndex';
 import { roundEndedAt, roundStartedAt } from './finishStamp';
 import { msg, raw } from './statsMsg';
-import { formatDate } from '../i18n';
+import { formatDate, t as translate } from '../i18n';
 
 // Canonical player id used inside the synthetic tournament.
 export const CANON_ID = 'me';
@@ -381,9 +381,9 @@ export function collectMyRounds(tournaments, userId, displayName, opts = {}) {
         key: `${t.id}:${roundIndex}`,
         round,
         tournamentId: t.id,
-        tournamentName: t.name || 'Tournament',
+        tournamentName: t.name || translate('stats.data.tournament'),
         tournamentDate: t.createdAt ?? null,
-        courseName: round.courseName || `Round ${roundIndex + 1}`,
+        courseName: round.courseName || translate('rounds.next.roundLabel', { n: roundIndex + 1 }),
         roundIndex,
         playerId: me.id,
         player: me,

@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 
 const ACTION_WIDTH = 72;
 const FLICK_VELOCITY = 0.2;
@@ -16,6 +17,7 @@ export default function SwipeToDelete({
   enabled = true, onDelete, borderRadius = 18, accessibilityLabel, children,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme, borderRadius), [theme, borderRadius]);
   const translateX = useRef(new Animated.Value(0)).current;
   const offsetRef = useRef(0);
@@ -58,7 +60,7 @@ export default function SwipeToDelete({
           style={s.deleteBtn}
           onPress={() => { snapTo(0); onDelete?.(); }}
           accessibilityRole="button"
-          accessibilityLabel={accessibilityLabel ?? 'Delete'}
+          accessibilityLabel={accessibilityLabel ?? t('misc.swipeDelete')}
           testID="swipe-delete-action"
         >
           <Feather name="trash-2" size={20} color="#ffffff" />

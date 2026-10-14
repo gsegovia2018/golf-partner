@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getLeague, getLeagueCached } from '../store/leagueStore';
 import { leagueErrorText } from '../lib/leagueErrorText';
+import { t } from '../i18n';
 
 // One league's snapshot for the League screens (the shape getLeague returns).
 // Cache first, then live, on mount and on every focus. The cached snapshot is
@@ -42,7 +43,7 @@ export function useLeague(navigation, leagueId) {
         setStale(false);
         setError(leagueErrorText(e));
       } else if (dataRef.current) setStale(true);
-      else setError(leagueErrorText(e) || 'Could not load the league.');
+      else setError(leagueErrorText(e) || t('league.final.loadFailed'));
     } finally {
       if (mountedRef.current) setLoading(false);
     }

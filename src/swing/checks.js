@@ -9,6 +9,7 @@ import {
   LM, angleAboveHorizontal, angleBetween, sideOfLine, extendToY, spineTiltDeg, mid, trailShoulder,
 } from './geometry';
 import { SWING_STRINGS as T } from './strings';
+import { t } from '../i18n';
 
 const round = (v, d = 1) => (v == null || !Number.isFinite(v) ? v : Math.round(v * 10 ** d) / 10 ** d);
 const has = (p) => p && Number.isFinite(p.x) && Number.isFinite(p.y);
@@ -132,6 +133,8 @@ export function runChecks(input) {
   const rows = [];
   const M = (id, phase, cpsList, extra = {}) => ({ id, label: T.checkLabel[id], phase, cps: cpsList, ...extra });
   const unknown = (m, reason, text) => ({ ...m, status: 'unknown', value: null, unit: null, reason, text });
+  const at = (name) => t(`misc.swing.at.${name}`);
+  const why = (name, params) => T.reason.nodata(t(`misc.swing.why.${name}`, params));
   const headMissing = (c, where) => (c.unplaced ? T.reason.unplaced(where) : T.reason.hidden(where));
   const push = (m, status, value, unit, text, extra = {}) => rows.push({ ...m, status, value, unit, text, ...extra });
   const tiltOf = (k) => {
@@ -143,7 +146,7 @@ export function runChecks(input) {
   {
     const m = M('posture_address', 'setup', ['address']);
     const t = tiltOf('address');
-    if (t === null) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame')));
+    if (t === null) rows.push(unknown(m, 'nopose', T.reason.nopose(at('address'))));
     else {
       const { green: [gLo, gHi], yellow: [yLo, yHi] } = TH.posture;
       const s = t >= gLo && t <= gHi ? 'green' : t >= yLo && t <= yHi ? 'yellow' : 'red';
@@ -171,7 +174,7 @@ export function runChecks(input) {
     const m = M('hands_under_shoulders', 'setup', ['address']);
     const sh = midLm('address', LM.lSh, LM.rSh);
     const a = C.address;
-    if (!sh || !a) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame')));
+    if (!sh || !a) rows.push(unknown(m, 'nopose', T.reason.nopose(at('address'))));
     else {
       const d = (a.hands.x - sh.x) * cm;
       const s = sym(d, TH.handsUnderShoulders);
@@ -187,7 +190,7 @@ export function runChecks(input) {
     const sh = midLm('address', LM.lSh, LM.rSh);
     const knee = midLm('address', LM.lKnee, LM.rKnee);
     const ang = hip && sh && knee ? angleBetween({ x: sh.x - hip.x, y: sh.y - hip.y }, { x: knee.x - hip.x, y: knee.y - hip.y }) : null;
-    if (ang === null) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame')));
+    if (ang === null) rows.push(unknown(m, 'nopose', T.reason.nopose(at('address'))));
     else {
       const s = range(ang, TH.waistBend);
       // A smaller angle is more bend: 'over' = bent over too far, 'tall' = too upright.
@@ -202,7 +205,7 @@ export function runChecks(input) {
     const ear = midLm('address', LM.lEar, LM.rEar);
     const sh = midLm('address', LM.lSh, LM.rSh);
     const hip = midLm('address', LM.lHip, LM.rHip);
-    if (!ear || !sh || !hip) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame')));
+    if (!ear || !sh || !hip) rows.push(unknown(m, 'nopose', T.reason.nopose(at('address'))));
     else {
       const ang = angleBetween({ x: sh.x - hip.x, y: sh.y - hip.y }, { x: ear.x - sh.x, y: ear.y - sh.y });
       // Which side of the hip -> shoulder line the ear sits: + = toward the ball / down (head dropped).
@@ -220,7 +223,7 @@ export function runChecks(input) {
     const knee = lm('address', leadKneeIdx);
     const a = C.address;
     const x = a && hip && knee ? extendToY(hip, knee, a.hands.y) : null;
-    if (x === null) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame')));
+    if (x === null) rows.push(unknown(m, 'nopose', T.reason.nopose(at('address'))));
     else {
       const d = (a.hands.x - x) * cm;
       const s = range(d, TH.handGap);
@@ -233,7 +236,7 @@ export function runChecks(input) {
   // hands_between_planes (worst of leadArm, top)
   {
     const m = M('hands_between_planes', 'backswing', ['leadArm', 'top']);
-    if (!planes.shaft || !planes.shoulder) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame (shoulder plane)')));
+    if (!planes.shaft || !planes.shoulder) rows.push(unknown(m, 'nopose', T.reason.nopose(at('addressShoulder'))));
     else {
       let worst = null;
       ['leadArm', 'top'].forEach((k) => {
@@ -244,7 +247,7 @@ export function runChecks(input) {
         const ex = Math.max(dSh, -dShaft);
         if (!worst || ex > worst.ex) worst = { ex, k, dir: dSh >= -dShaft ? 'steep' : 'flat' };
       });
-      if (!worst) rows.push(unknown(m, 'nodata', T.reason.nodata('No lead arm / top marks')));
+      if (!worst) rows.push(unknown(m, 'nodata', why('noLeadArmTop')));
       else {
         const s = worst.ex <= 0 ? 'green' : worst.ex <= 4 ? 'yellow' : 'red';
         push(m, s, round(Math.max(0, worst.ex), 0), 'cm',
@@ -265,11 +268,11 @@ export function runChecks(input) {
   {
     const m = M('butt_extension', 'backswing', ['leadArm']);
     const c = C.leadArm;
-    if (!c) rows.push(unknown(m, 'nodata', T.reason.nodata('No lead arm mark')));
-    else if (!c.head || !ball) rows.push(unknown(m, c.unplaced ? 'unplaced' : 'hidden', headMissing(c, 'lead arm parallel')));
+    if (!c) rows.push(unknown(m, 'nodata', why('noLeadArm')));
+    else if (!c.head || !ball) rows.push(unknown(m, c.unplaced ? 'unplaced' : 'hidden', headMissing(c, at('leadArmParallel'))));
     else {
       const x = extendToY(c.head, c.hands, ball.y);
-      if (x === null) rows.push(unknown(m, 'nodata', T.reason.nodata('Shaft is horizontal')));
+      if (x === null) rows.push(unknown(m, 'nodata', why('shaftHorizontal')));
       else {
         const toes = toesX();
         const span = toes !== null && toes < ball.x ? bx - toes : 0;
@@ -297,8 +300,8 @@ export function runChecks(input) {
   {
     const m = M('top_direction', 'backswing', ['top']);
     const c = C.top;
-    if (!c) rows.push(unknown(m, 'nodata', T.reason.nodata('No top mark')));
-    else if (!c.head) rows.push(unknown(m, c.unplaced ? 'unplaced' : 'hidden', headMissing(c, 'the top')));
+    if (!c) rows.push(unknown(m, 'nodata', why('noTop')));
+    else if (!c.head) rows.push(unknown(m, c.unplaced ? 'unplaced' : 'hidden', headMissing(c, at('top'))));
     else {
       const dx = (c.head.x - c.hands.x) / H;
       const s = Math.abs(dx) <= 0.08 ? 'green' : 'yellow';
@@ -313,8 +316,8 @@ export function runChecks(input) {
     const m = M('hands_over_heels', 'backswing', ['top']);
     const c = C.top;
     const heel = lm('top', trailHeelIdx);
-    if (!c) rows.push(unknown(m, 'nodata', T.reason.nodata('No top mark')));
-    else if (!heel) rows.push(unknown(m, 'nopose', T.reason.nopose('the top')));
+    if (!c) rows.push(unknown(m, 'nodata', why('noTop')));
+    else if (!heel) rows.push(unknown(m, 'nopose', T.reason.nopose(at('top'))));
     else {
       const d = (c.hands.x - heel.x) * cm;
       const s = sym(d, TH.handsOverHeels);
@@ -330,8 +333,8 @@ export function runChecks(input) {
     const sh = lm('top', leadShIdx);
     const wr = lm('top', leadWrIdx);
     const trail = lm('address', trailShIdx);
-    if (!ball || !trail) rows.push(unknown(m, 'nopose', T.reason.nopose('the address frame (shoulder plane)')));
-    else if (!sh || !wr) rows.push(unknown(m, 'nopose', T.reason.nopose('the top')));
+    if (!ball || !trail) rows.push(unknown(m, 'nopose', T.reason.nopose(at('addressShoulder'))));
+    else if (!sh || !wr) rows.push(unknown(m, 'nopose', T.reason.nopose(at('top'))));
     else {
       // Angles of the two lines measured from the -x axis (away from the ball), counter-clockwise
       // in the image (y up), so "more" means a more upright line.
@@ -350,7 +353,7 @@ export function runChecks(input) {
     const m = M('downswing_path', 'transition', ['shaftDown']);
     const c = C.shaftDown;
     const path = ['address', 'takeaway', 'leadArm', 'top'].map((k) => C[k]?.hands).filter(Boolean);
-    if (!c) rows.push(unknown(m, 'nodata', T.reason.nodata('No shaft-down mark')));
+    if (!c) rows.push(unknown(m, 'nodata', why('noShaftDown')));
     else {
       let bxAt = null;
       for (let i = 0; i < path.length - 1; i++) {
@@ -361,7 +364,7 @@ export function runChecks(input) {
           break;
         }
       }
-      if (bxAt === null) rows.push(unknown(m, 'nodata', T.reason.nodata('Hands outside the backswing height range')));
+      if (bxAt === null) rows.push(unknown(m, 'nodata', why('handsOutOfRange')));
       else {
         const outCm = (c.hands.x - bxAt) * cm; // + = outside / toward the ball
         const s = outCm <= 3 ? 'green' : outCm <= 6 ? 'yellow' : 'red';
@@ -374,12 +377,12 @@ export function runChecks(input) {
   // ball and the toes. Returns null with an 'unknown' row pushed when it cannot be read.
   const shaftLanding = (m, k, where) => {
     const c = C[k];
-    if (!c) rows.push(unknown(m, 'nodata', T.reason.nodata(`No ${where} mark`)));
+    if (!c) rows.push(unknown(m, 'nodata', why('noMark', { what: where })));
     else if (!c.head || !ball) rows.push(unknown(m, c.unplaced ? 'unplaced' : 'hidden', headMissing(c, where)));
     else {
       const x = extendToY(c.hands, c.head, ball.y);
       const toes = toesX();
-      if (x === null || toes === null || toes >= bx) rows.push(unknown(m, 'nodata', T.reason.nodata('Shaft is horizontal')));
+      if (x === null || toes === null || toes >= bx) rows.push(unknown(m, 'nodata', why('shaftHorizontal')));
       else return { x, toes, cmFromBall: (x - bx) * cm };
     }
     return null;
@@ -388,7 +391,7 @@ export function runChecks(input) {
   // shaft_down_shallow (shaftDown, P6): beyond the ball = shallow; toes..ball = watch; inside the toes = steep (over the top)
   {
     const m = M('shaft_down_shallow', 'transition', ['shaftDown']);
-    const r = shaftLanding(m, 'shaftDown', 'shaft down');
+    const r = shaftLanding(m, 'shaftDown', T.checkpoint.shaftDown.toLowerCase());
     if (r) {
       const where = r.x > bx ? 'shallow' : r.x >= r.toes ? 'between' : 'steep';
       const s = where === 'shallow' ? 'green' : where === 'between' ? 'yellow' : 'red';
@@ -400,7 +403,7 @@ export function runChecks(input) {
   // beyond the ball = flat through impact (a flip)
   {
     const m = M('shaft_through_steep', 'impact', ['shaftThrough']);
-    const r = shaftLanding(m, 'shaftThrough', 'shaft through');
+    const r = shaftLanding(m, 'shaftThrough', T.checkpoint.shaftThrough.toLowerCase());
     if (r) {
       const beyond = r.cmFromBall;
       const s = beyond <= 0 ? 'green' : beyond <= TH.shaftThroughYellowCm ? 'yellow' : 'red';
@@ -413,9 +416,9 @@ export function runChecks(input) {
   ['preImpact', 'impact'].forEach((k) => {
     const m = M('clubhead_vs_plane', 'impact', [k], { cp: k });
     const c = C[k];
-    if (!c) rows.push(unknown(m, 'nodata', T.reason.nodata(`No ${T.checkpoint[k].toLowerCase()} mark`)));
+    if (!c) rows.push(unknown(m, 'nodata', why('noMark', { what: T.checkpoint[k].toLowerCase() })));
     else if (!c.head) rows.push(unknown(m, c.unplaced ? 'unplaced' : 'hidden', headMissing(c, T.checkpoint[k].toLowerCase())));
-    else if (!planes.shaft) rows.push(unknown(m, 'nodata', T.reason.nodata('No address plane')));
+    else if (!planes.shaft) rows.push(unknown(m, 'nodata', why('noAddressPlane')));
     else {
       const d = sideOfLine(c.head, planes.shaft.a, planes.shaft.b) * cm;
       const { green: g, yellow: y } = TH.clubheadPlane;
@@ -431,7 +434,7 @@ export function runChecks(input) {
     const m = M('hands_height_impact', 'impact', ['address', 'impact'], { cluster: 'early_extension' });
     const a = C.address;
     const i = C.impact;
-    if (!a || !i) rows.push(unknown(m, 'nodata', T.reason.nodata('Needs address and impact')));
+    if (!a || !i) rows.push(unknown(m, 'nodata', why('needsAddressImpact')));
     else {
       const d = (a.hands.y - i.hands.y) * cm;
       push(m, band(d, ...TH.handsHeight), round(d, 0), 'cm', d > 0 ? T.checkText.hands_height_impact_up(d) : T.checkText.hands_height_impact_down(-d));
@@ -443,7 +446,7 @@ export function runChecks(input) {
     const m = M('hands_out_impact', 'impact', ['address', 'impact'], { cluster: 'early_extension' });
     const a = C.address;
     const i = C.impact;
-    if (!a || !i) rows.push(unknown(m, 'nodata', T.reason.nodata('Needs address and impact')));
+    if (!a || !i) rows.push(unknown(m, 'nodata', why('needsAddressImpact')));
     else {
       const d = (i.hands.x - a.hands.x) * cm;
       push(m, band(d, 4, 8), round(d, 0), 'cm', d > 0 ? T.checkText.hands_out_impact_in(d) : T.checkText.hands_out_impact_out(-d));
@@ -455,9 +458,9 @@ export function runChecks(input) {
     const m = M('shaft_angle_impact', 'impact', ['address', 'impact'], { cluster: 'early_extension' });
     const a = C.address;
     const i = C.impact;
-    if (!a || !i) rows.push(unknown(m, 'nodata', T.reason.nodata('Needs address and impact')));
+    if (!a || !i) rows.push(unknown(m, 'nodata', why('needsAddressImpact')));
     else if (!a.head || !i.head) {
-      rows.push(unknown(m, a.unplaced || i.unplaced ? 'unplaced' : 'hidden', headMissing(a.head ? i : a, a.head ? 'impact' : 'address')));
+      rows.push(unknown(m, a.unplaced || i.unplaced ? 'unplaced' : 'hidden', headMissing(a.head ? i : a, a.head ? at('impact') : at('address'))));
     } else {
       const d = angleAboveHorizontal(i.head, i.hands) - angleAboveHorizontal(a.head, a.hands);
       push(m, band(d, ...TH.shaftAngle), round(d, 0), '°', d >= 0 ? T.checkText.shaft_angle_impact_up(d) : T.checkText.shaft_angle_impact_down(-d));
@@ -469,7 +472,7 @@ export function runChecks(input) {
     const m = M('spine_loss', 'impact', ['address', 'impact'], { cluster: 'early_extension' });
     const ta = tiltOf('address');
     const ti = tiltOf('impact');
-    if (ta === null || ti === null) rows.push(unknown(m, 'nopose', T.reason.nopose('address and impact')));
+    if (ta === null || ti === null) rows.push(unknown(m, 'nopose', T.reason.nopose(at('addressImpact'))));
     else {
       const loss = ta - ti;
       push(m, band(loss, ...TH.spineLoss), round(loss, 0), '°', T.checkText.spine_loss(ta, ti, loss));
@@ -481,7 +484,7 @@ export function runChecks(input) {
     const m = M('hip_drift', 'impact', ['address', 'impact'], { cluster: 'early_extension' });
     const a = lm('address', hipIdx);
     const i = lm('impact', hipIdx);
-    if (!a || !i) rows.push(unknown(m, 'nopose', T.reason.nopose('address and impact')));
+    if (!a || !i) rows.push(unknown(m, 'nopose', T.reason.nopose(at('addressImpact'))));
     else {
       const d = (i.x - a.x) * cm;
       push(m, band(d, 3, 6), round(d, 0), 'cm', T.checkText.hip_drift(d));
@@ -493,7 +496,7 @@ export function runChecks(input) {
     const m = M('head_drift', 'impact', ['address', 'impact']);
     const a = lm('address', LM.nose);
     const i = lm('impact', LM.nose);
-    if (!a || !i) rows.push(unknown(m, 'nopose', T.reason.nopose('address and impact')));
+    if (!a || !i) rows.push(unknown(m, 'nopose', T.reason.nopose(at('addressImpact'))));
     else {
       const d = Math.hypot(i.x - a.x, i.y - a.y) * cm;
       push(m, band(d, ...TH.headDrift), round(d, 0), 'cm', T.checkText.head_drift(d));
@@ -506,7 +509,7 @@ export function runChecks(input) {
     const start = input.motionStart ?? cps.takeaway?.frame;
     const tp = cps.top?.frame;
     const im = cps.impact?.frame;
-    if (start == null || tp == null || im == null || im <= tp || tp <= start) rows.push(unknown(m, 'nodata', T.reason.nodata('Needs the start of the swing, top and impact in order')));
+    if (start == null || tp == null || im == null || im <= tp || tp <= start) rows.push(unknown(m, 'nodata', why('needsOrder')));
     else {
       const r = round((tp - start) / (im - tp), 1); // judged at the precision shown
       let s;
@@ -529,7 +532,7 @@ export function runChecks(input) {
     const hl = lm('finish', LM.lHip);
     const hr = lm('finish', LM.rHip);
     const ank = lm('finish', leadAnkIdx);
-    if (!hl || !hr || !ank || input.finishQuietS == null) rows.push(unknown(m, 'nopose', T.reason.nopose('the finish frame')));
+    if (!hl || !hr || !ank || input.finishQuietS == null) rows.push(unknown(m, 'nopose', T.reason.nopose(at('finish'))));
     else {
       const quiet = input.finishQuietS >= FINISH_QUIET_S;
       const balanced = Math.abs(mid(hl, hr).x - ank.x) <= FINISH_BALANCE_H * H;

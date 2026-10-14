@@ -12,8 +12,8 @@ import {
   fallbackScoringMode,
   isScoringModeAllowed,
 } from '../components/scoringModes';
+import { t, formatDate } from '../i18n';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const COURSE_NAME_MAX = 22;
 
 function cloneHoles(holes) {
@@ -72,9 +72,10 @@ function validHistoryTee(tees, history) {
 }
 
 export function buildQuickStartGameName(courseName, date = new Date()) {
-  const stamp = `${date.getDate()} ${MONTHS[date.getMonth()]}`;
+  // The name is stored data: it is written in the creator's language now.
+  const stamp = formatDate(date, 'day');
   const trimmed = String(courseName ?? '').trim();
-  if (!trimmed) return `Game · ${stamp}`;
+  if (!trimmed) return t('game.name.quickStart', { stamp });
   const shortCourse = trimmed.length > COURSE_NAME_MAX
     ? `${trimmed.slice(0, COURSE_NAME_MAX - 1).trimEnd()}…`
     : trimmed;

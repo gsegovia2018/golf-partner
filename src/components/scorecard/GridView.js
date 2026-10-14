@@ -502,13 +502,14 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
       ) : !showTotalsCard ? null : (
         <View style={s.multiTotalCard}>
           <View style={s.multiTotalHeader}>
-            <Text style={s.multiTotalLabel}>PAR {coursePar}</Text>
+            <Text style={s.multiTotalLabel}>{t('scorecard.grid.parTotal')} {coursePar}</Text>
             <Text style={s.multiTotalLabel}>{
-              mode === 'matchplay' ? 'MATCH PLAY'
-                : mode === 'sindicato' ? 'SINDICATO'
-                : mode === 'pairsmatchplay' ? 'PAIRS MATCH PLAY'
-                : isScrambleMode(mode) ? 'SCRAMBLE'
-                : 'STABLEFORD'
+              t(`scoring.summary.eyebrow.${
+                mode === 'matchplay' ? 'matchPlay'
+                  : mode === 'sindicato' ? 'sindicato'
+                  : mode === 'pairsmatchplay' ? 'pairsMatchPlay'
+                  : isScrambleMode(mode) ? 'scramble'
+                  : 'stableford'}`)
             }</Text>
           </View>
           <View style={s.multiTotalColHeader}>

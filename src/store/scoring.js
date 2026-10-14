@@ -1338,7 +1338,8 @@ export function normalizeWatchShotPatch(detail, patch, par) {
 // { board: [{player, points, strokes}] sorted by holes won desc, status } or
 // null for the wrong player count / before any hole is scored. `status` is
 // "<leader> wins" once the lead exceeds the holes still to play, else
-// "<leader> leads by N", else "All square".
+// "<leader> leads by N", else "All square" — as a message descriptor
+// ({ key, params }) the screen renders with tr().
 export function tournamentMatchPlayStandings(tournament) {
   const { players, rounds } = tournament;
   if (!players || players.length !== 2) return null;
@@ -1382,8 +1383,8 @@ export function tournamentMatchPlayStandings(tournament) {
   const lead = Math.abs(aHoles - bHoles);
   const firstName = (p) => p.name?.split(' ')[0] ?? '—';
   let status;
-  if (lead === 0) status = 'All square';
-  else if (lead > holesRemaining) status = `${firstName(board[0].player)} wins`;
-  else status = `${firstName(board[0].player)} leads by ${lead}`;
+  if (lead === 0) status = { key: 'game.match.allSquare' };
+  else if (lead > holesRemaining) status = { key: 'game.match.wins', params: { name: firstName(board[0].player) } };
+  else status = { key: 'game.match.leadsBy', params: { name: firstName(board[0].player), lead } };
   return { board, status };
 }

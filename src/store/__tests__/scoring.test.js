@@ -902,7 +902,7 @@ describe('tournamentMatchPlayStandings', () => {
     const r = tournamentMatchPlayStandings(t);
     expect(r.board.map((e) => [e.player.id, e.points])).toEqual([['a', 2], ['b', 0]]);
     expect(r.board[0].strokes).toBe(8);
-    expect(r.status).toBe('Alex wins');
+    expect(r.status).toEqual({ key: 'game.match.wins', params: { name: 'Alex' } });
   });
 
   test('reports a running lead when holes remain', () => {
@@ -913,7 +913,7 @@ describe('tournamentMatchPlayStandings', () => {
     };
     const t = { players, settings: { scoringMode: 'matchplay' }, rounds: [round], currentRound: 0 };
     const r = tournamentMatchPlayStandings(t);
-    expect(r.status).toBe('Alex leads by 1');
+    expect(r.status).toEqual({ key: 'game.match.leadsBy', params: { name: 'Alex', lead: 1 } });
   });
 
   test('reports all square when holes won are equal', () => {
@@ -922,7 +922,7 @@ describe('tournamentMatchPlayStandings', () => {
       scores: { a: { 1: 4, 2: 5 }, b: { 1: 5, 2: 4 } },
     };
     const t = { players, settings: { scoringMode: 'matchplay' }, rounds: [round], currentRound: 0 };
-    expect(tournamentMatchPlayStandings(t).status).toBe('All square');
+    expect(tournamentMatchPlayStandings(t).status).toEqual({ key: 'game.match.allSquare' });
   });
 
   test('returns null when not exactly 2 players', () => {
@@ -940,7 +940,7 @@ describe('tournamentMatchPlayStandings', () => {
     };
     const r = tournamentMatchPlayStandings(t);
     expect(r.board.map((e) => [e.player.id, e.points])).toEqual([['a', 0], ['b', 0]]);
-    expect(r.status).toBe('All square');
+    expect(r.status).toEqual({ key: 'game.match.allSquare' });
   });
 
   test('future rounds keep their holes in the remaining count', () => {
@@ -955,7 +955,7 @@ describe('tournamentMatchPlayStandings', () => {
     const t = {
       players, settings: { scoringMode: 'matchplay' }, rounds: [played, future], currentRound: 0,
     };
-    expect(tournamentMatchPlayStandings(t).status).toBe('Alex leads by 2');
+    expect(tournamentMatchPlayStandings(t).status).toEqual({ key: 'game.match.leadsBy', params: { name: 'Alex', lead: 2 } });
   });
 
   test('non-matchplay rounds contribute nothing — not even remaining holes', () => {
@@ -980,7 +980,7 @@ describe('tournamentMatchPlayStandings', () => {
       rounds: [played, futureMp, stablefordRound],
       currentRound: 0,
     };
-    expect(tournamentMatchPlayStandings(t).status).toBe('Alex wins');
+    expect(tournamentMatchPlayStandings(t).status).toEqual({ key: 'game.match.wins', params: { name: 'Alex' } });
   });
 
   test('reports a win from a fully-scored later round even when currentRound is stale at 0', () => {
@@ -1004,7 +1004,7 @@ describe('tournamentMatchPlayStandings', () => {
       rounds: [tiedRound, decisiveRound],
       currentRound: 0,
     };
-    expect(tournamentMatchPlayStandings(t).status).toBe('Alex wins');
+    expect(tournamentMatchPlayStandings(t).status).toEqual({ key: 'game.match.wins', params: { name: 'Alex' } });
   });
 });
 

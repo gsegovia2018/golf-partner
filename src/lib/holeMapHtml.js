@@ -12,9 +12,17 @@
 //   host -> page:  { type:'set-targets', targets:[[lat,lng],...] } (replaces rings)
 //
 // data: { mode:'view'|'edit'|'replay', holeLabel, green, greenFront, greenCenter,
-//         greenBack, tee, hazards:[{kind,poly}], player, activeField }
+//         greenBack, tee, hazards:[{kind,poly}], player, activeField, hudLabels }
 
 import { LEAFLET_CSS, LEAFLET_JS, LEAFLET_ROTATE_JS } from './vendor/leafletBundle';
+import { t } from '../i18n';
+
+// The words the page's HUD prints, in the active language. The page is a
+// separate document with no i18n of its own, so the host passes them in as
+// data.hudLabels (call at build time, not at module load).
+export function hudLabels() {
+  return { you: t('game.holeMap.you'), fromTee: t('game.holeMap.fromTee'), aim: t('game.holeMap.aim') };
+}
 
 export function buildHoleMapHtml(data) {
   // Escape '<' so a course name containing "</script>" can't terminate the inline
@@ -329,9 +337,9 @@ function ringIcon(){ return L.divIcon({ className:'', html:'<div style="position
 // tee. The aim ring is a last resort, for a hole with neither a fix nor a tee,
 // so the card still says something rather than three dashes.
 function hudSource(aim){
-  if (valid(anchor.pos) && anchor.source === 'gps') return { from: anchor.pos, label: 'You' };
-  if (valid(anchor.pos) && anchor.source === 'tee') return { from: anchor.pos, label: 'From tee' };
-  return { from: valid(aim) ? aim : null, label: 'Aim' };
+  if (valid(anchor.pos) && anchor.source === 'gps') return { from: anchor.pos, label: (DATA.hudLabels || {}).you || 'You' };
+  if (valid(anchor.pos) && anchor.source === 'tee') return { from: anchor.pos, label: (DATA.hudLabels || {}).fromTee || 'From tee' };
+  return { from: valid(aim) ? aim : null, label: (DATA.hudLabels || {}).aim || 'Aim' };
 }
 
 // Top-right F/C/B box: how far the player is from the green, front and back.

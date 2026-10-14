@@ -39,7 +39,7 @@ import PtsBadge from '../components/PtsBadge';
 // Same 6-sample floor MyStats' Breakdown tab uses (metricTone.js) — below it
 // a bucket's average is too noisy to paint as a good/bad verdict.
 import { isLowSample } from '../components/mystats/metricTone';
-import { t, useT, formatNumber } from '../i18n';
+import { t, tr, useT, formatNumber } from '../i18n';
 
 // Numbers reach the catalogue already formatted (decimal comma in Spanish).
 const num = (v) => formatNumber(v);
@@ -110,7 +110,10 @@ const MODE_BADGE_LABELS = {
   bestball: 'stats.screen.modeBadge.bestball',
   pairsmatchplay: 'stats.screen.modeBadge.pairsmatchplay',
 };
-const modeBadgeLabel = (mode) => (MODE_BADGE_LABELS[mode] ? t(MODE_BADGE_LABELS[mode]) : getScoringMode(mode).label);
+const modeBadgeLabel = (mode) => (MODE_BADGE_LABELS[mode] ? t(MODE_BADGE_LABELS[mode]) : t(getScoringMode(mode).labelKey));
+// Match-play result text: closed matches read "3&2"; otherwise the engine hands
+// back a descriptor ("Halved" / "N up") to render in the active language.
+const scorelineText = (round) => (round.scorelineMsg ? tr(round.scorelineMsg) : round.scoreline);
 const toneForPoints = (p) => p >= 3 ? 'excellent' : p === 2 ? 'good' : p === 1 ? 'neutral' : 'poor';
 // Ranks a list already sorted best-first so equal values share a rank
 // (1,1,3 rather than 1,2,3) instead of a plain array index. `valueFn` reads
@@ -1537,11 +1540,11 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
           ) : (
             <View style={s.card}>
               <View style={s.distRow}>
-                <DistBar label="Eagle+" count={dist.eagles} total={dist.total} color={theme.scoreColor('excellent')} onPress={() => openBucket('eagles', dist.eagleHoles)} s={s} />
-                <DistBar label="Birdie" count={dist.birdies} total={dist.total} color={theme.scoreColor('excellent')} onPress={() => openBucket('birdies', dist.birdieHoles)} s={s} />
-                <DistBar label="Par" count={dist.pars} total={dist.total} color={theme.scoreColor('good')} onPress={() => openBucket('pars', dist.parHoles)} s={s} />
-                <DistBar label="Bogey" count={dist.bogeys} total={dist.total} color={theme.scoreColor('neutral')} onPress={() => openBucket('bogeys', dist.bogeyHoles)} s={s} />
-                <DistBar label="Dbl+" count={dist.doubles + dist.worse} total={dist.total} color={theme.scoreColor('poor')} onPress={() => openBucket('doubles', [...dist.doubleHoles, ...dist.worseHoles])} s={s} />
+                <DistBar label={t('stats.data.dist.eagles')} count={dist.eagles} total={dist.total} color={theme.scoreColor('excellent')} onPress={() => openBucket('eagles', dist.eagleHoles)} s={s} />
+                <DistBar label={t('stats.data.dist.birdies')} count={dist.birdies} total={dist.total} color={theme.scoreColor('excellent')} onPress={() => openBucket('birdies', dist.birdieHoles)} s={s} />
+                <DistBar label={t('stats.data.dist.pars')} count={dist.pars} total={dist.total} color={theme.scoreColor('good')} onPress={() => openBucket('pars', dist.parHoles)} s={s} />
+                <DistBar label={t('stats.data.dist.bogeys')} count={dist.bogeys} total={dist.total} color={theme.scoreColor('neutral')} onPress={() => openBucket('bogeys', dist.bogeyHoles)} s={s} />
+                <DistBar label={t('stats.data.dist.doubles')} count={dist.doubles + dist.worse} total={dist.total} color={theme.scoreColor('poor')} onPress={() => openBucket('doubles', [...dist.doubleHoles, ...dist.worseHoles])} s={s} />
               </View>
             </View>
           )}
@@ -1582,9 +1585,9 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
           <View style={s.card}>
             <View style={s.parSplitRow}>
               {[
-                { key: 'par3', label: 'Par 3', bucket: parSplit.par3 },
-                { key: 'par4', label: 'Par 4', bucket: parSplit.par4 },
-                { key: 'par5', label: 'Par 5', bucket: parSplit.par5 },
+                { key: 'par3', label: t('stats.data.parType.par3'), bucket: parSplit.par3 },
+                { key: 'par4', label: t('stats.data.parType.par4'), bucket: parSplit.par4 },
+                { key: 'par5', label: t('stats.data.parType.par5'), bucket: parSplit.par5 },
               ].map(({ key, label, bucket }) => (
                 <TouchableOpacity
                   key={key}
@@ -2232,7 +2235,7 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
   const openHoleWins = (row, metricMode) => {
     setSheet({
       title: t('stats.screen.holeWins.title', { name: row.player.name }),
-      subtitle: `Total ${row.total.W}·${row.total.T}·${row.total.L}  BB ${row.best.W}·${row.best.T}·${row.best.L}  WB ${row.worst.W}·${row.worst.T}·${row.worst.L}`,
+      subtitle: t('stats.data.holeWins.subtitle', { total: `${row.total.W}·${row.total.T}·${row.total.L}`, best: `${row.best.W}·${row.best.T}·${row.best.L}`, worst: `${row.worst.W}·${row.worst.T}·${row.worst.L}` }),
       explainer: t(metricMode === 'strokes' ? 'stats.screen.holeWins.explainerStrokes' : 'stats.screen.holeWins.explainerPoints'),
       rows: row.breakdown.map((b, i) => {
         const roleParts = [];
@@ -2261,7 +2264,7 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
     const winner = round.winnerPair ? round.winnerPair.map(p => firstName(p)).join(andSep()) : t('stats.screen.matchPlay.halved');
     setSheet({
       title: `${roundTag(round.roundIndex)} · ${p1Label} vs ${p2Label}`,
-      subtitle: t('stats.screen.matchPlay.subtitle', { scoreline: round.scoreline, winner }),
+      subtitle: t('stats.screen.matchPlay.subtitle', { scoreline: scorelineText(round), winner }),
       explainer: t(`stats.screen.matchPlay.explainer${metric === 'strokes' ? 'Strokes' : 'Points'}${round.closedAt ? 'Closed' : ''}`, { hole: round.closedAt }),
       rows: round.holes.map((h, i) => ({
         key: `${i}`,
@@ -2606,14 +2609,14 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
                   <Text style={s.matchCourse}>{round.courseName}</Text>
                   <Text style={[s.matchScoreline, {
                     color: isTie ? theme.text.muted : theme.scoreColor('excellent'),
-                  }]}>{round.scoreline}</Text>
+                  }]}>{scorelineText(round)}</Text>
                 </View>
                 <View style={s.matchTeams}>
                   <Text style={[s.matchTeam, {
                     color: p1Won ? theme.scoreColor('excellent') : isTie ? theme.text.primary : theme.text.muted,
                     fontFamily: p1Won ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-SemiBold',
                   }]}>{p1Label}</Text>
-                  <Text style={s.matchVs}>vs</Text>
+                  <Text style={s.matchVs}>{t('shared.teams.vs')}</Text>
                   <Text style={[s.matchTeam, {
                     color: !p1Won && !isTie ? theme.scoreColor('excellent') : isTie ? theme.text.primary : theme.text.muted,
                     fontFamily: !p1Won && !isTie ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-SemiBold',
@@ -2701,7 +2704,7 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
             </TouchableOpacity>
           ))}
         </View>
-        <Text style={s.h2hVs}>vs</Text>
+        <Text style={s.h2hVs}>{t('shared.teams.vs')}</Text>
         <View style={s.h2hCol}>
           {players.filter((_, i) => i !== h2hP1).map((p) => {
             const realIdx = players.indexOf(p);
@@ -2777,7 +2780,7 @@ function PairDifferenceChart({ data, metric, onHolePress, theme, s }) {
           <View style={[s.pdLegendDot, { backgroundColor: theme.pairA }]} />
           <Text style={s.pdLegendText}>{pair1Label}</Text>
         </View>
-        <Text style={s.pdLegendVs}>vs</Text>
+        <Text style={s.pdLegendVs}>{t('shared.teams.vs')}</Text>
         <View style={s.pdLegendItem}>
           <View style={[s.pdLegendDot, { backgroundColor: theme.pairB }]} />
           <Text style={s.pdLegendText}>{pair2Label}</Text>
@@ -3200,7 +3203,7 @@ function ShotsTab({ tournament, theme, s }) {
                     <Text style={[s.driveImpactStatVal, { color: vsParColor }]}>
                       {sgnPos(b.avgVsPar)}
                     </Text>
-                    <Text style={s.driveImpactStatLabel}>vs par</Text>
+                    <Text style={s.driveImpactStatLabel}>{t('stats.my.hole.col.vspar')}</Text>
                   </View>
                   <View style={s.driveImpactStat}>
                     <Text style={[s.driveImpactStatVal, { color: penColor }]}>{num(b.penaltyRate)}%</Text>
@@ -3254,7 +3257,7 @@ function ShotsTab({ tournament, theme, s }) {
                     <Text style={[s.driveImpactStatVal, { color: vsParColor }]}>
                       {sgnPos(b.avgVsPar)}
                     </Text>
-                    <Text style={s.driveImpactStatLabel}>vs par</Text>
+                    <Text style={s.driveImpactStatLabel}>{t('stats.my.hole.col.vspar')}</Text>
                   </View>
                   <View style={s.driveImpactStat}>
                     <Text style={[s.driveImpactStatVal, { color: girColor }]}>

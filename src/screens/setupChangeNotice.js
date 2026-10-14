@@ -10,6 +10,8 @@
 // Scoring mode is deliberately NOT part of the signature — the screen already
 // shows its own notice for that (fallbackNoticeText).
 
+import { t } from '../i18n';
+
 // The local copy Setup saves and the server's copy of the same game differ in
 // shape only: jsonb hands object keys back in its own order (a tee snapshot
 // written {label, rating, slope} returns as {label, slope, rating}), and pairs
@@ -45,20 +47,27 @@ export function setupSignature(tournament, roundIndex = 0) {
   };
 }
 
-const LABELS = { players: 'Players', teams: 'Teams', course: 'Course', handicaps: 'Handicaps' };
+const LABEL_KEYS = {
+  players: 'game.setupChange.players',
+  teams: 'game.setupChange.teams',
+  course: 'game.setupChange.course',
+  handicaps: 'game.setupChange.handicaps',
+};
 
 /**
  * Human wording for what changed between two signatures, or null when nothing
  * a scorer cares about did. "Teams changed on another phone",
  * "Players and teams changed on another phone", ...
+ * Finished text in the language active now: call it at render time.
  */
 export function describeSetupChange(prev, next) {
   if (!prev || !next) return null;
-  const changed = Object.keys(LABELS).filter((k) => prev[k] !== next[k]);
+  const changed = Object.keys(LABEL_KEYS).filter((k) => prev[k] !== next[k]);
   if (changed.length === 0) return null;
-  const words = changed.map((k, i) => (i === 0 ? LABELS[k] : LABELS[k].toLowerCase()));
+  const words = changed.map((k) => t(LABEL_KEYS[k]));
   const list = words.length === 1
     ? words[0]
-    : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
-  return `${list} changed on another phone`;
+    : t('game.setupChange.join', { rest: words.slice(0, -1).join(', '), last: words[words.length - 1] });
+  const text = t('game.setupChange.changed', { list });
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

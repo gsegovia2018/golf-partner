@@ -81,9 +81,27 @@ function roundTitle(item, roundLabel) {
   return roundLabel || item.courseName || t('shared.round.plain');
 }
 
+// The viewer's own row, rendered in second person. Feeds cached before
+// isYou existed carry the literal English 'You' on the viewer's row.
+const isYou = (result) => !!result?.isYou || (!!result?.isMine && result?.name === 'You');
+
+// Rendered live so a cached feed follows a language change.
+function resultName(result) {
+  if (isYou(result)) return t('comments.you');
+  return result.name || t('shared.player');
+}
+
 function leaderSummary(leader, second) {
   if (!leader) return t('shared.feed.noScores');
   const points = statValue(leader.points);
+  if (isYou(leader)) {
+    const margin = Number.isFinite(leader.points) && Number.isFinite(second?.points)
+      ? leader.points - second.points
+      : null;
+    if (!second) return t('shared.feed.scoredYou', { points });
+    if (margin != null && margin > 0) return t('shared.feed.ledByYou', { margin, points });
+    return t('shared.feed.ledYou', { points });
+  }
   if (!second) {
     return t('shared.feed.scored', { name: leader.name || t('shared.player'), points });
   }
@@ -179,12 +197,12 @@ export default function FeedRoundCard({
             onPress={() => onPressPlayer(result)}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             accessibilityRole="button"
-            accessibilityLabel={t('shared.feed.openStats', { name: result.name || t('shared.player') })}
+            accessibilityLabel={t('shared.feed.openStats', { name: resultName(result) })}
           >
-            <Text style={[s.resultName, s.resultNameLink]} numberOfLines={1}>{result.name || t('shared.player')}</Text>
+            <Text style={[s.resultName, s.resultNameLink]} numberOfLines={1}>{resultName(result)}</Text>
           </TouchableOpacity>
         ) : (
-          <Text style={s.resultName} numberOfLines={1}>{result.name || t('shared.player')}</Text>
+          <Text style={s.resultName} numberOfLines={1}>{resultName(result)}</Text>
         )}
         <View style={s.pointsLine}>
           <Text style={s.statValue}>{statValue(result.points)}</Text>

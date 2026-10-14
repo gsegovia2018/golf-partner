@@ -20,7 +20,7 @@ import { loadMediaForTournaments } from './mediaStore';
 import { roundFinalizedAt, roundEndedAt, roundStartedAt } from './finishStamp';
 import { roundDurationMs } from './roundDuration';
 import { isRoundLive } from './liveRound';
-import { t } from '../i18n';
+import { t, t as translate } from '../i18n';
 import { buildRoundHighlights, selectAchievements } from './roundAchievements';
 import { listFriends, getCachedFriends } from './friendStore';
 
@@ -637,7 +637,9 @@ export async function buildFeed(options = {}) {
             userId: uid,
             isMine: isMe,
             isFriend,
-            name: isMe && !solo ? 'You' : (friendInfo?.displayName ?? player.name),
+            // isYou: the card renders the viewer in second person ("You scored").
+            isYou: isMe && !solo,
+            name: isMe && !solo ? translate('comments.you') : (friendInfo?.displayName ?? player.name),
             avatarUrl: friendInfo?.avatarUrl ?? player.avatar_url ?? null,
             avatarColor: friendInfo?.avatarColor ?? null,
             points: entry.totalPoints,

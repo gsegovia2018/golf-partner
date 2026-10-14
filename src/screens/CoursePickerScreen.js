@@ -69,11 +69,11 @@ export default function CoursePickerScreen({ navigation, route }) {
           setUsingCachedData(library.usingCachedData);
           // The only true error state: offline with nothing cached to show.
           if (library.usingCachedData && library.courses.length === 0) {
-            setLoadError('Could not load courses');
+            setLoadError(t('courses.loadFailed'));
           }
         })
         .catch((err) => {
-          if (!cancelled) setLoadError(err?.message ?? 'Could not load courses');
+          if (!cancelled) setLoadError(err?.message ?? t('courses.loadFailed'));
         })
         .finally(() => {
           if (!cancelled) {
@@ -82,7 +82,7 @@ export default function CoursePickerScreen({ navigation, route }) {
           }
         });
       return () => { cancelled = true; };
-    }, [reloadKey]),
+    }, [reloadKey, t]),
   );
 
   // allItems is the full grouped list; items is the search-filtered view.

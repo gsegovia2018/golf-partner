@@ -102,9 +102,9 @@ export function SwingCompareView({ left, right, onBack, onSwap }) {
                         key={r.key}
                         style={s.tr}
                         accessible
-                        accessibilityLabel={T.rowLabel(r.label, r.a.text, r.b.text, word)}
+                        accessibilityLabel={T.rowLabel(SWING_STRINGS.checkLabel[r.id] ?? r.label, r.a.text, r.b.text, word)}
                       >
-                        <Text style={[s.label, s.cLabel]}>{r.label}</Text>
+                        <Text style={[s.label, s.cLabel]}>{SWING_STRINGS.checkLabel[r.id] ?? r.label}</Text>
                         <View style={[s.cVal, s.valCell]}>
                           <View style={[s.dot, { backgroundColor: tone[r.a.status] }]} />
                           <Text style={s.value}>{r.a.text}</Text>

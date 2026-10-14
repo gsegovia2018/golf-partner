@@ -170,7 +170,7 @@ export function BestBallValueFields({ settings, onSettingsChange }) {
   return (
     <View style={s.valueRow}>
       <View style={s.valueBlock}>
-        <Text style={s.valueLabel}>Best Ball</Text>
+        <Text style={s.valueLabel}>{t('home.roundMode.bestball')}</Text>
         <TextInput
           style={s.valueInput}
           keyboardType="numeric"
@@ -183,7 +183,7 @@ export function BestBallValueFields({ settings, onSettingsChange }) {
         <Text style={s.valueSuffix}>{t('setup.scoringMode.ptsPerHole')}</Text>
       </View>
       <View style={s.valueBlock}>
-        <Text style={s.valueLabel}>Worst Ball</Text>
+        <Text style={s.valueLabel}>{t('game.picker.worstBall')}</Text>
         <TextInput
           style={s.valueInput}
           keyboardType="numeric"

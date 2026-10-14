@@ -9,6 +9,7 @@
 // (recording, captureSupport()) to the version whose methods this bundle calls.
 import { Platform } from 'react-native';
 import { requireOptionalNativeModule, requireNativeView } from 'expo';
+import { t } from '../i18n';
 
 export const REQUIRED_API_VERSION = 2;
 
@@ -22,9 +23,10 @@ export const CAPTURE_API_VERSION = 2;
 // the last full-resolution still while dragging and fills in on release.
 export const PROXY_API_VERSION = 3;
 
-export const UPDATE_APP_MESSAGE = 'Update the app to analyse your swing.';
+// Finished text in the active language: call at the moment it is shown (docs/i18n.md).
+export const updateAppMessage = () => t('misc.swing.updateApp');
 
-export const UPDATE_CAPTURE_MESSAGE = 'Update the app to record here. You can still import a slow-motion video.';
+export const updateCaptureMessage = () => t('misc.swing.updateCapture');
 
 let cached;
 let cachedCamera;
@@ -62,7 +64,7 @@ export function swingSupport() {
   }
   const version = apiVersion();
   if (version === null || version < REQUIRED_API_VERSION) {
-    return { supported: false, reason: 'update_app', apiVersion: version, message: UPDATE_APP_MESSAGE };
+    return { supported: false, reason: 'update_app', apiVersion: version, message: updateAppMessage() };
   }
   return { supported: true, reason: null, apiVersion: version, message: null };
 }
@@ -70,7 +72,7 @@ export function swingSupport() {
 function requireSupported() {
   const s = swingSupport();
   if (!s.supported) {
-    const err = new Error(s.message ?? 'The swing analyzer is not available on this device.');
+    const err = new Error(s.message ?? t('misc.swing.analyzerUnavailable'));
     err.code = s.reason === 'update_app' ? 'ERR_UPDATE_APP' : 'ERR_UNSUPPORTED';
     throw err;
   }
@@ -85,7 +87,7 @@ export function captureSupport() {
   const s = swingSupport();
   if (!s.supported) return s;
   if (s.apiVersion < CAPTURE_API_VERSION || !cameraModule()) {
-    return { supported: false, reason: 'update_app', apiVersion: s.apiVersion, message: UPDATE_CAPTURE_MESSAGE };
+    return { supported: false, reason: 'update_app', apiVersion: s.apiVersion, message: updateCaptureMessage() };
   }
   return s;
 }
@@ -99,7 +101,7 @@ export function proxySupport() {
 function requireCapture() {
   const s = captureSupport();
   if (!s.supported) {
-    const err = new Error(s.message ?? 'Recording is not available on this device.');
+    const err = new Error(s.message ?? t('misc.swing.recordingUnavailable'));
     err.code = s.reason === 'update_app' ? 'ERR_UPDATE_APP' : 'ERR_UNSUPPORTED';
     throw err;
   }

@@ -239,8 +239,12 @@ export function fallbackNoticeText(prevKey, nextKey) {
   const prev = SCORING_MODES.find((m) => m.key === prevKey);
   const next = SCORING_MODES.find((m) => m.key === nextKey);
   if (!prev || !next) return null;
-  const reason = prev.requirement.replace(/^Requires/, 'needs');
-  return `${prev.label} ${reason} — switched to ${next.label}.`;
+  // Finished text in the language active now: call it at render time.
+  return t('game.mode.fallbackNotice', {
+    mode: t(prev.labelKey),
+    reason: t(prev.requirementKey.replace('.req.', '.need.')),
+    next: t(next.labelKey),
+  });
 }
 
 // Merges a scoring-mode draft back into a tournament's settings object.

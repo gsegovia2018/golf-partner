@@ -1,4 +1,7 @@
 import { setupSignature, describeSetupChange } from '../setupChangeNotice';
+import { setLanguagePref } from '../../i18n';
+
+afterEach(async () => { await setLanguagePref('en'); });
 
 const base = () => ({
   players: [{ id: 'a', name: 'Alex' }, { id: 'b', name: 'Bea' }],
@@ -66,5 +69,15 @@ describe('setupChangeNotice', () => {
     expect(setupSignature(null)).toBeNull();
     expect(describeSetupChange(null, setupSignature(base(), 0))).toBeNull();
     expect(describeSetupChange(setupSignature(base(), 3), setupSignature(base(), 3))).toBeNull();
+  });
+
+  it('words the notice in Spanish', async () => {
+    await setLanguagePref('es');
+    const a = base();
+    const b = base();
+    b.players = [...b.players, { id: 'c', name: 'Cris' }];
+    b.rounds[0].pairs = [['a', 'c']];
+    expect(describeSetupChange(setupSignature(a, 0), setupSignature(b, 0)))
+      .toBe('Cambios hechos en otro móvil: jugadores y equipos');
   });
 });

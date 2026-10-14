@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { buildHoleMapHtml } from '../../lib/holeMapHtml';
+import { buildHoleMapHtml, hudLabels } from '../../lib/holeMapHtml';
+import { useT, getLanguage } from '../../i18n';
 import { getTileDataUrl } from '../../store/tileCache';
 
 // Web host: renders the Leaflet map page in an <iframe>. Rebuilds the page only
@@ -7,8 +8,10 @@ import { getTileDataUrl } from '../../store/tileCache';
 // / marker updates go through postMessage so the map never reloads.
 export function HoleMapView({ data, player, anchor, activeField, shots, lastShot, targets, onShotMove, onAim, onShotTap, onPoint, style }) {
   const ref = useRef(null);
+  const t = useT(); // re-render when the language changes, so the page is rebuilt in it
+  const lang = getLanguage();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const html = useMemo(() => buildHoleMapHtml(data), [data.holeKey]);
+  const html = useMemo(() => buildHoleMapHtml({ ...data, hudLabels: hudLabels() }), [data.holeKey, lang]);
 
   const send = (m) => { ref.current?.contentWindow?.postMessage(JSON.stringify(m), '*'); };
 
@@ -40,7 +43,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, lastShot
     <iframe
       ref={ref}
       srcDoc={html}
-      title="hole map"
+      title={t('misc.holeMap.title')}
       style={{ border: 'none', width: '100%', height: '100%', display: 'block', ...flatten(style) }}
     />
   );

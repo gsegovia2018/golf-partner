@@ -56,7 +56,7 @@ import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { useAuth } from '../context/AuthContext';
 import { shouldOfferPostCreateEditorInvite } from './setupWizard';
 import { ScorecardTable, resolveScorecardRows } from '../components/scorecard/GridView';
-import { useT } from '../i18n';
+import { useT, tr } from '../i18n';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
 // RNW 0.21's `pagingEnabled` omits `scroll-snap-stop: always`, so a
@@ -1703,7 +1703,7 @@ export default function HomeScreen({ navigation, route }) {
           sub: entry.strokes != null ? (!showRunning ? '' : tx('home.board.strokesSub', { strokes: entry.strokes || '-' })) : null,
         }))}
         footer={settings.scoringMode === 'matchplay' && matchPlayStandings && showRunning && !tournamentHasMixedModes(tournament)
-          ? matchPlayStandings.status : null}
+          ? tr(matchPlayStandings.status) : null}
       />
       )}
 
@@ -2111,7 +2111,7 @@ export default function HomeScreen({ navigation, route }) {
             <View style={{ flex: 1 }}>
               <Text style={s.menuItemText}>{tx('home.round.scoringMode')}</Text>
               <Text style={s.modalSubtle}>
-                {getScoringMode(roundScoringMode(tournament, tournament.rounds[selectedRound])).label}
+                {tx(getScoringMode(roundScoringMode(tournament, tournament.rounds[selectedRound])).labelKey)}
               </Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
@@ -2179,7 +2179,7 @@ export default function HomeScreen({ navigation, route }) {
               <View style={{ flex: 1 }}>
                 <Text style={s.menuItemText}>{tx('home.round.scoringMode')}</Text>
                 <Text style={s.modalSubtle}>
-                  {getScoringMode(roundScoringMode(tournament, tournament.rounds[0])).label}
+                  {tx(getScoringMode(roundScoringMode(tournament, tournament.rounds[0])).labelKey)}
                 </Text>
               </View>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />

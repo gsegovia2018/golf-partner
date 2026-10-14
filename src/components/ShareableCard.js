@@ -4,8 +4,14 @@ import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
-import { t, useT, formatOrdinal } from '../i18n';
+import { t, useT, formatOrdinal, formatDate } from '../i18n';
 import { unitText } from '../lib/pointsText';
+
+// "Sat 4 Oct 2026" / "sáb 4 oct 2026" in the active language.
+const todayLabel = () => {
+  const d = new Date();
+  return `${formatDate(d, 'short')} ${d.getFullYear()}`;
+};
 
 // Cross-platform themed alert. On web there is no Alert UI, so fall back to
 // window.alert; native uses the OS dialog.
@@ -243,7 +249,7 @@ function drawRoundCanvas({
   // Footer: course + date, and branding
   ctx.fillStyle = muted;
   ctx.font = '600 18px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  const dateStr = new Date().toLocaleDateString();
+  const dateStr = todayLabel();
   const footerLeft = [courseName, dateStr].filter(Boolean).join(' · ');
   ctx.fillText(truncate(ctx, footerLeft, W / 2 - 40), 40, H - 36);
 
@@ -630,7 +636,7 @@ export const ShareableRoundCard = React.forwardRef(
     const pal = cardPalette(theme);
     const podium = ranked.slice(0, 3);
     const unitLabel = unitText(unit);
-    const dateStr = new Date().toLocaleDateString();
+    const dateStr = todayLabel();
 
     return (
       <View

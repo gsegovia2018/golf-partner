@@ -1,17 +1,19 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 
 export const ROUND_SUMMARY_TABS = [
-  { key: 'scorecard', label: 'Scorecard' },
-  { key: 'photos', label: 'Photos' },
-  { key: 'comments', label: 'Comments' },
+  { key: 'scorecard', label: 'Scorecard', labelKey: 'game.summaryTab.scorecard' },
+  { key: 'photos', label: 'Photos', labelKey: 'game.summaryTab.photos' },
+  { key: 'comments', label: 'Comments', labelKey: 'game.summaryTab.comments' },
 ];
 
 // Top-of-page underline tabs: active tab gets accent text and a rounded
 // indicator bar; inactive tabs stay muted on a transparent ground.
 export default function RoundSummaryTabs({ active, onChange }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   return (
@@ -26,10 +28,10 @@ export default function RoundSummaryTabs({ active, onChange }) {
             activeOpacity={0.75}
             accessibilityRole="button"
             accessibilityState={{ selected }}
-            accessibilityLabel={tab.label}
+            accessibilityLabel={t(tab.labelKey)}
           >
             <Text style={[s.tabText, selected && s.tabTextSelected]} numberOfLines={1}>
-              {tab.label}
+              {t(tab.labelKey)}
             </Text>
             <View style={[s.indicator, selected && s.indicatorSelected]} />
           </TouchableOpacity>

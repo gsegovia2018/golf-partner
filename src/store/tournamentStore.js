@@ -2160,7 +2160,8 @@ export function tournamentNoun(tournament) {
 
 // Capitalized variant of tournamentNoun, for headers and titles.
 export function tournamentNounCapitalized(tournament) {
-  return tournament?.kind === 'game' ? 'Game' : 'Tournament';
+  // Finished text in the language active now: call it at render time.
+  return t(tournament?.kind === 'game' ? 'game.noun.gameTitle' : 'game.noun.tournamentTitle');
 }
 
 // Round display label: the course name for a casual game, "Round N" for a

@@ -9,7 +9,7 @@ import PressableScale from '../components/ui/PressableScale';
 import IconButton from '../components/ui/IconButton';
 import Reveal from '../components/ui/Reveal';
 import { useTheme } from '../theme/ThemeContext';
-import { useT, formatNumber } from '../i18n';
+import { useT, formatNumber, formatDate } from '../i18n';
 import { semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
@@ -407,7 +407,7 @@ function RoundList({ rounds, onOpen, s, theme }) {
     <View>
       {rounds.map((r, i) => {
         const canOpen = !!(r.tournamentId && r.roundId);
-        const title = formatRoundDate(r.date) || r.tournamentName;
+        const title = formatRoundDate(r.date) || r.tournamentName || t('stats.data.tournament');
         const meta = [
           t('courses.stats.strokes', { count: r.strokes }),
           t('courses.stats.holesPlayed', { count: r.holesPlayed }),
@@ -453,7 +453,7 @@ function formatRoundDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
+  return `${formatDate(d, 'day')} ${String(d.getFullYear()).slice(-2)}`;
 }
 
 function HighlightRow({ icon, kind, label, detail, s, theme }) {

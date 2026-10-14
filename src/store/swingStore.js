@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Paths, Directory, File } from 'expo-file-system';
 import { emptyMarks, parseMarks } from '../swing/labels';
 import { makeZip, utf8 } from '../swing/zip';
+import { t, formatDate } from '../i18n';
 import { normClub, DEFAULT_CLUB } from '../swing/checks';
 import { newPass, markedFromMarks } from '../swing/markPass';
 
@@ -97,14 +98,12 @@ export async function setPracticeOpen(open) {
 
 // --- Names (D13) -------------------------------------------------------------
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const pad2 = (n) => String(n).padStart(2, '0');
 
-/** "Sat 11 Oct · 18:42" in the device's local time. */
-export function defaultSwingName(date) {
+/** "Sat 11 Oct · 18:42" / "sáb 11 oct · 18:42" in the device's local time. */
+export function defaultSwingName(date, lang) {
   const d = date instanceof Date ? date : new Date(date);
-  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} · ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return `${formatDate(d, 'short', lang)} · ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
 // --- Files -------------------------------------------------------------------
@@ -307,7 +306,7 @@ export const EXPORT_SCHEMA = 'swing-export/1';
  */
 export async function exportSwing(id) {
   const row = getSwing(id);
-  if (!row) throw new Error('Swing not found.');
+  if (!row) throw new Error(t('misc.swing.notFound'));
   const analysis = await readAnalysis(id);
   const marks = await readMarks(id);
   const probe = await readProbe(id);
