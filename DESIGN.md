@@ -32,6 +32,21 @@ colors:
   hud-sage: "#9fb0a4"
   hud-rose: "#e8a0a0"
   scrim: "rgba(0,0,0,0.5)"
+  deep-green: "#00553c"
+  on-deep: "#ffffff"
+  on-deep-strong: "rgba(255,255,255,0.9)"
+  on-deep-soft: "rgba(255,255,255,0.75)"
+  on-deep-faint: "rgba(255,255,255,0.6)"
+  on-deep-dim: "rgba(255,255,255,0.45)"
+  on-deep-border: "rgba(255,255,255,0.12)"
+  on-deep-border-strong: "rgba(255,255,255,0.3)"
+  on-deep-fill: "rgba(255,255,255,0.08)"
+  on-deep-chip: "rgba(255,255,255,0.14)"
+  on-deep-silver: "#c0c8d4"
+  on-deep-bronze: "#daa06d"
+  on-deep-gold-fill: "rgba(255,215,0,0.2)"
+  on-deep-silver-fill: "rgba(192,200,212,0.15)"
+  on-deep-bronze-fill: "rgba(218,160,109,0.15)"
 typography:
   display:
     fontFamily: "PlayfairDisplay-Black, Playfair Display, Georgia, serif"
@@ -181,6 +196,10 @@ The palette is a restrained clubhouse green system over warm neutral surfaces, w
 - **Night Green**: Dark-mode background.
 - **Night Accent**: Dark-mode green for actions, selected states, and positive scores. Also the accent of the map HUD chrome below.
 - **Scrim** (rgba(0,0,0,0.5)): The modal and bottom-sheet backdrop dim, identical in both themes. Maps to `semantic.scrim` in `src/theme/tokens.js`; the darker HUD chrome keeps its own `hud.scrim`.
+
+### Deep Green Surfaces
+
+Hero cards on Deep Green (#00553c, `bg.deep`) — the leaderboard, league board, and join/invite heroes — take their text, hairlines and chip fills from the `onDeep` token block in `src/theme/tokens.js` (white at 90 / 75 / 60 / 45% for strong, soft, faint and dim text; 12 / 8 / 14% for dividers, washes and chips). Podium ranks on deep green use the lighter On-Deep Silver (#c0c8d4) and On-Deep Bronze (#daa06d), because Rank Silver drops below 3.5:1 there. Never hand-write `rgba(255,255,255,…)` on these surfaces.
 
 ### Map HUD
 

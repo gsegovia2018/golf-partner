@@ -14,16 +14,13 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
+import { buttonStyles } from '../components/ui/Buttons';
 import { ScorecardTable } from '../components/scorecard/GridView';
 import { useTheme } from '../theme/ThemeContext';
+import { onDeep } from '../theme/tokens';
 import { getMarkerCard, confirmMarkerCard } from '../store/markerCardStore';
 import { leagueErrorText } from '../lib/leagueErrorText';
 import { useT, t as translate, formatDate, formatNumber } from '../i18n';
-
-// Text on the green top bar. The bar is the brand accent in both themes, so
-// its text can't come from theme.text (which flips per theme).
-const ON_GREEN = '#ffffff';
-const ON_GREEN_SOFT = '#e6f0eb';
 
 const ROW_ID = 'marker-card';
 
@@ -313,15 +310,18 @@ export default function MarkerCardScreen(props) {
 }
 
 function makeStyles(theme) {
+  // The bar is green in both themes (deep green in dark), so its text comes from
+  // onDeep, not theme.text, which flips per theme.
   const green = theme.isDark ? theme.bg.deep : theme.accent.primary;
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: theme.bg.primary },
     topBar: {
       backgroundColor: green, paddingHorizontal: 16, paddingVertical: 14,
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     },
-    brand: { fontFamily: 'PlayfairDisplay-Black', fontSize: 18, color: ON_GREEN },
-    topBarSub: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: ON_GREEN_SOFT },
+    brand: { fontFamily: 'PlayfairDisplay-Black', fontSize: 18, color: onDeep.primary },
+    topBarSub: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: onDeep.strong },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     content: { paddingHorizontal: 14, paddingTop: 16, paddingBottom: 32, gap: 12 },
     heading: { paddingHorizontal: 2 },
@@ -341,16 +341,10 @@ function makeStyles(theme) {
     },
     noteInput: { minHeight: 88, paddingTop: 12, textAlignVertical: 'top' },
     error: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: theme.destructive },
-    primaryBtn: {
-      minHeight: 50, borderRadius: 14, backgroundColor: theme.accent.primary,
-      alignItems: 'center', justifyContent: 'center', padding: 14, ...theme.shadow.accent,
-    },
-    primaryText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, color: theme.text.inverse },
-    secondaryBtn: {
-      minHeight: 50, borderRadius: 14, borderWidth: 1, borderColor: theme.border.default,
-      backgroundColor: theme.bg.card, alignItems: 'center', justifyContent: 'center', padding: 14,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, color: theme.accent.primary },
+    primaryBtn: { ...btn.primaryBtn, ...theme.shadow.accent },
+    primaryText: btn.primaryText,
+    secondaryBtn: { ...btn.secondaryBtn, backgroundColor: theme.bg.card },
+    secondaryText: btn.secondaryTextAccent,
     retryBtn: { alignSelf: 'stretch', marginTop: 4 },
     disabled: { opacity: 0.5 },
     footnote: {

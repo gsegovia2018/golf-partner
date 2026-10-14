@@ -4,7 +4,8 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
-import IconButton from '../components/ui/IconButton';
+import { buttonStyles } from '../components/ui/Buttons';
+import ScreenHeader from '../components/ui/ScreenHeader';
 import PullToRefresh from '../components/PullToRefresh';
 import { useT, formatDate } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
@@ -65,10 +66,7 @@ export default function LeagueStatsScreen({ navigation, route }) {
   const title = t('league.stats.title', { name: view?.league.name ?? route?.params?.name ?? t('league.stats.leagueFallback') });
 
   const header = (
-    <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
-      <Text style={s.headerTitle} numberOfLines={1}>{title}</Text>
-    </View>
+    <ScreenHeader onBack={() => navigation.goBack()} title={title} numberOfLines={1} />
   );
 
   if (!view) {
@@ -336,37 +334,28 @@ export default function LeagueStatsScreen({ navigation, route }) {
 
 function makeStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-    header: {
-      flexDirection: 'row', alignItems: 'center', gap: 4,
-      paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6,
-    },
-    headerTitle: {
-      fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 17, letterSpacing: -0.3, flexShrink: 1,
-    },
     content: { padding: 16, paddingBottom: 40 },
-    muted: { color: theme.text.muted },
+    muted: { color: theme.text.secondary },
     bold: { fontFamily: 'PlusJakartaSans-ExtraBold' },
 
-    emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 22, marginTop: 14, textAlign: 'center' },
+    emptyTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 18, lineHeight: 24, marginTop: 14, textAlign: 'center' },
     emptyText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, marginTop: 6, marginBottom: 18, textAlign: 'center' },
     emptyNote: {
       fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, lineHeight: 19,
       textAlign: 'center', marginTop: 12,
     },
-    secondaryBtn: {
-      alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1, minHeight: 44,
-      borderColor: theme.border.default, paddingVertical: 12, paddingHorizontal: 28,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
+    secondaryBtn: { ...btn.secondaryBtn, paddingHorizontal: 28 },
+    secondaryText: btn.secondaryText,
 
     tabs: {
       flexDirection: 'row', marginHorizontal: 16, marginTop: 4, padding: 3, borderRadius: 14,
       backgroundColor: theme.bg.secondary,
     },
-    tab: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 11 },
+    tab: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
     tabOn: { backgroundColor: theme.accent.primary },
     tabText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 13 },
     tabTextOn: { color: theme.text.inverse },
@@ -392,22 +381,22 @@ function makeStyles(theme) {
     },
     cardHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 },
     cardTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15 },
-    cardMeta: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, flexShrink: 1, textAlign: 'right' },
+    cardMeta: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, flexShrink: 1, textAlign: 'right' },
     cardText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, lineHeight: 19 },
     rowDivider: { borderBottomWidth: 1, borderBottomColor: theme.border.subtle },
-    footnote: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, lineHeight: 17 },
+    footnote: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17 },
 
     honourRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
     honourIcon: {
-      width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center',
+      width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
       backgroundColor: theme.accent.light,
     },
-    honourLabel: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 10, letterSpacing: 1 },
+    honourLabel: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 10, letterSpacing: 1 },
     honourText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.primary, fontSize: 13, lineHeight: 18, marginTop: 1 },
 
     leaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 4 },
     meRow: { backgroundColor: theme.accent.light, borderRadius: 10 },
-    place: { width: 20, fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 12, textAlign: 'center' },
+    place: { width: 20, fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 12, textAlign: 'center' },
     leaderName: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14, width: 96 },
     barTrack: { flex: 1, height: 8, borderRadius: 4, backgroundColor: theme.bg.secondary, overflow: 'hidden' },
     barFill: { height: 8, borderRadius: 4, backgroundColor: theme.accent.primary },
@@ -419,7 +408,7 @@ function makeStyles(theme) {
     gridName: { width: 92 },
     gridHead: {
       width: 36, textAlign: 'center', marginRight: 4, fontFamily: 'PlusJakartaSans-Bold',
-      color: theme.text.muted, fontSize: 12,
+      color: theme.text.secondary, fontSize: 12,
     },
     cell: { width: 36, height: 44, marginRight: 4, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
     cellHigh: { backgroundColor: theme.accent.primary },
@@ -434,10 +423,10 @@ function makeStyles(theme) {
     legendText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12 },
 
     rivalRow: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingVertical: 8 },
-    rivalSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, marginTop: 1 },
+    rivalSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 1 },
     record: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.primary, fontSize: 16, marginLeft: 8 },
     monthRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6, paddingLeft: 8 },
-    monthRowMonth: { width: 32, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 12 },
+    monthRowMonth: { width: 32, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 12 },
     monthRowText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13 },
     winner: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.accent.primary },
   });

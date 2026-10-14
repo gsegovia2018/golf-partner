@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  Alert, Platform, Share, Clipboard, ActivityIndicator,
+  Share, Clipboard, ActivityIndicator,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
+import { buttonStyles } from '../components/ui/Buttons';
 import WizardProgress from '../components/setup/WizardProgress';
 import WizardNav from '../components/setup/WizardNav';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
 import DateField from '../components/DateField';
 import { wizardSteps, isStepValid } from './setupWizard';
 import { useTheme } from '../theme/ThemeContext';
+import { onDeep } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import { loadProfile } from '../store/profileStore';
 import { listFriends, getCachedFriends } from '../store/friendStore';
@@ -22,16 +24,12 @@ import {
 } from '../store/leagueDraft';
 import { formatEuros } from '../store/leagueView';
 import PointsForPlaying from '../components/league/PointsForPlaying';
-import { useT, t as translate, formatNumber, formatDate } from '../i18n';
+import LeagueHero from '../components/league/LeagueHero';
+import { useT, formatNumber, formatDate } from '../i18n';
 import { shareOrigin } from '../lib/shareOrigin';
 import { NAME_MAX } from '../components/league/GuestIdentityFields';
 import { leagueErrorText } from '../lib/leagueErrorText';
-
-function showError(message) {
-  const msg = message || translate('league.create.errorGeneric');
-  if (Platform.OS === 'web') window.alert(msg);
-  else Alert.alert(translate('league.create.errorTitle'), msg);
-}
+import { useConfirmSheet } from '../components/league/ConfirmSheet';
 
 const fmtDate = (iso) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
@@ -45,6 +43,8 @@ export default function LeagueCreateScreen({ navigation }) {
   const { theme } = useTheme();
   const { user } = useAuth();
   const t = useT();
+  const { ask, sheet: confirmSheet } = useConfirmSheet();
+  const showError = (message) => ask({ title: t('league.create.errorTitle'), message: message || t('league.create.errorGeneric') });
   const s = makeStyles(theme);
 
   const mountedRef = useRef(true);
@@ -396,9 +396,9 @@ export default function LeagueCreateScreen({ navigation }) {
           value={name}
           onChangeText={setName}
           placeholder={t('league.create.leagueName')}
-          placeholderTextColor="rgba(255,255,255,0.5)"
+          placeholderTextColor={onDeep.faint}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-          selectionColor="#ffffff"
+          selectionColor={onDeep.primary}
         />
         <View style={s.chipRow}>
           <View style={s.chip}><Text style={s.chipText}>{t('league.join.members', { count: memberCount })}</Text></View>
@@ -453,15 +453,16 @@ export default function LeagueCreateScreen({ navigation }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <ScrollView contentContainerStyle={s.content}>
-          <View style={s.hero}>
-            <Text style={s.heroOverline}>{t('league.create.created')}</Text>
-            <Text style={[s.heroName, { paddingVertical: 4 }]}>{name.trim()}</Text>
-            <View style={s.chipRow}>
-              <View style={s.chip}><Text style={s.chipText}>{t('league.join.members', { count: memberCount })}</Text></View>
-              <View style={s.chip}><Text style={s.chipText}>{`${fmtDate(startIso)} – ${fmtDate(endIso)}`}</Text></View>
-              <View style={s.chip}><Text style={s.chipText}>{t('league.create.netStableford')}</Text></View>
-            </View>
-          </View>
+          <LeagueHero
+            nameSize={24}
+            overline={t('league.create.created')}
+            name={name.trim()}
+            chips={[
+              t('league.join.members', { count: memberCount }),
+              `${fmtDate(startIso)} – ${fmtDate(endIso)}`,
+              t('league.create.netStableford'),
+            ]}
+          />
 
           <Text style={s.stepOverline}>{t('league.create.inviteCode')}</Text>
           <View style={s.codeBox}>
@@ -502,6 +503,7 @@ export default function LeagueCreateScreen({ navigation }) {
           title={t('league.create.qrTitle')}
           subtitle={t('league.create.qrSubtitle')}
         />
+        {confirmSheet}
       </ScreenContainer>
     );
   }
@@ -525,12 +527,14 @@ export default function LeagueCreateScreen({ navigation }) {
         onBack={handleBack}
         onNext={handleNext}
       />
+      {confirmSheet}
     </ScreenContainer>
   );
 }
 
 function makeStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     scrollView: { flex: 1 },
@@ -541,7 +545,7 @@ function makeStyles(theme) {
       letterSpacing: 1.8, textTransform: 'uppercase', marginBottom: 6,
     },
     stepPrompt: {
-      fontFamily: 'PlayfairDisplay-Bold', fontSize: 26, color: theme.text.primary, letterSpacing: -0.3,
+      fontFamily: 'PlusJakartaSans-Bold', fontSize: 24, lineHeight: 30, color: theme.text.primary, letterSpacing: -0.3,
     },
     stepSubtitle: {
       fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13,
@@ -557,7 +561,7 @@ function makeStyles(theme) {
       padding: 14, marginBottom: 8, fontSize: 15, fontFamily: 'PlusJakartaSans-Medium',
     },
     hint: {
-      fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, lineHeight: 17, marginBottom: 8,
+      fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17, marginBottom: 8,
     },
     errorText: {
       fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 12, marginBottom: 8,
@@ -605,37 +609,31 @@ function makeStyles(theme) {
       flexDirection: 'row', alignItems: 'center', backgroundColor: theme.bg.secondary, borderRadius: 12,
       borderWidth: 1, borderColor: theme.border.default, borderStyle: 'dashed', padding: 14, marginBottom: 8,
     },
-    emptyHintText: { flex: 1, fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 13 },
+    emptyHintText: { flex: 1, fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13 },
 
     // Same deep-green hero as the official wizard's review step; theme.bg.deep
     // is dark in both themes, so white text keeps its contrast.
     hero: { backgroundColor: theme.bg.deep, borderRadius: 20, padding: 20, marginBottom: 20 },
     heroOverline: {
-      fontFamily: 'PlusJakartaSans-Bold', color: 'rgba(255,255,255,0.55)', fontSize: 10, letterSpacing: 1.6,
+      fontFamily: 'PlusJakartaSans-Bold', color: onDeep.faint, fontSize: 10, letterSpacing: 1.6,
     },
     heroName: {
-      fontFamily: 'PlayfairDisplay-Bold', color: '#ffffff', fontSize: 24, letterSpacing: -0.3,
+      fontFamily: 'PlayfairDisplay-Bold', color: onDeep.primary, fontSize: 24, letterSpacing: -0.3,
       marginTop: 6, paddingVertical: 4,
     },
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-    chip: { backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12 },
-    chipText: { fontFamily: 'PlusJakartaSans-Bold', color: '#ffffff', fontSize: 11 },
+    chip: { backgroundColor: onDeep.chip, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12 },
+    chipText: { fontFamily: 'PlusJakartaSans-Bold', color: onDeep.primary, fontSize: 11 },
 
     codeBox: {
       backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1, borderColor: cardBorder,
       paddingVertical: 18, alignItems: 'center', marginBottom: 10,
     },
     code: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 32, letterSpacing: 3 },
-    primaryBtn: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.accent.primary, borderRadius: 14, paddingVertical: 14, marginTop: 4,
-    },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
-    secondaryBtn: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 14,
-      borderWidth: 1, borderColor: theme.border.default, paddingVertical: 14, marginBottom: 10,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+    primaryBtn: { ...btn.primaryBtn, marginTop: 4 },
+    primaryText: btn.primaryText,
+    secondaryBtn: { ...btn.secondaryBtn, marginBottom: 10 },
+    secondaryText: btn.secondaryTextAccent,
     linkBtn: { alignItems: 'center', paddingVertical: 16 },
     linkText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
   });

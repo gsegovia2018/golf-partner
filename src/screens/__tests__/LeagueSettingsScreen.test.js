@@ -1,5 +1,4 @@
 import React from 'react';
-import { Alert } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import LeagueSettingsScreen from '../LeagueSettingsScreen';
@@ -51,20 +50,12 @@ const navigation = { goBack: jest.fn(), navigate: jest.fn(), addListener: jest.f
 const route = { params: { leagueId: 'L1' } };
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
-// Alert.alert with buttons: press the one with this text.
-function pressAlertButton(spy, text) {
-  const buttons = spy.mock.calls[spy.mock.calls.length - 1][2];
-  buttons.find((b) => b.text === text).onPress();
-}
-
 describe('LeagueSettingsScreen', () => {
-  let alertSpy;
   beforeEach(() => {
     jest.clearAllMocks();
     store.getLeagueCached.mockResolvedValue(null);
-    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
-  afterEach(() => { alertSpy.mockRestore(); jest.useRealTimers(); });
+  afterEach(() => { jest.useRealTimers(); });
 
   test('an admin edits the rules and saves them through updateLeagueRules', async () => {
     store.getLeague.mockResolvedValue(snapshot());
@@ -190,7 +181,8 @@ describe('LeagueSettingsScreen', () => {
     await waitFor(() => getByText('Archive the league'));
     fireEvent.press(getByText('Archive the league'));
     expect(store.archiveLeague).not.toHaveBeenCalled();
-    pressAlertButton(alertSpy, 'Archive');
+    // The confirm is an in-app sheet; its action button is the exact word.
+    fireEvent.press(getByText('Archive'));
     await waitFor(() => expect(store.archiveLeague).toHaveBeenCalledWith('L1'));
   });
 
@@ -239,7 +231,7 @@ describe('LeagueSettingsScreen', () => {
     await waitFor(() => getByText('Leave league'));
     fireEvent.press(getByText('Leave league'));
     expect(store.leaveLeague).not.toHaveBeenCalled();
-    pressAlertButton(alertSpy, 'Leave');
+    fireEvent.press(getByText('Leave'));
     await waitFor(() => expect(store.leaveLeague).toHaveBeenCalledWith('L1'));
     await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('Main'));
   });

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import LeagueFinalScreen from '../LeagueFinalScreen';
@@ -42,9 +41,7 @@ describe('LeagueFinalScreen', () => {
     jest.clearAllMocks();
     mockUserId = 'me';
     store.getLeague.mockResolvedValue(snapshot);
-    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
-  afterEach(() => Alert.alert.mockRestore());
 
   test('prefills the suggestion, lets the admin edit, and continues to Setup with the strokes', async () => {
     fetchPlayers.mockResolvedValue([
@@ -81,7 +78,7 @@ describe('LeagueFinalScreen', () => {
     await findByText('Continue to setup');
     fireEvent.press(getByText('Continue to setup'));
     await waitFor(() => expect(navigation.navigate).toHaveBeenCalled());
-    expect(Alert.alert.mock.calls[0][1]).toMatch(/Javi, Nacho have no player profile/);
+    await findByText(/Javi, Nacho have no player profile/);
     expect(navigation.navigate.mock.calls[0][1].prefill.players).toHaveLength(1);
   });
 

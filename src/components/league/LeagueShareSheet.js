@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import BottomSheet from '../BottomSheet';
+import SheetHandle from '../ui/SheetHandle';
+import { buttonStyles } from '../ui/Buttons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useT, getLanguage, formatDate } from '../../i18n';
 import { getLeagueShareLink } from '../../store/leagueStore';
@@ -103,7 +105,7 @@ export default function LeagueShareSheet({
 
   return (
     <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
-      <View style={s.handle} />
+      <SheetHandle />
       <Text style={s.title} accessibilityRole="header">{t('league.share.title')}</Text>
 
       {chips.length > 1 && (
@@ -180,14 +182,9 @@ export default function LeagueShareSheet({
 const cap = (x) => (x ? x.charAt(0).toUpperCase() + x.slice(1) : x);
 
 function makeStyles(theme) {
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
-    sheet: {
-      backgroundColor: theme.bg.primary, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-      paddingHorizontal: 20, paddingTop: 10, paddingBottom: 28, maxHeight: '92%',
-    },
-    handle: {
-      alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: theme.border.default, marginBottom: 12,
-    },
+    sheet: { paddingHorizontal: 20, paddingTop: 10, maxHeight: '92%' },
     title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, lineHeight: 28, color: theme.text.primary, marginBottom: 12 },
     chipRow: { flexGrow: 0, marginBottom: 12 },
     chipRowContent: { gap: 8 },
@@ -214,15 +211,9 @@ function makeStyles(theme) {
     },
     toastText: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: theme.accent.primary },
     buttons: { flexDirection: 'row', gap: 10 },
-    secondary: {
-      flex: 1, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: theme.border.default,
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.accent.primary },
-    primary: {
-      flex: 1, minHeight: 48, borderRadius: 14, backgroundColor: theme.accent.primary,
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15, color: theme.text.inverse },
+    secondary: { ...btn.secondaryBtn, flex: 1, gap: 8 },
+    secondaryText: btn.secondaryTextAccent,
+    primary: { ...btn.primaryBtn, flex: 1, gap: 8 },
+    primaryText: btn.primaryText,
   });
 }

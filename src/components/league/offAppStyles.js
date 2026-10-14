@@ -1,17 +1,13 @@
 import { StyleSheet } from 'react-native';
+import { buttonStyles } from '../ui/Buttons';
 
 // Styles shared by the three off-app league screens (announce, add score, add proof).
 export function makeOffAppStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-    header: {
-      flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6, gap: 4,
-    },
-    headerTitle: {
-      fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 17, letterSpacing: -0.3, flexShrink: 1,
-    },
     content: { padding: 16, paddingBottom: 40 },
     note: {
       flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.bg.secondary,
@@ -46,19 +42,12 @@ export function makeOffAppStyles(theme) {
     chipOn: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
     chipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 12 },
     chipTextOn: { color: theme.text.inverse },
-    hint: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, lineHeight: 17, marginBottom: 8 },
+    hint: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17, marginBottom: 8 },
     errorText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 13, lineHeight: 18, marginBottom: 10 },
-    primaryBtn: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.accent.primary, borderRadius: 14, paddingVertical: 14, marginTop: 8,
-    },
+    ...btn,
+    primaryBtn: { ...btn.primaryBtn, marginTop: 8 },
     primaryBtnOff: { opacity: 0.4 },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
-    secondaryBtn: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14,
-      borderWidth: 1, borderColor: theme.border.default, paddingVertical: 12,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
+    secondaryBtn: { ...btn.secondaryBtn, flex: 1, gap: 8 },
     linkBtn: { alignItems: 'center', paddingVertical: 12 },
     linkText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
     preview: { width: '100%', height: 200, borderRadius: 12, marginBottom: 10, backgroundColor: theme.bg.secondary },

@@ -77,7 +77,7 @@ function makeStyles(theme) {
     cell: { flex: 1, alignItems: 'center', paddingTop: 6, paddingBottom: 8, gap: 3 },
     cellEdge: { borderLeftWidth: 1, borderLeftColor: line },
     total: { backgroundColor: theme.bg.secondary },
-    holeNo: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 10 },
+    holeNo: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 11 },
     shape: { width: 26, height: 26, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
     strokes: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.primary, fontSize: 15 },
     pts: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11 },

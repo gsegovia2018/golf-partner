@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, Platform,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
-import IconButton from '../components/ui/IconButton';
+import { buttonStyles } from '../components/ui/Buttons';
+import ScreenHeader from '../components/ui/ScreenHeader';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
@@ -15,11 +16,7 @@ import { formatPoints } from '../store/leagueView';
 import { memberName } from '../lib/leagueNames';
 import { MAX_FINAL_STROKES, clampFinalStrokes, suggestFinalStrokes } from '../store/leagueFinal';
 import { leagueErrorText } from '../lib/leagueErrorText';
-
-function notify(title, message) {
-  if (Platform.OS === 'web') window.alert(`${title}\n${message}`);
-  else Alert.alert(title, message);
-}
+import { useConfirmSheet } from '../components/league/ConfirmSheet';
 
 // Admin only: set the extra strokes each member gets in the December Final
 // (prefilled from the standings, freely editable), then continue to Setup.
@@ -27,6 +24,8 @@ export default function LeagueFinalScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
   const t = useT();
+  const { ask, sheet: confirmSheet } = useConfirmSheet();
+  const notify = (title, message) => ask({ title, message });
   const s = makeStyles(theme);
   const meId = user?.id ?? null;
   const leagueId = route?.params?.leagueId;
@@ -47,10 +46,7 @@ export default function LeagueFinalScreen({ navigation, route }) {
   }, [view, strokes]);
 
   const header = (
-    <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
-      <Text style={s.headerTitle}>{t('league.final.title')}</Text>
-    </View>
+    <ScreenHeader onBack={() => navigation.goBack()} title={t('league.final.title')} />
   );
 
   if (!view || !strokes) {
@@ -166,17 +162,17 @@ export default function LeagueFinalScreen({ navigation, route }) {
           {busy ? <ActivityIndicator color={theme.text.inverse} /> : <Text style={s.primaryText}>{t('league.final.continue')}</Text>}
         </TouchableOpacity>
       </ScrollView>
+      {confirmSheet}
     </ScreenContainer>
   );
 }
 
 function makeStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6, gap: 4 },
-    headerTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 17, letterSpacing: -0.3 },
     content: { padding: 16, paddingBottom: 40 },
     note: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 14 },
     card: {
@@ -185,17 +181,17 @@ function makeStyles(theme) {
     },
     row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 10 },
     divider: { borderBottomWidth: 1, borderBottomColor: theme.border.subtle },
-    place: { width: 26, fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.muted, fontSize: 14, textAlign: 'center' },
+    place: { width: 26, fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.secondary, fontSize: 14, textAlign: 'center' },
     name: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
-    points: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 11, marginTop: 2 },
-    label: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 10, width: 48, textAlign: 'right' },
+    points: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 11, marginTop: 2 },
+    label: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 11, width: 48, textAlign: 'right' },
     stepper: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     stepBtn: {
       width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: theme.border.default,
       alignItems: 'center', justifyContent: 'center',
     },
     value: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 16, minWidth: 22, textAlign: 'center' },
-    primaryBtn: { alignItems: 'center', justifyContent: 'center', backgroundColor: theme.accent.primary, borderRadius: 14, paddingVertical: 14 },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
+    primaryBtn: btn.primaryBtn,
+    primaryText: btn.primaryText,
   });
 }

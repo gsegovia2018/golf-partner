@@ -108,10 +108,7 @@ export default function LeagueCardActions({
 
 function makeStyles(theme) {
   return StyleSheet.create({
-    sheet: {
-      backgroundColor: theme.bg.primary, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-      padding: 20, paddingBottom: 32, gap: 6,
-    },
+    sheet: { padding: 20, gap: 6 },
     title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, lineHeight: 28, color: theme.text.primary, marginBottom: 6 },
     item: {
       flexDirection: 'row', alignItems: 'flex-start', gap: 14, minHeight: 56, paddingVertical: 10,

@@ -9,6 +9,7 @@ import {
 import { useTheme } from '../../theme/ThemeContext';
 import { useT, formatNumber } from '../../i18n';
 import BottomSheet from '../BottomSheet';
+import { buttonStyles } from '../ui/Buttons';
 import { leagueStrokes, setupPlayerTee } from '../../store/leagueSetup';
 import { cardMonth } from '../../store/leagueRules';
 import { monthWord } from './LeagueCardsList';
@@ -73,12 +74,9 @@ export default function LeagueOptInSheet({
 }
 
 function makeStyles(theme) {
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
-    sheet: {
-      backgroundColor: theme.bg.primary,
-      borderTopLeftRadius: 22, borderTopRightRadius: 22,
-      paddingHorizontal: 20, paddingTop: 22, paddingBottom: 28,
-    },
+    sheet: { padding: 20 },
     title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary, marginBottom: 8 },
     lead: {
       fontFamily: 'PlusJakartaSans-Medium', fontSize: 14, lineHeight: 20, color: theme.text.secondary, marginBottom: 14,
@@ -91,15 +89,9 @@ function makeStyles(theme) {
     error: {
       fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.destructive, marginBottom: 12,
     },
-    primary: {
-      minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.accent.primary, marginBottom: 10,
-    },
-    primaryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.text.inverse },
-    secondary: {
-      minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
-      borderWidth: 1, borderColor: theme.border.default,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.accent.primary },
+    primary: { ...btn.primaryBtn, marginBottom: 10 },
+    primaryText: btn.primaryText,
+    secondary: btn.secondaryBtn,
+    secondaryText: btn.secondaryTextAccent,
   });
 }

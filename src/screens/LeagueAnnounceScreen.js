@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
-import IconButton from '../components/ui/IconButton';
+import ScreenHeader from '../components/ui/ScreenHeader';
 import DateField from '../components/DateField';
 import CourseTeePicker from '../components/league/CourseTeePicker';
 import LeagueShareSheet from '../components/league/LeagueShareSheet';
@@ -88,10 +88,7 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
   if (announced) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
-        <View style={s.header}>
-          <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
-          <Text style={s.headerTitle}>{t('league.announce.title')}</Text>
-        </View>
+        <ScreenHeader onBack={() => navigation.goBack()} title={t('league.announce.title')} />
         <ScrollView contentContainerStyle={s.content}>
           <Text style={[s.text, { marginBottom: 16 }]} accessibilityRole="alert">{t('league.share.announced')}</Text>
           <TouchableOpacity style={s.primaryBtn} onPress={() => setShareOpen(true)} activeOpacity={0.8} accessibilityRole="button">
@@ -116,10 +113,7 @@ export default function LeagueAnnounceScreen({ navigation, route }) {
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
-      <View style={s.header}>
-        <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
-        <Text style={s.headerTitle}>{t('league.announce.title')}</Text>
-      </View>
+      <ScreenHeader onBack={() => navigation.goBack()} title={t('league.announce.title')} />
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
         <Text style={[s.text, { marginBottom: 8 }]}>
           {t('league.announce.intro', { hours: OFFAPP_NOTICE_HOURS })}

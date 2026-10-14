@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Image, Sty
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
+import ScreenHeader from '../components/ui/ScreenHeader';
 import { makeOffAppStyles } from '../components/league/offAppStyles';
 import CardHoleGrid from '../components/league/CardHoleGrid';
 import DeadlineLine from '../components/league/DeadlineLine';
@@ -17,6 +18,7 @@ import { useMinuteClock } from '../hooks/useMinuteClock';
 import { useCardEvents } from '../hooks/useCardEvents';
 import { useT, tr, formatNumber } from '../i18n';
 import { semantic } from '../theme/tokens';
+import { withAlpha } from '../theme/alpha';
 import { getLeagueProofUrl } from '../store/leagueStore';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
 import { isMissed, needsApproval, isMonthClosed } from '../store/leagueRules';
@@ -65,10 +67,11 @@ export default function LeagueCardScreen({ navigation, route }) {
   }, [card, isOwner, isAdmin, otherAdmin, data?.league, now]);
 
   const header = (
-    <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
-      <Text style={[s.headerTitle, { flex: 1 }]} numberOfLines={1}>{data ? t('league.cardScreen.title', { who, month: monthLabel }) : t('league.cardScreen.titleNoWho', { month: monthLabel })}</Text>
-      {items.length > 0 && (
+    <ScreenHeader
+      onBack={() => navigation.goBack()}
+      title={data ? t('league.cardScreen.title', { who, month: monthLabel }) : t('league.cardScreen.titleNoWho', { month: monthLabel })}
+      numberOfLines={1}
+      right={items.length > 0 ? (
         <IconButton
           icon="more-vertical"
           size={22}
@@ -76,8 +79,8 @@ export default function LeagueCardScreen({ navigation, route }) {
           onPress={() => setMenuOpen(true)}
           accessibilityLabel={t('league.actions.menu')}
         />
-      )}
-    </View>
+      ) : null}
+    />
   );
 
   // A flick to another card closes anything open for this one.
@@ -278,9 +281,9 @@ export default function LeagueCardScreen({ navigation, route }) {
         />
 
         {scored && !!course?.holes && (
-          <>
+          <View style={l.holeGrid}>
             <CardHoleGrid perHole={breakdown.perHole} />
-          </>
+          </View>
         )}
 
         {scored && (
@@ -344,7 +347,9 @@ function ProofPhoto({ path, official, theme }) {
 }
 
 function makeStyles(theme) {
+  const warn = theme.isDark ? semantic.warning.dark : semantic.warning.light;
   return StyleSheet.create({
+    holeGrid: { marginTop: 14 },
     flick: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 },
     arrow: { width: 44, height: 44 },
     arrowOff: { opacity: 0.3 },
@@ -357,8 +362,8 @@ function makeStyles(theme) {
     badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 11 },
     badgeBad: { backgroundColor: theme.bg.secondary, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
     badgeBadText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.destructive, fontSize: 11 },
-    badgeWarn: { backgroundColor: theme.isDark ? 'rgba(224,178,77,0.18)' : 'rgba(184,121,26,0.14)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-    badgeWarnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.isDark ? semantic.warning.dark : semantic.warning.light, fontSize: 11 },
+    badgeWarn: { backgroundColor: withAlpha(warn, theme.isDark ? 0.18 : 0.14), borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+    badgeWarnText: { fontFamily: 'PlusJakartaSans-Bold', color: warn, fontSize: 11 },
     strip: { flexDirection: 'row', gap: 8, marginTop: 10 },
     cell: { flex: 1, backgroundColor: theme.bg.secondary, borderRadius: 12, padding: 12 },
     cellValue: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.primary, fontSize: 18 },

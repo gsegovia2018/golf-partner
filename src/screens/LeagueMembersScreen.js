@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Clipboard, Alert,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Clipboard,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
-import IconButton from '../components/ui/IconButton';
+import { buttonStyles } from '../components/ui/Buttons';
+import ScreenHeader from '../components/ui/ScreenHeader';
+import SheetHandle from '../components/ui/SheetHandle';
 import PullToRefresh from '../components/PullToRefresh';
 import BottomSheet from '../components/BottomSheet';
 import { useTheme } from '../theme/ThemeContext';
@@ -26,12 +28,9 @@ import { memberLabel, memberName, handicapEventLine } from '../lib/leagueNames';
 import { shareOrigin } from '../lib/shareOrigin';
 import InitialsAvatar from '../components/league/InitialsAvatar';
 import MemberAdminSheet from '../components/league/MemberAdminSheet';
-import { useT, t as translate, formatDate, formatTime, formatNumber } from '../i18n';
+import { useT, formatDate, formatTime, formatNumber } from '../i18n';
 import { leagueErrorText } from '../lib/leagueErrorText';
-
-function fail(e) {
-  Alert.alert(translate('common.error'), leagueErrorText(e) || translate('league.membersMisc.wrong'));
-}
+import { useConfirmSheet } from '../components/league/ConfirmSheet';
 
 // Members, league handicaps and their history, the open handicap vote, and the
 // invite link. Fee and role changes live in League settings.
@@ -57,6 +56,8 @@ export default function LeagueMembersScreen({ navigation, route }) {
   const [seen, setSeen] = useState([]);
   const [rotated, setRotated] = useState(null); // the code just made, until the snapshot catches up
   const t = useT();
+  const { ask, sheet: confirmSheet } = useConfirmSheet();
+  const fail = (e) => ask({ title: t('common.error'), message: leagueErrorText(e) || t('league.membersMisc.wrong') });
   const lastConfirm = useRef(null);
 
   const viewerIsAdmin = !!data?.members?.some((m) => m.userId === meId && m.role === 'admin' && !m.leftAt);
@@ -76,10 +77,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
   useEffect(() => { setRotated(null); }, [data?.league?.inviteCode]);
 
   const header = (
-    <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
-      <Text style={s.headerTitle}>{t('league.membersMisc.title')}</Text>
-    </View>
+    <ScreenHeader onBack={() => navigation.goBack()} title={t('league.membersMisc.title')} />
   );
 
   if (!data) {
@@ -152,19 +150,14 @@ export default function LeagueMembersScreen({ navigation, route }) {
     }
   }
 
-  function confirmRemoveInvitee(invitee) {
-    Alert.alert(
-      t('league.members.removeTitle', { name: invitee.name }),
-      t('league.membersMisc.removeInviteeBody'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('league.membersMisc.remove'),
-          style: 'destructive',
-          onPress: () => run(() => removeLeagueInvitee(leagueId, invitee.id)),
-        },
-      ],
-    );
+  async function confirmRemoveInvitee(invitee) {
+    const yes = await ask({
+      title: t('league.members.removeTitle', { name: invitee.name }),
+      message: t('league.membersMisc.removeInviteeBody'),
+      confirmLabel: t('league.membersMisc.remove'),
+      destructive: true,
+    });
+    if (yes) run(() => removeLeagueInvitee(leagueId, invitee.id));
   }
 
   function openConfirm(next) {
@@ -492,7 +485,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
       </PullToRefresh>
 
       <BottomSheet visible={!!target} onClose={() => setTarget(null)} sheetStyle={s.sheet}>
-        <View style={s.handle} />
+        <SheetHandle />
         <Text style={s.sheetTitle}>{target ? memberLabel(target, meId) : ''}</Text>
         <Text style={s.sheetSub}>{t('league.membersMisc.sheetSub', { cap: league.handicapCap })}</Text>
         <TextInput
@@ -564,23 +557,23 @@ export default function LeagueMembersScreen({ navigation, route }) {
           )}
         </MemberAdminSheet>
       )}
+      {confirmSheet}
     </ScreenContainer>
   );
 }
 
 function makeStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6, gap: 4 },
-    headerTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 17, letterSpacing: -0.3 },
     content: { padding: 16, paddingBottom: 40 },
-    emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 22, textAlign: 'center' },
+    emptyTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 18, lineHeight: 24, textAlign: 'center' },
     emptyText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, marginTop: 6, marginBottom: 18, textAlign: 'center' },
 
     sectionLabel: {
-      fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 10, letterSpacing: 1.5,
+      fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 10, letterSpacing: 1.5,
       marginBottom: 10, marginTop: 8,
     },
     card: {
@@ -595,7 +588,7 @@ function makeStyles(theme) {
     removeBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
     fee: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
     badge: { backgroundColor: theme.accent.light, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 8 },
-    badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 10 },
+    badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 11 },
     historyRow: { paddingVertical: 10 },
     historyText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17 },
 
@@ -605,7 +598,7 @@ function makeStyles(theme) {
     },
     voteHead: { flexDirection: 'row', marginBottom: 6 },
     voteOverline: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 10, letterSpacing: 1.6 },
-    voteTitle: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 18, lineHeight: 24 },
+    voteTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 16, lineHeight: 22 },
     voteMeta: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 6 },
     voteBtns: { flexDirection: 'row', gap: 10, marginTop: 12 },
     voteBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12, paddingVertical: 12 },
@@ -637,22 +630,12 @@ function makeStyles(theme) {
 
     link: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, paddingVertical: 14 },
     inviteBtns: { flexDirection: 'row', gap: 10, paddingBottom: 14 },
-    primaryBtn: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.accent.primary, borderRadius: 14, paddingVertical: 14,
-    },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
-    secondaryBtn: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1,
-      borderColor: theme.border.default, paddingVertical: 14, paddingHorizontal: 16,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+    primaryBtn: btn.primaryBtn,
+    primaryText: btn.primaryText,
+    secondaryBtn: btn.secondaryBtn,
+    secondaryText: btn.secondaryTextAccent,
 
-    sheet: {
-      backgroundColor: theme.bg.card, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22,
-      paddingBottom: 28, borderWidth: 1, borderColor: cardBorder,
-    },
-    handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: theme.border.default, alignSelf: 'center', marginBottom: 18 },
+    sheet: { padding: 20 },
     sheetTitle: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 22, textAlign: 'center' },
     sheetSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, textAlign: 'center', marginTop: 4, marginBottom: 14 },
     input: {

@@ -131,7 +131,7 @@ function makeStyles(theme) {
     },
     title: {
       fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, letterSpacing: 1.5,
-      textTransform: 'uppercase', color: theme.text.muted, marginTop: 12, marginBottom: 2,
+      textTransform: 'uppercase', color: theme.text.secondary, marginTop: 12, marginBottom: 2,
     },
     row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
     right: { marginLeft: 10 },

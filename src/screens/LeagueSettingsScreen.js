@@ -1,16 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Switch, Alert, Platform,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Switch,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
-import IconButton from '../components/ui/IconButton';
+import { buttonStyles } from '../components/ui/Buttons';
+import ScreenHeader from '../components/ui/ScreenHeader';
 import PullToRefresh from '../components/PullToRefresh';
 import DateField from '../components/DateField';
 import DeleteLeagueSheet from '../components/DeleteLeagueSheet';
 import BottomSheet from '../components/BottomSheet';
 import PointsForPlaying from '../components/league/PointsForPlaying';
-import { useT, t as translate, formatNumber, formatDate } from '../i18n';
+import { useT, formatNumber, formatDate } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
@@ -37,22 +38,7 @@ import {
   LEAGUE_NOTIFICATION_ROWS, resolveLeaguePrefs, leaguePrefsPatch,
 } from '../store/leagueNotificationPrefs';
 import { leagueErrorText } from '../lib/leagueErrorText';
-
-// Alert.alert does nothing on web (react-native-web), so both helpers fall
-// back to the browser's own dialogs there.
-function fail(e) {
-  const message = leagueErrorText(e) || translate('league.create.errorGeneric');
-  if (Platform.OS === 'web') window.alert(message);
-  else Alert.alert(translate('league.create.errorTitle'), message);
-}
-
-function confirmDestructive(title, message, actionLabel) {
-  if (Platform.OS === 'web') return Promise.resolve(window.confirm(`${title}\n\n${message}`));
-  return new Promise((resolve) => Alert.alert(title, message, [
-    { text: translate('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
-    { text: actionLabel, style: 'destructive', onPress: () => resolve(true) },
-  ], { cancelable: true, onDismiss: () => resolve(false) }));
-}
+import { useConfirmSheet } from '../components/league/ConfirmSheet';
 
 // Links to Members and the Final, rules (admin edits), fees and roles (admin),
 // notification switches and leave / archive / delete. Everyone sees the rules; only an admin can change them.
@@ -65,6 +51,9 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   const { data, loading, refreshing, error, reload, refresh } = useLeague(navigation, leagueId);
   const appSettings = useAppSettings();
   const t = useT();
+  const { ask, sheet: confirmSheet } = useConfirmSheet();
+  const fail = (e) => ask({ title: t('league.create.errorTitle'), message: leagueErrorText(e) || t('league.create.errorGeneric') });
+  const confirmDestructive = (title, message, confirmLabel) => ask({ title, message, confirmLabel, destructive: true });
 
   const [name, setName] = useState('');
   const [seasonStart, setSeasonStart] = useState('');
@@ -158,10 +147,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   }
 
   const header = (
-    <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
-      <Text style={s.headerTitle}>{t('league.settings.title')}</Text>
-    </View>
+    <ScreenHeader onBack={() => navigation.goBack()} title={t('league.settings.title')} />
   );
 
   if (!data) {
@@ -564,23 +550,23 @@ export default function LeagueSettingsScreen({ navigation, route }) {
           onCancel={() => setDeleteOpen(false)}
         />
       )}
+      {confirmSheet}
     </ScreenContainer>
   );
 }
 
 function makeStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
+  const btn = buttonStyles(theme);
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6, gap: 4 },
-    headerTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 17, letterSpacing: -0.3 },
     content: { padding: 16, paddingBottom: 40 },
-    emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 22, textAlign: 'center' },
+    emptyTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 18, lineHeight: 24, textAlign: 'center' },
     emptyText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, marginTop: 6, marginBottom: 18, textAlign: 'center' },
 
     sectionLabel: {
-      fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 10, letterSpacing: 1.5,
+      fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 10, letterSpacing: 1.5,
       marginBottom: 10, marginTop: 12,
     },
     card: {
@@ -594,7 +580,7 @@ function makeStyles(theme) {
       borderColor: theme.border.default, padding: 12, marginBottom: 4, fontSize: 15, fontFamily: 'PlusJakartaSans-Medium',
     },
     errorText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 13, lineHeight: 18, marginBottom: 8 },
-    hint: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, lineHeight: 17, marginVertical: 8 },
+    hint: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17, marginVertical: 8 },
 
     linkRow: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingVertical: 12 },
     pill: { backgroundColor: theme.accent.light, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, marginRight: 6 },
@@ -607,30 +593,22 @@ function makeStyles(theme) {
       minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: theme.border.default,
       paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center',
     },
-    sheet: {
-      backgroundColor: theme.bg.primary, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32,
-    },
+    sheet: { padding: 20 },
     sheetTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, lineHeight: 28, color: theme.text.primary, marginBottom: 8 },
     sheetText: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 14, lineHeight: 20, color: theme.text.secondary, marginBottom: 16 },
 
     adminHead: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8, gap: 12 },
     colHead: {
-      fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 10, letterSpacing: 1,
+      fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 10, letterSpacing: 1,
       textTransform: 'uppercase', width: 52, textAlign: 'center',
     },
     adminRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 12 },
     memberName: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
 
-    primaryBtn: {
-      alignItems: 'center', justifyContent: 'center', backgroundColor: theme.accent.primary,
-      borderRadius: 14, paddingVertical: 14, marginTop: 8,
-    },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
-    secondaryBtn: {
-      alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1,
-      borderColor: theme.border.default, paddingVertical: 12, paddingHorizontal: 28,
-    },
-    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
+    primaryBtn: { ...btn.primaryBtn, marginTop: 8 },
+    primaryText: btn.primaryText,
+    secondaryBtn: { ...btn.secondaryBtn, paddingHorizontal: 28 },
+    secondaryText: btn.secondaryText,
 
     dangerRow: {
       backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1, borderColor: cardBorder,

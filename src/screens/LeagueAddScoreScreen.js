@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
-import IconButton from '../components/ui/IconButton';
+import ScreenHeader from '../components/ui/ScreenHeader';
 import DateField from '../components/DateField';
 import CourseTeePicker from '../components/league/CourseTeePicker';
 import { makeOffAppStyles } from '../components/league/offAppStyles';
@@ -104,10 +104,7 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
   }
 
   const header = (
-    <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
-      <Text style={s.headerTitle}>{cardId ? t('league.addScore.titleCard') : t('league.addScore.titleNew')}</Text>
-    </View>
+    <ScreenHeader onBack={() => navigation.goBack()} title={cardId ? t('league.addScore.titleCard') : t('league.addScore.titleNew')} />
   );
 
   if (cardId && !card) {

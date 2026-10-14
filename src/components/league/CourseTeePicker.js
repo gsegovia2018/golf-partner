@@ -174,7 +174,7 @@ function makeStyles(theme) {
     chipUnrated: { borderStyle: 'dashed' },
     chipUnratedOn: { borderColor: theme.accent.primary, backgroundColor: theme.accent.light },
     chipTextUnratedOn: { color: theme.accent.primary },
-    chipSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 10 },
+    chipSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 11 },
     note: {
       backgroundColor: theme.bg.secondary, borderRadius: 12, borderWidth: 1, borderColor: theme.border.default,
       padding: 12, marginBottom: 8,

@@ -114,7 +114,7 @@ function makeStyles(theme) {
     titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8 },
     title: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14, lineHeight: 19, flexShrink: 1 },
     chip: { backgroundColor: theme.bg.secondary, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
-    chipText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.secondary, fontSize: 10, letterSpacing: 0.6 },
+    chipText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.secondary, fontSize: 11, letterSpacing: 0.6 },
     meta: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 1 },
     quote: {
       fontFamily: 'PlusJakartaSans-Medium', color: theme.text.primary, fontSize: 13, lineHeight: 18, marginTop: 6,

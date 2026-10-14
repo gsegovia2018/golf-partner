@@ -34,7 +34,7 @@ export default function LeagueListSection({ navigation, meId, theme, s }) {
                 </View>
               </View>
               <Text style={s.tournamentCardMeta}>{row.position ? text(row.position) : t('league.list.noCards')}</Text>
-              {!!row.month && <Text style={[s.tournamentCardMeta, { color: theme.text.muted }]}>{text(row.month)}</Text>}
+              {!!row.month && <Text style={[s.tournamentCardMeta, { color: theme.text.secondary }]}>{text(row.month)}</Text>}
             </View>
             <View style={s.tournamentCardRight}>
               <Feather name="chevron-right" size={18} color={theme.text.muted} />
