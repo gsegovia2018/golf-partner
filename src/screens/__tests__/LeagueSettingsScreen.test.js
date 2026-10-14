@@ -191,10 +191,17 @@ describe('LeagueSettingsScreen', () => {
 
   test('sharing (admin): the public board switch, the link and a new link', async () => {
     store.getLeague.mockResolvedValue(snapshot());
-    const { getByText, getByLabelText, queryByText, findByText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    const {
+      getByText, getAllByText, getByLabelText, queryByText, findByText,
+    } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
     expect(await findByText('https://golf-partner.vercel.app/league-board/tokAAAAAAAAAAAAAAAAAAAAA')).toBeTruthy();
     expect(getByText('SHARING')).toBeTruthy();
+    // A new link asks first and says what stops working.
     fireEvent.press(getByText('Make a new link'));
+    expect(getByText('Every link already shared stops working. Members who left can still open the current link until you make a new one.')).toBeTruthy();
+    expect(store.rotateLeaguePublicBoard).not.toHaveBeenCalled();
+    const buttons = getAllByText('Make a new link');
+    fireEvent.press(buttons[buttons.length - 1]);
     expect(await findByText('https://golf-partner.vercel.app/league-board/tokBBBBBBBBBBBBBBBBBBBBB')).toBeTruthy();
     expect(getByText('New link made. The old one no longer works.')).toBeTruthy();
     expect(store.rotateLeaguePublicBoard).toHaveBeenCalledWith('L1');
@@ -202,6 +209,15 @@ describe('LeagueSettingsScreen', () => {
     await waitFor(() => expect(store.setLeaguePublicBoard).toHaveBeenCalledWith('L1', false));
     await waitFor(() => expect(queryByText(/league-board/)).toBeNull());
     expect(queryByText('Make a new link')).toBeNull();
+  });
+
+  test('sharing: a failed first load says so and Try again loads it', async () => {
+    store.getLeague.mockResolvedValue(snapshot());
+    store.getLeagueShareLink.mockRejectedValueOnce(new Error('Failed to fetch'));
+    const { getByText, findByText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    expect(await findByText("Couldn't load the public board link.")).toBeTruthy();
+    fireEvent.press(getByText('Try again'));
+    expect(await findByText('https://golf-partner.vercel.app/league-board/tokAAAAAAAAAAAAAAAAAAAAA')).toBeTruthy();
   });
 
   test('sharing is admin only', async () => {

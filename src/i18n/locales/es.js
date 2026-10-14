@@ -630,6 +630,11 @@ export default {
   'league.share.settings.rotateSub': 'El enlace actual deja de funcionar para todos.',
   'league.share.settings.rotated': 'Enlace nuevo creado. El anterior ya no funciona.',
   'league.share.settings.failed': 'No se ha podido cambiar la clasificación pública. Inténtalo de nuevo.',
+  'league.share.settings.loadFailed': 'No se ha podido cargar el enlace a la clasificación pública.',
+  'league.share.settings.rotateTitle': '¿Crear un enlace nuevo?',
+  'league.share.settings.rotateBody': 'Todos los enlaces ya compartidos dejan de funcionar. Los miembros que se han ido aún pueden abrir el enlace actual hasta que crees uno nuevo.',
+  'league.share.settings.rotateConfirm': 'Crear un enlace nuevo',
+  'league.share.golfer': 'Jugador',
   'league.public.soFar': {
     one: '{month} hasta hoy · queda {count} día · {in} de {total} tarjetas',
     other: '{month} hasta hoy · quedan {count} días · {in} de {total} tarjetas',

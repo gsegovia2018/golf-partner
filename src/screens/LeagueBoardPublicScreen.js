@@ -18,7 +18,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import LeaderboardCard from '../components/LeaderboardCard';
-import { useT, formatNumber, formatDate } from '../i18n';
+import { useT, formatNumber, formatDate, getLanguage } from '../i18n';
 import { getPublicLeagueBoard } from '../store/publicLeagueBoardStore';
 import { publicBoardSnapshot, publicBoardView, publicBoardScopes } from '../store/leagueShare';
 import { currentMonthKey, leaguePointsText } from '../store/leagueView';
@@ -113,7 +113,7 @@ export default function LeagueBoardPublicScreen(props) {
   } else if (!snapshot) {
     body = state('link', t('league.public.offTitle'), t('league.public.offText'), false);
   } else {
-    const view = publicBoardView(snapshot, active, now);
+    const view = publicBoardView(snapshot, active, now, getLanguage());
     const season = active === 'season';
     const leader = view.rows[0];
     let heroLine;

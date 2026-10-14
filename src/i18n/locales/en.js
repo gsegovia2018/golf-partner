@@ -630,6 +630,11 @@ export default {
   'league.share.settings.rotateSub': 'The current link stops working for everyone.',
   'league.share.settings.rotated': 'New link made. The old one no longer works.',
   'league.share.settings.failed': "Couldn't change the public board. Try again.",
+  'league.share.settings.loadFailed': "Couldn't load the public board link.",
+  'league.share.settings.rotateTitle': 'Make a new link?',
+  'league.share.settings.rotateBody': 'Every link already shared stops working. Members who left can still open the current link until you make a new one.',
+  'league.share.settings.rotateConfirm': 'Make a new link',
+  'league.share.golfer': 'Golfer',
   'league.public.soFar': {
     one: '{month} so far · {count} day left · {in} of {total} cards in',
     other: '{month} so far · {count} days left · {in} of {total} cards in',

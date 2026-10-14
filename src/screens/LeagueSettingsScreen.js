@@ -8,6 +8,7 @@ import IconButton from '../components/ui/IconButton';
 import PullToRefresh from '../components/PullToRefresh';
 import DateField from '../components/DateField';
 import DeleteLeagueSheet from '../components/DeleteLeagueSheet';
+import BottomSheet from '../components/BottomSheet';
 import PointsForPlaying from '../components/league/PointsForPlaying';
 import { useT, formatNumber } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
@@ -80,6 +81,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   const [board, setBoard] = useState(null);
   const [boardBusy, setBoardBusy] = useState(false);
   const [boardNote, setBoardNote] = useState(null);
+  const [rotateOpen, setRotateOpen] = useState(false);
 
   // Seed the form once, from the first snapshot (cache or live). Later
   // refreshes must not overwrite what the admin is typing.
@@ -122,15 +124,20 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   // The public board link, for admins: the token (created on first ask) while
   // it is on. Loaded once the snapshot says I'm an admin.
   const amAdmin = !!data?.members?.some((m) => m.userId === meId && !m.leftAt && m.role === 'admin');
-  const boardEnabled = data?.league?.publicBoardEnabled;
   useEffect(() => {
     if (!amAdmin || board) return undefined;
     let alive = true;
     getLeagueShareLink(leagueId)
       .then((token) => { if (alive) setBoard({ enabled: !!token, token }); })
-      .catch(() => { if (alive) setBoard({ enabled: boardEnabled !== false, token: null, failed: true }); });
+      // Retry (or pull to refresh) clears it and loads again.
+      .catch(() => { if (alive) setBoard({ failed: true }); });
     return () => { alive = false; };
-  }, [amAdmin, board, leagueId, boardEnabled]);
+  }, [amAdmin, board, leagueId]);
+
+  function onRefresh() {
+    if (board?.failed) setBoard(null);
+    return refresh();
+  }
 
   async function boardAction(run, doneKey = null) {
     if (boardBusy) return;
@@ -323,7 +330,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {header}
-      <PullToRefresh style={{ flex: 1 }} contentContainerStyle={s.content} refreshing={refreshing} onRefresh={refresh}>
+      <PullToRefresh style={{ flex: 1 }} contentContainerStyle={s.content} refreshing={refreshing} onRefresh={onRefresh}>
         <Text style={s.sectionLabel}>LEAGUE</Text>
         <View style={[s.card, { paddingVertical: 4 }]}>
           {linkRows.map((r, i) => (
@@ -424,11 +431,16 @@ export default function LeagueSettingsScreen({ navigation, route }) {
               <View style={[s.adminRow, board?.enabled && s.rowDivider]}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.readLabel}>{t('league.share.settings.switch')}</Text>
-                  <Text style={s.readValue}>
-                    {t(board?.enabled === false ? 'league.share.settings.off' : 'league.share.settings.on')}
+                  <Text style={board?.failed ? s.errorText : s.readValue}>
+                    {t(board?.failed ? 'league.share.settings.loadFailed'
+                      : board?.enabled === false ? 'league.share.settings.off' : 'league.share.settings.on')}
                   </Text>
                 </View>
-                {board ? (
+                {board?.failed ? (
+                  <TouchableOpacity style={s.retryBtn} onPress={() => setBoard(null)} accessibilityRole="button">
+                    <Text style={s.secondaryText}>{t('common.retry')}</Text>
+                  </TouchableOpacity>
+                ) : board ? (
                   <Switch
                     value={!!board.enabled}
                     onValueChange={(v) => boardAction(() => setLeaguePublicBoard(leagueId, v))}
@@ -447,7 +459,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
                   </View>
                   <TouchableOpacity
                     style={s.linkRow}
-                    onPress={() => boardAction(() => rotateLeaguePublicBoard(leagueId), 'league.share.settings.rotated')}
+                    onPress={() => setRotateOpen(true)}
                     disabled={boardBusy}
                     activeOpacity={0.7}
                     accessibilityRole="button"
@@ -466,6 +478,25 @@ export default function LeagueSettingsScreen({ navigation, route }) {
               <Text style={boardNote.error ? s.errorText : s.hint} accessibilityRole="alert">{t(boardNote.key)}</Text>
             )}
           </>
+        )}
+        {isAdmin && (
+          <BottomSheet visible={rotateOpen} onClose={() => setRotateOpen(false)} sheetStyle={s.sheet}>
+            <Text style={s.sheetTitle} accessibilityRole="header">{t('league.share.settings.rotateTitle')}</Text>
+            <Text style={s.sheetText}>{t('league.share.settings.rotateBody')}</Text>
+            <TouchableOpacity
+              style={s.primaryBtn}
+              onPress={() => {
+                setRotateOpen(false);
+                boardAction(() => rotateLeaguePublicBoard(leagueId), 'league.share.settings.rotated');
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={s.primaryText}>{t('league.share.settings.rotateConfirm')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.secondaryBtn, { marginTop: 10 }]} onPress={() => setRotateOpen(false)} accessibilityRole="button">
+              <Text style={s.secondaryText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </BottomSheet>
         )}
 
         {/* Notification preferences. The switches save to profiles.settings
@@ -567,6 +598,15 @@ function makeStyles(theme) {
     readLabel: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14 },
     readValue: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
     linkValue: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 13 },
+    retryBtn: {
+      minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: theme.border.default,
+      paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center',
+    },
+    sheet: {
+      backgroundColor: theme.bg.primary, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32,
+    },
+    sheetTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, lineHeight: 28, color: theme.text.primary, marginBottom: 8 },
+    sheetText: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 14, lineHeight: 20, color: theme.text.secondary, marginBottom: 16 },
 
     adminHead: { flexDirection: 'row', alignItems: 'center', paddingBottom: 8, gap: 12 },
     colHead: {

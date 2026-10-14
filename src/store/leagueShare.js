@@ -8,7 +8,12 @@
 // takes that language as `lang` and passes it to t / formatNumber /
 // formatDate / formatTime explicitly, so the output never depends on the
 // language active elsewhere and tests can pin it.
-// WhatsApp formatting: *bold* for the league name.
+// WhatsApp formatting: *bold* for the league name; the markers * _ ~ ` are
+// stripped from every name inside the text (wa()) so a name can't restyle it.
+//
+// Privacy: names are the profile's display name only, never the username
+// (it comes from the email's local part). No display name -> "Golfer" /
+// "Jugador". The server's league_public_name follows the same rule.
 import { t, formatNumber, formatDate, formatTime, formatOrdinal } from '../i18n';
 import { monthResults, seasonTable } from './leagueStandings';
 import {
@@ -31,36 +36,62 @@ export function publicBoardTokenFromPath(pathname) {
   try { return decodeURIComponent(m[1]); } catch { return m[1]; }
 }
 
-// 'Íñigo Echeverría' -> 'Íñigo E.'; one word stays; '' -> 'Golfer'. Same rule
-// as the server's league_public_name.
-export function shareName(name) {
-  const words = String(name ?? '').trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return 'Golfer';
+// First name + the initial of the first surname, i.e. the second word:
+// 'Íñigo Echeverría Ruiz' -> 'Íñigo E.', 'Miguel Ángel Domínguez' -> 'Miguel Á.'.
+// One word stays as it is. The initial is the first code point (Array.from),
+// so an emoji or a surrogate pair stays whole. Blank -> null. Same rule as
+// the server's league_public_name.
+export function publicNameRule(name) {
+  const words = String(name ?? '').split(/\s+/).filter(Boolean);
+  if (words.length === 0) return null;
   if (words.length === 1) return words[0];
-  return `${words[0]} ${words[words.length - 1].charAt(0).toUpperCase()}.`;
+  return `${words[0]} ${Array.from(words[1])[0].toUpperCase()}.`;
 }
+
+// The name a share shows: publicNameRule, or the neutral "Golfer" / "Jugador".
+export function shareName(name, lang) {
+  return publicNameRule(name) ?? t('league.share.golfer', {}, lang);
+}
+
+// A member's display name for sharing, never the username: the members RPC
+// falls back to the username when there is no display name, so a value equal
+// to the username counts as none.
+export function publicDisplayName(member) {
+  const name = String(member?.displayName ?? '').trim();
+  if (!name) return null;
+  const username = String(member?.username ?? '').trim();
+  return username && name.toLowerCase() === username.toLowerCase() ? null : name;
+}
+
+// WhatsApp markers out of a name: * _ ~ `.
+export const wa = (s) => String(s ?? '').replace(/[*_~`]/g, '');
+
+// A row's name inside a message: the markers go before the name rule, so
+// "Íñigo ~Echeverría" still reads "Íñigo E.".
+const msgName = (row, lang) => shareName(wa(row.display), lang);
 
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 const monthWord = (monthKey, lang) => formatDate(`${monthKey}-01`, 'monthName', lang);
 const rank = (place, isTie) => `${isTie ? 'T' : ''}${place}`;
 const leaguePts = (n, lang) => formatNumber(n, { maxDecimals: 1 }, lang);
-const memberNameOf = (members, userId) => {
+const memberNameOf = (members, userId, lang) => {
   const m = (members ?? []).find((x) => x.userId === userId);
-  return shareName(m?.displayName || m?.username);
+  return shareName(publicDisplayName(m), lang);
 };
 const linkLines = (url, lang) => (url ? ['', t('league.share.msg.liveBoard', { url }, lang)] : []);
 const active = (members) => (members ?? []).filter((m) => !m.leftAt);
 const optsOf = (league) => ({ participationPoints: league?.participationPoints ?? 0 });
 
 // The ranked rows of a month: { place, isTie, name, points, course, seasonPoints }.
-export function rankedMonthRows(snapshot, month, now = new Date()) {
+export function rankedMonthRows(snapshot, month, now = new Date(), lang) {
   const { league, members, cardsByMonth } = snapshot;
   const board = monthBoard(members, cardsByMonth, month, league.pointsTable, now, optsOf(league));
   return board.confirmed.filter((r) => r.place != null).map((r) => ({
     userId: r.member.userId,
     place: r.place,
     isTie: r.isTie,
-    name: shareName(r.member.displayName || r.member.username),
+    name: shareName(publicDisplayName(r.member), lang),
+    display: publicDisplayName(r.member),
     points: r.cardPoints,
     course: r.card?.course?.name ?? null,
     seasonPoints: r.seasonPoints,
@@ -94,11 +125,13 @@ function soFarLine(month, now, lang) {
 // Live board: <url>
 export function standingsMessage(snapshot, { month = null, now = new Date(), url = null, lang } = {}) {
   const key = month ?? currentMonthKey(now);
-  const rows = rankedMonthRows(snapshot, key, now);
-  const lines = [`*${snapshot.league.name}*`, soFarLine(key, now, lang), ''];
+  const rows = rankedMonthRows(snapshot, key, now, lang);
+  const lines = [`*${wa(snapshot.league.name)}*`, soFarLine(key, now, lang), ''];
   if (rows.length === 0) lines.push(t('league.share.msg.noneYet', {}, lang));
   for (const r of rows) {
-    const params = { place: rank(r.place, r.isTie), name: r.name, points: formatNumber(r.points, {}, lang), course: r.course };
+    const params = {
+      place: rank(r.place, r.isTie), name: msgName(r, lang), points: formatNumber(r.points, {}, lang), course: r.course && wa(r.course),
+    };
     lines.push(t(r.course ? 'league.share.msg.rowCourse' : 'league.share.msg.row', params, lang));
   }
   const left = stillToPost(snapshot, key, now);
@@ -108,11 +141,12 @@ export function standingsMessage(snapshot, { month = null, now = new Date(), url
 
 // The season table rows over the months up to `upTo` ('YYYY-MM', inclusive;
 // null = all): { place, isTie, name, total }.
-export function seasonRows(snapshot, upTo = null) {
+export function seasonRows(snapshot, upTo = null, lang) {
   const { league, members, cardsByMonth } = snapshot;
   const months = Object.fromEntries(Object.entries(cardsByMonth ?? {}).filter(([m]) => upTo == null || m <= upTo));
   return seasonTable(active(members), months, league.pointsTable, optsOf(league)).map((r) => ({
-    userId: r.userId, place: r.place, isTie: r.isTie, name: memberNameOf(members, r.userId), total: r.total,
+    userId: r.userId, place: r.place, isTie: r.isTie, name: memberNameOf(members, r.userId, lang), total: r.total,
+    display: publicDisplayName((members ?? []).find((x) => x.userId === r.userId)),
     lastMonthDelta: r.lastMonthDelta,
   }));
 }
@@ -127,14 +161,14 @@ export function seasonRows(snapshot, upTo = null) {
 export function seasonMessage(snapshot, { url = null, lang } = {}) {
   const last = lastScoredMonth(snapshot.cardsByMonth);
   const lines = [
-    `*${snapshot.league.name}*`,
+    `*${wa(snapshot.league.name)}*`,
     last ? t('league.share.msg.seasonAfter', { month: monthWord(last, lang) }, lang) : t('league.share.msg.season', {}, lang),
     '',
   ];
   if (!last) lines.push(t('league.share.msg.noneYet', {}, lang));
   else {
-    for (const r of seasonRows(snapshot)) {
-      lines.push(t('league.share.msg.seasonRow', { place: rank(r.place, r.isTie), name: r.name, points: leaguePts(r.total, lang) }, lang));
+    for (const r of seasonRows(snapshot, null, lang)) {
+      lines.push(t('league.share.msg.seasonRow', { place: rank(r.place, r.isTie), name: msgName(r, lang), points: leaguePts(r.total, lang) }, lang));
     }
   }
   return [...lines, ...linkLines(url, lang)].join('\n');
@@ -152,18 +186,18 @@ export function seasonMessage(snapshot, { url = null, lang } = {}) {
 //
 // Live board: <url>
 export function resultsMessage(snapshot, { month, now = new Date(), url = null, lang } = {}) {
-  const rows = rankedMonthRows(snapshot, month, now);
-  const lines = [`*${snapshot.league.name}*`, cap(t('league.share.msg.results', { month: monthWord(month, lang) }, lang)), ''];
+  const rows = rankedMonthRows(snapshot, month, now, lang);
+  const lines = [`*${wa(snapshot.league.name)}*`, cap(t('league.share.msg.results', { month: monthWord(month, lang) }, lang)), ''];
   if (rows.length === 0) lines.push(t('league.share.msg.noneYet', {}, lang));
   for (const r of rows) {
     lines.push(t('league.share.msg.rowResult', {
-      place: rank(r.place, r.isTie), name: r.name, points: formatNumber(r.points, {}, lang), league: leaguePts(r.seasonPoints, lang),
+      place: rank(r.place, r.isTie), name: msgName(r, lang), points: formatNumber(r.points, {}, lang), league: leaguePts(r.seasonPoints, lang),
     }, lang));
   }
-  const top = seasonRows(snapshot, month).filter((r) => r.total > 0).slice(0, 3);
+  const top = seasonRows(snapshot, month, lang).filter((r) => r.total > 0).slice(0, 3);
   if (top.length > 0) {
     const list = top.map((r) => t('league.share.msg.seasonTopItem', {
-      place: rank(r.place, r.isTie), name: r.name, points: leaguePts(r.total, lang),
+      place: rank(r.place, r.isTie), name: msgName(r, lang), points: leaguePts(r.total, lang),
     }, lang)).join(' · ');
     lines.push('', t('league.share.msg.seasonTop', { list }, lang));
   }
@@ -189,12 +223,13 @@ export function shareCardAction(card, isOwner) {
 // "My October card for <League>: 36 pts at <course>, confirmed by Javier. 4th so far.\n<url>"
 export function cardMessage(snapshot, card, { now = new Date(), url = null, lang } = {}) {
   const month = card.monthKey ?? String(card.month ?? '').slice(0, 7);
-  const by = card.status === 'confirmed' && card.confirmedByName ? firstName(card.confirmedByName) : null;
+  const byName = wa(firstName(card.confirmedByName));
+  const by = card.status === 'confirmed' && byName ? byName : null;
   const params = {
     month: monthWord(month, lang),
-    league: snapshot.league.name,
+    league: wa(snapshot.league.name),
     points: formatNumber(card.points, {}, lang),
-    course: card.course?.name ?? '—',
+    course: wa(card.course?.name) || '—',
     name: by,
   };
   let text = t(by ? 'league.share.msg.cardBy' : 'league.share.msg.card', params, lang);
@@ -221,7 +256,7 @@ export function announcementMessage({
     : null;
   const key = byText ? 'league.share.msg.announce' : 'league.share.msg.announceNoBy';
   const text = t(key, {
-    month: monthWord(String(month ?? '').slice(0, 7), lang), league: leagueName, when, course: course ?? '—', by: byText,
+    month: monthWord(String(month ?? '').slice(0, 7), lang), league: wa(leagueName), when, course: wa(course) || '—', by: byText,
   }, lang);
   return url ? `${text}\n${url}` : text;
 }
@@ -231,7 +266,8 @@ export function announcementMessage({
 // get_public_league_board's payload as the snapshot shape the standings
 // helpers read ({ league, members, cardsByMonth }); null for no board.
 // Member keys stand in for user ids; every card counts (the server sends
-// only counting ones).
+// only counting ones). A member without a display name has name null: the
+// views show the neutral label.
 export function publicBoardSnapshot(payload) {
   if (!payload || typeof payload !== 'object' || !payload.league) return null;
   const l = payload.league;
@@ -263,10 +299,12 @@ export function publicBoardSnapshot(payload) {
 // The public page's view of one scope ('season' or a 'YYYY-MM' month):
 // { rows, ranked, total } where rows are
 // { key, place, isTie, name, course, points, league } (points null on the season).
-export function publicBoardView(snapshot, scope, now = new Date()) {
-  const total = active(snapshot.members).length;
+// `total` counts every member the board shows (active ones plus anyone with a
+// counting card), so "X of Y cards in" can never pass Y.
+export function publicBoardView(snapshot, scope, now = new Date(), lang) {
+  const total = (snapshot.members ?? []).length;
   if (scope === 'season') {
-    const rows = seasonRows(snapshot).map((r) => ({
+    const rows = seasonRows(snapshot, null, lang).map((r) => ({
       key: r.userId, place: r.place, isTie: r.isTie, name: r.name, course: null, points: null, league: r.total,
       lastMonth: r.lastMonthDelta,
     }));
@@ -278,7 +316,7 @@ export function publicBoardView(snapshot, scope, now = new Date()) {
   const rows = results.map((r) => {
     const card = (cardsByMonth[scope] ?? []).find((c) => c.userId === r.userId && c.points === r.cardPoints);
     return {
-      key: r.userId, place: r.place, isTie: r.isTie, name: memberNameOf(members, r.userId),
+      key: r.userId, place: r.place, isTie: r.isTie, name: memberNameOf(members, r.userId, lang),
       course: card?.course?.name ?? null, points: r.cardPoints, league: r.seasonPoints,
     };
   });

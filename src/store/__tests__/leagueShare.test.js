@@ -1,8 +1,9 @@
 import {
   shareName, publicBoardUrl, publicBoardTokenFromPath, standingsMessage, seasonMessage, resultsMessage,
   cardMessage, announcementMessage, shareableCard, stillToPost, publicBoardSnapshot, publicBoardView,
-  publicBoardScopes, shareCardAction,
+  publicBoardScopes, shareCardAction, publicNameRule, publicDisplayName, wa,
 } from '../leagueShare';
+import { daysLeftInMonth } from '../leagueView';
 
 const NOW = new Date(2026, 9, 13, 10, 0); // Tue 13 Oct 2026, 18 days left
 const URL = 'https://golf-partner.vercel.app/league-board/tok_123456789012345678';
@@ -33,12 +34,81 @@ const snapshot = {
   },
 };
 
-test('shareName: first name + initial', () => {
-  expect(shareName('Íñigo Echeverría')).toBe('Íñigo E.');
-  expect(shareName('  Javier  de la Fuente ')).toBe('Javier F.');
-  expect(shareName('Luis')).toBe('Luis');
-  expect(shareName('')).toBe('Golfer');
-  expect(shareName(null)).toBe('Golfer');
+// The same cases as league_public_board_smoke.sql's league_public_name_rule
+// checks: server and client must agree.
+test.each([
+  ['Íñigo Echeverría Ruiz', 'Íñigo E.'],
+  ['Miguel Ángel Domínguez', 'Miguel Á.'],
+  ['  Javier   ortega ', 'Javier O.'],
+  ['ana \u00a0émile', 'ana É.'],
+  ['Pepe 🏌️Golf', 'Pepe 🏌.'],
+  ['Luna 😀', 'Luna 😀.'],
+  ['😀 Smile', '😀 S.'],
+  ['Luis', 'Luis'],
+  ['', null],
+  ['   ', null],
+  [null, null],
+])('publicNameRule(%p) -> %p (first name + initial of the first surname)', (input, want) => {
+  expect(publicNameRule(input)).toBe(want);
+});
+
+test('shareName: no display name gives the neutral label in the sharer\'s language', () => {
+  expect(shareName('Íñigo Echeverría', 'en')).toBe('Íñigo E.');
+  expect(shareName('', 'en')).toBe('Golfer');
+  expect(shareName(null, 'es')).toBe('Jugador');
+});
+
+test('publicDisplayName never falls back to the username', () => {
+  expect(publicDisplayName({ displayName: 'Ana Pérez', username: 'ana.p' })).toBe('Ana Pérez');
+  // The members RPC puts the username in display_name when there is none.
+  expect(publicDisplayName({ displayName: 'ana.p', username: 'ana.p' })).toBeNull();
+  expect(publicDisplayName({ displayName: '  ', username: 'ana.p' })).toBeNull();
+  expect(publicDisplayName({ displayName: null, username: 'ana.p' })).toBeNull();
+  expect(publicDisplayName({ displayName: 'Bea' })).toBe('Bea');
+});
+
+test('a member with only a username is shared as "Golfer", the username never appears', () => {
+  const snap = {
+    ...snapshot,
+    members: [...snapshot.members, member('u6', 'leaky.local', { username: 'leaky.local' })],
+    cardsByMonth: { '2026-10': [card('u6', '2026-10', 44, { course: 'Club C' })] },
+  };
+  const text = standingsMessage(snap, { now: NOW, lang: 'en' });
+  expect(text).toContain('1. Golfer · 44 pts · Club C');
+  expect(text).not.toMatch(/leaky/);
+  expect(standingsMessage(snap, { now: NOW, lang: 'es' })).toContain('1. Jugador · 44 ptos · Club C');
+});
+
+test('WhatsApp markers are stripped from league, course and player names', () => {
+  expect(wa('*Bold* _it_ ~st~ `code`')).toBe('Bold it st code');
+  const snap = {
+    league: { ...snapshot.league, name: '*Mulli_gan*' },
+    members: [member('u1', 'Íñigo ~Echeverría'), member('u2', '`Javier` Ortega')],
+    cardsByMonth: {
+      '2026-10': [
+        card('u1', '2026-10', 41, { course: 'RCG *Soto*grande', confirmedByName: '_Javi_ Ortega' }),
+        card('u2', '2026-10', 30, { course: 'La_Moraleja' }),
+      ],
+    },
+  };
+  const text = standingsMessage(snap, { now: NOW, lang: 'en' });
+  expect(text.split('\n').slice(0, 5)).toEqual([
+    '*Mulligan*', 'October so far · 18 days left', '', '1. Íñigo E. · 41 pts · RCG Sotogrande', '2. Javier O. · 30 pts · LaMoraleja',
+  ]);
+  expect(seasonMessage(snap, { lang: 'en' }).split('\n')[0]).toBe('*Mulligan*');
+  expect(cardMessage(snap, snap.cardsByMonth['2026-10'][0], { now: NOW, lang: 'en' }))
+    .toBe('My October card for Mulligan: 41 pts at RCG Sotogrande, confirmed by Javi. 1st so far.');
+  expect(announcementMessage({
+    leagueName: 'Mulli*gan', month: '2026-10-01', teeTime: new Date(2026, 9, 17, 9, 20).toISOString(), postBy: null, course: 'Golf_Santander',
+  }, { lang: 'en' })).toBe("I'm playing my October card for Mulligan: Sat 17 Oct 9:20 am at GolfSantander, without the app.");
+});
+
+test('daysLeftInMonth counts the Madrid calendar day', () => {
+  // 31 Oct 23:30 UTC is already 1 Nov in Madrid (UTC+1): 29 days left in November.
+  expect(daysLeftInMonth(new Date('2026-10-31T23:30:00Z'))).toBe(29);
+  // 30 Sep 22:30 UTC is 1 Oct 00:30 in Madrid (UTC+2): 30 days left.
+  expect(daysLeftInMonth(new Date('2026-09-30T22:30:00Z'))).toBe(30);
+  expect(daysLeftInMonth(new Date('2026-10-13T10:00:00Z'))).toBe(18);
 });
 
 test('public board link and path', () => {
@@ -196,13 +266,24 @@ describe('public board', () => {
   test('month view: ties share, course and league points; X of Y in counts active members', () => {
     const snap = publicBoardSnapshot(payload);
     const v = publicBoardView(snap, '2026-10', NOW);
-    expect(v.total).toBe(3);
+    // Every member the board shows, the one who left (k9) included.
+    expect(v.total).toBe(4);
     expect(v.ranked).toBe(2);
     expect(v.daysLeft).toBe(18);
     expect(v.rows).toEqual(expect.arrayContaining([
       { key: 'k1', place: 1, isTie: true, name: 'Íñigo E.', course: 'RCG Sotogrande', points: 41, league: 400 },
       { key: 'k3', place: 1, isTie: true, name: 'Ana P.', course: 'La Moraleja', points: 41, league: 400 },
     ]));
+  });
+
+  test('a member the server sends without a name shows the neutral label', () => {
+    const snap = publicBoardSnapshot({
+      ...payload,
+      members: [...payload.members, { key: 'k5', name: null, active: true }],
+      cards: [{ month: '2026-10-01', member: 'k5', status: 'confirmed', points: 45, course: 'Club C' }],
+    });
+    expect(publicBoardView(snap, '2026-10', NOW, 'en').rows[0].name).toBe('Golfer');
+    expect(publicBoardView(snap, '2026-10', NOW, 'es').rows[0].name).toBe('Jugador');
   });
 
   test('a member who left still ranks in their month', () => {

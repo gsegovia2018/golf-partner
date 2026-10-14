@@ -2,7 +2,7 @@
 // formats live here so the Play tab, board and members screens agree.
 import {
   cardMonth, isMissed, needsApproval, deadlineInfo, takesMonth, canReschedule, canWithdraw, autoWithdrawAt,
-  isMonthClosed, OFFAPP_NOTICE_HOURS, MAX_RESCHEDULES, POST_WINDOW_HOURS,
+  isMonthClosed, OFFAPP_NOTICE_HOURS, MAX_RESCHEDULES, POST_WINDOW_HOURS, madridDay,
 } from './leagueRules';
 import { seasonTable, monthResults } from './leagueStandings';
 import { isRatedTee, netDoubleBogeyCap } from './handicapIndex';
@@ -259,10 +259,12 @@ export function monthBoard(members, cardsByMonth, month, pointsTable, now = new 
   return { confirmed, waiting, onCourse, noCard, awaiting, missed, voided };
 }
 
-// Days left in the calendar month, for the "27 days left" caption.
+// Days left in the league's month (Europe/Madrid, like currentMonthKey), for
+// the "27 days left" caption.
 export function daysLeftInMonth(now = new Date()) {
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return end.getDate() - now.getDate();
+  const d = madridDay(now);
+  if (!d) return 0;
+  return new Date(Date.UTC(d.year, d.month, 0)).getUTCDate() - d.day;
 }
 
 export function currentMonthKey(now = new Date()) {

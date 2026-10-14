@@ -11,7 +11,8 @@
 --
 --   psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/league_public_board_smoke.sql
 --
--- Cast: A Ana (admin), B Bea (member), O Olga (not in the league).
+-- Cast: A Ana (admin), B Bea (member), C (member with a username but no
+-- display name), O Olga (not in the league).
 -- ============================================================================
 
 BEGIN;
@@ -70,6 +71,7 @@ INSERT INTO pb_ctx (k, v) VALUES
   ('u:a', 'e2000000-0000-4000-8000-00000000000a'),
   ('u:b', 'e2000000-0000-4000-8000-00000000000b'),
   ('u:o', 'e2000000-0000-4000-8000-00000000000c'),
+  ('u:c', 'e2000000-0000-4000-8000-00000000000d'),
   ('this', (date_trunc('month', now() AT TIME ZONE 'Europe/Madrid'))::date::text),
   ('prev', (date_trunc('month', now() AT TIME ZONE 'Europe/Madrid') - interval '1 month')::date::text);
 
@@ -81,8 +83,11 @@ INSERT INTO public.profiles (user_id, display_name)
 SELECT v::uuid, CASE substr(k, 3) WHEN 'a' THEN 'Ana Smoke Board' WHEN 'b' THEN 'Bea' ELSE 'Olga Smoke' END
   FROM pb_ctx WHERE k LIKE 'u:%'
 ON CONFLICT (user_id) DO UPDATE SET display_name = EXCLUDED.display_name;
+-- C's username is their email's local part; they never set a display name.
+UPDATE public.profiles SET display_name = NULL, username = 'leaky.localpart' WHERE user_id = pg_temp.pb_v('u:c')::uuid;
 INSERT INTO public.friendships (requester_id, addressee_id, status)
-VALUES (pg_temp.pb_v('u:a')::uuid, pg_temp.pb_v('u:b')::uuid, 'accepted');
+VALUES (pg_temp.pb_v('u:a')::uuid, pg_temp.pb_v('u:b')::uuid, 'accepted'),
+       (pg_temp.pb_v('u:a')::uuid, pg_temp.pb_v('u:c')::uuid, 'accepted');
 
 SET LOCAL ROLE authenticated;
 
@@ -93,17 +98,21 @@ BEGIN
   r := public.create_league('Board Smoke', '2020-01-01', '2030-12-31', NULL, 30, 0,
          jsonb_build_array(
            jsonb_build_object('user_id', pg_temp.pb_v('u:a'), 'handicap', 18),
-           jsonb_build_object('user_id', pg_temp.pb_v('u:b'), 'handicap', 22.4)));
+           jsonb_build_object('user_id', pg_temp.pb_v('u:b'), 'handicap', 22.4),
+           jsonb_build_object('user_id', pg_temp.pb_v('u:c'), 'handicap', 15)));
   INSERT INTO pb_ctx VALUES ('league', r->>'id'), ('code', r->>'invite_code');
 END $$;
 SELECT pg_temp.pb_as('b');
 SELECT public.join_league(pg_temp.pb_v('code'), 22.4);
+SELECT pg_temp.pb_as('c');
+SELECT public.join_league(pg_temp.pb_v('code'), 15);
 
 -- Cards, written as the server would have left them (superuser):
 --   A this month: confirmed 36 pts      -> counts
 --   B this month: confirmed, tee by hand, not approved -> waits, hidden
 --   B last month: confirmed 31 pts      -> counts
 --   A last month: void                  -> hidden
+--   C this month: confirmed 30 pts      -> counts (C has no display name)
 SELECT pg_temp.pb_sql(format($q$
   INSERT INTO public.league_cards (league_id, user_id, month, source, status, course, league_handicap,
                                    playing_handicap, holes, gross, points, tee_verified, confirmation,
@@ -113,8 +122,10 @@ SELECT pg_temp.pb_sql(format($q$
      18, 20, '{"1":5}', 90, 36, true, 'photo', 'Bea Marker', 'x/secret-proof.jpg', 'a private note'),
     (%1$L, %3$L, %4$L, 'offapp', 'confirmed', '{"name":"Muni Hand"}', 22.4, 25, '{"1":5}', 95, 33, false, 'photo', NULL, NULL, NULL),
     (%1$L, %3$L, %5$L, 'offapp', 'confirmed', '{"name":"RCG Sotogrande"}', 22.4, 25, '{"1":5}', 99, 31, true, 'photo', NULL, NULL, NULL),
-    (%1$L, %2$L, %5$L, 'offapp', 'void', '{"name":"Void Course"}', 18, 20, '{"1":5}', 99, 40, true, NULL, NULL, NULL, NULL)
-$q$, pg_temp.pb_v('league'), pg_temp.pb_v('u:a'), pg_temp.pb_v('u:b'), pg_temp.pb_v('this'), pg_temp.pb_v('prev')));
+    (%1$L, %2$L, %5$L, 'offapp', 'void', '{"name":"Void Course"}', 18, 20, '{"1":5}', 99, 40, true, NULL, NULL, NULL, NULL),
+    (%1$L, %6$L, %4$L, 'offapp', 'confirmed', '{"name":"Club C"}', 15, 16, '{"1":5}', 92, 30, true, 'photo', NULL, NULL, NULL)
+$q$, pg_temp.pb_v('league'), pg_temp.pb_v('u:a'), pg_temp.pb_v('u:b'), pg_temp.pb_v('this'), pg_temp.pb_v('prev'),
+     pg_temp.pb_v('u:c')));
 
 -- 1) Members get the link; outsiders and anon don't --------------------------------------
 SELECT pg_temp.pb_as('o');
@@ -177,7 +188,7 @@ BEGIN
     AND position('secret-proof' IN txt) = 0 AND position('private note' IN txt) = 0
     AND position('Bea Marker' IN txt) = 0 AND position('Amarillas' IN txt) = 0, NULL);
   PERFORM pg_temp.pb_ok('only counting cards: confirmed, scored, not waiting for approval, never void',
-    jsonb_array_length(r -> 'cards') = 2
+    jsonb_array_length(r -> 'cards') = 3
     AND (SELECT bool_and(c ->> 'status' = 'confirmed') FROM jsonb_array_elements(r -> 'cards') c)
     AND NOT txt LIKE '%Muni Hand%' AND NOT txt LIKE '%Void Course%'
     AND EXISTS (SELECT 1 FROM jsonb_array_elements(r -> 'cards') c
@@ -187,10 +198,15 @@ BEGIN
                  WHERE c ->> 'course' = 'RCG Sotogrande' AND (c ->> 'points')::int = 31
                    AND c ->> 'month' = pg_temp.pb_v('prev')),
     r ->> 'cards');
-  SELECT m INTO ana FROM jsonb_array_elements(r -> 'members') m WHERE m ->> 'name' = 'Ana B.';
-  PERFORM pg_temp.pb_ok('names are first name + initial ("Ana Smoke Board" -> "Ana B.", "Bea" stays)',
+  SELECT m INTO ana FROM jsonb_array_elements(r -> 'members') m WHERE m ->> 'name' = 'Ana S.';
+  PERFORM pg_temp.pb_ok('names are first name + initial of the first surname ("Ana Smoke Board" -> "Ana S.", "Bea" stays)',
     ana IS NOT NULL AND EXISTS (SELECT 1 FROM jsonb_array_elements(r -> 'members') m WHERE m ->> 'name' = 'Bea')
-    AND jsonb_array_length(r -> 'members') = 2, r ->> 'members');
+    AND jsonb_array_length(r -> 'members') = 3, r ->> 'members');
+  PERFORM pg_temp.pb_ok('no display name: name is NULL and the username appears nowhere',
+    position('leaky' IN txt) = 0 AND position('localpart' IN txt) = 0
+    AND (SELECT count(*) FROM jsonb_array_elements(r -> 'members') m
+          WHERE m -> 'name' = 'null'::jsonb AND m ? 'name') = 1
+    AND EXISTS (SELECT 1 FROM jsonb_array_elements(r -> 'cards') c WHERE c ->> 'course' = 'Club C'), r ->> 'members');
   PERFORM pg_temp.pb_ok('a card points at its member by an opaque key, not the user id',
     length(ana ->> 'key') = 16 AND ana ->> 'key' !~ '-'
     AND EXISTS (SELECT 1 FROM jsonb_array_elements(r -> 'cards') c
@@ -276,8 +292,27 @@ BEGIN
     AND public.get_public_league_board(pg_temp.pb_v('token2')) IS NULL, r::text);
 END $$;
 
--- 4) Grants and search_path ------------------------------------------------------------------
+-- 4) The name rule, case by case (the same cases as leagueShare.test.js) ---------------------
 RESET ROLE;
+INSERT INTO pb_smoke (name, ok, detail)
+SELECT 'league_public_name_rule: ' || COALESCE(input, 'NULL') || ' -> ' || COALESCE(want, 'NULL'),
+       public.league_public_name_rule(input) IS NOT DISTINCT FROM want,
+       public.league_public_name_rule(input)
+  FROM (VALUES
+    ('Íñigo Echeverría Ruiz', 'Íñigo E.'),
+    ('Miguel Ángel Domínguez', 'Miguel Á.'),
+    ('  Javier   ortega ', 'Javier O.'),
+    ('ana ' || chr(160) || 'émile', 'ana É.'),
+    ('Pepe 🏌️Golf', 'Pepe 🏌.'),
+    ('Luna 😀', 'Luna 😀.'),
+    ('😀 Smile', '😀 S.'),
+    ('Luis', 'Luis'),
+    ('', NULL),
+    ('   ', NULL),
+    (NULL, NULL)
+  ) AS cases(input, want);
+
+-- 5) Grants and search_path ------------------------------------------------------------------
 INSERT INTO pb_smoke (name, ok, detail)
 SELECT 'member and admin RPCs: authenticated only',
        bool_and(has_function_privilege('authenticated', p.oid, 'EXECUTE')
@@ -294,11 +329,11 @@ SELECT 'get_public_league_board: anon and authenticated',
  WHERE n.nspname = 'public' AND p.proname = 'get_public_league_board';
 INSERT INTO pb_smoke (name, ok, detail)
 SELECT 'internal helpers: nobody executes them',
-       count(*) = 2 AND bool_and(NOT has_function_privilege('authenticated', p.oid, 'EXECUTE')
+       count(*) = 3 AND bool_and(NOT has_function_privilege('authenticated', p.oid, 'EXECUTE')
                                  AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')),
        string_agg(p.proname, ',')
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
- WHERE n.nspname = 'public' AND p.proname IN ('league_new_board_token', 'league_public_name');
+ WHERE n.nspname = 'public' AND p.proname IN ('league_new_board_token', 'league_public_name', 'league_public_name_rule');
 INSERT INTO pb_smoke (name, ok, detail)
 SELECT 'the new SECURITY DEFINER functions pin search_path',
        count(*) = 4 AND bool_and(COALESCE(p.proconfig @> ARRAY['search_path=public'], false)),

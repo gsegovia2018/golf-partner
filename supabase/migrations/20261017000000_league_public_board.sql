@@ -34,9 +34,12 @@
 --     "cards":   [{"month", "member", "status", "points", "course"}]
 --   }
 --   * members: the active members, plus anyone who left but has a counting
---     card this season (their cards still rank). `name` is first name +
---     initial ("Íñigo E."). `key` is left(md5(token || ':' || user_id), 16):
---     stable for one link, useless without it, never the user id.
+--     card this season (their cards still rank). `name` is the profile's
+--     display name as first name + initial of the first surname ("Íñigo
+--     Echeverría Ruiz" -> "Íñigo E."), NULL without a display name (the page
+--     shows a neutral label). Never the username: it comes from the email.
+--     `key` is left(md5(token || ':' || user_id), 16): stable for one link,
+--     useless without it, never the user id.
 --   * cards: counting cards only — status confirmed, scored (points not
 --     null), not waiting for an admin's approval — within the season.
 --     `status` is always 'confirmed'; `course` is the course name only.
@@ -82,27 +85,40 @@ BEGIN
 END;
 $$;
 
--- "Íñigo Echeverría" -> "Íñigo E."; one word stays as it is; no name -> "Golfer".
+-- The public name rule, on a display name: first name + the initial of the
+-- first surname, i.e. the second word ("Íñigo Echeverría Ruiz" -> "Íñigo E.",
+-- "Miguel Ángel Domínguez" -> "Miguel Á."); one word stays; blank -> NULL.
+-- The initial is the first character (code point), so an emoji stays whole.
+-- Words split on the same whitespace set as JavaScript's \s, so the result
+-- is identical to the client's leagueShare.publicNameRule.
+CREATE OR REPLACE FUNCTION public.league_public_name_rule(p_name text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = public
+AS $$
+  SELECT CASE
+           WHEN cardinality(w) = 0 THEN NULL
+           WHEN cardinality(w) = 1 THEN w[1]
+           ELSE w[1] || ' ' || upper(left(w[2], 1)) || '.'
+         END
+    FROM (SELECT array_remove(regexp_split_to_array(COALESCE(p_name, ''),
+            E'[\\t\\n\\v\\f\\r \\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+'), '') AS w) x;
+$$;
+
+-- A member's public name: the display name only, never the username.
 CREATE OR REPLACE FUNCTION public.league_public_name(p_user uuid)
 RETURNS text
 LANGUAGE sql
 STABLE
 SET search_path = public
 AS $$
-  SELECT CASE
-           WHEN cardinality(w) = 0 THEN 'Golfer'
-           WHEN cardinality(w) = 1 THEN w[1]
-           ELSE w[1] || ' ' || upper(left(w[cardinality(w)], 1)) || '.'
-         END
-    FROM (SELECT COALESCE(
-                   regexp_split_to_array(NULLIF(btrim(COALESCE(
-                     (SELECT COALESCE(NULLIF(btrim(display_name), ''), username)
-                        FROM public.profiles WHERE user_id = p_user), '')), ''), '\s+'),
-                   ARRAY[]::text[]) AS w) x;
+  SELECT public.league_public_name_rule((SELECT display_name FROM public.profiles WHERE user_id = p_user));
 $$;
 
 REVOKE EXECUTE ON FUNCTION public.league_new_board_token() FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.league_public_name(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.league_public_name_rule(text) FROM PUBLIC, anon, authenticated;
 
 -- 3) Member and admin RPCs --------------------------------------------------------
 
@@ -243,7 +259,7 @@ BEGIN
               'key',    left(md5(p_token || ':' || p.user_id::text), 16),
               'name',   public.league_public_name(p.user_id),
               'active', p.active)
-            ORDER BY public.league_public_name(p.user_id), left(md5(p_token || ':' || p.user_id::text), 16)), '[]'::jsonb)
+            ORDER BY public.league_public_name(p.user_id) NULLS LAST, left(md5(p_token || ':' || p.user_id::text), 16)), '[]'::jsonb)
        FROM people p),
     (SELECT COALESCE(jsonb_agg(jsonb_build_object(
               'month',  to_char(k.month, 'YYYY-MM-DD'),
