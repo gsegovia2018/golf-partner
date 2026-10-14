@@ -3,12 +3,14 @@
 // A plural entry is { one, other } and reads {count}.
 import auth from './es/auth';
 import common from './es/common';
+import feed from './es/feed';
 import leagueBoard from './es/leagueBoard';
 import leagueCards from './es/leagueCards';
 import leagueMembers from './es/leagueMembers';
 import leagueShare from './es/leagueShare';
 import leagueTimeline from './es/leagueTimeline';
 import marker from './es/marker';
+import notifications from './es/notifications';
 import onboarding from './es/onboarding';
 import profile from './es/profile';
 import scorecard from './es/scorecard';
@@ -18,12 +20,14 @@ import tour from './es/tour';
 export const AREAS = {
   auth,
   common,
+  feed,
   leagueBoard,
   leagueCards,
   leagueMembers,
   leagueShare,
   leagueTimeline,
   marker,
+  notifications,
   onboarding,
   profile,
   scorecard,
@@ -34,12 +38,14 @@ export const AREAS = {
 export default {
   ...auth,
   ...common,
+  ...feed,
   ...leagueBoard,
   ...leagueCards,
   ...leagueMembers,
   ...leagueShare,
   ...leagueTimeline,
   ...marker,
+  ...notifications,
   ...onboarding,
   ...profile,
   ...scorecard,

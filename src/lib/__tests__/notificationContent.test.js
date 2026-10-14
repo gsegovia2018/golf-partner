@@ -334,3 +334,59 @@ describe('league integrity notifications (20261016000000)', () => {
     });
   });
 });
+
+describe('renderNotification in Spanish', () => {
+  const es = (type, data) => renderNotification(type, data, 'es');
+  const base = { league_id: 'L1', league_name: 'Tour', actor_name: 'Pablo' };
+
+  test('social types use Spanish copy and fallbacks', () => {
+    expect(es('friend_request', { actor_name: 'Sam' })).toEqual({
+      icon: 'user-plus',
+      title: 'Nueva solicitud de amistad',
+      body: 'Sam quiere ser tu pareja de golf',
+    });
+    expect(es('round_finished', { actor_name: 'Jo' }).body).toBe('Jo terminó una vuelta en el campo');
+    expect(es('feed_reaction', { actor_name: 'Ana', emoji: '🔥' }).body).toBe('Ana ha reaccionado 🔥 a una vuelta');
+    expect(es('friend_request', {}).body).toBe('Un amigo quiere ser tu pareja de golf');
+  });
+
+  test('league card copy uses the Spanish month and card phrase', () => {
+    const r = es('league_card_announced', { ...base, month: '2026-10-01', course_name: 'Sotogrande' });
+    expect(r.body).toBe('Pablo jugará la tarjeta de octubre en Sotogrande');
+    expect(es('league_card_confirmed', { ...base, month: '2026-10-01', points: 38 }).body)
+      .toBe('La tarjeta de octubre de Pablo está confirmada · 38 pts');
+    expect(es('league_card_auto_withdrawn', { ...base, month: '2026-10-01', course_name: 'Sotogrande' }).body)
+      .toBe('Se ha retirado tu tarjeta de octubre en Sotogrande: no se jugó ningún golpe en las 24 horas posteriores a la salida. Puedes jugar otra este mes.');
+  });
+
+  test('owner and reason branches read naturally', () => {
+    const card = { ...base, month: '2026-10-01', course_name: 'Sotogrande', actor_name: 'Ana' };
+    expect(es('league_card_voided', { ...card, owner_name: 'Pablo', reason: 'Wrong tee' }).body)
+      .toBe('Ana anuló la tarjeta de octubre en Sotogrande de Pablo: Wrong tee');
+    expect(es('league_card_approved', { ...card, owner_name: 'Pablo' }).body)
+      .toBe('Ana aprobó la tarjeta de octubre en Sotogrande de Pablo');
+    expect(es('league_card_approved', card).body).toBe('Ana aprobó una tarjeta de octubre en Sotogrande');
+    expect(es('league_handicap_changed', { ...card, subject_name: 'Pablo', old: 18, new: 16 }).body)
+      .toBe('Ana ha fijado el hándicap de liga de Pablo de 18 a 16');
+  });
+
+  test('marker, vote and reminder copy', () => {
+    expect(es('league_marker_issue', { ...base, marker_name: 'Ana', note: 'hole 4' }).body)
+      .toBe('Ana ha señalado tu tarjeta: hole 4');
+    expect(es('league_marker_issue', { ...base, marker_name: 'Ana', note: 'hole 4', tournament_id: 'T', round_id: 'R' }).body)
+      .toBe('Ana: hole 4');
+    expect(es('league_month_reminder', base)).toEqual({
+      icon: 'clock',
+      title: 'Quedan 3 días',
+      body: 'Aún no tienes tarjeta en Tour este mes',
+    });
+    expect(es('league_vote_opened', { ...base, subject_name: 'Ana', old: 12.4, proposed: 10.8 }).body)
+      .toBe('Votación sobre el hándicap de Ana: de 12,4 a 10,8');
+    expect(es('league_post_reminder', { ...base, course_name: 'Golf Olivar', post_by: '2026-10-24T18:30:00Z' }).body)
+      .toMatch(/^Publica tu tarjeta de Golf Olivar antes de las \d{2}:\d{2} o no contará para Tour$/);
+  });
+
+  test('unknown types fall back to the Spanish default', () => {
+    expect(es('something_else', {})).toEqual({ icon: 'bell', title: 'Notificación', body: '' });
+  });
+});

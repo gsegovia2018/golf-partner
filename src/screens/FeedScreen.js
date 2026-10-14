@@ -10,6 +10,7 @@ import PressableScale from '../components/ui/PressableScale';
 import IconButton from '../components/ui/IconButton';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useT, getLanguage } from '../i18n';
 import {
   buildFeed, loadReactions, toggleReaction, isValidReactionEmoji, loadCommentCounts,
   invalidateFeedCache, loadFeedSnapshot,
@@ -39,20 +40,21 @@ const TOURNAMENT_CHANGE_DEBOUNCE_MS = 700;
 const ROUND_STORY_RAIL_LIMIT = 12;
 
 // Compact relative time: "just now", "3h", "2d", "5w". Pure function of a
-// timestamp and a "now" — `now` is passed in so the value can re-render live.
-function timeAgo(ts, now) {
+// timestamp, a "now" and the translator — `now` is passed in so the value can
+// re-render live.
+function timeAgo(ts, now, t) {
   if (!ts) return '';
   const diff = Math.max(0, now - ts);
   const min = Math.floor(diff / 60000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min}m`;
+  if (min < 1) return t('feed.time.now');
+  if (min < 60) return t('feed.time.min', { count: min });
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h`;
+  if (hr < 24) return t('feed.time.hour', { count: hr });
   const day = Math.floor(hr / 24);
-  if (day < 7) return `${day}d`;
+  if (day < 7) return t('feed.time.day', { count: day });
   const wk = Math.floor(day / 7);
-  if (wk < 5) return `${wk}w`;
-  return new Date(ts).toLocaleDateString();
+  if (wk < 5) return t('feed.time.week', { count: wk });
+  return new Date(ts).toLocaleDateString(getLanguage() === 'es' ? 'es-ES' : undefined);
 }
 
 // Re-renders the consumer every `intervalMs` so relative timestamps stay
@@ -81,6 +83,7 @@ function ReactionBar({
   s,
   theme,
 }) {
+  const t = useT();
   const counts = reactions?.counts ?? EMPTY_REACTION_COUNTS;
   const mine = reactions?.mine ?? EMPTY_REACTION_MINE;
   const emojiInputRef = useRef(null);
@@ -136,16 +139,16 @@ function ReactionBar({
           setTimeout(() => emojiInputRef.current?.focus?.(), 0);
         }}
         activeScale={0.97}
-        accessibilityLabel="React with any emoji"
+        accessibilityLabel={t('feed.reactA11y')}
       >
         <Feather name="smile" size={14} color={theme.text.muted} />
-        <Text style={s.reactionActionText}>React</Text>
+        <Text style={s.reactionActionText}>{t('feed.react')}</Text>
       </PressableScale>
       <PressableScale
         style={s.reactionChip}
         onPress={() => onOpenComments?.(itemKey)}
         activeScale={0.97}
-        accessibilityLabel="Comments"
+        accessibilityLabel={t('feed.commentsA11y')}
       >
         <Feather name="message-circle" size={14} color={theme.text.muted} />
         {commentCount > 0 ? (
@@ -157,10 +160,10 @@ function ReactionBar({
           style={s.reactionChip}
           onPress={onAddPhoto}
           activeScale={0.97}
-          accessibilityLabel="Add photo"
+          accessibilityLabel={t('feed.addPhoto')}
         >
           <Feather name="camera" size={14} color={theme.text.muted} />
-          <Text style={s.reactionActionText}>Add photo</Text>
+          <Text style={s.reactionActionText}>{t('feed.addPhoto')}</Text>
         </PressableScale>
       ) : null}
       {pickerOpen ? (
@@ -170,19 +173,19 @@ function ReactionBar({
             style={s.emojiInput}
             value={emojiDraft}
             onChangeText={setEmojiDraft}
-            placeholder="Emoji"
+            placeholder={t('feed.emojiPlaceholder')}
             placeholderTextColor={theme.text.muted}
             autoCorrect={false}
             autoCapitalize="none"
             maxLength={16}
             onSubmitEditing={submitEmoji}
-            accessibilityLabel="Emoji reaction"
+            accessibilityLabel={t('feed.emojiA11y')}
           />
           <TouchableOpacity
             style={[s.emojiSendBtn, !isValidReactionEmoji(emojiDraft) && s.emojiSendBtnDisabled]}
             disabled={!isValidReactionEmoji(emojiDraft)}
             onPress={submitEmoji}
-            accessibilityLabel="Send reaction"
+            accessibilityLabel={t('feed.emojiSend')}
           >
             <Feather name="send" size={14} color={theme.text.inverse} />
           </TouchableOpacity>
@@ -218,6 +221,7 @@ export default function FeedScreen({ navigation }) {
   const { theme } = useTheme();
   const { user } = useAuth() ?? {};
   const userId = user?.id ?? null;
+  const t = useT();
   const s = makeStyles(theme);
   const now = useNow();
 
@@ -483,9 +487,9 @@ export default function FeedScreen({ navigation }) {
       setAttachTarget({ tournament: t, roundIndex: item.roundIndex ?? 0 });
       openCaptureMenu();
     } catch {
-      Alert.alert("Couldn't load this round", 'Try again in a moment.');
+      Alert.alert(t('feed.photoLoadFail.title'), t('feed.photoLoadFail.body'));
     }
-  }, [openCaptureMenu]);
+  }, [openCaptureMenu, t]);
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
@@ -615,7 +619,7 @@ export default function FeedScreen({ navigation }) {
       <FeedRoundCard
         item={item}
         roundLabel={roundLabel}
-        timestamp={timeAgo(item.ts, now)}
+        timestamp={timeAgo(item.ts, now, t)}
         onPress={() => openRound(item)}
         onPressMedia={item.mediaCoverUrl ? (media) => openRoundMedia(item, media) : undefined}
         onPressPlayer={openPlayer}
@@ -642,13 +646,13 @@ export default function FeedScreen({ navigation }) {
       return (
         <View style={s.emptyState}>
           <Feather name="cloud-off" size={44} color={theme.text.muted} />
-          <Text style={s.emptyTitle}>Could not load your feed</Text>
+          <Text style={s.emptyTitle}>{t('feed.error.title')}</Text>
           <Text style={s.emptySub}>
-            Check your connection and try again.
+            {t('feed.error.body')}
           </Text>
           <TouchableOpacity style={s.emptyBtn} onPress={() => load(true)}>
             <Feather name="refresh-cw" size={14} color={theme.text.inverse} />
-            <Text style={s.emptyBtnText}>Retry</Text>
+            <Text style={s.emptyBtnText}>{t('feed.retry')}</Text>
           </TouchableOpacity>
         </View>
       );
@@ -656,16 +660,16 @@ export default function FeedScreen({ navigation }) {
     return (
       <View style={s.emptyState}>
         <Feather name="rss" size={44} color={theme.text.muted} />
-        <Text style={s.emptyTitle}>Your feed is quiet</Text>
+        <Text style={s.emptyTitle}>{t('feed.quiet.title')}</Text>
         <Text style={s.emptySub}>
-          Play a round or add friends to see their golf here.
+          {t('feed.quiet.body')}
         </Text>
         <TouchableOpacity
           style={s.emptyBtn}
           onPress={() => navigation.navigate('Friends')}
         >
           <Feather name="user-plus" size={14} color={theme.text.inverse} />
-          <Text style={s.emptyBtnText}>Add friends</Text>
+          <Text style={s.emptyBtnText}>{t('feed.addFriends')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -674,7 +678,7 @@ export default function FeedScreen({ navigation }) {
   return (
     <ScreenContainer style={s.container} edges={['top']}>
       <View style={s.header}>
-        <Text style={s.headerTitle}>Feed</Text>
+        <Text style={s.headerTitle}>{t('feed.title')}</Text>
         <IconButton
           icon="users"
           onPress={() => navigation.navigate('Friends')}
@@ -692,7 +696,7 @@ export default function FeedScreen({ navigation }) {
       {status === 'partial' && items.length > 0 ? (
         <TouchableOpacity style={s.partialBanner} onPress={() => load(true)} activeOpacity={0.8}>
           <Feather name="alert-circle" size={14} color={theme.text.muted} />
-          <Text style={s.partialText}>Feed may be incomplete · Tap to retry</Text>
+          <Text style={s.partialText}>{t('feed.partial')}</Text>
         </TouchableOpacity>
       ) : null}
 
@@ -721,7 +725,7 @@ export default function FeedScreen({ navigation }) {
             onEndReachedThreshold={0.4}
             ListFooterComponent={loadingMore ? (
               <View style={s.loadingMoreRow}>
-                <Text style={s.loadingMoreText}>Loading more…</Text>
+                <Text style={s.loadingMoreText}>{t('feed.loadingMore')}</Text>
               </View>
             ) : null}
           />

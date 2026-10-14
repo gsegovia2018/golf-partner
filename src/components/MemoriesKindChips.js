@@ -2,15 +2,17 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 
 export default function MemoriesKindChips({ counts, active, onChange }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const kinds = [
-    { key: 'all', label: `Todo · ${counts.all}`, icon: null },
-    { key: 'photo', label: `Foto · ${counts.photo}`, icon: 'camera' },
-    { key: 'video', label: `Vídeo · ${counts.video}`, icon: 'video' },
+    { key: 'all', label: t('memories.kind.all', { count: counts.all }), icon: null },
+    { key: 'photo', label: t('memories.kind.photo', { count: counts.photo }), icon: 'camera' },
+    { key: 'video', label: t('memories.kind.video', { count: counts.video }), icon: 'video' },
   ];
 
   return (

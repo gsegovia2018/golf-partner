@@ -7,25 +7,27 @@ import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 import { listNotifications, markAllRead } from '../store/notificationStore';
 import { renderNotification, notificationLink } from '../lib/notificationContent';
 
 // Relative "time ago" for the notification list. Coarse on purpose.
-function timeAgo(iso) {
+function timeAgo(iso, t) {
   const then = new Date(iso).getTime();
   if (!then) return '';
   const secs = Math.max(0, Math.floor((Date.now() - then) / 1000));
-  if (secs < 60) return 'just now';
+  if (secs < 60) return t('notifications.time.now');
   const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return t('notifications.time.min', { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t('notifications.time.hour', { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t('notifications.time.day', { count: days });
 }
 
 export default function NotificationsScreen({ navigation }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const [items, setItems] = useState([]);
@@ -61,9 +63,9 @@ export default function NotificationsScreen({ navigation }) {
         <IconButton
           icon="chevron-left"
           onPress={() => navigation.goBack()}
-          accessibilityLabel="Back"
+          accessibilityLabel={t('common.back')}
         />
-        <Text style={s.title}>Notifications</Text>
+        <Text style={s.title}>{t('notifications.title')}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -74,7 +76,7 @@ export default function NotificationsScreen({ navigation }) {
       ) : items.length === 0 ? (
         <View style={s.center}>
           <Feather name="bell" size={44} color={theme.text.muted} />
-          <Text style={s.emptyText}>No notifications yet</Text>
+          <Text style={s.emptyText}>{t('notifications.empty')}</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.list}>
@@ -94,7 +96,7 @@ export default function NotificationsScreen({ navigation }) {
                 <View style={s.rowBody}>
                   <Text style={s.rowTitle}>{title}</Text>
                   {!!body && <Text style={s.rowText}>{body}</Text>}
-                  <Text style={s.rowTime}>{timeAgo(item.createdAt)}</Text>
+                  <Text style={s.rowTime}>{timeAgo(item.createdAt, t)}</Text>
                 </View>
                 {unread && <View style={s.unreadDot} />}
               </TouchableOpacity>
