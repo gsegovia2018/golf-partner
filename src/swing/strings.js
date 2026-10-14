@@ -372,8 +372,8 @@ export const SWING_STRINGS = build({
     // Design B: one thing to work on, then the rest by priority.
     practiseTitle: L,
     priorityTitle: L,
-    notMeasured: L,
     goodFold: (n) => t('swing.results.goodFold', { count: n }),
+    unknownFold: (n) => t('swing.results.unknownFold', { count: n }),
     show: L,
     hide: L,
     detailTitle: L,

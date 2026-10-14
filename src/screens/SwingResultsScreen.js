@@ -269,7 +269,7 @@ export function SwingResultsView({
   const [selKey, setSelKey] = useState(null);
   const [allDrills, setAllDrills] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [goodOpen, setGoodOpen] = useState(false);
+  const [folds, setFolds] = useState({ unknown: false, green: false });
   const [sheet, setSheet] = useState(null); // null | 'menu' | 'rename'
   const [fixSheet, setFixSheet] = useState({ list: [], index: 0, open: false });
   const [nameDraft, setNameDraft] = useState('');
@@ -444,7 +444,7 @@ export function SwingResultsView({
 
             <View style={s.card} testID="results-priority">
               <Text style={s.overlineDark}>{T.priorityTitle}</Text>
-              {[['red', SWING_STRINGS.statusWord.red], ['yellow', SWING_STRINGS.statusWord.yellow], ['unknown', T.notMeasured]].map(([status, name]) => (
+              {[['red', SWING_STRINGS.statusWord.red], ['yellow', SWING_STRINGS.statusWord.yellow]].map(([status, name]) => (
                 groups[status].length ? (
                   <React.Fragment key={status}>
                     <View style={s.groupHead}>
@@ -464,31 +464,36 @@ export function SwingResultsView({
                   </React.Fragment>
                 ) : null
               ))}
-              {groups.green.length ? (
-                <>
-                  <DisclosureRow
-                    s={s}
-                    theme={theme}
-                    style={s.fold}
-                    open={goodOpen}
-                    onToggle={() => setGoodOpen((v) => !v)}
-                    label={T.goodFold(groups.green.length)}
-                    testID="results-good-fold"
-                  >
-                    <View style={s.foldIcon}><Feather name="check" size={12} color={theme.text.inverse} /></View>
-                    <Text style={[s.foldText, s.flex]}>{T.goodFold(groups.green.length)}</Text>
-                  </DisclosureRow>
-                  {goodOpen ? groups.green.map((c) => (
-                    <SwingCheckRow
-                      key={CHECK_KEY(c)}
-                      check={c}
-                      onPress={jumpToCheck}
-                      onPlace={openEdit}
-                      placeAt={unplacedCheckpoint(c, analysis.clubMarks)}
-                    />
-                  )) : null}
-                </>
-              ) : null}
+              {/* Unmeasured and good checks fold away: what needs work stays on top. */}
+              {[['unknown', T.unknownFold, 'results-unknown-fold'], ['green', T.goodFold, 'results-good-fold']].map(([status, label, testID]) => (
+                groups[status].length ? (
+                  <React.Fragment key={status}>
+                    <DisclosureRow
+                      s={s}
+                      theme={theme}
+                      style={s.fold}
+                      open={folds[status]}
+                      onToggle={() => setFolds((f) => ({ ...f, [status]: !f[status] }))}
+                      label={label(groups[status].length)}
+                      testID={testID}
+                    >
+                      {status === 'green'
+                        ? <View style={s.foldIcon}><Feather name="check" size={12} color={theme.text.inverse} /></View>
+                        : <View style={[s.chipDot, { backgroundColor: tone.unknown }]} />}
+                      <Text style={[s.foldText, s.flex]}>{label(groups[status].length)}</Text>
+                    </DisclosureRow>
+                    {folds[status] ? groups[status].map((c) => (
+                      <SwingCheckRow
+                        key={CHECK_KEY(c)}
+                        check={c}
+                        onPress={jumpToCheck}
+                        onPlace={openEdit}
+                        placeAt={unplacedCheckpoint(c, analysis.clubMarks)}
+                      />
+                    )) : null}
+                  </React.Fragment>
+                ) : null
+              ))}
             </View>
 
             <View style={s.card} testID="results-detail">
@@ -535,12 +540,12 @@ export function SwingResultsView({
               ) : null}
             </View>
 
-            <View style={s.btnRow}>
-              <PressableScale style={[s.btn, s.btnPrimary, s.flex]} onPress={onPlay} accessibilityRole="button" accessibilityLabel={T.play}>
+            <View style={s.btnStack}>
+              <PressableScale style={[s.btn, s.btnPrimary]} onPress={onPlay} accessibilityRole="button" accessibilityLabel={T.play}>
                 <Feather name="play" size={16} color={theme.text.inverse} />
                 <Text style={s.btnPrimaryText}>{T.play}</Text>
               </PressableScale>
-              <PressableScale style={[s.btn, s.btnSecondary, s.flex]} onPress={() => openEdit(cp)} accessibilityRole="button" accessibilityLabel={T.editMarks}>
+              <PressableScale style={[s.btn, s.btnSecondary]} onPress={() => openEdit(cp)} accessibilityRole="button" accessibilityLabel={T.editMarks}>
                 <Feather name="edit-2" size={16} color={theme.text.primary} />
                 <Text style={s.btnSecondaryText}>{T.editMarks}</Text>
               </PressableScale>
@@ -853,6 +858,7 @@ const makeStyles = (theme) => StyleSheet.create({
   fixText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12.5, color: theme.accent.primary },
 
   btnRow: { flexDirection: 'row', gap: 10 },
+  btnStack: { gap: 10 },
   btn: { minHeight: 48, borderRadius: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   btnPrimary: { backgroundColor: theme.accent.primary },
   btnPrimaryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.text.inverse },

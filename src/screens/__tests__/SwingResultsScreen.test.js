@@ -103,6 +103,7 @@ describe('SwingResultsScreen: coaching', () => {
   test('the priority card lists red, then yellow, then unknown, each in swing order; greens are folded', async () => {
     const { findByText, getByTestId, queryByLabelText } = setup();
     await findByText(VERDICT);
+    fireEvent.press(getByTestId('results-unknown-fold')); // unmeasured checks fold away like the greens
     const card = within(getByTestId('results-priority'));
     expect(card.getByText(T.priorityTitle)).toBeTruthy();
     const groups = prioritizeChecks(MARKED.checks);
@@ -114,6 +115,18 @@ describe('SwingResultsScreen: coaching', () => {
     expect(groups.green.length).toBeGreaterThan(0);
     expect(queryByLabelText(new RegExp(`^${nameOf(groups.green[0])},`))).toBeNull();
     expect(card.getAllByText(SWING_STRINGS.statusWord.red).length).toBeGreaterThan(0); // the group header
+  });
+
+  test('unmeasured checks stay hidden until their fold row is pressed', async () => {
+    const { findByText, getByTestId } = setup({ analysis: UNMARKED });
+    await findByText(VERDICT);
+    const unknown = prioritizeChecks(UNMARKED.checks).unknown;
+    const fold = getByTestId('results-unknown-fold');
+    expect(within(fold).getByText(T.unknownFold(unknown.length))).toBeTruthy();
+    const rows = () => within(getByTestId('results-priority')).queryAllByLabelText(/^Place clubhead:/);
+    expect(rows()).toHaveLength(0);
+    fireEvent.press(fold);
+    expect(rows().length).toBeGreaterThan(0);
   });
 
   test('greens stay hidden until the fold row is pressed, and it says how many', async () => {
@@ -310,8 +323,9 @@ describe('SwingResultsScreen: a stored swing', () => {
   });
 
   test('D16: club checks with no clubhead placed offer "Place clubhead", which opens Edit marks on that checkpoint', async () => {
-    const { findByText, getAllByLabelText, navigation } = setup({ analysis: UNMARKED });
+    const { findByText, getAllByLabelText, getByTestId, navigation } = setup({ analysis: UNMARKED });
     await findByText(VERDICT);
+    fireEvent.press(getByTestId('results-unknown-fold'));
     const cta = getAllByLabelText(/^Place clubhead: Halfway back/);
     fireEvent.press(cta[cta.length - 1]);
     expect(navigation.navigate).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'leadArm' });
@@ -323,8 +337,9 @@ describe('SwingResultsScreen: a stored swing', () => {
       checks: MARKED.checks.map((c) => (c.id === 'downswing_path'
         ? { ...c, status: 'unknown', reason: 'hidden', value: null, text: 'Clubhead hidden at shaft down' } : c)),
     };
-    const { findByText, queryByLabelText, getAllByText } = setup({ analysis: hiddenOnly });
+    const { findByText, queryByLabelText, getAllByText, getByTestId } = setup({ analysis: hiddenOnly });
     await findByText(VERDICT);
+    fireEvent.press(getByTestId('results-unknown-fold'));
     expect(getAllByText('Hidden').length).toBeGreaterThan(0);
     expect(queryByLabelText(/^Place clubhead: Downswing path/)).toBeNull();
   });
