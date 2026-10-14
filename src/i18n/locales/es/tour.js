@@ -1,0 +1,20 @@
+// Spanish catalogue: App tour (spotlight walkthrough). See docs/i18n.md.
+export default {
+  "tour.play.title": "Todo empieza aquí",
+  "tour.play.body": "Toca la bandera para empezar una vuelta o un torneo de fin de semana. Las parejas y la puntuación ya están listas.",
+  "tour.stats.title": "Tu juego, medido",
+  "tour.stats.body": "Evolución del hándicap, golpes ganados y un entrenador que te dice qué arreglar primero.",
+  "tour.feed.title": "Los recuerdos del grupo",
+  "tour.feed.body": "Aquí aparecen las fotos y los momentos de cada vuelta.",
+  "tour.profile.title": "Tu ficha de jugador",
+  "tour.profile.body": "Avatar, hándicap, amigos y Ajustes, donde puedes cambiar los valores por defecto.",
+  "tour.score.title": "Puntúa el hoyo",
+  "tour.score.body": "Toca tus golpes: los puntos se calculan solos, con los golpes extra del hándicap incluidos.",
+  "tour.distances.title": "Distancias y mapa",
+  "tour.distances.body": "Distancias GPS en directo al frente, al centro y al fondo. Tócalas en cualquier momento para sobrevolar el hoyo.",
+  "tour.nav.title": "Avanza por la vuelta",
+  "tour.nav.body": "Este botón te lleva al siguiente hoyo; los puntos parciales mantienen la partida a la vista.",
+  "tour.overline": "RECORRIDO · {index} DE {total}",
+  "tour.nextStop": "{title} — siguiente parada",
+  "tour.skip": "Saltar recorrido",
+};
