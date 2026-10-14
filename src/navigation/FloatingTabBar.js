@@ -11,6 +11,7 @@ import PressableScale from '../components/ui/PressableScale';
 import TabBarFade from './TabBarFade';
 import { haptic } from '../lib/haptics';
 import { useTourTarget } from '../components/tour/tourTargets';
+import { useT } from '../i18n';
 
 // Route name → tour target key; History deliberately has no stop.
 const TOUR_TARGET_KEYS = {
@@ -87,6 +88,7 @@ function TabItem({ route, item, center, focused, onPress, theme, styles }) {
 }
 
 export default function FloatingTabBar({ state, navigation }) {
+  useT(); // re-render when the language changes; labels resolve in getTabBarItem
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = React.useMemo(() => tabBarStyles(theme), [theme]);

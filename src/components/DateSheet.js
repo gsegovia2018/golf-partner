@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
-import { useT, formatDate, getLanguage } from '../i18n';
+import { useT, formatDate } from '../i18n';
 import BottomSheet from './BottomSheet';
 import {
   parseIso, todayIso, addDays, nearestSaturday, inBounds, clampIso, addMonths, monthGrid,
@@ -17,11 +17,8 @@ const monthOf = (iso) => {
 };
 const monthKey = ({ y, m }) => y * 12 + m;
 
-// "Sat 10 Oct 2026". English keeps the en-GB label from lib/calendar; Spanish
-// goes through the shared date formatter.
-const dateLabel = (iso) => (getLanguage() === 'en'
-  ? formatLabel(iso)
-  : `${formatDate(iso, 'short')} ${iso.slice(0, 4)}`);
+// "Sat 10 Oct 2026" / "sáb 10 oct 2026".
+const dateLabel = formatLabel;
 const monthLabel = ({ y, m }) => formatDate(`${y}-${String(m).padStart(2, '0')}-01`, 'month');
 
 // Pure-JS calendar sheet (no native picker, so it ships over the air and looks

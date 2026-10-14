@@ -1,3 +1,5 @@
+import { t } from '../i18n';
+
 export const CENTER_ROUTE_NAME = 'Home';
 
 export const TAB_ROUTE_NAMES = [
@@ -10,23 +12,23 @@ export const TAB_ROUTE_NAMES = [
 
 const TAB_BAR_ITEMS = {
   Feed: {
-    label: 'Feed',
+    labelKey: 'nav.tab.feed',
     icon: 'rss',
   },
   MyStats: {
-    label: 'Stats',
+    labelKey: 'nav.tab.stats',
     icon: 'bar-chart-2',
   },
   Home: {
-    label: 'Play',
+    labelKey: 'nav.tab.play',
     icon: 'flag',
   },
   History: {
-    label: 'History',
+    labelKey: 'nav.tab.history',
     icon: 'clock',
   },
   Profile: {
-    label: 'Profile',
+    labelKey: 'nav.tab.profile',
     icon: 'user',
   },
 };
@@ -39,11 +41,12 @@ export function isCenterTab(routeName) {
 // way back into a scorecard, so the tab bar no longer redirects mid-round.
 export function getTabBarItem(routeName) {
   const base = TAB_BAR_ITEMS[routeName] ?? {
-    label: routeName,
+    labelKey: null,
     icon: 'circle-outline',
   };
   return {
     ...base,
+    label: base.labelKey ? t(base.labelKey) : routeName,
     routeName,
     targetRouteName: routeName,
     center: isCenterTab(routeName),

@@ -2,6 +2,7 @@ import React from 'react';
 import { Animated, StyleSheet } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import { PlayerCard } from '../PlayerCard';
+import { setLanguagePref } from '../../../i18n';
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => {
@@ -185,5 +186,30 @@ describe('PlayerCard LEAGUE chip (the only on-hole league signal)', () => {
   test('absent otherwise', () => {
     const { queryByText } = renderPlayerCard();
     expect(queryByText('LEAGUE')).toBeNull();
+  });
+});
+
+describe('PlayerCard polish (Spanish and English)', () => {
+  afterEach(async () => { await setLanguagePref('en'); });
+
+  test('stepper labels and the placeholder tee name follow the language', async () => {
+    const en = renderPlayerCard({ canEdit: true, isMe: true, teeLabel: 'Default' });
+    expect(en.getByLabelText('Decrease strokes on hole 1')).toBeTruthy();
+    expect(en.getByLabelText('Increase strokes on hole 1')).toBeTruthy();
+    expect(en.getByText('Default')).toBeTruthy();
+    en.unmount();
+
+    await setLanguagePref('es');
+    const es = renderPlayerCard({ canEdit: true, isMe: true, teeLabel: 'Default' });
+    expect(es.getByLabelText('Quitar un golpe en el hoyo 1')).toBeTruthy();
+    expect(es.getByLabelText('Sumar un golpe en el hoyo 1')).toBeTruthy();
+    expect(es.getByText('Por defecto')).toBeTruthy();
+  });
+
+  test('a real tee name is course data and is never translated', async () => {
+    await setLanguagePref('es');
+    const { getByText, queryByText } = renderPlayerCard({ teeLabel: 'Amarillas' });
+    expect(getByText('Amarillas')).toBeTruthy();
+    expect(queryByText('Por defecto')).toBeNull();
   });
 });

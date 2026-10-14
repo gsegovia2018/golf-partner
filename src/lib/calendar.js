@@ -2,6 +2,8 @@
 // 'YYYY-MM-DD' strings and times as 'HH:MM'; everything is computed on local
 // calendar fields (never UTC) so a day never shifts across a timezone.
 
+import { formatDate } from '../i18n';
+
 const pad = (n) => String(n).padStart(2, '0');
 
 export function toIso(y, m, d) {
@@ -87,11 +89,9 @@ export function monthTitle({ y, m }) {
   return `${MONTH_NAMES[m - 1]} ${y}`;
 }
 
-// "Sat 10 Oct 2026" (en-GB, short weekday).
+// "Sat 10 Oct 2026" / "sáb 10 oct 2026" in the active language.
 export function formatLabel(iso) {
   const p = parseIso(iso);
   if (!p) return '';
-  return new Date(p.y, p.m - 1, p.d)
-    .toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
-    .replace(',', '');
+  return `${formatDate(iso, 'short')} ${p.y}`;
 }

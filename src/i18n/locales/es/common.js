@@ -1,5 +1,12 @@
 // Spanish catalogue: Shared words, account fields and the error boundary. See docs/i18n.md.
 export default {
+  'units.word.yards': 'yardas',
+  'units.word.metres': 'metros',
+  'nav.tab.feed': 'Feed',
+  'nav.tab.stats': 'Estadísticas',
+  'nav.tab.play': 'Jugar',
+  'nav.tab.history': 'Historial',
+  'nav.tab.profile': 'Perfil',
   'common.cancel': 'Cancelar',
   'common.retry': 'Reintentar',
   "common.back": "Atrás",

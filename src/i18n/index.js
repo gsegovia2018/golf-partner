@@ -41,11 +41,24 @@ export function resolveLanguage(preference, system = detectSystemLanguage()) {
   return system === 'es' ? 'es' : 'en';
 }
 
+// Web: keep <html lang> on the active language (screen readers, hyphenation,
+// browser translation prompts). No-op on native, where there is no document.
+function syncDocumentLang() {
+  try {
+    if (typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.lang = lang;
+    }
+  } catch {
+    // Nothing to sync.
+  }
+}
+
 function apply(nextPref) {
   const nextLang = resolveLanguage(nextPref);
   if (nextPref === pref && nextLang === lang) return;
   pref = nextPref;
   lang = nextLang;
+  syncDocumentLang();
   listeners.forEach((l) => l());
 }
 
@@ -79,12 +92,16 @@ export async function loadLanguagePref() {
 }
 
 lang = resolveLanguage('system');
+syncDocumentLang();
 loadLanguagePref();
 
 // en and es both split on exactly 1.
 export const pluralForm = (n) => (Math.abs(Number(n)) === 1 ? 'one' : 'other');
 
 const PARAM = /\{(\w+)\}/g;
+const CASED_PARAMS = new Set(['month', 'otherMonth', 'weekday']);
+// True when `offset` is the start of the text or follows a sentence end.
+const startsSentence = (whole, offset) => /(^|[.!?¿¡]\s+|\n\s*)$/.test(whole.slice(0, offset));
 
 // t('marker.confirm.title', { name }). A plural entry is { one, other } and
 // picks by params.count. Missing key: English, then the key itself.
@@ -93,17 +110,33 @@ export function t(key, params = {}, language = lang) {
   if (entry === undefined) entry = en[key];
   if (entry === undefined) return key;
   if (typeof entry === 'object') entry = entry[pluralForm(params.count)] ?? entry.other;
-  return String(entry).replace(PARAM, (m, name) => (params[name] === undefined ? m : String(params[name])));
+  return String(entry).replace(PARAM, (m, name, offset, whole) => {
+    if (params[name] === undefined) return m;
+    const value = String(params[name]);
+    // Spanish writes months and weekdays in lower case mid-sentence, but a
+    // sentence still starts with a capital: "Octubre sigue ocupado."
+    return CASED_PARAMS.has(name) && language === 'es' && startsSentence(whole, offset)
+      ? value.charAt(0).toUpperCase() + value.slice(1)
+      : value;
+  });
 }
 
 // Render a { key, params } descriptor returned by a pure store module.
 // A `monthKey` param ('2026-10') becomes `month` ("October" / "octubre") at
 // render time, so a descriptor cached before a language switch stays right.
+// A param may itself be a descriptor ({ key, params }): it is rendered first,
+// depth-first (a hole list inside an achievement line).
 export const tr = (msg) => {
   if (!msg) return '';
-  const params = msg.params?.monthKey
+  if (typeof msg === 'string') return msg; // already finished text
+  let params = msg.params?.monthKey
     ? { ...msg.params, month: formatDate(`${msg.params.monthKey}-01`, 'monthName') }
     : msg.params;
+  if (params && Object.values(params).some((v) => v && typeof v === 'object' && typeof v.key === 'string')) {
+    params = Object.fromEntries(Object.entries(params).map(([k, v]) => [
+      k, v && typeof v === 'object' && typeof v.key === 'string' ? tr(v) : v,
+    ]));
+  }
   return t(msg.key, params);
 };
 

@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import FloatingTabBar from '../FloatingTabBar';
 import { light } from '../../theme/tokens';
+import { setLanguagePref } from '../../i18n';
 import { __getRegisteredTourKeysForTests, __resetTourTargetsForTests } from '../../components/tour/tourTargets';
 
 jest.mock('react-native-safe-area-context', () => {
@@ -139,5 +140,29 @@ describe('tour target registration', () => {
     const keys = __getRegisteredTourKeysForTests();
     expect(keys).toEqual(expect.arrayContaining(['tab-play', 'tab-stats', 'tab-feed', 'tab-profile']));
     expect(keys).not.toContain('tab-history');
+  });
+});
+
+describe('FloatingTabBar language', () => {
+  afterEach(async () => { await setLanguagePref('en'); });
+
+  test('labels are Spanish in Spanish and switch live', async () => {
+    const { getByLabelText, getByText, rerender } = renderTabBar();
+    expect(getByLabelText('Play')).toBeTruthy();
+    expect(getByText('History')).toBeTruthy();
+
+    await setLanguagePref('es');
+    rerender(
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <FloatingTabBar state={makeState(2)} navigation={makeNavigation()} />
+        </ThemeProvider>
+      </SafeAreaProvider>
+    );
+    expect(getByLabelText('Jugar')).toBeTruthy();
+    expect(getByLabelText('Estadísticas')).toBeTruthy();
+    expect(getByLabelText('Perfil')).toBeTruthy();
+    expect(getByText('Historial')).toBeTruthy();
+    expect(getByText('Feed')).toBeTruthy();
   });
 });

@@ -35,6 +35,7 @@ describe('liveRoundSummary', () => {
     expect(s).not.toBeNull();
     expect(s.name).toBe('Weekend Golf');
     expect(s.roundLabel).toBe('Round 2');
+    expect(s.roundNumber).toBe(2); // the card renders its own label, in the live language
     expect(s.courseName).toBe('CCVM Negro');
     expect(s.thru).toBe(3);            // my entered holes
     expect(s.holeCount).toBe(18);

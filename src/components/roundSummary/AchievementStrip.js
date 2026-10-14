@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
-import { useT } from '../../i18n';
+import { useT, tr } from '../../i18n';
 import { semantic } from '../../theme/tokens';
 
 // Icon per achievement id, falling back to a per-tone default so a new
@@ -58,6 +58,7 @@ function toneColor(tone, theme) {
 }
 
 function AchievementRow({ item }) {
+  useT(); // re-render on language change; title/subtitle are descriptors
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const color = toneColor(item.tone, theme);
@@ -70,10 +71,10 @@ function AchievementRow({ item }) {
       </View>
       <View style={s.rowText}>
         <Text style={[s.title, { color }]} numberOfLines={1}>
-          {item.playerName ? `${item.playerName} — ${item.title}` : item.title}
+          {item.playerName ? `${item.playerName} — ${tr(item.title)}` : tr(item.title)}
         </Text>
         {item.subtitle ? (
-          <Text style={s.subtitle} numberOfLines={2}>{item.subtitle}</Text>
+          <Text style={s.subtitle} numberOfLines={2}>{tr(item.subtitle)}</Text>
         ) : null}
       </View>
     </View>

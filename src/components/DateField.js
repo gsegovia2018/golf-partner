@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import DateSheet from './DateSheet';
 import { formatLabel } from '../lib/calendar';
+import { useT } from '../i18n';
 
 // An input-looking button that opens the calendar sheet. Holds only the
 // open/closed state; the screen keeps the ISO strings.
@@ -11,11 +12,13 @@ import { formatLabel } from '../lib/calendar';
 //   value        - 'YYYY-MM-DD' or ''
 //   time/onTime  - optional 'HH:MM' tee time edited in the same sheet
 export default function DateField({
-  label, title, value, onChange, min, max, placeholder = 'Select a date', time, onTimeChange, quickDates, style,
+  label, title, value, onChange, min, max, placeholder, time, onTimeChange, quickDates, style,
 }) {
+  const t = useT(); // re-render on language change
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const [open, setOpen] = useState(false);
+  const shown = placeholder ?? t('setup.date.select');
   const text = value ? `${formatLabel(value)}${time ? ` · ${time}` : ''}` : '';
 
   return (
@@ -26,9 +29,9 @@ export default function DateField({
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityLabel={label}
-        accessibilityValue={{ text: text || placeholder }}
+        accessibilityValue={{ text: text || shown }}
       >
-        <Text style={[s.text, !text && s.placeholder]} numberOfLines={1}>{text || placeholder}</Text>
+        <Text style={[s.text, !text && s.placeholder]} numberOfLines={1}>{text || shown}</Text>
         <Feather name="calendar" size={18} color={theme.accent.primary} />
       </TouchableOpacity>
       <DateSheet

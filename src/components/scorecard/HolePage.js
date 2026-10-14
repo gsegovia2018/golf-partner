@@ -222,6 +222,11 @@ export const HolePage = React.memo(function HolePage({
   const edgeSummary = edgeShots
     .map((e) => `${(e.name || '?')[0].toUpperCase()}+${e.edge}`)
     .join(' ');
+  // "Q+1" is the compact form of "Quique gets 1 extra shot on this hole": spell
+  // it out for screen readers (and hover on web), one sentence per player.
+  const edgeA11y = edgeShots
+    .map((e) => tl('scorecard.hole.edgeA11y', { name: e.name || '?', count: e.edge }))
+    .join(' ');
 
   return (
     <View
@@ -414,7 +419,7 @@ export const HolePage = React.memo(function HolePage({
         <Text style={s.holeSlimBarInfo} numberOfLines={1}>
           {tl('scorecard.hole.slimBar', { hole: formatNumber(pageHole.number), par: formatNumber(pageHole.par), si: formatNumber(pageHole.strokeIndex) })}
           {edgeShots.length > 0 && (
-            <Text style={s.holeSlimBarEdge}>{` · ${edgeSummary}`}</Text>
+            <Text style={s.holeSlimBarEdge} accessibilityLabel={edgeA11y}>{` · ${edgeSummary}`}</Text>
           )}
         </Text>
         <HoleDistanceBlock

@@ -14,6 +14,7 @@
 // src/components. Imported (and re-exported below) so existing call sites
 // that import it from this file keep working.
 import { SCRAMBLE_MODES, isScrambleMode } from '../store/scoring';
+import { t } from '../i18n';
 
 export { SCRAMBLE_MODES, isScrambleMode };
 
@@ -207,12 +208,14 @@ export function scoringModeUsesTeams(key, playerCount) {
 // every other mode toggles to Stableford. Labels are short toggle captions
 // (e.g. 'Best Ball'), not the full SCORING_MODES labels.
 export function leaderboardToggleLabels(scoringMode) {
-  if (scoringMode === 'matchplay') return { left: 'Match Play', right: 'Stableford' };
-  if (scoringMode === 'sindicato') return { left: 'Sindicato', right: 'Stableford' };
-  if (scoringMode === 'bestball') return { left: 'Best Ball', right: 'Stableford' };
-  if (scoringMode === 'pairsmatchplay') return { left: 'Match Play', right: 'Stableford' };
-  if (isScrambleMode(scoringMode)) return { left: 'Scramble', right: 'Stroke Play' };
-  return { left: 'Stableford', right: 'Stroke Play' };
+  // Finished text in the language active now: call it at render time.
+  const m = (k) => t(`home.roundMode.${k}`);
+  if (scoringMode === 'matchplay') return { left: m('matchplay'), right: m('stableford') };
+  if (scoringMode === 'sindicato') return { left: m('sindicato'), right: m('stableford') };
+  if (scoringMode === 'bestball') return { left: m('bestball'), right: m('stableford') };
+  if (scoringMode === 'pairsmatchplay') return { left: m('matchplay'), right: m('stableford') };
+  if (isScrambleMode(scoringMode)) return { left: m('scramble'), right: m('strokePlay') };
+  return { left: m('stableford'), right: m('strokePlay') };
 }
 
 // Groups SCORING_MODES into ordered { category, modes } sections, preserving

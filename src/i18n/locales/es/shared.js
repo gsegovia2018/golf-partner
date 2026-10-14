@@ -180,6 +180,7 @@ export default {
   "shared.tees.unset": "sin definir",
   "shared.tees.index": "Índice {value}",
   "shared.tees.indexBase": "Índice {value} · base {base}",
+  "shared.tees.defaultTee": "Por defecto",
   "shared.tees.teeName": "Barras {tee}",
   "shared.tees.pickTee": "Elige unas barras",
   "shared.tees.edited": "· Editado",

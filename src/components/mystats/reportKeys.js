@@ -23,6 +23,19 @@ const CELL_KEYS = {
   Penalties: 'stats.my.report.cell.penalties',
 };
 
+// Count cells read "{n} {thing}" in the preview line, so the noun has to agree
+// with the number ("1 par", "3 pares"): one plural entry per cell.
+const COUNT_KEYS = {
+  'Birdies+': 'stats.my.report.count.birdies',
+  Pars: 'stats.my.report.count.pars',
+  Bogeys: 'stats.my.report.count.bogeys',
+  'Blow-ups': 'stats.my.report.count.blowups',
+  Putts: 'stats.my.report.count.putts',
+  Penalties: 'stats.my.report.count.penalties',
+};
+
+export const countKey = (label) => COUNT_KEYS[label] ?? null;
+
 const GROUP_KEYS = {
   course: 'stats.my.report.group.course',
   timing: 'stats.my.report.group.timing',

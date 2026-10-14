@@ -7,7 +7,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { formatRoundDuration } from '../../store/roundDuration';
 import { semantic } from '../../theme/tokens';
 import { getScoringMode } from '../scoringModes';
-import { t, useT } from '../../i18n';
+import { t, tr, useT } from '../../i18n';
 import { unitText } from '../../lib/pointsText';
 
 function Avatar({ item, theme }) {
@@ -73,8 +73,8 @@ function modeBadgeLabel(scoringMode) {
 function highlightLabel(highlight) {
   if (!highlight) return null;
   return highlight.playerName
-    ? `${highlight.playerName} — ${highlight.title}`
-    : highlight.title;
+    ? `${highlight.playerName} — ${tr(highlight.title)}`
+    : tr(highlight.title);
 }
 
 function roundTitle(item, roundLabel) {

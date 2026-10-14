@@ -1,7 +1,19 @@
 import {
-  buildRoundHighlights, buildPersonalRecords, selectAchievements,
-  buildRoundAchievements,
+  buildRoundHighlights as buildRoundHighlightsRaw,
+  buildPersonalRecords as buildPersonalRecordsRaw,
+  selectAchievements,
+  buildRoundAchievements as buildRoundAchievementsRaw,
 } from '../roundAchievements';
+import { tr as renderMsg, setLanguagePref } from '../../i18n';
+
+// Titles and subtitles are message descriptors; these wrappers render them in
+// the active language (English by default) so assertions read as the card does.
+const rendered = (c) => (c ? { ...c, title: renderMsg(c.title), subtitle: renderMsg(c.subtitle) } : c);
+const buildRoundHighlights = (...a) => buildRoundHighlightsRaw(...a).map(rendered);
+const buildPersonalRecords = (...a) => buildPersonalRecordsRaw(...a).map(rendered);
+const buildRoundAchievements = (...a) => buildRoundAchievementsRaw(...a).map(rendered);
+
+afterEach(async () => { await setLanguagePref('en'); });
 
 // ── Fixture helpers ───────────────────────────────────────────────
 // Par-4 layout, strokeIndex = hole number (so SI 1-18 on a full round).
@@ -769,5 +781,43 @@ describe('buildRoundAchievements', () => {
     const picked = buildRoundAchievements({ tournament: t, roundIndex: 0 });
     expect(picked.length).toBeGreaterThan(0);
     expect(idsOf(picked)).not.toContain('bestRoundEver');
+  });
+});
+
+
+describe('achievement cards in Spanish', () => {
+  const holes = mkHoles();
+
+  test('the group lines are descriptors that render in either language', async () => {
+    const scoresA = scoresOf(holes, 3);
+    const scoresB = scoresOf(holes, 3);
+    const players = [{ id: 'p1', name: 'Ana', handicap: 0 }, { id: 'p2', name: 'Eva', handicap: 0 }];
+    const t = mkTournament({ players, holes, scores: { p1: scoresA, p2: scoresB } });
+    const raw = buildRoundHighlightsRaw(t, 0);
+    const gave = raw.find((c) => c.id === 'everyoneScored');
+    expect(gave.title).toEqual({ key: 'achv.scored.title', params: { hole: expect.any(Number) } });
+
+    expect(renderMsg(gave.title)).toMatch(/^Hole \d+ gave itself away$/);
+    await setLanguagePref('es');
+    expect(renderMsg(gave.title)).toMatch(/^El hoyo \d+ se regaló$/);
+    expect(renderMsg(gave.subtitle)).toBe('Los 2 os llevasteis puntos');
+  });
+
+  test('streak and hole spans localise, nested hole labels included', async () => {
+    const scores = scoresOf(holes, 5, { 6: 4, 7: 4, 8: 4, 9: 4 });
+    const t = mkTournament({ players: solo, holes, scores: { p1: scores } });
+    const streak = buildRoundHighlightsRaw(t, 0).find((c) => c.id === 'parStreak');
+    await setLanguagePref('es');
+    expect(renderMsg(streak.title)).toBe('4 seguidos');
+    expect(renderMsg(streak.subtitle)).toBe('Par o mejor en los hoyos 6-9');
+  });
+
+  test('plural titles pick the right form', async () => {
+    const scores = scoresOf(holes, 5, { 3: 3, 11: 3 });
+    const t = mkTournament({ players: solo, holes, scores: { p1: scores } });
+    const birdies = buildRoundHighlightsRaw(t, 0).find((c) => c.id === 'birdies');
+    await setLanguagePref('es');
+    expect(renderMsg(birdies.title)).toBe('2 birdies');
+    expect(renderMsg(birdies.subtitle)).toBe('En los hoyos 3 y 11');
   });
 });

@@ -121,7 +121,7 @@ export default function LeagueCardScreen({ navigation, route }) {
   const played = card.playedOn ? dayLabel(card.playedOn) : null;
   const breakdown = cardBreakdown(card);
   const teeText = course?.tee
-    ? (breakdown.rated ? t('league.cardScreen.teeRated', { tee: course.tee, slope: breakdown.slope, rating: breakdown.rating }) : course.tee)
+    ? (breakdown.rated ? t('league.cardScreen.teeRated', { tee: course.tee, slope: formatNumber(breakdown.slope), rating: formatNumber(breakdown.rating) }) : course.tee)
     : null;
   const subline = [course?.name, teeText, played].filter(Boolean).join(' · ');
   // Stableford points are the headline (the league ranks by them).
