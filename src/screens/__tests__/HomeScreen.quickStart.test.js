@@ -232,6 +232,9 @@ jest.mock('../../store/notificationStore', () => ({
   unreadCount: jest.fn(() => Promise.resolve(0)),
 }));
 
+let mockLeagueRows = [];
+jest.mock('../../hooks/useMyLeagueRows', () => ({ useMyLeagueRows: () => mockLeagueRows }));
+
 jest.mock('../../lib/navigationFocus', () => ({
   shouldHandleStoreChange: jest.fn(() => false),
 }));
@@ -273,6 +276,7 @@ function renderHome(navigationOverrides = {}) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockUserId = 'u-one';
+  mockLeagueRows = [];
   useAuth.mockImplementation(() => ({ user: mockUserId ? { id: mockUserId } : null }));
   getActiveTournamentSnapshot.mockReturnValue({
     id: 'active-1',
@@ -434,4 +438,31 @@ test('edit details opens the game wizard with the quick-start name and game defa
     });
   });
   expect(mutate).not.toHaveBeenCalled();
+});
+
+// The list loads on focus: render, then focus the screen.
+async function renderFocusedHome() {
+  const focus = [];
+  const screen = renderHome({ addListener: jest.fn((event, cb) => { if (event === 'focus') focus.push(cb); return jest.fn(); }) });
+  await act(async () => { focus.forEach((cb) => cb()); });
+  await waitFor(() => expect(loadAllTournamentsWithFallback).toHaveBeenCalled());
+  return screen;
+}
+
+test('with nothing in play the list shows its empty line', async () => {
+  const { findByText } = await renderFocusedHome();
+  expect(await findByText('Nothing here yet')).toBeTruthy();
+});
+
+test('a league counts as in play: no empty line, the league card instead', async () => {
+  mockLeagueRows = [{
+    id: 'L1',
+    name: 'Mulligan Tour',
+    position: { key: 'league.play.position', params: { place: '2nd', total: 7, points: '2,340' } },
+    month: { key: 'league.play.monthNone', params: { monthKey: '2026-10', count: 17 } },
+  }];
+  const { findByText, queryByText } = await renderFocusedHome();
+  expect(await findByText('Mulligan Tour')).toBeTruthy();
+  expect(queryByText('Nothing here yet')).toBeNull();
+  expect(queryByText('All caught up')).toBeNull();
 });
