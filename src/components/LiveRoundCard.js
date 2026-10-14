@@ -66,40 +66,43 @@ export default function LiveRoundCard({ onOpen }) {
   return (
     <Animated.View style={[s.card, { opacity, transform: [{ translateY }] }]}>
       <View style={s.row}>
-        <View style={s.livePill}><View style={s.liveDot} /><Text style={s.liveText}>{tl('shared.live')}</Text></View>
+        <View style={s.liveMark}><View style={s.liveDot} /><Text style={s.liveText}>{tl('shared.live').toUpperCase()}</Text></View>
         <Text style={s.overline}>{(summary.roundNumber != null ? tl('shared.round.numbered', { n: summary.roundNumber }) : summary.roundLabel).toUpperCase()}</Text>
       </View>
       <Text style={s.name} numberOfLines={1}>{summary.name}</Text>
-      <Text style={s.meta} numberOfLines={1}>
-        {summary.courseName}
-        {summary.thru > 0 ? ` · ${tl('shared.liveRound.thru', { points: summary.myPoints, thru: summary.thru })}` : ''}
-      </Text>
-      <TouchableOpacity style={s.cta} onPress={onOpen} accessibilityRole="button" accessibilityLabel={tl('shared.liveRound.open')}>
-        <Feather name="clipboard" size={14} color="#00553c" />
-        <Text style={s.ctaText}>{tl('shared.liveRound.open')}</Text>
-      </TouchableOpacity>
+      <Text style={s.meta} numberOfLines={1}>{summary.courseName}</Text>
+      <View style={s.footer}>
+        <TouchableOpacity style={s.cta} onPress={onOpen} accessibilityRole="button" accessibilityLabel={tl('shared.liveRound.open')}>
+          <Feather name="clipboard" size={14} color="#00553c" />
+          <Text style={s.ctaText}>{tl('shared.liveRound.open')}</Text>
+        </TouchableOpacity>
+        {summary.thru > 0 ? (
+          <Text style={s.progress}>{tl('shared.liveRound.thru', { points: summary.myPoints, thru: summary.thru })}</Text>
+        ) : null}
+      </View>
     </Animated.View>
   );
 }
 
 const styles = (t) => StyleSheet.create({
   card: {
-    backgroundColor: '#00553c', borderRadius: 16, padding: 16, marginBottom: 16,
-    ...(t.isDark ? {} : t.shadow.elevated),
+    backgroundColor: '#00553c', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, marginBottom: 16,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  livePill: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#b3392e', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3,
-  },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#ffffff' },
-  liveText: { color: '#ffffff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 11 },
+  liveMark: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#ff6b5e' },
+  liveText: { color: '#ffffff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4 },
   overline: { color: 'rgba(243,239,230,0.7)', fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4 },
   name: { color: '#f3efe6', fontFamily: 'PlayfairDisplay-Bold', fontSize: 21 },
   meta: { color: 'rgba(243,239,230,0.82)', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, marginTop: 2 },
+  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 12 },
   cta: {
-    flexDirection: 'row', alignItems: 'center', gap: 7, alignSelf: 'flex-start',
-    backgroundColor: '#f3efe6', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9, marginTop: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 40,
+    backgroundColor: '#f3efe6', borderRadius: 10, paddingHorizontal: 14,
+  },
+  progress: {
+    flexShrink: 1, textAlign: 'right', color: '#f3efe6',
+    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14, fontVariant: ['tabular-nums'],
   },
   ctaText: { color: '#00553c', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13 },
 });

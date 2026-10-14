@@ -219,7 +219,7 @@ export default function QuickStartCourses({
         </ScrollView>
       ) : (
         <View style={s.emptyState}>
-          <Feather name="star" size={32} color={theme.text.muted} />
+          <Feather name="star" size={20} color={theme.accent.primary} />
           <Text style={s.emptyTitle}>{t('setup.quickStart.emptyTitle')}</Text>
           <Text style={s.emptySubtitle}>
             {t('setup.quickStart.emptyHint')}
@@ -417,23 +417,15 @@ const makeStyles = (t) => StyleSheet.create({
   manageTextDisabled: { color: t.text.muted },
   rail: { paddingRight: 20, gap: 12, paddingBottom: 2 },
   courseCard: {
-    width: 168,
-    minHeight: 118,
+    width: 156,
     borderRadius: 14,
     padding: 14,
     backgroundColor: t.bg.card,
     borderWidth: 1,
     borderColor: t.border.default,
-    ...t.shadow.card,
   },
   courseIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: t.accent.light,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   courseName: {
     fontFamily: 'PlusJakartaSans-Bold',
@@ -448,28 +440,25 @@ const makeStyles = (t) => StyleSheet.create({
     marginTop: 5,
   },
   emptyState: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     borderRadius: 14,
     borderWidth: 1,
     borderColor: t.border.default,
     backgroundColor: t.bg.card,
-    paddingHorizontal: 18,
-    paddingVertical: 22,
-    gap: 8,
-    ...t.shadow.card,
+    padding: 14,
+    gap: 4,
   },
   emptyTitle: {
     fontFamily: 'PlusJakartaSans-Bold',
-    fontSize: 15,
+    fontSize: 14,
     color: t.text.primary,
-    textAlign: 'center',
+    marginTop: 4,
   },
   emptySubtitle: {
-    fontFamily: 'PlusJakartaSans-Medium',
+    fontFamily: 'PlusJakartaSans-Regular',
     fontSize: 13,
     lineHeight: 18,
     color: t.text.secondary,
-    textAlign: 'center',
   },
   sheet: {
     maxHeight: '86%',

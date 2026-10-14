@@ -56,7 +56,7 @@ import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { useAuth } from '../context/AuthContext';
 import { shouldOfferPostCreateEditorInvite } from './setupWizard';
 import { ScorecardTable, resolveScorecardRows } from '../components/scorecard/GridView';
-import { useT, tr } from '../i18n';
+import { useT, tr, formatDate } from '../i18n';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
 // RNW 0.21's `pagingEnabled` omits `scroll-snap-stop: always`, so a
@@ -1164,6 +1164,7 @@ export default function HomeScreen({ navigation, route }) {
       <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
         <View style={s.header}>
           <View>
+            <Text style={s.headerDate}>{formatDate(new Date())}</Text>
             <Text style={s.title}>Golf Partner</Text>
           </View>
           <View style={s.headerActions}>
@@ -1213,9 +1214,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => navigation.navigate('Setup', { kind: 'game' })}
             activeScale={0.97}
           >
-            <View style={[s.startTileIconWrap, s.startTileIconWrapFeatured]}>
-              <Feather name="flag" size={24} color={theme.text.inverse} />
-            </View>
+            <Feather name="flag" size={20} color={theme.text.inverse} />
             <View>
               <Text style={[s.startTileTitle, s.startTileTitleFeatured]}>{tx('home.list.gameTile')}</Text>
               <Text style={[s.startTileSub, s.startTileSubFeatured]}>{tx('home.list.gameTileSub')}</Text>
@@ -1230,9 +1229,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => setShowTournamentKindChoice(true)}
             activeScale={0.97}
           >
-            <View style={s.startTileIconWrap}>
-              <Feather name="award" size={24} color={theme.accent.primary} />
-            </View>
+            <Feather name="award" size={20} color={theme.accent.primary} />
             <View>
               <Text style={s.startTileTitle}>{tx('home.list.tournamentTile')}</Text>
               <Text style={s.startTileSub}>{tx('home.list.tournamentTileSub')}</Text>
@@ -1249,9 +1246,7 @@ export default function HomeScreen({ navigation, route }) {
           onPress={() => navigation.navigate('JoinTournament')}
           activeOpacity={0.85}
         >
-          <View style={s.joinTileIconWrap}>
-            <Feather name="link" size={20} color={theme.accent.primary} />
-          </View>
+          <Feather name="link" size={20} color={theme.accent.primary} />
           <View style={{ flex: 1 }}>
             <Text style={s.joinTileTitle}>{tx('home.list.joinTitle')}</Text>
             <Text style={s.joinTileSub}>{tx('home.list.joinSub')}</Text>
@@ -1325,19 +1320,20 @@ export default function HomeScreen({ navigation, route }) {
                   disabled={!openable}
                   activeOpacity={openable ? 0.7 : 1}
                 >
-                  <View style={s.tournamentCardLeft}>
+                  <View style={[s.tournamentCardLeft, openable && t._role === 'owner' && s.tournamentCardLeftWithDelete]}>
                     <View style={s.tournamentCardHeader}>
                       <Text style={s.tournamentCardName}>{t.name}</Text>
                       {totalRounds > 0 && (
-                        <View style={[s.statusBadge, !isActive && s.statusBadgeFinished]}>
-                          <Text style={[s.statusBadgeText, !isActive && s.statusBadgeTextFinished]}>
+                        <View style={s.stateMark}>
+                          <View style={[s.stateDot, !isActive && s.stateDotFinished]} />
+                          <Text style={[s.stateMarkText, !isActive && s.stateMarkTextFinished]}>
                             {isActive ? tx('home.card.active') : tx('home.card.finished')}
                           </Text>
                         </View>
                       )}
                       {t._role === 'viewer' && (
                         <View style={s.viewerBadge}>
-                          <Feather name="eye" size={9} color={theme.text.muted} />
+                          <Feather name="eye" size={12} color={theme.text.secondary} />
                           <Text style={s.viewerBadgeText}>{tx('home.card.viewer')}</Text>
                         </View>
                       )}
@@ -1361,13 +1357,14 @@ export default function HomeScreen({ navigation, route }) {
                   </View>
                 </TouchableOpacity>
                 {openable && t._role === 'owner' && (
-                  <IconButton
-                    icon="trash-2"
-                    color={theme.destructive}
-                    onPress={() => confirmDelete(t)}
-                    accessibilityLabel={tx('home.card.deleteA11y')}
-                    style={s.deleteCardBtn}
-                  />
+                  <View style={s.deleteCardBtn} pointerEvents="box-none">
+                    <IconButton
+                      icon="trash-2"
+                      color={theme.text.secondary}
+                      onPress={() => confirmDelete(t)}
+                      accessibilityLabel={tx('home.card.deleteA11y')}
+                    />
+                  </View>
                 )}
               </View>
             );
@@ -1394,19 +1391,23 @@ export default function HomeScreen({ navigation, route }) {
               );
             }
             return (
-              <View style={s.emptyState}>
-                <Feather name="flag" size={44} color={theme.text.muted} />
-                <Text style={s.emptyTitle}>{tx('home.list.emptyTitle')}</Text>
-                <Text style={s.emptySubtitle}>{tx('home.list.emptySub')}</Text>
+              <View style={s.listEmpty}>
+                <Feather name="flag" size={20} color={theme.accent.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.listEmptyTitle}>{tx('home.list.emptyTitle')}</Text>
+                  <Text style={s.listEmptyText}>{tx('home.list.emptySub')}</Text>
+                </View>
               </View>
             );
           }
           if (active.length === 0) {
             return (
-              <View style={s.emptyState}>
-                <Feather name="check-circle" size={44} color={theme.text.muted} />
-                <Text style={s.emptyTitle}>{tx('home.list.caughtUpTitle')}</Text>
-                <Text style={s.emptySubtitle}>{tx('home.list.caughtUpSub')}</Text>
+              <View style={s.listEmpty}>
+                <Feather name="check-circle" size={20} color={theme.accent.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.listEmptyTitle}>{tx('home.list.caughtUpTitle')}</Text>
+                  <Text style={s.listEmptyText}>{tx('home.list.caughtUpSub')}</Text>
+                </View>
               </View>
             );
           }
@@ -2457,7 +2458,11 @@ const makeStyles = (t) => StyleSheet.create({
   // Header — list header (serif "Golf Partner" title).
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: t.bg.primary },
   headerActions: { flexDirection: 'row', gap: 8, flexShrink: 0 },
-  title: { fontFamily: 'PlayfairDisplay-Black', fontSize: 30, color: t.text.primary, letterSpacing: -0.5 },
+  headerDate: {
+    fontFamily: 'PlusJakartaSans-Bold', color: t.text.secondary, fontSize: 10,
+    letterSpacing: 1.4, textTransform: 'uppercase',
+  },
+  title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 26, lineHeight: 32, color: t.text.primary, letterSpacing: -0.3 },
 
   // Tournament-detail header — matches the scorecard header exactly (same
   // paddings, same PlusJakartaSans-Bold 17 title).
@@ -2492,28 +2497,19 @@ const makeStyles = (t) => StyleSheet.create({
 
   // Start tiles (Game / Tournament)
   startHeading: {
-    fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary,
-    fontSize: 17, marginBottom: 12, letterSpacing: -0.2,
+    fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary,
+    fontSize: 15, marginBottom: 10,
   },
-  startTilesRow: { flexDirection: 'row', gap: 12 },
+  startTilesRow: { flexDirection: 'row', gap: 10 },
   startTile: {
-    flex: 1, alignItems: 'flex-start', gap: 14,
+    flex: 1, alignItems: 'stretch', gap: 10,
     backgroundColor: t.bg.card,
-    borderRadius: 22, borderWidth: 1.5, borderColor: t.accent.primary + '55',
-    paddingVertical: 20, paddingHorizontal: 16, minHeight: 168,
-    ...(t.isDark ? {} : t.shadow.card),
+    borderRadius: 14, borderWidth: 1, borderColor: t.border.default,
+    padding: 14,
   },
   startTileFeatured: {
     backgroundColor: t.accent.primary,
     borderColor: t.accent.primary,
-  },
-  startTileIconWrap: {
-    width: 48, height: 48, borderRadius: 16,
-    backgroundColor: t.accent.light,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  startTileIconWrapFeatured: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   startTileTitle: {
     fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary, fontSize: 21,
@@ -2521,42 +2517,36 @@ const makeStyles = (t) => StyleSheet.create({
   },
   startTileTitleFeatured: { color: t.text.inverse },
   startTileSub: {
-    fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 12,
-    marginTop: 3, letterSpacing: 0.2,
+    fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12,
+    marginTop: 2,
   },
   startTileSubFeatured: { color: t.text.inverse, opacity: 0.82 },
   startTileCta: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    marginTop: 'auto',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    marginTop: 'auto', minHeight: 36,
     backgroundColor: t.accent.light,
-    borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12,
+    borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10,
   },
   startTileCtaFeatured: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   startTileCtaText: {
-    fontFamily: 'PlusJakartaSans-Bold', color: t.accent.primary, fontSize: 12,
+    fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary, fontSize: 13,
   },
 
   // "Join with code" entry point
   joinTile: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: t.bg.card,
-    borderRadius: 16, borderWidth: 1,
+    borderRadius: 14, borderWidth: 1,
     borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
-    paddingVertical: 14, paddingHorizontal: 16, marginTop: 12,
-    ...(t.isDark ? {} : t.shadow.card),
-  },
-  joinTileIconWrap: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: t.accent.light,
-    alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 13, paddingHorizontal: 14, marginTop: 10,
   },
   joinTileTitle: {
     fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 15,
   },
   joinTileSub: {
-    fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 12,
+    fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12,
     marginTop: 1,
   },
 
@@ -2585,9 +2575,9 @@ const makeStyles = (t) => StyleSheet.create({
 
   // Tournament list
   sectionLabel: {
-    fontFamily: 'PlusJakartaSans-SemiBold',
-    color: t.text.muted, fontSize: 10, letterSpacing: 1.5,
-    marginBottom: 12, marginTop: 20, textTransform: 'uppercase',
+    fontFamily: 'PlusJakartaSans-Bold',
+    color: t.text.secondary, fontSize: 10, letterSpacing: 1.4,
+    marginBottom: 10, marginTop: 22, textTransform: 'uppercase',
   },
   finishedLink: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -2601,17 +2591,17 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.primary, fontSize: 14,
   },
   tournamentCard: {
-    backgroundColor: t.isDark ? t.bg.card : t.bg.card,
-    borderRadius: 20, borderWidth: t.isDark ? 1 : 0,
+    backgroundColor: t.bg.card,
+    borderRadius: 14, borderWidth: 1,
     borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
-    padding: 16, marginBottom: 10, flexDirection: 'row', alignItems: 'center',
-    ...(t.isDark ? {} : t.shadow.card),
+    paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8, flexDirection: 'row', alignItems: 'center',
   },
   tournamentCardLeft: { flex: 1 },
+  tournamentCardLeftWithDelete: { paddingRight: 36 },
   tournamentCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  tournamentCardName: { fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary, fontSize: 16 },
+  tournamentCardName: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 15, flexShrink: 1 },
   tournamentCardMeta: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12, marginBottom: 2 },
-  tournamentCardRound: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11 },
+  tournamentCardRound: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12 },
   tournamentCardRight: { paddingLeft: 12 },
   statusBadge: {
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20,
@@ -2620,6 +2610,11 @@ const makeStyles = (t) => StyleSheet.create({
   statusBadgeText: { fontFamily: 'PlusJakartaSans-SemiBold', color: semantic.rank.gold, fontSize: 9, letterSpacing: 0.5 },
   statusBadgeFinished: { backgroundColor: t.bg.secondary },
   statusBadgeTextFinished: { color: t.text.muted },
+  stateMark: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  stateDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: t.accent.primary },
+  stateDotFinished: { backgroundColor: t.text.muted },
+  stateMarkText: { fontFamily: 'PlusJakartaSans-Bold', color: t.accent.primary, fontSize: 11 },
+  stateMarkTextFinished: { color: t.text.secondary },
 
   staleBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -2647,6 +2642,11 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Medium',
     fontSize: 14, color: t.text.muted, textAlign: 'center',
   },
+
+  // Home list empty / caught-up row
+  listEmpty: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 20 },
+  listEmptyTitle: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 14 },
+  listEmptyText: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 1 },
 
   // Empty state
   emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },
@@ -2851,7 +2851,7 @@ const makeStyles = (t) => StyleSheet.create({
 
   // Delete (tournament list cards)
   tournamentCardWrapper: { position: 'relative' },
-  deleteCardBtn: { position: 'absolute', top: 8, right: 8, padding: 6 },
+  deleteCardBtn: { position: 'absolute', top: 0, bottom: 8, right: 36, justifyContent: 'center' },
 
   // Settings modal (bottom sheet)
   modalBackdrop: {
@@ -2889,12 +2889,8 @@ const makeStyles = (t) => StyleSheet.create({
   menuItemDestructive: { borderBottomWidth: 0 },
 
   // Viewer badge
-  viewerBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 20,
-    backgroundColor: t.bg.secondary, borderWidth: 1, borderColor: t.border.default,
-  },
-  viewerBadgeText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 9, letterSpacing: 0.5 },
+  viewerBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  viewerBadgeText: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.secondary, fontSize: 11 },
 
   // Invite modal
   inviteSubtitle: {
