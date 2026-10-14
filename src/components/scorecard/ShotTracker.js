@@ -10,6 +10,7 @@ import {
   insertShotAfter, deleteShot,
 } from '../../store/shotStore';
 import { haversineMeters } from '../../lib/geo';
+import { useT } from '../../i18n';
 import { recommendClub, clubAverages } from '../../lib/shotStats';
 import { swingClubs, clubLabel, clubNominal } from '../../lib/clubs';
 import { ClubWheel } from './ClubWheel';
@@ -44,6 +45,7 @@ export function ShotTracker({
   tappedShotIndex, onConsumeShotTap, onCollapseTargets,
 }) {
   const appSettings = useAppSettings();
+  const tl = useT();
   const { units } = appSettings;
   const bag = useMemo(() => swingClubs(appSettings.bag), [appSettings.bag]);
 
@@ -179,10 +181,10 @@ export function ShotTracker({
           <PressableScale
             onPress={finishOnGreen}
             style={s.greenBtn}
-            accessibilityLabel="Ball is on the green — finish the hole here"
+            accessibilityLabel={tl('shots.tracker.onGreenA11y')}
           >
             <Feather name="flag" size={16} color={hud.text} />
-            <Text style={s.greenLbl}>On the green</Text>
+            <Text style={s.greenLbl}>{tl('shots.tracker.onGreen')}</Text>
           </PressableScale>
         )}
         <PressableScale
@@ -190,10 +192,10 @@ export function ShotTracker({
           onLongPress={dropAtAim}
           disabled={!canAdd}
           style={[s.addBtn, !canAdd && s.fabDisabled]}
-          accessibilityLabel="Mark a shot at your location"
+          accessibilityLabel={tl('shots.tracker.markA11y')}
         >
           <Feather name="plus" size={20} color={hud.onAccent} />
-          <Text style={s.addLbl}>Mark shot</Text>
+          <Text style={s.addLbl}>{tl('shots.tracker.mark')}</Text>
         </PressableScale>
       </View>
 
@@ -202,7 +204,7 @@ export function ShotTracker({
         clubs={wheelClubs}
         value={editValue}
         units={units}
-        seqLabel={editIndex >= 0 ? `Shot ${editIndex + 1}` : 'Club'}
+        seqLabel={editIndex >= 0 ? tl('shots.tracker.shotN', { n: editIndex + 1 }) : tl('shots.wheel.club')}
         carryMeters={editCarry}
         toPinMeters={editToPin}
         onSelect={chooseClub}

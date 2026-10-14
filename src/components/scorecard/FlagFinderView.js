@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useT, formatNumber } from '../../i18n';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { hud } from '../../theme/tokens';
 import { useAppSettings } from '../../hooks/useAppSettings';
@@ -76,6 +77,7 @@ export function FlagFinderView({ visible, courseName, holeNumber, onClose }) {
 // sitting there with the flag finder closed.
 function FlagFinderContent({ courseName, holeNumber, onClose }) {
   const { units } = useAppSettings();
+  const tl = useT();
 
   const { position, accuracy, distances } = useGpsDistances(courseName, holeNumber);
   const { heading, lowAccuracy, flat, status: compassStatus, requestPermission } = useCompassHeading();
@@ -113,17 +115,17 @@ function FlagFinderContent({ courseName, holeNumber, onClose }) {
   let statusMessage = null;
   let statusAction = null;
   if (compassStatus === 'needs-permission') {
-    statusAction = { label: 'Enable compass', onPress: requestPermission };
+    statusAction = { label: tl('map.compass.enable'), onPress: requestPermission };
   } else if (compassStatus === 'unavailable') {
-    statusMessage = 'Compass not available on this device';
+    statusMessage = tl('map.compass.unavailable');
   } else if (!position) {
-    statusMessage = 'Locating GPS…';
+    statusMessage = tl('map.locating');
   } else if (!target) {
-    statusMessage = "This hole isn't mapped yet";
+    statusMessage = tl('map.notMapped');
   } else if (flat) {
-    statusMessage = 'Hold your phone upright, camera toward the green';
+    statusMessage = tl('map.holdUpright');
   } else if (heading == null) {
-    statusMessage = 'Reading compass…';
+    statusMessage = tl('map.readingCompass');
   }
 
   const distanceMeters = distances?.pin ?? distances?.center ?? null;
@@ -143,14 +145,14 @@ function FlagFinderContent({ courseName, holeNumber, onClose }) {
 
       <View style={s.chrome} pointerEvents="box-none">
         <View style={s.topRow}>
-          <Text style={s.holeLabel}>{`Hole ${holeNumber}`}</Text>
-          <Pressable onPress={onClose} hitSlop={10} style={s.closeBtn} accessibilityLabel="Close flag finder">
+          <Text style={s.holeLabel}>{tl('map.hole', { hole: formatNumber(holeNumber) })}</Text>
+          <Pressable onPress={onClose} hitSlop={10} style={s.closeBtn} accessibilityLabel={tl('map.finder.close')}>
             <Feather name="x" size={22} color={hud.text} />
           </Pressable>
         </View>
 
         {!cameraGranted && (
-          <Text style={s.cameraCaption}>Camera off — compass still works</Text>
+          <Text style={s.cameraCaption}>{tl('map.cameraOff')}</Text>
         )}
 
         {statusAction ? (
@@ -177,7 +179,7 @@ function FlagFinderContent({ courseName, holeNumber, onClose }) {
             <Text style={s.chevronText}>
               {overlay.deltaDeg < 0
                 ? `◀ Flag · ${Math.round(Math.abs(overlay.deltaDeg))}° to your left`
-                : `Flag · ${Math.round(overlay.deltaDeg)}° to your right ▶`}
+                : tl('map.flag.right', { deg: formatNumber(Math.round(overlay.deltaDeg)) })}
             </Text>
           </View>
         ) : null}
@@ -185,11 +187,11 @@ function FlagFinderContent({ courseName, holeNumber, onClose }) {
         <View style={s.captions}>
           {poorGps && (
             <Text style={s.caption}>
-              {`GPS accuracy ±${formatDistance(accuracy, units)}${unitSuffix(units)} — direction is approximate`}
+              {tl('map.gpsAccuracy', { distance: `${formatDistance(accuracy, units)}${unitSuffix(units)}` })}
             </Text>
           )}
           {lowAccuracy && (
-            <Text style={s.caption}>Compass needs calibration — wave your phone in a figure 8</Text>
+            <Text style={s.caption}>{tl('map.calibrate')}</Text>
           )}
         </View>
       </View>

@@ -9,6 +9,7 @@ import PressableScale from '../ui/PressableScale';
 import { hud } from '../../theme/tokens';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { haptic } from '../../lib/haptics';
+import { useT } from '../../i18n';
 
 const ITEM_H = 48;
 const VISIBLE = 5; // odd, so one row sits dead-centre
@@ -50,17 +51,18 @@ export function ClubWheel({
 
   const confirm = () => { onSelect?.(clubs[focus]?.key); };
   const suffix = unitSuffix(units);
+  const tl = useT();
 
   return (
     <Modal visible={!!visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={s.backdrop} onPress={onClose}>
         <Pressable style={s.card} onPress={() => {}}>
-          <Text style={s.title}>{seqLabel || 'Club'}</Text>
+          <Text style={s.title}>{seqLabel || tl('shots.wheel.club')}</Text>
           <Text style={s.sub}>
             {[
-              carryMeters != null ? `carried ${formatDistance(carryMeters, units)}${suffix}` : null,
-              toPinMeters != null ? `${formatDistance(toPinMeters, units)}${suffix} to pin` : null,
-            ].filter(Boolean).join(' · ') || 'Which club got the ball here?'}
+              carryMeters != null ? tl('shots.wheel.carried', { distance: `${formatDistance(carryMeters, units)}${suffix}` }) : null,
+              toPinMeters != null ? tl('shots.wheel.toPin', { distance: `${formatDistance(toPinMeters, units)}${suffix}` }) : null,
+            ].filter(Boolean).join(' · ') || tl('shots.wheel.prompt')}
           </Text>
 
           <View style={s.wheelWrap}>
@@ -91,27 +93,27 @@ export function ClubWheel({
           </View>
 
           <PressableScale style={s.confirm} onPress={confirm}>
-            <Text style={s.confirmText}>{`Set ${clubs[focus]?.label ?? ''}`}</Text>
+            <Text style={s.confirmText}>{tl('shots.wheel.set', { club: clubs[focus]?.label ?? '' })}</Text>
           </PressableScale>
 
           {(onMove || onInsert || onDelete) && (
             <View style={s.editRow}>
               {onMove && (
-                <PressableScale style={s.editBtn} onPress={onMove} accessibilityLabel="Move this shot">
+                <PressableScale style={s.editBtn} onPress={onMove} accessibilityLabel={tl('shots.wheel.moveA11y')}>
                   <Feather name="move" size={15} color={hud.textSoft} />
-                  <Text style={s.editText}>Move</Text>
+                  <Text style={s.editText}>{tl('shots.wheel.move')}</Text>
                 </PressableScale>
               )}
               {onInsert && (
-                <PressableScale style={s.editBtn} onPress={onInsert} accessibilityLabel="Add a shot after this one">
+                <PressableScale style={s.editBtn} onPress={onInsert} accessibilityLabel={tl('shots.wheel.addAfterA11y')}>
                   <Feather name="plus" size={15} color={hud.textSoft} />
-                  <Text style={s.editText}>Add after</Text>
+                  <Text style={s.editText}>{tl('shots.wheel.addAfter')}</Text>
                 </PressableScale>
               )}
               {onDelete && (
-                <PressableScale style={s.editBtn} onPress={onDelete} accessibilityLabel="Delete this shot">
+                <PressableScale style={s.editBtn} onPress={onDelete} accessibilityLabel={tl('shots.wheel.deleteA11y')}>
                   <Feather name="trash-2" size={15} color={hud.danger} />
-                  <Text style={[s.editText, s.editTextDanger]}>Delete</Text>
+                  <Text style={[s.editText, s.editTextDanger]}>{tl('shots.wheel.delete')}</Text>
                 </PressableScale>
               )}
             </View>

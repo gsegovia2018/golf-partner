@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { CELEBRATION_TIERS } from './constants';
+import { useT, formatNumber } from '../../i18n';
 
 // Non-blocking celebration for the common tiers (birdie, noelada). Slides in at
 // the top, holds, slides out — the scorecard stays visible and usable, so a
@@ -13,6 +14,7 @@ import { CELEBRATION_TIERS } from './constants';
 // mid-tap, which is worse than the takeover it replaces.
 export function CelebrationToast({ celebration, celebrationAnim, players }) {
   const { theme } = useTheme();
+  const tl = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   if (!celebration?.label) return null;
@@ -43,9 +45,9 @@ export function CelebrationToast({ celebration, celebrationAnim, players }) {
           <Feather name={tier.icon} size={13} color={tier.accent} />
         </View>
         <View style={s.textWrap}>
-          <Text style={s.label} numberOfLines={1}>{celebration.label}</Text>
+          <Text style={s.label} numberOfLines={1}>{tl(`scorecard.celebration.${tier.key}.name`)}</Text>
           {!!firstName && (
-            <Text style={s.subtitle} numberOfLines={1}>{`${firstName} · Hole ${celebration.holeNumber}`}</Text>
+            <Text style={s.subtitle} numberOfLines={1}>{tl('scorecard.celebration.subtitle', { name: firstName, hole: formatNumber(celebration.holeNumber) })}</Text>
           )}
         </View>
         {!!deltaLabel && (

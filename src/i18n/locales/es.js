@@ -3,6 +3,7 @@
 // A plural entry is { one, other } and reads {count}.
 import auth from './es/auth';
 import common from './es/common';
+import holeMap from './es/holeMap';
 import leagueBoard from './es/leagueBoard';
 import leagueCards from './es/leagueCards';
 import leagueMembers from './es/leagueMembers';
@@ -13,11 +14,13 @@ import onboarding from './es/onboarding';
 import profile from './es/profile';
 import scorecard from './es/scorecard';
 import settings from './es/settings';
+import shots from './es/shots';
 import tour from './es/tour';
 
 export const AREAS = {
   auth,
   common,
+  holeMap,
   leagueBoard,
   leagueCards,
   leagueMembers,
@@ -28,12 +31,14 @@ export const AREAS = {
   profile,
   scorecard,
   settings,
+  shots,
   tour,
 };
 
 export default {
   ...auth,
   ...common,
+  ...holeMap,
   ...leagueBoard,
   ...leagueCards,
   ...leagueMembers,
@@ -44,5 +49,6 @@ export default {
   ...profile,
   ...scorecard,
   ...settings,
+  ...shots,
   ...tour,
 };

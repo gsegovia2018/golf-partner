@@ -6,6 +6,7 @@ import React, { useMemo } from 'react';
 import { View, Text } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
 import { semantic } from '../../theme/tokens';
 import { makeScorecardStyles } from './styles';
 import { teamColor } from './teamModel';
@@ -21,6 +22,7 @@ export const RoundSummary = React.memo(function RoundSummary({
   meId,
 }) {
   const { theme } = useTheme();
+  const tl = useT();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   // Soft gold washes out on the light theme's white summary card.
   const gold = theme.isDark ? semantic.winner.soft : semantic.winner.light;
@@ -37,8 +39,8 @@ export const RoundSummary = React.memo(function RoundSummary({
         <View>
           <View style={s.summaryColHeader}>
             <View style={s.summaryName} />
-            <Text style={s.summaryColLabel}>{`HOLE ${currentHole}`}</Text>
-            <Text style={s.summaryColLabel}>ROUND</Text>
+            <Text style={s.summaryColLabel}>{tl('scorecard.summary.holeCol', { hole: formatNumber(currentHole) })}</Text>
+            <Text style={s.summaryColLabel}>{tl('scorecard.summary.roundCol')}</Text>
           </View>
           {(state.pairs ?? []).map((pair) => (
             <View
@@ -92,17 +94,17 @@ export const RoundSummary = React.memo(function RoundSummary({
       {state.variant === 'solo' && (
         <View style={s.summarySolo}>
           <View style={s.summarySoloItem}>
-            <Text style={s.summarySoloLabel}>STROKES</Text>
+            <Text style={s.summarySoloLabel}>{tl('scorecard.summary.strokes')}</Text>
             <Text style={s.summarySoloValue}>{state.solo.str}</Text>
           </View>
           <View style={s.summarySoloDivider} />
           <View style={s.summarySoloItem}>
-            <Text style={s.summarySoloLabel}>POINTS</Text>
+            <Text style={s.summarySoloLabel}>{tl('scorecard.summary.points')}</Text>
             <Text style={s.summarySoloValue}>{state.solo.pts}</Text>
           </View>
           <View style={s.summarySoloDivider} />
           <View style={s.summarySoloItem}>
-            <Text style={s.summarySoloLabel}>vs PAR</Text>
+            <Text style={s.summarySoloLabel}>{tl('scorecard.grid.vsPar')}</Text>
             <Text style={s.summarySoloValue}>{state.solo.vsParLabel}</Text>
           </View>
         </View>

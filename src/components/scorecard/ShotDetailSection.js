@@ -5,6 +5,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { makeScorecardStyles } from './styles';
 import { ShotDetailPanel } from './ShotDetailPanel';
+import { useT } from '../../i18n';
 
 const ALL_ON = { putting: true, teeShot: true, approach: true, shortGame: true, penalties: true };
 
@@ -12,6 +13,7 @@ const ALL_ON = { putting: true, teeShot: true, approach: true, shortGame: true, 
 // `onToggle` are controlled by the parent so the choice persists across holes.
 // Renders nothing when every stat-tracking group is switched off in Settings.
 export function ShotDetailSection({ hole, detail, onChange, strokes, collapsed, onToggle }) {
+  const tl = useT();
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const { statGroups } = useAppSettings();
@@ -25,9 +27,9 @@ export function ShotDetailSection({ hole, detail, onChange, strokes, collapsed, 
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityState={{ expanded: !collapsed }}
-        accessibilityLabel={collapsed ? 'Show shot detail' : 'Hide shot detail'}
+        accessibilityLabel={collapsed ? tl('shots.section.show') : tl('shots.section.hide')}
       >
-        <Text style={s.shotSectionTitle}>Shot detail</Text>
+        <Text style={s.shotSectionTitle}>{tl('shots.section.title')}</Text>
         <Feather name={collapsed ? 'chevron-right' : 'chevron-down'} size={16} color={theme.text.muted} />
       </TouchableOpacity>
       {!collapsed && (
