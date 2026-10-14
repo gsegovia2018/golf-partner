@@ -10,7 +10,7 @@ import en from '../../i18n/locales/en';
 import es from '../../i18n/locales/es';
 import { formatDate } from '../../i18n/format';
 import { renderNotification } from '../notificationContent';
-import { renderPushText, pushLocale } from '../../../supabase/functions/_shared/notificationRender';
+import { renderPushText, renderPushTextSafe, pushLocale } from '../../../supabase/functions/_shared/notificationRender';
 
 const FUNCTIONS = path.join(__dirname, '../../../supabase/functions');
 const COPY_FILE = path.join(FUNCTIONS, '_shared/notificationCopy.js');
@@ -119,6 +119,21 @@ describe('push copy (supabase/functions/_shared)', () => {
     const es1 = renderPushText('league_card_confirmed', { actor_name: 'Pablo', month: '2026-10-01', points: 38.5 }, 'es');
     expect(es1.body).toContain('octubre');
     expect(es1.body).toContain('38,5');
+  });
+
+  test('a renderer that throws falls back to English, then skips the push', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const esThrows = jest.fn((type, data, lang) => {
+      if (lang === 'es') throw new Error('boom');
+      return renderPushText(type, data, lang);
+    });
+    expect(renderPushTextSafe('friend_request', { actor_name: 'Sam' }, 'es', esThrows).title).toBe('New friend request');
+    expect(esThrows.mock.calls.map((c) => c[2])).toEqual(['es', 'en']);
+    const always = jest.fn(() => { throw new Error('boom'); });
+    expect(renderPushTextSafe('friend_request', {}, 'es', always)).toBeNull();
+    expect(console.error).toHaveBeenCalledTimes(3);
+    expect(renderPushTextSafe('friend_request', { actor_name: 'Sam' }, 'es').title).toBe('Nueva solicitud de amistad');
+    console.error.mockRestore();
   });
 
   test('locale: es is Spanish, anything else (NULL, fr, es-ES) is English', () => {

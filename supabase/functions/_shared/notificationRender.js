@@ -350,3 +350,20 @@ export function renderPushText(type, data = {}, locale = 'en') {
       return null;
   }
 }
+
+// renderPushText that never throws: a bad payload in the recipient's language
+// retries in English, and only if that throws too is the push skipped (null,
+// logged). `render` is injectable for tests.
+export function renderPushTextSafe(type, data, locale, render = renderPushText) {
+  try {
+    return render(type, data, locale);
+  } catch (e) {
+    console.error(`send-push: rendering ${type} in ${locale ?? 'default'} failed, retrying in en`, e);
+  }
+  try {
+    return render(type, data, 'en');
+  } catch (e) {
+    console.error(`send-push: rendering ${type} in en failed, skipping the push`, e);
+    return null;
+  }
+}

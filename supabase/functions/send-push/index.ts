@@ -6,7 +6,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { isAuthorized } from './auth.ts';
 import { chunk, staleTokensForChunk } from './push.ts';
-import { renderPushText } from '../_shared/notificationRender.js';
+import { renderPushTextSafe } from '../_shared/notificationRender.js';
 
 // Expo's push API caps each request at 100 messages.
 const EXPO_PUSH_CHUNK_SIZE = 100;
@@ -206,8 +206,9 @@ Deno.serve(async (req) => {
     }
 
     const data = note.data ?? {};
-    const text = renderPushText(note.type, data, prof?.locale ?? undefined);
-    if (!text) return new Response('ignored type', { status: 200 });
+    // Never throws: falls back to English, then skips (logged) if that fails too.
+    const text = renderPushTextSafe(note.type, data, prof?.locale ?? undefined);
+    if (!text) return new Response('not rendered', { status: 200 });
     const { title, body } = text;
     const deepLink = linkOf(data);
 
