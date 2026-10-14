@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 
 // A league card's holes, nine per row: strokes in a shape (circle = 3+ points,
 // square = 0), points underneath. A hole capped at net double bogey gets a
@@ -8,12 +9,13 @@ import { useTheme } from '../../theme/ThemeContext';
 // differential. `perHole` is leagueView.cardBreakdown's list.
 export default function CardHoleGrid({ perHole }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const good = theme.scoreColor('excellent');
   const zero = theme.destructive;
   const halves = [
-    { label: 'OUT', cells: perHole.slice(0, 9) },
-    { label: 'IN', cells: perHole.slice(9, 18) },
+    { label: t('league.holeGrid.out'), cells: perHole.slice(0, 9) },
+    { label: t('league.holeGrid.in'), cells: perHole.slice(9, 18) },
   ].filter((h) => h.cells.length > 0);
   const anyCapped = perHole.some((h) => h.capped);
 
@@ -33,7 +35,9 @@ export default function CardHoleGrid({ perHole }) {
                   key={c.n}
                   style={[s.cell, i > 0 && s.cellEdge]}
                   accessible
-                  accessibilityLabel={`Hole ${c.n}, ${c.strokes} strokes, ${c.points} points${c.capped ? `, counts as ${c.counted}` : ''}`}
+                  accessibilityLabel={c.capped
+                    ? t('league.holeGrid.holeCapped', { n: c.n, strokes: c.strokes, points: c.points, counted: c.counted })
+                    : t('league.holeGrid.hole', { n: c.n, strokes: c.strokes, points: c.points })}
                 >
                   <Text style={s.holeNo}>{c.n}</Text>
                   <View style={[s.shape, ring]}>
@@ -57,7 +61,7 @@ export default function CardHoleGrid({ perHole }) {
         );
       })}
       <Text style={s.legend}>
-        {`○ 3+ pts   □ 0 pts   small number = points${anyCapped ? '   dashed = capped, badge counts' : ''}`}
+        {t(anyCapped ? 'league.holeGrid.legendCapped' : 'league.holeGrid.legend')}
       </Text>
     </View>
   );

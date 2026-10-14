@@ -7,6 +7,7 @@ import {
 import { middleTee } from './tees';
 import { scoreCard } from './leagueRules';
 import { isRatedTee } from './handicapIndex';
+import { formatDate } from '../i18n';
 
 export const HOLES_PER_CARD = 18;
 
@@ -102,17 +103,11 @@ export function localTimeText(date = new Date()) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-// "Sat 4 Oct" from an ISO instant or a YYYY-MM-DD date.
+// "Sat 4 Oct" / "sáb 4 oct" from an ISO instant or a YYYY-MM-DD date ('' if
+// invalid). formatDate reads a bare date as a calendar day (no zone shift).
 export function dayLabel(value) {
   if (!value) return '';
-  // Only a bare date is a calendar day; an instant's UTC date can be the day before.
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
-  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return formatDate(value, 'short');
 }
 
 export function timeLabel(iso) {

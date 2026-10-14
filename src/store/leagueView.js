@@ -7,7 +7,7 @@ import {
 import { seasonTable, monthResults } from './leagueStandings';
 import { isRatedTee, netDoubleBogeyCap } from './handicapIndex';
 import { calcExtraShots, calcStablefordPoints } from './scoring';
-import { formatNumber, formatOrdinal } from '../i18n';
+import { formatNumber, formatOrdinal, formatDate } from '../i18n';
 import { splitVoidReason } from './leagueTimeline';
 
 const MONTHS = [
@@ -129,43 +129,48 @@ export function positionMessage(table, userId, cardsByMonth) {
 
 const STATUS_RANK = { confirmed: 0, submitted: 1, playing: 2, announced: 3, missed: 4 };
 
-function clock(iso, now) {
+// "Announced · today 10:10" / "Announced · 4 Oct 10:10", as a descriptor.
+function announcedMsg(iso, now) {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  return d.toDateString() === now.toDateString() ? `today ${hm}` : `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} ${hm}`;
+  if (Number.isNaN(d.getTime())) return { key: 'league.view.status.announced' };
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return d.toDateString() === now.toDateString()
+    ? { key: 'league.view.status.announcedToday', params: { time } }
+    : { key: 'league.view.status.announcedOn', params: { date: formatDate(d, 'day'), time } };
 }
 
-// One member's line for the current month: { text, tone, flag, lead, leadTone }.
-// tone: 'done' (counts), 'live' (in progress), 'muted' (no card, or not posted
-// in time: `missed: true`). Live cards carry `deadline` (deadlineInfo). `lead` is the
+const V = (key, params) => (params ? { key: `league.view.${key}`, params } : { key: `league.view.${key}` });
+
+// One member's line for the current month: { msg, tone, flag, lead, leadTone }.
+// msg and flag are descriptors (render with tr()). tone: 'done' (counts),
+// 'live' (in progress), 'muted' (no card, or not posted in time:
+// `missed: true`). Live cards carry `deadline` (deadlineInfo). `lead` is the
 // card's Stableford points ('38 pts'), the value the month ranks by, that
-// `text` starts with; leadTone is null (points carry no better/worse).
+// `msg` starts with; leadTone is null (points carry no better/worse).
 export function cardStatus(card, now = new Date()) {
-  if (!card) return { text: 'No card yet', tone: 'muted', flag: null };
-  if (isMissed(card, now)) return { text: 'Not posted', tone: 'muted', flag: null, missed: true };
-  let flag = card.notAnnounced ? 'Not announced in the app' : null;
+  if (!card) return { msg: V('status.noCard'), tone: 'muted', flag: null };
+  if (isMissed(card, now)) return { msg: V('status.notPosted'), tone: 'muted', flag: null, missed: true };
+  let flag = card.notAnnounced ? V('flag.notAnnounced') : null;
   if (needsApproval(card)) {
-    flag = card.teeVerified === false ? 'Tee entered by hand · awaiting approval' : 'Awaiting approval · not counted yet';
+    flag = card.teeVerified === false ? V('flag.handTee') : V('flag.awaitingApproval');
   }
   const offApp = card.source === 'offapp';
-  const lead = card.points != null ? `${formatPoints(card.points)} pts` : null;
+  const points = card.points != null ? formatPoints(card.points) : null;
+  const lead = points != null ? `${points} pts` : null;
   switch (card.status) {
     case 'confirmed':
-      if (lead == null) return { text: 'unrated · not ranked', tone: 'muted', flag, lead: 'unrated', leadTone: null };
-      return { text: `${lead} · confirmed`, tone: 'done', flag, lead, leadTone: null };
+      if (lead == null) return { msg: V('status.unrated'), tone: 'muted', flag, lead: 'unrated', leadTone: null };
+      return { msg: V('status.confirmed', { points }), tone: 'done', flag, lead, leadTone: null };
     case 'submitted': {
-      const how = offApp ? 'added after the round' : 'submitted';
-      return { text: lead ? `${lead} · ${how}` : how, tone: 'done', flag, lead, leadTone: null };
+      const how = offApp ? 'status.addedAfter' : 'status.submitted';
+      return { msg: lead ? V(`${how}Pts`, { points }) : V(how), tone: 'done', flag, lead, leadTone: null };
     }
     case 'playing':
-      return { text: 'Playing now', tone: 'live', flag, deadline: deadlineInfo(card, now) };
+      return { msg: V('status.playing'), tone: 'live', flag, deadline: deadlineInfo(card, now) };
     case 'announced':
-      return {
-        text: `Announced · ${clock(card.announcedAt, now)}`.trim(), tone: 'live', flag, deadline: deadlineInfo(card, now),
-      };
+      return { msg: announcedMsg(card.announcedAt, now), tone: 'live', flag, deadline: deadlineInfo(card, now) };
     default:
-      return { text: 'No card yet', tone: 'muted', flag: null };
+      return { msg: V('status.noCard'), tone: 'muted', flag: null };
   }
 }
 
@@ -194,11 +199,19 @@ const HOW_CONFIRMED = {
   partner: 'app partner', marker: 'marker in the app', qr: 'marker by QR', photo: 'signed card photo', official: 'official result',
 };
 
-// Why a submitted card is not counting yet.
+// Why a submitted card is not counting yet. `reason` (English) stays until the
+// board renders `reasonMsg`; same for `how` / `howMsg`.
 function waitingReason(card) {
   if (card.markerName && card.source !== 'offapp') return `submitted · waiting for ${card.markerName}`;
   if (card.source === 'offapp') return card.proofPath ? 'waiting for the check' : 'needs the card photo';
   return card.returnedAt ? 'sent back by the marker' : "marker hasn't scanned the QR yet";
+}
+
+// The same, as a descriptor.
+function waitingReasonMsg(card) {
+  if (card.markerName && card.source !== 'offapp') return V('waiting.marker', { name: card.markerName });
+  if (card.source === 'offapp') return V(card.proofPath ? 'waiting.check' : 'waiting.photo');
+  return V(card.returnedAt ? 'waiting.sentBack' : 'waiting.noScan');
 }
 
 // The month board, grouped for the board's month view. Only the confirmed
@@ -229,6 +242,7 @@ export function monthBoard(members, cardsByMonth, month, pointsTable, now = new 
       netDifferential: r.netDifferential, cardPoints: r.cardPoints, seasonPoints: r.seasonPoints,
       tieSize: r.tieSize, floored: !!r.floored,
       how: HOW_CONFIRMED[card.confirmation] ?? null,
+      howMsg: HOW_CONFIRMED[card.confirmation] ? V(`how.${card.confirmation}`) : null,
     });
   }
   const placed = new Set(confirmed.map((r) => r.member.userId));
@@ -243,7 +257,7 @@ export function monthBoard(members, cardsByMonth, month, pointsTable, now = new 
     const card = bestCard(member.userId, () => true);
     if (card && needsApproval(card)) awaiting.push({ member, card });
     else if (card && isMissed(card, now)) missed.push({ member, card });
-    else if (card?.status === 'submitted') waiting.push({ member, card, reason: waitingReason(card) });
+    else if (card?.status === 'submitted') waiting.push({ member, card, reason: waitingReason(card), reasonMsg: waitingReasonMsg(card) });
     else if (card?.status === 'playing' || card?.status === 'announced') onCourse.push({ member, card });
     else {
       // An admin's void (or a played-after-withdraw card) still takes the month:

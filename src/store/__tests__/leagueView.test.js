@@ -5,6 +5,7 @@ import {
   yourCardState, myMonthCard, monthCardsView, cardActions, voidedNote, voidReasonText, autoWithdrawNote,
   formatNetDiff, formatNetDiffSigned, netDiffTone, myRoundScored, markerAskedLine, firstName, initials, cardBreakdown, leagueNameMatches,
 } from '../leagueView';
+import { tr, setLanguagePref } from '../../i18n';
 
 const NOW = new Date(2026, 9, 4, 12, 0);
 
@@ -54,30 +55,36 @@ describe('standings text', () => {
   });
 });
 
+// cardStatus returns descriptors; render them in English like the screen would.
+const cs = (card, now) => {
+  const r = cardStatus(card, now);
+  return { ...r, text: tr(r.msg), flag: r.flag && tr(r.flag) };
+};
+
 describe('card status', () => {
   test('each state', () => {
-    expect(cardStatus(null, NOW).text).toBe('No card yet');
-    expect(cardStatus({ status: 'confirmed', points: 38, netDifferential: -2.4 }, NOW))
+    expect(cs(null, NOW)).toMatchObject({ msg: { key: 'league.view.status.noCard' }, text: 'No card yet' });
+    expect(cs({ status: 'confirmed', points: 38, netDifferential: -2.4 }, NOW))
       .toMatchObject({ text: '38 pts · confirmed', tone: 'done', lead: '38 pts', leadTone: null });
-    expect(cardStatus({ status: 'confirmed', points: 31, netDifferential: 4.3 }, NOW))
+    expect(cs({ status: 'confirmed', points: 31, netDifferential: 4.3 }, NOW))
       .toMatchObject({ text: '31 pts · confirmed', leadTone: null });
-    expect(cardStatus({ status: 'playing' }, NOW)).toMatchObject({ text: 'Playing now', tone: 'live' });
-    expect(cardStatus({ status: 'submitted', points: 36, netDifferential: 0.04, source: 'offapp' }, NOW).text)
+    expect(cs({ status: 'playing' }, NOW)).toMatchObject({ text: 'Playing now', tone: 'live' });
+    expect(cs({ status: 'submitted', points: 36, netDifferential: 0.04, source: 'offapp' }, NOW).text)
       .toBe('36 pts · added after the round');
   });
   test('the lead is the points, with or without a net differential; a card without points is not ranked', () => {
-    expect(cardStatus({ status: 'confirmed', points: 30, netDifferential: null }, NOW))
+    expect(cs({ status: 'confirmed', points: 30, netDifferential: null }, NOW))
       .toMatchObject({ text: '30 pts · confirmed', tone: 'done', lead: '30 pts' });
-    expect(cardStatus({ status: 'confirmed', points: null, netDifferential: -1 }, NOW))
+    expect(cs({ status: 'confirmed', points: null, netDifferential: -1 }, NOW))
       .toMatchObject({ text: 'unrated · not ranked', tone: 'muted', leadTone: null });
-    expect(cardStatus({ status: 'submitted', points: null, source: 'app' }, NOW).text).toBe('submitted');
+    expect(cs({ status: 'submitted', points: null, source: 'app' }, NOW).text).toBe('submitted');
   });
   test('flags a card that was not announced', () => {
-    expect(cardStatus({ status: 'submitted', points: 30, netDifferential: 1, notAnnounced: true, approvedAt: '2026-10-05T00:00:00Z' }, NOW).flag).toBe('Not announced in the app');
+    expect(cs({ status: 'submitted', points: 30, netDifferential: 1, notAnnounced: true, approvedAt: '2026-10-05T00:00:00Z' }, NOW).flag).toBe('Not announced in the app');
   });
   test('announced shows the time', () => {
     const iso = new Date(2026, 9, 4, 10, 10).toISOString();
-    expect(cardStatus({ status: 'announced', announcedAt: iso }, NOW).text).toBe('Announced · today 10:10');
+    expect(cs({ status: 'announced', announcedAt: iso }, NOW).text).toBe('Announced · today 10:10');
   });
 });
 
@@ -102,37 +109,47 @@ describe('card status: post deadline', () => {
   const after = new Date('2026-10-10T18:00:00Z');
 
   test('a missed card reads Not posted', () => {
-    expect(cardStatus({ status: 'missed', postBy }, before))
-      .toEqual({ text: 'Not posted', tone: 'muted', flag: null, missed: true });
+    expect(cs({ status: 'missed', postBy }, before))
+      .toMatchObject({ msg: { key: 'league.view.status.notPosted' }, text: 'Not posted', tone: 'muted', flag: null, missed: true });
   });
 
   test('a live card past its deadline reads Not posted without the sweep', () => {
-    expect(cardStatus({ status: 'announced', postBy, announcedAt: '2026-10-10T09:00:00Z' }, after))
+    expect(cs({ status: 'announced', postBy, announcedAt: '2026-10-10T09:00:00Z' }, after))
       .toMatchObject({ text: 'Not posted', missed: true });
-    expect(cardStatus({ status: 'playing', postBy }, after)).toMatchObject({ missed: true });
+    expect(cs({ status: 'playing', postBy }, after)).toMatchObject({ missed: true });
   });
 
   test('a live card carries its deadline, text unchanged', () => {
-    const s = cardStatus({ status: 'announced', postBy, announcedAt: '2026-10-10T09:00:00Z' }, before);
+    const s = cs({ status: 'announced', postBy, announcedAt: '2026-10-10T09:00:00Z' }, before);
     expect(s.text).toMatch(/^Announced/);
     expect(s.deadline).toMatchObject({ msLeft: 3 * 3600000, urgent: false });
-    expect(cardStatus({ status: 'playing', postBy }, before).deadline.postBy).toEqual(new Date(postBy));
-    expect(cardStatus({ status: 'playing' }, before).deadline).toBeNull();
+    expect(cs({ status: 'playing', postBy }, before).deadline.postBy).toEqual(new Date(postBy));
+    expect(cs({ status: 'playing' }, before).deadline).toBeNull();
   });
 
   test('a tee entered by hand flags awaiting approval until an admin approves it', () => {
     const card = { status: 'confirmed', teeVerified: false, points: 30 };
-    expect(cardStatus(card, before).flag).toBe('Tee entered by hand · awaiting approval');
-    expect(cardStatus({ ...card, notAnnounced: true }, before).flag).toBe('Tee entered by hand · awaiting approval');
-    expect(cardStatus({ ...card, approvedAt: '2026-10-11T00:00:00Z' }, before).flag).toBeNull();
-    expect(cardStatus({ ...card, teeVerified: true }, before).flag).toBeNull();
+    expect(cs(card, before).flag).toBe('Tee entered by hand · awaiting approval');
+    expect(cs({ ...card, notAnnounced: true }, before).flag).toBe('Tee entered by hand · awaiting approval');
+    expect(cs({ ...card, approvedAt: '2026-10-11T00:00:00Z' }, before).flag).toBeNull();
+    expect(cs({ ...card, teeVerified: true }, before).flag).toBeNull();
   });
 
   test('an unapproved not-announced card flags awaiting approval', () => {
     const card = { status: 'submitted', notAnnounced: true, points: 30 };
-    expect(cardStatus(card, before).flag).toBe('Awaiting approval · not counted yet');
-    expect(cardStatus({ ...card, approvedAt: '2026-10-11T00:00:00Z' }, before).flag).toBe('Not announced in the app');
+    expect(cs(card, before).flag).toBe('Awaiting approval · not counted yet');
+    expect(cs({ ...card, approvedAt: '2026-10-11T00:00:00Z' }, before).flag).toBe('Not announced in the app');
   });
+
+describe('card status in Spanish', () => {
+  afterEach(() => setLanguagePref('en'));
+  test('renders the descriptors in Spanish', async () => {
+    await setLanguagePref('es');
+    expect(cs({ status: 'confirmed', points: 38 }, NOW).text).toBe('38 ptos · confirmada');
+    expect(cs({ status: 'submitted', points: 30, notAnnounced: true }, NOW).flag).toBe('Pendiente de aprobación · aún no cuenta');
+    expect(cs(null, NOW).text).toBe('Sin tarjeta todavía');
+  });
+});
 
   test('monthRows puts not posted after announced', () => {
     const members = [{ userId: 'a' }, { userId: 'b' }, { userId: 'c' }];
@@ -244,6 +261,10 @@ describe('monthBoard', () => {
       ['d', "marker hasn't scanned the QR yet"],
       ['e', 'needs the card photo'],
     ]);
+    // The descriptors say the same thing.
+    expect(board.confirmed.map((r) => tr(r.howMsg))).toEqual(['app partner', 'marker by QR', 'signed card photo']);
+    expect(board.waiting.map((r) => r.reasonMsg.key)).toEqual(['league.view.waiting.noScan', 'league.view.waiting.photo']);
+    expect(board.waiting.map((r) => tr(r.reasonMsg))).toEqual(board.waiting.map((r) => r.reason));
     expect(board.onCourse.map((r) => r.member.userId)).toEqual(['f']);
     expect(board.noCard.map((x) => x.userId)).toEqual(['g']);
   });

@@ -10,7 +10,7 @@ import DateField from '../components/DateField';
 import DeleteLeagueSheet from '../components/DeleteLeagueSheet';
 import BottomSheet from '../components/BottomSheet';
 import PointsForPlaying from '../components/league/PointsForPlaying';
-import { useT, formatNumber } from '../i18n';
+import { useT, t as translate, formatNumber, formatDate } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
@@ -26,7 +26,7 @@ import {
   parseIsoDate, parsePointsTable, formatPointsTable, parseFeeCents,
 } from '../store/leagueDraft';
 import {
-  formatEuros, memberLabel, voteThreshold, monthName,
+  formatEuros, memberLabel, voteThreshold,
 } from '../store/leagueView';
 import {
   getPendingLeagueFinals, subscribePendingLeagueFinals, flushPendingLeagueFinals,
@@ -34,19 +34,20 @@ import {
 import {
   LEAGUE_NOTIFICATION_ROWS, resolveLeaguePrefs, leaguePrefsPatch,
 } from '../store/leagueNotificationPrefs';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
 // Alert.alert does nothing on web (react-native-web), so both helpers fall
 // back to the browser's own dialogs there.
 function fail(e) {
-  const message = e?.message || 'Something went wrong';
+  const message = leagueErrorText(e) || translate('league.create.errorGeneric');
   if (Platform.OS === 'web') window.alert(message);
-  else Alert.alert('Error', message);
+  else Alert.alert(translate('league.create.errorTitle'), message);
 }
 
 function confirmDestructive(title, message, actionLabel) {
   if (Platform.OS === 'web') return Promise.resolve(window.confirm(`${title}\n\n${message}`));
   return new Promise((resolve) => Alert.alert(title, message, [
-    { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+    { text: translate('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
     { text: actionLabel, style: 'destructive', onPress: () => resolve(true) },
   ], { cancelable: true, onDismiss: () => resolve(false) }));
 }
@@ -156,8 +157,8 @@ export default function LeagueSettingsScreen({ navigation, route }) {
 
   const header = (
     <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel="Back" />
-      <Text style={s.headerTitle}>League settings</Text>
+      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
+      <Text style={s.headerTitle}>{t('league.settings.title')}</Text>
     </View>
   );
 
@@ -168,9 +169,9 @@ export default function LeagueSettingsScreen({ navigation, route }) {
         <View style={s.center}>
           {loading ? <ActivityIndicator color={theme.accent.primary} /> : (
             <>
-              <Text style={s.emptyTitle}>Couldn't load the league</Text>
+              <Text style={s.emptyTitle}>{t('league.join.couldntLoad')}</Text>
               <Text style={s.emptyText}>{error}</Text>
-              <TouchableOpacity style={s.secondaryBtn} onPress={reload}><Text style={s.secondaryText}>Try again</Text></TouchableOpacity>
+              <TouchableOpacity style={s.secondaryBtn} onPress={reload}><Text style={s.secondaryText}>{t('common.retry')}</Text></TouchableOpacity>
             </>
           )}
         </View>
@@ -231,18 +232,18 @@ export default function LeagueSettingsScreen({ navigation, route }) {
 
   async function confirmArchive() {
     const yes = await confirmDestructive(
-      'Archive the league?',
-      'The board stays visible but becomes read-only for everyone. Announcing cards, joining and handicap changes stop.',
-      'Archive',
+      t('league.settings.archiveTitle'),
+      t('league.settings.archiveBody'),
+      t('league.settings.archiveAction'),
     );
     if (yes) await act(async () => { await archiveLeague(leagueId); await reload(); });
   }
 
   async function confirmLeave() {
     const yes = await confirmDestructive(
-      'Leave this league?',
-      'Your past cards stay in the standings, marked as left. You can rejoin with the invite link.',
-      'Leave',
+      t('league.settings.leaveTitle'),
+      t('league.settings.leaveBody'),
+      t('league.settings.leaveAction'),
     );
     if (!yes) return;
     const ok = await act(async () => { await leaveLeague(leagueId); });
@@ -263,7 +264,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
       setDeleteOpen(false);
       navigation.navigate('Main');
     } catch (e) {
-      setDeleteError(e?.message || 'Something went wrong.');
+      setDeleteError(leagueErrorText(e) || t('league.settings.errorGenericDot'));
     } finally {
       setDeleteBusy(false);
     }
@@ -292,29 +293,29 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   // the tournament for everyone.
   const finalId = data.final?.tournamentId ?? pendingFinal?.tournamentId ?? null;
   const finalDate = data.final?.createdAt
-    ? new Date(data.final.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    ? formatDate(data.final.createdAt, 'day')
     : null;
   let finalRow = null;
   if (finalId) {
     finalRow = {
-      title: ['The Final', finalDate].filter(Boolean).join(' · '),
-      sub: data.final ? 'Open' : 'Linking the Final to the league…',
+      title: [t('league.settings.theFinal'), finalDate].filter(Boolean).join(' · '),
+      sub: data.final ? t('league.settings.finalOpen') : t('league.settings.finalLinking'),
       onPress: () => navigation.navigate('Tournament', { tournamentId: finalId, viewMode: 'tournament' }),
     };
   } else if (isAdmin && !archived) {
     finalRow = {
-      title: 'Set up the Final',
-      sub: `${monthName(league.seasonEnd)} · extra strokes from the standings`,
+      title: t('league.settings.setUpFinal'),
+      sub: t('league.settings.setUpFinalSub', { month: formatDate(`${String(league.seasonEnd).slice(0, 7)}-01`, 'monthName') }),
       onPress: () => navigation.navigate('LeagueFinal', { leagueId }),
     };
   }
   const openVotes = (data.votes ?? []).length;
   const membersSub = isAdmin
-    ? `${active.length} members · cap ${league.handicapCap}`
-    : (me?.leagueHandicap != null ? `Your league handicap ${Number(me.leagueHandicap).toFixed(1)}` : 'Handicaps and votes');
+    ? t('league.settings.membersSubAdmin', { count: active.length, cap: formatNumber(league.handicapCap) })
+    : (me?.leagueHandicap != null ? t('league.settings.yourHcp', { hcp: formatNumber(Number(me.leagueHandicap), { decimals: 1 }) }) : t('league.settings.hcpAndVotes'));
   const linkRows = [
     {
-      key: 'members', icon: 'users', title: 'Members and handicaps', sub: membersSub, pill: openVotes > 0 ? `${openVotes} ${openVotes === 1 ? 'vote' : 'votes'} open` : null,
+      key: 'members', icon: 'users', title: t('league.settings.membersAndHcp'), sub: membersSub, pill: openVotes > 0 ? t('league.settings.votesOpen', { count: openVotes }) : null,
       onPress: () => navigation.navigate('LeagueMembers', { leagueId }),
     },
     finalRow && { key: 'final', icon: 'flag', ...finalRow },
@@ -331,7 +332,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {header}
       <PullToRefresh style={{ flex: 1 }} contentContainerStyle={s.content} refreshing={refreshing} onRefresh={onRefresh}>
-        <Text style={s.sectionLabel}>LEAGUE</Text>
+        <Text style={s.sectionLabel}>{t('league.settings.sectionLeague')}</Text>
         <View style={[s.card, { paddingVertical: 4 }]}>
           {linkRows.map((r, i) => (
             <TouchableOpacity
@@ -352,52 +353,54 @@ export default function LeagueSettingsScreen({ navigation, route }) {
           ))}
         </View>
 
-        <Text style={s.sectionLabel}>RULES</Text>
+        <Text style={s.sectionLabel}>{t('league.settings.sectionRules')}</Text>
         {isAdmin && !archived ? (
           <View style={s.card}>
-            {field('League name', { value: name, onChangeText: setName })}
-            <Text style={s.fieldLabel}>Season starts</Text>
-            <DateField label="Season starts" value={seasonStart} onChange={setSeasonStart} quickDates={false} />
-            <Text style={s.fieldLabel}>Season ends</Text>
-            <DateField label="Season ends" value={seasonEnd} onChange={setSeasonEnd} quickDates={false} min={startIso || undefined} />
+            {field(t('league.create.leagueName'), { value: name, onChangeText: setName })}
+            <Text style={s.fieldLabel}>{t('league.create.seasonStarts')}</Text>
+            <DateField label={t('league.create.seasonStarts')} value={seasonStart} onChange={setSeasonStart} quickDates={false} />
+            <Text style={s.fieldLabel}>{t('league.create.seasonEnds')}</Text>
+            <DateField label={t('league.create.seasonEnds')} value={seasonEnd} onChange={setSeasonEnd} quickDates={false} min={startIso || undefined} />
             {startIso && endIso && startIso > endIso && (
-              <Text style={s.errorText}>The season must end on or after it starts.</Text>
+              <Text style={s.errorText}>{t('league.settings.seasonOrder')}</Text>
             )}
-            {field('Points table (1st, 2nd, 3rd…)', { value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none' })}
+            {field(t('league.create.pointsTable'), { value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none' })}
             <PointsForPlaying value={participation} onChange={setParticipation} pointsTable={pointsTable} count={active.length} />
             <Text style={s.hint}>{t('league.rules.recompute')}</Text>
-            {field('Handicap cap', { value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}
-            {field('Entry fee (€)', { value: feeText, onChangeText: setFeeText, keyboardType: 'decimal-pad', placeholder: '0' })}
-            <Text style={s.hint}>One card a month and net Stableford are fixed for every league.</Text>
+            {field(t('league.create.handicapCap'), { value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}
+            {field(t('league.create.entryFee'), { value: feeText, onChangeText: setFeeText, keyboardType: 'decimal-pad', placeholder: '0' })}
+            <Text style={s.hint}>{t('league.settings.fixedRules')}</Text>
             <TouchableOpacity
               style={[s.primaryBtn, (!formValid || busy) && { opacity: 0.5 }]}
               onPress={saveRules}
               disabled={!formValid || busy}
               activeOpacity={0.8}
             >
-              <Text style={s.primaryText}>{saved ? 'Saved' : 'Save rules'}</Text>
+              <Text style={s.primaryText}>{saved ? t('league.settings.saved') : t('league.settings.saveRules')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={[s.card, { paddingVertical: 4 }]}>
-            {readRow('Format', t('league.rules.format'))}
-            {readRow('Points table', `${formatPointsTable(league.pointsTable)} · ties share`)}
+            {readRow(t('league.settings.readFormat'), t('league.rules.format'))}
+            {readRow(t('league.settings.readPoints'), t('league.settings.readTies', { table: formatPointsTable(league.pointsTable) }))}
             {readRow(t('league.rules.playing'), league.participationPoints > 0
               ? t('league.rules.playingMember', { points: formatNumber(league.participationPoints) })
               : t('league.rules.playingNone'))}
-            {readRow('Handicaps', `Max ${league.handicapCap} · changes need ${voteThreshold(active.length)} of ${active.length} votes`)}
-            {readRow('Entry fee', league.entryFeeCents > 0 ? formatEuros(league.entryFeeCents) : 'None', true)}
+            {readRow(t('league.settings.readHandicaps'), t('league.settings.readHandicapsValue', {
+              cap: formatNumber(league.handicapCap), need: voteThreshold(active.length), total: active.length,
+            }))}
+            {readRow(t('league.settings.readFee'), league.entryFeeCents > 0 ? formatEuros(league.entryFeeCents) : t('league.settings.readFeeNone'), true)}
           </View>
         )}
 
         {isAdmin && !archived && (
           <>
-            <Text style={s.sectionLabel}>MEMBERS</Text>
+            <Text style={s.sectionLabel}>{t('league.settings.sectionMembers')}</Text>
             <View style={s.card}>
               <View style={[s.adminHead, s.rowDivider]}>
-                <Text style={[s.colHead, { flex: 1 }]}>Member</Text>
-                {league.entryFeeCents > 0 && <Text style={s.colHead}>Paid</Text>}
-                <Text style={s.colHead}>Admin</Text>
+                <Text style={[s.colHead, { flex: 1 }]}>{t('league.settings.colMember')}</Text>
+                {league.entryFeeCents > 0 && <Text style={s.colHead}>{t('league.settings.colPaid')}</Text>}
+                <Text style={s.colHead}>{t('league.settings.colAdmin')}</Text>
               </View>
               {active.map((m, i) => (
                 <View key={m.userId} style={[s.adminRow, i < active.length - 1 && s.rowDivider]}>
@@ -407,7 +410,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
                       value={m.feePaid}
                       onValueChange={(v) => toggleFee(m, v)}
                       disabled={busy}
-                      accessibilityLabel={`${memberLabel(m, meId)} paid`}
+                      accessibilityLabel={t('league.settings.paidA11y', { name: memberLabel(m, meId) })}
                       trackColor={{ true: theme.accent.primary }}
                     />
                   )}
@@ -415,7 +418,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
                     value={m.role === 'admin'}
                     onValueChange={(v) => toggleAdmin(m, v)}
                     disabled={busy}
-                    accessibilityLabel={`${memberLabel(m, meId)} admin`}
+                    accessibilityLabel={t('league.settings.adminA11y', { name: memberLabel(m, meId) })}
                     trackColor={{ true: theme.accent.primary }}
                   />
                 </View>
@@ -502,46 +505,46 @@ export default function LeagueSettingsScreen({ navigation, route }) {
         {/* Notification preferences. The switches save to profiles.settings
             (notifications.league) through settingsStore; send-push reads the push
             column. send-email (P10) does not read the email column yet. */}
-        <Text style={s.sectionLabel}>NOTIFICATIONS</Text>
+        <Text style={s.sectionLabel}>{t('league.notifPrefs.section')}</Text>
         <View style={s.card}>
           <View style={[s.adminHead, s.rowDivider]}>
             <Text style={[s.colHead, { flex: 1 }]} />
-            <Text style={s.colHead}>Push</Text>
-            <Text style={s.colHead}>Email</Text>
+            <Text style={s.colHead}>{t('league.notifPrefs.push')}</Text>
+            <Text style={s.colHead}>{t('league.notifPrefs.email')}</Text>
           </View>
           {LEAGUE_NOTIFICATION_ROWS.map((row, i) => (
             <View key={row.type} style={[s.adminRow, i < LEAGUE_NOTIFICATION_ROWS.length - 1 && s.rowDivider]}>
-              <Text style={s.memberName}>{row.label}</Text>
+              <Text style={s.memberName}>{t(row.labelKey)}</Text>
               {['push', 'email'].map((channel) => (
                 <Switch
                   key={channel}
                   value={prefs[channel][row.type]}
                   onValueChange={(v) => updateAppSettings(leaguePrefsPatch(appSettings, channel, row.type, v))}
-                  accessibilityLabel={`${row.label} (${channel})`}
+                  accessibilityLabel={t('league.notifPrefs.a11y', { label: t(row.labelKey), channel: t(channel === 'push' ? 'league.notifPrefs.chPush' : 'league.notifPrefs.chEmail') })}
                   trackColor={{ true: theme.accent.primary }}
                 />
               ))}
             </View>
           ))}
         </View>
-        <Text style={s.hint}>These apply to all your leagues. Email delivery for leagues is coming; your email choices are saved now.</Text>
+        <Text style={s.hint}>{t('league.notifPrefs.hint')}</Text>
 
-        <Text style={s.sectionLabel}>SEASON</Text>
+        <Text style={s.sectionLabel}>{t('league.settings.sectionSeason')}</Text>
         {isAdmin && !archived && (
           <TouchableOpacity style={s.dangerRow} onPress={confirmArchive} disabled={busy} activeOpacity={0.7}>
-            <Text style={s.dangerTitle}>Archive the league</Text>
-            <Text style={s.dangerSub}>Keeps the board read-only for everyone</Text>
+            <Text style={s.dangerTitle}>{t('league.settings.archiveRow')}</Text>
+            <Text style={s.dangerSub}>{t('league.settings.archiveRowSub')}</Text>
           </TouchableOpacity>
         )}
         {isAdmin && (
           <TouchableOpacity style={s.dangerRow} onPress={openDelete} disabled={busy} activeOpacity={0.7} accessibilityRole="button">
-            <Text style={s.dangerTitle}>Delete the league</Text>
-            <Text style={s.dangerSub}>{"Removes it for everyone. Can't be undone"}</Text>
+            <Text style={s.dangerTitle}>{t('league.settings.deleteRow')}</Text>
+            <Text style={s.dangerSub}>{t('league.settings.deleteRowSub')}</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity style={s.dangerRow} onPress={confirmLeave} disabled={busy} activeOpacity={0.7}>
-          <Text style={s.dangerTitle}>Leave league</Text>
-          <Text style={s.dangerSub}>Your past cards stay in the standings</Text>
+          <Text style={s.dangerTitle}>{t('league.settings.leaveRow')}</Text>
+          <Text style={s.dangerSub}>{t('league.settings.leaveRowSub')}</Text>
         </TouchableOpacity>
       </PullToRefresh>
       {isAdmin && (

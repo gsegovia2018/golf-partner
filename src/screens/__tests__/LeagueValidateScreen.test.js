@@ -2,6 +2,7 @@ import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import LeagueValidateScreen, { PARTNER_REASONS } from '../LeagueValidateScreen';
+import { t as translate } from '../../i18n';
 
 // After Finish on a league round (plan §4.3 Validate, P6): my card read-only
 // in the scorecard grid, Submit, then the partner check or the fallbacks.
@@ -143,7 +144,7 @@ describe('LeagueValidateScreen', () => {
     ));
     fireEvent.press(await findByText('Submit'));
 
-    expect(await findByText(PARTNER_REASONS.no_partner)).toBeTruthy();
+    expect(await findByText(translate(PARTNER_REASONS.no_partner))).toBeTruthy();
     expect(queryByText(/coming soon/)).toBeNull();
 
     // LeagueMarkerQRScreen reads { cardId, leagueId }.
@@ -167,7 +168,7 @@ describe('LeagueValidateScreen', () => {
     const { findByText, getByText, queryByText } = render(wrap(
       <LeagueValidateScreen navigation={navigation} route={{ params: { ...route.params, submitted: true } }} />,
     ));
-    expect(await findByText(PARTNER_REASONS.no_partner)).toBeTruthy();
+    expect(await findByText(translate(PARTNER_REASONS.no_partner))).toBeTruthy();
     expect(store.confirmLeagueCardByPartner).toHaveBeenCalledWith('card-1');
     expect(store.submitLeagueCard).not.toHaveBeenCalled();
     expect(queryByText('Submit')).toBeNull();
@@ -193,7 +194,7 @@ describe('LeagueValidateScreen', () => {
     ));
     expect(await findByText('You need a connection to do this.')).toBeTruthy();
     fireEvent.press(getByText('Check with my partner'));
-    expect(await findByText(PARTNER_REASONS.no_partner)).toBeTruthy();
+    expect(await findByText(translate(PARTNER_REASONS.no_partner))).toBeTruthy();
     expect(store.confirmLeagueCardByPartner).toHaveBeenCalledTimes(2);
     expect(store.submitLeagueCard).not.toHaveBeenCalled();
   });
@@ -298,7 +299,7 @@ describe('LeagueValidateScreen: pick your marker', () => {
     await findByText('Submit and ask Javi');
     fireEvent.press(getByText('Someone else'));
     fireEvent.press(await findByText('Submit'));
-    expect(await findByText(PARTNER_REASONS.no_partner)).toBeTruthy();
+    expect(await findByText(translate(PARTNER_REASONS.no_partner))).toBeTruthy();
     expect(store.requestLeagueMarker).not.toHaveBeenCalled();
     expect(getByText('Show QR to your marker')).toBeTruthy();
   });
@@ -345,7 +346,7 @@ describe('LeagueValidateScreen: pick your marker', () => {
   test('reopened after a send-back (no pending request): the chips and Ask come back', async () => {
     store.getLeagueMarkerCandidates.mockResolvedValue({ pending: null, candidates: [javi] });
     const { findByText, getByText } = mount({ submitted: true });
-    expect(await findByText(PARTNER_REASONS.no_partner)).toBeTruthy();
+    expect(await findByText(translate(PARTNER_REASONS.no_partner))).toBeTruthy();
     expect(getByText('WHO MARKED YOU?')).toBeTruthy();
     fireEvent.press(getByText('Ask Javi'));
     await waitFor(() => expect(store.requestLeagueMarker).toHaveBeenCalledWith('card-1', 'user-2'));

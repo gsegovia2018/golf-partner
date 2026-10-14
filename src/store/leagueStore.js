@@ -4,6 +4,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { File as FsFile } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
 import { takesMonth } from './leagueRules';
+import { leagueErrorDescriptor } from './leagueErrors';
 
 // Client surface for the league tables and RPCs (see
 // supabase/migrations/20261004000000_leagues.sql and
@@ -18,8 +19,10 @@ const CACHE_PREFIX = '@golf_league_cache:';
 const PROOF_BUCKET = 'league-proofs';
 
 /**
- * Thrown by every read and write here. `message` is the server's own text
- * (postgres RAISE message) so the UI can show it as is.
+ * Thrown by every read and write here. `message` is the server's own English
+ * text (postgres RAISE message); `descriptor` ({ key, params } or null) is the
+ * same sentence as a catalogue key (leagueErrors.js). Show it with
+ * lib/leagueErrorText.js, which falls back to `message`.
  */
 export class LeagueError extends Error {
   constructor(message, { code = null, hint = null, offline = false } = {}) {
@@ -28,6 +31,7 @@ export class LeagueError extends Error {
     this.code = code;
     this.hint = hint;
     this.offline = offline;
+    this.descriptor = leagueErrorDescriptor(message, hint);
   }
 }
 
