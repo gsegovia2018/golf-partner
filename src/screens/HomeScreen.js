@@ -1126,7 +1126,7 @@ export default function HomeScreen({ navigation, route }) {
       >
         <Feather name="hash" size={14} color={theme.text.primary} />
         <View style={{ flex: 1 }}>
-          <Text style={s.menuItemText}>{tx('home.menu.pointValues')}</Text>
+          <Text style={s.menuItemTitle}>{tx('home.menu.pointValues')}</Text>
           <Text style={s.modalSubtle}>{tx('home.menu.pointValuesSummary', { best: vals.bestBallValue, worst: vals.worstBallValue })}</Text>
         </View>
         <Feather name="chevron-right" size={16} color={theme.text.muted} />
@@ -1467,7 +1467,7 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="users" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>{tx('home.kind.casual')}</Text>
+              <Text style={s.menuItemTitle}>{tx('home.kind.casual')}</Text>
               <Text style={s.modalSubtle}>{tx('home.kind.casualSub')}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
@@ -1480,7 +1480,7 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="award" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>{tx('home.kind.official')}</Text>
+              <Text style={s.menuItemTitle}>{tx('home.kind.official')}</Text>
               <Text style={s.modalSubtle}>{tx('home.kind.officialSub')}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
@@ -1493,7 +1493,7 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="users" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>{tx('home.kind.league')}</Text>
+              <Text style={s.menuItemTitle}>{tx('home.kind.league')}</Text>
               <Text style={s.modalSubtle}>{tx('home.kind.leagueSub')}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
@@ -1562,7 +1562,7 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="users" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>{tx('home.kind.casual')}</Text>
+              <Text style={s.menuItemTitle}>{tx('home.kind.casual')}</Text>
               <Text style={s.modalSubtle}>{tx('home.kind.casualSub')}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
@@ -1575,7 +1575,7 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="award" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>{tx('home.kind.official')}</Text>
+              <Text style={s.menuItemTitle}>{tx('home.kind.official')}</Text>
               <Text style={s.modalSubtle}>{tx('home.kind.officialSub')}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
@@ -1588,7 +1588,7 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="users" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>{tx('home.kind.league')}</Text>
+              <Text style={s.menuItemTitle}>{tx('home.kind.league')}</Text>
               <Text style={s.modalSubtle}>{tx('home.kind.leagueSub')}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
@@ -2057,7 +2057,7 @@ export default function HomeScreen({ navigation, route }) {
               >
                 <Feather name="refresh-cw" size={14} color={theme.text.primary} />
                 <View style={{ flex: 1 }}>
-                  <Text style={s.menuItemText}>{tx('home.share.newLink')}</Text>
+                  <Text style={s.menuItemTitle}>{tx('home.share.newLink')}</Text>
                   <Text style={s.modalSubtle}>{tx('home.share.newLinkHint')}</Text>
                 </View>
                 {boardShareBusy
@@ -2110,7 +2110,7 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="flag" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.menuItemText}>{tx('home.round.scoringMode')}</Text>
+              <Text style={s.menuItemTitle}>{tx('home.round.scoringMode')}</Text>
               <Text style={s.modalSubtle}>
                 {tx(getScoringMode(roundScoringMode(tournament, tournament.rounds[selectedRound])).labelKey)}
               </Text>
@@ -2178,7 +2178,7 @@ export default function HomeScreen({ navigation, route }) {
             >
               <Feather name="flag" size={14} color={theme.text.primary} />
               <View style={{ flex: 1 }}>
-                <Text style={s.menuItemText}>{tx('home.round.scoringMode')}</Text>
+                <Text style={s.menuItemTitle}>{tx('home.round.scoringMode')}</Text>
                 <Text style={s.modalSubtle}>
                   {tx(getScoringMode(roundScoringMode(tournament, tournament.rounds[0])).labelKey)}
                 </Text>
@@ -2280,7 +2280,7 @@ export default function HomeScreen({ navigation, route }) {
             >
               <Feather name="edit-2" size={14} color={theme.text.primary} />
               <View style={{ flex: 1 }}>
-                <Text style={s.menuItemText}>{tx('home.settings.editPairs')}</Text>
+                <Text style={s.menuItemTitle}>{tx('home.settings.editPairs')}</Text>
                 <Text style={s.modalSubtle}>{pairsPreviewText(tournament)}</Text>
               </View>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
@@ -2884,6 +2884,12 @@ const makeStyles = (t) => StyleSheet.create({
   },
   menuItemText: {
     flex: 1, fontFamily: 'PlusJakartaSans-SemiBold',
+    color: t.text.primary, fontSize: 14,
+  },
+  // Title stacked over a modalSubtle line — no flex: 1, which collapses it
+  // to zero height inside the column wrapper on web.
+  menuItemTitle: {
+    fontFamily: 'PlusJakartaSans-SemiBold',
     color: t.text.primary, fontSize: 14,
   },
   menuItemDestructive: { borderBottomWidth: 0 },
