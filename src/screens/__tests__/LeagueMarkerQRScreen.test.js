@@ -116,10 +116,47 @@ describe('LeagueMarkerQRScreen', () => {
     await waitFor(() => getByText('Your marker confirmed your card. It counts.'));
   });
 
+  test('Send link shares the same marker URL as the QR', async () => {
+    const share = jest.spyOn(require('react-native').Share, 'share').mockResolvedValue({});
+    const { getByTestId, getByText } = render(wrap(<LeagueMarkerQRScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByTestId('qr-value'));
+    fireEvent.press(getByText('Send link'));
+    await waitFor(() => expect(share).toHaveBeenCalled());
+    expect(share.mock.calls[0][0].message).toContain('https://golf-partner.vercel.app/m/abc_DEF-123');
+    share.mockRestore();
+  });
+
   test('formatCountdown', () => {
     expect(formatCountdown(0)).toBe('0:00');
     expect(formatCountdown(-5)).toBe('0:00');
     expect(formatCountdown(59_500)).toBe('1:00');
     expect(formatCountdown(7_199_000)).toBe('1:59:59');
+  });
+});
+
+describe('LeagueMarkerQRScreen in Spanish', () => {
+  const { setLanguagePref } = require('../../i18n');
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
+    store.createMarkerToken.mockResolvedValue({
+      token: 'abc_DEF-123', expiresAt: new Date(NOW + 2 * 3600 * 1000).toISOString(),
+    });
+    store.getLeagueCard.mockResolvedValue({ id: 'card-1', leagueId: 'L1', status: 'submitted' });
+    await act(async () => { await setLanguagePref('es'); });
+  });
+  afterEach(async () => {
+    await act(async () => { await setLanguagePref('en'); });
+    jest.useRealTimers();
+  });
+
+  test('translates the heading, the expiry line and the actions', async () => {
+    const { getByTestId, getByText } = render(wrap(<LeagueMarkerQRScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByTestId('qr-value'));
+    expect(getByText('Enseñar QR al marcador')).toBeTruthy();
+    expect(getByText('Caduca en 2:00:00 · vale una vez')).toBeTruthy();
+    expect(getByText('Enviar enlace')).toBeTruthy();
+    expect(getByText('Código nuevo')).toBeTruthy();
   });
 });

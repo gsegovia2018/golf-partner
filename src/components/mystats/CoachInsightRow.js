@@ -2,29 +2,31 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { msgText, areaText } from './msg';
+import { useT, t, formatNumber } from '../../i18n';
 
 const TONES = {
   good: {
     icon: 'trending-up',
-    label: 'Good',
+    labelKey: 'stats.my.coach.tone.good',
     color: (theme) => theme.scoreColor('good'),
     backgroundColor: (theme) => theme.accent.light,
   },
   bad: {
     icon: 'alert-triangle',
-    label: 'Bad',
+    labelKey: 'stats.my.coach.tone.bad',
     color: (theme) => theme.destructive,
     backgroundColor: (theme) => (theme.isDark ? 'rgba(248,113,113,0.14)' : '#fee2e2'),
   },
   watch: {
     icon: 'eye',
-    label: 'Watch',
+    labelKey: 'stats.my.coach.tone.watch',
     color: (theme) => theme.text.muted,
     backgroundColor: (theme) => theme.bg.secondary,
   },
   neutral: {
     icon: 'activity',
-    label: 'Neutral',
+    labelKey: 'stats.my.coach.tone.neutral',
     color: (theme) => theme.text.muted,
     backgroundColor: (theme) => theme.bg.secondary,
   },
@@ -32,28 +34,31 @@ const TONES = {
 
 function formatSample(sample) {
   if (sample == null) return null;
-  return `${sample} ${sample === 1 ? 'sample' : 'samples'}`;
+  return t('stats.my.sample', { count: sample });
 }
 
 function formatConfidence(confidence) {
   if (!confidence) return null;
-  return `${confidence.slice(0, 1).toUpperCase()}${confidence.slice(1)} confidence`;
+  const key = `stats.my.confidence.${confidence}`;
+  const out = t(key);
+  return out === key ? `${confidence.slice(0, 1).toUpperCase()}${confidence.slice(1)} confidence` : out;
 }
 
 function formatPointsPerRound(pointsPerRound) {
   if (!Number.isFinite(pointsPerRound)) return null;
   const sign = pointsPerRound > 0 ? '+' : '';
-  return `≈ ${sign}${pointsPerRound} pts / round`;
+  return t('stats.my.pointsPerRound', { value: `${sign}${formatNumber(pointsPerRound)}` });
 }
 
 export default function CoachInsightRow({ insight, practiceRole }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const tone = TONES[insight?.tone] ?? TONES.neutral;
   const toneName = TONES[insight?.tone] ? insight.tone : 'neutral';
   const color = tone.color(theme);
   const backgroundColor = tone.backgroundColor(theme);
-  const proofs = [insight?.basis, formatSample(insight?.sample), formatConfidence(insight?.confidence)].filter(Boolean);
+  const proofs = [msgText(insight?.basisMsg, insight?.basis), formatSample(insight?.sample), formatConfidence(insight?.confidence)].filter(Boolean);
 
   if (!insight) return null;
 
@@ -62,27 +67,27 @@ export default function CoachInsightRow({ insight, practiceRole }) {
       <View
         style={[s.iconWrap, { backgroundColor }]}
         testID={`coach-insight-tone-${toneName}`}
-        accessibilityLabel={`${tone.label} coach insight tone`}
+        accessibilityLabel={t('stats.my.coach.toneLabel', { tone: t(tone.labelKey) })}
       >
         <Feather name={tone.icon} size={16} color={color} testID={`coach-insight-icon-${toneName}`} />
       </View>
       <View style={s.body}>
         <View style={s.metaRow}>
-          <Text style={s.area}>{insight.areaLabel ?? insight.area ?? 'Coach'}</Text>
+          <Text style={s.area}>{areaText(insight)}</Text>
           {proofs.length ? <Text style={s.proof}>{proofs.join(' · ')}</Text> : null}
           {practiceRole ? (
             <View style={s.practicePill}>
-              <Text style={s.practiceText}>{`Plan: ${practiceRole}`}</Text>
+              <Text style={s.practiceText}>{t('stats.my.coach.planPill', { role: practiceRole })}</Text>
             </View>
           ) : null}
         </View>
-        <Text style={s.title}>{insight.title}</Text>
-        {insight.reason ? <Text style={s.reason}>{insight.reason}</Text> : null}
+        <Text style={s.title}>{msgText(insight.titleMsg, insight.title)}</Text>
+        {insight.reason ? <Text style={s.reason}>{msgText(insight.reasonMsg, insight.reason)}</Text> : null}
       </View>
       {insight.metric ? (
         <View style={s.metricWrap}>
           <Text style={[s.metric, { color }]} testID={`coach-insight-metric-${toneName}`}>
-            {insight.metric}
+            {msgText(insight.metricMsg, insight.metric)}
           </Text>
           {Number.isFinite(insight.pointsPerRound) ? (
             <Text style={s.pointsCaption}>{formatPointsPerRound(insight.pointsPerRound)}</Text>

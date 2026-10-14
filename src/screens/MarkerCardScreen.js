@@ -17,6 +17,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import { ScorecardTable } from '../components/scorecard/GridView';
 import { useTheme } from '../theme/ThemeContext';
 import { getMarkerCard, confirmMarkerCard } from '../store/markerCardStore';
+import { useT, t as translate, formatDate, formatNumber } from '../i18n';
 
 // Text on the green top bar. The bar is the brand accent in both themes, so
 // its text can't come from theme.text (which flips per theme).
@@ -24,17 +25,12 @@ const ON_GREEN = '#ffffff';
 const ON_GREEN_SOFT = '#e6f0eb';
 
 const ROW_ID = 'marker-card';
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // played_on is a calendar date ('2026-10-04'); parse it as local so the day
-// never shifts with the viewer's time zone. "Sat 4 Oct".
+// never shifts with the viewer's time zone. "Sat 4 Oct" / "sáb 4 oct".
 export function formatPlayedOn(date) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(date || '');
-  if (!m) return null;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  if (Number.isNaN(d.getTime())) return null;
-  return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(date || '');
+  return m ? (formatDate(m[1], 'short') || null) : null;
 }
 
 // The RPC always returns holes 1-18; a nine-hole card has no par past 9.
@@ -50,7 +46,7 @@ export function buildMarkerTable(card) {
   }
   return {
     round: { holes, playerHandicaps: { [ROW_ID]: handicap } },
-    players: [{ id: ROW_ID, name: card.playerFirstName || 'Player', handicap }],
+    players: [{ id: ROW_ID, name: card.playerFirstName || translate('marker.defaultPlayer'), handicap }],
     scores: { [ROW_ID]: scores },
   };
 }
@@ -59,39 +55,26 @@ function metaLine(card) {
   return [
     card.course,
     formatPlayedOn(card.date),
-    card.tee ? `${card.tee} tees` : null,
-    card.slope != null && card.rating != null ? `slope ${card.slope} · CR ${card.rating}` : null,
-    card.playingHandicap != null ? `Playing handicap ${card.playingHandicap}` : null,
+    card.tee ? translate('marker.meta.tee', { tee: card.tee }) : null,
+    card.slope != null && card.rating != null
+      ? translate('marker.meta.slopeRating', { slope: formatNumber(card.slope), rating: formatNumber(card.rating) }) : null,
+    card.playingHandicap != null
+      ? translate('marker.meta.playingHandicap', { handicap: card.playingHandicap }) : null,
   ].filter(Boolean).join(' · ');
 }
 
 // Dead-end states, keyed by the server's error word or the submit result.
 const STATE_COPY = {
-  invalid: {
-    icon: 'link', tone: 'muted',
-    title: "This code isn't valid",
-    body: 'Check that the whole link came through, or ask the player to show their code again.',
-  },
-  expired: {
-    icon: 'alert-circle', tone: 'warning',
-    title: 'This code has expired',
-    body: 'Marker codes last 2 hours and work once. Ask the player to show a new one from their card. It takes a second.',
-  },
-  used: {
-    icon: 'check-circle', tone: 'muted',
-    title: 'This code was already used.',
-    body: "Codes work once. If you confirmed this card, you're done, thank you.",
-  },
-  changed: {
-    icon: 'alert-circle', tone: 'warning',
-    title: 'The card changed — ask for a new code',
-    body: 'The player edited the card after showing this code, so it no longer matches what you would sign.',
-  },
+  invalid: { icon: 'link', tone: 'muted' },
+  expired: { icon: 'alert-circle', tone: 'warning' },
+  used: { icon: 'check-circle', tone: 'muted' },
+  changed: { icon: 'alert-circle', tone: 'warning' },
 };
 
 export default function MarkerCardScreen(props) {
   const token = props.token ?? props.route?.params?.token;
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   // phase: 'loading' | 'ready' | 'error' (network) | a STATE_COPY key |
@@ -143,7 +126,7 @@ export default function MarkerCardScreen(props) {
     } catch (e) {
       if (!mountedRef.current) return;
       if (STATE_COPY[e?.reason]) setPhase(e.reason);
-      else setSubmitError(e?.message || 'Something went wrong. Try again.');
+      else setSubmitError(e?.message || t('marker.submit.failed'));
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setBusy(false);
@@ -152,8 +135,8 @@ export default function MarkerCardScreen(props) {
 
   const topBar = (
     <View style={s.topBar}>
-      <Text style={s.brand}>Golf Partner</Text>
-      <Text style={s.topBarSub}>Marker confirmation</Text>
+      <Text style={s.brand}>{t('marker.topBar.brand')}</Text>
+      <Text style={s.topBarSub}>{t('marker.topBar.sub')}</Text>
     </View>
   );
 
@@ -181,35 +164,41 @@ export default function MarkerCardScreen(props) {
   } else if (phase === 'error') {
     body = message({
       icon: 'wifi-off', tone: 'muted',
-      title: "Couldn't load this card",
-      body: 'Check your connection and try again.',
+      title: t('marker.error.title'),
+      body: t('marker.error.body'),
       action: (
         <TouchableOpacity style={[s.secondaryBtn, s.retryBtn]} onPress={load} accessibilityRole="button">
-          <Text style={s.secondaryText}>Try again</Text>
+          <Text style={s.secondaryText}>{t('marker.error.retry')}</Text>
         </TouchableOpacity>
       ),
     });
   } else if (STATE_COPY[phase]) {
-    body = message(STATE_COPY[phase]);
+    body = message({
+      ...STATE_COPY[phase],
+      title: t(`marker.${phase}.title`),
+      body: t(`marker.${phase}.body`),
+    });
   } else if (phase === 'confirmed') {
     body = message({
       icon: 'check-circle', tone: 'good',
-      title: 'Thank you',
-      body: `${card?.playerFirstName ? `${card.playerFirstName}'s card` : 'The card'} is confirmed with your name. You can close this page.`,
+      title: t('marker.confirmed.title'),
+      body: card?.playerFirstName
+        ? t('marker.confirmed.bodyNamed', { name: card.playerFirstName }) : t('marker.confirmed.body'),
     });
   } else if (phase === 'returned') {
     body = message({
       icon: 'send', tone: 'good',
-      title: 'Note sent',
-      body: `The card went back to ${card?.playerFirstName || 'the player'} with your note. They can fix it and show you a new code.`,
+      title: t('marker.returned.title'),
+      body: card?.playerFirstName
+        ? t('marker.returned.body', { name: card.playerFirstName }) : t('marker.returned.bodyAnon'),
     });
   } else {
     const table = buildMarkerTable(card);
-    const firstName = card.playerFirstName || 'Player';
+    const firstName = card.playerFirstName || t('marker.defaultPlayer');
     body = (
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
         <View style={s.heading}>
-          <Text style={s.title}>{`Confirm ${firstName}'s card`}</Text>
+          <Text style={s.title}>{t('marker.confirm.title', { name: firstName })}</Text>
           <Text style={s.meta}>{metaLine(card)}</Text>
         </View>
 
@@ -225,14 +214,14 @@ export default function MarkerCardScreen(props) {
         />
 
         <View style={s.form}>
-          <Text style={s.label} nativeID="marker-name-label">Your name</Text>
+          <Text style={s.label} nativeID="marker-name-label">{t('marker.name.label')}</Text>
           <TextInput
             style={s.input}
             value={name}
             onChangeText={setName}
-            placeholder="First and last name"
+            placeholder={t('marker.name.placeholder')}
             placeholderTextColor={theme.text.muted}
-            accessibilityLabel="Your name"
+            accessibilityLabel={t('marker.name.label')}
             accessibilityLabelledBy="marker-name-label"
             autoCapitalize="words"
             autoComplete="name"
@@ -242,14 +231,14 @@ export default function MarkerCardScreen(props) {
 
           {noteOpen && (
             <>
-              <Text style={s.label} nativeID="marker-note-label">{"What's wrong?"}</Text>
+              <Text style={s.label} nativeID="marker-note-label">{t('marker.note.label')}</Text>
               <TextInput
                 style={[s.input, s.noteInput]}
                 value={note}
                 onChangeText={setNote}
-                placeholder="e.g. Hole 7 was a 6, not a 5"
+                placeholder={t('marker.note.placeholder')}
                 placeholderTextColor={theme.text.muted}
-                accessibilityLabel="What's wrong?"
+                accessibilityLabel={t('marker.note.label')}
                 accessibilityLabelledBy="marker-note-label"
                 multiline
                 maxLength={500}
@@ -270,7 +259,7 @@ export default function MarkerCardScreen(props) {
                 accessibilityState={{ disabled: !trimmedName || busy }}
               >
                 {busy ? <ActivityIndicator color={theme.text.inverse} />
-                  : <Text style={s.primaryText}>{`Send back to ${firstName}`}</Text>}
+                  : <Text style={s.primaryText}>{t('marker.sendBack', { name: firstName })}</Text>}
               </TouchableOpacity>
               <TouchableOpacity
                 style={s.secondaryBtn}
@@ -278,7 +267,7 @@ export default function MarkerCardScreen(props) {
                 disabled={busy}
                 accessibilityRole="button"
               >
-                <Text style={s.secondaryText}>Cancel</Text>
+                <Text style={s.secondaryText}>{t('marker.cancel')}</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -292,7 +281,7 @@ export default function MarkerCardScreen(props) {
                 accessibilityState={{ disabled: !trimmedName || busy }}
               >
                 {busy ? <ActivityIndicator color={theme.text.inverse} />
-                  : <Text style={s.primaryText}>Confirm card</Text>}
+                  : <Text style={s.primaryText}>{t('marker.confirm.button')}</Text>}
               </TouchableOpacity>
               <TouchableOpacity
                 style={s.secondaryBtn}
@@ -300,13 +289,14 @@ export default function MarkerCardScreen(props) {
                 disabled={busy}
                 accessibilityRole="button"
               >
-                <Text style={s.secondaryText}>{"Something's wrong"}</Text>
+                <Text style={s.secondaryText}>{t('marker.wrong')}</Text>
               </TouchableOpacity>
             </>
           )}
 
           <Text style={s.footnote}>
-            {`You're confirming the strokes shown; ${card.playerFirstName ? `${card.playerFirstName}'s` : 'the'} league result is worked out from them once you do. No account needed. This code works once.`}
+            {card.playerFirstName
+              ? t('marker.footnote.named', { name: card.playerFirstName }) : t('marker.footnote.anon')}
           </Text>
         </View>
       </ScrollView>

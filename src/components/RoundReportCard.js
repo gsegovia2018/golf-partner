@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 import PressableScale from './ui/PressableScale';
 import ReportVerdictHero from './mystats/ReportVerdictHero';
 import ReportCalloutTiles from './mystats/ReportCalloutTiles';
@@ -19,18 +20,21 @@ const CHAPTER_ICONS = {
 function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound, durationLabel = null }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
+  const t = useT();
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // `t` changes with the language: the chapter labels are built in it.
   const chapters = useMemo(
     () => (card ? card.groups.map((g) => buildChapterVM(g, { hasHistory: card.hasHistory })) : []),
-    [card],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [card, t],
   );
 
   if (!card) {
     return (
       <View style={s.empty}>
         <Feather name="clipboard" size={44} color={theme.text.muted} />
-        <Text style={s.emptyText}>No round selected.</Text>
+        <Text style={s.emptyText}>{t('stats.my.report.noRound')}</Text>
       </View>
     );
   }
@@ -46,7 +50,7 @@ function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound, dur
           <Text style={s.dropSub} numberOfLines={1}>{round.tournamentName}</Text>
         </View>
         <PressableScale style={s.pickBtn} onPress={() => setPickerOpen(true)}>
-          <Text style={s.pickBtnText}>Change</Text>
+          <Text style={s.pickBtnText}>{t('stats.my.report.change')}</Text>
           <Feather name="chevron-down" size={13} color={theme.accent.primary} />
         </PressableScale>
       </View>
@@ -75,7 +79,7 @@ function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound, dur
           style={s.openRoundBtn}
           onPress={onOpenRound}
         >
-          <Text style={s.openRoundText}>Round Stats</Text>
+          <Text style={s.openRoundText}>{t('stats.my.report.roundStats')}</Text>
           <Feather name="chevron-right" size={16} color={theme.accent.primary} />
         </PressableScale>
       )}
@@ -84,7 +88,7 @@ function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound, dur
       <Modal statusBarTranslucent hardwareAccelerated visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
         <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setPickerOpen(false)}>
           <View style={s.modalCard}>
-            <Text style={s.modalTitle}>Choose a round</Text>
+            <Text style={s.modalTitle}>{t('stats.my.report.chooseRound')}</Text>
             <ScrollView style={{ maxHeight: 360 }}>
               {(rounds || []).slice().reverse().map((r) => (
                 <TouchableOpacity

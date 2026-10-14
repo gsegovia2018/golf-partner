@@ -6,6 +6,7 @@ import { fetchTournament as repoFetchTournament, fetchMyTournaments } from './to
 import { syncQueue } from './syncQueue';
 import { runExclusiveForTournament } from './tournamentMutex';
 import { isOnline } from '../lib/connectivity';
+import { t } from '../i18n';
 import { teeByLabel, resolveTeeForPlayer } from './tees';
 // Pure scoring & handicap math lives in ./scoring. Imported here for this
 // module's own use and re-exported below so existing call sites that do
@@ -307,6 +308,12 @@ async function _overlayAndSave(id, remote, { makeActive = true } = {}) {
     // merge.js:203-206, the LWW path this overlay replaces). Local wins,
     // including an explicit null.
     if (local && 'meId' in local) merged.meId = local.meId;
+    // `_role` comes only from the list RPC (fetchMyTournaments); the single
+    // fetch has none. Keep the cached one, or the two writers of this blob
+    // (Home's list + its tournament refresh) flip it in and out: every save
+    // changes the JSON, emits, and Home reloads both again — the alternating
+    // get_my_game_tournaments / get_game_tournament loop.
+    if (!('_role' in merged) && local?._role != null) merged._role = local._role;
     await saveLocal(merged, { makeActive });
     const latest = await _pendingEntriesFor(id);
     const stable = latest.length === snapshot.length
@@ -607,9 +614,22 @@ export async function syncTournamentParticipants(tournament) {
 // per tournament id and bail out early when nothing actually changed.
 const _lastWrittenJson = new Map();
 
+// The stored JSON with the top-level keys in a fixed order. Writers assemble
+// the blob in different orders (the list RPC's entry carries `_role` before
+// the device-local `meId` is set, the single fetch gets `_role` restored after
+// it), and a byte comparison of two equal blobs then reads as a change: the
+// save emits, Home reloads, both fetches run again and the order flips back —
+// the get_my_game_tournaments / get_game_tournament loop. Nested objects come
+// from the server's jsonb in a stable order, so the top level is enough.
+function _blobJson(tournament) {
+  const ordered = {};
+  for (const k of Object.keys(tournament).sort()) ordered[k] = tournament[k];
+  return JSON.stringify(ordered);
+}
+
 export async function saveLocal(tournament, options = {}) {
   const { makeActive = true } = options ?? {};
-  const json = JSON.stringify(tournament);
+  const json = _blobJson(tournament);
   const finished = isTournamentFinished(tournament);
   const shouldWriteActive = makeActive && !finished && _activeTournamentId !== tournament.id;
   if (makeActive && !finished) _activeTournamentId = tournament.id;
@@ -2023,7 +2043,7 @@ export async function removeTournamentMember(tournamentId, userId) {
 
 export async function joinTournamentByCode(code) {
   const userId = await getCurrentUserId();
-  if (!userId) throw new Error('Must be signed in to join');
+  if (!userId) throw new Error(t('shared.error.joinSignedIn'));
 
   // Redemption runs server-side via the redeem_invite_code SECURITY DEFINER
   // RPC: it validates the code (revoked / expired / usage cap), records the
@@ -2034,7 +2054,7 @@ export async function joinTournamentByCode(code) {
     .rpc('redeem_invite_code', { p_code: String(code ?? '').toUpperCase().trim() });
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
-  if (!row) throw new Error('Invalid code — check with the tournament owner');
+  if (!row) throw new Error(t('shared.error.invalidCode'));
   return { tournamentId: row.tournament_id, role: row.role ?? 'editor' };
 }
 
@@ -2148,11 +2168,14 @@ export function tournamentNounCapitalized(tournament) {
 // object so it serves both full tournament objects and the flattened
 // feed-item shape. roundIndex is zero-based; the label shows roundIndex + 1.
 export function formatRoundLabel({ kind, courseName, roundIndex }) {
-  if (kind === 'game') return courseName || 'Round';
+  if (kind === 'game') return courseName || t('shared.round.plain');
   // Multi-round tournaments: keep the ordinal for sequencing context and
   // append the course when known (each round is usually a different course).
-  const ordinal = `Round ${roundIndex + 1}`;
-  return courseName ? `${ordinal} · ${courseName}` : ordinal;
+  // Finished text in the language active now: call it at render time.
+  const n = roundIndex + 1;
+  return courseName
+    ? t('shared.round.numberedCourse', { n, course: courseName })
+    : t('shared.round.numbered', { n });
 }
 
 // Atomic player-slot claim. Wraps the claim_tournament_player RPC (migration

@@ -9,7 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import {
   createTournament, buildTeamsForMode, teamShapeOf, DEFAULT_SETTINGS, GAME_DEFAULT_SETTINGS,
-  deriveRoundPlayingHandicap, generateInviteCode, buildJoinLink, rosterCap,
+  deriveRoundPlayingHandicap, generateInviteCode, buildJoinLink, rosterCap, roundScoringMode,
 } from '../store/tournamentStore';
 import { defaultHoles, fetchPlayers, fetchMyPlayers } from '../store/libraryStore';
 import { middleTee } from '../store/tees';
@@ -40,8 +40,14 @@ import { cardMonth } from '../store/leagueRules';
 import { monthName } from '../store/leagueView';
 import {
   applyLeagueHandicap, isLeagueLength, isLeagueRated, leagueCourse, leagueStrokes, setupPlayerTee,
+  leagueCardsPatch,
 } from '../store/leagueSetup';
+import { leagueCardRows, showsLeagueList } from '../store/leagueGameCards';
 import { useSetupLeagues } from '../hooks/useSetupLeagues';
+import { useLeagueCardsStatus } from '../hooks/useLeagueCardsStatus';
+import { dismissLeagueOptIn } from '../lib/leagueOptIn';
+import LeagueCardsList from '../components/league/LeagueCardsList';
+import { useT, t as translate, t as tNow, formatNumber, formatDate } from '../i18n';
 import { applyFinalStrokes, finalStrokeList, finalStrokesRecord } from '../store/leagueFinal';
 
 // Deep green used for the Review hero band — fixed in both themes so white
@@ -54,37 +60,35 @@ function newRoundId() { return `setup-r${Date.now()}-${_roundIdSeq++}`; }
 
 // The league announce failed: start a normal game instead, or stay here.
 async function askStartWithoutLeague(leagueName, reason) {
-  const title = "Couldn't announce your card";
-  const message = `${reason}\n\nStart it as a normal game? It won't count for ${leagueName}.`;
+  const title = tNow('league.cards.failTitle');
+  const message = tNow('league.setup.failMessage', { reason, league: leagueName });
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
   return new Promise((resolve) => Alert.alert(
     title, message,
-    [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-     { text: 'Start normal game', onPress: () => resolve(true) }],
+    [{ text: tNow('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+     { text: tNow('league.setup.startNormal'), onPress: () => resolve(true) }],
   ));
 }
 
-async function confirmDialog(title, message, confirmLabel = 'Remove') {
+async function confirmDialog(title, message, confirmLabel = translate('setup.screen.remove')) {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
   return new Promise((resolve) => Alert.alert(
     title, message,
-    [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+    [{ text: translate('setup.screen.cancel'), style: 'cancel', onPress: () => resolve(false) },
      { text: confirmLabel, style: 'destructive', onPress: () => resolve(true) }],
   ));
 }
 
 function buildGameName(courseName) {
-  const d = new Date();
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const stamp = `${d.getDate()} ${months[d.getMonth()]}`;
+  const stamp = formatDate(new Date(), 'day');
   const trimmed = (courseName || '').trim();
-  if (!trimmed) return `Game · ${stamp}`;
+  if (!trimmed) return translate('setup.screen.gameStamp', { stamp });
   // Keep the title short — golf course names can be very long and clip
   // in the tournament header. Trim to ~22 chars with an ellipsis when
   // combined with the date.
   const MAX = 22;
   const shortCourse = trimmed.length > MAX ? `${trimmed.slice(0, MAX - 1).trimEnd()}…` : trimmed;
-  return `${shortCourse} · ${stamp}`;
+  return translate('setup.screen.courseStamp', { course: shortCourse, stamp });
 }
 
 export default function SetupScreen({ navigation, route }) {
@@ -137,17 +141,41 @@ export default function SetupScreen({ navigation, route }) {
   // League switch (games only, before Start): leagues where I have no card
   // this month. The board's "Play with the app" passes leagueId to preselect
   // that league with the switch on.
-  const setupLeagues = useSetupLeagues(isGame, user?.id ?? null);
+  const {
+    leagues: setupLeagues, loading: leaguesLoading, error: leaguesError, retry: retryLeagues,
+  } = useSetupLeagues(isGame, user?.id ?? null);
   const [leaguePick, setLeaguePick] = useState(() => route?.params?.leagueId ?? null);
   const [leagueOn, setLeagueOn] = useState(() => !!route?.params?.leagueId);
   const league = setupLeagues.find((l) => l.id === leaguePick) ?? setupLeagues[0] ?? null;
   const myPlayer = players.find((p) => p.user_id && p.user_id === user?.id) ?? null;
   const leagueOffered = isGame && !!league && !!myPlayer;
+  // Opened from the board's "Play with the app": this round is meant to count,
+  // so a league that is still loading holds Start, and a failed read says so.
+  const leagueIntended = isGame && !!route?.params?.leagueId;
+  // (Declared before the list status below; widened there.)
+  const leagueCheckingLeagues = leagueIntended && !leagueOffered && leaguesLoading;
+  const leagueFailed = leagueIntended && !leagueOffered && !leaguesLoading && leaguesError;
   const leagueEligibleRound = isLeagueLength(rounds[0]);
   // The league ranks by net differential: my tee needs a slope and a rating.
   const leagueRated = !leagueOffered || !leagueEligibleRound || isLeagueRated(rounds[0], myPlayer.id);
-  const leagueActive = leagueOffered && leagueOn && leagueEligibleRound && leagueRated;
+  // Several league cards per game (R16, D5 B): when another player of the game
+  // is in this league too, a "League cards" list replaces the switch. Each
+  // member decides on their own phone; only my row has a switch.
+  const otherLinked = players.some((p) => p.user_id && p.user_id !== user?.id);
+  const leagueStatus = useLeagueCardsStatus({ leagueId: league?.id ?? null, enabled: leagueOffered && otherLinked });
+  const leagueRows = leagueCardRows({
+    players, userId: user?.id ?? null, members: leagueStatus.members, round: rounds[0],
+  });
+  // The members' status read failed: fall back to the single switch for my
+  // own card (it doesn't need that read) rather than starting a normal game.
+  const leagueListMode = leagueOffered && otherLinked && !leagueStatus.error
+    && (leagueStatus.loading || showsLeagueList(leagueRows));
+  const leagueListBlocked = leagueListMode && leagueStatus.loading;
+  const leagueActive = leagueOffered && leagueOn && leagueEligibleRound && leagueRated && !leagueListBlocked;
+  // A switch already on (the board's "Play with the app") waits for the list.
+  const leagueChecking = leagueCheckingLeagues || (leagueListMode && leagueOn && leagueStatus.loading);
   const startBusyRef = useRef(false);
+  const t = useT();
 
   // The league Final (LeagueFinalScreen): { leagueId, strokes by user id }.
   // Start raises round 0's playing handicaps by those strokes.
@@ -309,8 +337,10 @@ export default function SetupScreen({ navigation, route }) {
   async function removePlayer(id) {
     const player = players.find((p) => p.id === id);
     const ok = await confirmDialog(
-      'Remove player',
-      `Remove ${player?.name ?? 'this player'} from the ${isGame ? 'game' : 'tournament'}?`,
+      t('setup.screen.removePlayerTitle'),
+      t(isGame ? 'setup.screen.removePlayerGame' : 'setup.screen.removePlayerTournament', {
+        name: player?.name ?? t('setup.screen.thisPlayer'),
+      }),
     );
     if (!ok) return;
     setPlayers((prev) => prev.filter((p) => p.id !== id));
@@ -349,10 +379,10 @@ export default function SetupScreen({ navigation, route }) {
     // been configured — still confirm so a stray tap doesn't wipe holes/tees.
     const hasCourse = !!(round?.courseName || '').trim();
     const ok = await confirmDialog(
-      'Remove round',
+      t('setup.screen.removeRoundTitle'),
       hasCourse
-        ? `Round ${index + 1} (${round.courseName}) and its hole setup will be removed.`
-        : `Remove Round ${index + 1}?`,
+        ? t('setup.screen.removeRoundCourse', { n: index + 1, course: round.courseName })
+        : t('setup.screen.removeRoundPlain', { n: index + 1 }),
     );
     if (!ok) return;
     setRounds((prev) => prev.filter((_, i) => i !== index));
@@ -416,14 +446,14 @@ export default function SetupScreen({ navigation, route }) {
   async function sharePostCreateInvite() {
     if (!postCreateInvite.link) return;
     try {
-      const label = tournamentName.trim() || 'my game';
+      const label = tournamentName.trim() || t('setup.screen.myGame');
       await Share.share({
-        message: `Join "${label}" on Golf Partner:\n${postCreateInvite.link}`,
+        message: t('setup.screen.inviteShare', { name: label, link: postCreateInvite.link }),
       });
     } catch (err) {
-      const msg = err?.message ?? 'Could not share the invite link';
+      const msg = err?.message ?? t('setup.screen.shareError');
       if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('Error', msg);
+      else Alert.alert(t('setup.screen.error'), msg);
     }
   }
 
@@ -455,27 +485,31 @@ export default function SetupScreen({ navigation, route }) {
         tournamentId: tournament.id,
         roundId: r0.id,
         playerId: meId,
+        scoringMode: roundScoringMode(tournament, r0),
       });
       const hcp = card.leagueHandicap ?? league.leagueHandicap;
       return {
         ...tournament,
+        // `league` keeps builds before R16 reading the creator's card;
+        // `leagueCards` is where every member's card of every round lives.
         league: { leagueId: league.id, cardId: card.id, playerId: meId },
+        ...leagueCardsPatch({ leagueId: league.id, cardId: card.id, playerId: meId, roundId: r0.id }),
         rounds: tournament.rounds.map((r, i) => (
           i === 0 && hcp != null ? applyLeagueHandicap(r, meId, hcp) : r)),
       };
     } catch (err) {
-      const ok = await askStartWithoutLeague(league.name, err?.message ?? 'The league could not be reached.');
+      const ok = await askStartWithoutLeague(league.name, err?.message ?? t('league.setup.unreachable'));
       return ok ? tournament : null;
     }
   }
 
   async function startGame() {
     if (players.length < 1) {
-      Alert.alert('Missing info', 'Select at least 1 player.');
+      Alert.alert(t('setup.screen.missingInfo'), t('setup.screen.needPlayer'));
       return;
     }
     if (missingCourseName) {
-      Alert.alert('Missing info', 'All course names are required.');
+      Alert.alert(t('setup.screen.missingInfo'), t('setup.screen.needCourseNames'));
       return;
     }
 
@@ -490,8 +524,8 @@ export default function SetupScreen({ navigation, route }) {
     if (invalidRound) {
       const { siIssues, dupes } = canSaveCourse(invalidRound.holes, invalidRound.tees);
       Alert.alert(
-        'Fix course data before creating',
-        [...siIssues, ...(dupes.length > 0 ? [`Duplicate tee labels: ${dupes.join(', ')}`] : [])].join('\n'),
+        t('setup.screen.fixCourse'),
+        [...siIssues, ...(dupes.length > 0 ? [t('setup.screen.dupeTees', { labels: dupes.join(', ') })] : [])].join('\n'),
       );
       return;
     }
@@ -564,7 +598,7 @@ export default function SetupScreen({ navigation, route }) {
 
     let tournament = createTournament({
       kind,
-      name: tournamentName.trim() || (isGame ? 'Game' : 'Weekend Golf'),
+      name: tournamentName.trim() || (isGame ? t('setup.screen.defaultGameName') : t('setup.screen.defaultTournamentName')),
       players,
       meId,
       rounds: builtRounds,
@@ -588,6 +622,11 @@ export default function SetupScreen({ navigation, route }) {
 
     try {
       await mutate(tournament, { type: 'tournament.create', tournament });
+      // I saw my league switch and left it off: the scorecard won't ask again.
+      // Not while the list was still blocked: I never got to decide.
+      if (leagueOffered && !leagueActive && !leagueListBlocked && meId) {
+        await dismissLeagueOptIn(tournament.id, tournament.rounds[0].id);
+      }
 
       if (leagueFinal) {
         // The create is only queued for sync, so the tournaments row may not
@@ -599,9 +638,9 @@ export default function SetupScreen({ navigation, route }) {
           if (isRetryableFinalError(finalErr)) {
             await enqueueLeagueFinal({ leagueId: leagueFinal.leagueId, tournamentId: tournament.id, strokes });
           } else {
-            const msg = `The Final was created, but the league could not be told: ${finalErr?.message ?? 'try again from the league board.'}`;
+            const msg = t('league.setup.finalTold', { error: finalErr?.message ?? t('league.setup.finalTryAgain') });
             if (Platform.OS === 'web') window.alert(msg);
-            else Alert.alert('League Final', msg);
+            else Alert.alert(t('league.setup.finalTitle'), msg);
           }
         }
       }
@@ -631,7 +670,7 @@ export default function SetupScreen({ navigation, route }) {
             visible: true,
             loading: false,
             link: '',
-            error: inviteErr?.message ?? 'Could not create the invite link right now.',
+            error: inviteErr?.message ?? t('setup.screen.inviteError'),
             tournament,
           });
         }
@@ -640,9 +679,9 @@ export default function SetupScreen({ navigation, route }) {
 
       navigateToCreatedTournament(tournament);
     } catch (err) {
-      const msg = err?.message ?? 'Could not create tournament';
+      const msg = err?.message ?? t('setup.screen.createError');
       if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('Error', msg);
+      else Alert.alert(t('setup.screen.error'), msg);
     }
   }
 
@@ -666,10 +705,10 @@ export default function SetupScreen({ navigation, route }) {
 
   const isLastStep = stepKey === 'review';
   const nextEnabled = isStepValid(stepKey, { players, rounds })
-    && (!isLastStep || canStart);
+    && (!isLastStep || (canStart && !leagueChecking));
   const nextLabel = isLastStep
-    ? (isGame ? 'Start Game' : 'Start Tournament')
-    : 'Next';
+    ? (isGame ? t('setup.screen.startGame') : t('setup.screen.startTournament'))
+    : t('setup.screen.next');
 
   // ---- Step bodies -------------------------------------------------------
 
@@ -686,12 +725,12 @@ export default function SetupScreen({ navigation, route }) {
     const emptySlots = isGame ? remaining : Math.min(remaining, 1);
     return (
       <>
-        <Text style={s.stepOverline}>PLAYERS</Text>
-        <Text style={s.stepPrompt}>Who's playing?</Text>
+        <Text style={s.stepOverline}>{t('setup.screen.playersOverline')}</Text>
+        <Text style={s.stepPrompt}>{t('setup.screen.playersPrompt')}</Text>
         <Text style={s.stepSubtitle}>
           {isGame
-            ? `Add 1–${cap} golfers from your library.`
-            : `Add 1–${cap} golfers from your library — flights and pairings come later.`}
+            ? t('setup.screen.playersSubGame', { cap })
+            : t('setup.screen.playersSubTournament', { cap })}
         </Text>
         <View style={s.slotGrid}>
           {players.map((p) => (
@@ -709,7 +748,7 @@ export default function SetupScreen({ navigation, route }) {
                   : <Text style={s.slotAvatarText}>{(p.name ?? '?').slice(0, 2).toUpperCase()}</Text>}
               </View>
               <Text style={s.slotName} numberOfLines={1}>{p.name}</Text>
-              <Text style={s.slotHcp}>HCP {p.handicap}</Text>
+              <Text style={s.slotHcp}>{t('setup.screen.hcp', { value: p.handicap })}</Text>
             </View>
           ))}
           {Array.from({ length: emptySlots }).map((_, i) => (
@@ -725,7 +764,7 @@ export default function SetupScreen({ navigation, route }) {
               <View style={s.slotPlus}>
                 <Feather name="plus" size={16} color={theme.accent.primary} />
               </View>
-              <Text style={s.slotEmptyLabel}>ADD PLAYER</Text>
+              <Text style={s.slotEmptyLabel}>{t('setup.screen.addPlayer')}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -735,21 +774,21 @@ export default function SetupScreen({ navigation, route }) {
 
   const renderCourseStep = () => (
     <>
-      <Text style={s.stepOverline}>{isGame ? 'COURSE' : 'ROUNDS'}</Text>
-      <Text style={s.stepPrompt}>Where are you playing?</Text>
+      <Text style={s.stepOverline}>{isGame ? t('setup.screen.courseOverline') : t('setup.screen.roundsOverline')}</Text>
+      <Text style={s.stepPrompt}>{t('setup.screen.coursePrompt')}</Text>
       <Text style={s.stepSubtitle}>
         {isGame
-          ? 'Pick a course, then fine-tune the holes if needed.'
-          : 'Add each round and pick its course.'}
+          ? t('setup.screen.courseSubGame')
+          : t('setup.screen.courseSubTournament')}
       </Text>
       {!isGame && (
         <View style={s.nameGroup}>
-          <Text style={s.nameLabel}>Tournament name</Text>
+          <Text style={s.nameLabel}>{t('setup.screen.tournamentName')}</Text>
           <TextInput
             style={s.nameInput}
             value={tournamentName}
             onChangeText={(v) => { setTournamentName(v); setNameTouched(true); }}
-            placeholder="Weekend Golf"
+            placeholder={t('setup.screen.defaultTournamentName')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -763,11 +802,11 @@ export default function SetupScreen({ navigation, route }) {
         return (
           <View key={r.id ?? `round-${i}`} style={s.courseBlock}>
             <View style={s.roundHeader}>
-              {!isGame && <Text style={s.roundLabel}>Round {i + 1}</Text>}
+              {!isGame && <Text style={s.roundLabel}>{t('setup.screen.round', { n: i + 1 })}</Text>}
               {rounds.length > 1 && (
                 <TouchableOpacity onPress={() => removeRound(i)} style={s.removeRoundBtn}>
                   <Feather name="trash-2" size={14} color={theme.destructive} />
-                  <Text style={s.removeRoundText}>Remove</Text>
+                  <Text style={s.removeRoundText}>{t('setup.screen.remove')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -787,7 +826,7 @@ export default function SetupScreen({ navigation, route }) {
                         onBlur={() => setRenamingIndex(null)}
                         onSubmitEditing={() => setRenamingIndex(null)}
                         autoFocus
-                        placeholder="Course name"
+                        placeholder={t('setup.screen.courseName')}
                         placeholderTextColor={theme.text.muted}
                         keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                         selectionColor={theme.accent.primary}
@@ -821,15 +860,15 @@ export default function SetupScreen({ navigation, route }) {
                 <View style={s.courseStats}>
                   <View style={s.courseStat}>
                     <Text style={s.courseStatValue}>{totalPar}</Text>
-                    <Text style={s.courseStatLabel}>PAR</Text>
+                    <Text style={s.courseStatLabel}>{t('setup.screen.statPar')}</Text>
                   </View>
                   <View style={s.courseStat}>
                     <Text style={s.courseStatValue}>{r.holes.length}</Text>
-                    <Text style={s.courseStatLabel}>HOLES</Text>
+                    <Text style={s.courseStatLabel}>{t('setup.screen.statHoles')}</Text>
                   </View>
                   <View style={s.courseStat}>
                     <Text style={s.courseStatValue}>{r.tees?.length ?? 0}</Text>
-                    <Text style={s.courseStatLabel}>TEES</Text>
+                    <Text style={s.courseStatLabel}>{t('setup.screen.statTees')}</Text>
                   </View>
                 </View>
 
@@ -838,7 +877,7 @@ export default function SetupScreen({ navigation, route }) {
                   onPress={() =>
                     navigation.navigate('CourseEditor', {
                       roundIndex: i,
-                      courseName: r.courseName || `Round ${i + 1}`,
+                      courseName: r.courseName || t('setup.screen.round', { n: i + 1 }),
                       initialHoles: r.holes,
                       initialTees: r.tees ?? [],
                       onSave: handleHolesSaved,
@@ -847,7 +886,7 @@ export default function SetupScreen({ navigation, route }) {
                   }
                 >
                   <Feather name="settings" size={14} color={theme.accent.primary} />
-                  <Text style={s.courseConfigText}>Configure holes</Text>
+                  <Text style={s.courseConfigText}>{t('setup.screen.configureHoles')}</Text>
                   <Feather name="chevron-right" size={16} color={theme.text.muted} style={{ marginLeft: 'auto' }} />
                 </TouchableOpacity>
               </View>
@@ -870,8 +909,8 @@ export default function SetupScreen({ navigation, route }) {
                 <View style={s.courseEmptyPin}>
                   <Feather name="map-pin" size={20} color={theme.accent.primary} />
                 </View>
-                <Text style={s.courseEmptyTitle}>Pick a club or course</Text>
-                <Text style={s.courseEmptyHint}>Tap to choose where you're playing</Text>
+                <Text style={s.courseEmptyTitle}>{t('setup.screen.pickCourse')}</Text>
+                <Text style={s.courseEmptyHint}>{t('setup.screen.pickCourseHint')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -880,7 +919,7 @@ export default function SetupScreen({ navigation, route }) {
       {!isGame && (
         <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
           <Feather name="plus-circle" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-          <Text style={s.addRoundBtnText}>Add Round</Text>
+          <Text style={s.addRoundBtnText}>{t('setup.screen.addRound')}</Text>
         </TouchableOpacity>
       )}
     </>
@@ -888,12 +927,12 @@ export default function SetupScreen({ navigation, route }) {
 
   const renderScoringStep = () => (
     <>
-      <Text style={s.stepOverline}>SCORING</Text>
-      <Text style={s.stepPrompt}>How do you keep score?</Text>
+      <Text style={s.stepOverline}>{t('setup.screen.scoringOverline')}</Text>
+      <Text style={s.stepPrompt}>{t('setup.screen.scoringPrompt')}</Text>
       <Text style={s.stepSubtitle}>
         {rounds.length > 1
-          ? 'Pick a format for each round. You can change it later.'
-          : 'Pick a format. You can change it later.'}
+          ? t('setup.screen.scoringSubRounds')
+          : t('setup.screen.scoringSubOne')}
       </Text>
       {rounds.length <= 1 ? (
         <ScoringModePicker
@@ -907,7 +946,7 @@ export default function SetupScreen({ navigation, route }) {
         />
       ) : rounds.map((r, i) => (
         <View key={r.id ?? `scoring-round-${i}`} style={s.teesRoundBlock}>
-          <Text style={[s.roundLabel, s.teesRoundLabel]}>Round {i + 1} · {r.courseName || 'Course'}</Text>
+          <Text style={[s.roundLabel, s.teesRoundLabel]}>{t('setup.screen.roundCourse', { n: i + 1, course: r.courseName || t('setup.screen.courseFallback') })}</Text>
           <View style={s.teesRoundCard}>
             <ScoringModePicker
               value={r.scoringMode ?? settings.scoringMode}
@@ -930,10 +969,10 @@ export default function SetupScreen({ navigation, route }) {
 
   const renderTeamsStep = () => (
     <>
-      <Text style={s.stepOverline}>TEAMS</Text>
-      <Text style={s.stepPrompt}>Same teams all tournament?</Text>
+      <Text style={s.stepOverline}>{t('setup.screen.teamsOverline')}</Text>
+      <Text style={s.stepPrompt}>{t('setup.screen.teamsPrompt')}</Text>
       <Text style={s.stepSubtitle}>
-        Applies whenever a round's format is played in teams.
+        {t('setup.screen.teamsSub')}
       </Text>
       <TeamsSettingsFields
         value={settings.scoringMode}
@@ -946,14 +985,14 @@ export default function SetupScreen({ navigation, route }) {
 
   const renderTeesStep = () => (
     <>
-      <Text style={s.stepOverline}>TEES & HANDICAPS</Text>
-      <Text style={s.stepPrompt}>Who plays from where?</Text>
+      <Text style={s.stepOverline}>{t('setup.screen.teesOverline')}</Text>
+      <Text style={s.stepPrompt}>{t('setup.screen.teesPrompt')}</Text>
       <Text style={s.stepSubtitle}>
-        Pick each player's tee. Playing handicaps auto-calculate — tap one to override.
+        {t('setup.screen.teesSub')}
       </Text>
       {rounds.map((r, i) => (
         <View key={r.id ?? `round-${i}`} style={s.teesRoundBlock}>
-          {!isGame && <Text style={[s.roundLabel, s.teesRoundLabel]}>Round {i + 1}</Text>}
+          {!isGame && <Text style={[s.roundLabel, s.teesRoundLabel]}>{t('setup.screen.round', { n: i + 1 })}</Text>}
           <View style={s.teesRoundCard}>
             <RoundTeeAssignments
               round={r}
@@ -967,72 +1006,117 @@ export default function SetupScreen({ navigation, route }) {
     </>
   );
 
+  const renderAddRatingLink = (unratedTee) => (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('CourseEditor', {
+        roundIndex: 0,
+        courseName: rounds[0].courseName || t('setup.screen.round', { n: 1 }),
+        initialHoles: rounds[0].holes,
+        initialTees: rounds[0].tees ?? [],
+        onSave: handleHolesSaved,
+        courseId: rounds[0].courseId ?? null,
+      })}
+      activeOpacity={0.7}
+      accessibilityRole="link"
+      style={{ paddingVertical: 6 }}
+    >
+      <Text style={[s.leagueSub, { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' }]}>
+        {unratedTee ? t('league.setup.addRatingTee', { tee: unratedTee }) : t('league.setup.addRating')}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const renderLeaguePicker = () => (setupLeagues.length > 1 ? (
+    <View style={s.leaguePicker}>
+      {setupLeagues.map((l) => {
+        const on = l.id === league.id;
+        return (
+          <TouchableOpacity
+            key={l.id}
+            style={[s.leagueChip, on && s.leagueChipOn]}
+            onPress={() => setLeaguePick(l.id)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: on }}
+          >
+            <Text style={[s.leagueChipText, on && s.leagueChipTextOn]} numberOfLines={1}>{l.name}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  ) : null);
+
+  // The "League cards" list (D5 B): my row carries my switch and the same
+  // reasons the single switch gives; the other members are asked on their phone.
+  const renderLeagueList = () => {
+    const monthKey = cardMonth(new Date());
+    const month = monthName(monthKey);
+    const hcp = league.leagueHandicap;
+    const unratedTee = !leagueRated ? setupPlayerTee(rounds[0], myPlayer.id)?.label ?? null : null;
+    let sub;
+    if (!leagueEligibleRound) sub = t('league.setup.eighteenOnly');
+    else if (!leagueRated) {
+      sub = unratedTee ? t('league.setup.unratedTees', { tee: unratedTee, month }) : t('league.setup.unratedTee', { month });
+    } else if (hcp == null) sub = t('league.cards.meSubNoHcp', { month });
+    else {
+      sub = t('league.cards.meSub', {
+        month,
+        strokes: leagueStrokes(rounds[0], myPlayer.id, hcp),
+        hcp: formatNumber(hcp, { decimals: 1 }),
+      });
+    }
+    const state = leagueStatus.loading ? 'loading' : leagueStatus.error ? 'error' : 'ready';
+    return (
+      <LeagueCardsList
+        title={t('league.cards.title', { league: league.name })}
+        state={state}
+        rows={leagueRows}
+        monthKey={monthKey}
+        onRetry={leagueStatus.retry}
+        me={{
+          sub,
+          value: leagueActive,
+          onChange: setLeagueOn,
+          disabled: !leagueEligibleRound || !leagueRated,
+          label: t('league.cards.switchLabel', { league: league.name }),
+          extra: leagueEligibleRound && !leagueRated ? renderAddRatingLink(unratedTee) : null,
+        }}
+      >
+        {renderLeaguePicker()}
+      </LeagueCardsList>
+    );
+  };
+
   const renderLeagueSwitch = () => {
     const hcp = league.leagueHandicap;
     const month = monthName(cardMonth(new Date()));
     let sub;
     const unratedTee = !leagueRated ? setupPlayerTee(rounds[0], myPlayer.id)?.label ?? null : null;
-    if (!leagueEligibleRound) sub = 'League cards are 18 holes. Pick an 18-hole course to count this round.';
+    if (!leagueEligibleRound) sub = t('league.setup.eighteenOnly');
     else if (!leagueRated) {
-      sub = `Your ${unratedTee ? `${unratedTee} tees aren't` : "tee isn't"} rated, so this round can't be your ${month} card yet. Pick a rated tee for yourself, or add the rating.`;
+      sub = unratedTee ? t('league.setup.unratedTees', { tee: unratedTee, month }) : t('league.setup.unratedTee', { month });
     } else if (!leagueOn) sub = null;
-    else if (hcp == null) sub = `Your ${month} card · no league handicap set yet, your own index is used · counts whatever you score`;
+    else if (hcp == null) sub = t('league.setup.subNoHcp', { month });
     else {
       const strokes = leagueStrokes(rounds[0], myPlayer.id, hcp);
-      sub = `Your ${month} card · ${strokes} strokes from your league handicap ${Number(hcp).toFixed(1)} · counts whatever you score`;
+      sub = t('league.setup.sub', { month, strokes, hcp: formatNumber(hcp, { decimals: 1 }) });
     }
     return (
       <View style={s.leagueCard}>
         <View style={s.leagueRow}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={s.leagueTitle}>{`Counts for ${league.name}`}</Text>
+            <Text style={s.leagueTitle}>{t('league.cards.switchLabel', { league: league.name })}</Text>
             {!!sub && <Text style={s.leagueSub}>{sub}</Text>}
-            {leagueEligibleRound && !leagueRated && (
-              <TouchableOpacity
-                onPress={() => navigation.navigate('CourseEditor', {
-                  roundIndex: 0,
-                  courseName: rounds[0].courseName || 'Round 1',
-                  initialHoles: rounds[0].holes,
-                  initialTees: rounds[0].tees ?? [],
-                  onSave: handleHolesSaved,
-                  courseId: rounds[0].courseId ?? null,
-                })}
-                activeOpacity={0.7}
-                accessibilityRole="link"
-                style={{ paddingVertical: 6 }}
-              >
-                <Text style={[s.leagueSub, { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' }]}>
-                  {`Add slope and rating${unratedTee ? ` to ${unratedTee} tees` : ''} ›`}
-                </Text>
-              </TouchableOpacity>
-            )}
+            {leagueEligibleRound && !leagueRated && renderAddRatingLink(unratedTee)}
           </View>
           <Switch
             value={leagueActive}
             onValueChange={setLeagueOn}
             disabled={!leagueEligibleRound || !leagueRated}
-            accessibilityLabel={`Counts for ${league.name}`}
+            accessibilityLabel={t('league.cards.switchLabel', { league: league.name })}
             trackColor={{ true: theme.accent.primary }}
           />
         </View>
-        {setupLeagues.length > 1 && (
-          <View style={s.leaguePicker}>
-            {setupLeagues.map((l) => {
-              const on = l.id === league.id;
-              return (
-                <TouchableOpacity
-                  key={l.id}
-                  style={[s.leagueChip, on && s.leagueChipOn]}
-                  onPress={() => setLeaguePick(l.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                >
-                  <Text style={[s.leagueChipText, on && s.leagueChipTextOn]} numberOfLines={1}>{l.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
+        {renderLeaguePicker()}
       </View>
     );
   };
@@ -1042,24 +1126,24 @@ export default function SetupScreen({ navigation, route }) {
     // For a solo game there is no scoring choice — show a neutral label
     // rather than whatever mode happens to be left in settings.
     const scoringLabel = hasScoringStep
-      ? (getScoringMode(settings.scoringMode)?.label ?? 'Solo play')
-      : 'Solo play';
+      ? t(getScoringMode(settings.scoringMode)?.labelKey ?? 'setup.screen.soloPlay')
+      : t('setup.screen.soloPlay');
     const playerSummary = players.length === 1
-      ? `${players[0].name} · HCP ${players[0].handicap}`
-      : `${players.length} golfers`;
+      ? t('setup.screen.playerSummaryOne', { name: players[0].name, hcp: players[0].handicap })
+      : t('setup.screen.playerSummaryMany', { count: players.length });
     const courseSummary = isGame
-      ? (rounds[0]?.courseName || 'No course set')
-      : `${rounds.length} round${rounds.length === 1 ? '' : 's'}`;
+      ? (rounds[0]?.courseName || t('setup.screen.noCourse'))
+      : t('setup.screen.roundsCount', { count: rounds.length });
     return (
       <>
         {/* Green hero recap */}
         <View style={s.reviewHero}>
-          <Text style={s.reviewHeroOverline}>REVIEW & CONFIRM</Text>
+          <Text style={s.reviewHeroOverline}>{t('setup.screen.reviewOverline')}</Text>
           <TextInput
             style={s.reviewNameInput}
             value={tournamentName}
             onChangeText={(v) => { setTournamentName(v); setNameTouched(true); }}
-            placeholder={isGame ? 'Game name' : 'Tournament name'}
+            placeholder={isGame ? t('setup.screen.gameNamePlaceholder') : t('setup.screen.tournamentNamePlaceholder')}
             placeholderTextColor="rgba(255,255,255,0.5)"
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor="#ffffff"
@@ -1067,7 +1151,7 @@ export default function SetupScreen({ navigation, route }) {
           <View style={s.reviewChipRow}>
             <View style={s.reviewChip}>
               <Text style={s.reviewChipText}>
-                {players.length} player{players.length === 1 ? '' : 's'}
+                {t('setup.screen.playersChip', { count: players.length })}
               </Text>
             </View>
             <View style={s.reviewChip}>
@@ -1076,7 +1160,7 @@ export default function SetupScreen({ navigation, route }) {
           </View>
         </View>
 
-        <Text style={s.stepOverline}>TAP TO EDIT</Text>
+        <Text style={s.stepOverline}>{t('setup.screen.tapToEdit')}</Text>
         <View style={s.reviewList}>
           <TouchableOpacity
             style={[s.reviewRow, s.reviewRowDivider]}
@@ -1084,7 +1168,7 @@ export default function SetupScreen({ navigation, route }) {
           >
             <Feather name="users" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
-              <Text style={s.reviewRowTitle}>Players</Text>
+              <Text style={s.reviewRowTitle}>{t('setup.screen.reviewPlayers')}</Text>
               <Text style={s.reviewRowSub}>{playerSummary}</Text>
             </View>
             <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -1096,7 +1180,7 @@ export default function SetupScreen({ navigation, route }) {
           >
             <Feather name="map-pin" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
-              <Text style={s.reviewRowTitle}>{isGame ? 'Course' : 'Rounds'}</Text>
+              <Text style={s.reviewRowTitle}>{isGame ? t('setup.screen.reviewCourse') : t('setup.screen.reviewRounds')}</Text>
               <Text style={s.reviewRowSub}>{courseSummary}</Text>
             </View>
             <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -1109,7 +1193,7 @@ export default function SetupScreen({ navigation, route }) {
           >
             <Feather name="target" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
-              <Text style={s.reviewRowTitle}>Scoring</Text>
+              <Text style={s.reviewRowTitle}>{t('setup.screen.reviewScoring')}</Text>
               <Text style={s.reviewRowSub}>{scoringLabel}</Text>
             </View>
             {hasScoringStep && (
@@ -1124,9 +1208,9 @@ export default function SetupScreen({ navigation, route }) {
             >
               <Feather name="users" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
               <View style={{ flex: 1 }}>
-                <Text style={s.reviewRowTitle}>Teams</Text>
+                <Text style={s.reviewRowTitle}>{t('setup.screen.reviewTeams')}</Text>
                 <Text style={s.reviewRowSub}>
-                  {settings.fixedTeams ? 'Same teams every round' : 'Random each round'}
+                  {settings.fixedTeams ? t('setup.screen.sameTeams') : t('setup.screen.randomTeams')}
                 </Text>
               </View>
               <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -1134,13 +1218,23 @@ export default function SetupScreen({ navigation, route }) {
           )}
         </View>
 
-        {leagueOffered && renderLeagueSwitch()}
+        {leagueOffered && (leagueListMode ? renderLeagueList() : renderLeagueSwitch())}
+
+        {leagueCheckingLeagues && <Text style={s.leagueSub}>{t('league.cards.checking')}</Text>}
+        {leagueFailed && (
+          <View style={s.leagueCard}>
+            <Text style={s.leagueSub}>{t('league.setup.loadFailed')}</Text>
+            <TouchableOpacity onPress={retryLeagues} accessibilityRole="button" style={{ paddingVertical: 6 }}>
+              <Text style={[s.leagueSub, { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' }]}>{t('league.setup.retry')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {finalStrokes.length > 0 && (
           <View style={[s.leagueCard, { paddingVertical: 12 }]}>
-            <Text style={s.leagueTitle}>League Final · extra strokes applied</Text>
+            <Text style={s.leagueTitle}>{t('league.setup.finalApplied')}</Text>
             {finalStrokes.map(({ player, extra }) => (
-              <Text key={player.id} style={s.leagueSub}>{`${player.name} +${extra}`}</Text>
+              <Text key={player.id} style={s.leagueSub}>{t('league.setup.finalExtra', { name: player.name, extra })}</Text>
             ))}
           </View>
         )}
@@ -1148,8 +1242,8 @@ export default function SetupScreen({ navigation, route }) {
         {!canStart && (
           <Text style={s.errorText}>
             {players.length < 1
-              ? 'Add at least 1 player to continue.'
-              : 'Pick a course for every round to continue.'}
+              ? t('setup.screen.errNeedPlayer')
+              : t('setup.screen.errNeedCourse')}
           </Text>
         )}
       </>

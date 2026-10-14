@@ -21,12 +21,22 @@ import { scoringModeUsesTeams, needsManualTeamSetup } from '../components/scorin
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
+import { useAuth } from '../context/AuthContext';
+import { useRoundLeague } from '../hooks/useRoundLeague';
+import { announceRoundCard, confirmStartWithoutLeague, dismissLeagueOptIn } from '../lib/leagueOptIn';
+import { leagueStrokes } from '../store/leagueSetup';
+import { listText } from '../store/leagueGameCards';
+import { cardMonth } from '../store/leagueRules';
+import LeagueCardsList from '../components/league/LeagueCardsList';
+import { useT, formatNumber } from '../i18n';
 
 export default function NextRoundScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
   const { revealOnly = false, roundIndex: paramRoundIndex } = route?.params ?? {};
+  const { user } = useAuth();
+  const t = useT();
 
   const [tournament, setTournament] = useState(null);
   const [nextPairs, setNextPairs] = useState(null);
@@ -47,6 +57,11 @@ export default function NextRoundScreen({ navigation, route }) {
   const pairAnimsRef = useRef([]);
   const actionsOpacity = useRef(new Animated.Value(0)).current;
   const actionsTranslateY = useRef(new Animated.Value(20)).current;
+
+  // League card for this round (R17, D5 B): hooks run before the early returns.
+  const leagueRoundIndex = tournament ? (revealOnly ? paramRoundIndex : tournament.currentRound + 1) : null;
+  const leagueRound = tournament?.rounds?.[leagueRoundIndex] ?? null;
+  const roundLeague = useRoundLeague({ tournament, round: leagueRound, userId: user?.id ?? null });
 
   function ensurePairAnims(count) {
     while (pairAnimsRef.current.length < count) {
@@ -129,16 +144,16 @@ export default function NextRoundScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
           <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-          <Text style={s.headerTitle}>Next Round</Text>
+          <Text style={s.headerTitle}>{t('rounds.next.title')}</Text>
           <View style={{ width: 22 }} />
         </View>
         <View style={s.loadingBody}>
           <Feather name="alert-circle" size={44} color={theme.text.muted} />
-          <Text style={s.errorTitle}>Couldn't load the next round</Text>
-          <Text style={s.loadingText}>Check your connection and try again.</Text>
+          <Text style={s.errorTitle}>{t('rounds.next.loadErrorTitle')}</Text>
+          <Text style={s.loadingText}>{t('rounds.next.loadErrorBody')}</Text>
           <TouchableOpacity style={s.retryBtn} onPress={retryLoad} activeOpacity={0.8}>
             <Feather name="rotate-ccw" size={14} color={theme.text.inverse} />
-            <Text style={s.retryBtnText}>Retry</Text>
+            <Text style={s.retryBtnText}>{t('rounds.next.retry')}</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -151,12 +166,12 @@ export default function NextRoundScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
           <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-          <Text style={s.headerTitle}>Next Round</Text>
+          <Text style={s.headerTitle}>{t('rounds.next.title')}</Text>
           <View style={{ width: 22 }} />
         </View>
         <View style={s.loadingBody}>
           <ActivityIndicator color={theme.accent.primary} />
-          <Text style={s.loadingText}>Loading…</Text>
+          <Text style={s.loadingText}>{t('rounds.next.loading')}</Text>
         </View>
       </ScreenContainer>
     );
@@ -183,6 +198,54 @@ export default function NextRoundScreen({ navigation, route }) {
     tournament?.players?.length,
     tournament?.settings?.manualTeams,
   ) && !tournament?.settings?.fixedTeams && !round?.revealed;
+
+  // "Round N for <league>": the league cards list for this round, or my row
+  // alone when nobody else in the game is in the league.
+  function renderRoundLeague() {
+    const { mode, league } = roundLeague;
+    if (mode === 'hidden') return null;
+    const n = roundIndex + 1;
+    const course = round.courseName ?? '';
+    const title = t('league.cards.roundTitle', { round: n, league: league.name });
+    if (mode === 'nineHoles') {
+      return <LeagueCardsList title={title} rows={[]} footer={t('league.cards.nineHoles', { round: n, course })} />;
+    }
+    const hcp = league.leagueHandicap;
+    const { meId } = roundLeague;
+    let sub;
+    if (!roundLeague.rated) sub = t('league.cards.meUnrated');
+    else if (hcp == null) sub = t('league.cards.meRoundSubNoHcp', { round: n, course });
+    else {
+      sub = t('league.cards.meRoundSub', {
+        round: n, course, strokes: leagueStrokes(round, meId, hcp), hcp: formatNumber(hcp, { decimals: 1 }),
+      });
+    }
+    const others = tournament.rounds.map((_, i) => i + 1).filter((x) => x !== n);
+    const footer = others.length > 0
+      ? t('league.cards.onlyRound', {
+        count: others.length, round: n,
+        rounds: listText(others.map((x) => ({ name: String(x) })), { and: t('league.cards.and') }),
+      })
+      : null;
+    return (
+      <LeagueCardsList
+        title={title}
+        state={roundLeague.state}
+        rows={roundLeague.rows}
+        monthKey={cardMonth(new Date())}
+        short
+        onRetry={roundLeague.retry}
+        footer={roundLeague.state === 'ready' ? footer : null}
+        me={{
+          sub,
+          value: roundLeague.on,
+          onChange: roundLeague.setOn,
+          disabled: !roundLeague.rated,
+          label: t('league.cards.switchLabel', { league: league.name }),
+        }}
+      />
+    );
+  }
 
   function startReveal() {
     setPhase('countdown');
@@ -266,7 +329,7 @@ export default function NextRoundScreen({ navigation, route }) {
   function showMutationError(err, fallbackMessage) {
     const msg = err?.message ?? fallbackMessage;
     if (Platform.OS === 'web') window.alert(msg);
-    else Alert.alert('Error', msg);
+    else Alert.alert(t('rounds.next.error'), msg);
   }
 
   async function reshuffle() {
@@ -286,7 +349,7 @@ export default function NextRoundScreen({ navigation, route }) {
       setPhase('reveal');
       revealPairs();
     } catch (err) {
-      showMutationError(err, 'Could not reshuffle teams. Please try again.');
+      showMutationError(err, t('rounds.next.reshuffleError'));
     } finally {
       setBusy(false);
     }
@@ -296,7 +359,24 @@ export default function NextRoundScreen({ navigation, route }) {
     if (busy) return;
     setBusy(true);
     try {
-      const updated = await mutate(tournament, {
+      let base = tournament;
+      // My league card for this round is announced before anyone can score
+      // it; left off, the scorecard won't ask me again.
+      if (roundLeague.mode === 'cards' && roundLeague.state === 'ready') {
+        if (roundLeague.on) {
+          try {
+            ({ tournament: base } = await announceRoundCard({
+              tournament, roundId: round.id, meId: roundLeague.meId, league: roundLeague.league,
+            }));
+          } catch (err) {
+            const ok = await confirmStartWithoutLeague(roundLeague.league.name, err?.message ?? t('league.cards.offline'));
+            if (!ok) return;
+          }
+        } else {
+          await dismissLeagueOptIn(tournament.id, round.id);
+        }
+      }
+      const updated = await mutate(base, {
         type: 'round.reveal', roundId: tournament.rounds[roundIndex].id, pairs: nextPairs,
       });
       if (!revealOnly) {
@@ -304,7 +384,7 @@ export default function NextRoundScreen({ navigation, route }) {
       }
       navigation.replace('Home');
     } catch (err) {
-      showMutationError(err, 'Could not start the round. Please try again.');
+      showMutationError(err, t('rounds.next.startError'));
     } finally {
       setBusy(false);
     }
@@ -319,7 +399,7 @@ export default function NextRoundScreen({ navigation, route }) {
             activeOpacity={1}
             style={s.countdownTapTarget}
             onPress={finishRevealInstant}
-            accessibilityLabel="Skip the countdown"
+            accessibilityLabel={t('rounds.next.skipCountdownLabel')}
           >
             <View style={s.countdownCircle}>
               <Animated.Text
@@ -334,7 +414,7 @@ export default function NextRoundScreen({ navigation, route }) {
                 {countdownNum}
               </Animated.Text>
             </View>
-            <Text style={s.skipHint}>Tap to skip</Text>
+            <Text style={s.skipHint}>{t('rounds.next.tapToSkip')}</Text>
           </TouchableOpacity>
         </View>
       </ScreenContainer>
@@ -355,7 +435,7 @@ export default function NextRoundScreen({ navigation, route }) {
             return (
               <React.Fragment key={i}>
               {i > 0 && (
-                <Text style={s.vsDivider}>vs</Text>
+                <Text style={s.vsDivider}>{t('rounds.next.vs')}</Text>
               )}
               <Animated.View
                 style={[
@@ -369,7 +449,7 @@ export default function NextRoundScreen({ navigation, route }) {
                 ]}
               >
                 <Text style={[s.revealPairLabel, { color }]}>
-                  {pair.length === 1 ? `SOLO ${i + 1}` : `PAIR ${i + 1}`}
+                  {pair.length === 1 ? t('rounds.next.solo', { n: i + 1 }) : t('rounds.next.pair', { n: i + 1 })}
                 </Text>
                 {pair.map((p, j) => {
                   const live = tournament.players?.find((x) => x.id === p.id);
@@ -396,10 +476,11 @@ export default function NextRoundScreen({ navigation, route }) {
             },
           ]}
         >
+          {renderRoundLeague()}
           {canReshuffle && (
             <TouchableOpacity style={s.btnSecondary} onPress={reshuffle} disabled={busy}>
               <Feather name="shuffle" size={14} color={theme.accent.primary} style={{ marginRight: 8 }} />
-              <Text style={s.btnSecondaryText}>Re-shuffle</Text>
+              <Text style={s.btnSecondaryText}>{t('rounds.next.reshuffle')}</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity style={s.btnPrimary} onPress={handleConfirm} disabled={busy}>
@@ -410,7 +491,7 @@ export default function NextRoundScreen({ navigation, route }) {
               style={{ marginRight: 8 }}
             />
             <Text style={s.btnPrimaryText}>
-              {revealOnly ? "Let's Play!" : `Start Round ${roundIndex + 1}`}
+              {revealOnly ? t('rounds.next.letsPlay') : t('rounds.next.startRound', { n: roundIndex + 1 })}
             </Text>
           </TouchableOpacity>
         </View>
@@ -423,12 +504,12 @@ export default function NextRoundScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Next Round</Text>
+        <Text style={s.headerTitle}>{t('rounds.next.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
       <View style={s.body}>
-        <Text style={s.roundLabel}>Round {roundIndex + 1}</Text>
+        <Text style={s.roundLabel}>{t('rounds.next.roundLabel', { n: roundIndex + 1 })}</Text>
         <Text style={s.course}>{round.courseName}</Text>
 
         {manualTeamsPending ? (
@@ -436,20 +517,20 @@ export default function NextRoundScreen({ navigation, route }) {
             style={s.revealBtn}
             onPress={() => navigation.navigate('EditTeams', { roundIndex, tournamentId: tournament.id })}
           >
-            <Text style={s.revealBtnText}>Set Teams</Text>
+            <Text style={s.revealBtnText}>{t('rounds.next.setTeams')}</Text>
           </TouchableOpacity>
         ) : (
           <>
             <TouchableOpacity style={s.revealBtn} onPress={startReveal}>
-              <Text style={s.revealBtnText}>{usesTeams ? 'Reveal Teams' : 'Reveal Round'}</Text>
+              <Text style={s.revealBtnText}>{usesTeams ? t('rounds.next.revealTeams') : t('rounds.next.revealRound')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={s.skipBtn}
               onPress={finishRevealInstant}
-              accessibilityLabel="Skip the reveal animation"
+              accessibilityLabel={t('rounds.next.skipRevealLabel')}
             >
-              <Text style={s.skipBtnText}>Skip</Text>
+              <Text style={s.skipBtnText}>{t('rounds.next.skip')}</Text>
             </TouchableOpacity>
           </>
         )}

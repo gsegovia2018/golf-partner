@@ -8,37 +8,39 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { loadComments, addComment, deleteComment } from '../store/feedStore';
+import { useT, getLanguage } from '../i18n';
 
 const MAX_BODY = 500;
 
 // Compact relative time from an ISO timestamp: "just now", "3m", "5h", "2d".
-function relTime(iso) {
+function relTime(iso, t) {
   if (!iso) return '';
   const ts = new Date(iso).getTime();
   if (Number.isNaN(ts)) return '';
   const diff = Math.max(0, Date.now() - ts);
   const min = Math.floor(diff / 60000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min}m`;
+  if (min < 1) return t('feed.time.now');
+  if (min < 60) return t('feed.time.min', { count: min });
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h`;
+  if (hr < 24) return t('feed.time.hour', { count: hr });
   const day = Math.floor(hr / 24);
-  if (day < 7) return `${day}d`;
-  return new Date(ts).toLocaleDateString();
+  if (day < 7) return t('feed.time.day', { count: day });
+  return new Date(ts).toLocaleDateString(getLanguage() === 'es' ? 'es-ES' : undefined);
 }
 
 // Cross-platform confirm — window.confirm on web, Alert on native.
-async function confirmDelete() {
-  if (Platform.OS === 'web') return window.confirm('Delete this comment?');
+async function confirmDelete(t) {
+  if (Platform.OS === 'web') return window.confirm(t('comments.delete.body'));
   return new Promise((resolve) => Alert.alert(
-    'Delete comment', 'Delete this comment?',
-    [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-     { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }],
+    t('comments.delete.title'), t('comments.delete.body'),
+    [{ text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+     { text: t('comments.delete.confirm'), style: 'destructive', onPress: () => resolve(true) }],
   ));
 }
 
 function CommentRow({ comment, theme, s, onDelete }) {
-  const name = comment.isMine ? 'You' : (comment.author?.name || 'Player');
+  const t = useT();
+  const name = comment.isMine ? t('comments.you') : (comment.author?.name || t('comments.player'));
   const initial = name.trim().charAt(0).toUpperCase() || '?';
   const color = comment.author?.avatarColor || theme.accent.primary;
   return (
@@ -51,7 +53,7 @@ function CommentRow({ comment, theme, s, onDelete }) {
       <View style={{ flex: 1 }}>
         <View style={s.rowHead}>
           <Text style={s.rowName} numberOfLines={1}>{name}</Text>
-          <Text style={s.rowTime}>{relTime(comment.createdAt)}</Text>
+          <Text style={s.rowTime}>{relTime(comment.createdAt, t)}</Text>
         </View>
         <Text style={s.rowBody}>{comment.body}</Text>
       </View>
@@ -60,7 +62,7 @@ function CommentRow({ comment, theme, s, onDelete }) {
           onPress={() => onDelete(comment)}
           style={s.deleteBtn}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityLabel="Delete comment"
+          accessibilityLabel={t('comments.delete.title')}
         >
           <Feather name="trash-2" size={14} color={theme.text.muted} />
         </TouchableOpacity>
@@ -86,6 +88,7 @@ export default function CommentThread({
   onCommentAdded,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const [comments, setComments] = useState([]);
@@ -132,13 +135,13 @@ export default function CommentThread({
   };
 
   const onDelete = async (comment) => {
-    if (!(await confirmDelete())) return;
+    if (!(await confirmDelete(t))) return;
     const ok = await deleteComment(comment.id);
     if (ok) {
       setComments((prev) => prev.filter((c) => c.id !== comment.id));
       onCountChange?.(itemKey, -1);
     } else if (Platform.OS !== 'web') {
-      Alert.alert('Could not delete', 'Check your connection and try again.');
+      Alert.alert(t('comments.deleteFail.title'), t('comments.deleteFail.body'));
     }
   };
 
@@ -153,15 +156,15 @@ export default function CommentThread({
       ) : state === 'error' ? (
         <View style={s.centerBox}>
           <Feather name="wifi-off" size={44} color={theme.text.muted} />
-          <Text style={s.emptyText}>Couldn't load comments.</Text>
+          <Text style={s.emptyText}>{t('comments.loadError')}</Text>
           <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.7}>
-            <Text style={s.retryBtnText}>Retry</Text>
+            <Text style={s.retryBtnText}>{t('comments.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : comments.length === 0 ? (
         <View style={s.centerBox}>
           <Feather name="message-circle" size={44} color={theme.text.muted} />
-          <Text style={s.emptyText}>No comments yet — be the first.</Text>
+          <Text style={s.emptyText}>{t('comments.empty')}</Text>
         </View>
       ) : (
         <List
@@ -184,14 +187,14 @@ export default function CommentThread({
 
       {sendError ? (
         <Text style={s.sendError}>
-          Couldn't post — you may be offline.
+          {t('comments.sendError')}
         </Text>
       ) : null}
 
       <View style={s.inputRow}>
         <TextInput
           style={s.input}
-          placeholder="Add a comment…"
+          placeholder={t('comments.placeholder')}
           placeholderTextColor={theme.text.muted}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor={theme.accent.primary}
@@ -205,7 +208,7 @@ export default function CommentThread({
           onPress={onSend}
           disabled={!draft.trim() || sending}
           activeOpacity={0.7}
-          accessibilityLabel="Post comment"
+          accessibilityLabel={t('comments.postA11y')}
         >
           {sending
             ? <ActivityIndicator size="small" color={theme.text.inverse} />

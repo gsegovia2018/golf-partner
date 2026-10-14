@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { parseHandicapIndex } from '../lib/handicap';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber } from '../i18n';
 import { deletePlayer, fetchMyGuestPlayers, upsertPlayer } from '../store/libraryStore';
 import { propagatePlayerToTournaments } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
@@ -19,6 +20,7 @@ import { mutate } from '../store/mutate';
 export default function PlayersLibraryScreen() {
   const navigation = useNavigation();
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const [players, setPlayers] = useState([]);
@@ -72,9 +74,9 @@ export default function PlayersLibraryScreen() {
     // decimal-pad field) on its own, so this only fires for real typos.
     const parsed = parseHandicapIndex(handicap);
     if (!parsed.ok && parsed.reason === 'invalid') {
-      const msg = 'Handicap must be a number between 0 and 54, with up to one decimal place.';
+      const msg = t('players.invalidHcpBody');
       if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('Invalid handicap', msg);
+      else Alert.alert(t('players.invalidHcpTitle'), msg);
       return;
     }
     setSaving(true);
@@ -100,7 +102,7 @@ export default function PlayersLibraryScreen() {
         cancelEdit();
       }
     } catch (e) {
-      Alert.alert('Error', e.message);
+      Alert.alert(t('players.errorTitle'), e.message);
     } finally {
       setSaving(false);
     }
@@ -108,19 +110,19 @@ export default function PlayersLibraryScreen() {
 
   async function remove(p) {
     const confirmed = Platform.OS === 'web'
-      ? window.confirm(`Remove ${p.name} from the library?`)
+      ? window.confirm(t('players.library.removeConfirm', { name: p.name }))
       : await new Promise((resolve) => Alert.alert(
-          'Remove Player', `Remove ${p.name} from the library?`,
-          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-           { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }],
+          t('players.library.removeTitle'), t('players.library.removeConfirm', { name: p.name }),
+          [{ text: t('players.cancel'), style: 'cancel', onPress: () => resolve(false) },
+           { text: t('players.library.remove'), style: 'destructive', onPress: () => resolve(true) }],
         ));
     if (!confirmed) return;
     try {
       await deletePlayer(p.id);
       await load();
     } catch (err) {
-      if (Platform.OS === 'web') window.alert(err.message ?? 'Could not delete player');
-      else Alert.alert('Error', err.message ?? 'Could not delete player');
+      if (Platform.OS === 'web') window.alert(err.message ?? t('players.library.deleteFailed'));
+      else Alert.alert(t('players.errorTitle'), err.message ?? t('players.library.deleteFailed'));
     }
   }
 
@@ -128,16 +130,16 @@ export default function PlayersLibraryScreen() {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Players</Text>
+        <Text style={s.headerTitle}>{t('players.library.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
-        <Text style={s.sectionTitle}>{editingId ? 'Edit player' : 'New player'}</Text>
+        <Text style={s.sectionTitle}>{editingId ? t('players.library.editSection') : t('players.library.newSection')}</Text>
         <View style={s.form}>
           <TextInput
             style={[s.input, s.flex]}
-            placeholder="Name"
+            placeholder={t('players.namePlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -146,7 +148,7 @@ export default function PlayersLibraryScreen() {
           />
           <TextInput
             style={[s.input, s.hcpInput]}
-            placeholder="HCP"
+            placeholder={t('players.hcpPlaceholder')}
             placeholderTextColor={theme.text.muted}
             keyboardType="decimal-pad"
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
@@ -159,7 +161,7 @@ export default function PlayersLibraryScreen() {
             onPress={save}
             disabled={saving || !name.trim()}
             activeOpacity={0.7}
-            accessibilityLabel={editingId ? 'Save player' : 'Add player'}
+            accessibilityLabel={editingId ? t('players.library.saveA11y') : t('players.library.addA11y')}
           >
             <Feather name={editingId ? 'check' : 'plus'} size={20} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
           </TouchableOpacity>
@@ -170,7 +172,7 @@ export default function PlayersLibraryScreen() {
           )}
         </View>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-          {[['male', 'Male'], ['female', 'Female']].map(([value, label]) => (
+          {[['male', t('players.gender.male')], ['female', t('players.gender.female')]].map(([value, label]) => (
             <TouchableOpacity
               key={value}
               onPress={() => setGender(value)}
@@ -185,18 +187,18 @@ export default function PlayersLibraryScreen() {
           ))}
         </View>
 
-        <Text style={s.sectionTitle}>List</Text>
+        <Text style={s.sectionTitle}>{t('players.library.listSection')}</Text>
         {loading
           ? <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
           : loadError
             ? (
               <View style={s.errorBox}>
                 <Feather name="wifi-off" size={44} color={theme.destructive} />
-                <Text style={s.errorTitle}>Couldn't load players</Text>
+                <Text style={s.errorTitle}>{t('players.loadFailedTitle')}</Text>
                 <Text style={s.errorMsg}>{loadError}</Text>
                 <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.7}>
                   <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-                  <Text style={s.retryBtnText}>Retry</Text>
+                  <Text style={s.retryBtnText}>{t('players.retry')}</Text>
                 </TouchableOpacity>
               </View>
             )
@@ -204,8 +206,8 @@ export default function PlayersLibraryScreen() {
             ? (
               <View style={s.emptyState}>
                 <Feather name="users" size={44} color={theme.text.muted} />
-                <Text style={s.emptyTitle}>No players yet</Text>
-                <Text style={s.emptySubtitle}>Add players to use in your tournaments</Text>
+                <Text style={s.emptyTitle}>{t('players.library.empty')}</Text>
+                <Text style={s.emptySubtitle}>{t('players.library.emptySub')}</Text>
               </View>
             )
             : players.map((p, index) => (
@@ -213,7 +215,7 @@ export default function PlayersLibraryScreen() {
                 <View style={s.row}>
                   <View style={s.rowLeft}>
                     <Text style={s.playerName}>{p.name}</Text>
-                    <Text style={s.hcpLabel}>HCP {p.handicap}</Text>
+                    <Text style={s.hcpLabel}>{t('players.hcp', { hcp: formatNumber(p.handicap) })}</Text>
                   </View>
                   <TouchableOpacity style={s.editBtn} onPress={() => startEdit(p)} activeOpacity={0.7}>
                     <Feather name="edit-2" size={16} color={theme.accent.primary} />

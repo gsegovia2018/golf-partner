@@ -4,6 +4,7 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing, useReducedMotion,
 } from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
 import { toneColor } from './metricTone';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
@@ -72,7 +73,7 @@ function clampPct(value) {
 }
 
 function formatTarget(value) {
-  return Number.isInteger(value) ? `${value}` : value.toFixed(1);
+  return Number.isInteger(value) ? `${value}` : formatNumber(value, { decimals: 1 });
 }
 
 // Target-meter row: label (with muted sample line) on the left, an 8px pill
@@ -88,6 +89,7 @@ export default function TargetMeterRow({
   tone = 'neutral', rowIndex = 0, first = false, testID,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const scale = isNumber(numericValue) && isNumber(target)
     ? Math.max(numericValue, target) * SCALE_HEADROOM
@@ -95,7 +97,7 @@ export default function TargetMeterRow({
   const hasMeter = isNumber(scale) && scale > 0;
   const fillPct = hasMeter ? clampPct((numericValue / scale) * 100) : 0;
   const tickPct = hasMeter ? clampPct((target / scale) * 100) : 0;
-  const targetText = hasMeter ? `target ${targetDisplay ?? formatTarget(target)}` : null;
+  const targetText = hasMeter ? t('stats.my.target.target', { value: targetDisplay ?? formatTarget(target) }) : null;
   const tickColor = theme.isDark ? theme.semantic.winner.dark : theme.semantic.winner.light;
   const accessibilityLabel = targetText
     ? `${label}: ${value}, ${targetText}`

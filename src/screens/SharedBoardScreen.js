@@ -29,6 +29,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { buildSharedBoardModel, buildSharedMediaModel } from '../store/sharedBoard';
 import FeedRoundCard from '../components/feed/FeedRoundCard';
@@ -101,6 +102,7 @@ function attachMedia(feedItem, story) {
 export default function SharedBoardScreen(props) {
   const token = props.token ?? props.route?.params?.token;
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const [model, setModel] = useState(null);
@@ -232,7 +234,7 @@ export default function SharedBoardScreen(props) {
     <View style={s.footer}>
       <TouchableOpacity onPress={openApp} activeOpacity={0.7}>
         <Text style={s.footerText}>
-          Scored with Golf Partner 🏌️ — <Text style={s.footerLink}>{BOARD_URL}</Text>
+          {t('sharedBoard.footer')}<Text style={s.footerLink}>{BOARD_URL}</Text>
         </Text>
       </TouchableOpacity>
     </View>
@@ -269,9 +271,9 @@ export default function SharedBoardScreen(props) {
             <View style={s.icon}>
               <Feather name="link" size={28} color={theme.text.muted} />
             </View>
-            <Text style={s.stateTitle}>This board link isn't active</Text>
+            <Text style={s.stateTitle}>{t('sharedBoard.notActive.title')}</Text>
             <Text style={s.stateSubtitle}>
-              It may have been rotated or revoked. Ask the organiser for a fresh link.
+              {t('sharedBoard.notActive.body')}
             </Text>
           </View>
         )}
@@ -281,8 +283,8 @@ export default function SharedBoardScreen(props) {
             <View style={s.icon}>
               <Feather name="wifi-off" size={28} color={theme.text.muted} />
             </View>
-            <Text style={s.stateTitle}>Couldn't load this board</Text>
-            <Text style={s.stateSubtitle}>Check your connection and pull down to try again.</Text>
+            <Text style={s.stateTitle}>{t('sharedBoard.error.title')}</Text>
+            <Text style={s.stateSubtitle}>{t('sharedBoard.error.body')}</Text>
           </View>
         )}
 
@@ -291,7 +293,7 @@ export default function SharedBoardScreen(props) {
             <Hero model={model} createdAt={createdAt} s={s} />
 
             {error && (
-              <Text style={s.staleHint}>Showing the last update — updating…</Text>
+              <Text style={s.staleHint}>{t('sharedBoard.stale')}</Text>
             )}
 
             {mediaModel.stories.length > 0 && (
@@ -305,8 +307,8 @@ export default function SharedBoardScreen(props) {
 
             {orderedRounds.length === 0 ? (
               <View style={s.card}>
-                <Text style={s.cardTitle}>ROUNDS</Text>
-                <Text style={s.emptyText}>No rounds yet</Text>
+                <Text style={s.cardTitle}>{t('sharedBoard.rounds')}</Text>
+                <Text style={s.emptyText}>{t('sharedBoard.noRounds')}</Text>
               </View>
             ) : orderedRounds.map((round) => {
               const story = storyByRoundId.get(round.id);
@@ -315,9 +317,9 @@ export default function SharedBoardScreen(props) {
                 return (
                   <View key={round.id} style={s.card}>
                     <Text style={s.cardTitle}>
-                      {round.label}{round.isLive ? ' · LIVE' : ''}
+                      {round.label}{round.isLive ? t('sharedBoard.liveSuffix') : ''}
                     </Text>
-                    <Text style={s.emptyText}>No scores yet</Text>
+                    <Text style={s.emptyText}>{t('sharedBoard.noScores')}</Text>
                   </View>
                 );
               }
@@ -326,7 +328,9 @@ export default function SharedBoardScreen(props) {
                   key={round.id}
                   item={displayItem}
                   roundLabel={round.label}
-                  timestamp={round.isLive ? `Live · thru ${round.thru}` : `Final · ${round.holesPlayed} holes`}
+                  timestamp={round.isLive
+                    ? t('sharedBoard.liveThru', { thru: round.thru })
+                    : t('sharedBoard.finalHoles', { count: round.holesPlayed })}
                   onPressMedia={displayItem.mediaCoverUrl
                     ? () => setOpenStoryKey(`board-story:${round.id}`)
                     : undefined}
@@ -357,6 +361,7 @@ export default function SharedBoardScreen(props) {
 // gold. Same visual family as HomeScreen's mastersCard / LiveRoundCard /
 // FormHero / CourseStatsScreen's CourseRecordBoard.
 function Hero({ model, createdAt, s }) {
+  const t = useT();
   const live = model.liveRoundIndex != null;
   const heroRound = live ? model.rounds[model.liveRoundIndex] : model.rounds[model.rounds.length - 1];
   const courseName = heroRound ? courseFromLabel(heroRound.label) : null;
@@ -370,15 +375,15 @@ function Hero({ model, createdAt, s }) {
         {live ? (
           <View style={s.heroLivePill}>
             <View style={s.heroLiveDot} />
-            <Text style={s.heroLivePillText}>LIVE</Text>
+            <Text style={s.heroLivePillText}>{t('sharedBoard.liveBadge')}</Text>
           </View>
         ) : model.rounds.length > 0 ? (
           <View style={s.heroFinalPill}>
             <Feather name="check-circle" size={11} color={CREAM_70} />
-            <Text style={s.heroFinalPillText}>FINAL</Text>
+            <Text style={s.heroFinalPillText}>{t('sharedBoard.final')}</Text>
           </View>
         ) : null}
-        {live && <Text style={s.heroThru}>Thru {heroRound?.thru ?? 0}</Text>}
+        {live && <Text style={s.heroThru}>{t('sharedBoard.thru', { thru: heroRound?.thru ?? 0 })}</Text>}
       </View>
 
       <Text style={s.heroTitle} numberOfLines={2}>{model.tournamentName}</Text>
@@ -389,7 +394,7 @@ function Hero({ model, createdAt, s }) {
         <View style={s.heroLeaderRow}>
           <Feather name="award" size={15} color={GOLD} />
           <Text style={s.heroLeaderText} numberOfLines={1}>
-            {`${leader.player.name} leads · ${leader.points} pts`}
+            {t('sharedBoard.leads', { name: leader.player.name, points: formatNumber(leader.points, { maxDecimals: 2 }) })}
           </Text>
         </View>
       )}
@@ -401,11 +406,12 @@ function Hero({ model, createdAt, s }) {
 // (semantic.rank) and the leader's name reads in Playfair; the rest of the
 // field is clean rows. This is the screen's centerpiece card.
 function OverallStandings({ overall, s, theme }) {
+  const t = useT();
   return (
     <View style={s.card} testID="shared-board-overall">
-      <Text style={s.cardTitle}>OVERALL</Text>
+      <Text style={s.cardTitle}>{t('sharedBoard.overall')}</Text>
       {overall.length === 0 ? (
-        <Text style={s.emptyText}>No standings yet</Text>
+        <Text style={s.emptyText}>{t('sharedBoard.noStandings')}</Text>
       ) : overall.map((entry) => (
         <PodiumRow key={entry.player.id} entry={entry} s={s} theme={theme} />
       ))}
@@ -414,6 +420,7 @@ function OverallStandings({ overall, s, theme }) {
 }
 
 function PodiumRow({ entry, s, theme }) {
+  const t = useT();
   const rank = theme.semantic.rank;
   const podiumColor = entry.place === 1 ? rank.gold : entry.place === 2 ? rank.silver
     : entry.place === 3 ? rank.bronze : null;
@@ -434,7 +441,7 @@ function PodiumRow({ entry, s, theme }) {
       >
         {entry.player.name}
       </Text>
-      <Text style={[s.rowPoints, isLeader && { color: winnerColor }]}>{entry.points} pts</Text>
+      <Text style={[s.rowPoints, isLeader && { color: winnerColor }]}>{t('sharedBoard.points', { points: formatNumber(entry.points, { maxDecimals: 2 }) })}</Text>
     </View>
   );
 }

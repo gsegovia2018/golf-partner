@@ -15,7 +15,7 @@ const T = SWING_STRINGS.results;
  * (draws it on the still); `onPlace` opens Edit marks on the checkpoint that needs a mark.
  */
 export default function SwingCheckRow({
-  check, selected = false, onPress, onPlace, placeAt = null,
+  check, selected = false, expanded, onPress, onPlace, placeAt = null,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
@@ -53,7 +53,7 @@ export default function SwingCheckRow({
   );
   if (!onPress) return <View accessible accessibilityLabel={a11y}>{body}</View>;
   return (
-    <PressableScale onPress={() => onPress(check)} activeScale={0.99} accessibilityRole="button" accessibilityLabel={a11y} accessibilityState={{ selected }}>
+    <PressableScale onPress={() => onPress(check)} activeScale={0.99} accessibilityRole="button" accessibilityLabel={a11y} accessibilityState={expanded === undefined ? { selected } : { selected, expanded }}>
       {body}
     </PressableScale>
   );

@@ -13,20 +13,23 @@ import { fetchTournament } from '../store/tournamentRepo';
 import { readLocal } from '../store/tournamentStore';
 import {
   submitLeagueCard, confirmLeagueCardByPartner, getLeagueMarkerCandidates, requestLeagueMarker,
-  remindLeagueMarker, cancelLeagueMarkerRequest,
+  remindLeagueMarker, cancelLeagueMarkerRequest, getLeagueCard,
 } from '../store/leagueStore';
 import { scoreCard, cardMonth } from '../store/leagueRules';
 import {
-  monthName, formatNetDiff, formatNetDiffSigned, netDiffTone, firstName, markerAskedLine,
+  monthName, formatNetDiffSigned, firstName, markerAskedLine,
 } from '../store/leagueView';
 import { UNRATED_TEE_PROBLEM } from '../store/leagueOffApp';
+import { leagueCardsOf } from '../store/leagueSetup';
+import { useT, tr } from '../i18n';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
-// Plain words for confirm_league_card_by_partner's refusals.
+// Catalogue keys for confirm_league_card_by_partner's refusals.
 export const PARTNER_REASONS = {
-  no_partner: 'Nobody else signed in to the app marked all 18 of your holes.',
-  not_settled: 'Some of your holes have not reached the server yet. Wait a moment and check again.',
-  snapshot_mismatch: 'The scores on the server changed since you submitted. Check again to resubmit them.',
-  not_your_player: 'Your player in this game is not linked to your account.',
+  no_partner: 'league.validate.reason.noPartner',
+  not_settled: 'league.validate.reason.notSettled',
+  snapshot_mismatch: 'league.validate.reason.snapshotMismatch',
+  not_your_player: 'league.validate.reason.notYourPlayer',
 };
 
 // Who to preselect as the marker: the only candidate, else whoever scored most
@@ -55,6 +58,7 @@ async function loadTournament(id) {
 // never confirmed), it skips Submit and runs the partner check straight away.
 export default function LeagueValidateScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const { user } = useAuth();
   const {
@@ -82,10 +86,10 @@ export default function LeagueValidateScreen({ navigation, route }) {
   const autoChecked = useRef(false);
 
   const load = useCallback(async () => {
-    const t = await loadTournament(tournamentId);
-    setTournament(t);
+    const loaded = await loadTournament(tournamentId);
+    setTournament(loaded);
     setLoading(false);
-    return t;
+    return loaded;
   }, [tournamentId]);
 
   useEffect(() => { load(); }, [load]);
@@ -94,9 +98,13 @@ export default function LeagueValidateScreen({ navigation, route }) {
     const round = tournament?.rounds?.find((r) => r.id === roundId);
     if (!round) return null;
     const players = tournament.players ?? [];
-    const lg = tournament.league ?? tournament.props?.league ?? null;
-    const player = players.find((p) => p.id === lg?.playerId)
+    // This card's player (R16: every member has their own card, any round),
+    // then my linked player, then the legacy single link of older games.
+    const entry = leagueCardsOf(tournament).find((e) => e.cardId === cardId) ?? null;
+    const legacy = tournament.league ?? tournament.props?.league ?? null;
+    const player = (entry?.playerId ? players.find((p) => p.id === entry.playerId) : null)
       ?? players.find((p) => p.user_id && p.user_id === user?.id)
+      ?? players.find((p) => p.id === legacy?.playerId)
       ?? null;
     if (!player) return null;
     const strokes = round.scores?.[player.id] ?? {};
@@ -123,7 +131,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
       round, roundNumber, player, strokes, gross, points, playingHandicap, snapshot, missing,
       rated, adjustedGross, differential, netDifferential, leagueHandicap: Number(leagueHandicap) || 0,
     };
-  }, [tournament, roundId, user?.id]);
+  }, [tournament, roundId, cardId, user?.id]);
 
   const checkPartner = useCallback(async () => {
     setBusy(true);
@@ -131,11 +139,11 @@ export default function LeagueValidateScreen({ navigation, route }) {
     try {
       setResult(await confirmLeagueCardByPartner(cardId));
     } catch (e) {
-      setError(e?.message ?? 'Could not check the card.');
+      setError(leagueErrorText(e) || t('league.validate.checkFailed'));
     } finally {
       setBusy(false);
     }
-  }, [cardId]);
+  }, [cardId, t]);
 
   useEffect(() => {
     let alive = true;
@@ -147,6 +155,20 @@ export default function LeagueValidateScreen({ navigation, route }) {
         setPending(m?.pending ?? null);
       } catch { /* no picker: Someone else is the only chip */ }
       if (alive) setMarkersLoaded(true);
+    })();
+    return () => { alive = false; };
+  }, [cardId]);
+
+  // The note a marker left when they sent the card back (it was only in the
+  // push). A failed read just means no note.
+  const [returnNote, setReturnNote] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const c = await getLeagueCard(cardId);
+        if (alive && c?.status === 'submitted' && c.markerNote) setReturnNote(c.markerNote);
+      } catch { /* no note shown */ }
     })();
     return () => { alive = false; };
   }, [cardId]);
@@ -183,15 +205,15 @@ export default function LeagueValidateScreen({ navigation, route }) {
     try {
       if (pending.failed) {
         if (!(await ask(pending.userId, pending.name))) {
-          setMarkerNote({ error: true, text: `Could not ask ${firstName(pending.name)}. Try again.` });
+          setMarkerNote({ error: true, text: t('league.validate.askFailed', { name: firstName(pending.name) }) });
         }
       } else {
         const r = await remindLeagueMarker(cardId);
         setPending((p) => ({ ...p, remindedAt: r?.remindedAt ?? null }));
-        setMarkerNote({ text: `Reminded ${firstName(pending.name)}.` });
+        setMarkerNote({ text: t('league.validate.reminded', { name: firstName(pending.name) }) });
       }
     } catch (e) {
-      setMarkerNote({ error: true, text: e?.message ?? 'Could not remind.' });
+      setMarkerNote({ error: true, text: leagueErrorText(e) || t('league.validate.remindFailed') });
     } finally {
       setBusy(false);
     }
@@ -207,7 +229,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
       // Reopened without a check result: show the not-confirmed state.
       setResult((r) => r ?? { confirmed: false, reason: 'no_partner', settled: 18 });
     } catch (e) {
-      setMarkerNote({ error: true, text: e?.message ?? 'Could not cancel the request.' });
+      setMarkerNote({ error: true, text: leagueErrorText(e) || t('league.validate.cancelFailed') });
     } finally {
       setBusy(false);
     }
@@ -231,7 +253,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
       setResult(r);
       if (!r.confirmed && picked && !RESUBMIT_REASONS.includes(r.reason)) await ask(picked.userId, picked.name);
     } catch (e) {
-      setError(e?.message ?? 'Could not submit the card.');
+      setError(leagueErrorText(e) || t('league.validate.submitFailed'));
     } finally {
       setBusy(false);
     }
@@ -250,8 +272,8 @@ export default function LeagueValidateScreen({ navigation, route }) {
 
   const header = (
     <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={goBoard} accessibilityLabel="Back" />
-      <Text style={s.headerTitle} numberOfLines={1}>{`${month} card`}</Text>
+      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={goBoard} accessibilityLabel={t('common.back')} />
+      <Text style={s.headerTitle} numberOfLines={1}>{t('league.validate.headerTitle', { month })}</Text>
     </View>
   );
 
@@ -262,9 +284,9 @@ export default function LeagueValidateScreen({ navigation, route }) {
         <View style={s.center}>
           {loading ? <ActivityIndicator color={theme.accent.primary} /> : (
             <>
-              <Text style={s.emptyText}>This round could not be loaded.</Text>
+              <Text style={s.emptyText}>{t('league.validate.loadFailed')}</Text>
               <TouchableOpacity style={s.secondaryBtn} onPress={load} activeOpacity={0.8}>
-                <Text style={s.secondaryText}>Try again</Text>
+                <Text style={s.secondaryText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -282,8 +304,18 @@ export default function LeagueValidateScreen({ navigation, route }) {
   const markerFirst = pending ? firstName(pending.name) : '';
   // The server refuses to submit an unrated tee (P0001); say so up front.
   const unrated = !rated && !alreadySubmitted && !result;
-  const netTone = netDiffTone(netDifferential);
-  const netColor = netTone === 'better' ? theme.scoreColor('excellent') : netTone === 'worse' ? theme.destructive : theme.text.primary;
+
+  // Fix a hole in the game's own scorecard, then come back and Check again.
+  const editInScorecard = (
+    <TouchableOpacity
+      style={s.secondaryBtn}
+      onPress={() => navigation.navigate('Scorecard', { tournamentId, roundIndex: roundNumber - 1 })}
+      accessibilityRole="button"
+      activeOpacity={0.8}
+    >
+      <Text style={s.secondaryText}>{t('league.validate.editScorecard')}</Text>
+    </TouchableOpacity>
+  );
 
   const fallback = (icon, title, sub, routeName, params) => (
     <TouchableOpacity
@@ -303,8 +335,8 @@ export default function LeagueValidateScreen({ navigation, route }) {
 
   // "Who marked you?" chips: one per candidate, then Someone else.
   const picker = (
-    <View accessibilityRole="radiogroup" accessibilityLabel="Who marked you?">
-      <Text style={s.overline}>WHO MARKED YOU?</Text>
+    <View accessibilityRole="radiogroup" accessibilityLabel={t('league.validate.pickerTitle')}>
+      <Text style={s.overline}>{t('league.validate.pickerOverline')}</Text>
       <View style={s.chips}>
         {candidates.map((c) => (
           <TouchableOpacity
@@ -327,7 +359,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
           accessibilityState={{ checked: pick === 'else' }}
           activeOpacity={0.8}
         >
-          <Text style={[s.chipText, pick === 'else' && s.chipTextOn]} numberOfLines={1}>Someone else</Text>
+          <Text style={[s.chipText, pick === 'else' && s.chipTextOn]} numberOfLines={1}>{t('league.validate.someoneElse')}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -335,14 +367,14 @@ export default function LeagueValidateScreen({ navigation, route }) {
 
   const fallbacks = (
     <>
-      <Text style={s.overline}>MARKER NOT IN THE APP?</Text>
+      <Text style={s.overline}>{t('league.validate.fallbacksOverline')}</Text>
       <View style={s.fallbackList}>
-        {fallback('maximize', 'Show QR to your marker', 'They confirm in their phone browser',
+        {fallback('maximize', t('league.validate.qrTitle'), t('league.validate.qrSub'),
           'LeagueMarkerQR', { leagueId, cardId })}
         {/* The card is already submitted: AddProof only uploads and attaches. */}
-        {fallback('camera', 'Upload signed paper card', 'A photo of the card your marker signed',
+        {fallback('camera', t('league.validate.uploadTitle'), t('league.validate.uploadSub'),
           'LeagueAddProof', { leagueId, cardId, source: 'app', kind: 'photo' })}
-        {fallback('award', 'Official tournament result', 'A screenshot or photo of the official result',
+        {fallback('award', t('league.validate.officialTitle'), t('league.validate.officialSub'),
           'LeagueAddProof', { leagueId, cardId, source: 'app', kind: 'official' })}
       </View>
     </>
@@ -357,9 +389,9 @@ export default function LeagueValidateScreen({ navigation, route }) {
             <Feather name="check-circle" size={18} color={theme.accent.primary} style={{ marginRight: 12 }} />
             <View style={{ flex: 1 }}>
               <Text style={s.statusTitle}>
-                {`${result.partnerName || 'Your partner'} confirmed ${result.settled ?? 18} of 18 holes in the app`}
+                {t('league.validate.confirmedTitle', { partner: result.partnerName || t('league.validate.yourPartner'), settled: result.settled ?? 18 })}
               </Text>
-              <Text style={s.statusSub}>Your card counts. The league has been told.</Text>
+              <Text style={s.statusSub}>{t('league.validate.confirmedSub')}</Text>
             </View>
           </View>
         )}
@@ -373,28 +405,28 @@ export default function LeagueValidateScreen({ navigation, route }) {
               <View style={{ flex: 1 }}>
                 {pending.failed ? (
                   <Text style={s.statusTitle}>
-                    {`Card submitted, but ${markerFirst} wasn't asked. Tap “Remind ${markerFirst}” to try again.`}
+                    {t('league.validate.notAsked', { name: markerFirst })}
                   </Text>
                 ) : (
                   <>
-                    <Text style={s.statusTitle}>{`Waiting for ${markerFirst} to confirm`}</Text>
-                    <Text style={s.statusSub}>{markerAskedLine(pending.requestedAt, pending.expiresAt)}</Text>
+                    <Text style={s.statusTitle}>{t('league.validate.waiting', { name: markerFirst })}</Text>
+                    <Text style={s.statusSub}>{markerAskedLine(pending.requestedAt, pending.expiresAt).map(tr).join(' · ')}</Text>
                   </>
                 )}
               </View>
             </View>
-            {rated && netDifferential != null && (
+            {rated && card.points != null && (
               <Text style={s.waitingNet}>
-                <Text style={{ color: netColor, fontFamily: 'PlusJakartaSans-ExtraBold' }}>{formatNetDiff(netDifferential)}</Text>
-                {` ${netDifferential === 0 ? 'with' : 'than'} your league handicap ${card.leagueHandicap.toFixed(1)} · counts once confirmed`}
+                <Text style={{ fontFamily: 'PlusJakartaSans-ExtraBold' }}>{t('league.scoring.pts', { points: card.points })}</Text>
+                {t('league.validate.countsOnceConfirmed')}
               </Text>
             )}
             <View style={s.btnRow}>
               <TouchableOpacity style={[s.rowBtn, busy && s.disabled]} onPress={remind} disabled={busy} accessibilityRole="button">
-                <Text style={s.secondaryText} numberOfLines={1}>{`Remind ${markerFirst}`}</Text>
+                <Text style={s.secondaryText} numberOfLines={1}>{t('league.validate.remind', { name: markerFirst })}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[s.rowBtn, busy && s.disabled]} onPress={askSomeoneElse} disabled={busy} accessibilityRole="button">
-                <Text style={s.secondaryText} numberOfLines={1}>Ask someone else</Text>
+                <Text style={s.secondaryText} numberOfLines={1}>{t('league.validate.askElse')}</Text>
               </TouchableOpacity>
             </View>
             {!!markerNote && (
@@ -403,12 +435,25 @@ export default function LeagueValidateScreen({ navigation, route }) {
           </>
         )}
 
+        {!!returnNote && !confirmed && (
+          <>
+            <View style={[s.statusCard, s.statusWarn]}>
+              <Feather name="message-circle" size={18} color={theme.text.secondary} style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.statusTitle}>{t('league.validate.sentBack')}</Text>
+                <Text style={s.statusSub}>{returnNote}</Text>
+              </View>
+            </View>
+            <View style={{ marginBottom: 16 }}>{editInScorecard}</View>
+          </>
+        )}
+
         {notConfirmed && !waiting && (
           <View style={[s.statusCard, s.statusWarn]}>
             <Feather name="alert-circle" size={18} color={theme.text.secondary} style={{ marginRight: 12 }} />
             <View style={{ flex: 1 }}>
-              <Text style={s.statusTitle}>Submitted · not confirmed yet</Text>
-              <Text style={s.statusSub}>{PARTNER_REASONS[result.reason] ?? 'The card could not be confirmed in the app.'}</Text>
+              <Text style={s.statusTitle}>{t('league.validate.notConfirmedTitle')}</Text>
+              <Text style={s.statusSub}>{t(PARTNER_REASONS[result.reason] ?? 'league.validate.notConfirmedFallback')}</Text>
             </View>
           </View>
         )}
@@ -416,18 +461,18 @@ export default function LeagueValidateScreen({ navigation, route }) {
         {confirmed && rated && netDifferential != null && (
           <View style={s.resultCard}>
             <View style={s.resultHead}>
-              <Text style={[s.resultValue, { color: netColor }]}>{formatNetDiff(netDifferential)}</Text>
-              <Text style={s.resultKey}>{`${netDifferential === 0 ? 'with' : 'than'} your league handicap ${card.leagueHandicap.toFixed(1)}`}</Text>
+              <Text style={[s.resultValue, { color: theme.text.primary }]}>{card.points}</Text>
+              <Text style={s.resultKey}>{t('league.card.stableford')}</Text>
             </View>
             <Text style={s.resultSub}>
-              {`Net ${formatNetDiffSigned(netDifferential)} · differential ${card.differential.toFixed(1)} · ${card.points} pts · gross ${card.gross} (adjusted ${card.adjustedGross})`}
+              {t('league.validate.resultSub', { gross: card.gross, adjusted: card.adjustedGross, diff: formatNetDiffSigned(netDifferential) })}
             </Text>
             <TouchableOpacity
               onPress={() => navigation.navigate('LeagueCard', { leagueId, month: cardMonth(new Date()), userId: user?.id })}
               activeOpacity={0.7}
               accessibilityRole="link"
             >
-              <Text style={s.resultLink}>{'How it\'s worked out ›'}</Text>
+              <Text style={s.resultLink}>{t('league.validate.howWorked')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -436,13 +481,13 @@ export default function LeagueValidateScreen({ navigation, route }) {
           <View style={[s.statusCard, s.statusWarn]}>
             <Feather name="alert-circle" size={18} color={theme.text.secondary} style={{ marginRight: 12 }} />
             <View style={{ flex: 1 }}>
-              <Text style={s.statusTitle}>This tee isn't rated</Text>
-              <Text style={s.statusSub}>{UNRATED_TEE_PROBLEM}</Text>
+              <Text style={s.statusTitle}>{t('league.validate.unratedTitle')}</Text>
+              <Text style={s.statusSub}>{tr(UNRATED_TEE_PROBLEM)}</Text>
             </View>
           </View>
         )}
 
-        <Text style={s.courseTitle} numberOfLines={1}>{`${round.courseName} · Round ${roundNumber}`}</Text>
+        <Text style={s.courseTitle} numberOfLines={1}>{t('league.validate.courseRound', { course: round.courseName, round: roundNumber })}</Text>
         <ScorecardTable
           round={round}
           players={[player]}
@@ -455,16 +500,17 @@ export default function LeagueValidateScreen({ navigation, route }) {
 
         {missing.length > 0 && !result && !alreadySubmitted && (
           <Text style={s.errorText}>
-            {`Every hole needs a score before the card can be submitted. Missing: ${missing.join(', ')}.`}
+            {t('league.validate.missing', { holes: missing.join(', ') })}
           </Text>
         )}
+        {missing.length > 0 && !result && !alreadySubmitted && editInScorecard}
         {!!error && <Text style={s.errorText}>{error}</Text>}
 
         {(notConfirmed || waiting) && (
           <>
             {!waiting && RESUBMIT_REASONS.includes(result.reason) && (
               <TouchableOpacity style={s.secondaryBtn} onPress={checkAgain} activeOpacity={0.8}>
-                <Text style={s.secondaryText}>Check again</Text>
+                <Text style={s.secondaryText}>{t('league.validate.checkAgain')}</Text>
               </TouchableOpacity>
             )}
             {/* Nobody asked, or the last ask was sent back or expired: pick again. */}
@@ -478,7 +524,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
                     disabled={busy}
                     accessibilityRole="button"
                   >
-                    <Text style={s.secondaryText}>{`Ask ${firstName(picked.name)}`}</Text>
+                    <Text style={s.secondaryText}>{t('league.validate.ask', { name: firstName(picked.name) })}</Text>
                   </TouchableOpacity>
                 )}
               </>
@@ -491,7 +537,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
       <View style={s.footer}>
         {confirmed || waiting || (notConfirmed && !RESUBMIT_REASONS.includes(result.reason)) ? (
           <TouchableOpacity style={s.primaryBtn} onPress={goBoard} activeOpacity={0.8}>
-            <Text style={s.primaryText}>{confirmed ? 'Done' : 'Back to the league'}</Text>
+            <Text style={s.primaryText}>{confirmed ? t('common.done') : t('league.validate.backToLeague')}</Text>
           </TouchableOpacity>
         ) : alreadySubmitted && !result ? (
           <TouchableOpacity
@@ -502,14 +548,14 @@ export default function LeagueValidateScreen({ navigation, route }) {
           >
             {busy
               ? <ActivityIndicator color={theme.text.inverse} />
-              : <Text style={s.primaryText}>Check with my partner</Text>}
+              : <Text style={s.primaryText}>{t('league.validate.checkPartner')}</Text>}
           </TouchableOpacity>
         ) : (
           <>
             {picker}
             {picked
-              ? <Text style={s.footnote}>{`If ${firstName(picked.name)} scored your holes too, it counts straight away.`}</Text>
-              : !result && <Text style={s.footnote}>Once you submit, the card counts straight away.</Text>}
+              ? <Text style={s.footnote}>{t('league.validate.footnotePicked', { name: firstName(picked.name) })}</Text>
+              : !result && <Text style={s.footnote}>{t('league.validate.footnote')}</Text>}
             <TouchableOpacity
               style={[s.primaryBtn, (busy || missing.length > 0 || unrated) && s.disabled]}
               onPress={submitAndConfirm}
@@ -518,7 +564,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
             >
               {busy
                 ? <ActivityIndicator color={theme.text.inverse} />
-                : <Text style={s.primaryText}>{result ? 'Submit again' : picked ? `Submit and ask ${firstName(picked.name)}` : 'Submit'}</Text>}
+                : <Text style={s.primaryText}>{result ? t('league.validate.submitAgain') : picked ? t('league.validate.submitAndAsk', { name: firstName(picked.name) }) : t('league.validate.submit')}</Text>}
             </TouchableOpacity>
           </>
         )}

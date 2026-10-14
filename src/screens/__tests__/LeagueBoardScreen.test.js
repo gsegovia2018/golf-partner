@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import LeagueBoardScreen from '../LeagueBoardScreen';
 
@@ -11,9 +11,13 @@ jest.mock('../../components/PullToRefresh', () => {
 jest.mock('../../store/leagueStore', () => ({
   getLeague: jest.fn(),
   getLeagueCached: jest.fn(() => Promise.resolve(null)),
+  getLeagueShareLink: jest.fn(() => Promise.resolve('tok12345678901234567890')),
 }));
 
+jest.mock('../../store/tournamentStore', () => ({ getTournamentSnapshot: jest.fn(() => null) }));
+
 const store = require('../../store/leagueStore');
+const tournaments = require('../../store/tournamentStore');
 
 const THIS_MONTH = (() => {
   const d = new Date();
@@ -22,7 +26,7 @@ const THIS_MONTH = (() => {
 const PAST_MONTH = '2025-09';
 
 const member = (userId, displayName, extra = {}) => ({
-  userId, displayName, role: 'member', feePaid: false, leftAt: null, leagueHandicap: 18, ...extra,
+  userId, displayName, publicName: displayName, role: 'member', feePaid: false, leftAt: null, leagueHandicap: 18, ...extra,
 });
 
 function snapshot({ cardsByMonth = {}, members } = {}) {
@@ -78,7 +82,7 @@ describe('LeagueBoardScreen', () => {
     expect(getByText('No card yet · 3')).toBeTruthy();
     expect(getByText('You, Javi, Nacho')).toBeTruthy();
     expect(queryByText(/^Confirmed ·/)).toBeNull();
-    expect(getByText(/^Gold = table points if the month ended today/)).toBeTruthy();
+    expect(getByText(/^PTS = Stableford\. LEAGUE = league points if \w+ ended today\./)).toBeTruthy();
     fireEvent.press(getByText('Season'));
     expect(getAllByText('—')).toHaveLength(3);
     expect(getByText(/No cards yet\. .* is open: the board fills in as each card is confirmed\./)).toBeTruthy();
@@ -96,6 +100,42 @@ describe('LeagueBoardScreen', () => {
     expect(nav.navigate).toHaveBeenCalledWith('LeagueAnnounce', { leagueId: 'L1' });
     fireEvent.press(getByText('Add a card I played'));
     expect(nav.navigate).toHaveBeenCalledWith('LeagueAddScore', { leagueId: 'L1' });
+  });
+
+  test('an admin-voided card takes the month: the board shows it, not the announce buttons', async () => {
+    const snap = snapshot();
+    snap.cards = [card('me', 'void', 41, { voidKind: 'admin', voidedReason: 'Wrong tee: sheet says yellow', monthKey: THIS_MONTH, month: `${THIS_MONTH}-01` })];
+    store.getLeague.mockResolvedValue(snap);
+    const nav = makeNav();
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText(/^Voided by an admin: Wrong tee\. .* stays used\.$/));
+    expect(queryByText('Playing without the app')).toBeNull();
+    expect(queryByText('Play with the app')).toBeNull();
+    fireEvent.press(getByText('Open the card'));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueCard', { leagueId: 'L1', month: THIS_MONTH, userId: 'me' });
+  });
+
+  test("a member's admin-voided card is its own group on the month table, not under No card yet", async () => {
+    const snap = snapshot();
+    snap.cards = [card('javi', 'void', 41, { voidKind: 'admin', voidedReason: 'Wrong tee: sheet says yellow', monthKey: THIS_MONTH, month: `${THIS_MONTH}-01` })];
+    store.getLeague.mockResolvedValue(snap);
+    const nav = makeNav();
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText('Voided · 1'));
+    expect(getByText('Voided · Wrong tee')).toBeTruthy();
+    expect(getByText('Javi')).toBeTruthy();
+    expect(getByText('No card yet · 2')).toBeTruthy();
+    expect(queryByText('No card yet · 3')).toBeNull();
+    fireEvent.press(getByText('Javi'));
+    expect(nav.navigate).toHaveBeenCalledWith('LeagueCard', { leagueId: 'L1', month: THIS_MONTH, userId: 'javi' });
+  });
+
+  test('a withdrawn card frees the month: the announce buttons are back', async () => {
+    const snap = snapshot();
+    snap.cards = [card('me', 'void', null, { voidKind: 'withdrawn', monthKey: THIS_MONTH, month: `${THIS_MONTH}-01` })];
+    store.getLeague.mockResolvedValue(snap);
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('Playing without the app'));
   });
 
   test('announced off-app: shows the announcement and "Add your score" opens LeagueAddScore', async () => {
@@ -125,7 +165,7 @@ describe('LeagueBoardScreen', () => {
       },
     }));
     const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
-    await waitFor(() => getByText('4.0 worse than your handicap · 36 pts · Golf Olivar · added after the round · photo attached'));
+    await waitFor(() => getByText('36 pts · 1st so far · +500 league pts · Golf Olivar · added after the round · photo attached'));
   });
 
   test('a submitted off-app card without proof offers "Add proof" (resume)', async () => {
@@ -139,6 +179,23 @@ describe('LeagueBoardScreen', () => {
     await waitFor(() => getByText('Add proof'));
     fireEvent.press(getByText('Add proof'));
     expect(nav.navigate).toHaveBeenCalledWith('LeagueAddProof', { leagueId: 'L1', cardId: 'c9', resume: true });
+  });
+
+  test('a playing app card with holes still unscored shows no Finish button, only the scorecard link', async () => {
+    tournaments.getTournamentSnapshot.mockReturnValueOnce({
+      players: [{ id: 'p1', user_id: 'me' }],
+      rounds: [{ id: 't1-r0', holes: [{ number: 1 }, { number: 2 }], scores: { p1: { 1: 4 } } }],
+    });
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'playing', null, {
+          id: 'c5', course: { name: 'Centro Nacional' }, tournamentId: 't1', roundId: 't1-r0',
+        })],
+      },
+    }));
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText(/Playing with the app/));
+    expect(queryByText('Finish validating your card')).toBeNull();
   });
 
   test('a playing app card offers "Finish validating your card" → LeagueValidate on its round', async () => {
@@ -156,6 +213,33 @@ describe('LeagueBoardScreen', () => {
     expect(nav.navigate).toHaveBeenCalledWith('LeagueValidate', {
       leagueId: 'L1', cardId: 'c5', tournamentId: 't1', roundId: 't1-r0', submitted: false,
     });
+  });
+
+  test('"Playing with the app" opens the game scorecard', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'playing', null, {
+          id: 'c5', course: { name: 'Centro Nacional' }, tournamentId: 't1', roundId: 't1-r0',
+        })],
+      },
+    }));
+    const nav = makeNav();
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={nav} route={route} />));
+    await waitFor(() => getByText(/Playing with the app/));
+    fireEvent.press(getByText(/Playing with the app/));
+    expect(nav.navigate).toHaveBeenCalledWith('Scorecard', { tournamentId: 't1', roundIndex: 0 });
+  });
+
+  test('a card the marker sent back shows the marker note', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: {
+        [THIS_MONTH]: [card('me', 'submitted', 36, {
+          id: 'c5', tournamentId: 't1', roundId: 't1-r0', markerNote: 'Hole 7 was a 6',
+        })],
+      },
+    }));
+    const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText(/Hole 7 was a 6/));
   });
 
   test('a submitted card with a marker asked reads "Waiting for <first>"', async () => {
@@ -230,7 +314,7 @@ describe('LeagueBoardScreen', () => {
     }));
     const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Confirmed'));
-    expect(getByText('4.0 worse than your handicap · 36 pts · Golf Olivar · confirmed by Lucía')).toBeTruthy();
+    expect(getByText('36 pts · 1st so far · +500 league pts · Golf Olivar · confirmed by Lucía')).toBeTruthy();
     expect(queryByText('Play with the app')).toBeNull();
   });
 
@@ -241,7 +325,8 @@ describe('LeagueBoardScreen', () => {
     const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Awaiting approval · 1'));
     expect(getByText("Needs an admin's approval · not announced in the app")).toBeTruthy();
-    expect(getByText('10.0 worse')).toBeTruthy();
+    expect(getByText('30')).toBeTruthy();
+    expect(queryByText(/worse|better/)).toBeNull();
     expect(getByText('not counted')).toBeTruthy();
     expect(queryByText(/^Confirmed ·/)).toBeNull();
   });
@@ -326,8 +411,11 @@ describe('LeagueBoardScreen', () => {
     const { getByText, getAllByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Confirmed · 1'));
     expect(getByText('Olivar · marker by QR')).toBeTruthy();
-    expect(getByText('2.0 worse')).toBeTruthy();
-    expect(getAllByText('5.0 worse')).toHaveLength(2); // my card block + the waiting row
+    expect(getByText('38')).toBeTruthy(); // Stableford points under PTS
+    expect(getByText('PTS', { includeHiddenElements: true })).toBeTruthy();
+    expect(getByText('LEAGUE', { includeHiddenElements: true })).toBeTruthy();
+    expect(getAllByText(/35/).length).toBeGreaterThan(0); // my card block + the waiting row
+    expect(queryByText(/worse|better/)).toBeNull();
     expect(getByText('+500')).toBeTruthy();
     expect(getByText('Waiting for confirmation · 1')).toBeTruthy();
     expect(getByText("Olivar · marker hasn't scanned the QR yet")).toBeTruthy();
@@ -342,18 +430,19 @@ describe('LeagueBoardScreen', () => {
     expect(queryByText('Set up the Final')).toBeNull();
   });
 
-  test('this month: an unrated confirmed card is listed with the confirmed, not ranked', async () => {
+  test('this month: an unscored confirmed card is listed with the confirmed, not ranked', async () => {
     store.getLeague.mockResolvedValue(snapshot({
       cardsByMonth: {
         [THIS_MONTH]: [
           card('javi', 'confirmed', 38, { netDifferential: -2.4 }),
-          card('nacho', 'confirmed', 33, { netDifferential: null }),
+          card('nacho', 'confirmed', null, { netDifferential: null }),
         ],
       },
     }));
-    const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
     await waitFor(() => getByText('Confirmed · 2'));
-    expect(getByText('2.4 better')).toBeTruthy();
+    expect(getByText('38')).toBeTruthy();
+    expect(queryByText(/worse|better/)).toBeNull();
     expect(getByText('unrated')).toBeTruthy();
     expect(getByText('not ranked')).toBeTruthy();
     expect(getByText(/Nacho's card has no slope or rating\. Shown, not ranked\.$/)).toBeTruthy();
@@ -365,6 +454,41 @@ describe('LeagueBoardScreen', () => {
     await waitFor(() => getByText(/^Your .* card$/));
     const json = JSON.stringify(toJSON());
     expect(json.indexOf('Play with the app')).toBeLessThan(json.indexOf('SO FAR'));
+  });
+
+  test('header: "Share standings" opens the share sheet on the month so far, with the live board link', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: { [THIS_MONTH]: [card('javi', 'confirmed', 36, { course: { name: 'Golf Olivar' } })] },
+    }));
+    const { getByLabelText, findByText, getAllByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    fireEvent.press(await waitFor(() => getByLabelText('Share standings')));
+    expect(await findByText('Share to the group')).toBeTruthy();
+    await waitFor(() => expect(store.getLeagueShareLink).toHaveBeenCalledWith('L1'));
+    await waitFor(() => {
+      const text = getByLabelText('Message preview').props.children;
+      expect(text).toMatch(/^\*El Club\*\n\w+ so far · (\d+ days? left|last day)\n\n1\. Javi · 36 pts · Golf Olivar\n2 still to post\.\n\nLive board: https:\/\/golf-partner\.vercel\.app\/league-board\/tok12345678901234567890$/);
+    });
+    // Without the link: the same text, no URL.
+    fireEvent(getByLabelText('Add the live board link'), 'valueChange', false);
+    expect(getByLabelText('Message preview').props.children).not.toMatch(/league-board/);
+    // The sheet's Season chip is the last "Season" on screen (the board has one too).
+    const seasons = getAllByText('Season');
+    fireEvent.press(seasons[seasons.length - 1]);
+    expect(getByLabelText('Message preview').props.children).toMatch(/^\*El Club\*\nSeason after /);
+  });
+
+  test('a month that is final: the banner shares the results with places and league points', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      cardsByMonth: { [PAST_MONTH]: [card('javi', 'confirmed', 38), card('me', 'confirmed', 34)] },
+    }));
+    const { getByText, getByLabelText, findByText } = render(wrap(
+      <LeagueBoardScreen navigation={makeNav()} route={{ params: { leagueId: 'L1', finalMonth: PAST_MONTH } }} />,
+    ));
+    expect(await findByText('September is final')).toBeTruthy();
+    fireEvent.press(getByText('Share the results'));
+    await waitFor(() => expect(getByLabelText('Message preview').props.children).toMatch(
+      /^\*El Club\*\nSeptember results\n\n1\. Javi · 38 pts · \+500\n2\. Marcos · 34 pts · \+300\n\nSeason: 1\. Javi 500 · 2\. Marcos 300/,
+    ));
   });
 
   test('header: Stats and Settings, no Members icon', async () => {
@@ -431,23 +555,86 @@ describe('LeagueBoardScreen', () => {
   });
 
 
-  test("a month's results speak the net differential; an unrated card is listed, not ranked", async () => {
+  test("a month's results rank by points with PTS and LEAGUE columns; an unscored card is listed, not ranked", async () => {
     store.getLeague.mockResolvedValue(snapshot({
       cardsByMonth: {
         [PAST_MONTH]: [
           card('javi', 'confirmed', 38, { netDifferential: -2.4 }),
           card('nacho', 'confirmed', 30, { netDifferential: 3.1 }),
-          card('me', 'confirmed', 33, { netDifferential: null }),
+          card('me', 'confirmed', null, { netDifferential: null }),
+        ],
+      },
+    }));
+    const { getByText, queryByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('Sep'));
+    fireEvent.press(getByText('Sep'));
+    expect(getByText('38')).toBeTruthy();
+    expect(getByText('30')).toBeTruthy();
+    expect(getByText('PTS', { includeHiddenElements: true })).toBeTruthy();
+    expect(getByText('LEAGUE', { includeHiddenElements: true })).toBeTruthy();
+    expect(queryByText(/worse|better/)).toBeNull();
+    expect(getByText('unrated')).toBeTruthy();
+    expect(getByText('not ranked')).toBeTruthy();
+    expect(getByText('Your card has no slope or rating. Shown, not ranked.')).toBeTruthy();
+  });
+});
+
+describe('LeagueBoardScreen in Spanish', () => {
+  const { setLanguagePref, formatDate } = require('../../i18n');
+  const mes = formatDate(`${THIS_MONTH}-01`, 'monthName', 'es');
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    store.getLeagueCached.mockResolvedValue(null);
+    await act(async () => { await setLanguagePref('es'); });
+  });
+  afterEach(async () => { await act(async () => { await setLanguagePref('en'); }); });
+
+  test('groups, reasons, my card and the month in Spanish', async () => {
+    store.getLeague.mockResolvedValue(snapshot({
+      members: [
+        member('me', 'Marcos'), member('javi', 'Javi'), member('nacho', 'Nacho'), member('pablo', 'Pablo'),
+      ],
+      cardsByMonth: {
+        [THIS_MONTH]: [
+          card('javi', 'confirmed', 38, { confirmation: 'qr', course: { name: 'Olivar' } }),
+          card('nacho', 'submitted', 35, { course: { name: 'Olivar' } }),
         ],
       },
     }));
     const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
-    await waitFor(() => getByText('Sep'));
-    fireEvent.press(getByText('Sep'));
-    expect(getByText('2.4 better')).toBeTruthy();
-    expect(getByText('3.1 worse')).toBeTruthy();
-    expect(getByText('unrated')).toBeTruthy();
-    expect(getByText('not ranked')).toBeTruthy();
-    expect(getByText('Your card has no slope or rating. Shown, not ranked.')).toBeTruthy();
+    await waitFor(() => getByText('Confirmadas · 1'));
+    expect(getByText(new RegExp(`^${mes.toUpperCase()} HASTA AHORA · `))).toBeTruthy();
+    expect(getByText('Olivar · marcador por QR')).toBeTruthy();
+    expect(getByText('Pendientes de confirmación · 1')).toBeTruthy();
+    expect(getByText('Olivar · el marcador aún no ha escaneado el QR')).toBeTruthy();
+    expect(getByText('Sin tarjeta · 2')).toBeTruthy();
+    expect(getByText('Tú, Pablo')).toBeTruthy();
+    // Mid-sentence the month is lower case.
+    expect(getByText(`Tu tarjeta de ${mes}`)).toBeTruthy();
+  });
+
+  test('a shared place shows decimal league points with a comma, and the floor reads "puntos por jugar"', async () => {
+    const snap = snapshot({
+      members: [
+        member('me', 'Marcos'), member('javi', 'Javi'), member('nacho', 'Nacho'),
+        member('lucia', 'Lucía'), member('pablo', 'Pablo'),
+      ],
+      cardsByMonth: {
+        [THIS_MONTH]: [
+          card('javi', 'confirmed', 38), card('me', 'confirmed', 34, { course: { name: 'Olivar' } }),
+          card('nacho', 'confirmed', 34), card('lucia', 'confirmed', 34), card('pablo', 'confirmed', 30),
+        ],
+      },
+    });
+    snap.league.participationPoints = 100;
+    store.getLeague.mockResolvedValue(snap);
+    const { getByText, getAllByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+    await waitFor(() => getByText('Confirmadas · 5'));
+    // 2nd-4th share (300 + 190 + 0) / 3 = 163.3 each.
+    expect(getAllByText('+163,3')).toHaveLength(3);
+    expect(getAllByText('Comparte 2.º–4.º')).toHaveLength(2);
+    expect(getByText('+100')).toBeTruthy();
+    expect(getByText('Puntos por jugar')).toBeTruthy();
+    expect(getByText('34 ptos · T2.º de momento · +163,3 ptos de liga · Olivar')).toBeTruthy();
   });
 });

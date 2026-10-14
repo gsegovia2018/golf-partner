@@ -1721,3 +1721,31 @@ describe('route params', () => {
     expect(getTournament).toHaveBeenCalledWith('t-old');
   });
 });
+
+describe('StatsScreen in Spanish', () => {
+  const { setLanguagePref } = require('../../i18n');
+  beforeEach(async () => { await act(async () => { await setLanguagePref('es'); }); });
+  afterEach(async () => { await act(async () => { await setLanguagePref('en'); }); });
+
+  test('translates the header, tabs, scope chips and the Overview section titles', async () => {
+    const { getByText } = await renderStats([makeRound('r1'), makeRound('r2', 5)]);
+
+    expect(getByText('Estadísticas')).toBeTruthy();
+    expect(getByText('Resumen')).toBeTruthy();
+    expect(getByText('Jugadores')).toBeTruthy();
+    expect(getByText('Mis golpes')).toBeTruthy();
+    expect(getByText('Golpes')).toBeTruthy();
+    expect(getByText('Puntos')).toBeTruthy();
+    expect(getByText('V1')).toBeTruthy();
+    expect(getByText('DESTACADOS DEL TORNEO')).toBeTruthy();
+  });
+
+  test('translates the Players tab cards', async () => {
+    const { getByText } = await renderStats([makeRound('r1'), makeRound('r2', 5)]);
+
+    fireEvent.press(getByText('Jugadores'));
+    expect(getByText('Media por vuelta')).toBeTruthy();
+    expect(getByText('DISTRIBUCIÓN DE RESULTADOS')).toBeTruthy();
+    expect(getByText('HISTORIAL DE VUELTAS')).toBeTruthy();
+  });
+});

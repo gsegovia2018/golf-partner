@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Polyline, Circle, Line, Path, Defs, LinearGradient, Stop, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
 import { scalePoints, toSegments, dropGaps as dropGapEntries } from './chartGeometry';
 
 // SVG gradient ids are document-global on web; several charts render on one
@@ -27,13 +28,14 @@ export default function TrendLineChart({
   color,
   labelColor,
   variant = 'full',
-  formatValue = (v) => `${v}`,
+  formatValue = (v) => formatNumber(v, { maxDecimals: 4 }),
   caption,
   dropGaps = false,
   ringColor,
   lastDotColor,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const stroke = color || theme.accent.primary;
   const labelFill = labelColor || theme.text.primary;
@@ -64,7 +66,7 @@ export default function TrendLineChart({
   if (!hasData) {
     return (
       <View style={s.empty}>
-        <Text style={s.emptyText}>Not enough rounds yet.</Text>
+        <Text style={s.emptyText}>{t('stats.my.chart.notEnough')}</Text>
       </View>
     );
   }

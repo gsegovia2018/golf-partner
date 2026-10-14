@@ -6,10 +6,12 @@ import React, { useEffect } from 'react';
 import { Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 
 export default function ScoringModeChangeBanner({
-  message, onPress, onDismiss, ctaLabel = 'Change', icon = 'info',
+  message, onPress, onDismiss, ctaLabel, icon = 'info',
 }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
@@ -25,7 +27,7 @@ export default function ScoringModeChangeBanner({
     <TouchableOpacity style={s.banner} onPress={onPress ?? onDismiss} activeOpacity={0.85}>
       <Feather name={icon} size={16} color={theme.text.primary} />
       <Text style={s.text} numberOfLines={2}>{message}</Text>
-      {onPress ? <Text style={s.cta}>{ctaLabel}</Text> : null}
+      {onPress ? <Text style={s.cta}>{ctaLabel ?? t('setup.scoringBanner.change')}</Text> : null}
     </TouchableOpacity>
   );
 }

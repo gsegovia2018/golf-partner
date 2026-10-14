@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 
 // Sticky bottom navigation bar for the setup wizard.
 //
@@ -15,6 +16,7 @@ import { useTheme } from '../../theme/ThemeContext';
 export default function WizardNav({
   isFirstStep, isLastStep, nextEnabled, nextLabel, onBack, onNext,
 }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const iconColor = theme.isDark ? theme.accent.primary : theme.text.inverse;
@@ -22,7 +24,7 @@ export default function WizardNav({
     <View style={s.bar}>
       {!isFirstStep && (
         <TouchableOpacity style={s.backBtn} onPress={onBack} activeOpacity={0.8}>
-          <Text style={s.backText}>Back</Text>
+          <Text style={s.backText}>{t('setup.wizard.back')}</Text>
         </TouchableOpacity>
       )}
       <TouchableOpacity

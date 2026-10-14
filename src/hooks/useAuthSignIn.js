@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { parseOAuthError, getWebRedirectTo, getPasswordResetRedirectTo } from '../lib/oauth';
 import { isResetPasswordUrl } from '../lib/passwordReset';
 import { EMAIL_RE } from '../lib/email';
+import { t as translate } from '../i18n';
 
 const isWeb = Platform.OS === 'web';
 
@@ -32,14 +33,15 @@ export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
   const passwordValid = password.length >= 6;
   const formValid = emailValid && passwordValid;
 
+  // Errors are message descriptors ({ key, params }); AuthForm renders them with tr().
   const emailError = useMemo(
     () => (touched.email && email.trim().length > 0 && !emailValid
-      ? 'Enter a valid email address' : null),
+      ? { key: 'auth.email.invalid' } : null),
     [touched.email, email, emailValid],
   );
   const passwordError = useMemo(
     () => (touched.password && password.length > 0 && !passwordValid
-      ? 'Password must be at least 6 characters' : null),
+      ? { key: 'auth.password.tooShort', params: { min: 6 } } : null),
     [touched.password, password, passwordValid],
   );
 
@@ -50,7 +52,7 @@ export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
     if (!isWeb) return;
     const message = parseOAuthError(window.location.href);
     if (message) {
-      Alert.alert('Sign-in failed', message);
+      Alert.alert(translate('auth.signInFailed'), message);
       window.history.replaceState({}, '', getWebRedirectTo());
     }
   }, []);
@@ -74,7 +76,7 @@ export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
     if (isResetPasswordUrl(url)) return;
     const { params, errorCode } = QueryParams.getQueryParams(url);
     if (errorCode || params.error) {
-      Alert.alert('Sign-in failed', params.error_description || errorCode || params.error);
+      Alert.alert(translate('auth.signInFailed'), params.error_description || errorCode || params.error);
       return;
     }
     const { code } = params;
@@ -84,7 +86,7 @@ export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
     lastOAuthCode.current = code;
     try {
       const { error } = await supabase.auth.exchangeCodeForSession(code);
-      if (error) Alert.alert('Error', error.message);
+      if (error) Alert.alert(translate('common.error'), error.message);
       // On success `onAuthStateChange` swaps in the app.
     } finally {
       oauthBusy.current = false;
@@ -119,12 +121,12 @@ export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
       } else {
         ({ error } = await supabase.auth.signUp({ email: email.trim(), password }));
         if (!error) {
-          Alert.alert('Check your email', 'Confirm your account then sign in.');
+          Alert.alert(translate('auth.checkEmail.title'), translate('auth.confirmAccount.body'));
           onSignedUp?.();
           return;
         }
       }
-      if (error) Alert.alert('Error', error.message);
+      if (error) Alert.alert(translate('common.error'), error.message);
     } finally {
       setLoading(false);
     }
@@ -133,7 +135,7 @@ export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
   async function handleForgotPassword() {
     if (!emailValid) {
       setTouched((t) => ({ ...t, email: true }));
-      Alert.alert('Email needed', 'Enter your account email above, then tap "Forgot password?" again.');
+      Alert.alert(translate('auth.emailNeeded.title'), translate('auth.emailNeeded.body'));
       return;
     }
     setLoading(true);
@@ -141,8 +143,8 @@ export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
       const redirectTo = getPasswordResetRedirectTo(Platform.OS, Linking.createURL('reset-password'));
       const options = redirectTo ? { redirectTo } : undefined;
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), options);
-      if (error) Alert.alert('Error', error.message);
-      else Alert.alert('Check your email', 'We sent a password reset link to your email.');
+      if (error) Alert.alert(translate('common.error'), error.message);
+      else Alert.alert(translate('auth.checkEmail.title'), translate('auth.resetSent.body'));
     } finally {
       setLoading(false);
     }
@@ -159,7 +161,7 @@ export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
           provider,
           options: { redirectTo: getWebRedirectTo() },
         });
-        if (error) Alert.alert('Error', error.message);
+        if (error) Alert.alert(translate('common.error'), error.message);
         // On success the browser redirects away — nothing else to do here.
         return;
       }
@@ -169,7 +171,7 @@ export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
         provider,
         options: { redirectTo, skipBrowserRedirect: true },
       });
-      if (error) { Alert.alert('Error', error.message); return; }
+      if (error) { Alert.alert(translate('common.error'), error.message); return; }
 
       // Opens an in-app browser. On iOS the redirect returns as `result.url`;
       // on Android it usually arrives via the deep-link listener instead.
@@ -180,7 +182,7 @@ export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
       }
       // Otherwise the deep-link listener handles the callback.
     } catch (e) {
-      Alert.alert('Error', e?.message ?? 'Could not sign in. Please try again.');
+      Alert.alert(translate('common.error'), e?.message ?? translate('auth.signInFallback'));
     } finally {
       setOauthLoading(null);
     }

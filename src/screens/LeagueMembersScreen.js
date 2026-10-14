@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Clipboard, Alert,
 } from 'react-native';
@@ -12,23 +12,26 @@ import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import {
   castHandicapBallot, openHandicapVote, setLeagueHandicap, removeLeagueInvitee,
+  removeLeagueMember, rotateLeagueInviteCode, releaseLeagueInvitee, getLeagueMemberEvents,
 } from '../store/leagueStore';
+import {
+  activeSpotClaims, pendingSpotClaims, claimForUser, pastCardCount, memberAdminErrorKey,
+  loadSeenClaims, markClaimsSeen, membershipHistory,
+} from '../store/leagueMembersAdmin';
 import { parseMemberHandicap, leagueJoinLink } from '../store/leagueDraft';
 import {
-  formatEuros, potCents, memberLabel, memberName, handicapEventLine, voteThreshold,
+  formatEuros, potCents, voteThreshold,
 } from '../store/leagueView';
+import { memberLabel, memberName, handicapEventLine } from '../lib/leagueNames';
 import { shareOrigin } from '../lib/shareOrigin';
 import InitialsAvatar from '../components/league/InitialsAvatar';
+import MemberAdminSheet from '../components/league/MemberAdminSheet';
+import { useT, t as translate, formatDate, formatTime, formatNumber } from '../i18n';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
 function fail(e) {
-  Alert.alert('Error', e?.message || 'Something went wrong');
+  Alert.alert(translate('common.error'), leagueErrorText(e) || translate('league.membersMisc.wrong'));
 }
-
-const shortDate = (iso) => {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-};
 
 // Members, league handicaps and their history, the open handicap vote, and the
 // invite link. Fee and role changes live in League settings.
@@ -44,11 +47,38 @@ export default function LeagueMembersScreen({ navigation, route }) {
   const [hcpText, setHcpText] = useState('');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Admin actions: which confirm sheet is open, its busy/error, and the last result.
+  const [confirm, setConfirm] = useState(null); // { kind: 'remove', member } | { kind: 'release', claim } | { kind: 'code' }
+  const [alsoCode, setAlsoCode] = useState(false);
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const [sheetError, setSheetError] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [seen, setSeen] = useState([]);
+  const [rotated, setRotated] = useState(null); // the code just made, until the snapshot catches up
+  const t = useT();
+  const lastConfirm = useRef(null);
+
+  const viewerIsAdmin = !!data?.members?.some((m) => m.userId === meId && m.role === 'admin' && !m.leftAt);
+  useEffect(() => {
+    if (!viewerIsAdmin) return undefined;
+    let live = true;
+    (async () => {
+      try {
+        const [log, dismissed] = await Promise.all([getLeagueMemberEvents(leagueId), loadSeenClaims(leagueId)]);
+        if (live) { setEvents(log); setSeen(dismissed); }
+      } catch {
+        // The log is an extra: without it the screen is just the members.
+      }
+    })();
+    return () => { live = false; };
+  }, [viewerIsAdmin, leagueId, data]);
+  useEffect(() => { setRotated(null); }, [data?.league?.inviteCode]);
 
   const header = (
     <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel="Back" />
-      <Text style={s.headerTitle}>Members</Text>
+      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
+      <Text style={s.headerTitle}>{t('league.membersMisc.title')}</Text>
     </View>
   );
 
@@ -59,9 +89,9 @@ export default function LeagueMembersScreen({ navigation, route }) {
         <View style={s.center}>
           {loading ? <ActivityIndicator color={theme.accent.primary} /> : (
             <>
-              <Text style={s.emptyTitle}>Couldn't load the members</Text>
+              <Text style={s.emptyTitle}>{t('league.membersMisc.loadError')}</Text>
               <Text style={s.emptyText}>{error}</Text>
-              <TouchableOpacity style={s.secondaryBtn} onPress={reload}><Text style={s.secondaryText}>Try again</Text></TouchableOpacity>
+              <TouchableOpacity style={s.secondaryBtn} onPress={reload}><Text style={s.secondaryText}>{t('common.retry')}</Text></TouchableOpacity>
             </>
           )}
         </View>
@@ -76,9 +106,14 @@ export default function LeagueMembersScreen({ navigation, route }) {
   const isAdmin = me?.role === 'admin';
   const archived = !!league.archivedAt;
   const needed = voteThreshold(active.length);
-  const link = leagueJoinLink(shareOrigin(), league.inviteCode);
+  const link = leagueJoinLink(shareOrigin(), rotated ?? league.inviteCode);
   const pot = potCents(members, league.entryFeeCents);
   const history = [...handicapEvents].reverse().slice(0, 8);
+  const claims = isAdmin ? activeSpotClaims(events, members) : [];
+  const pending = pendingSpotClaims(claims, seen);
+  const nameOf = (id) => (id ? memberName(members, id, meId) : '');
+  const membership = isAdmin ? membershipHistory(events, nameOf) : [];
+  const whenOf = (iso) => `${formatDate(iso)} ${formatTime(iso)}`;
 
   function openSheet(member) {
     setTarget(member);
@@ -116,12 +151,12 @@ export default function LeagueMembersScreen({ navigation, route }) {
 
   function confirmRemoveInvitee(invitee) {
     Alert.alert(
-      `Remove ${invitee.name}?`,
-      'Their spot and handicap are deleted. They can still join from the link with "I\'m not on the list".',
+      t('league.members.removeTitle', { name: invitee.name }),
+      t('league.membersMisc.removeInviteeBody'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Remove',
+          text: t('league.membersMisc.remove'),
           style: 'destructive',
           onPress: () => run(() => removeLeagueInvitee(leagueId, invitee.id)),
         },
@@ -129,9 +164,62 @@ export default function LeagueMembersScreen({ navigation, route }) {
     );
   }
 
+  function openConfirm(next) {
+    setTarget(null);
+    setAlsoCode(false);
+    setSheetError(null);
+    setConfirm(next);
+  }
+
+  function closeConfirm() {
+    if (!sheetBusy) setConfirm(null);
+  }
+
+  async function dismissClaims(list) {
+    setSeen(await markClaimsSeen(leagueId, list.map((c) => c.eventId)));
+  }
+
+  async function confirmAction() {
+    if (sheetBusy || !confirm) return;
+    setSheetBusy(true);
+    setSheetError(null);
+    let name = '';
+    try {
+      if (confirm.kind === 'remove') {
+        name = memberLabel(confirm.member, meId);
+        await removeLeagueMember(leagueId, confirm.member.userId);
+        let message = t('league.members.removed', { name });
+        if (alsoCode) {
+          try {
+            setRotated((await rotateLeagueInviteCode(leagueId)).inviteCode);
+            message = t('league.members.removedNewCode', { name });
+          } catch (e) {
+            message = t('league.members.removedCodeFailed', { name, error: leagueErrorText(e) || '' });
+          }
+        }
+        setNotice(message);
+      } else if (confirm.kind === 'release') {
+        name = memberName(members, confirm.claim.userId, meId);
+        await releaseLeagueInvitee(leagueId, confirm.claim.inviteeId);
+        setNotice(t('league.members.released', { spot: confirm.claim.spotName }));
+      } else {
+        setRotated((await rotateLeagueInviteCode(leagueId)).inviteCode);
+        setNotice(t('league.members.codeDone'));
+      }
+      setConfirm(null);
+      await reload();
+    } catch (e) {
+      const key = memberAdminErrorKey(e);
+      setSheetError(key ? t(key, { name }) : (leagueErrorText(e) || t('league.membersMisc.wrong')));
+      if (e?.hint === 'not_claimed' || e?.hint === 'not_member') reload();
+    } finally {
+      setSheetBusy(false);
+    }
+  }
+
   async function shareLink() {
     try {
-      await Share.share({ message: `Join "${league.name}" on Golf Partner:\n${link}` });
+      await Share.share({ message: t('league.membersMisc.shareMessage', { league: league.name, link }) });
     } catch (e) {
       fail(e);
     }
@@ -143,37 +231,130 @@ export default function LeagueMembersScreen({ navigation, route }) {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  // The sheet keeps its text while it slides out, so it is built from the last confirm.
+  const shown = confirm ?? lastConfirm.current;
+  lastConfirm.current = shown;
+  let confirmCopy = null;
+  if (shown?.kind === 'remove') {
+    const name = memberLabel(shown.member, meId);
+    const n = pastCardCount(data.cards, shown.member.userId);
+    confirmCopy = {
+      title: t('league.members.removeTitle', { name }),
+      lead: t('league.members.removeLead', { name }),
+      lines: [n > 0 ? t('league.members.removeCards', { count: n }) : t('league.members.removeNoCards'), t('league.members.removeRejoin')],
+      action: t('league.members.removeAction', { name }),
+    };
+  } else if (shown?.kind === 'release') {
+    const c = shown.claim;
+    confirmCopy = {
+      title: t('league.members.releaseTitle', { spot: c.spotName }),
+      lead: t('league.members.releaseLead', { when: whenOf(c.at), account: c.accountName }),
+      lines: [
+        c.handicap == null ? t('league.members.releaseBackNoHcp') : t('league.members.releaseBack', { handicap: formatNumber(c.handicap, { decimals: 1 }) }),
+        t('league.members.releaseLeaves'),
+      ],
+      action: t('league.members.releaseAction'),
+    };
+  } else if (shown?.kind === 'code') {
+    confirmCopy = {
+      title: t('league.members.codeTitle'),
+      lead: t('league.members.codeLead'),
+      lines: [t('league.members.codeStops'), t('league.members.codeNeeds')],
+      action: t('league.members.codeAction'),
+    };
+  }
+
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {header}
       <PullToRefresh style={{ flex: 1 }} contentContainerStyle={s.content} refreshing={refreshing} onRefresh={refresh}>
+        {!!notice && (
+          <TouchableOpacity style={s.notice} onPress={() => setNotice(null)} accessibilityRole="alert">
+            <Feather name="check-circle" size={16} color={theme.accent.primary} />
+            <Text style={s.noticeText}>{notice}</Text>
+          </TouchableOpacity>
+        )}
+        {pending.length > 0 && (
+          <View style={s.claimCard} accessibilityRole="summary">
+            <Text style={s.claimOverline}>{t('league.members.claimOverline')}</Text>
+            {pending.length === 1 ? (
+              <>
+                <Text style={s.voteTitle}>{t('league.members.claimTitle', { spot: pending[0].spotName })}</Text>
+                <Text style={s.voteMeta}>
+                  {pending[0].handicap == null
+                    ? t('league.members.claimBodyNoHcp', { account: pending[0].accountName, when: whenOf(pending[0].at) })
+                    : t('league.members.claimBody', { account: pending[0].accountName, when: whenOf(pending[0].at), handicap: formatNumber(pending[0].handicap, { decimals: 1 }) })}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={s.voteTitle}>{t('league.members.claimsTitle', { count: pending.length })}</Text>
+                {pending.map((c) => (
+                  <View key={c.eventId} style={s.claimRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.memberName}>{c.spotName}</Text>
+                      <Text style={s.memberSub}>{t('league.members.claimRow', { account: c.accountName, when: whenOf(c.at) })}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={s.chip}
+                      onPress={() => openConfirm({ kind: 'release', claim: c })}
+                      disabled={archived}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('league.members.releaseA11y', { name: c.spotName })}
+                    >
+                      <Text style={s.chipText}>{t('league.members.release')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </>
+            )}
+            <View style={s.voteBtns}>
+              <TouchableOpacity style={[s.voteBtn, s.voteNo]} onPress={() => dismissClaims(pending)} activeOpacity={0.8} accessibilityRole="button">
+                <Text style={s.voteNoText}>{pending.length === 1 ? t('league.members.looksRight') : t('league.members.allLookRight')}</Text>
+              </TouchableOpacity>
+              {pending.length === 1 && (
+                <TouchableOpacity
+                  style={[s.voteBtn, s.voteNo, { borderColor: theme.destructive }]}
+                  onPress={() => openConfirm({ kind: 'release', claim: pending[0] })}
+                  disabled={archived}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                >
+                  <Text style={[s.voteNoText, { color: theme.destructive }]}>{t('league.members.releaseAction')}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
         {votes.map((v) => {
           const subject = memberName(members, v.subjectUser, meId);
           const current = members.find((m) => m.userId === v.subjectUser)?.leagueHandicap;
           const myBallot = v.ballots.find((b) => b.voter === meId);
-          const verb = current != null && v.proposed > current ? 'Raise' : 'Lower';
+          const verb = current != null && v.proposed > current ? 'raise' : 'lower';
           return (
             <View key={v.id} style={s.voteCard}>
               <View style={s.voteHead}>
-                <Text style={s.voteOverline}>OPEN VOTE</Text>
+                <Text style={s.voteOverline}>{t('league.membersMisc.openVote')}</Text>
               </View>
               <Text style={s.voteTitle}>
                 {current != null
-                  ? `${verb} ${subject}'s handicap from ${current.toFixed(1)} to ${v.proposed.toFixed(1)}?`
-                  : `Set ${subject}'s handicap to ${v.proposed.toFixed(1)}?`}
+                  ? t(`league.membersMisc.${verb}Title`, { subject, from: formatNumber(current, { decimals: 1 }), to: formatNumber(v.proposed, { decimals: 1 }) })
+                  : t('league.membersMisc.setTitle', { subject, to: formatNumber(v.proposed, { decimals: 1 }) })}
               </Text>
               <Text style={s.voteMeta}>
-                {`Proposed by ${memberName(members, v.openedBy, meId)} · ${v.ballots.filter((b) => b.yes).length} yes of ${active.length} votes, needs ${needed} · closes ${shortDate(v.closesAt)}`}
+                {t('league.membersMisc.voteMeta', {
+                  name: memberName(members, v.openedBy, meId), yes: v.ballots.filter((b) => b.yes).length, total: active.length, needed, date: formatDate(v.closesAt),
+                })}
               </Text>
               {myBallot ? (
-                <Text style={s.voteMeta}>{`You voted ${myBallot.yes ? 'yes' : 'no'}.`}</Text>
+                <Text style={s.voteMeta}>{t(myBallot.yes ? 'league.membersMisc.votedYes' : 'league.membersMisc.votedNo')}</Text>
               ) : (
                 <View style={s.voteBtns}>
                   <TouchableOpacity style={[s.voteBtn, s.voteNo]} onPress={() => vote(v, false)} disabled={busy || archived} activeOpacity={0.8}>
-                    <Text style={s.voteNoText}>No</Text>
+                    <Text style={s.voteNoText}>{t('league.membersMisc.no')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[s.voteBtn, s.voteYes]} onPress={() => vote(v, true)} disabled={busy || archived} activeOpacity={0.8}>
-                    <Text style={s.voteYesText}>{`Yes, ${verb.toLowerCase()} it`}</Text>
+                    <Text style={s.voteYesText}>{t(`league.membersMisc.yes.${verb}`)}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -182,12 +363,15 @@ export default function LeagueMembersScreen({ navigation, route }) {
         })}
 
         <Text style={s.sectionLabel}>
-          {`${active.length} MEMBERS${league.entryFeeCents > 0 ? ` · POT ${formatEuros(pot).toUpperCase()}` : ''}`}
+          {league.entryFeeCents > 0
+            ? t('league.membersMisc.membersPot', { count: active.length, pot: formatEuros(pot).toUpperCase() })
+            : t('league.membersMisc.members', { count: active.length })}
         </Text>
         <View style={s.card}>
           {active.map((m, i) => {
-            const hcp = m.leagueHandicap == null ? 'No league handicap yet' : `League hcp ${m.leagueHandicap.toFixed(1)}`;
+            const hcp = m.leagueHandicap == null ? t('league.membersMisc.noHcp') : t('league.membersMisc.hcp', { value: formatNumber(m.leagueHandicap, { decimals: 1 }) });
             const atCap = m.leagueHandicap != null && m.leagueHandicap >= league.handicapCap;
+            const claim = claimForUser(claims, m.userId);
             return (
               <TouchableOpacity
                 key={m.userId}
@@ -195,20 +379,31 @@ export default function LeagueMembersScreen({ navigation, route }) {
                 onPress={() => !archived && openSheet(m)}
                 activeOpacity={0.7}
                 accessibilityRole="button"
-                accessibilityLabel={`${memberLabel(m, meId)} handicap`}
+                accessibilityLabel={t('league.membersMisc.hcpA11y', { name: memberLabel(m, meId) })}
               >
                 <View style={{ flex: 1 }}>
                   <Text style={s.memberName} numberOfLines={1}>
-                    {m.userId === meId ? `You (${m.displayName ?? 'me'})` : memberLabel(m, meId)}
+                    {m.userId === meId ? t('league.membersMisc.youNamed', { name: m.displayName ?? t('league.membersMisc.me') }) : memberLabel(m, meId)}
                   </Text>
                   <Text style={s.memberSub}>
-                    {`${hcp}${atCap ? ' · at the cap' : ''}${m.role === 'admin' ? ' · admin' : ''}`}
+                    {[hcp, atCap ? t('league.membersMisc.atCap') : null, m.role === 'admin' ? t('league.membersMisc.adminLower') : null].filter(Boolean).join(' · ')}
                   </Text>
+                  {!!claim && <Text style={s.memberSub}>{t('league.members.claimedLineNoHcp', { when: formatDate(claim.at) })}</Text>}
                 </View>
-                {m.role === 'admin' && <View style={s.badge}><Text style={s.badgeText}>Admin</Text></View>}
+                {!!claim && !archived && (
+                  <TouchableOpacity
+                    style={s.chip}
+                    onPress={() => openConfirm({ kind: 'release', claim })}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('league.members.releaseA11y', { name: memberLabel(m, meId) })}
+                  >
+                    <Text style={s.chipText}>{t('league.members.release')}</Text>
+                  </TouchableOpacity>
+                )}
+                {m.role === 'admin' && <View style={s.badge}><Text style={s.badgeText}>{t('league.membersMisc.admin')}</Text></View>}
                 {league.entryFeeCents > 0 && (
                   <Text style={[s.fee, m.feePaid ? { color: theme.accent.primary } : { color: theme.destructive }]}>
-                    {m.feePaid ? 'Paid' : `${formatEuros(league.entryFeeCents)} due`}
+                    {m.feePaid ? t('league.membersMisc.paid') : t('league.membersMisc.due', { amount: formatEuros(league.entryFeeCents) })}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -218,23 +413,23 @@ export default function LeagueMembersScreen({ navigation, route }) {
 
         {invitees.length > 0 && (
           <>
-            <Text style={s.sectionLabel}>INVITED</Text>
+            <Text style={s.sectionLabel}>{t('league.membersMisc.invited')}</Text>
             <View style={s.card}>
               {invitees.map((i, idx) => (
                 <View key={i.id} style={[s.memberRow, s.invitedRow, idx < invitees.length - 1 && s.rowDivider]}>
                   <InitialsAvatar name={i.name} muted />
                   <View style={{ flex: 1 }}>
                     <Text style={s.memberName} numberOfLines={1}>{i.name}</Text>
-                    <Text style={s.memberSub}>Not joined yet</Text>
+                    <Text style={s.memberSub}>{t('league.membersMisc.notJoined')}</Text>
                   </View>
-                  <Text style={s.memberSub}>{i.handicap == null ? '' : i.handicap.toFixed(1)}</Text>
+                  <Text style={s.memberSub}>{i.handicap == null ? '' : formatNumber(i.handicap, { decimals: 1 })}</Text>
                   {isAdmin && !archived && (
                     <TouchableOpacity
                       style={s.removeBtn}
                       onPress={() => confirmRemoveInvitee(i)}
                       disabled={busy}
                       accessibilityRole="button"
-                      accessibilityLabel={`Remove ${i.name}`}
+                      accessibilityLabel={t('league.members.removeAction', { name: i.name })}
                     >
                       <Feather name="x" size={18} color={theme.text.muted} />
                     </TouchableOpacity>
@@ -247,7 +442,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
 
         {history.length > 0 && (
           <>
-            <Text style={s.sectionLabel}>HANDICAP HISTORY</Text>
+            <Text style={s.sectionLabel}>{t('league.membersMisc.hcpHistory')}</Text>
             <View style={s.card}>
               {history.map((ev, i) => (
                 <View key={ev.id} style={[s.historyRow, i < history.length - 1 && s.rowDivider]}>
@@ -258,36 +453,55 @@ export default function LeagueMembersScreen({ navigation, route }) {
           </>
         )}
 
-        <Text style={s.sectionLabel}>INVITE</Text>
+        {membership.length > 0 && (
+          <>
+            <Text style={s.sectionLabel}>{t('league.members.history')}</Text>
+            <View style={s.card}>
+              {membership.map((h, i) => (
+                <View key={h.id} style={[s.historyRow, i < membership.length - 1 && s.rowDivider]}>
+                  <Text style={s.historyText}>{`${t(h.key, h.params)} · ${formatDate(h.at, 'day')}`}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
+        <Text style={s.sectionLabel}>{t('league.membersMisc.invite')}</Text>
         <View style={s.card}>
           <Text style={s.link} selectable>{link}</Text>
           <View style={s.inviteBtns}>
             <TouchableOpacity style={[s.secondaryBtn, { flex: 1 }]} onPress={copyLink} activeOpacity={0.8}>
               <Feather name={copied ? 'check' : 'link'} size={16} color={theme.accent.primary} style={{ marginRight: 8 }} />
-              <Text style={s.secondaryText}>{copied ? 'Copied' : 'Copy link'}</Text>
+              <Text style={s.secondaryText}>{t(copied ? 'league.membersMisc.copied' : 'league.membersMisc.copyLink')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.primaryBtn, { flex: 1 }]} onPress={shareLink} activeOpacity={0.8}>
               <Feather name="share-2" size={16} color={theme.text.inverse} style={{ marginRight: 8 }} />
-              <Text style={s.primaryText}>Share invite</Text>
+              <Text style={s.primaryText}>{t('league.membersMisc.shareInvite')}</Text>
             </TouchableOpacity>
           </View>
+          {isAdmin && !archived && (
+            <TouchableOpacity style={s.codeLink} onPress={() => openConfirm({ kind: 'code' })} accessibilityRole="button">
+              <Feather name="refresh-cw" size={15} color={theme.accent.primary} style={{ marginRight: 8 }} />
+              <Text style={s.secondaryText}>{t('league.members.codeLink')}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </PullToRefresh>
 
       <BottomSheet visible={!!target} onClose={() => setTarget(null)} sheetStyle={s.sheet}>
         <View style={s.handle} />
         <Text style={s.sheetTitle}>{target ? memberLabel(target, meId) : ''}</Text>
-        <Text style={s.sheetSub}>{`League handicap, max ${league.handicapCap}`}</Text>
+        <Text style={s.sheetSub}>{t('league.membersMisc.sheetSub', { cap: league.handicapCap })}</Text>
         <TextInput
           style={s.input}
           value={hcpText}
           onChangeText={setHcpText}
           keyboardType="decimal-pad"
-          placeholder="e.g. 18.0"
+          placeholder={t('league.membersMisc.hcpPlaceholder')}
           placeholderTextColor={theme.text.muted}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor={theme.accent.primary}
-          accessibilityLabel="New league handicap"
+          accessibilityLabel={t('league.membersMisc.newHcpA11y')}
         />
         {isAdmin && (
           <TouchableOpacity
@@ -296,7 +510,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
             onPress={() => run(() => setLeagueHandicap(leagueId, target.userId, proposed))}
             activeOpacity={0.8}
           >
-            <Text style={s.primaryText}>Set handicap</Text>
+            <Text style={s.primaryText}>{t('league.membersMisc.setHandicap')}</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity
@@ -305,9 +519,48 @@ export default function LeagueMembersScreen({ navigation, route }) {
           onPress={() => run(() => openHandicapVote(leagueId, target.userId, proposed))}
           activeOpacity={0.8}
         >
-          <Text style={s.secondaryText}>{`Open a vote (needs ${needed} of ${active.length})`}</Text>
+          <Text style={s.secondaryText}>{t('league.membersMisc.openVoteBtn', { needed, total: active.length })}</Text>
         </TouchableOpacity>
+        {isAdmin && !archived && target && target.userId !== meId && (
+          <TouchableOpacity
+            style={s.removeLink}
+            onPress={() => openConfirm({ kind: 'remove', member: target })}
+            disabled={busy}
+            accessibilityRole="button"
+          >
+            <Feather name="user-minus" size={16} color={theme.destructive} style={{ marginRight: 8 }} />
+            <Text style={[s.secondaryText, { color: theme.destructive }]}>{t('league.members.removeLink')}</Text>
+          </TouchableOpacity>
+        )}
       </BottomSheet>
+
+      {confirmCopy && (
+        <MemberAdminSheet
+          visible={!!confirm}
+          title={confirmCopy.title}
+          lead={confirmCopy.lead}
+          lines={confirmCopy.lines}
+          danger={shown.kind !== 'code'}
+          action={confirmCopy.action}
+          busy={sheetBusy}
+          error={sheetError}
+          onConfirm={confirmAction}
+          onCancel={closeConfirm}
+        >
+          {shown.kind === 'remove' && (
+            <TouchableOpacity
+              style={s.checkRow}
+              onPress={() => setAlsoCode((v) => !v)}
+              disabled={sheetBusy}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: alsoCode }}
+            >
+              <Feather name={alsoCode ? 'check-square' : 'square'} size={20} color={theme.accent.primary} />
+              <Text style={s.checkText}>{t('league.members.removeAlsoCode')}</Text>
+            </TouchableOpacity>
+          )}
+        </MemberAdminSheet>
+      )}
     </ScreenContainer>
   );
 }
@@ -357,6 +610,27 @@ function makeStyles(theme) {
     voteNoText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
     voteYes: { backgroundColor: theme.accent.primary },
     voteYesText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
+
+    notice: {
+      flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.accent.light,
+      borderRadius: 12, padding: 12, marginBottom: 14,
+    },
+    noticeText: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 13, lineHeight: 18 },
+    claimCard: {
+      backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1, borderColor: theme.info ?? theme.accent.primary,
+      padding: 16, marginBottom: 14,
+    },
+    claimOverline: { fontFamily: 'PlusJakartaSans-Bold', color: theme.info ?? theme.accent.primary, fontSize: 10, letterSpacing: 1.6, marginBottom: 6 },
+    claimRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 10 },
+    chip: {
+      minHeight: 32, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: theme.destructive,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    chipText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.destructive, fontSize: 12 },
+    codeLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 44, marginBottom: 6 },
+    removeLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 44, marginTop: 14 },
+    checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
+    checkText: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
 
     link: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, paddingVertical: 14 },
     inviteBtns: { flexDirection: 'row', gap: 10, paddingBottom: 14 },

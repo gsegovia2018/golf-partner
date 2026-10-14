@@ -1,14 +1,17 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 import Reveal from '../ui/Reveal';
 import { calloutSub } from './reportCardView';
+import { cellKey } from './reportKeys';
 
 // Twin summary tiles (hybrid option C): bright spots on the left, cost-you-
 // points on the right, one row per rank. A missing side renders a spacer so
 // the grid stays aligned. Renders nothing when there are no callouts at all.
 export default function ReportCalloutTiles({ callouts }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const bright = callouts?.bright ?? [];
   const cost = callouts?.cost ?? [];
@@ -26,15 +29,15 @@ export default function ReportCalloutTiles({ callouts }) {
         <Reveal key={row.bright?.label ?? row.cost?.label ?? i} delay={140 + i * 60} dy={9} duration={400} style={s.row}>
           {row.bright ? (
             <View style={[s.tile, s.tileGood]}>
-              <Text style={[s.kicker, { color: theme.accent.primary }]}>BRIGHT SPOT</Text>
-              <Text style={s.label}>{row.bright.label}</Text>
+              <Text style={[s.kicker, { color: theme.accent.primary }]}>{t('stats.my.report.bright')}</Text>
+              <Text style={s.label}>{cellKey(row.bright.label) ? t(cellKey(row.bright.label)) : row.bright.label}</Text>
               <Text style={s.sub}>{calloutSub(row.bright)}</Text>
             </View>
           ) : <View style={s.spacer} />}
           {row.cost ? (
             <View style={[s.tile, s.tileBad]}>
-              <Text style={[s.kicker, { color: theme.destructive }]}>COST YOU POINTS</Text>
-              <Text style={s.label}>{row.cost.label}</Text>
+              <Text style={[s.kicker, { color: theme.destructive }]}>{t('stats.my.report.cost')}</Text>
+              <Text style={s.label}>{cellKey(row.cost.label) ? t(cellKey(row.cost.label)) : row.cost.label}</Text>
               <Text style={s.sub}>{calloutSub(row.cost)}</Text>
             </View>
           ) : <View style={s.spacer} />}

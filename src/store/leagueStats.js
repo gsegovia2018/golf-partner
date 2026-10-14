@@ -1,11 +1,15 @@
 // League stats: honours, leaders, season grid and rivals, derived from the
 // cards a league snapshot already carries (pure, no I/O). Only confirmed
-// cards count. Month comparisons (card of the month, grid, rivals) use the net
-// differential, lower is better, like the board (an unapproved not-announced
-// card is left out of the grid and rivals, as on the board); a card without one (unrated
-// tee) is never the best. Plan: docs/superpowers/plans/2026-10-05-league-stats-and-board.md
+// cards count. Month comparisons (card of the month, grid, rivals) use the
+// card's Stableford points, higher is better, like the board (an unapproved
+// not-announced card is left out of the grid and rivals, as on the board); a
+// card without points (never scored) is never the best. The net differential
+// rides along as secondary information.
+// Plans: docs/superpowers/plans/2026-10-05-league-stats-and-board.md,
+// docs/superpowers/plans/2026-10-13-league-review-followups.md (R1).
 import { calcExtraShots, calcStablefordPoints } from './scoring';
-import { memberName, ordinal, formatNetDiff } from './leagueView';
+import { formatNumber, formatOrdinal } from '../i18n';
+import { memberNameMsg } from './leagueView';
 import { dayLabel, timeLabel } from './leagueOffApp';
 import { needsApproval } from './leagueRules';
 
@@ -15,7 +19,13 @@ export const MIN_STAT_CARDS = 3; // fewer cards than this: a player's average is
 const confirmed = (cards) => (cards ?? []).filter((c) => c?.status === 'confirmed');
 const sum = (list) => list.reduce((a, b) => a + b, 0);
 const mean = (list) => sum(list) / list.length;
-// A card's net differential to one decimal (what the board ranks), or null when unrated.
+// A card's Stableford points (what the board ranks), or null when it has none.
+const pointsOf = (card) => {
+  if (card?.points == null || card.points === '') return null;
+  const n = Number(card.points);
+  return Number.isFinite(n) ? n : null;
+};
+// A card's net differential to one decimal (secondary), or null.
 const netDiffOf = (card) => {
   if (card?.netDifferential == null || card.netDifferential === '') return null;
   const n = Number(card.netDifferential);
@@ -50,19 +60,28 @@ function readable(cards) {
   return confirmed(cards).map((card) => ({ card, stats: cardHoleStats(card) })).filter((x) => x.stats);
 }
 
-// "16 cards · 7 courses" under a month's title.
+// "16 cards · 7 courses" under a month's title. `msg` is a descriptor whose
+// params are descriptors too (the screen renders them depth-first).
 export function monthSummary(cards) {
   const done = confirmed(cards);
   const courses = new Set(done.map((c) => c.course?.name).filter(Boolean));
   return {
     cards: done.length,
     courses: courses.size,
-    text: `${done.length} ${done.length === 1 ? 'card' : 'cards'} · ${courses.size} ${courses.size === 1 ? 'course' : 'courses'}`,
+    msg: {
+      key: 'league.stats.summary',
+      params: {
+        cards: { key: 'league.stats.cardsCount', params: { count: done.length } },
+        courses: { key: 'league.stats.coursesCount', params: { count: courses.size } },
+      },
+    },
   };
 }
 
-const article = (n) => ([8, 11, 18].includes(n) ? 'an' : 'a');
-const courseOf = (card) => (card.course?.name ? ` at ${card.course.name}` : '');
+// "a 5" / "an 8" (English); Spanish is always "un".
+const scoreOf = (n) => ({ key: [8, 11, 18].includes(n) ? 'league.stats.scoreAn' : 'league.stats.scoreA', params: { strokes: n } });
+const courseOf = (card) => (card.course?.name ? { key: 'league.stats.atCourse', params: { course: card.course.name } } : '');
+const pts = (n) => formatNumber(n, { maxDecimals: 1 });
 
 // Longest run of consecutive holes scoring 2+ points: { from, to, length }.
 function longestRun(holes) {
@@ -88,40 +107,48 @@ function maxBy(list, key) {
   return best;
 }
 
-// The month's honours, in display order: [{ key, title, text, userId }].
+// The month's honours, in display order: [{ key, title, text, userId }]
+// (title and text are message descriptors).
 // [] with fewer than MIN_HONOUR_CARDS confirmed cards. An honour whose data is
 // missing (no tee times, nobody over par by 3) is left out.
 export function monthHonours(cards, members, meId = null) {
   const done = confirmed(cards);
   if (done.length < MIN_HONOUR_CARDS) return [];
-  const name = (userId) => memberName(members, userId, meId);
+  const name = (userId) => memberNameMsg(members, userId, meId);
   const withHoles = readable(done);
   const honours = [];
-  const add = (key, title, text, userId) => honours.push({ key, title, text, userId });
+  const add = (key, text, userId) => honours.push({
+    key, title: { key: `league.stats.honour.${key}` }, text: { key: `league.stats.honour.${key}.text`, params: text }, userId,
+  });
 
-  const top = maxBy(done.filter((c) => netDiffOf(c) != null), (c) => -netDiffOf(c));
-  if (top) add('card', 'Card of the month', `${name(top.userId)}, ${formatNetDiff(netDiffOf(top))}${courseOf(top)}`, top.userId);
+  const top = maxBy(done.filter((c) => pointsOf(c) != null), (c) => pointsOf(c));
+  if (top) add('card', { name: name(top.userId), points: pts(pointsOf(top)), course: courseOf(top) }, top.userId);
 
   const holeList = withHoles.flatMap(({ card, stats }) => stats.holes.map((h) => ({ card, h })));
   const bestHole = maxBy(holeList, ({ h }) => h.points * 100 - (h.strokes - h.par));
   if (bestHole) {
     const { card, h } = bestHole;
-    const strokesText = h.extra > 0 ? (h.extra === 1 ? ' with a stroke' : ` with ${h.extra} strokes`) : '';
-    add('hole', 'Hole of the month',
-      `${name(card.userId)}, ${article(h.strokes)} ${h.strokes} on the par-${h.par} ${ordinal(h.n)}${courseOf(card)}${strokesText} · ${h.points} pts`,
-      card.userId);
+    add('hole', {
+      name: name(card.userId),
+      score: scoreOf(h.strokes),
+      par: h.par,
+      ordinal: formatOrdinal(h.n),
+      course: courseOf(card),
+      extra: h.extra > 0 ? { key: 'league.stats.withStrokes', params: { count: h.extra } } : '',
+      points: h.points,
+    }, card.userId);
   }
 
   const streaks = withHoles.map(({ card, stats }) => ({ card, run: longestRun(stats.holes) })).filter((x) => x.run);
   const streak = maxBy(streaks, (x) => x.run.length);
   if (streak && streak.run.length >= 3) {
     const { card, run } = streak;
-    add('streak', 'Hot streak', `${name(card.userId)}, ${run.length} holes at 2+ pts, holes ${run.from}-${run.to}`, card.userId);
+    add('streak', { name: name(card.userId), count: run.length, from: run.from, to: run.to }, card.userId);
   }
 
   const closer = maxBy(withHoles, ({ stats }) => stats.in);
   if (closer) {
-    add('closer', 'Closer', `${name(closer.card.userId)}, ${closer.stats.out} out and ${closer.stats.in} back`, closer.card.userId);
+    add('closer', { name: name(closer.card.userId), out: closer.stats.out, back: closer.stats.in }, closer.card.userId);
   }
 
   const birdies = new Map();
@@ -132,36 +159,38 @@ export function monthHonours(cards, members, meId = null) {
   if (birdies.size) {
     const total = sum([...birdies.values()]);
     const ranked = [...birdies].sort((a, b) => b[1] - a[1]).slice(0, 2);
-    add('birdies', 'Birdies',
-      `${total} as a group · ${ranked.map(([id, n]) => `${name(id)} ${n}`).join(', ')}`, ranked[0][0]);
+    // Names can be descriptors ("You"), so the list is nested descriptors too.
+    const list = ranked.map(([id, n]) => ({ key: 'league.view.nameCount', params: { name: name(id), count: n } }))
+      .reduce((acc, item) => ({ key: 'league.view.listJoin', params: { a: acc, b: item } }));
+    add('birdies', { total, list }, ranked[0][0]);
   }
 
   const snowman = maxBy(holeList, ({ h }) => (h.strokes - h.par) * 100 + h.strokes);
   if (snowman && snowman.h.strokes - snowman.h.par >= 3) {
     const { card, h } = snowman;
-    add('snowman', 'Snowman',
-      `${name(card.userId)}, ${article(h.strokes)} ${h.strokes} on the par-${h.par} ${ordinal(h.n)}${courseOf(card)}`, card.userId);
+    add('snowman', {
+      name: name(card.userId), score: scoreOf(h.strokes), par: h.par, ordinal: formatOrdinal(h.n), course: courseOf(card),
+    }, card.userId);
   }
 
   // Earliest time of day on the tee, whichever day it was.
   const timed = done.filter((c) => c.teeTime && !Number.isNaN(new Date(c.teeTime).getTime()));
   const early = maxBy(timed, (c) => { const d = new Date(c.teeTime); return -(d.getHours() * 60 + d.getMinutes()); });
   if (early) {
-    add('early', 'Early bird',
-      `${name(early.userId)}, out at ${timeLabel(early.teeTime)} on ${dayLabel(early.teeTime)}`, early.userId);
+    add('early', { name: name(early.userId), time: timeLabel(early.teeTime), day: dayLabel(early.teeTime) }, early.userId);
   }
 
   // The last card of the month to be played.
   const dated = done.filter((c) => c.playedOn && dayLabel(c.playedOn));
   const last = maxBy(dated, (c) => String(c.playedOn).slice(0, 10).replace(/-/g, '') * 1);
-  if (last) add('last', 'Last call', `${name(last.userId)}, played on ${dayLabel(last.playedOn)}`, last.userId);
+  if (last) add('last', { name: name(last.userId), day: dayLabel(last.playedOn) }, last.userId);
 
   return honours;
 }
 
 // ---- Leaders ---------------------------------------------------------------
 
-const signed = (v) => `${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(1)}`;
+const signed = (v) => `${v >= 0 ? '+' : '-'}${formatNumber(Math.abs(v), { decimals: 1 })}`;
 const birdiesOf = (stats) => stats.holes.filter((h) => h.strokes <= h.par - 1).length;
 
 // `holes`: needs a readable 18-hole card; `avg`: needs MIN_STAT_CARDS cards;
@@ -171,7 +200,7 @@ const STATS = {
     holes: false,
     avg: true,
     value: (list) => mean(list.map(({ card }) => Number(card.points) || 0)),
-    show: (v) => v.toFixed(1),
+    show: (v) => formatNumber(v, { decimals: 1 }),
   },
   birdies: { holes: true, avg: false, value: (list) => sum(list.map(({ stats }) => birdiesOf(stats))), show: String },
   blobs: {
@@ -187,7 +216,7 @@ const STATS = {
       const pts = list.flatMap(({ stats }) => stats.holes.filter((h) => h.par === 3).map((h) => h.points));
       return pts.length ? mean(pts) : null;
     },
-    show: (v) => v.toFixed(2),
+    show: (v) => formatNumber(v, { decimals: 2 }),
   },
   backNine: {
     holes: true,
@@ -197,7 +226,8 @@ const STATS = {
   },
 };
 
-// One row per member for a stat: [{ userId, value, display, cards }], best
+// One row per member for a stat: [{ userId, value, display, cards }]
+// (display is a formatted string, or a descriptor when the player needs more cards), best
 // first (every stat sorts high to low; blobs is a fun stat, most first).
 // avg: average points per card; birdies / blobs: season totals; par3: average
 // points on par 3s; backNine: average back nine minus average front nine.
@@ -216,7 +246,7 @@ export function statLeaders(cardsByMonth, members, statKey) {
     const value = list.length && !short ? stat.value(list) : null;
     let display = '–';
     if (value != null) display = stat.show(value);
-    else if (short && list.length) display = `needs ${MIN_STAT_CARDS} cards`;
+    else if (short && list.length) display = { key: 'league.stats.needsCards', params: { count: MIN_STAT_CARDS } };
     return { userId: m.userId, value, display, cards: list.length };
   });
   const ranked = rows.filter((r) => r.value != null).sort((a, b) => b.value - a.value || b.cards - a.cards);
@@ -226,11 +256,11 @@ export function statLeaders(cardsByMonth, members, statKey) {
 
 // ---- Season grid -----------------------------------------------------------
 
-// userId -> best confirmed card of one month: the lowest net differential;
-// an unrated card only when the member has no rated one (then most points).
+// userId -> best confirmed card of one month: the most points; a card
+// without points only when the member has no scored one.
 function bestByUser(cards) {
-  const nd = (c) => netDiffOf(c) ?? Infinity;
-  const better = (a, b) => (nd(a) === nd(b) ? (Number(a.points) || 0) > (Number(b.points) || 0) : nd(a) < nd(b));
+  const pts = (c) => pointsOf(c) ?? -Infinity;
+  const better = (a, b) => pts(a) > pts(b);
   const best = new Map();
   confirmed(cards).filter((c) => !needsApproval(c)).forEach((c) => {
     if (!best.has(c.userId) || better(c, best.get(c.userId))) best.set(c.userId, c);
@@ -238,27 +268,29 @@ function bestByUser(cards) {
   return best;
 }
 
-// Members x months: [{ userId, cells: [{ month, netDifferential, unrated, cardId, best }] }].
+// Members x months: [{ userId, cells: [{ month, points, netDifferential, unrated, cardId, best }] }].
 // Rows follow `members` (pass them in season-table order). cardId is null with
-// no confirmed card; unrated: a confirmed card with no net differential (not
-// ranked); `best` marks the month's lowest net differential (ties all best).
+// no confirmed card; unrated: a confirmed card with no points (not ranked);
+// `best` marks the month's most points (ties all best). netDifferential is the
+// best card's, secondary information (null on a tee that had no rating).
 export function seasonGrid(cardsByMonth, members, monthKeys) {
   const perMonth = Object.fromEntries(monthKeys.map((month) => {
     const best = bestByUser(cardsByMonth?.[month]);
-    const top = Math.min(Infinity, ...[...best.values()].map((c) => netDiffOf(c) ?? Infinity));
+    const top = Math.max(-Infinity, ...[...best.values()].map((c) => pointsOf(c) ?? -Infinity));
     return [month, { best, top }];
   }));
   return (members ?? []).map((m) => ({
     userId: m.userId,
     cells: monthKeys.map((month) => {
       const card = perMonth[month].best.get(m.userId);
-      const netDifferential = card ? netDiffOf(card) : null;
+      const points = card ? pointsOf(card) : null;
       return {
         month,
-        netDifferential,
-        unrated: !!card && netDifferential == null,
+        points,
+        netDifferential: card ? netDiffOf(card) : null,
+        unrated: !!card && points == null,
         cardId: card?.id ?? null,
-        best: netDifferential != null && netDifferential === perMonth[month].top,
+        best: points != null && points === perMonth[month].top,
       };
     }),
   }));
@@ -266,14 +298,14 @@ export function seasonGrid(cardsByMonth, members, monthKeys) {
 
 // ---- Rivals ----------------------------------------------------------------
 
-// Months where both players have a ranked (rated, confirmed) card, newest
-// first: [{ month, a, b }] with each side's net differential (lower wins).
+// Months where both players have a ranked (scored, confirmed) card, newest
+// first: [{ month, a, b }] with each side's Stableford points (higher wins).
 export function rivalMonths(cardsByMonth, a, b) {
   return Object.keys(cardsByMonth ?? {}).sort().reverse().flatMap((month) => {
     const best = bestByUser(cardsByMonth[month]);
-    const na = netDiffOf(best.get(a));
-    const nb = netDiffOf(best.get(b));
-    return na != null && nb != null ? [{ month, a: na, b: nb }] : [];
+    const pa = pointsOf(best.get(a));
+    const pb = pointsOf(best.get(b));
+    return pa != null && pb != null ? [{ month, a: pa, b: pb }] : [];
   });
 }
 
@@ -286,12 +318,20 @@ export function rivals(cardsByMonth, members, meId) {
     const months = rivalMonths(cardsByMonth, meId, m.userId);
     return {
       userId: m.userId,
-      won: months.filter((x) => x.a < x.b).length,
-      lost: months.filter((x) => x.a > x.b).length,
+      won: months.filter((x) => x.a > x.b).length,
+      lost: months.filter((x) => x.a < x.b).length,
       level: months.filter((x) => x.a === x.b).length,
       months: months.length,
     };
   });
   const gap = (r) => Math.abs(r.won - r.lost);
   return rows.sort((a, b) => (b.months > 0) - (a.months > 0) || gap(a) - gap(b) || b.months - a.months);
+}
+
+// Season grid shading by a month's Stableford points: 36 or more is level with
+// the handicap or better, 33-35 close, under 33 behind.
+export function pointsBand(points) {
+  if (points == null) return null;
+  if (points >= 36) return 'high';
+  return points >= 33 ? 'mid' : 'low';
 }

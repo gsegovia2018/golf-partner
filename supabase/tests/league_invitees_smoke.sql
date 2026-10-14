@@ -151,8 +151,9 @@ BEGIN
                              (SELECT v::uuid FROM inv_ctx WHERE k='inv:Nora Spot'));
   INSERT INTO inv_smoke (name, ok, detail) VALUES ('one user cannot claim a second spot in a league', false, 'no error');
 EXCEPTION WHEN others THEN
+  -- 20261016000000 (R15): an active member can't take a spot at all.
   INSERT INTO inv_smoke (name, ok, detail) VALUES ('one user cannot claim a second spot in a league',
-    SQLERRM = 'You already joined this league as Pablo Spot.', SQLERRM);
+    SQLERRM = 'You are already in this league, so you can''t take Nora Spot''s spot.', SQLERRM);
 END $$;
 
 DO $$
@@ -177,9 +178,10 @@ SELECT 'guest claim: joined with the admin handicap, named after the spot, spot 
  WHERE m.league_id = (SELECT v::uuid FROM inv_ctx WHERE k='league')
    AND m.user_id = 'c0000000-0000-4000-8000-000000000001';
 INSERT INTO inv_smoke (name, ok, detail)
-SELECT 'guest claim: exactly one ''set'' event by the spot''s creator (re-claim added none)',
+-- 20261016000000 (R15): the claim is logged as the claimer's.
+SELECT 'guest claim: exactly one ''set'' event, by the claimer (re-claim added none)',
        count(*) = 1 AND bool_and(reason = 'set' AND old IS NULL AND new = 18.0
-                                 AND by_user = 'c0000000-0000-4000-8000-00000000000a'),
+                                 AND by_user = 'c0000000-0000-4000-8000-000000000001'),
        string_agg(reason || ':' || COALESCE(old::text, 'null') || '->' || new, ', ')
   FROM public.league_handicap_events
  WHERE league_id = (SELECT v::uuid FROM inv_ctx WHERE k='league')
@@ -256,7 +258,7 @@ SELECT 'claim + different proposed handicap: admin value kept, set then proposed
          WHERE league_id = (SELECT v::uuid FROM inv_ctx WHERE k='league')
            AND user_id = 'c0000000-0000-4000-8000-00000000000b') = 28.0
    AND array_agg(reason || ':' || COALESCE(old::text, 'null') || '->' || new || ':' || by_user ORDER BY at, reason DESC)
-       = ARRAY['set:null->28.0:c0000000-0000-4000-8000-00000000000a',
+       = ARRAY['set:null->28.0:c0000000-0000-4000-8000-00000000000b',
                'proposed:28.0->20.0:c0000000-0000-4000-8000-00000000000b'],
        array_agg(reason || ':' || COALESCE(old::text, 'null') || '->' || new ORDER BY at, reason DESC)::text
   FROM public.league_handicap_events
@@ -372,7 +374,7 @@ SELECT 'grants: anon previews and greets only; authenticated runs the rest',
    AND NOT has_function_privilege('anon', 'public.join_league(text, numeric, text, uuid)', 'EXECUTE')
    AND NOT has_function_privilege('anon', 'public.get_league_invitees(uuid)', 'EXECUTE')
    AND NOT has_function_privilege('anon', 'public.remove_league_invitee(uuid, uuid)', 'EXECUTE')
-   AND NOT has_function_privilege('anon', 'public.create_league(text, date, date, int[], numeric, int, jsonb)', 'EXECUTE')
+   AND NOT has_function_privilege('anon', 'public.create_league(text, date, date, int[], numeric, int, jsonb, int)', 'EXECUTE')
    AND NOT has_function_privilege('anon', 'public.get_league_by_code(text)', 'EXECUTE')
    AND NOT has_function_privilege('anon', 'public.league_open_invitees(uuid)', 'EXECUTE')
    AND NOT has_function_privilege('authenticated', 'public.league_open_invitees(uuid)', 'EXECUTE')

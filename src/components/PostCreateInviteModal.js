@@ -6,6 +6,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 import BottomSheet from './BottomSheet';
 
 export default function PostCreateInviteModal({
@@ -15,22 +16,23 @@ export default function PostCreateInviteModal({
   error,
   onRequestClose,
   onShare,
-  title = 'Invite players',
-  subtitle = 'Share this QR with players who do not have the app yet. App users will see this game in Golf Partner.',
+  title,
+  subtitle,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   return (
     <BottomSheet visible={visible} onClose={onRequestClose} sheetStyle={s.sheet}>
       <View style={s.handle} />
-      <Text style={s.title}>{title}</Text>
-      <Text style={s.subtitle}>{subtitle}</Text>
+      <Text style={s.title}>{title ?? t('shared.invite.title')}</Text>
+      <Text style={s.subtitle}>{subtitle ?? t('shared.invite.subtitle')}</Text>
 
       {loading ? (
         <View style={s.loading}>
           <ActivityIndicator color={theme.accent.primary} />
-          <Text style={s.loadingText}>Creating invite link…</Text>
+          <Text style={s.loadingText}>{t('shared.invite.creating')}</Text>
         </View>
       ) : link ? (
         <>
@@ -49,13 +51,13 @@ export default function PostCreateInviteModal({
             activeOpacity={0.8}
           >
             <Feather name="share-2" size={16} color={theme.text.inverse} style={{ marginRight: 8 }} />
-            <Text style={s.primaryText}>Share link</Text>
+            <Text style={s.primaryText}>{t('shared.invite.share')}</Text>
           </TouchableOpacity>
         </>
       ) : (
         <>
           <Text style={s.error}>
-            Game created, but the invite link could not be created right now. You can invite players later from the game menu.
+            {t('shared.invite.failed')}
           </Text>
           {!!error && <Text style={s.errorDetail}>{error}</Text>}
         </>
@@ -68,7 +70,7 @@ export default function PostCreateInviteModal({
           activeOpacity={0.8}
         >
           <Text style={s.secondaryText}>
-            {link ? 'Skip for now' : 'Continue'}
+            {link ? t('shared.invite.skip') : t('shared.invite.continue')}
           </Text>
         </TouchableOpacity>
       )}

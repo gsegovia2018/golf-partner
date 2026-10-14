@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Text } from 'react-native';
+import { formatNumber } from '../../i18n';
 
 // Count-up: 0 → value over `duration` ms with cubic ease-out, starting
 // after `delay` ms. Plain JS + requestAnimationFrame so web and native
@@ -49,5 +50,5 @@ export function useCountUp(value, {
 // integer exactly as before.
 export default function CountUpText({ value, duration, delay, disabled, decimals = 0 }) {
   const display = useCountUp(value, { duration, delay, disabled, decimals });
-  return <Text>{decimals > 0 ? display.toFixed(decimals) : display}</Text>;
+  return <Text>{decimals > 0 ? formatNumber(display, { decimals }) : display}</Text>;
 }

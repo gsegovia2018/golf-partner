@@ -5,6 +5,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, useWindowDimensions } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, t as tNow } from '../../i18n';
+import { unitText } from '../../lib/pointsText';
 import { playersMeFirst } from '../../lib/playerOrder';
 import { calcExtraShots, scrambleUnits, matchPlayEffectiveHandicaps } from '../../store/tournamentStore';
 import { holeCountOf } from '../../store/scoring';
@@ -102,7 +104,7 @@ function getSoloColumns(blockWidth) {
 // Player label for the scorecard row: "You" for solo, 3-letter uppercase
 // abbreviation for multi-player (classic scorecard convention).
 function shortPlayerLabel(player, isSolo) {
-  if (isSolo) return 'You';
+  if (isSolo) return tNow('shared.you');
   const name = player.name?.trim() ?? '';
   if (!name) return '—';
   return name.slice(0, 3).toUpperCase();
@@ -113,6 +115,7 @@ function NineBlock({
   playerHandicaps, mode, round, theme, s, columns, meId, displayMode,
   currentHoleByPlayer, soloRowLabel,
 }) {
+  const t = useT();
   const { labelW, aggW, holeW, labelFontSize } = columns;
   // The block renders one nine, but strokes are allocated over the ROUND's
   // holes — never `holes.length`, which is 9 for the front block of an 18.
@@ -234,7 +237,7 @@ function NineBlock({
                   <TextInput
                     ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
                     style={[s.soloNineStrokeInput, rawScore == null && s.soloNineStrokeInputEmpty, digitOnSolid]}
-                    accessibilityLabel={`Strokes for ${player.name} on hole ${h.number}`}
+                    accessibilityLabel={t('shared.grid.strokesFor', { name: player.name, hole: h.number })}
                     keyboardType="numeric"
                     keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                     selectionColor={theme.accent.primary}
@@ -278,7 +281,7 @@ function NineBlock({
 
       {/* Hole header */}
       <View style={s.soloNineHeaderRow}>
-        <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineHeaderText, s.soloNineHeaderLabel, labelFont]}>Hole</Text>
+        <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineHeaderText, s.soloNineHeaderLabel, labelFont]}>{t('scorecard.grid.hole')}</Text>
         {holes.map((h) => (
           <Text key={h.number} numberOfLines={1} style={[s.soloNineCell, holeCell, s.soloNineHeaderText]}>
             {h.number}
@@ -289,7 +292,7 @@ function NineBlock({
 
       {/* Par */}
       <View style={s.soloNineRow}>
-        <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineRowLabel, labelFont]}>Par</Text>
+        <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineRowLabel, labelFont]}>{t('scorecard.grid.par')}</Text>
         {holes.map((h) => (
           <Text key={h.number} numberOfLines={1} style={[s.soloNineCell, holeCell, s.soloNineParText]}>{h.par}</Text>
         ))}
@@ -298,7 +301,7 @@ function NineBlock({
 
       {/* SI */}
       <View style={[s.soloNineRow, s.soloNineRowSi]}>
-        <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineRowLabel, s.soloNineSiLabel, labelFont]}>SI</Text>
+        <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineRowLabel, s.soloNineSiLabel, labelFont]}>{t('scorecard.grid.si')}</Text>
         {holes.map((h) => (
           <Text key={h.number} numberOfLines={1} style={[s.soloNineCell, holeCell, s.soloNineSiText]}>{h.strokeIndex}</Text>
         ))}
@@ -337,6 +340,7 @@ export function resolveScorecardRows({ round, settings, players, meId, isBestBal
 // `rowLabel` replaces the "You" label of a single-row card — for a card that
 // isn't the viewer's own (the marker page). Ignored with 2+ rows.
 export function ScorecardTable({ round, players, scores, onSetScore, editable, mode, meId, handicapsOverride, showTotalsCard = true, highlightCurrentHole = false, rowLabel = null }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const { width } = useWindowDimensions();
@@ -414,7 +418,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
               accessibilityState={{ selected: active }}
             >
               <Text style={[s.soloModeToggleText, active && s.soloModeToggleTextActive]}>
-                {m === 'strokes' ? 'Strokes' : 'Points'}
+                {m === 'strokes' ? t('scorecard.grid.strokes') : t('scorecard.grid.points')}
               </Text>
             </Pressable>
           );
@@ -425,8 +429,8 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
         <View style={sideBySide ? s.soloNineFlex : null}>
           <NineBlock
             holes={front}
-            label="FRONT NINE"
-            aggLabel="OUT"
+            label={t('scorecard.grid.frontNine')}
+            aggLabel={t('scorecard.grid.out')}
             players={players}
             scores={scores}
             onSetScore={onSetScore}
@@ -448,8 +452,8 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
           <View style={sideBySide ? s.soloNineFlex : null}>
             <NineBlock
               holes={back}
-              label="BACK NINE"
-              aggLabel="IN"
+              label={t('scorecard.grid.backNine')}
+              aggLabel={t('scorecard.grid.in')}
               players={players}
               scores={scores}
               onSetScore={onSetScore}
@@ -476,22 +480,22 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
       {isSolo ? (
         <View style={s.soloTotalBar}>
           <View style={s.soloTotalCol}>
-            <Text style={s.soloTotalLabel}>PAR</Text>
+            <Text style={s.soloTotalLabel}>{t('scorecard.grid.parTotal')}</Text>
             <Text style={s.soloTotalNumber}>{coursePar}</Text>
           </View>
           <View style={s.soloTotalDivider} />
           <View style={s.soloTotalCol}>
-            <Text style={s.soloTotalLabel}>STROKES</Text>
+            <Text style={s.soloTotalLabel}>{t('scorecard.grid.strokesTotal')}</Text>
             <Text style={s.soloTotalNumber}>{playerTotals[0].str || '·'}</Text>
           </View>
           <View style={s.soloTotalDivider} />
           <View style={s.soloTotalCol}>
-            <Text style={s.soloTotalLabel}>POINTS</Text>
+            <Text style={s.soloTotalLabel}>{t('scorecard.grid.pointsTotal')}</Text>
             <Text style={[s.soloTotalNumber, { color: theme.accent.primary }]}>{playerTotals[0].pts}</Text>
           </View>
           <View style={s.soloTotalDivider} />
           <View style={s.soloTotalCol}>
-            <Text style={s.soloTotalLabel}>vs PAR</Text>
+            <Text style={s.soloTotalLabel}>{t('scorecard.grid.vsPar')}</Text>
             <Text style={s.soloTotalNumber}>{playerTotals[0].vsParLabel}</Text>
           </View>
         </View>
@@ -509,9 +513,9 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
           </View>
           <View style={s.multiTotalColHeader}>
             <Text style={[s.multiTotalColHeaderLabel, { flex: 1 }]} />
-            <Text style={[s.multiTotalColHeaderLabel, { width: 48, textAlign: 'right' }]}>STR</Text>
-            <Text style={[s.multiTotalColHeaderLabel, { width: 40, textAlign: 'right' }]}>vs PAR</Text>
-            <Text style={[s.multiTotalColHeaderLabel, { width: 46, textAlign: 'right' }]}>PTS</Text>
+            <Text style={[s.multiTotalColHeaderLabel, { width: 48, textAlign: 'right' }]}>{t('shared.unit.str').toUpperCase()}</Text>
+            <Text style={[s.multiTotalColHeaderLabel, { width: 40, textAlign: 'right' }]}>{t('scorecard.grid.vsPar')}</Text>
+            <Text style={[s.multiTotalColHeaderLabel, { width: 46, textAlign: 'right' }]}>{unitText('pts').toUpperCase()}</Text>
           </View>
           {playerTotals.map(({ player, str, pts, vsParLabel }) => {
             const isLeader = leader && player.id === leader.player.id && leader.pts > 0;
@@ -575,6 +579,7 @@ export function GridView({ round, roundIndex, players, scores, isBestBall, bbRes
 
 function LiveMatchStrip({ bbResult, settings, players }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
 
   if (!bbResult) return null;
@@ -587,7 +592,7 @@ function LiveMatchStrip({ bbResult, settings, players }) {
   const roundWinner = p1Round > p2Round ? 1 : p2Round > p1Round ? 2 : 0;
   return (
     <View style={s.liveMatch}>
-      <Text style={s.liveMatchTitle}>Match Score</Text>
+      <Text style={s.liveMatchTitle}>{t('shared.grid.matchScore')}</Text>
       <View style={s.liveRow}>
         <Text style={[s.liveName, roundWinner === 1 && s.liveWin]}>{p1Name}</Text>
         <Text style={[s.liveScore, roundWinner === 1 && s.liveWin]}>{p1Round}</Text>

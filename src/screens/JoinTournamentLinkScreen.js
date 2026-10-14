@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { signInAnonymously } from '../lib/oauth';
 import AuthScreen from './AuthScreen';
+import { useT } from '../i18n';
 
 // Shown (pre-session, web) when someone opens a /join-tournament/<code> link
 // without being signed in. They choose: log in with an existing account, or
@@ -14,6 +15,7 @@ import AuthScreen from './AuthScreen';
 // same URL to the JoinTournament screen, which redeems the code.
 export default function JoinTournamentLinkScreen() {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   // When true, defer to the normal AuthScreen for email/social login.
@@ -32,10 +34,10 @@ export default function JoinTournamentLinkScreen() {
     } catch (err) {
       setBusy(false);
       Alert.alert(
-        'Could not continue',
+        t('home.joinLink.errorTitle'),
         err?.message
-          ? `${err.message}\n\nIf this keeps happening, ask the organiser to share the link again.`
-          : 'Could not start a guest session. Please try again.',
+          ? t('home.joinLink.errorWithMessage', { message: err.message })
+          : t('home.joinLink.errorGeneric'),
       );
     }
   }
@@ -46,10 +48,9 @@ export default function JoinTournamentLinkScreen() {
         <View style={s.icon}>
           <Feather name="flag" size={32} color={theme.accent.primary} />
         </View>
-        <Text style={s.title}>You're invited to play</Text>
+        <Text style={s.title}>{t('home.joinLink.title')}</Text>
         <Text style={s.subtitle}>
-          Join to enter scores. Log in if you already have a
-          Golf Partner account, or jump straight in as a guest.
+          {t('home.joinLink.subtitle')}
         </Text>
 
         <TouchableOpacity
@@ -60,7 +61,7 @@ export default function JoinTournamentLinkScreen() {
         >
           {busy
             ? <ActivityIndicator color={theme.text.inverse} />
-            : <Text style={s.primaryBtnText}>Continue without an account</Text>}
+            : <Text style={s.primaryBtnText}>{t('home.joinLink.continueGuest')}</Text>}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -69,7 +70,7 @@ export default function JoinTournamentLinkScreen() {
           disabled={busy}
           activeOpacity={0.7}
         >
-          <Text style={s.secondaryBtnText}>I have an account — log in</Text>
+          <Text style={s.secondaryBtnText}>{t('home.joinLink.login')}</Text>
         </TouchableOpacity>
       </View>
     </View>

@@ -16,3 +16,6 @@ export function useSwingTone() {
     none: theme.text.muted,
   }), [theme]);
 }
+
+/** The status colour of the focus-mode still. The still is always dark, so it uses the dark semantic values. */
+export const focusTone = (status) => (status === 'yellow' ? semantic.warning.dark : semantic.destructive.dark);

@@ -32,6 +32,11 @@ jest.mock('../../store/leagueStore', () => ({
   getMyLeagues: jest.fn(),
   getMyCardsForMonth: jest.fn(),
   announceLeagueCard: jest.fn(),
+  getLeagueMonthMembers: jest.fn(),
+}));
+
+jest.mock('../../lib/leagueOptIn', () => ({
+  dismissLeagueOptIn: jest.fn(() => Promise.resolve()),
 }));
 
 const store = require('../../store/leagueStore');
@@ -226,5 +231,116 @@ describe('SetupScreen league switch', () => {
       expect(t.league).toBeUndefined();
       expect(t.rounds[0].playerIndexes).toBeUndefined();
     });
+  });
+});
+
+describe('SetupScreen league load state', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    store.announceLeagueCard.mockResolvedValue({ id: 'card-1', month: '2026-10-01', announcedAt: 'x', leagueHandicap: 18 });
+    store.getMyCardsForMonth.mockResolvedValue([]);
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+  afterEach(() => { Alert.alert.mockRestore(); });
+
+  test('from the board: Start is held while the league loads, then enabled', async () => {
+    let release;
+    store.getMyLeagues.mockReturnValue(new Promise((r) => { release = r; }));
+    const { getByText, findByText, queryByText, findByLabelText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: params({ leagueId: 'L1' }) }} />,
+    ));
+    expect(await findByText('Checking your league…')).toBeTruthy();
+    fireEvent.press(getByText('Start Game'));
+    expect(mutate).not.toHaveBeenCalled();
+
+    await act(async () => { release([tour()]); });
+    await waitFor(() => expect(queryByText('Checking your league…')).toBeNull());
+    await findByLabelText('Counts for El Club del Mulligan');
+    fireEvent.press(getByText('Start Game'));
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+  });
+
+  test('from the board: a failed read says the round will not count, and Retry reads again', async () => {
+    store.getMyLeagues.mockRejectedValueOnce(new Error('offline'));
+    store.getMyLeagues.mockResolvedValue([tour()]);
+    const { findByText, getByText, findByLabelText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: params({ leagueId: 'L1' }) }} />,
+    ));
+    expect(await findByText("Couldn't load your league — this round won't count.")).toBeTruthy();
+    fireEvent.press(getByText('Retry'));
+    expect(await findByLabelText('Counts for El Club del Mulligan')).toBeTruthy();
+  });
+
+  test('without a league in the route a failed read stays quiet', async () => {
+    store.getMyLeagues.mockRejectedValue(new Error('offline'));
+    const { queryByText } = render(wrap(<SetupScreen navigation={navigation} route={{ params: params() }} />));
+    await flush();
+    await flush();
+    expect(queryByText(/Couldn't load your league/)).toBeNull();
+  });
+});
+
+// D5 B: another linked player in the game turns the switch into the
+// "League cards" list, which needs the members' status read.
+describe('SetupScreen league cards list (D5 B)', () => {
+  const { dismissLeagueOptIn } = require('../../lib/leagueOptIn');
+  const withFriend = (over = {}) => {
+    const p = params(over);
+    p.prefill.players = [...p.prefill.players, { id: 'p2', name: 'Javier', handicap: 10, user_id: 'user-2' }];
+    return p;
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockOrder.length = 0;
+    store.getMyLeagues.mockResolvedValue([tour()]);
+    store.getMyCardsForMonth.mockResolvedValue([]);
+    store.announceLeagueCard.mockResolvedValue({ id: 'card-1', month: '2026-10-01', announcedAt: 'x', leagueHandicap: 18 });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+
+  afterEach(() => { Alert.alert.mockRestore(); });
+
+  test('the members read fails: my own single switch still works, and Start announces my card', async () => {
+    store.getLeagueMonthMembers.mockRejectedValue(new Error('offline'));
+    const { findByLabelText, getByText, queryByText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: withFriend() }} />,
+    ));
+    const sw = await findByLabelText('Counts for El Club del Mulligan');
+    await flush();
+    expect(queryByText(/League cards ·/)).toBeNull();
+    expect(queryByText('Not counted: no connection.')).toBeNull();
+    fireEvent(sw, 'valueChange', true);
+
+    fireEvent.press(getByText('Start Game'));
+    await waitFor(() => expect(createdTournament()).toBeTruthy());
+    expect(store.announceLeagueCard).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'L1', playerId: 'p1' }));
+    expect(createdTournament().league).toEqual({ leagueId: 'L1', cardId: 'card-1', playerId: 'p1' });
+    expect(dismissLeagueOptIn).not.toHaveBeenCalled();
+  });
+
+  test('Start while the list is still loading: a normal game, and the round is NOT marked dismissed', async () => {
+    store.getLeagueMonthMembers.mockReturnValue(new Promise(() => {}));
+    const { findByText, getByText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: withFriend() }} />,
+    ));
+    expect(await findByText('Checking your league…')).toBeTruthy();
+    fireEvent.press(getByText('Start Game'));
+    await waitFor(() => expect(createdTournament()).toBeTruthy());
+    expect(store.announceLeagueCard).not.toHaveBeenCalled();
+    expect(dismissLeagueOptIn).not.toHaveBeenCalled();
+  });
+
+  test('the list loaded and I left my switch off: the round is marked dismissed', async () => {
+    store.getLeagueMonthMembers.mockResolvedValue({
+      members: [{ userId: 'user-1' }, { userId: 'user-2' }], cards: [],
+    });
+    const { findByText, getByText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: withFriend() }} />,
+    ));
+    expect(await findByText('League cards · El Club del Mulligan')).toBeTruthy();
+    fireEvent.press(getByText('Start Game'));
+    await waitFor(() => expect(dismissLeagueOptIn).toHaveBeenCalled());
+    expect(store.announceLeagueCard).not.toHaveBeenCalled();
   });
 });

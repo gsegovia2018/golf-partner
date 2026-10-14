@@ -1,0 +1,20 @@
+// English catalogue: App tour (spotlight walkthrough). See docs/i18n.md.
+export default {
+  "tour.play.title": "Everything starts here",
+  "tour.play.body": "Tap the flag to start a round or a weekend tournament — pairs and scoring are set up for you.",
+  "tour.stats.title": "Your game, measured",
+  "tour.stats.body": "Handicap evolution, strokes gained and a coach that tells you what to fix first.",
+  "tour.feed.title": "The group's memories",
+  "tour.feed.body": "Photos and moments from every round land here.",
+  "tour.profile.title": "Your player card",
+  "tour.profile.body": "Avatar, handicap, friends — and Settings, where you can tune the defaults.",
+  "tour.score.title": "Score the hole",
+  "tour.score.body": "Tap your strokes — points are worked out for you, extra handicap shots included.",
+  "tour.distances.title": "Distances & the map",
+  "tour.distances.body": "Live GPS distances to front, middle and back — tap them any time to fly over the hole.",
+  "tour.nav.title": "Move through the round",
+  "tour.nav.body": "This button carries you to the next hole; the running points keep the match in view.",
+  "tour.overline": "TOUR · {index} OF {total}",
+  "tour.nextStop": "{title} — next tour stop",
+  "tour.skip": "Skip tour",
+};

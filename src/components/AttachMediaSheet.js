@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, TextInput, Image, StyleSheet } from 'reac
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 import BottomSheet from './BottomSheet';
 import WheelPicker from './WheelPicker';
 import IconButton from './ui/IconButton';
@@ -19,6 +20,7 @@ export default function AttachMediaSheet({
   visible, asset, rounds, defaultRoundIndex, defaultHoleIndex, onCancel, onConfirm,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const [roundIndex, setRoundIndex] = useState(clampRoundIndex(defaultRoundIndex, rounds));
   // Hole wheel index 0 is "No hole"; hole N is wheel index N.
@@ -45,18 +47,18 @@ export default function AttachMediaSheet({
 
   const roundItems = useMemo(() => (rounds ?? []).map((r, i) => ({
     key: r.id ?? String(i),
-    label: `R${i + 1}`,
+    label: t('shared.media.roundShort', { n: i + 1 }),
     sublabel: r.courseName || undefined,
-  })), [rounds]);
+  })), [rounds, t]);
 
   const holeItems = useMemo(() => [
-    { key: 'none', label: 'No hole' },
+    { key: 'none', label: t('shared.media.noHole') },
     ...holes.map((h, i) => ({
       key: String(i),
-      label: `Hole ${i + 1}`,
-      sublabel: h?.par ? `Par ${h.par}` : undefined,
+      label: t('shared.media.hole', { n: i + 1 }),
+      sublabel: h?.par ? t('shared.media.par', { par: h.par }) : undefined,
     })),
-  ], [holes]);
+  ], [holes, t]);
 
   if (!asset) return null;
 
@@ -81,8 +83,8 @@ export default function AttachMediaSheet({
   return (
     <BottomSheet visible={visible} onClose={onCancel} sheetStyle={s.sheet}>
       <View style={s.header}>
-        <Text style={s.title}>Add photo</Text>
-        <IconButton icon="x" onPress={onCancel} accessibilityLabel="Cancel" />
+        <Text style={s.title}>{t('shared.media.addPhoto')}</Text>
+        <IconButton icon="x" onPress={onCancel} accessibilityLabel={t('common.cancel')} />
       </View>
 
       {asset.kind === 'photo' ? (
@@ -91,7 +93,7 @@ export default function AttachMediaSheet({
         <VideoPreview uri={asset.localUri} style={s.preview} />
       )}
 
-      <Text style={s.sectionLabel}>Round &amp; hole</Text>
+      <Text style={s.sectionLabel}>{t('shared.media.roundAndHole')}</Text>
       <View style={s.wheels}>
         {(rounds?.length ?? 0) > 1 ? (
           <WheelPicker
@@ -109,26 +111,26 @@ export default function AttachMediaSheet({
         />
       </View>
 
-      <Text style={s.sectionLabel}>Caption (optional)</Text>
+      <Text style={s.sectionLabel}>{t('shared.media.captionOptional')}</Text>
       <TextInput
         style={s.input}
         value={caption}
         onChangeText={setCaption}
-        placeholder="e.g. Bunker drama on 7"
+        placeholder={t('shared.media.captionPlaceholder')}
         placeholderTextColor={theme.text.muted}
       />
 
-      <Text style={s.sectionLabel}>Your name (optional)</Text>
+      <Text style={s.sectionLabel}>{t('shared.media.nameOptional')}</Text>
       <TextInput
         style={s.input}
         value={uploader}
         onChangeText={setUploader}
-        placeholder="e.g. Noé"
+        placeholder={t('shared.media.namePlaceholder')}
         placeholderTextColor={theme.text.muted}
       />
 
       <TouchableOpacity style={s.saveBtn} onPress={submit}>
-        <Text style={s.saveLabel}>Save</Text>
+        <Text style={s.saveLabel}>{t('common.save')}</Text>
       </TouchableOpacity>
     </BottomSheet>
   );

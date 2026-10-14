@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { unitText } from '../lib/pointsText';
+import { useT } from '../i18n';
 
 // Small "pts" chip for section titles whose numbers are always Stableford
 // points, even when the screen-wide Strokes/Points toggle is set to Strokes
@@ -10,9 +12,10 @@ import { useTheme } from '../theme/ThemeContext';
 // so it lives in its own file rather than inside StatsScreen.
 export default function PtsBadge() {
   const { theme } = useTheme();
+  useT(); // re-render on language change
   return (
     <View style={[styles.badge, { backgroundColor: theme.accent.light }]}>
-      <Text style={[styles.label, { color: theme.accent.primary }]}>pts</Text>
+      <Text style={[styles.label, { color: theme.accent.primary }]}>{unitText('pts')}</Text>
     </View>
   );
 }

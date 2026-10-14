@@ -3,6 +3,7 @@ import { Image } from 'react-native';
 import { render, waitFor, fireEvent, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import FeedRoundCard from '../FeedRoundCard';
+import { setLanguagePref } from '../../../i18n';
 
 jest.mock('@expo/vector-icons', () => ({
   Feather: 'Feather',
@@ -125,5 +126,41 @@ describe('FeedRoundCard', () => {
     // The leader's avatar and their tile both open the same player.
     expect(getAllByLabelText("Open You's stats")).toHaveLength(2);
     expect(queryByLabelText("Open Guest's stats")).toBeNull();
+  });
+});
+
+describe('FeedRoundCard labels', () => {
+  const media = { id: 'm1', kind: 'photo', url: 'https://x/p.jpg', thumbUrl: 'https://x/t.jpg' };
+  const item = (extra = {}) => ({ ...makeRoundItem(media), ...extra });
+
+  test('a single hole or player is not pluralised', async () => {
+    const { getByText } = render(wrap(
+      <FeedRoundCard
+        item={item({ results: [{ playerId: 'p1', name: 'Marcos', points: 3, strokes: 4, holes: 1, isMine: true }] })}
+        roundLabel="Lomas-Bosque"
+        timestamp="2d"
+        onPress={() => {}}
+      />,
+    ));
+    await flush();
+    expect(getByText('1 hole')).toBeTruthy();
+    expect(getByText('1 player')).toBeTruthy();
+  });
+
+  describe('in Spanish', () => {
+    beforeEach(async () => { await setLanguagePref('es'); });
+    afterEach(async () => { await setLanguagePref('en'); });
+
+    test('context, summary and score tile are Spanish', async () => {
+      const { getByText } = render(wrap(
+        <FeedRoundCard item={item()} roundLabel="Lomas-Bosque" timestamp="2d" onPress={() => {}} />,
+      ));
+      await flush();
+      expect(getByText('Tu vuelta')).toBeTruthy();
+      expect(getByText('Marcos hizo 38 ptos')).toBeTruthy();
+      expect(getByText('1 jugador')).toBeTruthy();
+      expect(getByText('18 hoyos')).toBeTruthy();
+      expect(getByText('ptos')).toBeTruthy();
+    });
   });
 });

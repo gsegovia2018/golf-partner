@@ -4,6 +4,7 @@ import { NavigationContainer, createNavigationContainerRef } from '@react-naviga
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
 import { useFonts } from 'expo-font';
@@ -36,6 +37,8 @@ import { leagueCodeFromPath, leagueCodeFromUrl } from './src/lib/leagueInviteLin
 import { useLeagueJoinHeld } from './src/lib/leagueJoinHandoff';
 import SharedBoardScreen from './src/screens/SharedBoardScreen';
 import MarkerCardScreen from './src/screens/MarkerCardScreen';
+import LeagueBoardPublicScreen from './src/screens/LeagueBoardPublicScreen';
+import { publicBoardTokenFromPath } from './src/store/leagueShare';
 import LeagueMarkerQRScreen from './src/screens/LeagueMarkerQRScreen';
 import LeagueMarkerConfirmScreen from './src/screens/LeagueMarkerConfirmScreen';
 import JoinLeagueScreen from './src/screens/JoinLeagueScreen';
@@ -211,6 +214,19 @@ function markerTokenFromUrl(url) {
   }
 }
 
+// Public league board link (/league-board/TOKEN), same shape as the board
+// helpers. Web only by design: no Android intent filter catches it.
+function leagueBoardTokenFromUrl(url) {
+  if (!url) return null;
+  const scheme = /^golf:\/\/league-board\/([^/?#]+)/i.exec(url);
+  if (scheme) return publicBoardTokenFromPath(`/league-board/${scheme[1]}`);
+  try {
+    return publicBoardTokenFromPath(new URL(url).pathname);
+  } catch {
+    return null;
+  }
+}
+
 function AppNavigator() {
   const { theme, mode } = useTheme();
   const { session, loading, passwordRecovery } = useAuth();
@@ -238,6 +254,13 @@ function AppNavigator() {
     }
     return undefined;
   });
+  // The public league board (/league-board/TOKEN), same three-state sentinel.
+  const [leagueBoardToken, setLeagueBoardToken] = useState(() => {
+    if (typeof window !== 'undefined' && window.location) {
+      return publicBoardTokenFromPath(window.location.pathname);
+    }
+    return undefined;
+  });
   // The league invite code (/league/CODE), same three-state sentinel. A league
   // link also counts as a join link; this picks the league screen over the
   // generic tournament guest/login choice.
@@ -254,7 +277,7 @@ function AppNavigator() {
 
   useEffect(() => {
     if (isJoinLink !== null && boardToken !== undefined && markerToken !== undefined
-      && leagueCode !== undefined) return undefined;
+      && leagueCode !== undefined && leagueBoardToken !== undefined) return undefined;
     let cancelled = false;
     Linking.getInitialURL().then((url) => {
       if (cancelled) return;
@@ -262,15 +285,17 @@ function AppNavigator() {
       setBoardToken(boardTokenFromUrl(url));
       setMarkerToken(markerTokenFromUrl(url));
       setLeagueCode(leagueCodeFromUrl(url));
+      setLeagueBoardToken(leagueBoardTokenFromUrl(url));
     }).catch(() => {
       if (cancelled) return;
       setIsJoinLink(false);
       setBoardToken(null);
       setMarkerToken(null);
       setLeagueCode(null);
+      setLeagueBoardToken(null);
     });
     return () => { cancelled = true; };
-  }, [isJoinLink, boardToken, markerToken, leagueCode]);
+  }, [isJoinLink, boardToken, markerToken, leagueCode, leagueBoardToken]);
 
   useEffect(() => {
     const sub = Linking.addEventListener('url', ({ url }) => {
@@ -282,6 +307,8 @@ function AppNavigator() {
       if (token) setBoardToken(token);
       const mToken = markerTokenFromUrl(url);
       if (mToken) setMarkerToken(mToken);
+      const lbToken = leagueBoardTokenFromUrl(url);
+      if (lbToken) setLeagueBoardToken(lbToken);
     });
     return () => sub.remove();
   }, []);
@@ -331,7 +358,7 @@ function AppNavigator() {
   }, []);
 
   if (loading || isJoinLink === null || boardToken === undefined || markerToken === undefined
-    || leagueCode === undefined) {
+    || leagueCode === undefined || leagueBoardToken === undefined) {
     return <LoadingSplash />;
   }
 
@@ -361,6 +388,8 @@ function AppNavigator() {
     // Signed-in visitors get the routed SharedBoard screen instead (below),
     // so they keep a back button into the app.
     if (boardToken) return <SharedBoardScreen token={boardToken} />;
+    // The public league board: an anon RPC, no account, no navigator.
+    if (leagueBoardToken) return <LeagueBoardPublicScreen token={leagueBoardToken} />;
     // The marker page likewise: anon RPCs only, no account, no navigator.
     if (markerToken) return <MarkerCardScreen token={markerToken} />;
     return <AuthScreen />;
@@ -448,6 +477,7 @@ function AppNavigator() {
         <Stack.Screen name="Friends" component={FriendsScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen name="RoundSummary" component={RoundSummaryScreen} />
+        <Stack.Screen name="LeagueBoardPublic" component={LeagueBoardPublicScreen} />{/* /league-board/:token opened by a signed-in visitor */}
         <Stack.Screen name="SharedBoard" component={SharedBoardScreen} />{/* public board opened by an already-signed-in visitor — same screen the signed-out branch renders bare, here with a back stack */}
       </Stack.Navigator>
       <BootSplashOverlay />
@@ -498,6 +528,7 @@ function BootSplashOverlay() {
 // `board/:token` → the public read-only leaderboard (signed-out visitors are
 // short-circuited to it above, outside the navigator);
 // `m/:token` → the public marker confirmation page (same short-circuit);
+// `league-board/:token` → the public league board (same short-circuit);
 // `reset-password` → the set-new-password screen (also short-circuited in
 // AppNavigator via the passwordRecovery flag, which is the primary path —
 // this mapping just makes the deep link literally resolvable).
@@ -523,6 +554,7 @@ const linking = {
       JoinLeague: 'league/:code',
       SharedBoard: 'board/:token',
       MarkerCard: 'm/:token',
+      LeagueBoardPublic: 'league-board/:token',
       ResetPassword: 'reset-password',
     },
   },
@@ -575,21 +607,27 @@ export default function App() {
     return <LoadingSplash />;
   }
 
+  // GestureHandlerRootView: the swing marking canvas drags marks and scrubs on the UI thread with
+  // react-native-gesture-handler (plan D28), which needs one root view above every screen.
   return (
-    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <ErrorBoundary>
-        <ThemeProvider>
-          <AuthProvider>
-            <NavigationContainer
-              linking={linking}
-              ref={navigationRef}
-              documentTitle={{ formatter: () => 'Golf Partner' }}
-            >
-              <AppNavigator />
-            </NavigationContainer>
-          </AuthProvider>
-        </ThemeProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={appStyles.root}>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <ErrorBoundary>
+          <ThemeProvider>
+            <AuthProvider>
+              <NavigationContainer
+                linking={linking}
+                ref={navigationRef}
+                documentTitle={{ formatter: () => 'Golf Partner' }}
+              >
+                <AppNavigator />
+              </NavigationContainer>
+            </AuthProvider>
+          </ThemeProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const appStyles = StyleSheet.create({ root: { flex: 1 } });

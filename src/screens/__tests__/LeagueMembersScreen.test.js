@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import LeagueMembersScreen from '../LeagueMembersScreen';
 
@@ -14,6 +15,10 @@ jest.mock('../../store/leagueStore', () => ({
   castHandicapBallot: jest.fn(() => Promise.resolve({ status: 'open' })),
   openHandicapVote: jest.fn(() => Promise.resolve('v2')),
   setLeagueHandicap: jest.fn(() => Promise.resolve(27)),
+  removeLeagueMember: jest.fn(() => Promise.resolve()),
+  rotateLeagueInviteCode: jest.fn(() => Promise.resolve({ inviteCode: 'NEWCODE2' })),
+  releaseLeagueInvitee: jest.fn(() => Promise.resolve()),
+  getLeagueMemberEvents: jest.fn(() => Promise.resolve([])),
 }));
 
 const store = require('../../store/leagueStore');
@@ -51,6 +56,8 @@ describe('LeagueMembersScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     store.getLeagueCached.mockResolvedValue(null);
+    store.getLeagueMemberEvents.mockResolvedValue([]);
+    return AsyncStorage.clear();
   });
 
   test('lists members with handicap, paid state, admin badge, history and pot', async () => {
@@ -103,5 +110,176 @@ describe('LeagueMembersScreen', () => {
     fireEvent.press(getByLabelText('Álvaro handicap'));
     expect(getByText('Open a vote (needs 2 of 3)')).toBeTruthy();
     expect(queryByText('Set handicap')).toBeNull();
+  });
+
+  describe('members admin', () => {
+    const claim = (id, inviteeId, userId, spot, account, handicap = 22.1) => ({
+      id, kind: 'spot_claimed', userId, inviteeId, actorUserId: userId, at: '2026-10-11T18:22:00Z',
+      data: { spot_name: spot, name: account, handicap },
+    });
+    const withKike = (admin = true) => {
+      const snap = snapshot({ admin });
+      snap.members.push(member('kike', 'Enrique M.', { leagueHandicap: 22.1 }));
+      snap.cards = [
+        { id: 'c1', userId: 'alv', status: 'confirmed' }, { id: 'c2', userId: 'alv', status: 'void' },
+        { id: 'c3', userId: 'alv', status: 'confirmed' },
+      ];
+      return snap;
+    };
+    const renderScreen = () => render(wrap(<LeagueMembersScreen navigation={navigation} route={route} />));
+    const pressLast = (getAllByText, text) => {
+      const all = getAllByText(text);
+      fireEvent.press(all[all.length - 1]);
+    };
+
+    test('remove from the handicap sheet states the consequence and removes', async () => {
+      store.getLeague.mockResolvedValue(withKike());
+      const { getByText, getByLabelText } = renderScreen();
+      await waitFor(() => getByText('Álvaro'));
+      fireEvent.press(getByLabelText('Álvaro handicap'));
+      fireEvent.press(getByText('Remove from league'));
+      await waitFor(() => getByText('Remove Álvaro?'));
+      expect(getByText('Their 2 past cards stay in the standings, marked as removed.')).toBeTruthy();
+      expect(getByText(/rejoin from the invite link unless you make a new code/)).toBeTruthy();
+      fireEvent.press(getByText('Remove Álvaro'));
+      await waitFor(() => expect(store.removeLeagueMember).toHaveBeenCalledWith('L1', 'alv'));
+      expect(store.rotateLeagueInviteCode).not.toHaveBeenCalled();
+      await waitFor(() => getByText('Álvaro removed. Members told.'));
+    });
+
+    test('the second option also makes a new invite code, and the link follows', async () => {
+      store.getLeague.mockResolvedValue(withKike());
+      const { getByText, getByLabelText } = renderScreen();
+      await waitFor(() => getByText('Álvaro'));
+      fireEvent.press(getByLabelText('Álvaro handicap'));
+      fireEvent.press(getByText('Remove from league'));
+      await waitFor(() => getByText('Remove Álvaro?'));
+      fireEvent.press(getByText('Also make a new invite code'));
+      fireEvent.press(getByText('Remove Álvaro'));
+      await waitFor(() => expect(store.rotateLeagueInviteCode).toHaveBeenCalledWith('L1'));
+      expect(store.removeLeagueMember.mock.invocationCallOrder[0])
+        .toBeLessThan(store.rotateLeagueInviteCode.mock.invocationCallOrder[0]);
+      await waitFor(() => getByText('https://golf-partner.vercel.app/league/NEWCODE2'));
+    });
+
+    test('last_admin shows its copy in the sheet and keeps it open', async () => {
+      store.getLeague.mockResolvedValue(withKike());
+      store.removeLeagueMember.mockRejectedValueOnce(Object.assign(new Error('x is the only admin'), { hint: 'last_admin' }));
+      const { getByText, getByLabelText } = renderScreen();
+      await waitFor(() => getByText('Álvaro'));
+      fireEvent.press(getByLabelText('Álvaro handicap'));
+      fireEvent.press(getByText('Remove from league'));
+      await waitFor(() => getByText('Remove Álvaro?'));
+      fireEvent.press(getByText('Remove Álvaro'));
+      await waitFor(() => getByText('Álvaro is the only other admin. Make someone else an admin first, or remove their admin role.'));
+      expect(getByText('Remove Álvaro?')).toBeTruthy();
+    });
+
+    test('you cannot remove yourself from your own sheet', async () => {
+      store.getLeague.mockResolvedValue(withKike());
+      const { getByText, queryByText } = renderScreen();
+      await waitFor(() => getByText('You (Marcos)'));
+      fireEvent.press(getByText('You (Marcos)'));
+      await waitFor(() => getByText('Set handicap'));
+      expect(queryByText('Remove from league')).toBeNull();
+    });
+
+    test('a new invite code asks first, then the card shows the new link', async () => {
+      store.getLeague.mockResolvedValue(withKike());
+      const { getByText } = renderScreen();
+      await waitFor(() => getByText('Make a new invite code'));
+      fireEvent.press(getByText('Make a new invite code'));
+      await waitFor(() => getByText('Make a new invite code?'));
+      expect(getByText('The current link stops working straight away.')).toBeTruthy();
+      expect(store.rotateLeagueInviteCode).not.toHaveBeenCalled();
+      fireEvent.press(getByText('Make new code'));
+      await waitFor(() => expect(store.rotateLeagueInviteCode).toHaveBeenCalledWith('L1'));
+      await waitFor(() => getByText('https://golf-partner.vercel.app/league/NEWCODE2'));
+      expect(getByText('New invite code ready. The old link no longer works.')).toBeTruthy();
+    });
+
+    test('a claim shows a card; Looks right dismisses it for good', async () => {
+      store.getLeague.mockResolvedValue(withKike());
+      store.getLeagueMemberEvents.mockResolvedValue([claim(7, 'i1', 'kike', 'Kike Moreno', 'Enrique M.')]);
+      const first = renderScreen();
+      await waitFor(() => first.getByText("Kike Moreno's spot was claimed"));
+      expect(first.getByText(/By the account "Enrique M\." on .*Handicap 22\.1 came with the spot\./)).toBeTruthy();
+      fireEvent.press(first.getByText('Looks right'));
+      await waitFor(() => expect(first.queryByText("Kike Moreno's spot was claimed")).toBeNull());
+      first.unmount();
+      const again = renderScreen();
+      await waitFor(() => again.getByLabelText('Release the spot of Enrique M.'));
+      expect(again.queryByText("Kike Moreno's spot was claimed")).toBeNull();
+    });
+
+    test('Release spot confirms with the consequence, then releases the spot', async () => {
+      store.getLeague.mockResolvedValue(withKike());
+      store.getLeagueMemberEvents.mockResolvedValue([claim(7, 'i1', 'kike', 'Kike Moreno', 'Enrique M.')]);
+      const { getByText, getAllByText } = renderScreen();
+      await waitFor(() => getByText('Release spot'));
+      fireEvent.press(getByText('Release spot'));
+      await waitFor(() => getByText("Release Kike Moreno's spot?"));
+      expect(getByText('The spot goes back to Invited, with handicap 22.1.')).toBeTruthy();
+      expect(store.releaseLeagueInvitee).not.toHaveBeenCalled();
+      pressLast(getAllByText, 'Release spot');
+      await waitFor(() => expect(store.releaseLeagueInvitee).toHaveBeenCalledWith('L1', 'i1'));
+      await waitFor(() => getByText('Spot released. Kike Moreno is back on Invited.'));
+    });
+
+    test('the Release chip on the claimed row opens the same sheet', async () => {
+      store.getLeague.mockResolvedValue(withKike());
+      store.getLeagueMemberEvents.mockResolvedValue([claim(7, 'i1', 'kike', 'Kike Moreno', 'Enrique M.')]);
+      const { getByText, getByLabelText } = renderScreen();
+      await waitFor(() => getByLabelText('Release the spot of Enrique M.'));
+      fireEvent.press(getByLabelText('Release the spot of Enrique M.'));
+      await waitFor(() => getByText("Release Kike Moreno's spot?"));
+    });
+
+    test('several claims make one card listing them, with a Release chip each', async () => {
+      store.getLeague.mockResolvedValue(withKike());
+      store.getLeagueMemberEvents.mockResolvedValue([
+        claim(7, 'i1', 'kike', 'Kike Moreno', 'Enrique M.'),
+        claim(8, 'i2', 'alv', 'Tomás Varela', 'Tomás V.', 14),
+      ]);
+      const { getByText, getAllByLabelText } = renderScreen();
+      await waitFor(() => getByText('2 spots claimed'));
+      expect(getByText('All look right')).toBeTruthy();
+      expect(getAllByLabelText('Release the spot of Kike Moreno')).toHaveLength(1);
+      expect(getAllByLabelText('Release the spot of Tomás Varela')).toHaveLength(1);
+    });
+
+    test('a not_claimed error reads as already released', async () => {
+      store.getLeague.mockResolvedValue(withKike());
+      store.getLeagueMemberEvents.mockResolvedValue([claim(7, 'i1', 'kike', 'Kike Moreno', 'Enrique M.')]);
+      store.releaseLeagueInvitee.mockRejectedValueOnce(Object.assign(new Error('nope'), { hint: 'not_claimed' }));
+      const { getByText, getAllByText } = renderScreen();
+      await waitFor(() => getByText('Release spot'));
+      fireEvent.press(getByText('Release spot'));
+      await waitFor(() => getByText("Release Kike Moreno's spot?"));
+      pressLast(getAllByText, 'Release spot');
+      await waitFor(() => getByText('Someone already released this spot. Pull down to refresh.'));
+    });
+
+    test('plain members see none of it', async () => {
+      store.getLeague.mockResolvedValue(withKike(false));
+      store.getLeagueMemberEvents.mockResolvedValue([claim(7, 'i1', 'kike', 'Kike Moreno', 'Enrique M.')]);
+      const { getByText, getByLabelText, queryByText } = renderScreen();
+      await waitFor(() => getByText('Álvaro'));
+      expect(store.getLeagueMemberEvents).not.toHaveBeenCalled();
+      expect(queryByText('Make a new invite code')).toBeNull();
+      expect(queryByText("Kike Moreno's spot was claimed")).toBeNull();
+      fireEvent.press(getByLabelText('Álvaro handicap'));
+      expect(queryByText('Remove from league')).toBeNull();
+    });
+
+    test('the membership log shows as a short history for admins', async () => {
+      store.getLeague.mockResolvedValue(withKike());
+      store.getLeagueMemberEvents.mockResolvedValue([
+        { id: 1, kind: 'invite_code_rotated', userId: null, inviteeId: null, actorUserId: 'me', data: {}, at: '2026-10-12T10:00:00Z' },
+      ]);
+      const { getByText } = renderScreen();
+      await waitFor(() => getByText('MEMBERSHIP HISTORY'));
+      expect(getByText(/You made a new invite code · /)).toBeTruthy();
+    });
   });
 });

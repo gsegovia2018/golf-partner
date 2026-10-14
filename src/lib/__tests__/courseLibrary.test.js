@@ -2,6 +2,7 @@ import {
   normalizeText, buildCourseLibraryItems, filterCourseLibraryItems,
   computeSiIssues, computeDupeTeeLabels, canSaveCourse, roundHolesArePersistable,
 } from '../courseLibrary';
+import { setLanguagePref } from '../../i18n';
 
 const course = (id, name, extra = {}) => ({
   id, name, slope: null, holes: [], city: null, province: null,
@@ -103,6 +104,22 @@ function cleanTees() {
     { id: 't2', label: 'Blue', rating: 73.2, slope: 132 },
   ];
 }
+
+describe('computeSiIssues in Spanish', () => {
+  beforeEach(async () => { await setLanguagePref('es'); });
+  afterEach(async () => { await setLanguagePref('en'); });
+
+  test('issues are written in Spanish with the same details', () => {
+    const dupes = cleanHoles();
+    dupes[1] = { ...dupes[1], strokeIndex: dupes[0].strokeIndex };
+    const issues = computeSiIssues(dupes);
+    expect(issues.some((i) => i.startsWith('HCP repetidos: '))).toBe(true);
+    expect(issues.some((i) => i.startsWith('HCP que faltan: '))).toBe(true);
+    const range = cleanHoles();
+    range[0] = { ...range[0], strokeIndex: 30 };
+    expect(computeSiIssues(range)[0]).toBe('Hoyo 1: el HCP debe estar entre 1 y 18');
+  });
+});
 
 describe('computeSiIssues', () => {
   test('complete 1..18 permutation → no issues', () => {

@@ -8,10 +8,13 @@ import IconButton from '../components/ui/IconButton';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
+import { useT } from '../i18n';
 import { fetchPlayers } from '../store/libraryStore';
 import { seasonTable } from '../store/leagueStandings';
-import { formatPoints, memberName } from '../store/leagueView';
+import { formatPoints } from '../store/leagueView';
+import { memberName } from '../lib/leagueNames';
 import { MAX_FINAL_STROKES, clampFinalStrokes, suggestFinalStrokes } from '../store/leagueFinal';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
 function notify(title, message) {
   if (Platform.OS === 'web') window.alert(`${title}\n${message}`);
@@ -23,6 +26,7 @@ function notify(title, message) {
 export default function LeagueFinalScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
+  const t = useT();
   const s = makeStyles(theme);
   const meId = user?.id ?? null;
   const leagueId = route?.params?.leagueId;
@@ -33,7 +37,8 @@ export default function LeagueFinalScreen({ navigation, route }) {
   const view = useMemo(() => {
     if (!data) return null;
     const active = data.members.filter((m) => !m.leftAt);
-    return { active, table: seasonTable(active, data.cardsByMonth, data.league.pointsTable) };
+    return { active, table: seasonTable(active, data.cardsByMonth, data.league.pointsTable,
+      { participationPoints: data.league.participationPoints }) };
   }, [data]);
 
   // Seed once from the standings; later refreshes never overwrite admin edits.
@@ -43,8 +48,8 @@ export default function LeagueFinalScreen({ navigation, route }) {
 
   const header = (
     <View style={s.header}>
-      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel="Back" />
-      <Text style={s.headerTitle}>The Final</Text>
+      <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
+      <Text style={s.headerTitle}>{t('league.final.title')}</Text>
     </View>
   );
 
@@ -54,7 +59,7 @@ export default function LeagueFinalScreen({ navigation, route }) {
         {header}
         <View style={s.center}>
           {loading ? <ActivityIndicator color={theme.accent.primary} /> : (
-            <Text style={s.note}>{error || 'Could not load the league.'}</Text>
+            <Text style={s.note}>{error || t('league.final.loadFailed')}</Text>
           )}
         </View>
       </ScreenContainer>
@@ -67,7 +72,7 @@ export default function LeagueFinalScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {header}
-        <View style={s.center}><Text style={s.note}>Only the league admin can set up the Final.</Text></View>
+        <View style={s.center}><Text style={s.note}>{t('league.final.adminOnly')}</Text></View>
       </ScreenContainer>
     );
   }
@@ -93,23 +98,23 @@ export default function LeagueFinalScreen({ navigation, route }) {
         } else missing.push(memberName(members, m.userId, meId));
       }
       if (players.length < 1) {
-        notify('No players found', 'None of the members have a player profile yet.');
+        notify(t('league.final.noPlayersTitle'), t('league.final.noPlayers'));
         return;
       }
       if (missing.length > 0) {
-        notify('Not in the Final', `${missing.join(', ')} ${missing.length > 1 ? 'have' : 'has'} no player profile yet. Add them in Setup if they play.`);
+        notify(t('league.final.missingTitle'), t('league.final.missing', { count: missing.length, names: missing.join(', ') }));
       }
       navigation.navigate('Setup', {
         kind: 'tournament',
         leagueFinal: { leagueId, strokes },
         prefill: {
-          name: `${league.name} Final`,
+          name: t('league.final.tournamentName', { league: league.name }),
           players,
           settings: { scoringMode: 'individual' },
         },
       });
     } catch (err) {
-      notify('Could not continue', err?.message ?? 'Check your connection and try again.');
+      notify(t('league.final.continueFailed'), leagueErrorText(err) || t('league.final.connection'));
     } finally {
       setBusy(false);
     }
@@ -119,7 +124,7 @@ export default function LeagueFinalScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {header}
       <ScrollView contentContainerStyle={s.content}>
-        <Text style={s.note}>Extra strokes are added to each player's playing handicap for the Final.</Text>
+        <Text style={s.note}>{t('league.final.intro')}</Text>
         <View style={s.card}>
           {view.table.map((r, i) => {
             const name = memberName(members, r.userId, meId);
@@ -129,26 +134,26 @@ export default function LeagueFinalScreen({ navigation, route }) {
                 <Text style={s.place}>{r.place == null ? '–' : `${r.isTie ? 'T' : ''}${r.place}`}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={s.name} numberOfLines={1}>{name}</Text>
-                  <Text style={s.points}>{`${formatPoints(r.total)} pts`}</Text>
+                  <Text style={s.points}>{t('league.scoring.pts', { points: formatPoints(r.total) })}</Text>
                 </View>
-                <Text style={s.label}>Extra strokes</Text>
+                <Text style={s.label}>{t('league.final.extraStrokes')}</Text>
                 <View style={s.stepper}>
                   <TouchableOpacity
                     style={s.stepBtn}
                     onPress={() => bump(r.userId, -1)}
                     disabled={n <= 0}
                     accessibilityRole="button"
-                    accessibilityLabel={`Fewer extra strokes for ${name}`}
+                    accessibilityLabel={t('league.final.fewer', { name })}
                   >
                     <Feather name="minus" size={16} color={n <= 0 ? theme.text.muted : theme.text.primary} />
                   </TouchableOpacity>
-                  <Text style={s.value} accessibilityLabel={`Extra strokes for ${name}`}>{n}</Text>
+                  <Text style={s.value} accessibilityLabel={t('league.final.extraFor', { name })}>{n}</Text>
                   <TouchableOpacity
                     style={s.stepBtn}
                     onPress={() => bump(r.userId, 1)}
                     disabled={n >= MAX_FINAL_STROKES}
                     accessibilityRole="button"
-                    accessibilityLabel={`More extra strokes for ${name}`}
+                    accessibilityLabel={t('league.final.more', { name })}
                   >
                     <Feather name="plus" size={16} color={n >= MAX_FINAL_STROKES ? theme.text.muted : theme.text.primary} />
                   </TouchableOpacity>
@@ -158,7 +163,7 @@ export default function LeagueFinalScreen({ navigation, route }) {
           })}
         </View>
         <TouchableOpacity style={s.primaryBtn} onPress={onContinue} disabled={busy} activeOpacity={0.8}>
-          {busy ? <ActivityIndicator color={theme.text.inverse} /> : <Text style={s.primaryText}>Continue to setup</Text>}
+          {busy ? <ActivityIndicator color={theme.text.inverse} /> : <Text style={s.primaryText}>{t('league.final.continue')}</Text>}
         </TouchableOpacity>
       </ScrollView>
     </ScreenContainer>

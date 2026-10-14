@@ -8,11 +8,13 @@ import IconButton from '../components/ui/IconButton';
 import { makeOffAppStyles } from '../components/league/offAppStyles';
 import { useTheme } from '../theme/ThemeContext';
 import { useLeague } from '../hooks/useLeague';
+import { useT, tr } from '../i18n';
 import { pickMedia } from '../lib/mediaCapture';
 import { formatPoints } from '../store/leagueView';
 import {
   proofSummary, dayLabel, submitOffAppCard, clearDraft,
 } from '../store/leagueOffApp';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
 function findCard(data, cardId) {
   if (!data || !cardId) return null;
@@ -34,6 +36,7 @@ function findCard(data, cardId) {
 // official toggle.
 export default function LeagueAddProofScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeOffAppStyles(theme);
   const {
     leagueId, cardId = null, snapshot = null, playedOn = null, strokes = null,
@@ -56,12 +59,13 @@ export default function LeagueAddProofScreen({ navigation, route }) {
       const c = findCard(data, cardId);
       if (!c) return null;
       return {
-        line: [c.course?.name, dayLabel(c.playedOn), c.points != null ? `${formatPoints(c.points)} pts` : null,
-          c.gross != null ? `gross ${c.gross}` : null].filter(Boolean).join(' · '),
+        line: [c.course?.name, dayLabel(c.playedOn), c.points != null ? t('league.scoring.pts', { points: formatPoints(c.points) }) : null,
+          c.gross != null ? t('league.addProof.gross', { gross: c.gross }) : null].filter(Boolean).join(' · '),
       };
     }
-    return proofSummary({ snapshot, playedOn, strokes, leagueHandicap });
-  }, [fromCard, data, cardId, snapshot, playedOn, strokes, leagueHandicap]);
+    const res = proofSummary({ snapshot, playedOn, strokes, leagueHandicap });
+    return { ...res, line: tr(res.line) };
+  }, [fromCard, data, cardId, snapshot, playedOn, strokes, leagueHandicap, t]);
 
   async function capture(source) {
     setError(null);
@@ -72,7 +76,7 @@ export default function LeagueAddProofScreen({ navigation, route }) {
         progress.current.path = null; // a new photo must be uploaded again
       }
     } catch (e) {
-      if (mountedRef.current) setError(e?.message || 'Could not get the photo.');
+      if (mountedRef.current) setError(e?.message || t('league.addProof.photoError'));
     }
   }
 
@@ -97,7 +101,7 @@ export default function LeagueAddProofScreen({ navigation, route }) {
       await clearDraft(leagueId, cardId);
       if (mountedRef.current) navigation.navigate('LeagueBoard', { leagueId });
     } catch (e) {
-      if (mountedRef.current) setError(e?.message || 'Could not submit the card.');
+      if (mountedRef.current) setError(leagueErrorText(e) || t('league.addProof.submitError'));
     } finally {
       if (mountedRef.current) setBusy(false);
     }
@@ -105,42 +109,42 @@ export default function LeagueAddProofScreen({ navigation, route }) {
 
   const canSubmit = !!photoUri && !!summary && !busy;
   const retrying = !!progress.current.submitted && !!error;
-  const photoLabel = official ? 'Photo of the official result' : 'Photo of the signed paper card';
+  const photoLabel = official ? t('league.addProof.photoOfficial') : t('league.addProof.photoPaper');
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel="Back" />
-        <Text style={s.headerTitle}>Add proof</Text>
+        <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
+        <Text style={s.headerTitle}>{t('league.addProof.title')}</Text>
       </View>
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
         {!!summary && <Text style={[s.cardTitle, { marginBottom: 12 }]}>{summary.line}</Text>}
 
         <Text style={s.fieldLabel}>{photoLabel}</Text>
-        {!!photoUri && <Image source={{ uri: photoUri }} style={s.preview} resizeMode="cover" accessibilityLabel="Photo preview" />}
+        {!!photoUri && <Image source={{ uri: photoUri }} style={s.preview} resizeMode="cover" accessibilityLabel={t('league.addProof.preview')} />}
         <View style={[s.row, { marginBottom: 8 }]}>
           {Platform.OS !== 'web' && (
             <TouchableOpacity style={s.secondaryBtn} onPress={() => capture('camera')} activeOpacity={0.7} accessibilityRole="button">
               <Feather name="camera" size={16} color={theme.text.secondary} />
-              <Text style={s.secondaryText}>{photoUri ? 'Retake' : 'Take photo'}</Text>
+              <Text style={s.secondaryText}>{photoUri ? t('league.addProof.retake') : t('league.addProof.takePhoto')}</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity style={s.secondaryBtn} onPress={() => capture('library')} activeOpacity={0.7} accessibilityRole="button">
             <Feather name="image" size={16} color={theme.text.secondary} />
-            <Text style={s.secondaryText}>From gallery</Text>
+            <Text style={s.secondaryText}>{t('league.addProof.gallery')}</Text>
           </TouchableOpacity>
         </View>
 
         {!official && (
           <>
-            <Text style={s.fieldLabel}>Marker's name</Text>
+            <Text style={s.fieldLabel}>{t('league.addProof.markerName')}</Text>
             <TextInput
               style={s.input}
               value={markerName}
               onChangeText={setMarkerName}
-              placeholder="Who signed your card"
+              placeholder={t('league.addProof.markerPlaceholder')}
               placeholderTextColor={theme.text.muted}
-              accessibilityLabel="Marker's name"
+              accessibilityLabel={t('league.addProof.markerName')}
             />
           </>
         )}
@@ -148,19 +152,19 @@ export default function LeagueAddProofScreen({ navigation, route }) {
         <View style={[s.card, { marginTop: 8 }]}>
           <View style={s.toggleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={s.toggleTitle}>It was an official tournament</Text>
-              <Text style={s.hint}>Add the result instead of a signed card.</Text>
+              <Text style={s.toggleTitle}>{t('league.addProof.officialTitle')}</Text>
+              <Text style={s.hint}>{t('league.addProof.officialHint')}</Text>
             </View>
             <Switch
               value={official}
               onValueChange={setOfficial}
               trackColor={{ true: theme.accent.primary }}
-              accessibilityLabel="It was an official tournament"
+              accessibilityLabel={t('league.addProof.officialTitle')}
             />
           </View>
         </View>
 
-        <Text style={s.hint}>The group sees the photo next to your card.</Text>
+        <Text style={s.hint}>{t('league.addProof.groupSees')}</Text>
         {!!error && <Text style={s.errorText} accessibilityRole="alert">{error}</Text>}
 
         <TouchableOpacity
@@ -172,7 +176,7 @@ export default function LeagueAddProofScreen({ navigation, route }) {
           accessibilityState={{ disabled: !canSubmit }}
         >
           {busy ? <ActivityIndicator color={theme.text.inverse} /> : (
-            <Text style={s.primaryText}>{retrying ? 'Retry' : 'Submit card'}</Text>
+            <Text style={s.primaryText}>{retrying ? t('league.addProof.retry') : t('league.addProof.submit')}</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

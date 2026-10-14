@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Polyline, Circle, Line as SvgLine } from 'react-native-svg';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
 import { semantic } from '../../theme/tokens';
 import SectionCard from '../mystats/SectionCard';
 import StatTile from '../mystats/StatTile';
@@ -16,23 +17,48 @@ const CREAM_70 = 'rgba(243,239,230,0.7)';
 const CREAM_80 = 'rgba(243,239,230,0.8)';
 const GOLD = semantic.winner.dark;
 
-const fmt1 = (v) => (v == null ? '—' : v.toFixed(1));
-const fmtSigned1 = (v) => {
+const fmt1 = (v) => (v == null ? '—' : formatNumber(v, { decimals: 1 }));
+const fmtSigned1 = (v, t) => {
   if (v == null) return null;
-  if (v === 0) return 'flat';
-  return v < 0 ? `▼ ${Math.abs(v).toFixed(1)}` : `▲ ${v.toFixed(1)}`;
+  if (v === 0) return t('stats.player.summary.flat');
+  return v < 0 ? `▼ ${formatNumber(Math.abs(v), { decimals: 1 })}` : `▲ ${formatNumber(v, { decimals: 1 })}`;
 };
 
-const CHIP_LABEL = {
-  hot: 'On a hot streak',
-  up: 'Trending up',
-  steady: 'Holding steady',
-  down: 'Cooling off',
+const CHIP_KEYS = ['hot', 'up', 'steady', 'down'];
+
+// strengths/weaknesses labels come from personalStats.rankStrengths (a closed set).
+const CELL_KEY = {
+  'Par 3s': 'par3',
+  'Par 4s': 'par4',
+  'Par 5s': 'par5',
+  'Hard holes': 'hard',
+  'Mid holes': 'mid',
+  'Easy holes': 'easy',
+  'Opening 3 holes': 'opening',
+  'Closing 3 holes': 'closing',
+  'Front nine': 'front',
+  'Back nine': 'back',
+  'Tee shot on the fairway': 'fairway',
+  'Tee shot missing the fairway': 'missedFairway',
+  'After a tee penalty': 'teePenalty',
 };
+const cellLabel = (label, t) => (CELL_KEY[label] ? t(`stats.player.cell.${CELL_KEY[label]}`) : label);
+
+// friendVerdict returns a descriptor whose params may be nested descriptors
+// (level / trait / form) and raw numbers; render it in the active language.
+function renderVerdict(msg, t) {
+  const params = {};
+  Object.entries(msg.params ?? {}).forEach(([k, v]) => {
+    if (v && typeof v === 'object') params[k] = renderVerdict(v, t);
+    else params[k] = typeof v === 'number' ? formatNumber(v) : v;
+  });
+  return t(msg.key, params);
+}
 
 // Sparkline for the last-10 differentials with a dashed line at the current
 // app index and filled dots for rounds at/better than it (lower is better).
 function FormSparkline({ series, index }) {
+  const t = useT();
   const [width, setWidth] = React.useState(0);
   const height = 92;
   const padX = 16;
@@ -48,7 +74,7 @@ function FormSparkline({ series, index }) {
   if (!values.some((v) => v != null)) {
     return (
       <View style={sparkStyles.empty}>
-        <Text style={sparkStyles.emptyText}>Not enough rounds yet.</Text>
+        <Text style={sparkStyles.emptyText}>{t('stats.player.summary.notEnoughRounds')}</Text>
       </View>
     );
   }
@@ -102,8 +128,9 @@ const sparkStyles = StyleSheet.create({
 export default function SummaryTab({ summary, verdict, h2h, name, onInfo, onGoTogether }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
+  const t = useT();
 
-  const move3m = fmtSigned1(summary.index?.move3m);
+  const move3m = fmtSigned1(summary.index?.move3m, t);
   const chipKey = summary.form?.chip ?? 'steady';
   // Reuses the app's existing better/worse tokens (accent = improving,
   // destructive = declining) rather than inventing new hero-surface colors.
@@ -111,27 +138,30 @@ export default function SummaryTab({ summary, verdict, h2h, name, onInfo, onGoTo
     : chipKey === 'up' ? theme.accent.primary
       : chipKey === 'down' ? theme.destructive
         : CREAM_70;
-  const chip = { label: CHIP_LABEL[chipKey] ?? CHIP_LABEL.steady, color: chipColor };
+  const chip = {
+    label: t(`stats.player.summary.chip.${CHIP_KEYS.includes(chipKey) ? chipKey : 'steady'}`),
+    color: chipColor,
+  };
   const winShare = h2h && h2h.n > 0 ? h2h.wins / h2h.n : 0;
 
   return (
     <View style={s.wrap}>
       {/* Hero */}
       <View style={s.hero}>
-        {verdict ? <Text style={s.verdict}>{verdict}</Text> : null}
+        {verdict ? <Text style={s.verdict}>{renderVerdict(verdict, t)}</Text> : null}
         <View style={s.heroRow}>
           <PressableScale style={s.heroStat} onPress={() => onInfo?.('scoreDifferential')} disabled={!onInfo}>
             <Text style={s.heroValue}>{fmt1(summary.recentDiff?.value)}</Text>
-            <Text style={s.heroLabel}>{`Avg diff · last ${summary.recentDiff?.count ?? 0}`}</Text>
+            <Text style={s.heroLabel}>{t('stats.player.summary.avgDiff', { count: summary.recentDiff?.count ?? 0 })}</Text>
           </PressableScale>
           <PressableScale style={s.heroStat} onPress={() => onInfo?.('handicapIndex')} disabled={!onInfo}>
             <Text style={s.heroValue}>{fmt1(summary.index?.value)}</Text>
-            <Text style={s.heroLabel}>App index</Text>
-            {move3m ? <Text style={s.heroSub}>{`${move3m} · 3 mo`}</Text> : null}
+            <Text style={s.heroLabel}>{t('stats.player.summary.appIndex')}</Text>
+            {move3m ? <Text style={s.heroSub}>{t('stats.player.summary.move3m', { move: move3m })}</Text> : null}
           </PressableScale>
           <PressableScale style={s.heroStat} onPress={() => onInfo?.('scoreDifferential')} disabled={!onInfo}>
             <Text style={s.heroValue}>{fmt1(summary.bestDiff?.value)}</Text>
-            <Text style={s.heroLabel}>Best diff</Text>
+            <Text style={s.heroLabel}>{t('stats.player.summary.bestDiff')}</Text>
             {summary.bestDiff?.courseName ? (
               <Text style={s.heroSub} numberOfLines={1}>{summary.bestDiff.courseName}</Text>
             ) : null}
@@ -142,41 +172,41 @@ export default function SummaryTab({ summary, verdict, h2h, name, onInfo, onGoTo
       {/* Form */}
       <View style={s.formCard}>
         <View style={s.formHead}>
-          <Text style={s.formKicker}>Form</Text>
+          <Text style={s.formKicker}>{t('stats.player.summary.form')}</Text>
           <View style={[s.chip, { backgroundColor: `${chip.color}26` }]}>
             <Text style={[s.chipText, { color: chip.color }]}>{chip.label}</Text>
           </View>
         </View>
         <Text style={s.formValue}>
           {fmt1(summary.form?.recent)}
-          <Text style={s.formSuffix}> diff</Text>
+          <Text style={s.formSuffix}>{` ${t('stats.player.summary.diffUnit')}`}</Text>
         </Text>
         <FormSparkline series={summary.series ?? []} index={summary.index?.value} />
-        <Text style={s.formMeta}>Dashed line marks the app index · gold dots are at or better than it</Text>
+        <Text style={s.formMeta}>{t('stats.player.summary.formMeta')}</Text>
       </View>
 
       {(summary.strengths?.length > 0 || summary.weaknesses?.length > 0) && (
-        <SectionCard title="Strengths & Watch-outs" infoKey="strengths" onInfo={onInfo}>
+        <SectionCard title={t('stats.player.summary.strengthsTitle')} infoKey="strengths" onInfo={onInfo}>
           <View style={s.swRow}>
             <View style={s.swCol}>
-              <Text style={s.swColTitle}>Strengths</Text>
+              <Text style={s.swColTitle}>{t('stats.player.summary.strengths')}</Text>
               {(summary.strengths ?? []).length === 0 ? (
-                <Text style={s.swEmpty}>Not enough sample yet.</Text>
+                <Text style={s.swEmpty}>{t('stats.player.summary.notEnoughSample')}</Text>
               ) : summary.strengths.map((item) => (
                 <View key={item.label} style={s.swRowItem}>
-                  <Text style={s.swLabel} numberOfLines={1}>{item.label}</Text>
-                  <Text style={[s.swValue, { color: theme.accent.primary }]}>{item.avgPoints.toFixed(2)}</Text>
+                  <Text style={s.swLabel} numberOfLines={1}>{cellLabel(item.label, t)}</Text>
+                  <Text style={[s.swValue, { color: theme.accent.primary }]}>{formatNumber(item.avgPoints, { decimals: 2 })}</Text>
                 </View>
               ))}
             </View>
             <View style={s.swCol}>
-              <Text style={s.swColTitle}>Watch-outs</Text>
+              <Text style={s.swColTitle}>{t('stats.player.summary.watchOuts')}</Text>
               {(summary.weaknesses ?? []).length === 0 ? (
-                <Text style={s.swEmpty}>Not enough sample yet.</Text>
+                <Text style={s.swEmpty}>{t('stats.player.summary.notEnoughSample')}</Text>
               ) : summary.weaknesses.map((item) => (
                 <View key={item.label} style={s.swRowItem}>
-                  <Text style={s.swLabel} numberOfLines={1}>{item.label}</Text>
-                  <Text style={[s.swValue, { color: theme.destructive }]}>{item.avgPoints.toFixed(2)}</Text>
+                  <Text style={s.swLabel} numberOfLines={1}>{cellLabel(item.label, t)}</Text>
+                  <Text style={[s.swValue, { color: theme.destructive }]}>{formatNumber(item.avgPoints, { decimals: 2 })}</Text>
                 </View>
               ))}
             </View>
@@ -185,60 +215,60 @@ export default function SummaryTab({ summary, verdict, h2h, name, onInfo, onGoTo
       )}
 
       {summary.scoreMix?.total > 0 && (
-        <SectionCard title="Score mix" infoKey="scoreMix" onInfo={onInfo}>
+        <SectionCard title={t('stats.player.summary.scoreMix')} infoKey="scoreMix" onInfo={onInfo}>
           <ScoreMixBar distribution={summary.scoreMix} />
         </SectionCard>
       )}
 
       {summary.homeCourse && (
-        <SectionCard title="Home course" titleVariant="heading">
+        <SectionCard title={t('stats.player.summary.homeCourse')} titleVariant="heading">
           <Text style={s.homeCourseName} numberOfLines={1}>{summary.homeCourse.courseName}</Text>
           <View style={s.homeCourseRow}>
             <View style={s.homeCourseStat}>
               <Text style={s.homeCourseValue}>{summary.homeCourse.rounds}</Text>
-              <Text style={s.homeCourseLabel}>Rounds</Text>
+              <Text style={s.homeCourseLabel}>{t('stats.player.summary.rounds')}</Text>
             </View>
             <View style={s.homeCourseStat}>
-              <Text style={s.homeCourseValue}>{summary.homeCourse.avgPoints}</Text>
-              <Text style={s.homeCourseLabel}>Avg pts</Text>
+              <Text style={s.homeCourseValue}>{formatNumber(summary.homeCourse.avgPoints)}</Text>
+              <Text style={s.homeCourseLabel}>{t('stats.player.summary.avgPts')}</Text>
             </View>
             <View style={s.homeCourseStat}>
               <Text style={s.homeCourseValue}>{summary.homeCourse.bestPoints}</Text>
-              <Text style={s.homeCourseLabel}>Best pts</Text>
+              <Text style={s.homeCourseLabel}>{t('stats.player.summary.bestPts')}</Text>
             </View>
             <View style={s.homeCourseStat}>
               <Text style={s.homeCourseValue}>{fmt1(summary.homeCourse.avgDifferential)}</Text>
-              <Text style={s.homeCourseLabel}>Avg diff</Text>
+              <Text style={s.homeCourseLabel}>{t('stats.player.summary.avgDiffShort')}</Text>
             </View>
           </View>
         </SectionCard>
       )}
 
-      <SectionCard title="Bests" titleVariant="heading">
+      <SectionCard title={t('stats.player.summary.bests')} titleVariant="heading">
         <View style={s.bestsGrid}>
-          <StatTile value={fmt1(summary.bestDiff?.value)} caption="Best differential" />
-          <StatTile value={summary.bestRound?.points ?? '—'} caption="Best round" />
-          <StatTile value={summary.milestones?.longestParStreak ?? 0} caption="Best par streak" />
-          <StatTile value={summary.milestones?.bestNine ?? '—'} caption="Best nine" />
+          <StatTile value={fmt1(summary.bestDiff?.value)} caption={t('stats.player.summary.bestDifferential')} />
+          <StatTile value={summary.bestRound?.points ?? '—'} caption={t('stats.player.summary.bestRound')} />
+          <StatTile value={summary.milestones?.longestParStreak ?? 0} caption={t('stats.player.summary.bestParStreak')} />
+          <StatTile value={summary.milestones?.bestNine ?? '—'} caption={t('stats.player.summary.bestNine')} />
         </View>
       </SectionCard>
 
       <PressableScale onPress={onGoTogether} disabled={!onGoTogether}>
-        <SectionCard title={`You vs ${name}`} titleVariant="heading">
+        <SectionCard title={t('stats.player.summary.vs', { name })} titleVariant="heading">
           {h2h && h2h.n > 0 ? (
             <>
               <View style={s.h2hRow}>
                 <View style={s.h2hCell}>
                   <Text style={s.h2hValue}>{h2h.wins}</Text>
-                  <Text style={s.h2hLabel}>Wins</Text>
+                  <Text style={s.h2hLabel}>{t('stats.player.summary.wins')}</Text>
                 </View>
                 <View style={s.h2hCell}>
                   <Text style={s.h2hValue}>{h2h.ties}</Text>
-                  <Text style={s.h2hLabel}>Ties</Text>
+                  <Text style={s.h2hLabel}>{t('stats.player.summary.ties')}</Text>
                 </View>
                 <View style={s.h2hCell}>
                   <Text style={s.h2hValue}>{h2h.losses}</Text>
-                  <Text style={s.h2hLabel}>Losses</Text>
+                  <Text style={s.h2hLabel}>{t('stats.player.summary.losses')}</Text>
                 </View>
               </View>
               <View style={s.winShareTrack}>
@@ -253,19 +283,19 @@ export default function SummaryTab({ summary, verdict, h2h, name, onInfo, onGoTo
                       { color: r === 'W' ? theme.accent.primary : r === 'L' ? theme.destructive : theme.text.muted },
                     ]}
                   >
-                    {r}
+                    {t(`stats.player.summary.glyph.${r}`)}
                   </Text>
                 ))}
               </View>
             </>
           ) : (
-            <Text style={s.swEmpty}>No shared rounds yet.</Text>
+            <Text style={s.swEmpty}>{t('stats.player.summary.noShared')}</Text>
           )}
         </SectionCard>
       </PressableScale>
 
       <Text style={s.footer}>
-        {`Based on ${summary.roundCount ?? 0} rounds you can see · 9-hole and unfinished rounds don't count toward differentials`}
+        {t('stats.player.footer', { count: summary.roundCount ?? 0 })}
       </Text>
     </View>
   );

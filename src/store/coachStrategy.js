@@ -2,7 +2,9 @@
 // each firing only when its data threshold is met, each quantified from the
 // player's own numbers in ≈ Stableford points per round (1 SG ≈ 1 pt).
 
-const round2 = (n) => Math.round(n * 100) / 100;
+import { msg, n } from './statsMsg';
+
+const round2 = (x) => Math.round(x * 100) / 100;
 
 function layUpRule(stats) {
   const long = stats.approachTarget?.buckets?.['150-200'];
@@ -16,9 +18,14 @@ function layUpRule(stats) {
     id: 'layup-150-200',
     title: 'Lay up from 150-200 m',
     reason: `From 150-200 m you average ${long.avgSg} SG per shot, but from 50-100 m you average ${short.avgSg}. Laying up to wedge range turns your worst distance into one of your best.`,
+    titleMsg: msg('stats.my.tip.layup.title'),
+    reasonMsg: msg('stats.my.tip.layup.reason', {
+      long: n(long.avgSg, { maxDecimals: 4 }), short: n(short.avgSg, { maxDecimals: 4 }),
+    }),
     payoffPointsPerRound: round2(payoff),
     sample: long.holes + short.holes,
     basis: 'your approach buckets',
+    basisMsg: msg('stats.my.tip.layup.basis'),
   };
 }
 
@@ -33,9 +40,14 @@ function clubDownRule(stats) {
     id: 'tee-club-down',
     title: 'Club down on tight tee shots',
     reason: `${Math.round(lies.troubleRate * 100)}% of your tracked drives finish in sand or trouble, and the tee game costs ${round2(teeSg)} SG per round. A 3-wood that stays dry keeps roughly half of that.`,
+    titleMsg: msg('stats.my.tip.clubDown.title'),
+    reasonMsg: msg('stats.my.tip.clubDown.reason', {
+      pct: Math.round(lies.troubleRate * 100), sg: n(round2(teeSg)),
+    }),
     payoffPointsPerRound: round2(payoff),
     sample: lies.drives,
     basis: 'your drive lies',
+    basisMsg: msg('stats.my.tip.clubDown.basis'),
   };
 }
 
@@ -49,9 +61,12 @@ function lagFirstRule(stats) {
     id: 'lag-first-6plus',
     title: 'Lag first from 6+ m',
     reason: `You three-putt ${lag.threePuttRate}% of putts from 6+ m. From that range the only goal is a tap-in: pick a 1 m circle, not the hole.`,
+    titleMsg: msg('stats.my.tip.lagFirst.title'),
+    reasonMsg: msg('stats.my.tip.lagFirst.reason', { pct: lag.threePuttRate }),
     payoffPointsPerRound: round2(payoff),
     sample: lag.attempts,
     basis: 'your long putts',
+    basisMsg: msg('stats.my.tip.lagFirst.basis'),
   };
 }
 
@@ -74,9 +89,14 @@ function missSideRule(stats) {
     id: 'tee-miss-side',
     title: `Guard the ${dominant.side} miss`,
     reason: `${dominant.holes} of your ${missTotal} tracked misses go ${dominant.side}, costing ${round2(perHoleCost)} pts per hole versus a fairway hit. Aim at the ${dominant.side === 'left' ? 'right' : 'left'} half of the fairway and let the miss find the middle.`,
+    titleMsg: msg(`stats.my.tip.missSide.title.${dominant.side}`),
+    reasonMsg: msg(`stats.my.tip.missSide.reason.${dominant.side}`, {
+      holes: dominant.holes, total: missTotal, cost: n(round2(perHoleCost)),
+    }),
     payoffPointsPerRound: round2(payoff),
     sample: missTotal,
     basis: 'your miss pattern',
+    basisMsg: msg('stats.my.tip.missSide.basis'),
   };
 }
 
@@ -92,9 +112,14 @@ function avoidSandRule(stats) {
     id: 'avoid-short-side-sand',
     title: 'Take bunkers out of play',
     reason: `You convert ${Math.round(nonSand.rate * 100)}% of up-and-downs from grass but only ${Math.round(sand.rate * 100)}% from sand, and you visit ${visits} bunkers per round. Aim to the fat side of the green — long or wide beats short-sided sand.`,
+    titleMsg: msg('stats.my.tip.avoidSand.title'),
+    reasonMsg: msg('stats.my.tip.avoidSand.reason', {
+      grass: Math.round(nonSand.rate * 100), sand: Math.round(sand.rate * 100), visits: n(visits, { maxDecimals: 4 }),
+    }),
     payoffPointsPerRound: round2(payoff),
     sample: sand.attempts + nonSand.attempts,
     basis: 'your up-and-down split',
+    basisMsg: msg('stats.my.tip.avoidSand.basis'),
   };
 }
 

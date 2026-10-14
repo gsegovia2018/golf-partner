@@ -5,6 +5,7 @@ export function canRemoveRoundFromEditor(tournament, roundIndex) {
   return roundIndex >= 0 && roundIndex < rounds.length && rounds.length > 1;
 }
 
+// Returns i18n message descriptors (keys + params); the screen renders them.
 export function roundRemovalConfirmation({
   round,
   roundIndex,
@@ -13,27 +14,30 @@ export function roundRemovalConfirmation({
 }) {
   const entered = round ? roundEnteredCount(round, players) : 0;
   const isHistoryRound = !!tournament?.finishedAt || isRoundComplete(round, players);
-  const label = `Round ${roundIndex + 1}`;
+  const params = { n: roundIndex + 1, count: entered };
 
   if (isHistoryRound) {
     return {
-      title: 'Delete history round',
-      message: `Delete ${label} from history? This permanently removes its scores and stats.`,
-      confirmLabel: 'Delete history round',
+      titleKey: 'setup.edit.delHistory.title',
+      messageKey: 'setup.edit.delHistory.message',
+      confirmKey: 'setup.edit.delHistory.confirm',
+      params,
     };
   }
 
   if (entered > 0) {
     return {
-      title: 'Remove round',
-      message: `${label} has scores entered for ${entered} hole${entered !== 1 ? 's' : ''}. Removing it will permanently delete those scores.`,
-      confirmLabel: 'Delete round & scores',
+      titleKey: 'setup.edit.delScores.title',
+      messageKey: 'setup.edit.delScores.message',
+      confirmKey: 'setup.edit.delScores.confirm',
+      params,
     };
   }
 
   return {
-    title: 'Remove round',
-    message: `Remove ${label}?`,
-    confirmLabel: 'Remove',
+    titleKey: 'setup.edit.delRound.title',
+    messageKey: 'setup.edit.delRound.message',
+    confirmKey: 'setup.edit.delRound.confirm',
+    params,
   };
 }

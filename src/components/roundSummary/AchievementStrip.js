@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT } from '../../i18n';
 import { semantic } from '../../theme/tokens';
 
 // Icon per achievement id, falling back to a per-tone default so a new
@@ -84,12 +85,13 @@ function AchievementRow({ item }) {
 // an empty shell — a quiet round should look quiet, not broken.
 export default function AchievementStrip({ items }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   if (!items || items.length === 0) return null;
 
   return (
-    <View style={s.card} accessibilityLabel="Round highlights">
-      <Text style={s.heading}>HIGHLIGHTS</Text>
+    <View style={s.card} accessibilityLabel={t('shared.highlights.a11y')}>
+      <Text style={s.heading}>{t('shared.highlights.title')}</Text>
       {items.map((item) => (
         <AchievementRow key={`${item.id}:${item.playerId ?? 'me'}`} item={item} />
       ))}

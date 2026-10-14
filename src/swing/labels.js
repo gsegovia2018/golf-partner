@@ -28,7 +28,7 @@ const sameXY = (a, b) => (a == null && b == null) || (a != null && b != null && 
  * left (equal when untouched); `corrected` is derived, never typed by callers.
  */
 export function frameLabel({
-  i, checkpoint, iProposed = null, hands, head, editedAt = null, confirmed = false,
+  i, checkpoint, iProposed = null, hands, head, editedAt = null, confirmed = false, confirmedFrame = false,
 }) {
   const corrected = (iProposed != null && iProposed !== i)
     || !sameXY(hands.proposed, hands.final)
@@ -56,6 +56,7 @@ export function frameLabel({
     },
     corrected,
     confirmed: !!confirmed, // the golfer confirmed the position (D26), moved or not
+    confirmedFrame: !!confirmedFrame, // the golfer chose this frame in step 1, "Find the frame" (D28)
     editedAt: corrected || confirmed ? editedAt : null,
   };
 }

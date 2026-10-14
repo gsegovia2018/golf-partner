@@ -6,6 +6,7 @@ import { supabase } from './supabase';
 import { insertMediaRow } from '../store/mediaStore';
 import { generateVideoThumbWeb } from './videoThumbWeb';
 import { MAX_VIDEO_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_LABEL } from './mediaLimits';
+import { t } from '../i18n';
 
 const BUCKET = 'tournament-media';
 
@@ -32,7 +33,7 @@ async function uriToBody(uri, { kind } = {}) {
     if (!res.ok) throw new Error(`Failed to read media (${res.status})`);
     const blob = await res.blob();
     if (kind === 'video' && blob.size > MAX_VIDEO_UPLOAD_BYTES) {
-      throw new Error(`Los vídeos deben ser de ${MAX_VIDEO_UPLOAD_LABEL} o menos.`);
+      throw new Error(t('shared.error.videoTooBig', { size: MAX_VIDEO_UPLOAD_LABEL }));
     }
     return blob;
   }

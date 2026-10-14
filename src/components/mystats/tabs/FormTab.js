@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../../theme/ThemeContext';
+import { useT, formatNumber } from '../../../i18n';
 import PressableScale from '../../ui/PressableScale';
 import SectionCard from '../SectionCard';
 import FormHero from '../FormHero';
@@ -9,9 +10,9 @@ import ScoreMixColumns, { DamageHeader } from '../ScoreMixColumns';
 import TrendLineChart from '../TrendLineChart';
 
 // vs-par values print with an explicit sign.
-const fmtVsPar = (v) => (v > 0 ? `+${v}` : `${v}`);
-const fmtPct = (v) => `${v}%`;
-const fmtNum = (v) => `${v}`;
+const fmtVsPar = (v) => (v > 0 ? `+${formatNumber(v)}` : formatNumber(v));
+const fmtPct = (v) => `${formatNumber(v)}%`;
+const fmtNum = (v) => formatNumber(v);
 // Shot metrics are null for an untracked slice — print a dash, not "null%".
 const orDash = (fmt) => (v) => (v == null ? '—' : fmt(v));
 
@@ -34,6 +35,7 @@ const META = {
 // Steady holes trend. Mix/damage/steady are GROSS — see computeFormSeries.
 // Memoised — see the note in CoachTab.
 function FormTab({ stats, n, onChangeN, onInfo }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   // Accordion for the Instruments rows: at most one row shows its full
@@ -53,7 +55,7 @@ function FormTab({ stats, n, onChangeN, onInfo }) {
           accessibilityRole="button"
           accessibilityState={{ selected: n === opt }}
         >
-          <Text style={[s.chipText, n === opt && s.chipTextOn]}>{`Last ${opt}`}</Text>
+          <Text style={[s.chipText, n === opt && s.chipTextOn]}>{t('stats.tab.form.last', { n: opt })}</Text>
         </PressableScale>
       ))}
     </View>
@@ -65,9 +67,9 @@ function FormTab({ stats, n, onChangeN, onInfo }) {
     <View style={s.wrap}>
       <FormHero form={form} formSeries={formSeries} metrics={stats.metrics} n={n} onInfo={onInfo} />
 
-      <SectionCard title="Instruments" infoKey="recentVsHistory" onInfo={onInfo} right={periodChips}>
+      <SectionCard title={t('stats.tab.form.instruments')} infoKey="recentVsHistory" onInfo={onInfo} right={periodChips}>
         {!form.hasHistory && (
-          <Text style={s.note}>{`Not enough history yet — select more than ${n} rounds to compare.`}</Text>
+          <Text style={s.note}>{t('stats.tab.form.notEnoughHistory', { n })}</Text>
         )}
         {instrumentMetrics.map((m, i) => {
           const meta = META[m.key];
@@ -88,12 +90,12 @@ function FormTab({ stats, n, onChangeN, onInfo }) {
           );
         })}
         {!formSeries.hasShotData && (
-          <Text style={s.note}>Log putts and drives during a round to unlock fairway, green and putting trends.</Text>
+          <Text style={s.note}>{t('stats.tab.form.logShots')}</Text>
         )}
       </SectionCard>
 
       <SectionCard
-        title="Score mix"
+        title={t('stats.tab.form.scoreMix')}
         infoKey="scoreMix"
         onInfo={onInfo}
         right={formSeries.scoreMix.length >= 2
@@ -103,15 +105,15 @@ function FormTab({ stats, n, onChangeN, onInfo }) {
         <ScoreMixColumns rounds={formSeries.scoreMix} damage={formSeries.damage} />
       </SectionCard>
 
-      <SectionCard title="Steady holes" infoKey="steadyHoles" onInfo={onInfo}>
+      <SectionCard title={t('stats.tab.form.steadyHoles')} infoKey="steadyHoles" onInfo={onInfo}>
         <TrendLineChart
           series={formSeries.steadyPct}
           color={theme.accent.primary}
           variant="compact"
-          formatValue={(v) => `${v}%`}
+          formatValue={(v) => `${formatNumber(v)}%`}
           dropGaps
         />
-        <Text style={s.steadyCaption}>Holes at bogey or better · oldest → newest</Text>
+        <Text style={s.steadyCaption}>{t('stats.tab.form.steadyCaption')}</Text>
       </SectionCard>
     </View>
   );

@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 
 // Drawer-style curves: a slower, more deliberate ease-out on the way in, a
 // quicker snap back on the way out — "exits faster than enters".
@@ -41,6 +42,7 @@ export default function BottomSheet({
   // one) — fall back to no explicit background, matching the app's other
   // theme-defensive components.
   const { theme } = useTheme() || {};
+  const t = useT();
   const reduced = useReducedMotion();
   const progress = useRef(new Animated.Value(0)).current;
   // Measured sheet height drives the slide distance so any sheet size slides
@@ -121,7 +123,7 @@ export default function BottomSheet({
     >
       {/* Scrim: full-screen from the first frame, only its opacity animates. */}
       <Animated.View style={[styles.backdrop, backdropStyle]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={t('shared.close')} />
       </Animated.View>
       {/* box-none lets taps above the sheet fall through to the scrim, while
           the keyboard lifts the sheet when a field inside it is focused. */}

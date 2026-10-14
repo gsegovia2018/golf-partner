@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, formatNumber } from '../../i18n';
 import { consumePendingCourses } from '../../lib/selectionBridge';
 import { defaultTee } from '../../store/leagueOffApp';
 import { isRatedTee } from '../../store/handicapIndex';
@@ -18,6 +19,7 @@ export default function CourseTeePicker({ navigation, value, onChange }) {
   const { theme } = useTheme();
   const s = makeOffAppStyles(theme);
   const l = makeStyles(theme);
+  const tt = useT();
   const [layouts, setLayouts] = useState(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -61,21 +63,21 @@ export default function CourseTeePicker({ navigation, value, onChange }) {
   const tees = course?.tees ?? [];
   const ratedTee = tees.find(isRatedTee) ?? null;
   const sub = course
-    ? [tee?.label ? `${tee.label} tees` : null, `${course.holes?.length ?? 0} holes`].filter(Boolean).join(' · ')
-    : 'Course and tee';
+    ? [tee?.label ? tt('league.tee.teesSub', { tee: tee.label }) : null, tt('league.tee.holes', { count: course.holes?.length ?? 0 })].filter(Boolean).join(' · ')
+    : tt('league.tee.courseAndTee');
 
   return (
     <View>
-      <Text style={s.fieldLabel}>Course</Text>
+      <Text style={s.fieldLabel}>{tt('league.tee.course')}</Text>
       <TouchableOpacity
         style={s.pickRow}
         onPress={() => navigation.navigate('CoursePicker', { roundIndex: 0, maxSelectable: 1 })}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel="Pick the course"
+        accessibilityLabel={tt('league.tee.pickCourse')}
       >
         <View style={{ flex: 1 }}>
-          <Text style={s.pickTitle}>{course?.name ?? 'Pick the course'}</Text>
+          <Text style={s.pickTitle}>{course?.name ?? tt('league.tee.pickCourse')}</Text>
           <Text style={s.pickSub}>{sub}</Text>
         </View>
         <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -83,7 +85,7 @@ export default function CourseTeePicker({ navigation, value, onChange }) {
 
       {layouts && !course && (
         <>
-          <Text style={s.fieldLabel}>Layout</Text>
+          <Text style={s.fieldLabel}>{tt('league.tee.layout')}</Text>
           <View style={s.chips}>
             {layouts.map((l) => (
               <TouchableOpacity
@@ -101,12 +103,14 @@ export default function CourseTeePicker({ navigation, value, onChange }) {
 
       {course && tees.length > 0 && (
         <>
-          <Text style={s.fieldLabel}>Tee</Text>
+          <Text style={s.fieldLabel}>{tt('league.tee.tee')}</Text>
           <View style={s.chips}>
             {tees.map((t) => {
               const on = tee?.label === t.label;
               const rated = isRatedTee(t);
-              const sub = rated ? `slope ${parseInt(t.slope, 10)} · CR ${parseFloat(t.rating)}` : 'no rating';
+              const slope = rated ? formatNumber(parseInt(t.slope, 10)) : null;
+              const rating = rated ? formatNumber(parseFloat(t.rating)) : null;
+              const sub = rated ? tt('league.tee.rated', { slope, rating }) : tt('league.tee.unrated');
               // Rated: filled when on. Unrated: dashed, and an on chip keeps the
               // dashed border with a light accent fill instead of the solid one.
               return (
@@ -116,7 +120,7 @@ export default function CourseTeePicker({ navigation, value, onChange }) {
                   onPress={() => onChange({ course, tee: t })}
                   activeOpacity={0.7}
                   accessibilityRole="button"
-                  accessibilityLabel={`${t.label}, ${rated ? sub.replace('CR', 'course rating') : 'no slope or rating'}`}
+                  accessibilityLabel={rated ? tt('league.tee.a11yRated', { tee: t.label, slope, rating }) : tt('league.tee.a11yUnrated', { tee: t.label })}
                   accessibilityState={{ selected: on }}
                 >
                   <Text style={[s.chipText, on && (rated ? s.chipTextOn : l.chipTextUnratedOn)]}>{t.label}</Text>
@@ -127,9 +131,9 @@ export default function CourseTeePicker({ navigation, value, onChange }) {
           </View>
           {tee && !isRatedTee(tee) && (
             <View style={l.note} accessibilityRole="alert">
-              <Text style={l.noteTitle}>{`${tee.label} tees aren't rated yet`}</Text>
+              <Text style={l.noteTitle}>{tt('league.tee.unratedTitle', { tee: tee.label })}</Text>
               <Text style={l.noteBody}>
-                A league card needs the tee's slope and course rating to work out the differential. You can add them now, or play the card off a rated tee.
+                {tt('league.tee.unratedBody')}
               </Text>
               <View style={l.noteActions}>
                 {!!course.id && (
@@ -141,7 +145,7 @@ export default function CourseTeePicker({ navigation, value, onChange }) {
                     activeOpacity={0.7}
                     accessibilityRole="link"
                   >
-                    <Text style={s.linkText}>Add slope & rating</Text>
+                    <Text style={s.linkText}>{tt('league.tee.addRating')}</Text>
                   </TouchableOpacity>
                 )}
                 {!!ratedTee && (
@@ -151,7 +155,7 @@ export default function CourseTeePicker({ navigation, value, onChange }) {
                     activeOpacity={0.7}
                     accessibilityRole="button"
                   >
-                    <Text style={s.secondaryText}>{`Use ${ratedTee.label}`}</Text>
+                    <Text style={s.secondaryText}>{tt('league.tee.use', { tee: ratedTee.label })}</Text>
                   </TouchableOpacity>
                 )}
               </View>

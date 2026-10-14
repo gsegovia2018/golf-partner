@@ -6,24 +6,24 @@ import { Feather } from '@expo/vector-icons';
 import BottomSheet from '../BottomSheet';
 import { useTheme } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
+import { useT, formatNumber } from '../../i18n';
 
 const CONFLICT = semantic.conflict.base;
 const DEFAULT_STROKES = 4; // par-ish fallback when no candidate carries a value
 
 const keyOf = (row) => `${row.playerId}:${row.hole}`;
-const valueLabel = (v) => (v == null ? 'No score' : String(v));
-const plural = (v) => (v === 1 ? 'stroke' : 'strokes');
+const valueLabel = (v, tl) => (v == null ? tl('scorecard.conflict.noScore') : formatNumber(v));
 
 // Compact relative time for a candidate's edit timestamp.
-function relTime(ts) {
+function relTime(ts, tl) {
   if (!ts) return '';
   const sec = Math.floor((Date.now() - ts) / 1000);
-  if (sec < 60) return 'just now';
+  if (sec < 60) return tl('scorecard.conflict.justNow');
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} min ago`;
+  if (min < 60) return tl('scorecard.conflict.minAgo', { count: formatNumber(min) });
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} h ago`;
-  return `${Math.floor(hr / 24)} d ago`;
+  if (hr < 24) return tl('scorecard.conflict.hAgo', { count: formatNumber(hr) });
+  return tl('scorecard.conflict.dAgo', { count: formatNumber(Math.floor(hr / 24)) });
 }
 
 // The one score-conflict surface: a wizard that settles one disagreement at a
@@ -56,6 +56,7 @@ export default function ConflictWizardSheet({
   // Tolerate a missing ThemeProvider (some render tests mount sheets without
   // one) — matches BottomSheet.js.
   const { theme } = useTheme() || {};
+  const tl = useT();
   const s = makeStyles(theme);
 
   const list = useMemo(() => (Array.isArray(rows) ? rows : []), [rows]);
@@ -150,7 +151,7 @@ export default function ConflictWizardSheet({
     </TouchableOpacity>
   );
 
-  const foot = <Text style={s.foot}>Your picks sync to every phone in the group</Text>;
+  const foot = <Text style={s.foot}>{tl('scorecard.conflict.foot')}</Text>;
 
   // Nothing left to ask: either everything is settled, or the rows that remain
   // were all deferred with "Decide later".
@@ -167,13 +168,13 @@ export default function ConflictWizardSheet({
               color={undecided > 0 ? CONFLICT : theme?.accent?.primary}
             />
           </View>
-          <Text style={s.doneTitle}>{undecided > 0 ? 'Left for later' : 'All scores agreed'}</Text>
+          <Text style={s.doneTitle}>{undecided > 0 ? tl('scorecard.conflict.leftForLater') : tl('scorecard.conflict.allAgreed')}</Text>
           <Text style={s.doneSub}>
             {undecided > 0
-              ? `${undecided} left undecided — they'll stay flagged on the scorecard.`
+              ? tl('scorecard.conflict.undecided', { count: formatNumber(undecided) })
               : (doneSubtitle ?? (settledCount > 0
-                ? `${settledCount} of ${settledCount} settled — every hole now has one score on every phone.`
-                : 'Every hole now has one score on every phone.'))}
+                ? tl('scorecard.conflict.settledAll', { count: formatNumber(settledCount) })
+                : tl('scorecard.conflict.allSettled')))}
           </Text>
           {(undecided === 0 || allowPrimaryWhilePending) && primaryButton}
           {undecided > 0 && (
@@ -183,9 +184,9 @@ export default function ConflictWizardSheet({
               // deferred row rather than resuming at the last one skipped.
               onPress={() => { setSkippedKeys(new Set()); setCursorKey(null); }}
               activeOpacity={0.8}
-              accessibilityLabel="Review again"
+              accessibilityLabel={tl('scorecard.conflict.reviewAgain')}
             >
-              <Text style={s.ghostText}>Review again</Text>
+              <Text style={s.ghostText}>{tl('scorecard.conflict.reviewAgain')}</Text>
             </TouchableOpacity>
           )}
           {undecided === 0 && secondaryLabel != null && (
@@ -205,14 +206,14 @@ export default function ConflictWizardSheet({
   }
 
   const { playerName, hole, par } = current;
-  const subject = playerName || 'Player';
+  const subject = playerName || tl('scorecard.conflict.playerFallback');
 
   return (
     <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
       <View style={s.handle} />
 
       <View style={s.top}>
-        <Text style={s.count}>{`${settledCount + 1} of ${total}`}</Text>
+        <Text style={s.count}>{tl('scorecard.conflict.progress', { current: formatNumber(settledCount + 1), total: formatNumber(total) })}</Text>
         <View style={s.segments}>
           {Array.from({ length: total }, (_, i) => (
             <View
@@ -228,7 +229,7 @@ export default function ConflictWizardSheet({
         <TouchableOpacity
           style={s.close}
           onPress={() => onClose?.()}
-          accessibilityLabel="Close conflicts"
+          accessibilityLabel={tl('scorecard.conflict.close')}
         >
           <Feather name="x" size={18} color={theme?.text?.secondary} />
         </TouchableOpacity>
@@ -239,9 +240,11 @@ export default function ConflictWizardSheet({
           <Text style={s.bandHoleText}>{hole}</Text>
         </View>
         <View style={s.bandWho}>
-          <Text style={s.bandWhoTitle}>{`${subject}'s score`}</Text>
+          <Text style={s.bandWhoTitle}>{tl('scorecard.conflict.scoreOf', { name: subject })}</Text>
           <Text style={s.bandWhoSub}>
-            {`Hole ${hole} · ${par != null ? `Par ${par} · ` : ''}two phones disagree`}
+            {par != null
+              ? tl('scorecard.conflict.holeParDisagree', { hole: formatNumber(hole), par: formatNumber(par) })
+              : tl('scorecard.conflict.holeDisagree', { hole: formatNumber(hole) })}
           </Text>
         </View>
         <View style={s.bandAvatar}>
@@ -252,8 +255,8 @@ export default function ConflictWizardSheet({
       <View style={s.cards}>
         {(current.candidates ?? []).map((c, i) => {
           const isYou = localIds.has(c.authorId) || c.authorName === 'You';
-          const name = isYou ? 'You' : (c.authorName ?? 'Another phone');
-          const when = relTime(c.ts);
+          const name = isYou ? tl('scorecard.conflict.you') : (c.authorName ?? tl('scorecard.conflict.anotherPhone'));
+          const when = relTime(c.ts, tl);
           return (
             <TouchableOpacity
               key={`${String(c.value)}-${c.ts}-${i}`}
@@ -262,26 +265,26 @@ export default function ConflictWizardSheet({
               activeOpacity={0.8}
               accessibilityLabel={
                 c.value == null
-                  ? `Use no score for ${subject} on hole ${hole}`
-                  : `Use ${c.value} ${plural(c.value)} for ${subject} on hole ${hole}`
+                  ? tl('scorecard.conflict.useNone', { subject, hole: formatNumber(hole) })
+                  : tl('scorecard.conflict.useFor', { count: formatNumber(c.value), subject, hole: formatNumber(hole) })
               }
             >
               <View style={s.author}>
                 <View style={[s.authorAvatar, isYou && s.authorAvatarYou]}>
                   <Text style={[s.authorAvatarText, isYou && s.authorAvatarTextYou]}>
-                    {isYou ? 'Y' : name.charAt(0)}
+                    {isYou ? tl('scorecard.conflict.youInitial') : name.charAt(0)}
                   </Text>
                 </View>
                 <Text style={s.authorName} numberOfLines={1}>
-                  {isYou ? 'You wrote' : `${name} wrote`}
+                  {isYou ? tl('scorecard.conflict.youWrote') : tl('scorecard.conflict.wrote', { name })}
                 </Text>
               </View>
               <Text style={[s.cardValue, c.value == null && s.cardValueNone]}>
-                {valueLabel(c.value)}
+                {valueLabel(c.value, tl)}
               </Text>
               {when !== '' && <Text style={s.cardWhen}>{when}</Text>}
               <View style={s.keep}>
-                <Text style={s.keepText}>Keep this</Text>
+                <Text style={s.keepText}>{tl('scorecard.conflict.keep')}</Text>
               </View>
             </TouchableOpacity>
           );
@@ -289,18 +292,18 @@ export default function ConflictWizardSheet({
       </View>
 
       {Array.isArray(current.blankAuthors) && current.blankAuthors.length > 0 && (
-        <Text style={s.blankNote}>{`No score from ${current.blankAuthors.join(', ')}`}</Text>
+        <Text style={s.blankNote}>{tl('scorecard.conflict.blankNote', { names: current.blankAuthors.join(', ') })}</Text>
       )}
 
       <View style={s.manualRow}>
         {manualOpen ? (
           <>
-            <Text style={s.manualLabel}>Different score</Text>
+            <Text style={s.manualLabel}>{tl('scorecard.conflict.different')}</Text>
             <View style={s.stepper}>
               <TouchableOpacity
                 style={s.stepBtn}
                 onPress={() => stepManual(-1)}
-                accessibilityLabel={`Decrease ${subject}'s score`}
+                accessibilityLabel={tl('scorecard.conflict.decrease', { subject })}
               >
                 <Feather name="minus" size={14} color={theme?.text?.primary} />
               </TouchableOpacity>
@@ -308,7 +311,7 @@ export default function ConflictWizardSheet({
               <TouchableOpacity
                 style={s.stepBtn}
                 onPress={() => stepManual(1)}
-                accessibilityLabel={`Increase ${subject}'s score`}
+                accessibilityLabel={tl('scorecard.conflict.increase', { subject })}
               >
                 <Feather name="plus" size={14} color={theme?.text?.primary} />
               </TouchableOpacity>
@@ -316,22 +319,22 @@ export default function ConflictWizardSheet({
                 style={s.pill}
                 onPress={() => pick(manual)}
                 activeOpacity={0.8}
-                accessibilityLabel={`Use ${manual} ${plural(manual)}`}
+                accessibilityLabel={tl('scorecard.conflict.useStrokes', { count: formatNumber(manual) })}
               >
-                <Text style={s.pillText}>{`Use ${manual}`}</Text>
+                <Text style={s.pillText}>{tl('scorecard.conflict.useShort', { count: formatNumber(manual) })}</Text>
               </TouchableOpacity>
             </View>
           </>
         ) : (
           <>
-            <Text style={s.manualLabel}>Neither is right?</Text>
+            <Text style={s.manualLabel}>{tl('scorecard.conflict.neither')}</Text>
             <TouchableOpacity
               style={s.pill}
               onPress={() => setManualOpen(true)}
               activeOpacity={0.8}
-              accessibilityLabel="Enter a different score"
+              accessibilityLabel={tl('scorecard.conflict.enterOther')}
             >
-              <Text style={s.pillText}>Enter a different score</Text>
+              <Text style={s.pillText}>{tl('scorecard.conflict.enterOther')}</Text>
             </TouchableOpacity>
           </>
         )}
@@ -341,9 +344,9 @@ export default function ConflictWizardSheet({
         style={s.ghost}
         onPress={skipCurrent}
         activeOpacity={0.8}
-        accessibilityLabel="Decide later"
+        accessibilityLabel={tl('scorecard.conflict.decideLater')}
       >
-        <Text style={s.ghostText}>Decide later</Text>
+        <Text style={s.ghostText}>{tl('scorecard.conflict.decideLater')}</Text>
       </TouchableOpacity>
       {allowPrimaryWhilePending && primaryButton}
       {foot}

@@ -3,6 +3,10 @@
 // ScoringModePicker.js re-exports SCORING_MODES / isScoringModeAllowed /
 // fallbackScoringMode so existing call sites keep their import path.
 //
+// The *Key fields are i18n catalogue keys (this module stays free of the
+// translator); screens render t(mode.labelKey) etc. The English fields remain
+// for non-UI callers.
+//
 // Order is fixed: solo modes first, then head-to-head, then team modes.
 
 // SCRAMBLE_MODES / isScrambleMode live in store/scoring.js — store modules
@@ -17,106 +21,151 @@ export const SCORING_MODES = [
   {
     key: 'individual',
     label: 'Stableford',
+    labelKey: 'setup.mode.individual.label',
     subtitle: 'Highest points wins',
+    subtitleKey: 'setup.mode.individual.subtitle',
     icon: 'user',
     category: 'Solo',
+    categoryKey: 'setup.mode.category.solo',
     // Each player competes solo — no partners/pairs to assign or reveal.
     teams: false,
     // Solo ranking — needs at least 2 players to be a contest.
     isAllowed: (count) => count >= 2,
     requirement: 'Requires 2+ players',
+    requirementKey: 'setup.mode.req.min2',
+    needKey: 'setup.mode.need.min2',
   },
   {
     key: 'stableford',
     label: 'Stableford with Partners',
+    labelKey: 'setup.mode.stableford.label',
     subtitle: 'Random partners each round',
+    subtitleKey: 'setup.mode.stableford.subtitle',
     icon: 'users',
     category: 'Solo',
+    categoryKey: 'setup.mode.category.solo',
     // Played in pairs — partners are assigned and revealed each round.
     teams: true,
     // Needs 3+ so there is an opposing side: 2 players form a single pair
     // (the whole field — no contest), and randomPairs would yield 1 pair.
     isAllowed: (count) => count >= 3,
     requirement: 'Requires 3+ players',
+    requirementKey: 'setup.mode.req.min3',
+    needKey: 'setup.mode.need.min3',
   },
   {
     key: 'matchplay',
     label: 'Match Play',
+    labelKey: 'setup.mode.matchplay.label',
     subtitle: 'Head-to-head, hole by hole',
+    subtitleKey: 'setup.mode.matchplay.subtitle',
     icon: 'flag',
     category: 'Head-to-head',
+    categoryKey: 'setup.mode.category.headToHead',
     // 1-vs-1 — each player is their own side, no partners to assign.
     teams: false,
     // Match play is strictly 1-vs-1.
     isAllowed: (count) => count === 2,
     requirement: 'Requires exactly 2 players',
+    requirementKey: 'setup.mode.req.exact2',
+    needKey: 'setup.mode.need.exact2',
   },
   {
     key: 'sindicato',
     label: 'Sindicato',
+    labelKey: 'setup.mode.sindicato.label',
     subtitle: 'Three-way points, hole by hole',
+    subtitleKey: 'setup.mode.sindicato.subtitle',
     icon: 'pie-chart',
     category: 'Head-to-head',
+    categoryKey: 'setup.mode.category.headToHead',
     // Each player competes solo — no partners/pairs to assign.
     teams: false,
     // Sindicato splits 6 points per hole between exactly three players.
     isAllowed: (count) => count === 3,
     requirement: 'Requires exactly 3 players',
+    requirementKey: 'setup.mode.req.exact3',
+    needKey: 'setup.mode.need.exact3',
   },
   {
     key: 'bestball',
     label: 'Best Ball / Worst Ball',
+    labelKey: 'setup.mode.bestball.label',
     subtitle: 'Two pairs, best & worst score',
+    subtitleKey: 'setup.mode.bestball.subtitle',
     icon: 'award',
     category: 'Teams',
+    categoryKey: 'setup.mode.category.teams',
     // Two pairs of two — partners are assigned and revealed each round.
     teams: true,
     // Two pairs of two.
     isAllowed: (count) => count === 4,
     requirement: 'Requires exactly 4 players',
+    requirementKey: 'setup.mode.req.exact4',
+    needKey: 'setup.mode.need.exact4',
   },
   {
     key: 'scramblepairs',
     label: 'Scramble — Pairs',
+    labelKey: 'setup.mode.scramblepairs.label',
     subtitle: 'Two teams, one ball each',
+    subtitleKey: 'setup.mode.scramblepairs.subtitle',
     icon: 'users',
     category: 'Teams',
+    categoryKey: 'setup.mode.category.teams',
     // Two teams of 2 — teams are assigned and revealed each round.
     teams: true,
     isAllowed: (count) => count === 4,
     requirement: 'Requires exactly 4 players',
+    requirementKey: 'setup.mode.req.exact4',
+    needKey: 'setup.mode.need.exact4',
   },
   {
     key: 'scramble3v1',
     label: 'Scramble — 3 vs 1',
+    labelKey: 'setup.mode.scramble3v1.label',
     subtitle: 'Three-man scramble vs a solo player',
+    subtitleKey: 'setup.mode.scramble3v1.subtitle',
     icon: 'users',
     category: 'Teams',
+    categoryKey: 'setup.mode.category.teams',
     // A team of 3 against one individual — sides assigned and revealed.
     teams: true,
     isAllowed: (count) => count === 4,
     requirement: 'Requires exactly 4 players',
+    requirementKey: 'setup.mode.req.exact4',
+    needKey: 'setup.mode.need.exact4',
   },
   {
     key: 'scramble4',
     label: 'Scramble — 4-man',
+    labelKey: 'setup.mode.scramble4.label',
     subtitle: 'One team, one ball, vs the course',
+    subtitleKey: 'setup.mode.scramble4.subtitle',
     icon: 'users',
     category: 'Teams',
+    categoryKey: 'setup.mode.category.teams',
     teams: true,
     isAllowed: (count) => count === 4,
     requirement: 'Requires exactly 4 players',
+    requirementKey: 'setup.mode.req.exact4',
+    needKey: 'setup.mode.need.exact4',
   },
   {
     key: 'pairsmatchplay',
     label: 'Pairs Match Play',
+    labelKey: 'setup.mode.pairsmatchplay.label',
     subtitle: 'Two 1v1 duels, 2 points per hole',
+    subtitleKey: 'setup.mode.pairsmatchplay.subtitle',
     icon: 'flag',
     category: 'Teams',
+    categoryKey: 'setup.mode.category.teams',
     // Two pairs; each player duels one opponent from the other pair.
     teams: true,
     isAllowed: (count) => count === 4,
     requirement: 'Requires exactly 4 players',
+    requirementKey: 'setup.mode.req.exact4',
+    needKey: 'setup.mode.need.exact4',
   },
 ];
 
@@ -173,7 +222,7 @@ export function scoringModeCategories() {
   for (const mode of SCORING_MODES) {
     let section = sections.find((s) => s.category === mode.category);
     if (!section) {
-      section = { category: mode.category, modes: [] };
+      section = { category: mode.category, categoryKey: mode.categoryKey, modes: [] };
       sections.push(section);
     }
     section.modes.push(mode);

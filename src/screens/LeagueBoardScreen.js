@@ -8,18 +8,25 @@ import IconButton from '../components/ui/IconButton';
 import PullToRefresh from '../components/PullToRefresh';
 import LeaderboardCard from '../components/LeaderboardCard';
 import DeadlineLine, { countdownText } from '../components/league/DeadlineLine';
+import LeagueShareSheet from '../components/league/LeagueShareSheet';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { useMinuteClock } from '../hooks/useMinuteClock';
-import { isMissed, needsApproval, deadlineInfo } from '../store/leagueRules';
+import { isMissed, needsApproval, deadlineInfo, isMonthClosed, monthClosesAt } from '../store/leagueRules';
 import { seasonTable, monthResults } from '../store/leagueStandings';
 import {
-  monthName, formatPoints, formatNetDiff, formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard,
-  daysLeftInMonth, collapseSeasonRows, currentMonthKey, memberName, yourCardState, viewableCards, monthRows,
+  formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard, rankNotes, placeLabel,
+  leaguePointsText, monthStanding,
+  daysLeftInMonth, collapseSeasonRows, currentMonthKey, yourCardState, myMonthCard, voidedNote, myRoundScored, viewableCards, monthRows,
 } from '../store/leagueView';
+import { memberName } from '../lib/leagueNames';
+import { useT, tr, formatNumber, formatDate } from '../i18n';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
+import { splitVoidReason } from '../store/leagueTimeline';
+import { getTournamentSnapshot } from '../store/tournamentStore';
+import { leagueRoundIndex } from '../store/leagueGameCards';
 
 // The league's home: my own card, then this month's board (or the season / a past month).
 // Cache first, then live; pull to refresh.
@@ -32,13 +39,17 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const { data, stale, loading, refreshing, error, reload, refresh } = useLeague(navigation, leagueId);
   const [scope, setScope] = useState(null); // null = this month (the season when archived)
   const [showAllSeason, setShowAllSeason] = useState(false);
+  // The share sheet: null = closed; { mode: 'board' } follows the board's
+  // chip; { mode: 'results', resultsMonth } is the month-end preset.
+  const [share, setShare] = useState(null);
   const now = useMinuteClock();
+  const t = useT();
 
   const view = useMemo(() => {
     if (!data) return null;
     const { league, members, cardsByMonth } = data;
     const active = members.filter((m) => !m.leftAt);
-    const table = seasonTable(active, cardsByMonth, league.pointsTable);
+    const table = seasonTable(active, cardsByMonth, league.pointsTable, { participationPoints: league.participationPoints });
     const last = lastScoredMonth(cardsByMonth);
     const scoredMonths = Object.keys(cardsByMonth)
       .filter((m) => cardsByMonth[m].some((c) => c.status === 'confirmed' && !needsApproval(c)))
@@ -46,24 +57,31 @@ export default function LeagueBoardScreen({ navigation, route }) {
     return { league, members, active, cardsByMonth, table, last, scoredMonths };
   }, [data]);
 
-  const title = view?.league.name ?? route?.params?.name ?? 'League';
+  const title = view?.league.name ?? route?.params?.name ?? t('league.stats.leagueFallback');
 
   const header = (
     <View style={s.header}>
       <View style={s.headerLeft}>
-        <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel="Back" />
+        <IconButton icon="chevron-left" size={24} color={theme.accent.primary} onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
         <Text style={s.headerTitle} numberOfLines={1}>{title}</Text>
       </View>
       <View style={s.headerRight}>
+        {!!view && (
+          <IconButton
+            icon="share-2"
+            onPress={() => setShare({ mode: 'board' })}
+            accessibilityLabel={t('league.share.boardButton')}
+          />
+        )}
         <IconButton
           icon="bar-chart-2"
           onPress={() => navigation.navigate('LeagueStats', { leagueId })}
-          accessibilityLabel="Stats"
+          accessibilityLabel={t('league.home.statsA11y')}
         />
         <IconButton
           icon="settings"
           onPress={() => navigation.navigate('LeagueSettings', { leagueId })}
-          accessibilityLabel="League settings"
+          accessibilityLabel={t('league.home.settingsA11y')}
         />
       </View>
     </View>
@@ -77,10 +95,10 @@ export default function LeagueBoardScreen({ navigation, route }) {
           {loading ? <ActivityIndicator color={theme.accent.primary} /> : (
             <>
               <Feather name="cloud-off" size={40} color={theme.text.muted} />
-              <Text style={s.emptyTitle}>Couldn't load the league</Text>
+              <Text style={s.emptyTitle}>{t('league.home.loadError')}</Text>
               <Text style={s.emptyText}>{error}</Text>
               <TouchableOpacity style={s.secondaryBtn} onPress={reload} activeOpacity={0.8}>
-                <Text style={s.secondaryText}>Try again</Text>
+                <Text style={s.secondaryText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -95,7 +113,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const viewable = (month) => new Set(viewableCards(members, cardsByMonth, month).map((c) => c.userId));
   const noCardsYet = !last;
   const curKey = currentMonthKey(now);
-  const curMonth = monthName(curKey);
+  const curMonth = monthLong(curKey);
   const archived = !!league.archivedAt;
   const activeScope = scope ?? (archived ? 'season' : curKey);
   const monthScope = activeScope === curKey && !archived;
@@ -104,18 +122,25 @@ export default function LeagueBoardScreen({ navigation, route }) {
   // ---- Standings card ------------------------------------------------------
 
   let boardTitle;
-  let boardRows;
   let boardSections;
   let boardFooter = null;
   let boardMore = null;
   // Confirmed cards on a tee with no slope/rating are listed, not ranked.
-  const unratedNote = (userIds) => `${userIds.length === 1 ? `${userIds[0] === meId ? 'Your' : `${nameOf(userIds[0])}'s`} card has` : `${userIds.length} cards have`} no slope or rating. Shown, not ranked.`;
+  const unratedNote = (userIds) => {
+    if (userIds.length !== 1) return t('league.home.unratedMany', { count: userIds.length });
+    return userIds[0] === meId ? t('league.home.unratedMine') : t('league.home.unratedOne', { name: nameOf(userIds[0]) });
+  };
   if (monthScope) {
     const left = daysLeftInMonth(now);
-    boardTitle = `${curMonth.toUpperCase()} SO FAR · ${left === 0 ? 'LAST DAY' : `${left} ${left === 1 ? 'DAY' : 'DAYS'} LEFT`}`;
-    const board = monthBoard(members, cardsByMonth, curKey, league.pointsTable, now);
-    // Any card this month opens: live and missed ones show their status.
-    const canOpen = new Set(monthRows(members, cardsByMonth, curKey, now).filter((r) => r.card).map((r) => r.member.userId));
+    boardTitle = left === 0
+      ? t('league.home.titleLastDay', { month: curMonth.toUpperCase() })
+      : t('league.home.titleDaysLeft', { month: curMonth.toUpperCase(), count: left });
+    const board = monthBoard(members, cardsByMonth, curKey, league.pointsTable, now, { participationPoints: league.participationPoints, voidCards: data?.cards });
+    // Any card this month opens: live, missed and voided ones show their status.
+    const canOpen = new Set([
+      ...monthRows(members, cardsByMonth, curKey, now).filter((r) => r.card).map((r) => r.member.userId),
+      ...board.voided.map((r) => r.member.userId),
+    ]);
     const rowOf = (member) => ({
       key: member.userId,
       name: nameOf(member.userId),
@@ -123,46 +148,50 @@ export default function LeagueBoardScreen({ navigation, route }) {
       onPress: canOpen.has(member.userId) ? () => openCard(curKey, member.userId) : undefined,
     });
     const detailOf = (card, ...parts) => {
-      const text = [...parts, card.notAnnounced ? 'not announced in the app' : null].filter(Boolean).join(' · ');
+      const text = [...parts, card.notAnnounced ? t('league.home.notAnnounced') : null].filter(Boolean).join(' · ');
       return text.charAt(0).toUpperCase() + text.slice(1);
     };
     const noCard = [...board.noCard].sort((a, b) => (b.userId === meId) - (a.userId === meId));
     boardSections = [
       board.confirmed.length > 0 && {
         key: 'confirmed',
-        label: `Confirmed · ${board.confirmed.length}`,
+        label: t('league.home.secConfirmed', { count: board.confirmed.length }),
         icon: 'check',
         gold: true,
+        cols: [t('league.board.colPts'), t('league.board.colLeague')],
         rows: board.confirmed.map((r) => ({
           ...rowOf(r.member),
           place: r.place,
           isTie: r.isTie,
           unranked: r.unrated,
           muted: r.unrated,
-          points: r.unrated ? 'unrated' : formatNetDiff(r.netDifferential),
-          sub: r.unrated ? 'not ranked' : r.seasonPoints > 0 ? `+${formatPoints(r.seasonPoints)}` : null,
+          white: !r.unrated,
+          points: r.unrated ? t('league.home.unrated') : formatNumber(r.cardPoints),
+          pointsLabel: r.unrated ? undefined : t('league.board.stablefordPoints', { count: r.cardPoints }),
+          sub: r.unrated ? t('league.home.notRanked') : r.seasonPoints > 0 ? `+${leaguePointsText(r.seasonPoints)}` : null,
+          subLabel: r.unrated || !(r.seasonPoints > 0) ? undefined : t('league.board.leaguePoints', { count: r.seasonPoints }),
           subGold: !r.unrated,
-          detail: detailOf(r.card, r.card.course?.name, r.how),
+          // A tie says who it shares with instead of how it was confirmed.
+          detail: detailOf(r.card, r.card.course?.name, r.isTie ? null : tr(r.howMsg), ...rankNotes(r).map(tr)),
         })),
       },
       board.waiting.length > 0 && {
         key: 'waiting',
-        label: `Waiting for confirmation · ${board.waiting.length}`,
+        label: t('league.home.secWaiting', { count: board.waiting.length }),
         icon: 'clock',
         rows: board.waiting.map((r) => ({
           ...rowOf(r.member),
           place: null,
           unranked: true,
           muted: true,
-          points: r.card.netDifferential != null ? formatNetDiff(r.card.netDifferential)
-            : r.card.points != null ? String(r.card.points) : '—',
-          sub: 'pending',
-          detail: detailOf(r.card, r.card.course?.name, r.reason),
+          points: r.card.points != null ? String(r.card.points) : '—',
+          sub: t('league.home.pending'),
+          detail: detailOf(r.card, r.card.course?.name, tr(r.reasonMsg)),
         })),
       },
       board.onCourse.length > 0 && {
         key: 'oncourse',
-        label: `Playing or announced · ${board.onCourse.length}`,
+        label: t('league.home.secOnCourse', { count: board.onCourse.length }),
         icon: 'flag',
         rows: board.onCourse.map((r) => {
           const dl = deadlineInfo(r.card, now);
@@ -172,35 +201,34 @@ export default function LeagueBoardScreen({ navigation, route }) {
           unranked: true,
           muted: true,
           points: dl ? countdownText(dl.msLeft) : '—',
-          sub: dl ? (dl.urgent ? 'left' : 'to post') : null,
+          sub: dl ? t(dl.urgent ? 'league.home.left' : 'league.home.toPost') : null,
           warn: !!dl?.urgent,
           detail: detailOf(
             r.card,
             ...(r.card.status === 'playing'
-              ? ['Playing now', r.card.course?.name]
-              : ['Announced', [dayLabel(r.card.teeTime), timeLabel(r.card.teeTime)].filter(Boolean).join(' '), r.card.course?.name]),
+              ? [t('league.home.playingNow'), r.card.course?.name]
+              : [t('league.home.announced'), [dayLabel(r.card.teeTime), timeLabel(r.card.teeTime)].filter(Boolean).join(' '), r.card.course?.name]),
           ),
           };
         }),
       },
       board.awaiting.length > 0 && {
         key: 'awaiting',
-        label: `Awaiting approval · ${board.awaiting.length}`,
+        label: t('league.home.secAwaiting', { count: board.awaiting.length }),
         icon: 'user-check',
         rows: board.awaiting.map((r) => ({
           ...rowOf(r.member),
           place: null,
           unranked: true,
           muted: true,
-          points: r.card.netDifferential != null ? formatNetDiff(r.card.netDifferential)
-            : r.card.points != null ? String(r.card.points) : '—',
-          sub: 'not counted',
-          detail: detailOf(r.card, r.card.course?.name, "needs an admin's approval"),
+          points: r.card.points != null ? String(r.card.points) : '—',
+          sub: t('league.home.notCounted'),
+          detail: detailOf(r.card, r.card.course?.name, t('league.home.needsApproval')),
         })),
       },
       board.missed.length > 0 && {
         key: 'missed',
-        label: `Not posted · ${board.missed.length}`,
+        label: t('league.home.secMissed', { count: board.missed.length }),
         icon: 'slash',
         rows: board.missed.map((r) => ({
           ...rowOf(r.member),
@@ -208,12 +236,29 @@ export default function LeagueBoardScreen({ navigation, route }) {
           unranked: true,
           muted: true,
           points: '—',
-          detail: detailOf(r.card, 'Not posted in time', r.card.course?.name),
+          detail: detailOf(r.card, t('league.home.notPostedInTime'), r.card.course?.name),
         })),
+      },
+      board.voided.length > 0 && {
+        key: 'voided',
+        label: t('league.home.secVoided', { count: board.voided.length }),
+        icon: 'slash',
+        rows: board.voided.map((r) => {
+          const { reason } = splitVoidReason(r.card.voidedReason);
+          const why = reason ?? (r.card.voidKind === 'withdrawn_after_play' ? t('league.home.playedAfterWithdrawing') : null);
+          return {
+            ...rowOf(r.member),
+            place: null,
+            unranked: true,
+            muted: true,
+            points: '—',
+            detail: why ? t('league.home.voidedWhy', { why }) : t('league.home.voided'),
+          };
+        }),
       },
       noCard.length > 0 && {
         key: 'nocard',
-        label: `No card yet · ${noCard.length}`,
+        label: t('league.home.secNoCard', { count: noCard.length }),
         icon: 'user-x',
         body: (
           <Text style={s.noCardText}>
@@ -227,44 +272,74 @@ export default function LeagueBoardScreen({ navigation, route }) {
       },
     ].filter(Boolean);
     const unratedNow = board.confirmed.filter((r) => r.unrated).map((r) => r.member.userId);
-    boardFooter = 'Gold = table points if the month ended today. The season table is one tap away on Season.'
+    boardFooter = tr({ key: 'league.board.footMonth', params: { monthKey: curKey } })
       + (unratedNow.length > 0 ? ` ${unratedNote(unratedNow)}` : '');
   } else if (activeScope === 'season' || !pastScopes.includes(activeScope)) {
-    boardTitle = last ? `SEASON · AFTER ${monthName(last).toUpperCase()}` : 'SEASON';
+    boardTitle = last ? t('league.home.titleSeasonAfter', { month: monthLong(last).toUpperCase() }) : t('league.home.titleSeason');
     const seasonRows = table.map((r) => ({
       key: r.userId,
       place: noCardsYet ? null : r.place,
       isTie: r.isTie,
       name: nameOf(r.userId),
-      points: noCardsYet ? '—' : formatPoints(r.total),
+      points: noCardsYet ? '—' : leaguePointsText(r.total),
       sub: noCardsYet ? null : deltaLabel(r.lastMonthDelta, last),
       isMe: r.userId === meId,
     }));
     const collapsed = collapseSeasonRows(seasonRows, { expanded: showAllSeason });
-    boardRows = collapsed.rows;
-    if (collapsed.hidden > 0) boardMore = { label: `Show all ${seasonRows.length}`, onPress: () => setShowAllSeason(true) };
-    else if (collapseSeasonRows(seasonRows).hidden > 0) boardMore = { label: 'Show top 8', onPress: () => setShowAllSeason(false) };
+    boardSections = [{
+      key: 'season',
+      label: t('league.board.seasonSection'),
+      icon: 'award',
+      gold: true,
+      cols: [t('league.board.colTotal'), t('league.board.colLast')],
+      rows: collapsed.rows,
+    }];
+    if (collapsed.hidden > 0) boardMore = { label: t('league.home.showAll', { count: seasonRows.length }), onPress: () => setShowAllSeason(true) };
+    else if (collapseSeasonRows(seasonRows).hidden > 0) boardMore = { label: t('league.home.showTop'), onPress: () => setShowAllSeason(false) };
     const pot = potCents(members, league.entryFeeCents);
-    boardFooter = `Final in ${monthName(league.seasonEnd)} — extra strokes from these standings, set on the day.${pot > 0 ? ` Pot ${formatEuros(pot)}` : ''}`;
+    boardFooter = t('league.home.footSeason', { month: monthWord(league.seasonEnd) })
+      + (pot > 0 ? ` ${t('league.home.footPot', { pot: formatEuros(pot) })}` : '');
   } else {
-    boardTitle = `${monthName(activeScope).toUpperCase()} · RESULTS`;
+    boardTitle = t('league.home.titleResults', { month: monthLong(activeScope).toUpperCase() });
     const canOpen = viewable(activeScope);
-    const results = monthResults(cardsByMonth[activeScope], active, league.pointsTable);
-    boardRows = results.map((r) => ({
-      key: r.userId,
-      place: r.place,
-      isTie: r.isTie,
-      name: nameOf(r.userId),
-      points: r.unrated ? 'unrated' : r.place == null ? '—' : formatNetDiff(r.netDifferential),
-      sub: r.unrated ? 'not ranked' : r.place == null ? null : `+${formatPoints(r.seasonPoints)}`,
-      muted: !!r.unrated,
-      isMe: r.userId === meId,
-      onPress: canOpen.has(r.userId) ? () => openCard(activeScope, r.userId) : undefined,
-    }));
+    const results = monthResults(cardsByMonth[activeScope], active, league.pointsTable, { participationPoints: league.participationPoints });
+    const ranked = results.filter((r) => r.place != null || r.unrated);
+    const absent = results.filter((r) => r.place == null && !r.unrated);
+    boardSections = [
+      ranked.length > 0 && {
+        key: 'results',
+        label: t('league.board.cards', { count: ranked.length }),
+        icon: 'check',
+        gold: true,
+        cols: [t('league.board.colPts'), t('league.board.colLeague')],
+        rows: ranked.map((r) => ({
+          key: r.userId,
+          place: r.place,
+          isTie: r.isTie,
+          name: nameOf(r.userId),
+          points: r.unrated ? t('league.home.unrated') : formatNumber(r.cardPoints),
+          pointsLabel: r.unrated ? undefined : t('league.board.stablefordPoints', { count: r.cardPoints }),
+          white: !r.unrated,
+          sub: r.unrated ? t('league.home.notRanked') : `+${leaguePointsText(r.seasonPoints)}`,
+          subLabel: r.unrated ? undefined : t('league.board.leaguePoints', { count: r.seasonPoints }),
+          subGold: !r.unrated,
+          detail: rankNotes(r).map(tr).join(' · '),
+          muted: !!r.unrated,
+          isMe: r.userId === meId,
+          onPress: canOpen.has(r.userId) ? () => openCard(activeScope, r.userId) : undefined,
+        })),
+      },
+      absent.length > 0 && {
+        key: 'noplay',
+        label: t('league.board.noPlay', { count: absent.length }),
+        icon: 'user-x',
+        body: <Text style={s.noCardText}>{t('league.board.noPlayNames', { names: absent.map((r) => nameOf(r.userId)).join(', ') })}</Text>,
+      },
+    ].filter(Boolean);
     const unrated = results.filter((r) => r.unrated).map((r) => r.userId);
-    boardFooter = unrated.length === 0
-      ? "Better or worse than each member's league handicap. Ties share points."
-      : unratedNote(unrated);
+    if (unrated.length > 0) boardFooter = unratedNote(unrated);
+    else if (ranked.some((r) => r.floored)) boardFooter = t('league.board.footPast', { points: formatNumber(league.participationPoints) });
+    else boardFooter = t('league.board.footPastTies');
   }
 
   const chipKeys = [...(archived ? [] : [curKey]), 'season', ...pastScopes];
@@ -283,24 +358,47 @@ export default function LeagueBoardScreen({ navigation, route }) {
             accessibilityState={{ selected: on }}
           >
             {key === curKey && <View style={[s.chipDot, on && s.chipDotOn]} />}
-            <Text style={[s.chipText, on && s.chipTextOn]}>{key === 'season' ? 'Season' : monthName(key, true)}</Text>
+            <Text style={[s.chipText, on && s.chipTextOn]}>{key === 'season' ? t('league.public.season') : monthShort(key)}</Text>
           </TouchableOpacity>
         );
       })}
     </ScrollView>
   ) : null;
 
+  // ---- Sharing -------------------------------------------------------------
+
+  // Month end: the previous month is final (closed on day 4) for two weeks, or
+  // the "Ranking updated" push says which month. Only when it ranked someone.
+  const [cy, cm] = curKey.split('-').map(Number);
+  const prevKey = `${cm === 1 ? cy - 1 : cy}-${String(cm === 1 ? 12 : cm - 1).padStart(2, '0')}`;
+  const finalKey = route?.params?.finalMonth ?? (
+    isMonthClosed(prevKey, now) && now.getTime() - monthClosesAt(prevKey).getTime() < 14 * 86400000 ? prevKey : null);
+  const finalMonth = !archived && finalKey && monthResults(cardsByMonth[finalKey] ?? [], active, league.pointsTable,
+    { participationPoints: league.participationPoints }).some((r) => r.place != null) ? finalKey : null;
+  // The header's share icon follows the board: the month so far, the season,
+  // or a past month's results.
+  const sheetMode = share?.mode === 'board'
+    ? (monthScope ? { mode: 'month' } : pastScopes.includes(activeScope)
+      ? { mode: 'results', resultsMonth: activeScope } : { mode: 'season' })
+    : share;
+
   // ---- My card -------------------------------------------------------------
 
-  const myCard = (cardsByMonth[curKey] ?? []).find((c) => c.userId === meId) ?? null;
+  // A card an admin voided (or one played after a withdrawal) still takes the
+  // month: it shows here instead of the announce buttons.
+  const myCard = myMonthCard(cardsByMonth, data?.cards, curKey, meId);
   const mine = yourCardState(myCard);
-  // Better = the success green, worse = the danger red, level = plain text.
-  const netColor = (tone) => (tone === 'better' ? theme.scoreColor('excellent')
-    : tone === 'worse' ? theme.destructive : theme.text.primary);
+  // Where my counting card stands in the open month (confirmed, counted).
+  const standing = mine.kind === 'confirmed' && !needsApproval(mine.card)
+    ? monthStanding({ league, members, cardsByMonth }, curKey, meId, now) : null;
 
   // My app card stuck before confirmation (left Validate, or no partner yet):
   // reopen Validate on its round. A submitted card goes straight to the check.
-  const finishValidating = !mine.offApp && (mine.kind === 'playing' || mine.kind === 'submitted') ? (
+  // While holes are still unscored the card is simply being played: the
+  // "Playing with the app" link to the scorecard is the way back, not Validate.
+  const stillPlaying = !mine.offApp && mine.kind === 'playing'
+    && myRoundScored(getTournamentSnapshot(mine.card.tournamentId), mine.card.roundId, meId, mine.card.playerId) === false;
+  const finishValidating = !mine.offApp && !stillPlaying && (mine.kind === 'playing' || mine.kind === 'submitted') ? (
     <TouchableOpacity
       style={s.primaryBtn}
       onPress={() => navigation.navigate('LeagueValidate', {
@@ -312,7 +410,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
       })}
       activeOpacity={0.8}
     >
-      <Text style={s.primaryText}>Finish validating your card</Text>
+      <Text style={s.primaryText}>{t('league.home.finishValidating')}</Text>
     </TouchableOpacity>
   ) : null;
 
@@ -323,7 +421,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
       body = (
         <>
           <Text style={s.cardText}>
-            Announce it before your first shot. Whatever you score then is your {curMonth} card.
+            {t('league.home.announceFirst', { month: monthWord(curKey) })}
           </Text>
           <TouchableOpacity
             style={s.primaryBtn}
@@ -332,7 +430,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
             activeOpacity={0.8}
           >
             <Feather name="play" size={16} color={theme.text.inverse} style={{ marginRight: 8 }} />
-            <Text style={s.primaryText}>Play with the app</Text>
+            <Text style={s.primaryText}>{t('league.home.playWithApp')}</Text>
           </TouchableOpacity>
           <View style={s.btnRow}>
             <TouchableOpacity
@@ -340,35 +438,64 @@ export default function LeagueBoardScreen({ navigation, route }) {
               onPress={() => navigation.navigate('LeagueAnnounce', { leagueId })}
               activeOpacity={0.7}
             >
-              <Text style={s.secondaryText}>Playing without the app</Text>
+              <Text style={s.secondaryText}>{t('league.home.playWithoutApp')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={s.splitBtn}
               onPress={() => navigation.navigate('LeagueAddScore', { leagueId })}
               activeOpacity={0.7}
             >
-              <Text style={s.secondaryText}>Add a card I played</Text>
+              <Text style={s.secondaryText}>{t('league.home.addPlayed')}</Text>
             </TouchableOpacity>
           </View>
         </>
       );
+    } else if (mine.kind === 'voided') {
+      badge = t('league.void.badge');
+      body = (
+        <>
+          <Text style={s.cardText}>{tr(voidedNote(mine.card, { isOwner: true, who: '' }))}</Text>
+          <TouchableOpacity
+            style={s.secondaryBtn}
+            onPress={() => navigation.navigate('LeagueCard', { leagueId, month: curKey, userId: meId })}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+          >
+            <Text style={s.secondaryText}>{t('league.void.openCard')}</Text>
+          </TouchableOpacity>
+        </>
+      );
     } else if (isMissed(mine.card, now)) {
-      badge = 'Not posted';
+      badge = t('league.home.badgeNotPosted');
       body = (
         <Text style={s.cardText}>
-          {`Not posted in time${mine.course ? ` · ${mine.course}` : ''}. This month's card is used; an admin can reopen it.`}
+          {t(mine.course ? 'league.home.missedCourse' : 'league.home.missed', { course: mine.course })}
         </Text>
       );
     } else if (mine.kind === 'announced' || mine.kind === 'playing') {
-      badge = mine.kind === 'playing' ? 'Playing' : 'Announced';
+      badge = t(mine.kind === 'playing' ? 'league.home.badgePlaying' : 'league.home.badgeAnnounced');
       body = (
         <>
-          <Text style={s.cardText}>
+          {/* An app card: the line opens the game's scorecard on the
+              card's own round (any round of a tournament, R17). */}
+          <Text
+            style={s.cardText}
+            {...(!mine.offApp && mine.card.tournamentId ? {
+              onPress: () => navigation.navigate('Scorecard', {
+                tournamentId: mine.card.tournamentId,
+                roundIndex: leagueRoundIndex(getTournamentSnapshot(mine.card.tournamentId), mine.card.roundId),
+              }),
+              accessibilityRole: 'link',
+            } : {})}
+          >
             {mine.offApp && mine.kind === 'announced'
-              ? [`Announced ${timeLabel(mine.card.announcedAt)}`, mine.course,
-                [dayLabel(mine.card.teeTime), timeLabel(mine.card.teeTime)].filter(Boolean).join(' ')]
-                .filter(Boolean).join(' · ') + ' — playing without the app'
-              : `${mine.offApp ? 'Playing without the app' : 'Playing with the app'}${mine.course ? ` · ${mine.course}` : ''}`}
+              ? t('league.home.announcedOffLine', {
+                parts: [t('league.home.announcedAt', { time: timeLabel(mine.card.announcedAt) }), mine.course,
+                  [dayLabel(mine.card.teeTime), timeLabel(mine.card.teeTime)].filter(Boolean).join(' ')]
+                  .filter(Boolean).join(' · '),
+              })
+              : [t(mine.offApp ? 'league.home.playWithoutApp' : 'league.home.playingWithApp'), mine.course,
+                !mine.offApp && mine.card.tournamentId ? t('league.home.openScorecard') : null].filter(Boolean).join(' · ')}
           </Text>
           {mine.kind === 'announced' && mine.offApp && (
             <TouchableOpacity
@@ -376,38 +503,42 @@ export default function LeagueBoardScreen({ navigation, route }) {
               onPress={() => navigation.navigate('LeagueAddScore', { leagueId, cardId: mine.card.id })}
               activeOpacity={0.8}
             >
-              <Text style={s.primaryText}>Add your score</Text>
+              <Text style={s.primaryText}>{t('league.home.addScore')}</Text>
             </TouchableOpacity>
           )}
-          <DeadlineLine card={mine.card} now={now} />
+          <DeadlineLine card={mine.card} now={now} style={s.deadline} />
           {finishValidating}
         </>
       );
     } else {
-      badge = needsApproval(mine.card) ? 'Awaiting approval' : mine.kind === 'confirmed' ? 'Confirmed'
-        : mine.waitingFor ? `Waiting for ${mine.waitingFor}` : 'Submitted';
+      badge = needsApproval(mine.card) ? t('league.home.badgeAwaiting') : mine.kind === 'confirmed' ? t('league.home.badgeConfirmed')
+        : mine.waitingFor ? t('league.home.badgeWaitingFor', { name: mine.waitingFor }) : t('league.home.badgeSubmitted');
       const proofText = mine.card.proofPath
-        ? (mine.card.confirmation === 'official' ? 'official result attached' : 'photo attached')
+        ? t(mine.card.confirmation === 'official' ? 'league.home.officialAttached' : 'league.home.photoAttached')
         : null;
       body = (
         <>
           <Text style={s.cardText}>
-            {mine.net != null && (
-              <Text style={[s.netLead, { color: netColor(mine.netTone) }]}>{mine.net}</Text>
-            )}
-            {mine.net != null && `${mine.net === 'level' ? ' with' : ' than'} your handicap · `}
-            {mine.unrated && 'Unrated tee, not ranked · '}
-            {[mine.pts, mine.course, mine.offApp ? 'added after the round' : null, proofText,
-              mine.card.confirmedByName ? `confirmed by ${mine.card.confirmedByName}` : null]
-              .filter(Boolean).join(' · ')}
+            {!!mine.pts && <Text style={s.netLead}>{tr(mine.pts)}</Text>}
+            {!!mine.pts && ' · '}
+            {mine.unrated && `${t('league.home.unratedTee')} · `}
+            {[
+              standing ? t('league.board.placeSoFar', { place: placeLabel(standing.place, standing.isTie) }) : null,
+              standing ? t('league.board.leaguePts', { points: leaguePointsText(standing.seasonPoints) }) : null,
+              mine.course, mine.offApp ? t('league.home.addedAfter') : null, proofText,
+              mine.card.confirmedByName ? t('league.home.confirmedBy', { name: mine.card.confirmedByName }) : null,
+            ].filter(Boolean).join(' · ')}
           </Text>
+          {mine.kind === 'submitted' && !!mine.card.markerNote && (
+            <Text style={s.cardText}>{t('league.home.markerSentBack', { note: mine.card.markerNote })}</Text>
+          )}
           {mine.kind === 'submitted' && mine.offApp && (
             <TouchableOpacity
               style={s.primaryBtn}
               onPress={() => navigation.navigate('LeagueAddProof', { leagueId, cardId: mine.card.id, resume: true })}
               activeOpacity={0.8}
             >
-              <Text style={s.primaryText}>Add proof</Text>
+              <Text style={s.primaryText}>{t('league.home.addProof')}</Text>
             </TouchableOpacity>
           )}
           {finishValidating}
@@ -417,7 +548,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
     return (
       <View style={s.card}>
         <View style={s.cardHeadRow}>
-          <Text style={s.cardTitle}>{`Your ${curMonth} card`}</Text>
+          <Text style={s.cardTitle}>{t('league.home.yourCard', { month: monthWord(curKey) })}</Text>
           {badge && <View style={s.badge}><Text style={s.badgeText}>{badge}</Text></View>}
         </View>
         {body}
@@ -437,13 +568,35 @@ export default function LeagueBoardScreen({ navigation, route }) {
         {stale && (
           <View style={s.staleBanner}>
             <Feather name="cloud-off" size={14} color={theme.text.secondary} />
-            <Text style={s.staleText}>Offline · showing the last saved board</Text>
+            <Text style={s.staleText}>{t('league.home.offline')}</Text>
           </View>
         )}
         {archived && (
           <View style={s.staleBanner}>
             <Feather name="archive" size={14} color={theme.text.secondary} />
-            <Text style={s.staleText}>This league is archived and read-only.</Text>
+            <Text style={s.staleText}>{t('league.home.archived')}</Text>
+          </View>
+        )}
+
+        {!!finalMonth && (
+          <View style={s.finalBanner}>
+            <View style={s.finalHead}>
+              <Feather name="award" size={18} color={theme.accent.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.finalTitle}>
+                  {t('league.share.finalBanner', { month: cap(formatDate(`${finalMonth}-01`, 'monthName')) })}
+                </Text>
+                <Text style={s.finalSub}>{t('league.share.finalSub')}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={s.secondaryBtn}
+              onPress={() => setShare({ mode: 'results', resultsMonth: finalMonth })}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+            >
+              <Text style={s.secondaryText}>{t('league.share.shareResults')}</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -452,7 +605,6 @@ export default function LeagueBoardScreen({ navigation, route }) {
         <LeaderboardCard
           title={boardTitle}
           subheader={chips}
-          rows={boardRows}
           sections={boardSections}
           footer={boardFooter}
           more={boardMore}
@@ -460,13 +612,29 @@ export default function LeagueBoardScreen({ navigation, route }) {
 
         {noCardsYet && !monthScope && (
           <Text style={s.emptyNote}>
-            {`No cards yet. ${curMonth} is open: the board fills in as each card is confirmed.`}
+            {t('league.home.noCardsYet', { month: curMonth })}
           </Text>
         )}
       </PullToRefresh>
+      <LeagueShareSheet
+        visible={!!share}
+        onClose={() => setShare(null)}
+        leagueId={leagueId}
+        snapshot={data}
+        meId={meId}
+        mode={sheetMode?.mode ?? 'month'}
+        resultsMonth={sheetMode?.resultsMonth ?? null}
+        now={now}
+      />
     </ScreenContainer>
   );
 }
+
+const cap = (x) => (x ? x.charAt(0).toUpperCase() + x.slice(1) : x);
+// Mid-sentence the month stays as the language writes it ("octubre").
+const monthWord = (key) => formatDate(`${String(key).slice(0, 7)}-01`, 'monthName');
+const monthLong = (key) => cap(monthWord(key));
+const monthShort = (key) => cap(formatDate(`${key}-01`, 'day').split(' ')[1] ?? '');
 
 function makeStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
@@ -516,7 +684,7 @@ function makeStyles(theme) {
     cardTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15 },
     cardText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 12 },
     badge: { backgroundColor: theme.accent.light, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 },
-    netLead: { fontFamily: 'PlusJakartaSans-Bold' },
+    netLead: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary },
     badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 11 },
 
     primaryBtn: {
@@ -529,11 +697,20 @@ function makeStyles(theme) {
       borderColor: theme.border.default, paddingVertical: 12, paddingHorizontal: 28,
     },
     secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
+    deadline: { marginBottom: 12 },
     btnRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
     splitBtn: {
       flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1,
       borderColor: theme.border.default, paddingVertical: 10, paddingHorizontal: 8,
     },
+
+    finalBanner: {
+      backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1, borderColor: theme.accent.primary,
+      padding: 14, marginBottom: 14, gap: 12,
+    },
+    finalHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+    finalTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15 },
+    finalSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, marginTop: 2 },
 
     noCardText: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 20, paddingVertical: 6 },
     noCardMe: { fontFamily: 'PlusJakartaSans-Bold', color: '#ffffff' },

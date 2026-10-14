@@ -17,6 +17,7 @@ import { PlayerCard } from './PlayerCard';
 import { holePoints, holeEdgeShots } from './scoreModel';
 import { teamsByPlayer } from './teamModel';
 import { useTourTarget } from '../tour/tourTargets';
+import { useT, formatNumber } from '../../i18n';
 
 // Web-only CSS scroll-snap for each pager page (the page-level snap rules).
 // The pager container's scroll-snap-type is set inline in HoleView.
@@ -107,6 +108,7 @@ export function holePagePropsEqual(prev, next) {
     || prev.conflictCells !== next.conflictCells
     || prev.onOpenFlyover !== next.onOpenFlyover
     || prev.ghostEnabled !== next.ghostEnabled
+    || prev.leaguePlayers !== next.leaguePlayers
   ) {
     return false;
   }
@@ -145,6 +147,9 @@ export const HolePage = React.memo(function HolePage({
   shotCollapsed, onToggleShotDetail,
   totalsMap,
   conflictCells = new Set(),
+  // Comma-joined ids of the players whose card counts for a league in this
+  // round (a string, so the memo compare above stays a cheap ===).
+  leaguePlayers = '',
   gps, onOpenFlyover,
   // Read-only "ghost" of a peer's entry for a cell this scorer hasn't
   // marked themselves — see HoleView's wiring comment. `scores` above is MY
@@ -163,6 +168,7 @@ export const HolePage = React.memo(function HolePage({
   // unconditional key here would let last-write-wins hand the registry an
   // off-screen (unmeasurable) node, silently skipping the tour stop.
   const scoreEntryRef = useTourTarget(isActive ? 'score-entry' : null);
+  const tl = useT();
 
   // Collapsing header: the player-cards scroll drives scrollY; the slim bar
   // fades/slides in once the (measured) full header has scrolled past. State
@@ -237,16 +243,16 @@ export const HolePage = React.memo(function HolePage({
         <View style={s.holeHeaderCard} onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}>
           <View style={s.holeHeaderLeft}>
             <View style={s.holeNumberRow}>
-              <Text style={s.holeNumberLabel}>HOLE</Text>
+              <Text style={s.holeNumberLabel}>{tl('scorecard.hole.holeLabel')}</Text>
               <Text style={s.holeNumber}>{pageHole.number}</Text>
             </View>
             <View style={s.holeMetaRow}>
               <View style={s.holeMetaItem}>
-                <Text style={s.holeMetaLabel}>PAR</Text>
+                <Text style={s.holeMetaLabel}>{tl('scorecard.hole.par')}</Text>
                 <Text style={s.holeMetaValue}>{pageHole.par}</Text>
               </View>
               <View style={s.holeMetaItem}>
-                <Text style={s.holeMetaLabel}>SI</Text>
+                <Text style={s.holeMetaLabel}>{tl('scorecard.hole.si')}</Text>
                 <Text style={s.holeMetaValue}>{pageHole.strokeIndex}</Text>
               </View>
             </View>
@@ -349,7 +355,7 @@ export const HolePage = React.memo(function HolePage({
               if (peerValue != null) {
                 ghost = {
                   value: peerValue,
-                  authorName: ghostAuthors?.[player.id]?.[pageHole.number] ?? 'Someone',
+                  authorName: ghostAuthors?.[player.id]?.[pageHole.number] ?? tl('scorecard.hole.someone'),
                 };
               }
             }
@@ -366,6 +372,7 @@ export const HolePage = React.memo(function HolePage({
                 pickup={pickup}
                 isPickup={isPickup}
                 teeLabel={round.playerTees?.[player.id]?.label ?? null}
+                league={!!leaguePlayers && leaguePlayers.split(',').includes(player.id)}
                 team={teams[player.id] ?? null}
                 isMe={isMe}
                 canEdit={canEdit}
@@ -405,7 +412,7 @@ export const HolePage = React.memo(function HolePage({
         pointerEvents="box-none"
       >
         <Text style={s.holeSlimBarInfo} numberOfLines={1}>
-          {`HOLE ${pageHole.number} · PAR ${pageHole.par} · SI ${pageHole.strokeIndex}`}
+          {tl('scorecard.hole.slimBar', { hole: formatNumber(pageHole.number), par: formatNumber(pageHole.par), si: formatNumber(pageHole.strokeIndex) })}
           {edgeShots.length > 0 && (
             <Text style={s.holeSlimBarEdge}>{` · ${edgeSummary}`}</Text>
           )}
@@ -447,6 +454,7 @@ export function HolePagePlaceholder({ width, height }) {
 // A centered modal: picking yourself matters enough to ask up front, but
 // `onSkip` lets you keep scoring without shot tracking.
 export function MePicker({ players, onPickMe, onSkip, theme, s }) {
+  const tl = useT();
   return (
     <Modal statusBarTranslucent hardwareAccelerated visible transparent animationType="fade" onRequestClose={onSkip}>
       <View style={s.mePickerBackdrop}>
@@ -454,9 +462,9 @@ export function MePicker({ players, onPickMe, onSkip, theme, s }) {
           <View style={s.mePickerIcon}>
             <Feather name="target" size={26} color={theme.accent.primary} />
           </View>
-          <Text style={s.mePickerTitle}>Which player are you?</Text>
+          <Text style={s.mePickerTitle}>{tl('scorecard.hole.mePickerTitle')}</Text>
           <Text style={s.mePickerSubtitle}>
-            Pick yourself so the app can track your shots this round.
+            {tl('scorecard.hole.mePickerBody')}
           </Text>
           <View style={s.mePickerChips}>
             {players.map((p) => (
@@ -475,7 +483,7 @@ export function MePicker({ players, onPickMe, onSkip, theme, s }) {
             onPress={onSkip}
             activeOpacity={0.7}
           >
-            <Text style={s.mePickerSkipText}>Not now</Text>
+            <Text style={s.mePickerSkipText}>{tl('scorecard.hole.notNow')}</Text>
           </TouchableOpacity>
         </View>
       </View>

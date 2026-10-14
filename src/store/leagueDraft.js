@@ -5,6 +5,8 @@ import { clampHandicap } from './leagueRules';
 import { parseHandicapIndex } from '../lib/handicap';
 
 export const DEFAULT_HANDICAP_CAP = 30;
+// Season points every counting card earns at least (the server's default too).
+export const DEFAULT_PARTICIPATION_POINTS = 10;
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -67,7 +69,7 @@ export function parseMemberHandicap(text, cap = DEFAULT_HANDICAP_CAP) {
 // creator first, then [{ name, handicap }] for people not in the app.
 export function buildCreateArgs({
   name, seasonStart, seasonEnd, pointsTable = DEFAULT_POINTS_TABLE, cap = DEFAULT_HANDICAP_CAP,
-  feeCents = 0, members = [],
+  feeCents = 0, participationPoints = DEFAULT_PARTICIPATION_POINTS, members = [],
 }) {
   return {
     name: String(name ?? '').trim(),
@@ -76,6 +78,7 @@ export function buildCreateArgs({
     pointsTable,
     cap,
     feeCents,
+    participationPoints,
     members: members.map((m) => (m.userId
       ? { userId: m.userId, handicap: m.handicap ?? null }
       : { name: String(m.name ?? '').trim(), handicap: m.handicap ?? null })),

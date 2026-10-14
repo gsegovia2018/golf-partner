@@ -2,6 +2,7 @@ import React from 'react';
 import { render, fireEvent, waitFor, within, act } from '@testing-library/react-native';
 import { Text as SvgText } from 'react-native-svg';
 import { ThemeProvider } from '../../../../theme/ThemeContext';
+import { setLanguagePref } from '../../../../i18n';
 import BreakdownTab from '../BreakdownTab';
 import CoachTab from '../CoachTab';
 import FormTab from '../FormTab';
@@ -806,5 +807,57 @@ describe('My Stats tabs', () => {
     await flush();
 
     expect(queryByText('Course Mastery')).toBeNull();
+  });
+
+  describe('in Spanish', () => {
+    beforeEach(async () => { await setLanguagePref('es'); });
+    afterEach(async () => { await setLanguagePref('en'); });
+
+    test('FormTab and CoachTab render Spanish copy', async () => {
+      const form = render(wrap(
+        <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={() => {}} />
+      ));
+      await flush();
+      expect(await form.findByText('Indicadores')).toBeTruthy();
+      expect(form.getByText('Últimas 3')).toBeTruthy();
+      expect(form.getByText('Reparto de resultados')).toBeTruthy();
+      expect(form.getByText('Hoyos estables')).toBeTruthy();
+      expect(form.getByText('Hoyos en bogey o mejor · de más antigua a más reciente')).toBeTruthy();
+      expect(form.queryByText('Instruments')).toBeNull();
+
+      const coach = render(wrap(
+        <CoachTab stats={formStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
+      ));
+      await flush();
+      expect(await coach.findByText('Forma actual')).toBeTruthy();
+      expect(await coach.findByText('Mejorando últimamente')).toBeTruthy();
+      expect(await coach.findByText(/hándicap objetivo de 14/)).toBeTruthy();
+      expect(coach.getByLabelText('Cambiar hándicap objetivo')).toBeTruthy();
+    });
+
+    test('ShotsTab renders Spanish titles, units and decimal commas', async () => {
+      const view = render(wrap(
+        <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
+      ));
+      await flush();
+      expect(await view.findByText('Salida frente al objetivo')).toBeTruthy();
+      expect(await view.findByText('Putts frente al objetivo')).toBeTruthy();
+      expect(await view.findByText('Resultado medio en par 3')).toBeTruthy();
+      expect(await view.findByText('Putts por vuelta')).toBeTruthy();
+      expect(await view.findByText('3 putts por vuelta')).toBeTruthy();
+      expect(view.queryByText('Driving vs target')).toBeNull();
+    });
+
+    test('BreakdownTab renders Spanish card titles and row labels', async () => {
+      const view = render(wrap(
+        <BreakdownTab stats={shotStats()} onInfo={() => {}} />
+      ));
+      await flush();
+      expect(await view.findByText('Patrones de resultado')).toBeTruthy();
+      expect(await view.findByText('Patrones de putts')).toBeTruthy();
+      expect(await view.findByText('Calle cogida')).toBeTruthy();
+      expect(await view.findByText('Birdies o mejor por vuelta')).toBeTruthy();
+      expect(view.queryByText('Scoring patterns')).toBeNull();
+    });
   });
 });

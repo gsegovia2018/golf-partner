@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import LeagueSettingsScreen from '../LeagueSettingsScreen';
 
@@ -17,6 +17,9 @@ jest.mock('../../store/leagueStore', () => ({
   setLeagueRole: jest.fn(() => Promise.resolve()),
   archiveLeague: jest.fn(() => Promise.resolve()),
   leaveLeague: jest.fn(() => Promise.resolve()),
+  getLeagueShareLink: jest.fn(() => Promise.resolve('tokAAAAAAAAAAAAAAAAAAAAA')),
+  setLeaguePublicBoard: jest.fn((id, enabled) => Promise.resolve({ enabled, token: enabled ? 'tokAAAAAAAAAAAAAAAAAAAAA' : null })),
+  rotateLeaguePublicBoard: jest.fn(() => Promise.resolve({ enabled: true, token: 'tokBBBBBBBBBBBBBBBBBBBBB' })),
 }));
 jest.mock('../../store/settingsStore', () => ({
   updateAppSettings: jest.fn(() => Promise.resolve()),
@@ -34,7 +37,7 @@ function snapshot({ admin = true } = {}) {
   return {
     league: {
       id: 'L1', name: 'El Club', handicapCap: 30, entryFeeCents: 3000, archivedAt: null, inviteCode: 'MULL',
-      pointsTable: [500, 300, 190], seasonStart: '2026-01-01', seasonEnd: '2026-12-31',
+      pointsTable: [500, 300, 190], participationPoints: 10, seasonStart: '2026-01-01', seasonEnd: '2026-12-31',
     },
     members: [
       member('me', 'Marcos', { role: admin ? 'admin' : 'member' }),
@@ -61,7 +64,7 @@ describe('LeagueSettingsScreen', () => {
     store.getLeagueCached.mockResolvedValue(null);
     alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   });
-  afterEach(() => alertSpy.mockRestore());
+  afterEach(() => { alertSpy.mockRestore(); jest.useRealTimers(); });
 
   test('an admin edits the rules and saves them through updateLeagueRules', async () => {
     store.getLeague.mockResolvedValue(snapshot());
@@ -70,21 +73,42 @@ describe('LeagueSettingsScreen', () => {
     fireEvent.changeText(getByDisplayValue('El Club'), 'El Club 2');
     fireEvent.changeText(getByDisplayValue('500, 300, 190'), '400, 250, 100');
     fireEvent.changeText(getByLabelText('Handicap cap'), '28');
+    fireEvent.press(getByLabelText('More points'));
     fireEvent.press(getByText('Save rules'));
     await waitFor(() => expect(store.updateLeagueRules).toHaveBeenCalledWith('L1', {
       name: 'El Club 2', seasonStart: '2026-01-01', seasonEnd: '2026-12-31',
-      pointsTable: [400, 250, 100], cap: 28, feeCents: 3000,
+      pointsTable: [400, 250, 100], cap: 28, feeCents: 3000, participationPoints: 15,
     }));
   });
 
+  test('points for playing is a stepper (step 5, never below 0) with a live payout line', async () => {
+    store.getLeague.mockResolvedValue(snapshot());
+    const { getByText, getByLabelText, getByTestId } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByText('Points for playing'));
+    expect(getByText('Saving recomputes every month of the season.')).toBeTruthy();
+    // 2 members, table of 3: the preview lists the places that exist.
+    expect(getByTestId('payout-preview').props.children).toBeTruthy();
+    fireEvent.press(getByLabelText('Fewer points'));
+    fireEvent.press(getByLabelText('Fewer points'));
+    expect(getByLabelText('Fewer points').props.accessibilityState.disabled).toBe(true);
+    expect(getByLabelText('Points for playing, 0')).toBeTruthy();
+    fireEvent.press(getByLabelText('More points'));
+    expect(getByLabelText('Points for playing, 5')).toBeTruthy();
+  });
+
   test('season dates are picked in the calendar sheet and the end cannot precede the start', async () => {
+    // BottomSheet unmounts after a real 250 ms exit timer; under a loaded CI runner that blew past
+    // waitFor's 1 s default and left the sheet mounted. Fake timers (clock pinned late on a UTC day,
+    // a month-end-adjacent time that must not matter) make the close deterministic.
+    jest.useFakeTimers({ now: new Date('2026-10-13T23:30:00.000Z') });
     store.getLeague.mockResolvedValue(snapshot());
     const { getByText, getByDisplayValue, getByLabelText, queryAllByLabelText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
     await waitFor(() => getByDisplayValue('El Club'));
     fireEvent.press(getByLabelText('Season starts'));
     fireEvent.press(getByLabelText('Thu 15 Jan 2026'));
     fireEvent.press(getByLabelText('Done'));
-    await waitFor(() => expect(queryAllByLabelText('Previous month')).toHaveLength(0)); // sheet closed
+    act(() => { jest.advanceTimersByTime(500); }); // exit animation + its fallback timer
+    expect(queryAllByLabelText('Previous month')).toHaveLength(0); // sheet closed
     fireEvent.press(getByLabelText('Season ends'));
     for (let i = 0; i < 11; i += 1) fireEvent.press(getByLabelText('Previous month')); // Dec -> Jan
     expect(getByLabelText('Wed 14 Jan 2026').props.accessibilityState.disabled).toBe(true);
@@ -100,7 +124,9 @@ describe('LeagueSettingsScreen', () => {
   test('a plain member sees the rules read-only and no admin controls', async () => {
     store.getLeague.mockResolvedValue(snapshot({ admin: false }));
     const { getByText, queryByText, queryByDisplayValue } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
-    await waitFor(() => getByText('One card a month · net differential'));
+    await waitFor(() => getByText('One card a month · most Stableford points'));
+    expect(getByText('Points for playing')).toBeTruthy();
+    expect(getByText('10 for every confirmed card, whatever its place')).toBeTruthy();
     expect(queryByDisplayValue('El Club')).toBeNull();
     expect(queryByText('Save rules')).toBeNull();
     expect(queryByText('Archive the league')).toBeNull();
@@ -166,6 +192,45 @@ describe('LeagueSettingsScreen', () => {
     expect(store.archiveLeague).not.toHaveBeenCalled();
     pressAlertButton(alertSpy, 'Archive');
     await waitFor(() => expect(store.archiveLeague).toHaveBeenCalledWith('L1'));
+  });
+
+  test('sharing (admin): the public board switch, the link and a new link', async () => {
+    store.getLeague.mockResolvedValue(snapshot());
+    const {
+      getByText, getAllByText, getByLabelText, queryByText, findByText,
+    } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    expect(await findByText('https://golf-partner.vercel.app/league-board/tokAAAAAAAAAAAAAAAAAAAAA')).toBeTruthy();
+    expect(getByText('SHARING')).toBeTruthy();
+    // A new link asks first and says what stops working.
+    fireEvent.press(getByText('Make a new link'));
+    expect(getByText('Every link already shared stops working. Members who left can still open the current link until you make a new one.')).toBeTruthy();
+    expect(store.rotateLeaguePublicBoard).not.toHaveBeenCalled();
+    const buttons = getAllByText('Make a new link');
+    fireEvent.press(buttons[buttons.length - 1]);
+    expect(await findByText('https://golf-partner.vercel.app/league-board/tokBBBBBBBBBBBBBBBBBBBBB')).toBeTruthy();
+    expect(getByText('New link made. The old one no longer works.')).toBeTruthy();
+    expect(store.rotateLeaguePublicBoard).toHaveBeenCalledWith('L1');
+    fireEvent(getByLabelText('Public board link'), 'valueChange', false);
+    await waitFor(() => expect(store.setLeaguePublicBoard).toHaveBeenCalledWith('L1', false));
+    await waitFor(() => expect(queryByText(/league-board/)).toBeNull());
+    expect(queryByText('Make a new link')).toBeNull();
+  });
+
+  test('sharing: a failed first load says so and Try again loads it', async () => {
+    store.getLeague.mockResolvedValue(snapshot());
+    store.getLeagueShareLink.mockRejectedValueOnce(new Error('Failed to fetch'));
+    const { getByText, findByText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    expect(await findByText("Couldn't load the public board link.")).toBeTruthy();
+    fireEvent.press(getByText('Try again'));
+    expect(await findByText('https://golf-partner.vercel.app/league-board/tokAAAAAAAAAAAAAAAAAAAAA')).toBeTruthy();
+  });
+
+  test('sharing is admin only', async () => {
+    store.getLeague.mockResolvedValue(snapshot({ admin: false }));
+    const { getByText, queryByText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByText('Leave league'));
+    expect(queryByText('SHARING')).toBeNull();
+    expect(store.getLeagueShareLink).not.toHaveBeenCalled();
   });
 
   test('leave asks first, leaves and goes back to the main tabs', async () => {

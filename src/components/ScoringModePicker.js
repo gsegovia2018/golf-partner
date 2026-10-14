@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
+import { useT } from '../i18n';
+
 import { useTheme } from '../theme/ThemeContext';
 import BottomSheet from './BottomSheet';
 import IconButton from './ui/IconButton';
@@ -13,7 +15,6 @@ import {
   isScoringModeAllowed,
   fallbackScoringMode,
   scoringModeCategories,
-  fallbackNoticeText,
   getScoringMode,
   scoringModeUsesTeams,
 } from './scoringModes';
@@ -23,12 +24,21 @@ import {
 // keep working now that the data/logic lives in scoringModes.js.
 export { SCORING_MODES, isScoringModeAllowed, fallbackScoringMode };
 
+// The note shown when the player count forced a mode change: the two mode
+// definitions, rendered with t() at render time. Null when either is unknown.
+function fallbackNotice(prevKey, nextKey) {
+  const prev = SCORING_MODES.find((m) => m.key === prevKey);
+  const next = SCORING_MODES.find((m) => m.key === nextKey);
+  return prev && next ? { prev, next } : null;
+}
+
 // Category sections are derived from static data — compute once.
 const MODE_SECTIONS = scoringModeCategories();
 
 // --- Bottom-sheet mode list ----------------------------------------------
 
 export function ScoringModeSheet({ visible, value, playerCount, onSelect, onClose }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const { height } = useWindowDimensions();
@@ -37,14 +47,14 @@ export function ScoringModeSheet({ visible, value, playerCount, onSelect, onClos
   return (
     <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
       <View style={s.sheetHeader}>
-            <Text style={s.sheetTitle}>Choose scoring mode</Text>
-            <IconButton icon="x" onPress={onClose} accessibilityLabel="Close" />
+            <Text style={s.sheetTitle}>{t('setup.scoringMode.choose')}</Text>
+            <IconButton icon="x" onPress={onClose} accessibilityLabel={t('setup.scoringMode.close')} />
           </View>
 
           <ScrollView style={{ maxHeight: sheetMaxHeight }} showsVerticalScrollIndicator={false}>
             {MODE_SECTIONS.map((section) => (
               <View key={section.category}>
-                <Text style={s.sectionHeader}>{section.category}</Text>
+                <Text style={s.sectionHeader}>{t(section.categoryKey)}</Text>
                 {section.modes.map((mode) => {
                   const allowed = mode.isAllowed(playerCount);
                   const active = value === mode.key;
@@ -63,13 +73,13 @@ export function ScoringModeSheet({ visible, value, playerCount, onSelect, onClos
                       />
                       <View style={s.rowText}>
                         <Text style={[s.rowLabel, !allowed && s.rowLabelDisabled]}>
-                          {mode.label}
+                          {t(mode.labelKey)}
                         </Text>
                         {allowed ? (
-                          <Text style={s.rowSubtitle}>{mode.subtitle}</Text>
+                          <Text style={s.rowSubtitle}>{t(mode.subtitleKey)}</Text>
                         ) : (
                           <View style={s.reqPill}>
-                            <Text style={s.reqPillText}>{mode.requirement}</Text>
+                            <Text style={s.reqPillText}>{t(mode.requirementKey)}</Text>
                           </View>
                         )}
                       </View>
@@ -95,6 +105,7 @@ export function ScoringModeSheet({ visible, value, playerCount, onSelect, onClos
 export function TeamsSettingsFields({
   value, playerCount, settings, onSettingsChange, hideFixedTeams,
 }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = makeStyles(theme);
   if (!settings || !onSettingsChange || !scoringModeUsesTeams(value, playerCount)) return null;
@@ -104,8 +115,8 @@ export function TeamsSettingsFields({
       {!hideFixedTeams && (
         <View style={s.fixedTeamsRow}>
           <View style={s.fixedTeamsText}>
-            <Text style={s.fixedTeamsLabel}>Same teams every round</Text>
-            <Text style={s.fixedTeamsHint}>Teams are drawn at random for round 1, then kept for the whole tournament.</Text>
+            <Text style={s.fixedTeamsLabel}>{t('setup.scoringMode.sameTeams')}</Text>
+            <Text style={s.fixedTeamsHint}>{t('setup.scoringMode.sameTeamsHint')}</Text>
           </View>
           <Switch
             value={Boolean(settings.fixedTeams)}
@@ -118,7 +129,7 @@ export function TeamsSettingsFields({
 
       {value !== 'scramble4' && (
         <View style={s.teamsRow}>
-          <Text style={s.teamsLabel}>Teams</Text>
+          <Text style={s.teamsLabel}>{t('setup.scoringMode.teams')}</Text>
           <View style={s.segmentGroup}>
             <TouchableOpacity
               style={[s.segmentBtn, !settings.manualTeams && s.segmentBtnActive]}
@@ -128,7 +139,7 @@ export function TeamsSettingsFields({
               accessibilityState={{ selected: !settings.manualTeams }}
             >
               <Text style={[s.segmentBtnText, !settings.manualTeams && s.segmentBtnTextActive]}>
-                Random draw
+                {t('setup.scoringMode.randomDraw')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -139,7 +150,7 @@ export function TeamsSettingsFields({
               accessibilityState={{ selected: Boolean(settings.manualTeams) }}
             >
               <Text style={[s.segmentBtnText, Boolean(settings.manualTeams) && s.segmentBtnTextActive]}>
-                Choose myself
+                {t('setup.scoringMode.chooseMyself')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -153,6 +164,7 @@ export function TeamsSettingsFields({
 // (tournament defaults at setup) and HomeScreen's per-round Point Values
 // sheet. `settings` holds the two values as strings (TextInput-backed).
 export function BestBallValueFields({ settings, onSettingsChange }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = makeStyles(theme);
   return (
@@ -168,7 +180,7 @@ export function BestBallValueFields({ settings, onSettingsChange }) {
           value={String(settings.bestBallValue)}
           onChangeText={(v) => onSettingsChange({ ...settings, bestBallValue: v })}
         />
-        <Text style={s.valueSuffix}>pts / hole</Text>
+        <Text style={s.valueSuffix}>{t('setup.scoringMode.ptsPerHole')}</Text>
       </View>
       <View style={s.valueBlock}>
         <Text style={s.valueLabel}>Worst Ball</Text>
@@ -181,7 +193,7 @@ export function BestBallValueFields({ settings, onSettingsChange }) {
           value={String(settings.worstBallValue)}
           onChangeText={(v) => onSettingsChange({ ...settings, worstBallValue: v })}
         />
-        <Text style={s.valueSuffix}>pts / hole</Text>
+        <Text style={s.valueSuffix}>{t('setup.scoringMode.ptsPerHole')}</Text>
       </View>
     </View>
   );
@@ -192,6 +204,7 @@ export function BestBallValueFields({ settings, onSettingsChange }) {
 export default function ScoringModeField({
   value, onChange, playerCount, settings, onSettingsChange, hideTeamsControls, hideFixedTeams,
 }) {
+  const t = useT();
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
@@ -209,7 +222,7 @@ export default function ScoringModeField({
     if (userPickedRef.current) {
       userPickedRef.current = false;
     } else {
-      setNotice(fallbackNoticeText(prevValueRef.current, value));
+      setNotice(fallbackNotice(prevValueRef.current, value));
     }
     prevValueRef.current = value;
   }, [value]);
@@ -235,13 +248,13 @@ export default function ScoringModeField({
         onPress={openSheet}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={`Scoring mode: ${current.label}`}
-        accessibilityHint="Opens the scoring mode picker"
+        accessibilityLabel={t('setup.scoringMode.fieldLabel', { mode: t(current.labelKey) })}
+        accessibilityHint={t('setup.scoringMode.fieldHint')}
       >
         <Feather name={current.icon} size={20} color={theme.accent.primary} />
         <View style={s.fieldText}>
-          <Text style={s.fieldLabel}>{current.label}</Text>
-          <Text style={s.fieldSubtitle}>{current.subtitle}</Text>
+          <Text style={s.fieldLabel}>{t(current.labelKey)}</Text>
+          <Text style={s.fieldSubtitle}>{t(current.subtitleKey)}</Text>
         </View>
         <Feather name="chevron-down" size={20} color={theme.text.muted} />
       </TouchableOpacity>
@@ -249,8 +262,14 @@ export default function ScoringModeField({
       {notice && (
         <View style={s.notice}>
           <Feather name="info" size={14} color={theme.accent.primary} />
-          <Text style={s.noticeText}>{notice}</Text>
-          <TouchableOpacity onPress={() => setNotice(null)} accessibilityLabel="Dismiss" accessibilityRole="button">
+          <Text style={s.noticeText}>
+            {t('setup.scoringMode.fallbackNotice', {
+              prev: t(notice.prev.labelKey),
+              reason: t(notice.prev.needKey),
+              next: t(notice.next.labelKey),
+            })}
+          </Text>
+          <TouchableOpacity onPress={() => setNotice(null)} accessibilityLabel={t('setup.scoringMode.dismiss')} accessibilityRole="button">
             <Feather name="x" size={14} color={theme.text.muted} />
           </TouchableOpacity>
         </View>

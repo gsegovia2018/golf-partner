@@ -142,18 +142,13 @@ describe('league notifications', () => {
     expect(renderNotification('league_card_announced', base).body).toBe('Pablo will play their card');
   });
 
-  test('card confirmed falls back to points when the payload has no net differential', () => {
-    const r = renderNotification('league_card_confirmed', { ...base, month: '2026-10-01', points: 36 });
-    expect(r.body).toBe("Pablo's October card is confirmed, 36 pts");
-  });
-
-  test('card confirmed speaks the net differential, with no pronouns', () => {
-    const at = (net) => renderNotification('league_card_confirmed', { ...base, month: '2026-10-01', points: 36, net_differential: net }).body;
-    expect(at(-2.4)).toBe("Pablo's October card is confirmed \u00b7 2.4 better than handicap");
-    expect(at('3.14')).toBe("Pablo's October card is confirmed \u00b7 3.1 worse than handicap");
-    expect(at(0)).toBe("Pablo's October card is confirmed \u00b7 level with handicap");
-    expect(at(null)).toBe("Pablo's October card is confirmed \u00b7 unrated tee, not ranked");
-    [at(-2.4), at(3.1), at(null)].forEach((b) => expect(b).not.toMatch(/\b(his|her|their)\b/));
+  test('card confirmed speaks the Stableford points, whatever the net differential, with no pronouns', () => {
+    const at = (extra) => renderNotification('league_card_confirmed', { ...base, month: '2026-10-01', ...extra }).body;
+    expect(at({ points: 36 })).toBe("Pablo's October card is confirmed \u00b7 36 pts");
+    expect(at({ points: 38, net_differential: -2.4 })).toBe("Pablo's October card is confirmed \u00b7 38 pts");
+    expect(at({ points: '40', net_differential: null })).toBe("Pablo's October card is confirmed \u00b7 40 pts");
+    expect(at({ points: null })).toBe("Pablo's October card is confirmed");
+    expect(at({})).toBe("Pablo's October card is confirmed");
   });
 
   test('marker issue includes the note', () => {
@@ -236,6 +231,11 @@ describe('league notifications', () => {
         .toEqual({ screen: 'LeagueBoard', params: { leagueId: 'L1' } }));
   });
 
+  test('"Ranking updated" opens the board on that month\'s "is final" banner', () => {
+    expect(notificationLink('league_ranking_updated', { league_id: 'L1', month: '2026-09-01' }))
+      .toEqual({ screen: 'LeagueBoard', params: { leagueId: 'L1', finalMonth: '2026-09' } });
+  });
+
   test('invite links to JoinLeague with the code', () => {
     expect(notificationLink('league_invite', { invite_code: 'ABC' }))
       .toEqual({ screen: 'JoinLeague', params: { code: 'ABC' } });
@@ -258,5 +258,135 @@ describe('league notifications', () => {
     expect(notificationLink('league_marker_request', { league_id: 'L1' })).toEqual({ screen: 'Notifications' });
     expect(notificationLink('league_marker_confirmed', { league_id: 'L1', card_id: 'C1' }))
       .toEqual({ screen: 'LeagueBoard', params: { leagueId: 'L1' } });
+  });
+});
+
+describe('league integrity notifications (20261016000000)', () => {
+  const card = {
+    league_id: 'L1', league_name: 'Mulligan', actor_name: 'Ana', owner_name: 'Pablo',
+    month: '2026-10-01', course_name: 'Golf Olivar',
+  };
+
+  test('card actions name the actor, the owner and the card', () => {
+    expect(renderNotification('league_card_withdrawn', { ...card, actor_name: 'Pablo' }).body)
+      .toBe('Pablo withdrew their October card at Golf Olivar');
+    expect(renderNotification('league_card_voided', { ...card, reason: 'Wrong tee' }).body)
+      .toBe("Ana voided Pablo's October card at Golf Olivar: Wrong tee");
+    expect(renderNotification('league_card_reopened', card).body)
+      .toBe("Ana reopened Pablo's October card at Golf Olivar: 8 hours to post it");
+    expect(renderNotification('league_card_approved', card).body)
+      .toBe("Ana approved Pablo's October card at Golf Olivar");
+    expect(renderNotification('league_card_auto_withdrawn', card).body)
+      .toMatch(/^Your October card at Golf Olivar was withdrawn: no shot was played within 24 hours of Start/);
+  });
+
+  test('a reschedule says when, in Madrid time', () => {
+    const r = renderNotification('league_card_rescheduled', { ...card, actor_name: 'Pablo', tee_time: '2026-10-24T07:00:00Z' });
+    expect(r.title).toBe('Card rescheduled');
+    expect(r.body).toMatch(/^Pablo moved their October card at Golf Olivar to Sat 24 Oct.*09:00$/);
+    expect(renderNotification('league_card_rescheduled', { ...card, actor_name: 'Pablo' }).body)
+      .toBe('Pablo moved their October card at Golf Olivar');
+  });
+
+  test('handicap and membership changes', () => {
+    expect(renderNotification('league_handicap_changed', { ...card, subject_name: 'Pablo', old: 18, new: 16 }).body)
+      .toBe("Ana set Pablo's league handicap from 18 to 16");
+    expect(renderNotification('league_member_removed', { ...card, subject_name: 'Pablo' }).body)
+      .toBe('Ana removed Pablo from Mulligan');
+    expect(renderNotification('league_member_removed', { ...card, you: true }).body)
+      .toBe('Ana removed you from Mulligan');
+    expect(renderNotification('league_spot_claimed', { ...card, actor_name: 'Kiko', spot_name: 'Kiko G.' }).body)
+      .toBe('Kiko joined Mulligan as Kiko G.');
+    expect(renderNotification('league_spot_released', { ...card, spot_name: 'Kiko G.' }).body)
+      .toBe('Ana released the spot Kiko G. in Mulligan');
+    expect(renderNotification('league_spot_released', { ...card, you: true }).body)
+      .toBe('Ana released your spot in Mulligan');
+  });
+
+  test('a withdrawn card played anyway, and role changes', () => {
+    expect(renderNotification('league_card_played_after_withdraw', card).body)
+      .toBe('Pablo played their withdrawn October card at Golf Olivar after all: it uses their month');
+    expect(renderNotification('league_role_changed', { ...card, subject_name: 'Gil', role: 'admin' }).body)
+      .toBe('Ana made Gil an admin of Mulligan');
+    expect(renderNotification('league_role_changed', { ...card, subject_name: 'Gil', role: 'member' }).body)
+      .toBe('Gil is no longer an admin of Mulligan');
+  });
+
+  const types = ['league_card_rescheduled', 'league_card_withdrawn', 'league_card_auto_withdrawn',
+    'league_card_voided', 'league_card_reopened', 'league_card_approved', 'league_handicap_changed',
+    'league_member_removed', 'league_spot_claimed', 'league_spot_released',
+    'league_role_changed', 'league_card_played_after_withdraw'];
+
+  test('each has its own icon and opens the board; the removed member goes to the inbox', () => {
+    types.forEach((type) => {
+      expect(renderNotification(type, card).icon).not.toBe('bell');
+      expect(notificationLink(type, card)).toEqual({ screen: 'LeagueBoard', params: { leagueId: 'L1' } });
+    });
+    expect(notificationLink('league_member_removed', { ...card, you: true })).toEqual({ screen: 'Notifications' });
+    expect(notificationLink('league_spot_released', { ...card, you: true })).toEqual({ screen: 'Notifications' });
+  });
+
+  test('send-push renders the same types', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../../../supabase/functions/send-push/index.ts'), 'utf8');
+    types.forEach((type) => {
+      expect(src).toContain(`  ${type}: (d: Record<string, unknown>) =>`);
+      expect(src).toContain(`  ${type}: 'league',`);
+    });
+  });
+});
+
+describe('renderNotification in Spanish', () => {
+  const es = (type, data) => renderNotification(type, data, 'es');
+  const base = { league_id: 'L1', league_name: 'Tour', actor_name: 'Pablo' };
+
+  test('social types use Spanish copy and fallbacks', () => {
+    expect(es('friend_request', { actor_name: 'Sam' })).toEqual({
+      icon: 'user-plus',
+      title: 'Nueva solicitud de amistad',
+      body: 'Sam quiere ser tu pareja de golf',
+    });
+    expect(es('round_finished', { actor_name: 'Jo' }).body).toBe('Jo terminó una vuelta en el campo');
+    expect(es('feed_reaction', { actor_name: 'Ana', emoji: '🔥' }).body).toBe('Ana ha reaccionado 🔥 a una vuelta');
+    expect(es('friend_request', {}).body).toBe('Un amigo quiere ser tu pareja de golf');
+  });
+
+  test('league card copy uses the Spanish month and card phrase', () => {
+    const r = es('league_card_announced', { ...base, month: '2026-10-01', course_name: 'Sotogrande' });
+    expect(r.body).toBe('Pablo jugará la tarjeta de octubre en Sotogrande');
+    expect(es('league_card_confirmed', { ...base, month: '2026-10-01', points: 38 }).body)
+      .toBe('La tarjeta de octubre de Pablo está confirmada · 38 pts');
+    expect(es('league_card_auto_withdrawn', { ...base, month: '2026-10-01', course_name: 'Sotogrande' }).body)
+      .toBe('Se ha retirado tu tarjeta de octubre en Sotogrande: no se jugó ningún golpe en las 24 horas posteriores a la salida. Puedes jugar otra este mes.');
+  });
+
+  test('owner and reason branches read naturally', () => {
+    const card = { ...base, month: '2026-10-01', course_name: 'Sotogrande', actor_name: 'Ana' };
+    expect(es('league_card_voided', { ...card, owner_name: 'Pablo', reason: 'Wrong tee' }).body)
+      .toBe('Ana anuló la tarjeta de octubre en Sotogrande de Pablo: Wrong tee');
+    expect(es('league_card_approved', { ...card, owner_name: 'Pablo' }).body)
+      .toBe('Ana aprobó la tarjeta de octubre en Sotogrande de Pablo');
+    expect(es('league_card_approved', card).body).toBe('Ana aprobó una tarjeta de octubre en Sotogrande');
+    expect(es('league_handicap_changed', { ...card, subject_name: 'Pablo', old: 18, new: 16 }).body)
+      .toBe('Ana ha fijado el hándicap de liga de Pablo de 18 a 16');
+  });
+
+  test('marker, vote and reminder copy', () => {
+    expect(es('league_marker_issue', { ...base, marker_name: 'Ana', note: 'hole 4' }).body)
+      .toBe('Ana ha señalado tu tarjeta: hole 4');
+    expect(es('league_marker_issue', { ...base, marker_name: 'Ana', note: 'hole 4', tournament_id: 'T', round_id: 'R' }).body)
+      .toBe('Ana: hole 4');
+    expect(es('league_month_reminder', base)).toEqual({
+      icon: 'clock',
+      title: 'Quedan 3 días',
+      body: 'Aún no tienes tarjeta en Tour este mes',
+    });
+    expect(es('league_vote_opened', { ...base, subject_name: 'Ana', old: 12.4, proposed: 10.8 }).body)
+      .toBe('Votación sobre el hándicap de Ana: de 12,4 a 10,8');
+    expect(es('league_post_reminder', { ...base, course_name: 'Golf Olivar', post_by: '2026-10-24T18:30:00Z' }).body)
+      .toMatch(/^Publica tu tarjeta de Golf Olivar antes de las \d{2}:\d{2} o no contará para Tour$/);
+  });
+
+  test('unknown types fall back to the Spanish default', () => {
+    expect(es('something_else', {})).toEqual({ icon: 'bell', title: 'Notificación', body: '' });
   });
 });

@@ -1,7 +1,7 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
 import PlaySmarterCard from '../PlaySmarterCard';
-import { statExplainers } from '../statExplainers';
+import { resolveStatExplainer } from '../statExplainers';
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => {
@@ -47,8 +47,8 @@ describe('PlaySmarterCard', () => {
 
 describe('coach explainers', () => {
   test('coachPractice and playSmarter entries exist with copy', () => {
-    expect(statExplainers.coachPractice.title).toBe('Practice Plan');
-    expect(statExplainers.playSmarter.title).toBe('Play Smarter');
-    expect(statExplainers.playSmarter.explainer).toContain('1 stroke gained ≈ 1 Stableford point');
+    expect(resolveStatExplainer('coachPractice').title).toBe('Practice Plan');
+    expect(resolveStatExplainer('playSmarter').title).toBe('Play Smarter');
+    expect(resolveStatExplainer('playSmarter').explainer).toContain('1 stroke gained ≈ 1 Stableford point');
   });
 });

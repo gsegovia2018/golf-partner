@@ -3,11 +3,13 @@ import { TouchableOpacity, View, Text, Modal, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 
 const STORAGE_PREFIX = 'shotDetailExplainer:';
 
 export function ShotDetailExplainer({ rowKey, title, body }) {
   const { theme } = useTheme();
+  const t = useT();
   const [dismissed, setDismissed] = useState(true);    // start "dismissed" until we know
   const [open, setOpen] = useState(false);
 
@@ -33,7 +35,7 @@ export function ShotDetailExplainer({ rowKey, title, body }) {
         onPress={() => setOpen(true)}
         hitSlop={8}
         accessibilityRole="button"
-        accessibilityLabel={`Open ${title} info`}
+        accessibilityLabel={t('stats.explainer.shot.open', { title })}
       >
         <Feather name="help-circle" size={14} color={iconColor} />
       </TouchableOpacity>
@@ -50,7 +52,7 @@ export function ShotDetailExplainer({ rowKey, title, body }) {
               {body}
             </Text>
             <TouchableOpacity onPress={dismiss} style={{ marginTop: 16, alignSelf: 'flex-end' }}>
-              <Text style={{ fontSize: 14, fontWeight: '600', color: theme.accent.primary }}>Got it</Text>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: theme.accent.primary }}>{t('stats.explainer.shot.gotIt')}</Text>
             </TouchableOpacity>
           </View>
         </Pressable>

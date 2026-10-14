@@ -2,27 +2,30 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { msgText, sampleLabel } from './msg';
+import { useT, formatNumber } from '../../i18n';
 import SectionCard from './SectionCard';
 
 // On-course strategy tips — decisions that pay off without practicing.
 export default function PlaySmarterCard({ tips, onInfo }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   if (!tips || tips.length === 0) return null;
 
   return (
-    <SectionCard title="Play smarter" infoKey="playSmarter" onInfo={onInfo}>
+    <SectionCard title={t('stats.my.tip.title')} infoKey="playSmarter" onInfo={onInfo}>
       {tips.map((tip, index) => (
         <View key={tip.id} style={[s.row, index === 0 && s.rowFirst]}>
           <View style={s.iconWrap}>
             <Feather name="map" size={14} color={theme.accent.primary} />
           </View>
           <View style={s.copy}>
-            <Text style={s.title}>{tip.title}</Text>
-            <Text style={s.reason}>{tip.reason}</Text>
-            <Text style={s.evidence}>{`${tip.basis} · ${tip.sample} samples`}</Text>
+            <Text style={s.title}>{msgText(tip.titleMsg, tip.title)}</Text>
+            <Text style={s.reason}>{msgText(tip.reasonMsg, tip.reason)}</Text>
+            <Text style={s.evidence}>{t('stats.my.tip.evidence', { basis: msgText(tip.basisMsg, tip.basis), sample: sampleLabel(tip.sample) })}</Text>
           </View>
-          <Text style={s.payoff}>{`≈ +${tip.payoffPointsPerRound} pts / round`}</Text>
+          <Text style={s.payoff}>{t('stats.my.tip.payoff', { value: formatNumber(tip.payoffPointsPerRound) })}</Text>
         </View>
       ))}
     </SectionCard>

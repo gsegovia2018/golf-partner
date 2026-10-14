@@ -21,10 +21,18 @@ import {
   APPROACH_FINISH_ORDER, APPROACH_FINISH_META,
   TEE_CLUBS, TEE_CLUB_LABELS,
 } from './constants';
+import { useT } from '../../i18n';
+
+// Display labels for a constant map, keyed by the same ids. The English values
+// stay in constants.js (storage keys never change); only the words are looked up.
+function localizeMap(map, group, tl) {
+  return Object.fromEntries(Object.keys(map).map((k) => [k, tl(`shots.${group}.${k}`)]));
+}
 
 // One "label … − value +" counter row used for putts, penalties, sand shots.
 // `canInc` is false once the hole's stroke budget is fully assigned.
 function ShotCounterRow({ label, value, onStep, canInc = true, theme, s, explainer, isLast = false }) {
+  const tl = useT();
   const canDec = value != null && value > 0;
   return (
     <View style={[s.shotRow, isLast && s.shotRowLast]}>
@@ -40,7 +48,7 @@ function ShotCounterRow({ label, value, onStep, canInc = true, theme, s, explain
           activeOpacity={0.7}
           hitSlop={4}
           accessibilityRole="button"
-          accessibilityLabel={`Decrease ${label}`}
+          accessibilityLabel={tl('shots.detail.decrease', { label })}
           accessibilityState={{ disabled: !canDec }}
         >
           <Feather name="minus" size={14} color={canDec ? theme.text.primary : theme.text.muted} />
@@ -53,7 +61,7 @@ function ShotCounterRow({ label, value, onStep, canInc = true, theme, s, explain
           activeOpacity={0.7}
           hitSlop={4}
           accessibilityRole="button"
-          accessibilityLabel={`Increase ${label}`}
+          accessibilityLabel={tl('shots.detail.increase', { label })}
           accessibilityState={{ disabled: !canInc }}
         >
           <Feather name="plus" size={14} color={canInc ? theme.text.primary : theme.text.muted} />
@@ -66,6 +74,7 @@ function ShotCounterRow({ label, value, onStep, canInc = true, theme, s, explain
 // A distance-bucket picker: label on its own line, then a full-width row of
 // equal-width segmented cells. Tapping the active cell clears the value.
 function BucketSegment({ label, value, buckets, labels, onSelect, theme, s, explainer, hint, isLast = false }) {
+  const tl = useT();
   return (
     <View style={[s.bucketSegBlock, isLast && { borderBottomWidth: 0 }]}>
       <View style={s.bucketSegLabelRow}>
@@ -85,7 +94,7 @@ function BucketSegment({ label, value, buckets, labels, onSelect, theme, s, expl
               onPress={() => onSelect(active ? null : key)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={`${label} ${labels[key]}`}
+              accessibilityLabel={tl('shots.detail.pairA11y', { label, value: labels[key] })}
               accessibilityState={{ selected: active }}
             >
               <Text style={[s.bucketSegCellText, active && s.bucketSegCellTextActive]}>
@@ -103,6 +112,7 @@ function BucketSegment({ label, value, buckets, labels, onSelect, theme, s, expl
 // selected state so a derived default (e.g. approach lie = fairway) can show
 // as selected without being stored.
 function LieChipRow({ label, a11yPrefix, options, labels, effectiveValue, onSelect, theme, s, explainer, isLast = false, stacked = false }) {
+  const tl = useT();
   return (
     <View style={[s.shotRow, stacked && s.shotRowStacked, isLast && s.shotRowLast]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -119,7 +129,7 @@ function LieChipRow({ label, a11yPrefix, options, labels, effectiveValue, onSele
               onPress={() => onSelect(key, active)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={`${a11yPrefix} ${labels[key]}`}
+              accessibilityLabel={tl('shots.detail.pairA11y', { label: a11yPrefix, value: labels[key] })}
               accessibilityState={{ selected: active }}
             >
               <Text style={[s.outcomeChipLabel, active && { color: theme.text.inverse }]}>
@@ -140,6 +150,7 @@ function LieChipRow({ label, a11yPrefix, options, labels, effectiveValue, onSele
 // direction or stands alone. `approachResult` is kept in sync ('green' vs
 // 'miss' vs null) so the stats engine and downstream rows read it unchanged.
 function ApproachFinishRow({ detail, onChange, theme, s, isLast = false }) {
+  const tl = useT();
   const dir = detail.approachMiss ?? null;
   const bunker = !!detail.approachBunker;
   const onGreen = detail.approachResult === 'green';
@@ -155,16 +166,16 @@ function ApproachFinishRow({ detail, onChange, theme, s, isLast = false }) {
   return (
     <View style={[s.shotRow, s.shotRowStacked, isLast && s.shotRowLast]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Text style={s.shotRowLabel}>Where did it finish?</Text>
+        <Text style={s.shotRowLabel}>{tl('shots.detail.finished')}</Text>
         <ShotDetailExplainer
           rowKey="approachResult"
-          title="Approach result"
-          body="Where the regulation approach finished: on the green, or which way it missed. Pick a direction and add Bunker if it caught sand. This keeps approach shots separate from short-game recovery shots and builds your miss tendency."
+          title={tl('shots.explain.approachResultTitle')}
+          body={tl('shots.explain.approachResultBody')}
         />
       </View>
       <View style={[s.driveBtns, s.driveBtnsStacked, s.approachFinishBtns]}>
         {APPROACH_FINISH_ORDER.map((key) => {
-          const meta = APPROACH_FINISH_META[key];
+          const meta = { ...APPROACH_FINISH_META[key], label: tl(`shots.finish.${key}`) };
           const active = activeFor(key);
           const color = active ? theme.text.inverse : theme.text.secondary;
           return (
@@ -176,7 +187,7 @@ function ApproachFinishRow({ detail, onChange, theme, s, isLast = false }) {
               hitSlop={5}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
-              accessibilityLabel={`Approach finish ${meta.label}`}
+              accessibilityLabel={tl('shots.detail.finishOn', { label: meta.label })}
             >
               {meta.set === 'material-community' ? (
                 <MaterialCommunityIcons name={meta.icon} size={18} color={color} />
@@ -195,6 +206,11 @@ function ApproachFinishRow({ detail, onChange, theme, s, isLast = false }) {
 // scorecard: stat rows with a stepper, plus a row of round direction
 // buttons for the drive. The drive row is hidden on par 3s.
 export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, theme: themeProp, s: sProp }) {
+  const tl = useT();
+  const teeClubLabels = localizeMap(TEE_CLUB_LABELS, 'teeClub', tl);
+  const lieLabels = localizeMap(DRIVE_MISS_LIE_LABELS, 'lie', tl);
+  const approachLieLabels = localizeMap(APPROACH_LIE_LABELS, 'lie', tl);
+  const driveMeta = Object.fromEntries(Object.entries(DRIVE_META).map(([k, v]) => [k, { ...v, label: tl(`shots.drive.${k}`) }]));
   const { theme: themeCtx } = useTheme();
   const theme = themeProp ?? themeCtx;
   const { units } = useAppSettings();
@@ -208,7 +224,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
   const isPar3 = hole.par === 3;
   const driveMissed = d.drive === 'left' || d.drive === 'right' || d.drive === 'short';
   const teeClub = d.teeClub ?? 'driver';
-  const approachDistanceLabel = isPar3 ? 'Hole distance' : 'Approach';
+  const approachDistanceLabel = isPar3 ? tl('shots.detail.holeDistance') : tl('shots.detail.approach');
   const approachShotHint = unitWord(units);
   const driveDistLabels = units === 'yards' ? DRIVE_DIST_LABELS_YD : DRIVE_DIST_LABELS;
   const approachLabels = units === 'yards' ? APPROACH_LABELS_YD : APPROACH_LABELS;
@@ -231,8 +247,8 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
   const budgetCaption = strokes == null
     ? null
     : budgetLeft > 0
-      ? `${budgetLeft} stroke${budgetLeft === 1 ? '' : 's'} left to assign`
-      : `All ${strokes} stroke${strokes === 1 ? '' : 's'} assigned`;
+      ? tl('shots.detail.budgetLeft', { count: budgetLeft })
+      : tl('shots.detail.budgetAll', { count: strokes });
 
   const step = (field, delta) => {
     if (delta > 0 && atBudget) return;
@@ -269,7 +285,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
 
       {g.putting && (
         <ShotCounterRow
-          label="Putts"
+          label={tl('shots.detail.putts')}
           value={d.putts}
           onStep={(delta) => step('putts', delta)}
           canInc={!atBudget}
@@ -280,7 +296,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
       )}
       {g.penalties && (
         <ShotCounterRow
-          label="Tee penalties"
+          label={tl('shots.detail.teePenalties')}
           value={d.teePenalties}
           onStep={(delta) => step('teePenalties', delta)}
           canInc={!atBudget}
@@ -290,7 +306,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
       )}
       {g.penalties && (
         <ShotCounterRow
-          label="Other penalties"
+          label={tl('shots.detail.otherPenalties')}
           value={d.otherPenalties}
           onStep={(delta) => step('otherPenalties', delta)}
           canInc={!atBudget}
@@ -301,7 +317,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
       )}
       {g.shortGame && (
         <ShotCounterRow
-          label="Sand shots"
+          label={tl('shots.detail.sandShots')}
           value={d.sandShots}
           onStep={(delta) => step('sandShots', delta)}
           canInc={!atBudget}
@@ -311,8 +327,8 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           explainer={
             <ShotDetailExplainer
               rowKey="sandShots"
-              title="Sand shots"
-              body="Total bunker shots you played on this hole — even from a fairway bunker. Used for sand saves and bunker visits per round."
+              title={tl('shots.explain.sandShotsTitle')}
+              body={tl('shots.explain.sandShotsBody')}
             />
           }
         />
@@ -320,10 +336,10 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
 
       {g.teeShot && !isPar3 && (
         <LieChipRow
-          label="Tee club"
-          a11yPrefix="Tee club"
+          label={tl('shots.detail.teeClub')}
+          a11yPrefix={tl('shots.detail.teeClub')}
           options={TEE_CLUBS}
-          labels={TEE_CLUB_LABELS}
+          labels={teeClubLabels}
           effectiveValue={teeClub}
           onSelect={(key) => onChange(teeClubPatch(key))}
           theme={theme}
@@ -332,18 +348,18 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           explainer={
             <ShotDetailExplainer
               rowKey="teeClub"
-              title="Tee club"
-              body="The club you hit off the tee. Driver is assumed — change it when you club down. Off-the-tee strokes gained compares your tee shot against a typical shot with the same club, so laying up isn't scored as a short drive."
+              title={tl('shots.explain.teeClubTitle')}
+              body={tl('shots.explain.teeClubBody')}
             />
           }
         />
       )}
       {g.teeShot && !isPar3 && (
         <View style={s.shotRow}>
-          <Text style={s.shotRowLabel}>{TEE_CLUB_LABELS[teeClub]}</Text>
+          <Text style={s.shotRowLabel}>{teeClubLabels[teeClub]}</Text>
           <View style={s.driveBtns}>
             {DRIVE_ORDER.map((key) => {
-              const meta = DRIVE_META[key];
+              const meta = driveMeta[key];
               const active = d.drive === key;
               return (
                 <TouchableOpacity
@@ -354,7 +370,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
                   hitSlop={5}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
-                  accessibilityLabel={`${TEE_CLUB_LABELS[teeClub]} ${meta.label}`}
+                  accessibilityLabel={tl('shots.teeShot.a11y', { club: teeClubLabels[teeClub], direction: meta.label })}
                 >
                   <Feather
                     name={meta.icon}
@@ -369,10 +385,10 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
       )}
       {g.teeShot && !isPar3 && driveMissed && (
         <LieChipRow
-          label="Drive finished in"
-          a11yPrefix="Drive lie"
+          label={tl('shots.detail.driveFinished')}
+          a11yPrefix={tl('shots.detail.driveLie')}
           options={DRIVE_MISS_LIES}
-          labels={DRIVE_MISS_LIE_LABELS}
+          labels={lieLabels}
           effectiveValue={d.driveLie ?? 'rough'}
           onSelect={(key) => onChange({ driveLie: key })}
           theme={theme}
@@ -381,15 +397,15 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           explainer={
             <ShotDetailExplainer
               rowKey="driveLie"
-              title="Drive lie"
-              body="Where the tee shot finished. Rough is assumed for a miss unless you say otherwise; pick Fairway when the miss still found a fairway (yours or another hole's); Trouble means trees, deep stuff, or anywhere you could only chip out."
+              title={tl('shots.explain.driveLieTitle')}
+              body={tl('shots.explain.driveLieBody')}
             />
           }
         />
       )}
       {g.teeShot && !isPar3 && (
         <BucketSegment
-          label="Drive distance"
+          label={tl('shots.detail.driveDistance')}
           value={d.driveDistBucket}
           buckets={DRIVE_DIST_BUCKETS}
           labels={driveDistLabels}
@@ -401,8 +417,8 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           explainer={
             <ShotDetailExplainer
               rowKey="driveDistBucket"
-              title="Drive distance"
-              body="Roughly how far the tee shot went. Powers the off-the-tee strokes gained category — no course measurements needed."
+              title={tl('shots.explain.driveDistanceTitle')}
+              body={tl('shots.explain.driveDistanceBody')}
             />
           }
         />
@@ -423,8 +439,8 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
               rowKey="approachBucket"
               title={approachDistanceLabel}
               body={isPar3
-                ? 'Use the hole distance bucket for this par 3. It is stored with approach distance so par-3 strokes gained can use the same bucketed model.'
-                : 'Log the shot you intended to hit into the green. Usually this is your 2nd shot on a par 4 or your 3rd shot on a par 5. After a punch-out, lay-up, or penalty, use the later shot that was actually aimed at the green.'}
+                ? tl('shots.explain.par3Body')
+                : tl('shots.explain.approachBody')}
             />
           }
         />
@@ -439,10 +455,10 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
       )}
       {showApproachExtras && (
         <LieChipRow
-          label="Approach lie"
-          a11yPrefix="Approach lie"
+          label={tl('shots.detail.approachLie')}
+          a11yPrefix={tl('shots.detail.approachLieA11y')}
           options={APPROACH_LIES}
-          labels={APPROACH_LIE_LABELS}
+          labels={approachLieLabels}
           effectiveValue={d.approachLie ?? defaultApproachLie(d, hole.par)}
           onSelect={(key) => onChange({ approachLie: key })}
           theme={theme}
@@ -452,15 +468,15 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           explainer={
             <ShotDetailExplainer
               rowKey="approachLie"
-              title="Approach lie"
-              body="Where you played the shot aimed at the green from. On par 4s the drive's terrain is assumed — change it when a recovery or penalty moved the ball somewhere else."
+              title={tl('shots.explain.approachLieTitle')}
+              body={tl('shots.explain.approachLieBody')}
             />
           }
         />
       )}
       {g.putting && (d.putts ?? 0) >= 1 && (
         <BucketSegment
-          label="First putt"
+          label={tl('shots.detail.firstPutt')}
           value={d.firstPuttBucket}
           buckets={FIRST_PUTT_BUCKETS}
           labels={firstPuttLabels}
@@ -472,8 +488,8 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           explainer={
             <ShotDetailExplainer
               rowKey="firstPuttBucket"
-              title="First putt distance"
-              body="How far away your first putt was (in meters). Lets us measure how well you lag long putts and how well you convert short ones."
+              title={tl('shots.explain.firstPuttTitle')}
+              body={tl('shots.explain.firstPuttBody')}
             />
           }
         />
@@ -481,11 +497,11 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
       {g.shortGame && missedGIR && (
         <View style={[s.shotRow, s.shotRowLast]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={s.shotRowLabel}>Outcome</Text>
+            <Text style={s.shotRowLabel}>{tl('shots.detail.outcome')}</Text>
             <ShotDetailExplainer
               rowKey="outcome"
-              title="Up & Down / Sand Save"
-              body={'A successful "up and down" means you missed the green in regulation but still saved par or better. A "sand save" is the same but from a bunker.'}
+              title={tl('shots.explain.upDownTitle')}
+              body={tl('shots.explain.upDownBody')}
             />
           </View>
           <View style={s.driveBtns}>
@@ -500,7 +516,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
                   s.outcomeChipLabel,
                   effectiveOutcome === 'up-and-down' && { color: theme.text.inverse },
                 ]}
-              >Up & Down</Text>
+              >{tl('shots.detail.upDown')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.outcomeChip, effectiveOutcome === 'sand-save' && s.outcomeChipActive]}
@@ -513,7 +529,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
                   s.outcomeChipLabel,
                   effectiveOutcome === 'sand-save' && { color: theme.text.inverse },
                 ]}
-              >Sand Save</Text>
+              >{tl('shots.detail.sandSave')}</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -9,14 +9,16 @@ import PersonAvatar from '../components/ui/PersonAvatar';
 import { useTheme } from '../theme/ThemeContext';
 import { getMarkerCard, confirmMarkerCard } from '../store/markerCardStore';
 import { monthName } from '../store/leagueView';
+import { useT } from '../i18n';
 import { formatPlayedOn } from './MarkerCardScreen';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
-// Plain words for the single-word errors the marker RPCs raise.
+// Catalogue keys for the single-word errors the marker RPCs raise.
 export const MARKER_STATE_COPY = {
-  invalid: 'This request was cancelled or the card changed. Nothing to do.',
-  changed: 'This request was cancelled or the card changed. Nothing to do.',
-  expired: 'This request expired.',
-  used: 'Already answered.',
+  invalid: 'league.markerConfirm.reason.invalid',
+  changed: 'league.markerConfirm.reason.changed',
+  expired: 'league.markerConfirm.reason.expired',
+  used: 'league.markerConfirm.reason.used',
 };
 
 // A member opens "<owner> asks you to confirm a card" (push or inbox): the
@@ -24,6 +26,7 @@ export const MARKER_STATE_COPY = {
 // to send it back with a correction. Route params: { token }.
 export default function LeagueMarkerConfirmScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const token = route?.params?.token;
 
@@ -54,7 +57,7 @@ export default function LeagueMarkerConfirmScreen({ navigation, route }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const owner = card?.playerFirstName || 'Player';
+  const owner = card?.playerFirstName || t('league.markerConfirm.player');
   const me = card?.signedInName || '';
 
   async function send(ok, note = null) {
@@ -68,7 +71,7 @@ export default function LeagueMarkerConfirmScreen({ navigation, route }) {
     } catch (e) {
       if (!mountedRef.current) return;
       if (MARKER_STATE_COPY[e?.reason]) setPhase(e.reason);
-      else setSubmitError(e?.message || 'Something went wrong. Try again.');
+      else setSubmitError(leagueErrorText(e) || t('league.markerConfirm.failed'));
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setBusy(false);
@@ -81,7 +84,7 @@ export default function LeagueMarkerConfirmScreen({ navigation, route }) {
 
   const header = (
     <View style={s.header}>
-      <IconButton icon="x" size={22} color={theme.accent.primary} onPress={close} accessibilityLabel="Close" />
+      <IconButton icon="x" size={22} color={theme.accent.primary} onPress={close} accessibilityLabel={t('league.markerConfirm.close')} />
     </View>
   );
 
@@ -94,7 +97,7 @@ export default function LeagueMarkerConfirmScreen({ navigation, route }) {
   );
   const doneBtn = (
     <TouchableOpacity style={[s.primaryBtn, s.wide]} onPress={close} accessibilityRole="button">
-      <Text style={s.primaryText}>Done</Text>
+      <Text style={s.primaryText}>{t('common.done')}</Text>
     </TouchableOpacity>
   );
 
@@ -102,38 +105,38 @@ export default function LeagueMarkerConfirmScreen({ navigation, route }) {
   if (phase === 'loading') {
     body = <View style={s.center}><ActivityIndicator size="large" color={theme.accent.primary} /></View>;
   } else if (phase === 'error') {
-    body = message('wifi-off', "Couldn't load this card. Check your connection and try again.", (
+    body = message('wifi-off', t('league.markerConfirm.loadFailed'), (
       <TouchableOpacity style={[s.secondaryBtn, s.wide]} onPress={load} accessibilityRole="button">
-        <Text style={s.secondaryText}>Try again</Text>
+        <Text style={s.secondaryText}>{t('common.retry')}</Text>
       </TouchableOpacity>
     ));
   } else if (MARKER_STATE_COPY[phase]) {
-    body = message('alert-circle', MARKER_STATE_COPY[phase], doneBtn);
+    body = message('alert-circle', t(MARKER_STATE_COPY[phase]), doneBtn);
   } else if (phase === 'confirmed') {
-    body = message('check-circle', `Confirmed. ${owner}'s card counts now.`, doneBtn);
+    body = message('check-circle', t('league.markerConfirm.confirmed', { owner }), doneBtn);
   } else if (phase === 'returned') {
-    body = message('send', `Sent back to ${owner}.`, doneBtn);
+    body = message('send', t('league.markerConfirm.returned', { owner }), doneBtn);
   } else if (phase === 'flag' && hole) {
     const changed = fix !== hole.strokes;
     body = (
       <View style={s.content}>
-        <Text style={s.title}>{`Hole ${hole.n} · par ${hole.par}`}</Text>
-        <Text style={s.meta}>{`${owner} wrote ${hole.strokes ?? '—'}. It should be`}</Text>
+        <Text style={s.title}>{t('league.markerConfirm.hole', { n: hole.n, par: hole.par })}</Text>
+        <Text style={s.meta}>{t('league.markerConfirm.wrote', { owner, strokes: hole.strokes ?? '—' })}</Text>
         <View style={s.stepper}>
           <TouchableOpacity
             style={s.stepBtn}
             onPress={() => setFix((v) => Math.max(1, v - 1))}
             accessibilityRole="button"
-            accessibilityLabel="One stroke less"
+            accessibilityLabel={t('league.markerConfirm.lessStroke')}
           >
             <Feather name="minus" size={20} color={theme.accent.primary} />
           </TouchableOpacity>
-          <Text style={s.stepValue} accessibilityLabel={`Strokes ${fix}`}>{fix}</Text>
+          <Text style={s.stepValue} accessibilityLabel={t('league.markerConfirm.strokes', { value: fix })}>{fix}</Text>
           <TouchableOpacity
             style={s.stepBtn}
             onPress={() => setFix((v) => Math.min(20, v + 1))}
             accessibilityRole="button"
-            accessibilityLabel="One stroke more"
+            accessibilityLabel={t('league.markerConfirm.moreStroke')}
           >
             <Feather name="plus" size={20} color={theme.accent.primary} />
           </TouchableOpacity>
@@ -141,15 +144,15 @@ export default function LeagueMarkerConfirmScreen({ navigation, route }) {
         {!!submitError && <Text style={s.error}>{submitError}</Text>}
         <TouchableOpacity
           style={[s.primaryBtn, (!changed || busy) && s.disabled]}
-          onPress={() => send(false, `Hole ${hole.n}: should be ${fix} (card says ${hole.strokes})`)}
+          onPress={() => send(false, t('league.markerConfirm.note', { n: hole.n, fix, strokes: hole.strokes }))}
           disabled={!changed || busy}
           accessibilityRole="button"
         >
           {busy ? <ActivityIndicator color={theme.text.inverse} />
-            : <Text style={s.primaryText}>{`Send back to ${owner}`}</Text>}
+            : <Text style={s.primaryText}>{t('league.markerConfirm.sendBack', { owner })}</Text>}
         </TouchableOpacity>
         <TouchableOpacity style={s.secondaryBtn} onPress={closeFlag} disabled={busy} accessibilityRole="button">
-          <Text style={s.secondaryText}>Cancel</Text>
+          <Text style={s.secondaryText}>{t('common.cancel')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -163,7 +166,7 @@ export default function LeagueMarkerConfirmScreen({ navigation, route }) {
         <View style={s.ownerRow}>
           <PersonAvatar person={{ displayName: owner }} theme={theme} size={40} />
           <View style={{ flex: 1 }}>
-            <Text style={s.title}>{`Confirm ${owner}'s ${month ? `${month} ` : ''}card`}</Text>
+            <Text style={s.title}>{month ? t('league.markerConfirm.titleMonth', { owner, month }) : t('league.markerConfirm.title', { owner })}</Text>
             {!!meta && <Text style={s.meta}>{meta}</Text>}
           </View>
         </View>
@@ -175,7 +178,7 @@ export default function LeagueMarkerConfirmScreen({ navigation, route }) {
                 style={[s.cell, i > 0 && s.cellEdge]}
                 onPress={() => openHole(h)}
                 accessibilityRole="button"
-                accessibilityLabel={`Hole ${h.n}, par ${h.par}, ${h.strokes ?? 'no score'}. Tap if it's wrong`}
+                accessibilityLabel={t('league.markerConfirm.holeLabel', { n: h.n, par: h.par, strokes: h.strokes ?? t('league.markerConfirm.noScore') })}
               >
                 <Text style={s.holeNo}>{h.n}</Text>
                 <Text style={s.strokes}>{h.strokes ?? '–'}</Text>
@@ -183,7 +186,7 @@ export default function LeagueMarkerConfirmScreen({ navigation, route }) {
             ))}
           </View>
         ))}
-        <Text style={s.meta}>{`Gross ${card?.gross ?? '—'}. Tap a hole if it's wrong.`}</Text>
+        <Text style={s.meta}>{t('league.markerConfirm.gross', { gross: card?.gross ?? '—' })}</Text>
         {!!submitError && <Text style={s.error}>{submitError}</Text>}
         <TouchableOpacity
           style={[s.primaryBtn, (busy || !me) && s.disabled]}
@@ -192,7 +195,7 @@ export default function LeagueMarkerConfirmScreen({ navigation, route }) {
           accessibilityRole="button"
         >
           {busy ? <ActivityIndicator color={theme.text.inverse} />
-            : <Text style={s.primaryText}>{me ? `Confirm as ${me}` : 'Confirm'}</Text>}
+            : <Text style={s.primaryText}>{me ? t('league.markerConfirm.confirmAs', { name: me }) : t('league.markerConfirm.confirm')}</Text>}
         </TouchableOpacity>
       </ScrollView>
     );

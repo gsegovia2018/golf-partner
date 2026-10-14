@@ -11,19 +11,21 @@ import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings } from '../store/settingsStore';
 import { resetTour } from '../store/tourStore';
 import { haptic } from '../lib/haptics';
+import { useT, useLanguagePref, setLanguagePref, formatNumber } from '../i18n';
 
+// label and loss are catalogue keys, resolved at render (see docs/i18n.md).
 const STAT_GROUP_ROWS = [
-  { key: 'putting', label: 'Putting', loss: 'Off: no putting stats, no GIR, no strokes gained putting' },
-  { key: 'teeShot', label: 'Tee shot', loss: 'Off: no fairways hit, no driving distance, no SG off the tee' },
-  { key: 'approach', label: 'Approach', loss: 'Off: no approach breakdown, no SG approach' },
-  { key: 'shortGame', label: 'Short game', loss: 'Off: no sand saves or up-and-downs, reduced SG around the green' },
-  { key: 'penalties', label: 'Penalties', loss: 'Off: no penalty stats, no SG penalties' },
+  { key: 'putting', label: 'settings.statGroups.putting.label', loss: 'settings.statGroups.putting.loss' },
+  { key: 'teeShot', label: 'settings.statGroups.teeShot.label', loss: 'settings.statGroups.teeShot.loss' },
+  { key: 'approach', label: 'settings.statGroups.approach.label', loss: 'settings.statGroups.approach.loss' },
+  { key: 'shortGame', label: 'settings.statGroups.shortGame.label', loss: 'settings.statGroups.shortGame.loss' },
+  { key: 'penalties', label: 'settings.statGroups.penalties.label', loss: 'settings.statGroups.penalties.loss' },
 ];
 
 const THEME_OPTIONS = [
-  { value: 'light', label: 'Light', icon: 'sun' },
-  { value: 'dark', label: 'Dark', icon: 'moon' },
-  { value: 'system', label: 'System', icon: 'smartphone' },
+  { value: 'light', label: 'settings.theme.light', icon: 'sun' },
+  { value: 'dark', label: 'settings.theme.dark', icon: 'moon' },
+  { value: 'system', label: 'settings.theme.system', icon: 'smartphone' },
 ];
 
 // Stagger step between section reveals on mount.
@@ -61,6 +63,8 @@ function Section({ title, hint, delay, s, children }) {
 
 export default function SettingsScreen({ navigation }) {
   const { theme, themePref, setThemeMode } = useTheme();
+  const t = useT();
+  const languagePref = useLanguagePref();
   const s = makeStyles(theme);
   const appSettings = useAppSettings();
   const setKey = useCallback((patch) => {
@@ -93,70 +97,86 @@ export default function SettingsScreen({ navigation }) {
       <View style={s.header}>
         <IconButton
           icon="chevron-left"
-          accessibilityLabel="Back"
+          accessibilityLabel={t('common.back')}
           onPress={handleBack}
         />
-        <Text style={s.headerTitle}>Settings</Text>
+        <Text style={s.headerTitle}>{t('settings.title')}</Text>
         <View style={s.backBtn} />
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}>
-        <Section title="ON THE COURSE" delay={0} s={s}>
-          <SwitchRow testID="setting-gpsEnabled" label="GPS distances" first
-            hint="Live distances from your position. Off: distances measure from the tee and the app never asks for your location."
+        <Section title={t('settings.section.course')} delay={0} s={s}>
+          <SwitchRow testID="setting-gpsEnabled" label={t('settings.gps.label')} first
+            hint={t('settings.gps.hint')}
             value={appSettings.gpsEnabled} onChange={(v) => setKey({ gpsEnabled: v })} theme={theme} s={s} />
-          <SwitchRow testID="setting-shotMeasuring" label="Shot measuring button"
-            hint="Floating button on the scorecard to measure your shots"
+          <SwitchRow testID="setting-shotMeasuring" label={t('settings.shotMeasuring.label')}
+            hint={t('settings.shotMeasuring.hint')}
             value={appSettings.shotMeasuring !== 'off'}
             onChange={(v) => setKey({ shotMeasuring: v ? 'on' : 'off' })} theme={theme} s={s} />
-          <SwitchRow testID="setting-showLastShot" label="Shot recommendation"
-            hint="Card on the hole map with the distance from your last shot to the green and a club tip."
+          <SwitchRow testID="setting-showLastShot" label={t('settings.showLastShot.label')}
+            hint={t('settings.showLastShot.hint')}
             value={appSettings.showLastShot} onChange={(v) => setKey({ showLastShot: v })} theme={theme} s={s} />
-          <SwitchRow testID="setting-keepAwake" label="Keep screen awake"
-            hint="Stops the screen sleeping while the scorecard is open."
+          <SwitchRow testID="setting-keepAwake" label={t('settings.keepAwake.label')}
+            hint={t('settings.keepAwake.hint')}
             value={appSettings.keepAwake} onChange={(v) => setKey({ keepAwake: v })} theme={theme} s={s} />
-          <SwitchRow testID="setting-autoAdvanceHole" label="Auto-advance hole"
-            hint="Flip to the next hole once every player has a score."
+          <SwitchRow testID="setting-autoAdvanceHole" label={t('settings.autoAdvance.label')}
+            hint={t('settings.autoAdvance.hint')}
             value={appSettings.autoAdvanceHole} onChange={(v) => setKey({ autoAdvanceHole: v })} theme={theme} s={s} />
-          <SwitchRow testID="setting-haptics" label="Haptic feedback"
-            hint="Vibrate on score entry."
+          <SwitchRow testID="setting-haptics" label={t('settings.haptics.label')}
+            hint={t('settings.haptics.hint')}
             value={appSettings.haptics} onChange={(v) => setKey({ haptics: v })} theme={theme} s={s} />
         </Section>
 
-        <Section title="SCORE VISIBILITY" delay={REVEAL_STEP} s={s}>
-          <SwitchRow testID="setting-noSpoilers" label="No-spoilers mode" first
-            hint="Hide running points and leaderboards until the round is finished."
+        <Section title={t('settings.section.scores')} delay={REVEAL_STEP} s={s}>
+          <SwitchRow testID="setting-noSpoilers" label={t('settings.noSpoilers.label')} first
+            hint={t('settings.noSpoilers.hint')}
             value={appSettings.noSpoilers} onChange={(v) => setKey({ noSpoilers: v })} theme={theme} s={s} />
-          <SwitchRow testID="setting-showRunningScore" label="Show running points"
-            hint={appSettings.noSpoilers ? 'Off while no-spoilers mode is on.' : 'Total Stableford points under every scorecard name.'}
+          <SwitchRow testID="setting-showRunningScore" label={t('settings.showRunningScore.label')}
+            hint={appSettings.noSpoilers ? t('settings.showRunningScore.off') : t('settings.showRunningScore.hint')}
             value={appSettings.showRunningScore && !appSettings.noSpoilers}
             disabled={appSettings.noSpoilers}
             onChange={(v) => setKey({ showRunningScore: v })} theme={theme} s={s} />
         </Section>
 
-        <Section title="STATS TRACKING" delay={REVEAL_STEP * 2}
-          hint="Turn off what you don't want to log — the scorecard hides those inputs." s={s}>
+        <Section title={t('settings.section.stats')} delay={REVEAL_STEP * 2}
+          hint={t('settings.section.statsHint')} s={s}>
           {STAT_GROUP_ROWS.map(({ key, label, loss }, i) => (
-            <SwitchRow key={key} testID={`setting-statGroups.${key}`} label={label} hint={loss} first={i === 0}
+            <SwitchRow key={key} testID={`setting-statGroups.${key}`} label={t(label)} hint={t(loss)} first={i === 0}
               value={appSettings.statGroups[key]}
               onChange={(v) => setKey({ statGroups: { [key]: v } })} theme={theme} s={s} />
           ))}
         </Section>
 
         <Reveal delay={REVEAL_STEP * 3}>
-          <Text style={s.sectionLabel}>DISPLAY</Text>
+          <Text style={s.sectionLabel}>{t('settings.section.display')}</Text>
           <View style={s.segmentRow}>
-            {[['meters', 'Meters'], ['yards', 'Yards']].map(([value, label]) => (
+            {[['meters', 'settings.units.meters'], ['yards', 'settings.units.yards']].map(([value, label]) => (
               <PressableScale key={value}
                 style={[s.segment, appSettings.units === value && s.segmentActive]}
                 onPress={() => setKey({ units: value })}
                 accessibilityRole="button" accessibilityState={{ selected: appSettings.units === value }}>
-                <Text style={[s.segmentText, appSettings.units === value && s.segmentTextActive]}>{label}</Text>
+                <Text style={[s.segmentText, appSettings.units === value && s.segmentTextActive]}>{t(label)}</Text>
               </PressableScale>
             ))}
           </View>
           <Text style={s.unitsHint}>
-            {appSettings.units === 'yards' ? 'e.g. 148 yds ≈ 135 m' : 'e.g. 135 m ≈ 148 yds'}
+            {appSettings.units === 'yards'
+              ? t('settings.units.exampleYards', { yards: formatNumber(148), meters: formatNumber(135) })
+              : t('settings.units.exampleMeters', { meters: formatNumber(135), yards: formatNumber(148) })}
           </Text>
+          <Text style={s.sectionLabel}>{t('settings.language.title')}</Text>
+          <View style={s.segmentRow}>
+            {['system', 'es', 'en'].map((value) => (
+              <PressableScale key={value} testID={`setting-language-${value}`}
+                style={[s.segment, languagePref === value && s.segmentActive]}
+                onPress={() => setLanguagePref(value)}
+                accessibilityRole="button" accessibilityState={{ selected: languagePref === value }}>
+                <Text style={[s.segmentText, languagePref === value && s.segmentTextActive]}>
+                  {t(`settings.language.${value}`)}
+                </Text>
+              </PressableScale>
+            ))}
+          </View>
+          <Text style={s.sectionLabel}>{t('settings.theme.title')}</Text>
           <View style={s.appearanceRow}>
             {THEME_OPTIONS.map((opt) => {
               const active = themePref === opt.value;
@@ -174,7 +194,7 @@ export default function SettingsScreen({ navigation }) {
                     color={active ? theme.accent.primary : theme.text.muted}
                   />
                   <Text style={[s.appearanceLabel, active && s.appearanceLabelActive]}>
-                    {opt.label}
+                    {t(opt.label)}
                   </Text>
                 </PressableScale>
               );
@@ -185,49 +205,49 @@ export default function SettingsScreen({ navigation }) {
             style={s.replayRow}
             onPress={async () => { haptic('selection'); await resetTour(); }}
             accessibilityRole="button"
-            accessibilityLabel="Replay app tour"
+            accessibilityLabel={t('settings.replayTour.label')}
           >
             <Feather name="refresh-ccw" size={16} color={theme.accent.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={s.replayLabel}>Replay app tour</Text>
-              <Text style={s.fieldHint}>The spotlights show again on Home and the scorecard.</Text>
+              <Text style={s.replayLabel}>{t('settings.replayTour.label')}</Text>
+              <Text style={s.fieldHint}>{t('settings.replayTour.hint')}</Text>
             </View>
           </PressableScale>
         </Reveal>
 
-        <Section title="NOTIFICATIONS" delay={REVEAL_STEP * 4} s={s}>
+        <Section title={t('settings.section.notifications')} delay={REVEAL_STEP * 4} s={s}>
           {pushBlocked ? (
             <PressableScale
               style={s.prefRow}
               onPress={() => { Linking.openSettings().catch(() => {}); }}
               accessibilityRole="button"
-              accessibilityLabel="Notifications are blocked — open system settings"
+              accessibilityLabel={t('settings.pushBlocked.a11y')}
             >
               <Feather name="alert-triangle" size={16} color={theme.destructive} />
               <View style={{ flex: 1 }}>
-                <Text style={[s.prefLabel, { color: theme.destructive }]}>Notifications are blocked</Text>
-                <Text style={s.fieldHint}>The system is blocking this app&apos;s notifications, so the toggles below have no effect. Tap to open system settings.</Text>
+                <Text style={[s.prefLabel, { color: theme.destructive }]}>{t('settings.pushBlocked.title')}</Text>
+                <Text style={s.fieldHint}>{t('settings.pushBlocked.hint')}</Text>
               </View>
               <Feather name="chevron-right" size={18} color={theme.text.muted} />
             </PressableScale>
           ) : null}
-          <SwitchRow testID="setting-notifications.scores" label="Score updates" first={!pushBlocked}
-            hint="When a friend finishes a round."
+          <SwitchRow testID="setting-notifications.scores" label={t('settings.notify.scores.label')} first={!pushBlocked}
+            hint={t('settings.notify.scores.hint')}
             value={appSettings.notifications.scores}
             onChange={(v) => setKey({ notifications: { scores: v } })} theme={theme} s={s} />
-          <SwitchRow testID="setting-notifications.invites" label="Invites & friends"
-            hint="Friend requests and being added to games."
+          <SwitchRow testID="setting-notifications.invites" label={t('settings.notify.invites.label')}
+            hint={t('settings.notify.invites.hint')}
             value={appSettings.notifications.invites}
             onChange={(v) => setKey({ notifications: { invites: v } })} theme={theme} s={s} />
-          <SwitchRow testID="setting-notifications.media" label="Photos & reactions"
-            hint="Comments and reactions on rounds."
+          <SwitchRow testID="setting-notifications.media" label={t('settings.notify.media.label')}
+            hint={t('settings.notify.media.hint')}
             value={appSettings.notifications.media}
             onChange={(v) => setKey({ notifications: { media: v } })} theme={theme} s={s} />
         </Section>
 
         <Reveal delay={REVEAL_STEP * 5}>
           <Text style={s.aboutText}>
-            Golf Partner v{Constants?.expoConfig?.version ?? '?'}
+            {t('settings.about.version', { version: Constants?.expoConfig?.version ?? '?' })}
             {Platform.OS !== 'web' && Constants?.nativeBuildVersion ? ` (${Constants.nativeBuildVersion})` : ''}
           </Text>
         </Reveal>

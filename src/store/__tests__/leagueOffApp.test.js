@@ -2,6 +2,13 @@ import {
   scoresComplete, applyStrokeText, holesPayload, buildTeeTime, courseSnapshot, courseFromSnapshot,
   courseProblem, proofSummary, dayLabel, submitOffAppCard, loadDraft, saveDraft, clearDraft,
 } from '../leagueOffApp';
+import { tr } from '../../i18n';
+
+// courseProblem returns a descriptor (or null); render it in English.
+const problem = (...args) => {
+  const p = courseProblem(...args);
+  return p ? tr(p) : p;
+};
 
 jest.mock('../leagueStore', () => ({
   submitLeagueCard: jest.fn(),
@@ -63,25 +70,30 @@ describe('helpers', () => {
     expect(back.tee).toEqual({ label: 'Yellow', slope: 125, rating: 72 });
   });
 
+  test('courseSnapshot carries the library course id (null for a course without one)', () => {
+    expect(courseSnapshot({ ...course, id: 'c-lib-1' }, null)).toMatchObject({ course_id: 'c-lib-1' });
+    expect(courseSnapshot({ ...course, id: undefined }, null)).toMatchObject({ course_id: null });
+  });
+
   test('courseProblem rejects a missing or non-18-hole course', () => {
-    expect(courseProblem(null)).toMatch(/Pick the course/);
-    expect(courseProblem({ holes: holes18.slice(0, 9) })).toMatch(/18-hole/);
-    expect(courseProblem(course)).toBeNull();
+    expect(problem(null)).toMatch(/Pick the course/);
+    expect(problem({ holes: holes18.slice(0, 9) })).toMatch(/18-hole/);
+    expect(problem(course)).toBeNull();
   });
 
   test('courseProblem rejects an unrated tee (passed, or on a snapshot course)', () => {
     const unrated = /no slope and course rating, so it can't count for the league/;
-    expect(courseProblem(course, { label: 'Red', slope: null, rating: null })).toMatch(unrated);
-    expect(courseProblem(course, { label: 'Red', slope: 120 })).toMatch(unrated);
-    expect(courseProblem(course, null)).toMatch(unrated);
-    expect(courseProblem(course, { label: 'Yellow', slope: 125, rating: 72 })).toBeNull();
+    expect(problem(course, { label: 'Red', slope: null, rating: null })).toMatch(unrated);
+    expect(problem(course, { label: 'Red', slope: 120 })).toMatch(unrated);
+    expect(problem(course, null)).toMatch(unrated);
+    expect(problem(course, { label: 'Yellow', slope: 125, rating: 72 })).toBeNull();
     // courseFromSnapshot shape: tee null when the snapshot has no slope/rating.
     const bare = { ...courseSnapshot(course, null), slope: null, rating: null };
-    expect(courseProblem(courseFromSnapshot(bare))).toMatch(unrated);
-    expect(courseProblem(courseFromSnapshot(courseSnapshot(course, { label: 'Y', slope: 125, rating: 72 }))))
+    expect(problem(courseFromSnapshot(bare))).toMatch(unrated);
+    expect(problem(courseFromSnapshot(courseSnapshot(course, { label: 'Y', slope: 125, rating: 72 }))))
       .toBeNull();
     // Hole-count problems still come first.
-    expect(courseProblem({ holes: holes18.slice(0, 9) }, null)).toMatch(/18-hole/);
+    expect(problem({ holes: holes18.slice(0, 9) }, null)).toMatch(/18-hole/);
   });
 
   test('proofSummary reads "<course> · <date> · <points> pts · gross <g>"', () => {
@@ -90,7 +102,7 @@ describe('helpers', () => {
       snapshot, playedOn: '2025-10-04', strokes: full(5), leagueHandicap: 18,
     });
     expect(gross).toBe(90);
-    expect(line).toBe(`Golf Olivar · Sat 4 Oct · ${points} pts · gross 90`);
+    expect(tr(line)).toBe(`Golf Olivar · Sat 4 Oct · ${points} pts · gross 90`);
   });
 
   test('proofSummary also returns the net differential (course-level slope/rating here)', () => {

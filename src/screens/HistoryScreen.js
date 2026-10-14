@@ -14,11 +14,12 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import {
   loadAllTournamentsWithFallback, isTournamentFinished,
-  subscribeTournamentChanges, deleteTournament, tournamentNounCapitalized,
+  subscribeTournamentChanges, deleteTournament,
 } from '../store/tournamentStore';
 import { loadProfile, computePersonalStats } from '../store/profileStore';
 import { buildHistorySections } from '../store/historyModel';
 import { semantic } from '../theme/tokens';
+import { useT, formatNumber } from '../i18n';
 
 // The era a net points record belongs to. Stableford points are net of the
 // handicap the round was played off, so a career best is not comparable with
@@ -28,22 +29,23 @@ import { semantic } from '../theme/tokens';
 // playing handicap, labelled "shots" so it is never misread as an index.
 // Mirrors the same helper in CareerMilestonesCard — kept local, like this
 // screen's other small formatters, rather than shared for four lines.
-function handicapEra({ index, handicap }) {
-  if (index != null) return `off ${index}`;
-  if (handicap != null) return `off ${handicap} shots`;
+function handicapEra({ index, handicap }, t) {
+  if (index != null) return t('home.history.eraIndex', { index: formatNumber(index) });
+  if (handicap != null) return t('home.history.eraShots', { handicap: formatNumber(handicap) });
   return null;
 }
 
 const FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'tournament', label: 'Tournaments' },
-  { key: 'game', label: 'Games' },
+  { key: 'all', labelKey: 'home.history.filterAll' },
+  { key: 'tournament', labelKey: 'home.history.filterTournaments' },
+  { key: 'game', labelKey: 'home.history.filterGames' },
 ];
 
 // History tab: a condensed record strip, filter chips, and the archive of
 // finished games and tournaments as one month-grouped timeline.
 export default function HistoryScreen({ navigation }) {
   const { theme } = useTheme();
+  const t = useT();
   const gold = theme.isDark ? semantic.winner.dark : semantic.winner.light;
   const s = useMemo(() => makeStyles(theme, gold), [theme, gold]);
 
@@ -54,12 +56,12 @@ export default function HistoryScreen({ navigation }) {
   const [filter, setFilter] = useState('all');
   const [confirmState, setConfirmState] = useState(null);
   const confirmResolverRef = useRef(null);
-  const confirm = useCallback(({ title, message, confirmLabel = 'Confirm', destructive = false }) => (
+  const confirm = useCallback(({ title, message, confirmLabel = t('home.history.confirm'), destructive = false }) => (
     new Promise((resolve) => {
       confirmResolverRef.current = resolve;
       setConfirmState({ title, message, confirmLabel, destructive });
     })
-  ), []);
+  ), [t]);
   const resolveConfirm = useCallback((result) => {
     const resolver = confirmResolverRef.current;
     confirmResolverRef.current = null;
@@ -95,20 +97,20 @@ export default function HistoryScreen({ navigation }) {
     navigation.navigate('Tournament', { tournamentId: id, viewMode: 'tournament' });
   }
 
-  async function confirmDelete(t) {
+  async function confirmDelete(tournament) {
     const confirmed = await confirm({
-      title: `Delete ${tournamentNounCapitalized(t)}`,
-      message: `Delete "${t.name}"? This cannot be undone.`,
-      confirmLabel: 'Delete',
+      title: t(tournament?.kind === 'game' ? 'home.history.deleteGameTitle' : 'home.history.deleteTournamentTitle'),
+      message: t('home.history.deleteMessage', { name: tournament.name }),
+      confirmLabel: t('home.history.delete'),
       destructive: true,
     });
     if (!confirmed) return;
     try {
-      await deleteTournament(t.id);
+      await deleteTournament(tournament.id);
       await reload();
     } catch (err) {
-      const msg = err?.message ?? 'Could not delete';
-      Alert.alert('Error', msg);
+      const msg = err?.message ?? t('home.history.deleteError');
+      Alert.alert(t('home.history.errorTitle'), msg);
     }
   }
 
@@ -128,15 +130,15 @@ export default function HistoryScreen({ navigation }) {
   );
 
   const recordCells = stats ? [
-    { label: 'Rounds', value: String(stats.roundsPlayed) },
-    { label: 'Wins', value: String(stats.wins), gold: true },
+    { label: t('home.history.rounds'), value: String(stats.roundsPlayed) },
+    { label: t('home.history.wins'), value: String(stats.wins), gold: true },
     // Averaged over full rounds only, so it is those — not every round played
     // — that decide whether there is an average to show at all.
-    { label: 'Avg pts', value: stats.fullRounds > 0 ? stats.avgPointsPerRound.toFixed(1) : '—' },
+    { label: t('home.history.avgPts'), value: stats.fullRounds > 0 ? formatNumber(stats.avgPointsPerRound, { decimals: 1 }) : '—' },
     {
-      label: 'Best',
+      label: t('home.history.best'),
       value: stats.bestRound ? String(stats.bestRound.points) : '—',
-      note: stats.bestRound ? handicapEra(stats.bestRound) : null,
+      note: stats.bestRound ? handicapEra(stats.bestRound, t) : null,
     },
   ] : [];
 
@@ -145,7 +147,7 @@ export default function HistoryScreen({ navigation }) {
   return (
     <ScreenContainer style={s.container} edges={['top']}>
       <View style={s.header}>
-        <Text style={s.headerTitle}>History</Text>
+        <Text style={s.headerTitle}>{t('home.history.title')}</Text>
       </View>
 
       {loading ? (
@@ -158,7 +160,7 @@ export default function HistoryScreen({ navigation }) {
               activeScale={0.98}
               onPress={() => navigation.navigate('MyStats')}
               accessibilityRole="button"
-              accessibilityLabel="Your record. Opens My Stats."
+              accessibilityLabel={t('home.history.recordA11y')}
             >
               {recordCells.map((c, i) => (
                 <React.Fragment key={c.label}>
@@ -184,7 +186,7 @@ export default function HistoryScreen({ navigation }) {
                 accessibilityRole="button"
                 accessibilityState={{ selected: filter === f.key }}
               >
-                <Text style={[s.chipText, filter === f.key && s.chipTextOn]}>{f.label}</Text>
+                <Text style={[s.chipText, filter === f.key && s.chipTextOn]}>{t(f.labelKey)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -192,11 +194,11 @@ export default function HistoryScreen({ navigation }) {
           {sections.length === 0 ? (
             <View style={s.emptyState}>
               <Feather name="clock" size={44} color={theme.text.muted} />
-              <Text style={s.emptyTitle}>No history yet</Text>
+              <Text style={s.emptyTitle}>{t('home.history.emptyTitle')}</Text>
               <Text style={s.emptySub}>
                 {finished.length === 0
-                  ? 'Finished games and tournaments will be archived here.'
-                  : 'Nothing in this filter yet.'}
+                  ? t('home.history.emptyAll')
+                  : t('home.history.emptyFilter')}
               </Text>
             </View>
           ) : (
@@ -205,7 +207,7 @@ export default function HistoryScreen({ navigation }) {
                 <Text style={s.sectionLabel}>{section.label.toUpperCase()}</Text>
                 {section.items.map((model) => {
                   rowIndex += 1;
-                  const t = byId[model.id];
+                  const item = byId[model.id];
                   return (
                     <Reveal
                       key={model.id}
@@ -215,14 +217,14 @@ export default function HistoryScreen({ navigation }) {
                       style={s.rowWrap}
                     >
                       <SwipeToDelete
-                        enabled={!!(model.isOwner && t)}
-                        onDelete={() => confirmDelete(t)}
-                        accessibilityLabel={`Delete ${model.title}`}
+                        enabled={!!(model.isOwner && item)}
+                        onDelete={() => confirmDelete(item)}
+                        accessibilityLabel={t('home.history.deleteA11y', { title: model.title })}
                       >
                         <HistoryRow
                           model={model}
                           onPress={() => openTournament(model.id)}
-                          onLongPress={model.isOwner && t ? () => confirmDelete(t) : undefined}
+                          onLongPress={model.isOwner && item ? () => confirmDelete(item) : undefined}
                         />
                       </SwipeToDelete>
                     </Reveal>
@@ -239,6 +241,7 @@ export default function HistoryScreen({ navigation }) {
 }
 
 function ConfirmModal({ state, onResult, s }) {
+  const t = useT();
   return (
     <Modal statusBarTranslucent hardwareAccelerated
       visible={!!state}
@@ -256,7 +259,7 @@ function ConfirmModal({ state, onResult, s }) {
               onPress={() => onResult(false)}
               activeOpacity={0.8}
             >
-              <Text style={s.confirmBtnCancelText}>Cancel</Text>
+              <Text style={s.confirmBtnCancelText}>{t('home.history.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.confirmBtn, state?.destructive ? s.confirmBtnDestructive : s.confirmBtnPrimary]}
@@ -267,7 +270,7 @@ function ConfirmModal({ state, onResult, s }) {
                 s.confirmBtnPrimaryText,
                 state?.destructive && s.confirmBtnDestructiveText,
               ]}>
-                {state?.confirmLabel ?? 'Confirm'}
+                {state?.confirmLabel ?? t('home.history.confirm')}
               </Text>
             </TouchableOpacity>
           </View>

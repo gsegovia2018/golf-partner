@@ -5,6 +5,7 @@ import ScreenContainer from '../../components/ScreenContainer';
 import IconButton from '../../components/ui/IconButton';
 import { useTheme } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
+import { useT } from '../../i18n';
 import { pairsMatchDuels } from '../../store/scoring';
 
 const firstName = (p) => (p?.name ?? '').split(' ')[0];
@@ -75,6 +76,7 @@ export default function EditTeamsView({
   onSave,
 }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
 
   const isThreeVsOne = scoringMode === 'scramble3v1';
@@ -91,10 +93,10 @@ export default function EditTeamsView({
   const armedName = selected ? nameFor(pairs[selected.pairIdx][selected.slotIdx]) : null;
 
   const helper = isThreeVsOne
-    ? 'Tap a player to send them solo'
+    ? t('shared.teams.helperSolo')
     : armedName
-      ? `Swapping ${firstName({ name: armedName })} — tap who takes their place`
-      : 'Tap a player, then tap another to swap them';
+      ? t('shared.teams.helperSwapping', { name: firstName({ name: armedName }) })
+      : t('shared.teams.helperSwap');
 
   const teamAccent = (pi) => (pi === 0 ? theme.pairA : theme.pairB);
 
@@ -105,8 +107,8 @@ export default function EditTeamsView({
       <View style={s.teamBlock}>
         <View style={s.teamHead}>
           <View style={[s.teamDot, { backgroundColor: accent }]} />
-          <Text style={[s.teamLabel, { color: accent }]}>PAIR {pi + 1}</Text>
-          {total != null && <Text style={s.teamTotal}>{total} hcp</Text>}
+          <Text style={[s.teamLabel, { color: accent }]}>{t('shared.teams.pair', { n: pi + 1 })}</Text>
+          {total != null && <Text style={s.teamTotal}>{t('shared.teams.totalHcp', { total })}</Text>}
         </View>
         {pair.map((player, si) => {
           const armed = isArmed(pi, si);
@@ -144,16 +146,16 @@ export default function EditTeamsView({
         <View style={s.teamBlock}>
           <View style={s.teamHead}>
             <View style={[s.teamDot, { backgroundColor: theme.pairB }]} />
-            <Text style={[s.teamLabel, { color: theme.pairB }]}>PLAYS SOLO</Text>
+            <Text style={[s.teamLabel, { color: theme.pairB }]}>{t('shared.teams.playsSolo')}</Text>
           </View>
           {solo && (
             <View style={[s.tile, s.soloTile]}>
               <Avatar name={solo.name} size={46} ring={theme.pairB} s={s} theme={theme} />
               <View style={s.tileText}>
                 <Text style={s.soloName} numberOfLines={1}>{solo.name}</Text>
-                {hcpFor(solo) != null && <Text style={s.tileHcp}>HCP {hcpFor(solo)}</Text>}
+                {hcpFor(solo) != null && <Text style={s.tileHcp}>{t('shared.hcp', { value: hcpFor(solo) })}</Text>}
               </View>
-              <View style={s.soloPill}><Text style={s.soloPillText}>1 v 3</Text></View>
+              <View style={s.soloPill}><Text style={s.soloPillText}>{t('shared.teams.oneVsThree')}</Text></View>
             </View>
           )}
         </View>
@@ -163,7 +165,7 @@ export default function EditTeamsView({
         <View style={s.teamBlock}>
           <View style={s.teamHead}>
             <View style={[s.teamDot, { backgroundColor: theme.pairA }]} />
-            <Text style={[s.teamLabel, { color: theme.pairA }]}>TEAM OF {pack.length}</Text>
+            <Text style={[s.teamLabel, { color: theme.pairA }]}>{t('shared.teams.teamOf', { count: pack.length })}</Text>
           </View>
           {pack.map((player) => (
             <PlayerTile
@@ -176,7 +178,7 @@ export default function EditTeamsView({
               theme={theme}
               trailing={
                 <View style={s.sendSolo}>
-                  <Text style={s.sendSoloText}>Solo</Text>
+                  <Text style={s.sendSoloText}>{t('shared.teams.solo')}</Text>
                   <Feather name="arrow-up-right" size={14} color={theme.text.muted} />
                 </View>
               }
@@ -191,13 +193,13 @@ export default function EditTeamsView({
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={onBack} />
-        <Text style={s.headerTitle}>Edit Teams</Text>
+        <Text style={s.headerTitle}>{t('shared.teams.title')}</Text>
         <View style={{ width: 36 }} />
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         <View style={s.hero}>
-          <Text style={s.roundLabel}>ROUND {roundNumber}</Text>
+          <Text style={s.roundLabel}>{t('shared.teams.round', { n: roundNumber })}</Text>
           <Text style={s.course}>{courseName}</Text>
         </View>
 
@@ -210,7 +212,7 @@ export default function EditTeamsView({
           <Text style={[s.helperText, armedName && s.helperTextArmed]}>{helper}</Text>
           {armedName && (
             <TouchableOpacity onPress={() => onTapPlayer(selected.pairIdx, selected.slotIdx)} hitSlop={8}>
-              <Text style={s.helperCancel}>Cancel</Text>
+              <Text style={s.helperCancel}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -226,22 +228,22 @@ export default function EditTeamsView({
         <TouchableOpacity style={s.shuffleBtn} onPress={onShuffle} activeOpacity={0.7}>
           <Feather name="shuffle" size={14} color={theme.accent.primary} />
           <Text style={s.shuffleBtnText}>
-            {isThreeVsOne ? 'Shuffle — pick a random solo' : 'Shuffle teams'}
+            {t(isThreeVsOne ? 'shared.teams.shuffleSolo' : 'shared.teams.shuffle')}
           </Text>
         </TouchableOpacity>
 
         {isPairsMatch && duels && (
           <View style={s.card}>
             <View style={s.cardHead}>
-              <Text style={s.cardLabel}>DUELS · 1 v 1</Text>
+              <Text style={s.cardLabel}>{t('shared.teams.duels')}</Text>
               <View style={s.duelActions}>
                 <TouchableOpacity style={s.swapBtn} onPress={onRandomizeDuels} activeOpacity={0.7}>
                   <Feather name="shuffle" size={14} color={theme.accent.primary} />
-                  <Text style={s.swapBtnText}>Randomize</Text>
+                  <Text style={s.swapBtnText}>{t('shared.teams.randomize')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.swapBtn} onPress={onSwapDuels} activeOpacity={0.7}>
                   <Feather name="repeat" size={14} color={theme.accent.primary} />
-                  <Text style={s.swapBtnText}>Swap</Text>
+                  <Text style={s.swapBtnText}>{t('shared.teams.swap')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -251,7 +253,7 @@ export default function EditTeamsView({
                   <Avatar name={nameFor(a)} size={28} ring={theme.pairA} s={s} theme={theme} />
                   <Text style={s.duelName} numberOfLines={1}>{firstName({ name: nameFor(a) })}</Text>
                 </View>
-                <Text style={s.duelVs}>vs</Text>
+                <Text style={s.duelVs}>{t('shared.teams.vs')}</Text>
                 <View style={[s.duelPlayer, s.duelPlayerEnd]}>
                   <Text style={s.duelName} numberOfLines={1}>{firstName({ name: nameFor(b) })}</Text>
                   <Avatar name={nameFor(b)} size={28} ring={theme.pairB} s={s} theme={theme} />
@@ -270,7 +272,7 @@ export default function EditTeamsView({
           activeOpacity={0.8}
         >
           <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-          <Text style={s.saveBtnText}>{saving ? 'Saving…' : 'Save Teams'}</Text>
+          <Text style={s.saveBtnText}>{saving ? t('shared.teams.saving') : t('shared.teams.save')}</Text>
         </TouchableOpacity>
       </View>
     </ScreenContainer>

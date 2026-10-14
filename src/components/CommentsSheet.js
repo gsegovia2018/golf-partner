@@ -3,17 +3,19 @@ import { StyleSheet, Text, View } from 'react-native';
 import BottomSheet from './BottomSheet';
 import CommentThread from './CommentThread';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 
 // Bottom-sheet comment thread for a single feed item (a round or a photo
 // reel), keyed by the feed item key. The thread itself (load, optimistic
 // post, delete-own) lives in CommentThread, shared with the round summary.
 export default function CommentsSheet({ visible, itemKey, onClose, onCountChange, onCommentAdded }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   return (
     <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
       <View style={s.handle} />
-      <Text style={s.title}>Comments</Text>
+      <Text style={s.title}>{t('shared.comments.title')}</Text>
       <CommentThread
         itemKey={itemKey}
         active={visible}

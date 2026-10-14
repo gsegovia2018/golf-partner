@@ -12,7 +12,8 @@ import { useAppSettings } from '../hooks/useAppSettings';
 import { subscribeShots, getShotsVersion, getShots } from '../store/shotStore';
 import { loadShotRoundIndex, shotRoundContext } from '../store/shotRounds';
 import { clubDetail } from '../lib/shotStats';
-import { clubLabel } from '../lib/clubs';
+import { clubLabel, isClubKey } from '../lib/clubs';
+import { useT } from '../i18n';
 import { formatDistance, unitSuffix, M_TO_YD } from '../lib/units';
 
 // Full per-club breakdown: measured carry, consistency, range and a per-round
@@ -23,6 +24,8 @@ export default function ClubStatScreen({ route, navigation }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { units } = useAppSettings();
+  const t = useT();
+  const clubName = isClubKey(club) ? t(`stats.club.name.${club}`) : clubLabel(club);
 
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -47,24 +50,23 @@ export default function ClubStatScreen({ route, navigation }) {
   const [replayOpen, setReplayOpen] = useState(false);
 
   const trend = useMemo(() => (detail?.byRound || []).map((r, i) => ({
-    label: `R${i + 1}`,
+    label: t('stats.club.roundShort', { n: i + 1 }),
     value: Math.round(units === 'yards' ? r.avg * M_TO_YD : r.avg),
-  })), [detail, units]);
+  })), [detail, units, t]);
 
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <IconButton icon="chevron-left" accessibilityLabel="Back" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>{clubLabel(club)}</Text>
+        <IconButton icon="chevron-left" accessibilityLabel={t('common.back')} onPress={() => navigation.goBack()} />
+        <Text style={s.headerTitle}>{clubName}</Text>
         <View style={s.spacer} />
       </View>
 
       {!detail ? (
         <View style={s.emptyWrap}>
-          <Text style={s.emptyTitle}>No shots yet</Text>
+          <Text style={s.emptyTitle}>{t('stats.club.emptyTitle')}</Text>
           <Text style={s.emptyText}>
-            Mark where the ball lands on the hole map and tag this club. Once you
-            log a shot, its carry, consistency and trend show up here.
+            {t('stats.club.emptyBody')}
           </Text>
         </View>
       ) : (
@@ -76,8 +78,9 @@ export default function ClubStatScreen({ route, navigation }) {
                 <Text style={s.heroUnit}>{` ${suffix}`}</Text>
               </Text>
               <Text style={s.heroSub}>
-                {`avg carry · ${detail.count} shot${detail.count === 1 ? '' : 's'}`}
-                {detail.nominal ? ` · typical ${formatDistance(detail.nominal, units)}${suffix}` : ''}
+                {detail.nominal
+                  ? t('stats.club.heroSubTypical', { count: detail.count, typical: `${formatDistance(detail.nominal, units)}${suffix}` })
+                  : t('stats.club.heroSub', { count: detail.count })}
               </Text>
             </View>
           </Reveal>
@@ -86,11 +89,11 @@ export default function ClubStatScreen({ route, navigation }) {
             <View style={s.tiles}>
               <View style={s.tile}>
                 <Text style={s.tileValue}>{`±${formatDistance(detail.std, units)}`}</Text>
-                <Text style={s.tileLabel}>CONSISTENCY</Text>
+                <Text style={s.tileLabel}>{t('stats.club.consistency')}</Text>
               </View>
               <View style={s.tile}>
                 <Text style={s.tileValue}>{`${formatDistance(detail.min, units)}–${formatDistance(detail.max, units)}`}</Text>
-                <Text style={s.tileLabel}>RANGE ({suffix})</Text>
+                <Text style={s.tileLabel}>{t('stats.club.range', { unit: suffix })}</Text>
               </View>
               <PressableScale
                 style={[s.tile, longestAt && s.tileTappable]}
@@ -98,16 +101,21 @@ export default function ClubStatScreen({ route, navigation }) {
                 onPress={() => setReplayOpen(true)}
                 accessibilityRole={longestAt ? 'button' : undefined}
                 accessibilityLabel={longestAt
-                  ? `Longest carry ${formatDistance(detail.max, units)} ${suffix}, hole ${longestAt.holeNumber} at ${longestAt.courseName}. Open the hole map.`
+                  ? t('stats.club.longestA11y', {
+                    distance: formatDistance(detail.max, units),
+                    unit: suffix,
+                    hole: longestAt.holeNumber,
+                    course: longestAt.courseName,
+                  })
                   : undefined}
                 testID="club-longest-tile"
               >
                 <Text style={s.tileValue}>{`${formatDistance(detail.max, units)}`}</Text>
-                <Text style={s.tileLabel}>LONGEST ({suffix})</Text>
+                <Text style={s.tileLabel}>{t('stats.club.longest', { unit: suffix })}</Text>
                 {longestAt ? (
                   <View style={s.tileLink}>
                     <Feather name="map-pin" size={9} color={theme.accent.primary} />
-                    <Text style={s.tileLinkText} numberOfLines={1}>{`Hole ${longestAt.holeNumber}`}</Text>
+                    <Text style={s.tileLinkText} numberOfLines={1}>{t('stats.club.holeLink', { hole: longestAt.holeNumber })}</Text>
                   </View>
                 ) : null}
               </PressableScale>
@@ -116,11 +124,11 @@ export default function ClubStatScreen({ route, navigation }) {
 
           {trend.length >= 2 && (
             <Reveal delay={80}>
-              <Text style={s.sectionLabel}>CARRY BY ROUND</Text>
+              <Text style={s.sectionLabel}>{t('stats.club.carryByRound')}</Text>
               <View style={s.card}>
                 <TrendLineChart
                   series={trend}
-                  caption="Average carry per round you used this club"
+                  caption={t('stats.club.trendCaption')}
                   formatValue={(v) => `${v}`}
                   dropGaps
                 />
@@ -130,7 +138,7 @@ export default function ClubStatScreen({ route, navigation }) {
 
           {detail.recent.length > 0 && (
             <Reveal delay={120}>
-              <Text style={s.sectionLabel}>RECENT CARRIES</Text>
+              <Text style={s.sectionLabel}>{t('stats.club.recent')}</Text>
               <View style={s.chipWrap}>
                 {detail.recent.map((m, i) => (
                   <View key={i} style={s.chip}>
@@ -152,7 +160,11 @@ export default function ClubStatScreen({ route, navigation }) {
           strokeIndex={longestAt.strokeIndex}
           roundId={detail.longest.roundId}
           roundIndex={detail.longest.roundIndex}
-          caption={`Longest ${clubLabel(club)} · ${formatDistance(detail.max, units)}${suffix} · ${longestAt.courseName}`}
+          caption={t('stats.club.replayCaption', {
+            club: clubName,
+            distance: `${formatDistance(detail.max, units)}${suffix}`,
+            course: longestAt.courseName,
+          })}
         />
       ) : null}
     </ScreenContainer>

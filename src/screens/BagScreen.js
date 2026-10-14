@@ -8,6 +8,7 @@ import IconButton from '../components/ui/IconButton';
 import PressableScale from '../components/ui/PressableScale';
 import Reveal from '../components/ui/Reveal';
 import { useTheme } from '../theme/ThemeContext';
+import { useT } from '../i18n';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings } from '../store/settingsStore';
 import {
@@ -26,6 +27,12 @@ import { haptic } from '../lib/haptics';
 
 const REVEAL_STEP = 40;
 
+const TAG_KEYS = {
+  SET: 'courses.bag.tag.set',
+  MEASURED: 'courses.bag.tag.measured',
+  EST: 'courses.bag.tag.est',
+};
+
 // De-dupe geometry courses by display name, sorted A→Z.
 function dedupeCoursesByName(list) {
   const seen = new Set();
@@ -36,6 +43,7 @@ function dedupeCoursesByName(list) {
 
 export default function BagScreen({ navigation }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = makeStyles(theme);
   const appSettings = useAppSettings();
   const {
@@ -134,15 +142,15 @@ export default function BagScreen({ navigation }) {
     const shotCount = getShots().length;
     if (!overrides.length && !shotCount) return;
     const body = shotCount
-      ? `This deletes all ${shotCount} marked shot${shotCount === 1 ? '' : 's'} and clears your manual carries. Club distances, shot stats and hole maps go back to estimates. This cannot be undone.`
-      : 'Your manual carry values are cleared. Each club falls back to its catalog estimate.';
+      ? t('courses.bag.resetBodyShots', { count: shotCount })
+      : t('courses.bag.resetBodyNone');
     Alert.alert(
-      'Reset club distances?',
+      t('courses.bag.resetTitle'),
       body,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('courses.cancel'), style: 'cancel' },
         {
-          text: shotCount ? 'Delete and reset' : 'Reset',
+          text: shotCount ? t('courses.bag.resetConfirm') : t('courses.bag.reset'),
           style: 'destructive',
           onPress: () => {
             haptic('selection');
@@ -161,15 +169,15 @@ export default function BagScreen({ navigation }) {
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <IconButton icon="chevron-left" accessibilityLabel="Back" onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>Your Bag</Text>
+        <IconButton icon="chevron-left" accessibilityLabel={t('courses.back')} onPress={() => navigation.goBack()} />
+        <Text style={s.headerTitle}>{t('courses.bag.title')}</Text>
         <View style={s.backBtn} />
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content}>
         <Reveal delay={0}>
-          <Text style={s.sectionLabel}>CLUBS YOU CARRY</Text>
-          <Text style={s.sectionHint}>Tap to add or remove. Only these appear when you log a shot.</Text>
+          <Text style={s.sectionLabel}>{t('courses.bag.clubsLabel')}</Text>
+          <Text style={s.sectionHint}>{t('courses.bag.clubsHint')}</Text>
           <View style={s.chipWrap}>
             {CLUB_CATALOG.map((c) => {
               const on = bagSet.has(c.key);
@@ -193,11 +201,9 @@ export default function BagScreen({ navigation }) {
         <Reveal delay={REVEAL_STEP}>
           <View style={s.condHead}>
             <View style={s.condHeadText}>
-              <Text style={s.sectionLabel}>CLUB DISTANCES</Text>
+              <Text style={s.sectionLabel}>{t('courses.bag.distancesLabel')}</Text>
               <Text style={s.sectionHint}>
-                Carry used for club recommendations — the average of your best
-                strikes, with mishits and freak bounces left out. Edit any value
-                directly; tap a club for its full breakdown.
+                {t('courses.bag.distancesHint')}
               </Text>
             </View>
             <View style={s.distActions}>
@@ -205,28 +211,28 @@ export default function BagScreen({ navigation }) {
                 <PressableScale
                   onPress={setAllToAverage}
                   style={s.avgBtn}
-                  accessibilityLabel="Set all club distances to their measured average"
+                  accessibilityLabel={t('courses.bag.setAllA11y')}
                 >
                   <Feather name="download" size={13} color={theme.accent.primary} />
-                  <Text style={s.avgBtnText}>Use averages</Text>
+                  <Text style={s.avgBtnText}>{t('courses.bag.useAverages')}</Text>
                 </PressableScale>
               )}
               {canReset && (
                 <PressableScale
                   onPress={resetDistances}
                   style={s.resetBtn}
-                  accessibilityLabel="Delete every marked shot and reset all club distances"
+                  accessibilityLabel={t('courses.bag.resetA11y')}
                   testID="bag-reset-distances"
                 >
                   <Feather name="rotate-ccw" size={13} color={theme.text.secondary} />
-                  <Text style={s.resetBtnText}>Reset</Text>
+                  <Text style={s.resetBtnText}>{t('courses.bag.reset')}</Text>
                 </PressableScale>
               )}
             </View>
           </View>
           <View style={s.groupCard}>
             {rows.length === 0 ? (
-              <Text style={s.empty}>No swing clubs in your bag yet.</Text>
+              <Text style={s.empty}>{t('courses.bag.noClubs')}</Text>
             ) : rows.map((r, i) => (
               <View key={r.club} style={[s.distRow, i > 0 && s.distRowDivider]}>
                 <Text style={s.distClub}>{r.label}</Text>
@@ -240,16 +246,16 @@ export default function BagScreen({ navigation }) {
                     placeholderTextColor={theme.text.muted}
                     onEndEditing={(e) => setClubDistance(r.club, e.nativeEvent.text)}
                     returnKeyType="done"
-                    accessibilityLabel={`${r.label} carry in ${unitSuffix(units)}`}
+                    accessibilityLabel={t('courses.bag.carryA11y', { club: r.label, unit: unitSuffix(units) })}
                   />
                   <Text style={s.distInputUnit}>{unitSuffix(units)}</Text>
                   <Text style={[s.distTag, r.hasOverride ? s.distTagSet : r.measured ? s.distTagReal : s.distTagEst]}>
-                    {r.tag}
+                    {t(TAG_KEYS[r.tag])}
                   </Text>
                   <PressableScale
                     onPress={() => navigation.navigate('ClubStat', { club: r.club })}
                     hitSlop={8}
-                    accessibilityLabel={`${r.label} stats`}
+                    accessibilityLabel={t('courses.bag.statsA11y', { club: r.label })}
                   >
                     <Feather name="chevron-right" size={16} color={theme.text.muted} />
                   </PressableScale>
@@ -262,10 +268,9 @@ export default function BagScreen({ navigation }) {
         <Reveal delay={REVEAL_STEP * 2}>
           <View style={s.condHead}>
             <View style={s.condHeadText}>
-              <Text style={s.sectionLabel}>PLAYING CONDITIONS</Text>
+              <Text style={s.sectionLabel}>{t('courses.bag.conditionsLabel')}</Text>
               <Text style={s.sectionHint}>
-                Adjust target distances for temperature (from the month) and course
-                elevation. Warm, high air flies farther — the hole plays shorter.
+                {t('courses.bag.conditionsHint')}
               </Text>
             </View>
             <Switch
@@ -278,7 +283,7 @@ export default function BagScreen({ navigation }) {
           {conditionsEnabled && (
             <View style={s.groupCard}>
               {courses.length === 0 ? (
-                <Text style={s.empty}>No courses with map data yet.</Text>
+                <Text style={s.empty}>{t('courses.bag.noCourses')}</Text>
               ) : courses.map((c, i) => {
                 const alt = (courseAltitudes && courseAltitudes[c.name]) || 0;
                 const d = describeConditions({ month, altitudeM: alt });
@@ -297,7 +302,7 @@ export default function BagScreen({ navigation }) {
                         placeholderTextColor={theme.text.muted}
                         onEndEditing={(e) => setAltitude(c.name, e.nativeEvent.text)}
                         returnKeyType="done"
-                        accessibilityLabel={`${c.name} elevation in metres`}
+                        accessibilityLabel={t('courses.bag.elevationA11y', { course: c.name })}
                       />
                       <Text style={s.altUnit}>m</Text>
                     </View>

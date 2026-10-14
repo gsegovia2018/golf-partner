@@ -5,6 +5,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { useT, t as tNow, formatNumber } from '../../i18n';
 import { semantic } from '../../theme/tokens';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../lib/units';
@@ -50,20 +51,25 @@ export function holeCellColors(theme, avgVsPar) {
 
 export function holeA11yLabel(hole, { isNemesis, isBest } = {}) {
   const v = hole.avgVsPar;
-  const vsPhrase = v > 0 ? `${v} over par` : v < 0 ? `${Math.abs(v)} under par` : 'level par';
-  return `Hole ${hole.holeNumber}, par ${hole.par}, average ${hole.avgStrokes}, ${vsPhrase}`
-    + (isNemesis ? ', nemesis hole' : '')
-    + (isBest ? ', best hole' : '');
+  const vsPhrase = v > 0 ? tNow('stats.my.hole.over', { value: formatNumber(v) })
+    : v < 0 ? tNow('stats.my.hole.under', { value: formatNumber(Math.abs(v)) })
+      : tNow('stats.my.hole.level');
+  const parts = [tNow('stats.my.hole.a11y', {
+    n: hole.holeNumber, par: hole.par, avg: formatNumber(hole.avgStrokes, { maxDecimals: 4 }), vs: vsPhrase,
+  })];
+  if (isNemesis) parts.push(tNow('stats.my.hole.nemesis'));
+  if (isBest) parts.push(tNow('stats.my.hole.best'));
+  return parts.join(', ');
 }
 
-const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
+const signed = (n) => (n > 0 ? `+${formatNumber(n)}` : formatNumber(n));
 
 // Under-par filters for the grid. `count` reads the hole row's tally so the
 // chip label, the cell badge and the "does this hole qualify" test all agree.
 const FILTERS = [
-  { key: 'all', label: 'All holes', count: () => 0 },
-  { key: 'birdies', label: 'Birdies', count: (h) => h.birdies ?? 0 },
-  { key: 'eagles', label: 'Eagles', count: (h) => h.eagles ?? 0 },
+  { key: 'all', label: 'stats.my.hole.filter.all', count: () => 0 },
+  { key: 'birdies', label: 'stats.my.hole.filter.birdies', hitsKey: 'stats.my.hole.hits.birdies', count: (h) => h.birdies ?? 0 },
+  { key: 'eagles', label: 'stats.my.hole.filter.eagles', hitsKey: 'stats.my.hole.hits.eagles', count: (h) => h.eagles ?? 0 },
 ];
 const filterDef = (key) => FILTERS.find((f) => f.key === key) ?? FILTERS[0];
 
@@ -78,6 +84,7 @@ function HoleCell({
   filterKey, hits,
 }) {
   const reduced = useReducedMotion();
+  const t = useT();
   const { bg, fg } = holeCellColors(theme, hole.avgVsPar);
   const gold = theme.isDark ? semantic.winner.dark : semantic.winner.light;
 
@@ -105,7 +112,7 @@ function HoleCell({
         accessibilityRole="button"
         accessibilityState={{ selected }}
         accessibilityLabel={holeA11yLabel(hole, { isNemesis, isBest })
-          + (filterKey === 'all' ? '' : `, ${hits} ${filterDef(filterKey).label.toLowerCase()}`)}
+          + (filterKey === 'all' ? '' : `, ${t(filterDef(filterKey).hitsKey, { count: hits })}`)}
         testID={`hole-cell-${hole.holeNumber}`}
         style={[
           s.cell,
@@ -138,11 +145,11 @@ function HoleCell({
 // different handicaps into an average belonging to no era. vs-par is the
 // exact same judgement of the hole, and it is what colours the grid above.
 const PANEL_COLS = [
-  { key: 'avg', label: 'Avg', get: (h) => h.avgStrokes },
-  { key: 'best', label: 'Best', get: (h) => h.bestStrokes },
-  { key: 'vspar', label: 'vs par', get: (h) => h.avgVsPar, signed: true },
-  { key: 'putts', label: 'Putts avg', get: (h) => h.avgPutts },
-  { key: 'pen', label: 'Pen', get: (h) => h.penalties },
+  { key: 'avg', label: 'stats.my.hole.col.avg', get: (h) => h.avgStrokes },
+  { key: 'best', label: 'stats.my.hole.col.best', get: (h) => h.bestStrokes },
+  { key: 'vspar', label: 'stats.my.hole.col.vspar', get: (h) => h.avgVsPar, signed: true },
+  { key: 'putts', label: 'stats.my.hole.col.putts', get: (h) => h.avgPutts },
+  { key: 'pen', label: 'stats.my.hole.col.pen', get: (h) => h.penalties },
 ];
 
 // Scorecard grid for the "Hole by hole" card: 9 cells per row colored by
@@ -151,6 +158,7 @@ const PANEL_COLS = [
 // without holes.
 export default function HoleGrid({ holes, highlights, drives, onViewDrive }) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { units } = useAppSettings();
 
@@ -202,7 +210,7 @@ export default function HoleGrid({ holes, highlights, drives, onViewDrive }) {
                 testID={`hole-filter-${f.key}`}
               >
                 <Text style={[s.filterText, on && s.filterTextOn]}>
-                  {f.key === 'all' ? f.label : `${f.label} · ${totals[f.key]}`}
+                  {f.key === 'all' ? t(f.label) : t('stats.my.hole.chipCount', { label: t(f.label), count: totals[f.key] })}
                 </Text>
               </PressableScale>
             );
@@ -242,9 +250,9 @@ export default function HoleGrid({ holes, highlights, drives, onViewDrive }) {
           <View style={s.panelHead}>
             <Text style={s.panelNum}>{selectedHole.holeNumber}</Text>
             <Text style={s.panelMeta}>
-              {`Par ${selectedHole.par}`
-                + (selectedHole.strokeIndex != null ? ` · SI ${selectedHole.strokeIndex}` : '')
-                + ` · ${selectedHole.timesPlayed}x`}
+              {selectedHole.strokeIndex != null
+                ? t('stats.my.hole.metaSI', { par: selectedHole.par, si: selectedHole.strokeIndex, times: selectedHole.timesPlayed })
+                : t('stats.my.hole.meta', { par: selectedHole.par, times: selectedHole.timesPlayed })}
             </Text>
           </View>
           <View style={s.panelCols}>
@@ -253,9 +261,9 @@ export default function HoleGrid({ holes, highlights, drives, onViewDrive }) {
               return (
                 <View key={col.key} style={s.panelCol}>
                   <Text style={s.panelValue} testID={`hole-panel-${col.key}`}>
-                    {value == null ? '—' : `${col.signed && value > 0 ? '+' : ''}${value}`}
+                    {value == null ? '—' : `${col.signed && value > 0 ? '+' : ''}${formatNumber(value, { maxDecimals: 4 })}`}
                   </Text>
-                  <Text style={s.panelLabel}>{col.label}</Text>
+                  <Text style={s.panelLabel}>{t(col.label)}</Text>
                 </View>
               );
             })}
@@ -264,12 +272,12 @@ export default function HoleGrid({ holes, highlights, drives, onViewDrive }) {
             <View style={s.tagRow}>
               {selectedHole.eagles > 0 ? (
                 <Text style={[s.tag, s.tagEagle]} testID="hole-panel-eagles">
-                  {`${selectedHole.eagles} eagle${selectedHole.eagles === 1 ? '' : 's'}`}
+                  {t('stats.my.hole.eagles', { count: selectedHole.eagles })}
                 </Text>
               ) : null}
               {selectedHole.birdies > 0 ? (
                 <Text style={[s.tag, s.tagBirdie]} testID="hole-panel-birdies">
-                  {`${selectedHole.birdies} birdie${selectedHole.birdies === 1 ? '' : 's'}`}
+                  {t('stats.my.hole.birdies', { count: selectedHole.birdies })}
                 </Text>
               ) : null}
             </View>
@@ -279,12 +287,12 @@ export default function HoleGrid({ holes, highlights, drives, onViewDrive }) {
               onPress={() => onViewDrive(selectedHole, drive)}
               style={s.driveBtn}
               accessibilityRole="button"
-              accessibilityLabel={`Show the map of your longest drive on hole ${selectedHole.holeNumber}`}
+              accessibilityLabel={t('stats.my.hole.driveMap', { n: selectedHole.holeNumber })}
               testID="hole-panel-drive"
             >
               <Feather name="map" size={13} color={theme.accent.primary} />
               <Text style={s.driveText}>
-                {`Longest drive · ${formatDistance(drive.meters, units)}${unitSuffix(units)}`}
+                {t('stats.my.hole.longestDrive', { distance: `${formatDistance(drive.meters, units)}${unitSuffix(units)}` })}
               </Text>
               <Feather name="chevron-right" size={14} color={theme.accent.primary} />
             </PressableScale>

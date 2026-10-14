@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useT, formatNumber, formatDate } from '../i18n';
 import { supabase } from '../lib/supabase';
 import { signInAnonymously } from '../lib/oauth';
 import { attachEmailToGuest, isEmailTakenError } from '../lib/guestAccount';
@@ -12,11 +13,12 @@ import {
 } from '../lib/leagueJoinHandoff';
 import { getLeagueInvitePreview, getLeagueInvitee, joinLeague } from '../store/leagueStore';
 import { parseMemberHandicap } from '../store/leagueDraft';
-import { formatEuros, monthName, currentMonthKey, firstName } from '../store/leagueView';
+import { formatEuros, currentMonthKey, firstName } from '../store/leagueView';
 import AuthForm from '../components/AuthForm';
 import GuestIdentityFields, { LabeledField, guestIdentityErrors } from '../components/league/GuestIdentityFields';
 import InitialsAvatar from '../components/league/InitialsAvatar';
 import AuthScreen from './AuthScreen';
+import { leagueErrorText } from '../lib/leagueErrorText';
 
 // Shown pre-session when someone opens a /league/CODE invite. One screen:
 // the league in a hero, then "I'm new" (name + email + handicap: a guest
@@ -34,6 +36,7 @@ import AuthScreen from './AuthScreen';
 export default function JoinLeagueLinkScreen({ code }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
+  const t = useT();
 
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -89,10 +92,9 @@ export default function JoinLeagueLinkScreen({ code }) {
   const showHcpField = !onSpot || proposing || picked.handicap == null;
   const joinHcp = showHcpField ? hcpValue : picked.handicap;
   const hcpError = !showHcpField ? null
-    : (hcpText.trim() === '' ? 'Enter your handicap' : (hcpValue == null ? 'Enter a number like 18.4' : null));
+    : (hcpText.trim() === '' ? t('league.join.hcpLabelEnter') : (hcpValue == null ? t('league.join.hcpLabelNumber') : null));
   const formValid = !nameError && !emailError && !hcpError;
   const archived = !!preview?.archived;
-  const leagueName = preview?.name ?? 'the league';
 
   async function dropGuest() {
     stepsRef.current = { guest: false, email: false };
@@ -137,7 +139,7 @@ export default function JoinLeagueLinkScreen({ code }) {
       const gone = /^Someone already joined as (.+?)\.?$/.exec(e?.message ?? '');
       if (mountedRef.current) {
         if (gone && onSpot) setTaken(gone[1]);
-        else setError({ kind: 'other', text: e?.message || 'Could not join. Please try again.' });
+        else setError({ kind: 'other', text: leagueErrorText(e) || '' });
       }
     } finally {
       if (mountedRef.current) setBusy(false);
@@ -208,10 +210,10 @@ export default function JoinLeagueLinkScreen({ code }) {
       <View style={s.screen}>
         <View style={s.center}>
           <Feather name="help-circle" size={40} color={theme.text.muted} />
-          <Text style={s.emptyTitle}>{"This invite code isn't valid"}</Text>
-          <Text style={s.emptyText}>Check the code or ask for the link again.</Text>
+          <Text style={s.emptyTitle}>{t('league.join.invalidCode')}</Text>
+          <Text style={s.emptyText}>{t('league.join.checkCode')}</Text>
           <TouchableOpacity style={s.secondaryBtn} onPress={() => setShowSignIn(true)} activeOpacity={0.8}>
-            <Text style={s.secondaryText}>Sign in</Text>
+            <Text style={s.secondaryText}>{t('league.join.signIn')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -220,23 +222,23 @@ export default function JoinLeagueLinkScreen({ code }) {
 
   const meta = preview
     ? [
-      `${preview.memberCount} member${preview.memberCount === 1 ? '' : 's'}`,
-      `${monthName(currentMonthKey())} open`,
-      preview.entryFeeCents > 0 ? `entry ${formatEuros(preview.entryFeeCents)}` : 'no entry fee',
+      t('league.join.members', { count: preview.memberCount }),
+      t('league.join.monthOpen', { month: formatDate(`${currentMonthKey()}-01`, 'monthName') }),
+      preview.entryFeeCents > 0 ? t('league.join.entryFee', { fee: formatEuros(preview.entryFeeCents) }) : t('league.join.noEntryFee'),
     ].join(' · ')
     : null;
   const admin = preview?.adminFirstName;
-  const hcpHelp = `League cap ${cap.toFixed(1)}. ${admin ?? 'The admin'} confirms it; a different number goes to a group vote.`;
+  const capText = formatNumber(cap, { decimals: 1 });
+  const hcpHelp = admin ? t('league.join.hcpHelp', { cap: capText, name: admin }) : t('league.join.hcpHelpAdmin', { cap: capText });
   const showErr = (msg) => (submitted ? msg : null);
 
-  const adminLabel = admin ?? 'the admin';
   // A failed preview still lets a new person join: the form shows, with a
   // note that the list couldn't load.
   const view = invitees.length > 0 ? step : 'form';
 
   const segment = (
     <View style={s.segment} accessibilityRole="tablist">
-      {[['new', "I'm new"], ['account', 'I have an account']].map(([key, label]) => (
+      {[['new', t('league.join.tabNew')], ['account', t('league.join.tabAccount')]].map(([key, label]) => (
         <TouchableOpacity
           key={key}
           style={[s.segmentBtn, tab === key && s.segmentBtnActive]}
@@ -253,8 +255,8 @@ export default function JoinLeagueLinkScreen({ code }) {
 
   const hero = (
     <View style={s.hero}>
-      <Text style={s.heroOverline}>{admin ? `${admin.toUpperCase()} INVITED YOU` : "YOU'RE INVITED"}</Text>
-      <Text style={s.heroName}>{preview?.name ?? 'League invite'}</Text>
+      <Text style={s.heroOverline}>{admin ? t('league.join.invitedYou', { name: admin.toUpperCase() }) : t('league.join.youreInvited')}</Text>
+      <Text style={s.heroName}>{preview?.name ?? t('league.join.leagueInvite')}</Text>
       {!!meta && <Text style={s.heroMeta}>{meta}</Text>}
     </View>
   );
@@ -270,14 +272,14 @@ export default function JoinLeagueLinkScreen({ code }) {
     <>
       {error?.kind === 'taken' && (
         <Text style={s.errorText}>
-          That email already has a Golf Partner account.{' '}
+          {t('league.join.emailTaken')}{' '}
           <Text style={s.errorLink} onPress={() => switchTab('account')} accessibilityRole="link">
-            Log in instead
+            {t('league.join.logInInstead')}
           </Text>
         </Text>
       )}
-      {error?.kind === 'other' && <Text style={s.errorText}>{error.text}</Text>}
-      {archived && <Text style={s.errorText}>{"This league is archived and can't be joined."}</Text>}
+      {error?.kind === 'other' && <Text style={s.errorText}>{error.text || t('league.join.joinFailed')}</Text>}
+      {archived && <Text style={s.errorText}>{t('league.join.archived')}</Text>}
     </>
   );
 
@@ -289,15 +291,15 @@ export default function JoinLeagueLinkScreen({ code }) {
       activeOpacity={0.8}
     >
       {busy && <ActivityIndicator color={theme.text.inverse} style={{ marginRight: 8 }} />}
-      <Text style={s.primaryText} numberOfLines={1}>{`Join ${leagueName}`}</Text>
+      <Text style={s.primaryText} numberOfLines={1}>{preview?.name ? t('league.join.joinNamed', { name: preview.name }) : t('league.join.joinGeneric')}</Text>
     </TouchableOpacity>
   );
 
   const handicapField = (
     <>
       <LabeledField
-        label="Handicap"
-        placeholder="e.g. 18.4"
+        label={t('account.handicap')}
+        placeholder={t('league.join.hcpFieldPh')}
         value={hcpText}
         onChangeText={setHcpText}
         keyboardType="decimal-pad"
@@ -313,20 +315,20 @@ export default function JoinLeagueLinkScreen({ code }) {
       <View style={s.statusCard}>
         <Feather name="alert-circle" size={18} color={theme.destructive} style={{ marginRight: 12, marginTop: 1 }} />
         <View style={{ flex: 1 }}>
-          <Text style={s.statusTitle}>{`Someone just joined as ${taken}`}</Text>
-          <Text style={s.statusSub}>{`If that wasn't you, tell ${adminLabel}. They can remove it.`}</Text>
+          <Text style={s.statusTitle}>{t('league.join.takenTitle', { name: taken })}</Text>
+          <Text style={s.statusSub}>{admin ? t('league.join.takenSub', { name: admin }) : t('league.join.takenSubAdmin')}</Text>
         </View>
       </View>
       <TouchableOpacity style={s.secondaryBtnFull} onPress={pickAgain} activeOpacity={0.8}>
-        <Text style={s.secondaryText}>Pick again</Text>
+        <Text style={s.secondaryText}>{t('league.join.pickAgain')}</Text>
       </TouchableOpacity>
     </>
   );
 
   const pickList = (
     <>
-      <Text style={s.stepTitle}>Who are you?</Text>
-      <Text style={s.stepHint}>{`${admin ?? 'The admin'} saved a spot for these players.`}</Text>
+      <Text style={s.stepTitle}>{t('league.join.whoAreYou')}</Text>
+      <Text style={s.stepHint}>{admin ? t('league.join.savedSpots', { name: admin }) : t('league.join.savedSpotsAdmin')}</Text>
       <View style={s.listCard}>
         {invitees.map((i) => (
           <TouchableOpacity
@@ -354,42 +356,42 @@ export default function JoinLeagueLinkScreen({ code }) {
         >
           <InitialsAvatar muted><Feather name="plus" size={16} color={theme.text.secondary} /></InitialsAvatar>
           <View style={{ flex: 1 }}>
-            <Text style={s.listName}>{"I'm not on the list"}</Text>
-            <Text style={s.listSub}>Add yourself to the league</Text>
+            <Text style={s.listName}>{t('league.join.notOnList')}</Text>
+            <Text style={s.listSub}>{t('league.join.addYourself')}</Text>
           </View>
           <Feather name="chevron-right" size={18} color={theme.text.muted} />
         </TouchableOpacity>
       </View>
-      {pickError && <Text style={s.errorText}>{"Couldn't load that spot. Try again."}</Text>}
+      {pickError && <Text style={s.errorText}>{t('league.join.spotLoadFailedShort')}</Text>}
       <Text style={s.note}>
-        {'Already use Golf Partner? '}
-        <Text style={s.errorLink} onPress={() => switchTab('account')} accessibilityRole="link">Log in</Text>
+        {t('league.join.alreadyUse')}
+        <Text style={s.errorLink} onPress={() => switchTab('account')} accessibilityRole="link">{t('league.join.logIn')}</Text>
       </Text>
     </>
   );
 
   const greeting = (
     <>
-      {backRow('Not you? Pick again', pickAgain)}
-      <Text style={s.hello} numberOfLines={2}>{`Hi ${firstName(picked?.name)}, your spot is ready`}</Text>
+      {backRow(t('league.join.notYou'), pickAgain)}
+      <Text style={s.hello} numberOfLines={2}>{t('league.join.hello', { name: firstName(picked?.name) })}</Text>
       {picked?.handicap != null && (
         <View style={s.factsCard}>
           <View style={[s.factRow, s.divider]}>
-            <Text style={s.factLabel}>League handicap</Text>
-            <Text style={s.factValue}>{picked.handicap.toFixed(1)}</Text>
+            <Text style={s.factLabel}>{t('league.join.factHcp')}</Text>
+            <Text style={s.factValue}>{formatNumber(picked.handicap, { decimals: 1 })}</Text>
           </View>
           <View style={s.factRow}>
-            <Text style={s.factLabel}>Set by</Text>
-            <Text style={s.factValue}>{admin ?? 'The admin'}</Text>
+            <Text style={s.factLabel}>{t('league.join.factSetBy')}</Text>
+            <Text style={s.factValue}>{admin ?? t('league.join.theAdminCap')}</Text>
           </View>
         </View>
       )}
       {picked?.handicap != null && !proposing && (
         <Text style={s.stepHint}>
           <Text style={s.errorLink} onPress={() => setProposing(true)} accessibilityRole="link">
-            Propose a different handicap
+            {t('league.join.proposeDifferent')}
           </Text>
-          {'. The group votes on it.'}
+          {t('league.join.groupVotes')}
         </Text>
       )}
       <View style={s.card}>
@@ -404,23 +406,23 @@ export default function JoinLeagueLinkScreen({ code }) {
         />
         {errorLines}
         {joinButton}
-        <Text style={s.note}>We email you a link to keep the account.</Text>
+        <Text style={s.note}>{t('league.join.emailLinkShort')}</Text>
       </View>
     </>
   );
 
   const loadError = (
     <Text style={s.errorText}>
-      {"Couldn't load the players. "}
+      {t('league.join.playersFailed')}
       <Text
         style={s.errorLink}
         onPress={() => { setState('loading'); setAttempt((n) => n + 1); }}
         accessibilityRole="link"
       >
-        Try again
+        {t('common.retry')}
       </Text>
-      {' or '}
-      <Text style={s.errorLink} onPress={() => setNoticeDismissed(true)} accessibilityRole="link">join without picking</Text>
+      {t('league.join.or')}
+      <Text style={s.errorLink} onPress={() => setNoticeDismissed(true)} accessibilityRole="link">{t('league.join.joinWithoutPicking')}</Text>
       .
     </Text>
   );
@@ -438,7 +440,7 @@ export default function JoinLeagueLinkScreen({ code }) {
       {handicapField}
       {errorLines}
       {joinButton}
-      <Text style={s.note}>We email you a link to keep the account and sign in on other devices.</Text>
+      <Text style={s.note}>{t('league.join.emailLinkLong')}</Text>
     </>
   );
 
@@ -460,7 +462,7 @@ export default function JoinLeagueLinkScreen({ code }) {
   } else {
     body = (
       <>
-        {invitees.length > 0 && backRow('Pick your name', pickAgain)}
+        {invitees.length > 0 && backRow(t('league.join.pickYourName'), pickAgain)}
         {hero}
         {state === 'error' && !noticeDismissed && loadError}
         {segment}
