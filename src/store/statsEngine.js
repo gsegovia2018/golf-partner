@@ -1,5 +1,5 @@
 import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap } from './tournamentStore';
-import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore, resolvePairs, holeCountOf } from './scoring';
+import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore, resolvePairs, holeCountOf, isFullLengthRound, isRoundFullyScoredBy } from './scoring';
 import {
   expectedFromBucket, expectedStrokes, BUCKETS,
   PAR_ANCHOR_DISTANCE, benchmarkTeeShotDistance, expectedPenaltiesPerRound,
@@ -44,15 +44,31 @@ export function playerRoundHistory(tournament, playerId) {
         }
       });
       if (holesPlayed === 0) return null;
-      return { roundIndex: ri, courseName: round.courseName, points, strokes, holesPlayed, avgPerHole: +(points / holesPlayed).toFixed(2) };
+      return {
+        roundIndex: ri, courseName: round.courseName, points, strokes, holesPlayed,
+        avgPerHole: +(points / holesPlayed).toFixed(2),
+        // Whole-round totals are only comparable for a full-length round the
+        // player scored on every hole (see isFullLengthRound in scoring.js).
+        fullRound: isFullLengthRound(round) && isRoundFullyScoredBy(round, playerId),
+      };
     })
     .filter(Boolean);
 }
 
+// Average Stableford points per round, over full-length, fully-scored rounds
+// only — a nine or a part-scored round would drag it down. 0 when none.
 export function playerAvgStableford(tournament, playerId) {
+  const full = playerRoundHistory(tournament, playerId).filter(r => r.fullRound);
+  if (full.length === 0) return 0;
+  return +(full.reduce((s, r) => s + r.points, 0) / full.length).toFixed(1);
+}
+
+// Points per hole over every hole the player scored (round length neutral).
+export function playerAvgPerHole(tournament, playerId) {
   const history = playerRoundHistory(tournament, playerId);
-  if (history.length === 0) return 0;
-  return +(history.reduce((s, r) => s + r.points, 0) / history.length).toFixed(1);
+  const holes = history.reduce((s, r) => s + r.holesPlayed, 0);
+  if (holes === 0) return 0;
+  return +(history.reduce((s, r) => s + r.points, 0) / holes).toFixed(2);
 }
 
 export function playerScoreDistribution(tournament, playerId, { metric = 'points', roundIndex = null } = {}) {
@@ -630,7 +646,12 @@ export function hallOfShame(tournament, { metric = 'points' } = {}) {
   // 1. Triple Bogey Club — worst single hole by vsPar
   const tripleBogey = tied(3);
   tournament.players.forEach(p => {
-    perPlayerEntries[p.id].forEach(e => push(tripleBogey, e.vsPar, { player: p, ...e, breakdown: [e] }));
+    perPlayerEntries[p.id].forEach(e => {
+      // A pickup is a recorded cap, not a real score — in strokes mode (gross
+      // vsPar) it would be credited as a genuine triple; blowup skips it too.
+      if (!useNet && e.isPickup) return;
+      push(tripleBogey, e.vsPar, { player: p, ...e, breakdown: [e] });
+    });
   });
 
   // longest-run helper per-player
@@ -790,9 +811,14 @@ export function tournamentMomentum(tournament) {
         points += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
         holesPlayed++;
       });
-      return { roundIndex, courseName: round.courseName, points: holesPlayed ? points : null, strokes: holesPlayed ? strokes : null, holesPlayed };
+      const fullRound = isFullLengthRound(round) && isRoundFullyScoredBy(round, player.id);
+      return { roundIndex, courseName: round.courseName, points: holesPlayed ? points : null, strokes: holesPlayed ? strokes : null, holesPlayed, fullRound };
     });
-    const played = rounds.filter(r => r.points != null);
+    // min/max are whole-round totals: a nine or part-scored round would read as
+    // a collapse. Fall back to every played round when none is a full one.
+    const playedAll = rounds.filter(r => r.points != null);
+    const playedFull = playedAll.filter(r => r.fullRound);
+    const played = playedFull.length ? playedFull : playedAll;
     const minPts = played.length ? Math.min(...played.map(r => r.points)) : 0;
     const maxPts = played.length ? Math.max(...played.map(r => r.points)) : 0;
     return { player, rounds, minPts, maxPts };
@@ -905,24 +931,31 @@ export function courseDNA(tournament) {
         // index-dependent label, not an identity a screen can re-derive later.
         courseKey: round.courseId ?? (round.courseName || null),
         courseName: label, points: 0, strokes: 0, holesPlayed: 0, rounds: 0, roundTotals: [],
+        fullRounds: 0, fullPoints: 0, fullStrokes: 0,
       };
       cur.courseName = label; // rounds iterate chronologically — latest label wins
       cur.points += points;
       cur.strokes += strokes;
       cur.holesPlayed += holesPlayed;
       cur.rounds++;
-      cur.roundTotals.push({ roundIndex, points, strokes, holesPlayed });
+      // Within one course every round shares its layout, so "whole" only means
+      // fully scored (a nine on a nine-hole course is a whole round there).
+      const fullRound = isRoundFullyScoredBy(round, player.id);
+      if (fullRound) { cur.fullRounds++; cur.fullPoints += points; cur.fullStrokes += strokes; }
+      cur.roundTotals.push({ roundIndex, points, strokes, holesPlayed, fullRound });
       perPlayer[player.id].courses[key] = cur;
     });
   });
 
   return Object.values(perPlayer).map(r => ({
     player: r.player,
-    courses: Object.values(r.courses).map(c => ({
+    courses: Object.values(r.courses).map(({ fullRounds, fullPoints, fullStrokes, ...c }) => ({
       ...c,
       avgPoints: c.holesPlayed ? +(c.points / c.holesPlayed).toFixed(2) : 0,
-      roundPoints: c.rounds ? +(c.points / c.rounds).toFixed(1) : 0,
-      roundStrokes: c.rounds ? +(c.strokes / c.rounds).toFixed(1) : 0,
+      // Per-round averages over fully-scored rounds only; with none, scale
+      // pts/hole (and strokes/hole) to an eighteen instead.
+      roundPoints: fullRounds ? +(fullPoints / fullRounds).toFixed(1) : (c.holesPlayed ? +(c.points / c.holesPlayed * 18).toFixed(1) : 0),
+      roundStrokes: fullRounds ? +(fullStrokes / fullRounds).toFixed(1) : (c.holesPlayed ? +(c.strokes / c.holesPlayed * 18).toFixed(1) : 0),
     })).sort((a, b) => b.avgPoints - a.avgPoints),
   }));
 }
@@ -969,12 +1002,16 @@ export function parTypeSplit(tournament, playerId) {
 // warmup/closing stretch regardless of printed numbering.
 export function warmupVsClosing(tournament, playerId) {
   const warmup = [], closing = [];
+  // Hole numbers the labels should name, taken from the longest round played
+  // (H16-18 on an eighteen, H7-9 on a nine).
+  let refHoles = null;
   tournament.rounds.forEach((round, roundIndex) => {
     if (!round.scores?.[playerId]) return;
     const player = tournament.players.find(p => p.id === playerId);
     if (!player) return;
     const handicap = getPlayingHandicap(round, player);
     const holes = round.holes;
+    if (holes.length > 0 && (!refHoles || holes.length > refHoles.length)) refHoles = holes;
     holes.forEach((hole, idx) => {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
@@ -987,7 +1024,14 @@ export function warmupVsClosing(tournament, playerId) {
     });
   });
   const avg = (arr) => arr.length ? +(arr.reduce((s, h) => s + h.points, 0) / arr.length).toFixed(2) : 0;
+  const range = refHoles ? {
+    warmupStart: refHoles[0].number,
+    warmupEnd: refHoles[Math.min(2, refHoles.length - 1)].number,
+    closingStart: refHoles[Math.max(0, refHoles.length - 3)].number,
+    closingEnd: refHoles[refHoles.length - 1].number,
+  } : { warmupStart: 1, warmupEnd: 3, closingStart: 16, closingEnd: 18 };
   return {
+    range,
     warmup: { avgPoints: avg(warmup), holes: warmup.length, breakdown: warmup },
     closing: { avgPoints: avg(closing), holes: closing.length, breakdown: closing },
     delta: +(avg(closing) - avg(warmup)).toFixed(2),
@@ -1789,9 +1833,11 @@ export function bounceBackRate(tournament) {
         const prev = seq[i - 1];
         const cur = seq[i];
         if (prev.vsPar < 1) continue; // prior hole was par-or-better — no opportunity
+        // A blank hole breaks the chain: nothing to recover on, not a failure.
+        if (!isAdjacentHole(prev, cur)) continue;
         const rec = perPlayer[player.id];
         rec.opportunities++;
-        const recovered = isAdjacentHole(prev, cur) && cur.vsPar <= 0;
+        const recovered = cur.vsPar <= 0;
         if (recovered) rec.bounceBacks++;
         rec.breakdown.push({
           roundIndex, courseName: round.courseName,
@@ -1885,7 +1931,7 @@ export function strokeIndexAccuracy(tournament, { roundIndex = null } = {}) {
       let entry = byHole.get(key);
       if (!entry) {
         entry = {
-          courseName: round.courseName, holeNumber: hole.number, par: hole.par,
+          courseKey, courseName: round.courseName, holeNumber: hole.number, par: hole.par,
           printedSi: hole.strokeIndex, totalVsPar: 0, count: 0, roundIndices: new Set(),
         };
         byHole.set(key, entry);
@@ -1908,15 +1954,26 @@ export function strokeIndexAccuracy(tournament, { roundIndex = null } = {}) {
 
   // Rank hardest (highest avgVsPar) as actualSi 1; equal avgVsPar shares the
   // average of the ranks its group spans (average-rank ties).
-  const sorted = [...holeStats].sort((a, b) => b.avgVsPar - a.avgVsPar);
-  let i = 0;
-  while (i < sorted.length) {
-    let j = i;
-    while (j + 1 < sorted.length && sorted[j + 1].avgVsPar === sorted[i].avgVsPar) j++;
-    const avgRank = (i + 1 + j + 1) / 2; // ranks are 1-indexed, spanning i..j
-    for (let k = i; k <= j; k++) sorted[k].actualSi = avgRank;
-    i = j + 1;
-  }
+  // Ranked within each course — a printed SI only means something against the
+  // other holes of the same course.
+  const byCourse = new Map();
+  holeStats.forEach(h => {
+    if (!byCourse.has(h.courseKey)) byCourse.set(h.courseKey, []);
+    byCourse.get(h.courseKey).push(h);
+  });
+  const sorted = [];
+  byCourse.forEach((group) => {
+    group.sort((a, b) => b.avgVsPar - a.avgVsPar);
+    let i = 0;
+    while (i < group.length) {
+      let j = i;
+      while (j + 1 < group.length && group[j + 1].avgVsPar === group[i].avgVsPar) j++;
+      const avgRank = (i + 1 + j + 1) / 2; // ranks are 1-indexed, spanning i..j
+      for (let k = i; k <= j; k++) group[k].actualSi = avgRank;
+      i = j + 1;
+    }
+    sorted.push(...group);
+  });
 
   return sorted
     .map(h => ({

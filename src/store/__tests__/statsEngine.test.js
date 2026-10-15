@@ -1871,7 +1871,14 @@ describe('withoutScrambleScores', () => {
     expect(clean.rounds[0].scores).toBe(t.rounds[0].scores);
   });
   it('keeps captain team-ball points out of personal aggregates', () => {
-    const t = mixedModeTournament();
+    const base = mixedModeTournament();
+    // Make the R2 team ball differ from p1's own R1 card (every hole a 5).
+    const t = {
+      ...base,
+      rounds: base.rounds.map((r, i) => (i === 1
+        ? { ...r, scores: { ...r.scores, p1: Object.fromEntries(r.holes.map((h) => [h.number, 5])) } }
+        : r)),
+    };
     const dirty = playerAvgStableford(t, 'p1');
     const clean = playerAvgStableford(withoutScrambleScores(t), 'p1');
     expect(clean).not.toEqual(dirty); // R2 team ball no longer credited to p1
@@ -2090,11 +2097,11 @@ describe('hallOfShame.bogeyStreak — adjacency-aware runs', () => {
 });
 
 describe('bounceBackRate — recovery must land on the very next hole', () => {
-  it('counts the opportunity after a bogey but does not count a birdie 2 holes later as a bounce-back', () => {
-    // Par, par, par, bogey (hole 4), hole 5 unscored, birdie (hole 6). The
-    // bogey on hole 4 is still a bounce-back opportunity, but since hole 5
-    // was never scored there is no result on the hole immediately after —
-    // the birdie on hole 6 must NOT count as the recovery.
+  it('a blank hole after a bogey is no opportunity, so a later birdie is neither a bounce-back nor a failure', () => {
+    // Par, par, par, bogey (hole 4), hole 5 unscored, birdie (hole 6). With no
+    // score on the hole immediately after the bogey there is nothing to
+    // recover on: the opportunity is not counted (and the birdie on hole 6
+    // must NOT be taken as the recovery).
     const holes = [1, 2, 3, 4, 5, 6].map((n) => ({ number: n, par: 4, strokeIndex: n }));
     const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
     const round = {
@@ -2105,15 +2112,7 @@ describe('bounceBackRate — recovery must land on the very next hole', () => {
     };
     const t = buildTournament({ players, rounds: [round] });
 
-    const results = bounceBackRate(t);
-
-    expect(results).toHaveLength(1);
-    const [p1Result] = results;
-    expect(p1Result.opportunities).toBe(1);
-    expect(p1Result.bounceBacks).toBe(0);
-    expect(p1Result.rate).toBe(0);
-    expect(p1Result.breakdown).toHaveLength(1);
-    expect(p1Result.breakdown[0]).toMatchObject({ holeNumber: 6, afterHole: 4, recovered: false });
+    expect(bounceBackRate(t)).toHaveLength(0);
   });
 });
 
