@@ -10,6 +10,7 @@ import PullToRefresh from '../components/PullToRefresh';
 import DateField from '../components/DateField';
 import DeleteLeagueSheet from '../components/DeleteLeagueSheet';
 import BottomSheet from '../components/BottomSheet';
+import PointsTableChart from '../components/league/PointsTableChart';
 import PointsForPlaying from '../components/league/PointsForPlaying';
 import { useT, formatNumber, formatDate } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
@@ -366,7 +367,13 @@ export default function LeagueSettingsScreen({ navigation, route }) {
             {startIso && endIso && startIso > endIso && (
               <Text style={s.errorText}>{t('league.settings.seasonOrder')}</Text>
             )}
-            {field(t('league.create.pointsTable'), { value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none' })}
+            {/* The chart reads its table once, on mount: this card only renders
+                once the league has loaded, so it starts from the real table. */}
+            <PointsTableChart
+              style={{ paddingHorizontal: 0, borderBottomWidth: 0 }}
+              table={league.pointsTable}
+              onChange={(table) => setPointsText(table ? formatPointsTable(table) : '')}
+            />
             <PointsForPlaying value={participation} onChange={setParticipation} pointsTable={pointsTable} count={active.length} />
             <Text style={s.hint}>{t('league.rules.recompute')}</Text>
             {format !== 'medal_gross' && field(t('league.create.handicapCap'), { value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}
