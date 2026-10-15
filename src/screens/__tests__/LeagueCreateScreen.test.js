@@ -77,7 +77,8 @@ describe('LeagueCreateScreen', () => {
     await utils.findByText('How does it work?');
     expect(utils.getByText('One card a month, 18 holes, any rated course.')).toBeTruthy();
     expect(utils.getByText('Stableford, net')).toBeTruthy();
-    expect(utils.getByText(/12 places · 1st gets 500/)).toBeTruthy();
+    expect(utils.getByText('Points per place')).toBeTruthy();
+    expect(utils.getByText('Show all 12 places')).toBeTruthy();
     expect(utils.getByLabelText('Points for playing, 10')).toBeTruthy();
     fireEvent.press(utils.getByLabelText('Fewer points'));
     fireEvent.press(utils.getByLabelText('Fewer points'));
@@ -88,15 +89,17 @@ describe('LeagueCreateScreen', () => {
     expect(utils.getByLabelText('Points for playing, 15')).toBeTruthy();
   });
 
-  test('the points sheet saves a new table that reaches createLeague', async () => {
+  test('editing the points chart reaches createLeague; an empty place blocks Next', async () => {
     const utils = render(wrap(<LeagueCreateScreen navigation={navigation} />));
     fireEvent.changeText(utils.getByPlaceholderText('El Club del Mulligan'), 'El Club');
     fireEvent.press(utils.getByText('Next'));
     await utils.findByText('How does it work?');
-    fireEvent.press(utils.getByLabelText('Points per place'));
+    fireEvent.press(utils.getByLabelText('1st place, 500 points'));
+    fireEvent.changeText(utils.getByLabelText('Points for 1st place'), '');
+    expect(utils.getByText('Give 1st place a number, or remove it.')).toBeTruthy();
+    fireEvent.press(utils.getByText('Next'));
+    expect(utils.queryByText("Who's playing?")).toBeNull();
     fireEvent.changeText(utils.getByLabelText('Points for 1st place'), '600');
-    fireEvent.press(utils.getByText('Save'));
-    expect(utils.getByText(/12 places · 1st gets 600/)).toBeTruthy();
     fireEvent.press(utils.getByText('Next'));
     await utils.findByText("Who's playing?");
     fireEvent.press(utils.getByText('Next'));

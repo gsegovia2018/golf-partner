@@ -26,7 +26,7 @@ import {
 import { formatEuros, stepParticipation } from '../store/leagueView';
 import Stepper from '../components/ui/Stepper';
 import LeagueFormatField from '../components/league/LeagueFormatField';
-import PointsTableSheet from '../components/league/PointsTableSheet';
+import PointsTableChart from '../components/league/PointsTableChart';
 import LeagueHero from '../components/league/LeagueHero';
 import { useT, formatNumber, formatDate } from '../i18n';
 import { shareOrigin } from '../lib/shareOrigin';
@@ -64,7 +64,6 @@ export default function LeagueCreateScreen({ navigation }) {
   const [feeText, setFeeText] = useState('');
   // Chosen but not sent anywhere yet: Stableford is the only format today.
   const [format, setFormat] = useState(DEFAULT_LEAGUE_FORMAT);
-  const [pointsSheetOpen, setPointsSheetOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [participationPoints, setParticipationPoints] = useState(DEFAULT_PARTICIPATION_POINTS);
   const [profile, setProfile] = useState(null);
@@ -238,7 +237,6 @@ export default function LeagueCreateScreen({ navigation }) {
   );
 
   const capValue = Number.isFinite(cap) ? cap : DEFAULT_HANDICAP_CAP;
-  const pointsInvalid = !pointsTable;
 
   const renderRulesStep = () => (
     <>
@@ -251,23 +249,10 @@ export default function LeagueCreateScreen({ navigation }) {
 
       <Text style={[s.fieldLabel, { marginTop: 18 }]}>{t('league.create.seasonScoring')}</Text>
       <View style={s.card}>
-        <TouchableOpacity
-          style={[s.settingRow, s.rowDivider]}
-          onPress={() => setPointsSheetOpen(true)}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel={t('league.create.pointsPerPlace')}
-        >
-          <View style={s.settingText}>
-            <Text style={s.ruleTitle}>{t('league.create.pointsPerPlace')}</Text>
-            <Text style={[s.ruleSub, pointsInvalid && s.ruleSubError]}>
-              {pointsTable
-                ? t('league.create.pointsSummary', { count: pointsTable.length, first: formatNumber(pointsTable[0]) })
-                : t('league.create.pointsSetError')}
-            </Text>
-          </View>
-          <Feather name="chevron-right" size={18} color={theme.text.muted} />
-        </TouchableOpacity>
+        <PointsTableChart
+          table={pointsTable ?? []}
+          onChange={(table) => setPointsText(table ? formatPointsTable(table) : '')}
+        />
 
         <View style={[s.settingRow, s.rowDivider]}>
           <View style={s.settingText}>
@@ -317,13 +302,6 @@ export default function LeagueCreateScreen({ navigation }) {
           />
         </View>
       </View>
-
-      <PointsTableSheet
-        visible={pointsSheetOpen}
-        table={pointsTable ?? []}
-        onSave={(table) => { setPointsText(formatPointsTable(table)); setPointsSheetOpen(false); }}
-        onClose={() => setPointsSheetOpen(false)}
-      />
     </>
   );
 
@@ -675,7 +653,6 @@ function makeStyles(theme) {
     settingText: { flex: 1 },
     ruleTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14 },
     ruleSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
-    ruleSubError: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive },
     reviewRow: { flexDirection: 'row', alignItems: 'center', padding: 14 },
     reviewIcon: { marginRight: 12 },
 
