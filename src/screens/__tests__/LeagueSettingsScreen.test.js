@@ -72,6 +72,67 @@ describe('LeagueSettingsScreen', () => {
     }));
   });
 
+  test('with no card yet the admin can change the format; only a change reaches updateLeagueRules', async () => {
+    store.getLeague.mockResolvedValue(snapshot());
+    const { getByText, getByLabelText, queryByText, findByText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByLabelText(/League format: Stableford/));
+    expect(queryByText('Locked once the league has a card.')).toBeNull();
+    fireEvent.press(getByText('Save rules'));
+    await waitFor(() => expect(store.updateLeagueRules).toHaveBeenCalledTimes(1));
+    expect(store.updateLeagueRules.mock.calls[0][1]).not.toHaveProperty('format');
+
+    fireEvent.press(getByLabelText(/League format: Stableford/));
+    fireEvent.press(getByText('Medal play, net'));
+    fireEvent.press(await findByText('Save rules', {}, { timeout: 4000 })); // "Saved" shows for 2 s
+    await waitFor(() => expect(store.updateLeagueRules).toHaveBeenCalledTimes(2));
+    expect(store.updateLeagueRules.mock.calls[1][1]).toMatchObject({ format: 'medal_net' });
+  });
+
+  test('the server refusing a format change (format_locked) is explained', async () => {
+    store.getLeague.mockResolvedValue(snapshot());
+    const err = Object.assign(new Error("The format can't change once the league has a card."), { hint: 'format_locked' });
+    store.updateLeagueRules.mockRejectedValueOnce(err);
+    const { getByText, getByLabelText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByLabelText(/League format: Stableford/));
+    fireEvent.press(getByLabelText(/League format: Stableford/));
+    fireEvent.press(getByText('Medal play, gross'));
+    fireEvent.press(getByText('Save rules'));
+    await waitFor(() => getByText("The format can't change once the league has a card."));
+  });
+
+  test('a gross league has no handicap cap field and its fixed-rules note drops Stableford', async () => {
+    const snap = snapshot();
+    snap.league.format = 'medal_gross';
+    store.getLeague.mockResolvedValue(snap);
+    const { getByText, queryByLabelText, queryByText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByText('Medal play, gross'));
+    expect(queryByLabelText('Handicap cap')).toBeNull();
+    expect(getByText('One card a month is fixed for every league.')).toBeTruthy();
+    expect(queryByText(/net Stableford are fixed/)).toBeNull();
+  });
+
+  test('once the league has a card the format is shown locked, with the note, and is not sent', async () => {
+    const snap = snapshot();
+    snap.league.format = 'medal_net';
+    snap.cardsByMonth = { '2026-10': [{ userId: 'javi', status: 'submitted' }] };
+    store.getLeague.mockResolvedValue(snap);
+    const { getByText, queryByLabelText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByText('Medal play, net'));
+    expect(getByText('Locked once the league has a card.')).toBeTruthy();
+    expect(queryByLabelText(/League format/)).toBeNull(); // not a picker
+    fireEvent.press(getByText('Save rules'));
+    await waitFor(() => expect(store.updateLeagueRules).toHaveBeenCalledTimes(1));
+    expect(store.updateLeagueRules.mock.calls[0][1]).not.toHaveProperty('format');
+  });
+
+  test('a read-only member sees the format in the rules', async () => {
+    const snap = snapshot({ admin: false });
+    snap.league.format = 'medal_gross';
+    store.getLeague.mockResolvedValue(snap);
+    const { getByText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
+    await waitFor(() => getByText('One card a month · fewest gross strokes against par'));
+  });
+
   test('points for playing is a stepper (step 5, never below 0) with a live payout line', async () => {
     store.getLeague.mockResolvedValue(snapshot());
     const { getByText, getByLabelText, getByTestId } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));

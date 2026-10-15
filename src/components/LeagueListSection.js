@@ -49,6 +49,8 @@ function monthParts(month) {
       return { title: m('league.list.hero.missed') };
     case 'league.play.monthRank':
       return { title: m('league.list.hero.rank', { points: p.points }), sub: m('league.list.hero.rankSub', { place: p.place }) };
+    case 'league.play.monthRankScore':
+      return { title: m('league.list.hero.rankScore', { score: p.score }), sub: m('league.list.hero.rankSub', { place: p.place }) };
     default:
       return { title: tr(month) };
   }

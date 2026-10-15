@@ -10,6 +10,7 @@ jest.mock('../../store/leagueStore', () => ({
   getLeagueCard: jest.fn(() => Promise.resolve(null)),
   getLeagueGameStatus: jest.fn(() => Promise.resolve([])),
   getMyLeagueCardsForRound: jest.fn(),
+  getMyLeagues: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock('../../lib/leagueOptIn', () => ({
@@ -84,6 +85,48 @@ describe('useScorecardLeague repair (D5)', () => {
     await waitFor(() => expect(store.getMyLeagueCardsForRound).toHaveBeenCalled());
     await flush();
     expect(record).not.toHaveBeenCalled();
+  });
+});
+
+describe('useScorecardLeague medal flag (no pick-up in a medal league)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    store.getMyLeagueCardsForRound.mockResolvedValue([]);
+  });
+
+  const linked = () => tournament(leagueCardsPatch({ leagueId: 'L1', cardId: 'card-1', playerId: 'p1', roundId: 'r1' }));
+  const props = (t) => ({
+    tournament: t, round: t.rounds[0], meId: 'p1', userId: 'u1', official: false, scores: {}, record: jest.fn(),
+  });
+
+  test('my recorded card is in a medal league: medal is true', async () => {
+    store.getMyLeagues.mockResolvedValue([{ id: 'L1', format: 'medal_net' }]);
+    const { result } = renderHook(() => useScorecardLeague(props(linked())));
+    expect(result.current.medal).toBe(false);
+    await waitFor(() => expect(result.current.medal).toBe(true));
+  });
+
+  test('a medal gross league counts too; Stableford and an unreadable league do not', async () => {
+    store.getMyLeagues.mockResolvedValue([{ id: 'L1', format: 'medal_gross' }]);
+    const gross = renderHook(() => useScorecardLeague(props(linked())));
+    await waitFor(() => expect(gross.result.current.medal).toBe(true));
+
+    store.getMyLeagues.mockResolvedValue([{ id: 'L1', format: 'stableford' }]);
+    const stableford = renderHook(() => useScorecardLeague(props(linked())));
+    await waitFor(() => expect(store.getMyLeagues).toHaveBeenCalledTimes(2));
+    await flush();
+    expect(stableford.result.current.medal).toBe(false);
+
+    store.getMyLeagues.mockRejectedValue(new Error('offline'));
+    const offline = renderHook(() => useScorecardLeague(props(linked())));
+    await flush();
+    expect(offline.result.current.medal).toBe(false);
+  });
+
+  test('no recorded card: nothing to read, medal is false', async () => {
+    const { result } = renderHook(() => useScorecardLeague(props(tournament())));
+    await flush();
+    expect(result.current.medal).toBe(false);
   });
 });
 

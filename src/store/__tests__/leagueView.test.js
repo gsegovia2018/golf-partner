@@ -4,7 +4,7 @@ import {
   tiePlaces, rankNotes, monthStanding, standingCells, monthLine, payoutPreview, stepParticipation,
   yourCardState, myMonthCard, monthCardsView, cardActions, voidedNote, voidReasonText, autoWithdrawNote,
   formatNetDiff, formatNetDiffSigned, netDiffTone, myRoundScored, markerAskedLine, firstName, initials, cardBreakdown, leagueNameMatches,
-  formatScore,
+  formatScore, formatToPar, formatKey, cardValueText,
 } from '../leagueView';
 import { tr, setLanguagePref } from '../../i18n';
 
@@ -802,5 +802,43 @@ describe('medal sorting', () => {
   test('leagueSummary ranks the season by the league format', () => {
     const snapshot = { league: { pointsTable: [100, 50], participationPoints: 0, format: 'medal_net' }, members: ms, cardsByMonth: byMonth };
     expect(leagueSummary(snapshot, 'b', NOW).table[0]).toMatchObject({ userId: 'b', total: 100 });
+  });
+});
+
+describe('medal copy helpers (PR B)', () => {
+  const NOW = new Date(2026, 9, 4, 12);
+  const ms = [{ userId: 'a' }, { userId: 'b' }];
+  const cards = { '2026-10': [
+    { userId: 'a', status: 'confirmed', toPar: -2, points: 38, monthKey: '2026-10', holes: {} },
+    { userId: 'b', status: 'confirmed', toPar: 4, points: 30, monthKey: '2026-10', holes: {} },
+  ] };
+
+  test('formatToPar is the bare strokes to par; formatKey picks the copy variant', () => {
+    expect([formatToPar(-2), formatToPar(0), formatToPar(4), formatToPar(null)]).toEqual(['−2', 'E', '+4', '—']);
+    expect(formatKey('league.board.colPts', 'stableford')).toBe('league.board.colPts');
+    expect(formatKey('league.board.colPts', 'medal_net')).toBe('league.board.colPtsNet');
+    expect(formatKey('league.board.colPts', 'medal_gross')).toBe('league.board.colPtsGross');
+  });
+
+  test('cardValueText shows the ranking value of the format, null when unscored', () => {
+    const c = { points: 36, toPar: -2 };
+    expect(cardValueText(c)).toBe('36 pts');
+    expect(cardValueText(c, 'medal_net')).toBe('net −2');
+    expect(cardValueText(c, 'medal_gross')).toBe('−2');
+    expect(cardValueText({ points: 36, toPar: null }, 'medal_net')).toBeNull();
+  });
+
+  test('yourCardState describes the score for the format', () => {
+    const card = { status: 'confirmed', points: 36, toPar: 0, netDifferential: -0.6 };
+    expect(yourCardState(card).pts).toEqual({ key: 'league.scoring.pts', params: { points: '36' } });
+    expect(yourCardState(card, 'medal_net').pts).toEqual({ key: 'league.scoring.score', params: { score: 'net E' } });
+    expect(yourCardState({ ...card, toPar: null }, 'medal_net')).toMatchObject({ pts: null, unrated: true });
+  });
+
+  test('monthLine speaks the score in a medal league', () => {
+    const snapshot = { league: { pointsTable: [100, 50], participationPoints: 0, format: 'medal_net' }, members: ms, cardsByMonth: cards };
+    expect(monthLine(snapshot, 'b', NOW)).toEqual({
+      key: 'league.play.monthRankScore', params: { monthKey: '2026-10', score: 'net +4', place: '2nd' },
+    });
   });
 });

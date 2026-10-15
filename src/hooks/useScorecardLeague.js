@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSetupLeagues } from './useSetupLeagues';
-import { getLeagueGameStatus, getMyLeagueCardsForRound } from '../store/leagueStore';
+import { getLeagueGameStatus, getMyLeagueCardsForRound, getMyLeagues } from '../store/leagueStore';
+import { isMedalFormat } from '../store/leagueStandings';
 import { leagueCardOf } from '../store/leagueSetup';
 import {
   leagueOptInState, leagueStripState, roundCanCount, roundLeagueCards,
@@ -10,6 +11,10 @@ import {
 } from '../lib/leagueOptIn';
 import { leagueErrorText } from '../lib/leagueErrorText';
 
+// `medal` is true when a league this round counts for (a recorded card, or the
+// one on offer) is medal play: the scorecard then hides the pick-up, since a
+// hole that isn't holed out can't count.
+//
 // The scorecard's league layer (D5 B): the one-time "Count this round?" sheet
 // on a member's phone, the header's "Count this round" action after "Not this
 // round", and the LEAGUE chips on counting players' cards (`strip.playerIds`;
@@ -39,6 +44,8 @@ export function useScorecardLeague({
   const [error, setError] = useState(null);
   const [lateHint, setLateHint] = useState(false);
   const [toast, setToast] = useState(null);
+  // League formats of the recorded cards' leagues, for those not on offer.
+  const [formatById, setFormatById] = useState({});
 
   // My leagues with a free month (the sheet) plus the leagues already carrying
   // a card on this round (the strip: my month may be taken by this very card).
@@ -61,6 +68,21 @@ export function useScorecardLeague({
     })();
     return () => { cancelled = true; };
   }, [canCount, tid, roundId, leagueIds, refreshKey]);
+
+  const unknownFormatIds = recordedIds.filter((id) => !leagues.some((l) => l.id === id) && formatById[id] === undefined).join(',');
+  useEffect(() => {
+    if (!canCount || !unknownFormatIds) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const mine = await getMyLeagues();
+        if (!cancelled) setFormatById((prev) => ({ ...prev, ...Object.fromEntries(mine.map((l) => [l.id, l.format ?? 'stableford'])) }));
+      } catch {
+        // Offline: Stableford rules (the pick-up stays) until the next read.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [canCount, unknownFormatIds]);
 
   useEffect(() => {
     if (!tid || !roundId) return undefined;
@@ -168,9 +190,13 @@ export function useScorecardLeague({
     setSheetOpen(true);
   }, []);
 
+  const formatOf = (id) => leagues.find((l) => l.id === id)?.format ?? formatById[id];
+  const medal = [...recordedIds, optIn.league?.id].filter(Boolean).some((id) => isMedalFormat(formatOf(id)));
+
   return {
     optIn,
     strip,
+    medal,
     sheet: {
       visible: sheetOpen && (optIn.kind === 'offer' || (sheetForced && optIn.kind === 'dismissed')),
       league: optIn.league,

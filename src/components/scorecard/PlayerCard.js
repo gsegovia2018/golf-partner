@@ -44,7 +44,7 @@ import { teeDisplayName } from '../../lib/teeName';
 export const PlayerCard = React.memo(function PlayerCard({
   player, hole, strokes, points,
   handicap, extraShots, pickup, isPickup, teeLabel,
-  team, league = false,
+  team, league = false, medalLeague = false,
   isMe, canEdit, showRunning, totals,
   getScoreAnim,
   onStep, onSetScore,
@@ -174,8 +174,9 @@ export const PlayerCard = React.memo(function PlayerCard({
               : tx('scorecard.player.hcp', { handicap })}
           </Text>
         </View>
-        {/* Pickup toggle is a write action — hide on read-only cards. */}
-        {showScoreControls && (
+        {/* Pickup toggle is a write action — hide on read-only cards, and in
+            a medal league (a hole not holed out can't count). */}
+        {showScoreControls && !(league && medalLeague) && (
           <TouchableOpacity
             style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
             onPress={() => onSetScore(player.id, hole.number, isPickup ? null : pickup)}
@@ -266,6 +267,10 @@ export const PlayerCard = React.memo(function PlayerCard({
           </PressableScale>
         )}
       </View>
+
+      {showScoreControls && league && medalLeague && (
+        <Text style={s.soloMedalNote}>{tx('scorecard.player.medalNote')}</Text>
+      )}
 
       {points != null && !conflicted && (
         <View style={[s.soloPtsBadge, { borderColor: ptsColor }]}>

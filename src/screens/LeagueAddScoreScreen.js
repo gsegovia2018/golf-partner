@@ -99,7 +99,7 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
     setProblem(null);
     if (!playedOn) { setProblem(t('league.addScore.pickDate')); return; }
     navigation.navigate('LeagueAddProof', {
-      leagueId, cardId, snapshot, playedOn, strokes, leagueHandicap,
+      leagueId, cardId, snapshot, playedOn, strokes, leagueHandicap, format: data?.league?.format,
     });
   }
 

@@ -60,6 +60,16 @@ function pointsValue(points) {
   return n;
 }
 
+// A medal league's score as the push shows it: 'net −2' / '+4' / 'E'. null
+// unless the payload is a medal league's with a numeric to_par.
+function medalScore(data, T) {
+  if (data.format !== 'medal_net' && data.format !== 'medal_gross') return null;
+  const v = pointsValue(data.to_par);
+  if (v == null) return null;
+  const toPar = v === 0 ? T('notif.score.level') : `${v < 0 ? '\u2212' : '+'}${Math.abs(v)}`;
+  return data.format === 'medal_net' ? T('notif.score.net', { score: toPar }) : toPar;
+}
+
 function fullCard(data, T, lang) {
   const month = monthName(data.month, lang);
   if (month && data.course_name) return T('notif.card.monthCourse', { month, course: data.course_name });
@@ -166,11 +176,14 @@ export function renderPushText(type, data = {}, locale = 'en') {
     case 'league_card_confirmed': {
       const card = monthCard(d, T, lang);
       const pts = pointsValue(d.points);
+      const score = medalScore(d, T);
       return {
         title: T('notif.cardConfirmed.title'),
-        body: pts == null
-          ? T('notif.cardConfirmed.body', { actor: actorName, card })
-          : T('notif.cardConfirmed.bodyPoints', { actor: actorName, card, points: fmt(pts) }),
+        body: score != null
+          ? T('notif.cardConfirmed.bodyScore', { actor: actorName, card, score })
+          : pts == null
+            ? T('notif.cardConfirmed.body', { actor: actorName, card })
+            : T('notif.cardConfirmed.bodyPoints', { actor: actorName, card, points: fmt(pts) }),
       };
     }
     case 'league_marker_issue': {

@@ -57,6 +57,10 @@ const VARIANTS = [
   { ...FULL, role: 'member', old: null, points: '' },
   { ...FULL, new: null, proposed: null, tee_time: 'nope' },
   { subject_name: 'Luis', old: -0.5 },
+  { ...FULL, format: 'medal_net', to_par: -2 },
+  { ...FULL, format: 'medal_net', to_par: 0 },
+  { ...FULL, format: 'medal_gross', to_par: 4 },
+  { ...FULL, format: 'medal_gross', to_par: null },
 ];
 
 describe('push copy (supabase/functions/_shared)', () => {
@@ -113,6 +117,12 @@ describe('push copy (supabase/functions/_shared)', () => {
     expect(renderPushText('league_post_reminder', data, 'en').body)
       .toBe("Post your Golf Olivar card by 17:00 or it won't count for Mulligan");
     expect(renderPushText('league_post_reminder', data, 'es').body).toContain('17:00');
+  });
+
+  test('a medal league push shows the score in both languages', () => {
+    const data = { actor_name: 'Pablo', month: '2026-10-01', format: 'medal_net', to_par: -2 };
+    expect(renderPushText('league_card_confirmed', data, 'en').body).toBe("Pablo's October card is confirmed \u00b7 net \u22122");
+    expect(renderPushText('league_card_confirmed', { ...data, format: 'medal_gross', to_par: 0 }, 'es').body).toContain('\u00b7 par');
   });
 
   test('Spanish pushes use Spanish months and decimal commas', () => {

@@ -458,6 +458,13 @@ export function makeScorecardStyles(theme) {
       alignItems: 'center',
       justifyContent: 'center',
     },
+    soloMedalNote: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      fontSize: 12,
+      color: theme.text.muted,
+      textAlign: 'center',
+      marginTop: 6,
+    },
     pickupBtnActive: {
       borderColor: theme.accent.primary,
       backgroundColor: theme.accent.primary,

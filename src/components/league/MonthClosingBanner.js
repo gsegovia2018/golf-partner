@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
 import { useT, formatDate } from '../../i18n';
-import { firstName, formatPoints } from '../../store/leagueView';
+import { firstName, cardValueText } from '../../store/leagueView';
 import { approvalReason } from '../../store/leagueGrace';
 import { getTournamentSnapshot } from '../../store/tournamentStore';
 import { leagueRoundIndex } from '../../store/leagueGameCards';
@@ -15,7 +15,7 @@ import { closeInfo, deadlineLabel, madridDateStr } from './graceText';
 // the board instead of vanishing on the 1st. `grace` is graceMonth()'s result.
 // Sits in the slot of the "<month> is final" banner (they never show together).
 export default function MonthClosingBanner({
-  grace, navigation, leagueId, nameOf, now = new Date(), onSeeMonth,
+  grace, navigation, leagueId, nameOf, now = new Date(), onSeeMonth, format = 'stableford',
 }) {
   const { theme } = useTheme();
   const t = useT();
@@ -87,7 +87,7 @@ export default function MonthClosingBanner({
           action = { label: t('league.grace.openScorecard'), onPress: () => scorecard(card) };
         }
     }
-    const lead = [card.points != null ? t('league.scoring.pts', { points: formatPoints(card.points) }) : null, card.course?.name]
+    const lead = [cardValueText(card, format, t), card.course?.name]
       .filter(Boolean).join(' · ');
     mineBlock = (
       <View style={s.block}>
@@ -111,7 +111,7 @@ export default function MonthClosingBanner({
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.rowName} numberOfLines={1}>{nameOf(e.userId)}</Text>
             <Text style={s.rowSub} numberOfLines={2}>
-              {[e.card.points != null ? t('league.scoring.pts', { points: formatPoints(e.card.points) }) : null,
+              {[cardValueText(e.card, format, t),
                 t(approvalReason(e.card) === 'handTee' ? 'league.grace.handTee' : 'league.grace.notAnnounced')]
                 .filter(Boolean).join(' · ')}
             </Text>

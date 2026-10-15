@@ -594,11 +594,13 @@ export async function setLeagueFeePaid(leagueId, userId, paid) {
 export async function updateLeagueRules(leagueId, {
   name, seasonStart, seasonEnd, pointsTable, cap, feeCents, participationPoints, format,
 } = {}) {
-  // Sent only when set (and the format only when it isn't the default), so a
-  // Stableford create still matches a server without the argument.
+  // Sent only when set, so an edit that leaves them alone still matches a
+  // server without the arguments. An update sends any format given (NULL keeps
+  // it, so going back to Stableford must be sent); a create omits Stableford,
+  // the default.
   const extra = {
     ...(participationPoints == null ? {} : { p_participation_points: participationPoints }),
-    ...(format == null || format === 'stableford' ? {} : { p_format: format }),
+    ...(format == null ? {} : { p_format: format }),
   };
   await rpc('update_league_rules', {
     ...extra,

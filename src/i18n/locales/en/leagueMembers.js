@@ -89,6 +89,8 @@ export default {
   'league.actions.void.stopsNoPts': '{name}’s card stops counting for {month}.',
   'league.actions.void.stopsOwn': 'Your {points} pts at {course} stop counting for {month}.',
   'league.actions.void.stopsOwnNoPts': 'Your card stops counting for {month}.',
+  'league.actions.void.stopsScore': '{name}’s card ({score}) at {course} stops counting for {month}.',
+  'league.actions.void.stopsOwnScore': 'Your card ({score}) at {course} stops counting for {month}.',
   'league.actions.void.keeps': 'The board and the season table update straight away. {name} can’t play another {month} card.',
   'league.actions.void.keepsOwn': 'The board and the season table update straight away. You can’t play another {month} card.',
   'league.actions.void.done': 'Card voided. Members told.',

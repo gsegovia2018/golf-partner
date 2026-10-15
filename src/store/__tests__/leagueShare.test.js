@@ -275,8 +275,8 @@ describe('public board', () => {
     expect(v.ranked).toBe(2);
     expect(v.daysLeft).toBe(18);
     expect(v.rows).toEqual(expect.arrayContaining([
-      { key: 'k1', place: 1, isTie: true, name: 'Íñigo E.', course: 'RCG Sotogrande', points: 41, league: 400 },
-      { key: 'k3', place: 1, isTie: true, name: 'Ana P.', course: 'La Moraleja', points: 41, league: 400 },
+      { key: 'k1', place: 1, isTie: true, name: 'Íñigo E.', course: 'RCG Sotogrande', points: 41, score: 41, league: 400 },
+      { key: 'k3', place: 1, isTie: true, name: 'Ana P.', course: 'La Moraleja', points: 41, score: 41, league: 400 },
     ]));
   });
 
@@ -320,5 +320,53 @@ describe('public board', () => {
     expect(publicBoardScopes(snap, NOW)).toEqual(['2026-10', 'season', '2026-09']);
     expect(publicBoardScopes({ ...snap, cardsByMonth: {} }, NOW)).toEqual(['2026-10', 'season']);
     expect(publicBoardScopes(snap, new Date(2027, 1, 3))).toEqual(['season']);
+  });
+});
+
+describe('medal league messages and public board', () => {
+  const medalCard = (userId, toPar, points, extra = {}) => ({ ...card(userId, '2026-10', points, extra), toPar });
+  const medal = (format) => ({
+    ...snapshot,
+    league: { ...snapshot.league, format },
+    cardsByMonth: {
+      '2026-10': [
+        medalCard('u1', 3, 45, { course: 'RCG Sotogrande', confirmedByName: 'Javier Ortega' }),
+        medalCard('u2', -2, 30, { course: 'La Moraleja' }),
+      ],
+    },
+  });
+
+  test('the standings rank fewest to par first and speak the score, not points', () => {
+    const text = standingsMessage(medal('medal_net'), { now: NOW, lang: 'en' });
+    expect(text).toContain('1. Javier O. · net −2 · La Moraleja');
+    expect(text).toContain('2. Íñigo E. · net +3 · RCG Sotogrande');
+    expect(text).not.toContain('pts');
+    expect(standingsMessage(medal('medal_gross'), { now: NOW, lang: 'es' })).toContain('1. Javier O. · −2 · La Moraleja');
+    expect(standingsMessage(medal('medal_net'), { now: NOW, lang: 'es' })).toContain('1. Javier O. · neto −2');
+  });
+
+  test('results rows and the card message use the score; Stableford is unchanged', () => {
+    const snap = medal('medal_net');
+    expect(resultsMessage(snap, { month: '2026-10', now: NOW, lang: 'en' })).toContain('1. Javier O. · net −2 · +500');
+    const mine = shareableCard(snap, '2026-10', 'u1');
+    expect(cardMessage(snap, mine, { now: NOW, lang: 'en' }))
+      .toBe('My October card for Mulligan: net +3 at RCG Sotogrande, confirmed by Javier. 2nd so far.');
+    expect(cardMessage(medal('stableford'), mine, { now: NOW, lang: 'en' }))
+      .toContain('45 pts at RCG Sotogrande');
+  });
+
+  test('the public board keeps to_par, orders by it and exposes the score per row', () => {
+    const payload = {
+      league: { name: 'Mulligan', format: 'medal_gross', points_table: [500, 300], participation_points: 0 },
+      members: [{ key: 'k1', name: 'Íñigo E.', active: true }, { key: 'k2', name: 'Javier O.', active: true }],
+      cards: [
+        { month: '2026-10-01', member: 'k1', status: 'confirmed', points: 41, to_par: 6, course: 'A' },
+        { month: '2026-10-01', member: 'k2', status: 'confirmed', points: 20, to_par: -1, course: 'B' },
+      ],
+    };
+    const snap = publicBoardSnapshot(payload);
+    expect(snap.league.format).toBe('medal_gross');
+    const v = publicBoardView(snap, '2026-10', NOW, 'en');
+    expect(v.rows.map((r) => [r.key, r.place, r.score])).toEqual([['k2', 1, -1], ['k1', 2, 6]]);
   });
 });

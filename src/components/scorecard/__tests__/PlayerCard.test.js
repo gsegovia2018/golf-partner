@@ -176,6 +176,33 @@ describe('PlayerCard pickup toggle', () => {
   });
 });
 
+describe('PlayerCard in a medal league', () => {
+  test('a counting player has no pick-up button, and a note says to hole out', () => {
+    const { queryByLabelText, getByText } = renderPlayerCard({ canEdit: true, league: true, medalLeague: true });
+    expect(queryByLabelText(/Pickup at/)).toBeNull();
+    expect(queryByLabelText(/Picked up at/)).toBeNull();
+    expect(getByText('Medal league: hole out every hole.')).toBeTruthy();
+  });
+
+  test('a player who is not in the league keeps the pick-up, and so does a Stableford league', () => {
+    const outside = renderPlayerCard({ canEdit: true, league: false, medalLeague: true });
+    expect(outside.getByLabelText('Pickup at 8 strokes')).toBeTruthy();
+    expect(outside.queryByText('Medal league: hole out every hole.')).toBeNull();
+    outside.unmount();
+    const stableford = renderPlayerCard({ canEdit: true, league: true, medalLeague: false });
+    expect(stableford.getByLabelText('Pickup at 8 strokes')).toBeTruthy();
+  });
+
+  test('a real blow-up score is shown as it is and hold-to-clear still works', () => {
+    const onSetScore = jest.fn();
+    const { getByLabelText } = renderPlayerCard({
+      canEdit: true, league: true, medalLeague: true, strokes: 9, onSetScore,
+    });
+    fireEvent(getByLabelText('Strokes on hole 1 — long-press to clear'), 'longPress');
+    expect(onSetScore).toHaveBeenCalledWith('p1', 1, '');
+  });
+});
+
 describe('PlayerCard LEAGUE chip (the only on-hole league signal)', () => {
   test('shows on a counting player', () => {
     const { getByLabelText, getByText } = renderPlayerCard({ league: true });

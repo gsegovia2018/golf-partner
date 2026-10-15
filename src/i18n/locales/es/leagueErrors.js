@@ -157,4 +157,6 @@ export default {
   'league.offApp.unratedTee': 'Estas barras no tienen slope ni valor de campo, así que no pueden contar para la liga. Elige unas barras valoradas o añade su slope y valor de campo en la biblioteca de campos.',
   'league.offApp.proofLine': '{head} · {points} ptos · bruto {gross}',
   'league.offApp.proofLineBare': '{points} ptos · bruto {gross}',
+  'league.offApp.proofLineScore': '{head} · {score} · bruto {gross}',
+  'league.offApp.proofLineBareScore': '{score} · bruto {gross}',
 };

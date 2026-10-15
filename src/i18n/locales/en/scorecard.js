@@ -135,6 +135,7 @@ export default {
   'scorecard.player.hcpExtra': 'HCP {handicap}  ·  +{extra} on this hole',
   'scorecard.player.pickedUpA11y': 'Picked up at {count} strokes — tap to clear',
   'scorecard.player.pickupA11y': 'Pickup at {count} strokes',
+  'scorecard.player.medalNote': 'Medal league: hole out every hole.',
   'scorecard.player.ghostA11y': 'Hole {hole}, {name}: {value} entered by {author}, not verified by you',
   'scorecard.player.ghostAcceptA11y': 'Hole {hole}, {name}: {value} entered by {author}, not verified by you — tap to accept',
   'scorecard.player.strokesA11y': 'Strokes on hole {hole}',

@@ -109,9 +109,10 @@ jest.mock('../../components/scorecard/HoleView', () => {
   const React = require('react');
   const { Text, TouchableOpacity, View } = require('react-native');
   return {
-    HoleView: ({ onSetScore, onNext, onGoToHole, onFinish, currentHole, leaguePlayers }) => (
+    HoleView: ({ onSetScore, onNext, onGoToHole, onFinish, currentHole, leaguePlayers, medalLeague }) => (
       <View>
         <Text accessibilityLabel="League players">{leaguePlayers}</Text>
+        <Text accessibilityLabel="Medal league">{String(medalLeague)}</Text>
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Score plus"
@@ -242,6 +243,7 @@ jest.mock('../../store/leagueStore', () => ({
 const mockLeagueLayerDefault = () => ({
   optIn: { kind: 'none', league: null },
   strip: null,
+  medal: false,
   sheet: { visible: false, league: null, busy: false, error: null },
   canCountMine: false,
   toast: null,
@@ -390,6 +392,21 @@ describe('ScorecardScreen league signals (no strip on the holes)', () => {
     await flush();
     expect(queryByText(STRIP_TEXT)).toBeNull();
     expect(getByLabelText('League players').props.children).toBe('p1,p2');
+  });
+
+  test('the screen hands the medal flag to the holes, so a medal round has no pick-up', async () => {
+    mockLeagueLayer = {
+      ...mockLeagueLayerDefault(),
+      medal: true,
+      strip: { kind: 'cards', count: 1, playerIds: ['p1'], names: [{ me: true }], mine: true },
+    };
+    const medal = render(wrap(<ScorecardScreen navigation={navigation} route={route} />));
+    expect((await medal.findByLabelText('Medal league')).props.children).toBe('true');
+    medal.unmount();
+
+    mockLeagueLayer = mockLeagueLayerDefault();
+    const stableford = render(wrap(<ScorecardScreen navigation={navigation} route={route} />));
+    expect((await stableford.findByLabelText('Medal league')).props.children).toBe('false');
   });
 
   test('"Not this round" said: the header offers "Count this round", which reopens the sheet', async () => {

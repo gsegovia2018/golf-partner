@@ -59,6 +59,20 @@ describe('JoinLeagueScreen', () => {
     expect(navigation.replace).toHaveBeenCalledWith('LeagueBoard', { leagueId: 'L1' });
   });
 
+  test('the rule line follows the league format', async () => {
+    store.getLeagueByCode.mockResolvedValue({ ...SUMMARY, format: 'medal_net' });
+    const net = render(wrap(<JoinLeagueScreen navigation={navigation} route={route} />));
+    await waitFor(() => net.getByText('Medal play, net, league handicap'));
+    expect(net.getByText(/Max 30\. The group can lower it by vote\. Hole out every hole\./)).toBeTruthy();
+    expect(net.queryByText('Net Stableford, league handicap')).toBeNull();
+    net.unmount();
+
+    store.getLeagueByCode.mockResolvedValue({ ...SUMMARY, format: 'medal_gross' });
+    const gross = render(wrap(<JoinLeagueScreen navigation={navigation} route={route} />));
+    await waitFor(() => gross.getByText('Medal play, gross'));
+    expect(gross.getByText(/Fewest strokes against par, no handicap/)).toBeTruthy();
+  });
+
   test('Propose another lets the member send their own handicap, clamped to the cap', async () => {
     const { getByText, getByLabelText } = render(wrap(<JoinLeagueScreen navigation={navigation} route={route} />));
     await waitFor(() => getByText('Propose another'));

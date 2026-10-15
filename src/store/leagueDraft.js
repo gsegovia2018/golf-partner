@@ -79,10 +79,10 @@ export function seasonMonthKeys(startIso, endIso) {
   return keys;
 }
 
-// Medal play (strokes against par) is scored by the server
-// (20261020000000) but the screens don't show it yet: the wizard offers it
-// once this is true (plan 2026-10-15-league-medal-play.md, PR B).
-export const MEDAL_FORMATS_ENABLED = false;
+// Medal play (strokes against par): scored by the server (20261020000000),
+// shown by the screens (plan 2026-10-15-league-medal-play.md, PR B). The
+// wizard and Settings offer it while this is true.
+export const MEDAL_FORMATS_ENABLED = true;
 
 const STABLEFORD_FORMAT = {
   key: 'stableford', icon: 'target', section: 'points',

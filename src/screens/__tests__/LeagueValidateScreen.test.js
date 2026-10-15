@@ -24,6 +24,8 @@ jest.mock('../../store/leagueStore', () => ({
   remindLeagueMarker: jest.fn(),
   cancelLeagueMarkerRequest: jest.fn(),
   getLeagueCard: jest.fn(() => Promise.resolve(null)),
+  getLeagueCached: jest.fn(() => Promise.resolve(null)),
+  getLeague: jest.fn(() => Promise.resolve(null)),
 }));
 
 const repo = require('../../store/tournamentRepo');
@@ -118,6 +120,43 @@ describe('LeagueValidateScreen', () => {
     expect(queryByText(/better|worse/)).toBeNull();
     fireEvent.press(getByText("How it's worked out ›"));
     expect(navigation.navigate).toHaveBeenCalledWith('LeagueCard', expect.objectContaining({ leagueId: 'L1', userId: 'user-1' }));
+  });
+
+  describe('medal leagues', () => {
+    // 18 pars of 4 = 72; all 5s = gross 90; playing handicap 20.
+    const medal = (format) => store.getLeagueCached.mockResolvedValueOnce({ snapshot: { league: { format } } });
+    const partner = { confirmed: true, settled: 18, partnerName: 'Javi', partnerUserId: 'user-2' };
+
+    test('net: the result card leads with strokes to par (gross - playing handicap - par)', async () => {
+      medal('medal_net');
+      store.confirmLeagueCardByPartner.mockResolvedValue(partner);
+      const { findByText, getByText, queryByText } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+      fireEvent.press(await findByText('Submit'));
+      expect(await findByText('−2')).toBeTruthy();
+      expect(getByText('Net to par')).toBeTruthy();
+      expect(queryByText('Stableford pts')).toBeNull();
+    });
+
+    test('gross: strokes to par without the handicap', async () => {
+      medal('medal_gross');
+      store.confirmLeagueCardByPartner.mockResolvedValue(partner);
+      const { findByText, getByText } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+      fireEvent.press(await findByText('Submit'));
+      expect(await findByText('+18')).toBeTruthy();
+      expect(getByText('Gross to par')).toBeTruthy();
+    });
+
+    test('while a marker is asked, the waiting line speaks the score', async () => {
+      medal('medal_net');
+      store.getLeagueMarkerCandidates.mockResolvedValue({
+        pending: null, candidates: [{ userId: 'user-2', name: 'Javi Ortega', marked: 18 }],
+      });
+      store.confirmLeagueCardByPartner.mockResolvedValue({ confirmed: false, reason: 'no_partner', settled: 18 });
+      const { findByText, getByText } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+      fireEvent.press(await findByText('Submit and ask Javi'));
+      expect(await findByText('Waiting for Javi to confirm')).toBeTruthy();
+      expect(getByText(/net −2.* · counts once confirmed/)).toBeTruthy();
+    });
   });
 
   test('an unrated tee says so and blocks Submit', async () => {

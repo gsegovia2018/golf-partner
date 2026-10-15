@@ -17,9 +17,9 @@
 // local part or the username (20261018000000). No public name -> "Golfer" /
 // "Jugador".
 import { t, formatNumber, formatDate, formatTime, formatOrdinal } from '../i18n';
-import { monthResults, seasonTable, cardScore } from './leagueStandings';
+import { monthResults, seasonTable, cardScore, isMedalFormat } from './leagueStandings';
 import {
-  monthBoard, monthStanding, lastScoredMonth, daysLeftInMonth, currentMonthKey, firstName,
+  monthBoard, monthStanding, lastScoredMonth, daysLeftInMonth, currentMonthKey, firstName, formatScore,
 } from './leagueView';
 import { isMonthClosed } from './leagueRules';
 
@@ -80,6 +80,9 @@ const memberNameOf = (members, userId, lang) => {
 };
 const linkLines = (url, lang) => (url ? ['', t('league.share.msg.liveBoard', { url }, lang)] : []);
 const active = (members) => (members ?? []).filter((m) => !m.leftAt);
+const isMedal = (snapshot) => isMedalFormat(snapshot?.league?.format);
+// A ranking value as finished text in `lang` ('net −2', '36 pts').
+const scoreText = (value, format, lang) => formatScore(value, format ?? 'stableford', (key, params) => t(key, params, lang));
 const optsOf = (league) => ({
   participationPoints: league?.participationPoints ?? 0, format: league?.format ?? 'stableford',
 });
@@ -97,6 +100,7 @@ export function rankedMonthRows(snapshot, month, now = new Date(), lang) {
     display: publicDisplayName(r.member),
     points: r.cardPoints,
     score: r.cardScore,
+    scoreText: scoreText(r.cardScore, league?.format, lang),
     course: r.card?.course?.name ?? null,
     seasonPoints: r.seasonPoints,
   }));
@@ -132,11 +136,13 @@ export function standingsMessage(snapshot, { month = null, now = new Date(), url
   const rows = rankedMonthRows(snapshot, key, now, lang);
   const lines = [`*${wa(snapshot.league.name)}*`, soFarLine(key, now, lang), ''];
   if (rows.length === 0) lines.push(t('league.share.msg.noneYet', {}, lang));
+  const medal = isMedal(snapshot);
   for (const r of rows) {
     const params = {
-      place: rank(r.place, r.isTie), name: msgName(r, lang), points: formatNumber(r.points, {}, lang), course: r.course && wa(r.course),
+      place: rank(r.place, r.isTie), name: msgName(r, lang), points: formatNumber(r.points, {}, lang), score: r.scoreText, course: r.course && wa(r.course),
     };
-    lines.push(t(r.course ? 'league.share.msg.rowCourse' : 'league.share.msg.row', params, lang));
+    const key = r.course ? 'league.share.msg.rowCourse' : 'league.share.msg.row';
+    lines.push(t(medal ? `${key}Score` : key, params, lang));
   }
   const left = stillToPost(snapshot, key, now);
   if (left > 0) lines.push(t('league.share.msg.toPost', { count: left }, lang));
@@ -194,8 +200,8 @@ export function resultsMessage(snapshot, { month, now = new Date(), url = null, 
   const lines = [`*${wa(snapshot.league.name)}*`, cap(t('league.share.msg.results', { month: monthWord(month, lang) }, lang)), ''];
   if (rows.length === 0) lines.push(t('league.share.msg.noneYet', {}, lang));
   for (const r of rows) {
-    lines.push(t('league.share.msg.rowResult', {
-      place: rank(r.place, r.isTie), name: msgName(r, lang), points: formatNumber(r.points, {}, lang), league: leaguePts(r.seasonPoints, lang),
+    lines.push(t(isMedal(snapshot) ? 'league.share.msg.rowResultScore' : 'league.share.msg.rowResult', {
+      place: rank(r.place, r.isTie), name: msgName(r, lang), points: formatNumber(r.points, {}, lang), score: r.scoreText, league: leaguePts(r.seasonPoints, lang),
     }, lang));
   }
   const top = seasonRows(snapshot, month, lang).filter((r) => r.total > 0).slice(0, 3);
@@ -233,10 +239,12 @@ export function cardMessage(snapshot, card, { now = new Date(), url = null, lang
     month: monthWord(month, lang),
     league: wa(snapshot.league.name),
     points: formatNumber(card.points, {}, lang),
+    score: scoreText(cardScore(card, snapshot.league.format), snapshot.league.format, lang),
     course: wa(card.course?.name) || '—',
     name: by,
   };
-  let text = t(by ? 'league.share.msg.cardBy' : 'league.share.msg.card', params, lang);
+  const cardKey = by ? 'league.share.msg.cardBy' : 'league.share.msg.card';
+  let text = t(isMedal(snapshot) ? `${cardKey}Score` : cardKey, params, lang);
   const standing = card.status === 'confirmed' ? monthStanding(snapshot, month, card.userId, now) : null;
   if (standing) {
     const place = `${standing.isTie ? 'T' : ''}${formatOrdinal(standing.place, lang)}`;
@@ -308,7 +316,8 @@ export function publicBoardSnapshot(payload) {
 
 // The public page's view of one scope ('season' or a 'YYYY-MM' month):
 // { rows, ranked, total } where rows are
-// { key, place, isTie, name, course, points, league } (points null on the season).
+// { key, place, isTie, name, course, points, score, league } (points and score null on the season;
+// score = the ranking value for the league's format).
 // `total` counts every member the board shows (active ones plus anyone with a
 // counting card), so "X of Y cards in" can never pass Y.
 export function publicBoardView(snapshot, scope, now = new Date(), lang) {
@@ -328,7 +337,7 @@ export function publicBoardView(snapshot, scope, now = new Date(), lang) {
       .find((c) => c.userId === r.userId && cardScore(c, league.format) === r.cardScore);
     return {
       key: r.userId, place: r.place, isTie: r.isTie, name: memberNameOf(members, r.userId, lang),
-      course: card?.course?.name ?? null, points: r.cardPoints, league: r.seasonPoints,
+      course: card?.course?.name ?? null, points: r.cardPoints, score: r.cardScore, league: r.seasonPoints,
     };
   });
   return { rows, ranked: rows.length, total, daysLeft: scope === currentMonthKey(now) ? daysLeftInMonth(now) : null };

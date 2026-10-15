@@ -1,6 +1,7 @@
 // English catalogue: league batch 7 (leagueScoring). See docs/i18n.md.
 export default {
   'league.scoring.pts': '{points} pts',
+  'league.scoring.score': '{score}',
   // Strokes to par in a medal league: level par, and the net value ('net −2').
   'league.scoring.level': 'E',
   'league.scoring.netToPar': 'net {score}',
@@ -140,6 +141,7 @@ export default {
   'league.validate.notAsked': "Card submitted, but {name} wasn't asked. Tap “Remind {name}” to try again.",
   'league.validate.waiting': 'Waiting for {name} to confirm',
   'league.validate.countsOnceConfirmed': ' Stableford · counts once confirmed',
+  'league.validate.countsOnceConfirmedMedal': ' · counts once confirmed',
   'league.validate.remind': 'Remind {name}',
   'league.validate.askElse': 'Ask someone else',
   'league.validate.sentBack': 'Your marker sent the card back',

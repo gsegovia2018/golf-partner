@@ -6,6 +6,9 @@ import {
 } from './leagueStore';
 import { middleTee } from './tees';
 import { scoreCard } from './leagueRules';
+import { totalParFromHoles } from './scoring';
+import { isMedalFormat } from './leagueStandings';
+import { formatScore } from './leagueView';
 import { isRatedTee } from './handicapIndex';
 import { formatDate } from '../i18n';
 
@@ -114,13 +117,20 @@ export function timeLabel(iso) {
 }
 
 // The proof summary: "<course> · <date> · <points> pts · gross <g>" (`line`, a
-// descriptor) plus the numbers the RPCs need.
-export function proofSummary({ snapshot, playedOn, strokes, leagueHandicap }) {
+// descriptor) plus the numbers the RPCs need. In a medal league (`format`) the
+// points give way to the strokes to par ("net −2"), worked out like the server.
+export function proofSummary({ snapshot, playedOn, strokes, leagueHandicap, format = 'stableford' }) {
   const course = courseFromSnapshot(snapshot);
   const { gross, points, playingHandicap, netDifferential } = scoreCard({
     holes: strokes, course, leagueHandicap, tee: course.tee,
   });
   const head = [snapshot?.name, dayLabel(playedOn)].filter(Boolean).join(' · ');
+  if (isMedalFormat(format)) {
+    const toPar = gross - (format === 'medal_net' ? playingHandicap : 0) - totalParFromHoles(course.holes);
+    const score = formatScore(toPar, format);
+    const key = head ? 'league.offApp.proofLineScore' : 'league.offApp.proofLineBareScore';
+    return { line: { key, params: { head, score, gross } }, gross, points, playingHandicap, netDifferential };
+  }
   const line = { key: head ? 'league.offApp.proofLine' : 'league.offApp.proofLineBare', params: { head, points, gross } };
   return { line, gross, points, playingHandicap, netDifferential };
 }

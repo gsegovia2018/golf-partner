@@ -28,7 +28,7 @@ import {
   parseIsoDate, parsePointsTable, formatPointsTable, parseFeeCents,
 } from '../store/leagueDraft';
 import {
-  formatEuros, voteThreshold,
+  formatEuros, voteThreshold, formatKey,
 } from '../store/leagueView';
 import { memberLabel } from '../lib/leagueNames';
 import {
@@ -40,6 +40,8 @@ import {
 } from '../store/leagueNotificationPrefs';
 import { leagueErrorText } from '../lib/leagueErrorText';
 import { useConfirmSheet } from '../components/league/ConfirmSheet';
+import LeagueFormatField from '../components/league/LeagueFormatField';
+import { isMedalFormat } from '../store/leagueStandings';
 
 // Links to Members and the Final, rules (admin edits), fees and roles (admin),
 // notification switches and leave / archive / delete. Everyone sees the rules; only an admin can change them.
@@ -63,6 +65,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   const [capText, setCapText] = useState('');
   const [feeText, setFeeText] = useState('');
   const [participation, setParticipation] = useState(0);
+  const [format, setFormat] = useState('stableford');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -89,6 +92,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
     setCapText(String(l.handicapCap));
     setFeeText(l.entryFeeCents ? String(l.entryFeeCents / 100) : '');
     setParticipation(l.participationPoints ?? 0);
+    setFormat(l.format ?? 'stableford');
   }, [data]);
 
   // A Final started on this device whose link to the league is still being
@@ -175,6 +179,9 @@ export default function LeagueSettingsScreen({ navigation, route }) {
   const archived = !!league.archivedAt;
   const prefs = resolveLeaguePrefs(appSettings);
 
+  // The format can't change once the league has a card that isn't void
+  // (cardsByMonth leaves void ones out).
+  const formatLocked = Object.values(data.cardsByMonth ?? {}).some((list) => (list ?? []).length > 0);
   const startIso = parseIsoDate(seasonStart);
   const endIso = parseIsoDate(seasonEnd);
   const pointsTable = parsePointsTable(pointsText);
@@ -202,6 +209,8 @@ export default function LeagueSettingsScreen({ navigation, route }) {
       await updateLeagueRules(leagueId, {
         name: name.trim(), seasonStart: startIso, seasonEnd: endIso, pointsTable, cap, feeCents,
         participationPoints: participation,
+        // Only a change: an edit that leaves the format alone sends nothing.
+        ...(format !== (league.format ?? 'stableford') ? { format } : {}),
       });
       await reload();
     });
@@ -347,6 +356,9 @@ export default function LeagueSettingsScreen({ navigation, route }) {
         {isAdmin && !archived ? (
           <View style={s.card}>
             {field(t('league.create.leagueName'), { value: name, onChangeText: setName })}
+            <Text style={s.fieldLabel}>{t('league.create.format')}</Text>
+            <LeagueFormatField value={format} onChange={setFormat} disabled={formatLocked} />
+            {formatLocked && <Text style={s.hint}>{t('league.settings.formatLocked')}</Text>}
             <Text style={s.fieldLabel}>{t('league.create.seasonStarts')}</Text>
             <DateField label={t('league.create.seasonStarts')} value={seasonStart} onChange={setSeasonStart} quickDates={false} />
             <Text style={s.fieldLabel}>{t('league.create.seasonEnds')}</Text>
@@ -357,9 +369,9 @@ export default function LeagueSettingsScreen({ navigation, route }) {
             {field(t('league.create.pointsTable'), { value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none' })}
             <PointsForPlaying value={participation} onChange={setParticipation} pointsTable={pointsTable} count={active.length} />
             <Text style={s.hint}>{t('league.rules.recompute')}</Text>
-            {field(t('league.create.handicapCap'), { value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}
+            {format !== 'medal_gross' && field(t('league.create.handicapCap'), { value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}
             {field(t('league.create.entryFee'), { value: feeText, onChangeText: setFeeText, keyboardType: 'decimal-pad', placeholder: '0' })}
-            <Text style={s.hint}>{t('league.settings.fixedRules')}</Text>
+            <Text style={s.hint}>{t(isMedalFormat(format) ? 'league.settings.fixedRulesMedal' : 'league.settings.fixedRules')}</Text>
             <TouchableOpacity
               style={[s.primaryBtn, (!formValid || busy) && { opacity: 0.5 }]}
               onPress={saveRules}
@@ -371,7 +383,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
           </View>
         ) : (
           <View style={[s.card, { paddingVertical: 4 }]}>
-            {readRow(t('league.settings.readFormat'), t('league.rules.format'))}
+            {readRow(t('league.settings.readFormat'), t(formatKey('league.rules.format', league.format)))}
             {readRow(t('league.settings.readPoints'), t('league.settings.readTies', { table: formatPointsTable(league.pointsTable) }))}
             {readRow(t('league.rules.playing'), league.participationPoints > 0
               ? t('league.rules.playingMember', { points: formatNumber(league.participationPoints) })

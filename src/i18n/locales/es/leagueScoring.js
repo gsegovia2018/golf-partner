@@ -1,6 +1,7 @@
 // Spanish catalogue: league batch 7 (leagueScoring). See docs/i18n.md.
 export default {
   'league.scoring.pts': '{points} ptos',
+  'league.scoring.score': '{score}',
   // Golpes respecto al par en una liga medal: al par, y el neto ('neto −2').
   'league.scoring.level': 'par',
   'league.scoring.netToPar': 'neto {score}',
@@ -140,6 +141,7 @@ export default {
   'league.validate.notAsked': 'Tarjeta enviada, pero no se le preguntó a {name}. Toca «Recordar a {name}» para intentarlo de nuevo.',
   'league.validate.waiting': 'Esperando a que {name} confirme',
   'league.validate.countsOnceConfirmed': ' Stableford · cuenta cuando se confirme',
+  'league.validate.countsOnceConfirmedMedal': ' · cuenta cuando se confirme',
   'league.validate.remind': 'Recordar a {name}',
   'league.validate.askElse': 'Preguntar a otra persona',
   'league.validate.sentBack': 'Tu marcador devolvió la tarjeta',

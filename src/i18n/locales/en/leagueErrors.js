@@ -158,4 +158,6 @@ export default {
   'league.offApp.unratedTee': "This tee has no slope and course rating, so it can't count for the league. Pick a rated tee or add its slope and rating in the course library.",
   'league.offApp.proofLine': '{head} · {points} pts · gross {gross}',
   'league.offApp.proofLineBare': '{points} pts · gross {gross}',
+  'league.offApp.proofLineScore': '{head} · {score} · gross {gross}',
+  'league.offApp.proofLineBareScore': '{score} · gross {gross}',
 };

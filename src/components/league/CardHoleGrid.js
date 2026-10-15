@@ -6,8 +6,10 @@ import { useT } from '../../i18n';
 // A league card's holes, nine per row: strokes in a shape (circle = 3+ points,
 // square = 0), points underneath. A hole capped at net double bogey gets a
 // dashed ring and a small badge with the number that counts for the
-// differential. `perHole` is leagueView.cardBreakdown's list.
-export default function CardHoleGrid({ perHole }) {
+// differential. `perHole` is leagueView.cardBreakdown's list. In a medal
+// league (`medal`) every stroke counts, so only the strokes show: no shapes,
+// points, caps or legend.
+export default function CardHoleGrid({ perHole, medal = false }) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
@@ -17,7 +19,7 @@ export default function CardHoleGrid({ perHole }) {
     { label: t('league.holeGrid.out'), cells: perHole.slice(0, 9) },
     { label: t('league.holeGrid.in'), cells: perHole.slice(9, 18) },
   ].filter((h) => h.cells.length > 0);
-  const anyCapped = perHole.some((h) => h.capped);
+  const anyCapped = !medal && perHole.some((h) => h.capped);
 
   return (
     <View>
@@ -27,7 +29,7 @@ export default function CardHoleGrid({ perHole }) {
         return (
           <View key={h.label} style={s.half}>
             {h.cells.map((c, i) => {
-              const ring = c.capped ? { borderWidth: 2, borderStyle: 'dashed', borderColor: zero }
+              const ring = medal ? null : c.capped ? { borderWidth: 2, borderStyle: 'dashed', borderColor: zero }
                 : c.points >= 3 ? { borderWidth: 2, borderColor: good, borderRadius: 13 }
                   : c.points === 0 ? { borderWidth: 2, borderColor: zero } : null;
               return (
@@ -35,34 +37,36 @@ export default function CardHoleGrid({ perHole }) {
                   key={c.n}
                   style={[s.cell, i > 0 && s.cellEdge]}
                   accessible
-                  accessibilityLabel={c.capped
+                  accessibilityLabel={medal ? t('league.holeGrid.holeStrokes', { n: c.n, strokes: c.strokes }) : c.capped
                     ? t('league.holeGrid.holeCapped', { n: c.n, strokes: c.strokes, points: c.points, counted: c.counted })
                     : t('league.holeGrid.hole', { n: c.n, strokes: c.strokes, points: c.points })}
                 >
                   <Text style={s.holeNo}>{c.n}</Text>
                   <View style={[s.shape, ring]}>
                     <Text style={s.strokes}>{c.strokes}</Text>
-                    {c.capped && (
+                    {!medal && c.capped && (
                       <View style={s.badge}>
                         <Text style={s.badgeText}>{c.counted}</Text>
                       </View>
                     )}
                   </View>
-                  <Text style={[s.pts, { color: c.points >= 3 ? good : c.points === 0 ? zero : theme.text.secondary }]}>{c.points}</Text>
+                  {!medal && <Text style={[s.pts, { color: c.points >= 3 ? good : c.points === 0 ? zero : theme.text.secondary }]}>{c.points}</Text>}
                 </View>
               );
             })}
             <View style={[s.cell, s.cellEdge, s.total]}>
               <Text style={s.holeNo}>{h.label}</Text>
               <View style={s.shape}><Text style={s.strokes}>{strokes}</Text></View>
-              <Text style={[s.pts, { color: good }]}>{points}</Text>
+              {!medal && <Text style={[s.pts, { color: good }]}>{points}</Text>}
             </View>
           </View>
         );
       })}
-      <Text style={s.legend}>
-        {t(anyCapped ? 'league.holeGrid.legendCapped' : 'league.holeGrid.legend')}
-      </Text>
+      {!medal && (
+        <Text style={s.legend}>
+          {t(anyCapped ? 'league.holeGrid.legendCapped' : 'league.holeGrid.legend')}
+        </Text>
+      )}
     </View>
   );
 }

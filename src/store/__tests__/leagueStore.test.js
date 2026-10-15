@@ -147,6 +147,9 @@ describe('RPC params', () => {
     }]);
     await updateLeagueRules('L1', { name: 'New' });
     expect(lastRpc()[1]).not.toHaveProperty('p_format');
+    // Going back to Stableford must be sent: NULL means "keep the current one".
+    await updateLeagueRules('L1', { format: 'stableford' });
+    expect(lastRpc()[1]).toMatchObject({ p_format: 'stableford' });
   });
 
   test('summary, preview and card results carry the format and toPar', async () => {
