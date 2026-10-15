@@ -14,7 +14,7 @@ import {
 import {
   tournamentHighlights, hotStretch, skinsLeaderboard, hallOfShame, par3Heartbreak,
   pickupChampion, anchor, zeroHero, bestWorstHoles, chaosHoles, collectiveExtremes,
-  headToHead, shotStats, playerStreaks, withoutScrambleScores,
+  headToHead, shotStats, playerStreaks, withoutScrambleScores, playerScoreDistribution,
 } from './statsEngine';
 
 // Modes whose round result is a team result when the round carries pairs.
@@ -554,22 +554,24 @@ export function improvementRows(tournament) {
 // ── Awards ──
 // The Summary strip: glory first, then shame. Each award carries the players
 // it names, a value and a detail descriptor, and the engine record (`data`)
-// its detail sheet is built from.
+// its detail sheet is built from. A one-round game drops Best round (it is
+// the winner) and every round / course prefix from the details.
 export function awardsList(tournament, { teams = false } = {}) {
   const players = tournament?.players ?? [];
   const multi = players.length > 1;
+  const single = singleRoundIndex(tournament) != null;
   const out = [];
   const push = (award) => out.push(award);
   const uniquePlayers = (list) => [...new Map(list.map((p) => [p.id, p])).values()];
-  const placeDetail = (e) => ({
-    key: 'stats.game.award.where', params: { round: e.roundIndex + 1, course: e.courseName, hole: e.holeNumber },
-  });
+  const placeDetail = (e) => (single
+    ? { key: 'stats.game.award.holePar', params: { hole: e.holeNumber, par: e.par } }
+    : { key: 'stats.game.award.where', params: { round: e.roundIndex + 1, course: e.courseName, hole: e.holeNumber } });
   const tiedDetail = (count) => ({ key: 'stats.game.award.tied', params: { count } });
 
   const net = tournamentHighlights(tournament, { metric: 'points' });
   const gross = tournamentHighlights(tournament, { metric: 'strokes' });
 
-  if (net.bestRound) {
+  if (net.bestRound && !single) {
     const e = net.bestRound.entries;
     push({
       id: 'bestRound', icon: 'award', tone: 'glory', players: e.map((x) => x.player),
@@ -585,7 +587,9 @@ export function awardsList(tournament, { teams = false } = {}) {
     push({
       id: 'hotStretch', icon: 'trending-up', tone: 'glory', players: [hot.player],
       value: { key: 'stats.game.award.pts', params: { count: hot.points } },
-      detail: { key: 'stats.game.award.stretch', params: { round: hot.roundIndex + 1, from: hot.startHole, to: hot.endHole } },
+      detail: single
+        ? { key: 'stats.game.award.stretchSingle', params: { from: hot.startHole, to: hot.endHole } }
+        : { key: 'stats.game.award.stretch', params: { round: hot.roundIndex + 1, from: hot.startHole, to: hot.endHole } },
       data: hot,
     });
   }
@@ -634,10 +638,11 @@ export function awardsList(tournament, { teams = false } = {}) {
     const vs = top[0].vs === 0 ? 'E' : `${top[0].vs > 0 ? '+' : '−'}${Math.abs(top[0].vs)}`;
     push({
       id: 'bestGross', icon: 'flag', tone: 'glory', players: uniquePlayers(top.map((r) => r.player)),
+      titleKey: single ? 'stats.game.award.title.bestGrossSingle' : undefined,
       value: { key: grossBest.nine ? 'stats.game.award.grossNine' : 'stats.game.award.gross', params: { strokes: top[0].strokes, vs } },
-      detail: top.length === 1
-        ? { key: 'stats.game.award.roundCourse', params: { round: top[0].roundIndex + 1, course: top[0].courseName } }
-        : tiedDetail(top.length),
+      detail: top.length > 1 ? tiedDetail(top.length)
+        : single ? { key: 'stats.game.award.grossSingleDetail' }
+          : { key: 'stats.game.award.roundCourse', params: { round: top[0].roundIndex + 1, course: top[0].courseName } },
       data: grossBest,
     });
   }
@@ -648,9 +653,9 @@ export function awardsList(tournament, { teams = false } = {}) {
     push({
       id: 'comeback', icon: 'rotate-ccw', tone: 'glory', players: uniquePlayers(top.flatMap((c) => c.players)),
       value: { key: 'stats.game.award.comebackValue' },
-      detail: top.length === 1
-        ? { key: 'stats.game.award.comebackDetail', params: { round: top[0].roundIndex + 1, count: top[0].deficit, hole: top[0].afterHole } }
-        : tiedDetail(top.length),
+      detail: top.length > 1 ? tiedDetail(top.length)
+        : single ? { key: 'stats.game.sheet.comebackRow', params: { count: top[0].deficit, hole: top[0].afterHole } }
+          : { key: 'stats.game.award.comebackDetail', params: { round: top[0].roundIndex + 1, count: top[0].deficit, hole: top[0].afterHole } },
       data: comebacks,
     });
   }
@@ -723,7 +728,8 @@ export function awardsList(tournament, { teams = false } = {}) {
         : { key: 'stats.game.award.zeroValue', params: { count: zero.entries[0].count } },
       detail: lead
         ? { key: `stats.game.award.cold.${kind}` }
-        : { key: 'stats.game.award.zeroDetail', params: { round: zero.entries[0].roundIndex + 1 } },
+        : single ? { key: 'stats.game.award.cold.pointless' }
+          : { key: 'stats.game.award.zeroDetail', params: { round: zero.entries[0].roundIndex + 1 } },
       data: {
         pointless: shame.pointlessStreak, double: shame.doubleBogeyStreak, bogey: shame.bogeyStreak, zero,
       },
@@ -743,9 +749,9 @@ export function awardsList(tournament, { teams = false } = {}) {
     push({
       id: 'collapse', icon: 'corner-right-down', tone: 'shame', players: uniquePlayers(e.map((x) => x.player)),
       value: { key: 'stats.game.award.collapse', params: { count: shame.collapse.value } },
-      detail: e.length === 1
-        ? { key: 'stats.game.award.collapseDetail', params: { round: e[0].roundIndex + 1, front: e[0].front, back: e[0].back } }
-        : tiedDetail(e.length),
+      detail: e.length > 1 ? tiedDetail(e.length)
+        : single ? { key: 'stats.game.award.collapseSingle', params: { front: e[0].front, back: e[0].back } }
+          : { key: 'stats.game.award.collapseDetail', params: { round: e[0].roundIndex + 1, front: e[0].front, back: e[0].back } },
       data: shame.collapse,
     });
   }
@@ -817,4 +823,194 @@ export function shotComparison(tournament) {
       penalties: st.penalties.total,
     };
   }).filter(Boolean);
+}
+
+// ── Single-round mode ──
+// The index of the one played round when the game has exactly one (a casual
+// game, or a tournament with a single scored round); null otherwise. The
+// screen then drops every view that only makes sense across rounds.
+export function singleRoundIndex(tournament) {
+  const scored = scoredRoundIndices(tournament);
+  return scored.length === 1 ? scored[0] : null;
+}
+
+// Gross result of one hole against par, the scorecard's classes.
+export function grossResult(par, strokes) {
+  if (!par || !strokes) return null;
+  const vs = strokes - par;
+  if (vs <= -2) return 'eagle';
+  if (vs === -1) return 'birdie';
+  if (vs === 0) return 'par';
+  if (vs === 1) return 'bogey';
+  return 'double';
+}
+
+const GROSS_LEVEL = { eagle: 4, birdie: 3, par: 2, bogey: 1, double: 0 };
+
+// Heat level (0–4, the heatColors scale) of a ledger cell. 'strokes': the
+// gross result (eagle+ 4 · birdie 3 · par 2 · bogey 1 · double+ 0).
+// 'points': Stableford points, 3+ capped at 3.
+export function cellLevel(mode, cell) {
+  if (cell?.strokes == null) return null;
+  if (mode === 'points') return Math.min(cell.points, 3);
+  return GROSS_LEVEL[cell.gross];
+}
+
+// Score mix for the shared Strokes | Points switch: 'strokes' classifies
+// gross (birdie = one under par), 'points' net of handicap strokes.
+export function scoreMix(tournament, playerId, mode) {
+  return playerScoreDistribution(tournament, playerId, { metric: mode === 'points' ? 'points' : 'strokes' });
+}
+
+const FAIRWAY_DRIVES = new Set(['fairway', 'super']);
+
+// ── Hole-by-hole ledger (one player, one round) ──
+// One cell per hole (strokes, points, gross result, putts, drive, tee
+// penalties, GIR) and a total per nine: an 18-hole round splits into out /
+// in like the scorecard, a 9-hole round has one 'tot' block. Shot fields are
+// null where the player logged nothing; drives only count on par 4s and 5s
+// (as shotStats does).
+export function roundLedger(tournament, roundIndex, playerId) {
+  const round = tournament?.rounds?.[roundIndex];
+  const player = (tournament?.players ?? []).find((p) => p.id === playerId);
+  if (!round || !player) return null;
+  const byHole = new Map(holeEntries(round, player).map((e) => [e.hole.number, e]));
+  const details = round.shotDetails?.[playerId] ?? {};
+  const cells = (round.holes ?? []).map((hole) => {
+    const e = byHole.get(hole.number);
+    const d = details[hole.number] ?? null;
+    const strokes = e ? e.strokes : null;
+    const putts = d?.putts ?? null;
+    return {
+      number: hole.number,
+      par: hole.par,
+      strokes,
+      points: e ? e.points : null,
+      gross: e ? grossResult(hole.par, strokes) : null,
+      putts,
+      drive: hole.par !== 3 ? (d?.drive ?? null) : null,
+      penalties: d?.teePenalties ?? 0,
+      gir: strokes != null && putts != null ? strokes - putts <= hole.par - 2 : null,
+    };
+  });
+  const sumOf = (list, key) => {
+    const vals = list.map((c) => c[key]).filter((v) => v != null);
+    return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
+  };
+  const block = (key, list) => {
+    const drives = list.filter((c) => c.drive != null);
+    const girs = list.filter((c) => c.gir != null);
+    return {
+      key,
+      cells: list,
+      par: list.reduce((s, c) => s + c.par, 0),
+      strokes: sumOf(list, 'strokes'),
+      points: sumOf(list, 'points'),
+      putts: sumOf(list, 'putts'),
+      fairways: { hit: drives.filter((c) => FAIRWAY_DRIVES.has(c.drive)).length, of: drives.length },
+      gir: { hit: girs.filter((c) => c.gir).length, of: girs.length },
+    };
+  };
+  const nines = cells.length > 9
+    ? [block('out', cells.slice(0, 9)), block('in', cells.slice(9))]
+    : [block('tot', cells)];
+  const played = cells.filter((c) => c.strokes != null);
+  const strokes = sumOf(played, 'strokes');
+  return {
+    nines,
+    hasShots: cells.some((c) => c.putts != null || c.drive != null || c.penalties > 0),
+    total: {
+      holes: played.length,
+      strokes,
+      toPar: strokes == null ? null : strokes - played.reduce((s, c) => s + c.par, 0),
+      points: sumOf(played, 'points'),
+      putts: sumOf(cells, 'putts'),
+    },
+  };
+}
+
+// Longest run of consecutive scored holes that are gross par or better
+// ('strokes') or worth 2+ points ('points'). Null under 2 holes.
+export function ledgerBestRun(ledger, mode) {
+  const cells = (ledger?.nines ?? []).flatMap((n) => n.cells);
+  const good = (c) => c.strokes != null && (mode === 'points' ? c.points >= 2 : c.strokes <= c.par);
+  let best = null;
+  let start = null;
+  cells.forEach((c, i) => {
+    if (!good(c)) { start = null; return; }
+    if (start == null) start = i;
+    const length = i - start + 1;
+    if (!best || length > best.length) best = { length, from: cells[start].number, to: c.number };
+  });
+  return best && best.length >= 2 ? best : null;
+}
+
+// ── Where you score ──
+// Points per hole by par type, by nine (18-hole rounds only) and by handicap
+// stroke, around the 2 pts/hole of playing to handicap. Empty buckets and
+// groups drop out.
+export function scoringSplits(tournament, playerId) {
+  const player = (tournament?.players ?? []).find((p) => p.id === playerId);
+  const buckets = {};
+  const add = (key, points) => {
+    const b = buckets[key] ?? { holes: 0, points: 0 };
+    b.holes += 1;
+    b.points += points;
+    buckets[key] = b;
+  };
+  if (player) {
+    (tournament.rounds ?? []).forEach((round) => {
+      const full = (round.holes?.length ?? 0) >= 18;
+      holeEntries(round, player).forEach((e) => {
+        if (e.hole.par >= 3 && e.hole.par <= 5) add(`par${e.hole.par}`, e.points);
+        if (full) add(e.hole.number <= 9 ? 'front' : 'back', e.points);
+        add(e.extra > 0 ? 'withStroke' : 'withoutStroke', e.points);
+      });
+    });
+  }
+  const item = (key) => (buckets[key] ? { key, holes: buckets[key].holes, avg: buckets[key].points / buckets[key].holes } : null);
+  return [
+    { key: 'par', items: ['par3', 'par4', 'par5'].map(item).filter(Boolean) },
+    { key: 'nine', items: ['front', 'back'].map(item).filter(Boolean) },
+    { key: 'stroke', items: ['withStroke', 'withoutStroke'].map(item).filter(Boolean) },
+  ].filter((g) => g.items.length > 0);
+}
+
+// ── Putts histogram ──
+// Holes by putts taken: 0 (holed from off the green), 1, 2, 3+.
+export function puttBuckets(tournament, playerId) {
+  const out = { zero: 0, one: 0, two: 0, three: 0, holes: 0, total: 0 };
+  (tournament?.rounds ?? []).forEach((round) => {
+    const byHole = round.shotDetails?.[playerId];
+    if (!byHole) return;
+    (round.holes ?? []).forEach((hole) => {
+      const p = byHole[hole.number]?.putts;
+      if (p == null) return;
+      out.holes += 1;
+      out.total += p;
+      if (p <= 0) out.zero += 1;
+      else if (p === 1) out.one += 1;
+      else if (p === 2) out.two += 1;
+      else out.three += 1;
+    });
+  });
+  return out;
+}
+
+// ── Compare with the group ──
+// Dot plots for the players who logged shots, one axis per metric. Empty
+// unless 2+ players logged; a metric needs 2+ values to be worth a plot.
+export function shotComparePlots(tournament) {
+  const rows = shotComparison(tournament);
+  if (rows.length < 2) return [];
+  const metric = (key, field, max) => ({
+    key,
+    max,
+    values: rows.filter((r) => r[field] != null).map((r) => ({ player: r.player, value: r[field] })),
+  });
+  return [
+    metric('fir', 'firPct', 100),
+    metric('gir', 'girPct', 100),
+    metric('putts', 'puttsPerHole', 3),
+  ].filter((m) => m.values.length >= 2);
 }

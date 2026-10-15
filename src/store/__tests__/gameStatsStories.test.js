@@ -219,7 +219,8 @@ describe('weekend story awards', () => {
     expect(a.players).toHaveLength(2);
     const nine = awardsList(build([{ cards: { a: same(9, 5), b: same(9, 6) } }])).find((x) => x.id === 'bestGross');
     expect(nine.value).toEqual({ key: 'stats.game.award.grossNine', params: { strokes: 45, vs: '+9' } });
-    expect(nine.detail).toMatchObject({ key: 'stats.game.award.roundCourse' });
+    // A one-round game names no round or course.
+    expect(nine.detail).toMatchObject({ key: 'stats.game.award.grossSingleDetail' });
   });
 
   test('comeback and most improved appear only past their thresholds', () => {
