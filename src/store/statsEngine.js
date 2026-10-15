@@ -238,22 +238,6 @@ export function bestWorstHoles(tournament, { metric = 'points', roundIndex = nul
   };
 }
 
-export function holeDifficultyMap(tournament, roundIndex) {
-  const round = tournament.rounds[roundIndex];
-  if (!round?.scores) return [];
-  return round.holes.map(hole => {
-    const playerScores = tournament.players.map(p => {
-      const sc = round.scores[p.id]?.[hole.number];
-      if (!sc) return null;
-      const handicap = getPlayingHandicap(round, p);
-      return { playerId: p.id, playerName: p.name, points: calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round)), strokes: sc };
-    }).filter(Boolean);
-    const avgPts = playerScores.length > 0 ? +(playerScores.reduce((s, x) => s + x.points, 0) / playerScores.length).toFixed(2) : null;
-    const avgStr = playerScores.length > 0 ? +(playerScores.reduce((s, x) => s + x.strokes, 0) / playerScores.length).toFixed(2) : null;
-    return { holeNumber: hole.number, par: hole.par, si: hole.strokeIndex, playerScores, avgPoints: avgPts, avgStrokes: avgStr };
-  });
-}
-
 // ── Head-to-Head ──
 
 export function headToHead(tournament, p1Id, p2Id, { roundIndex = null } = {}) {
@@ -795,36 +779,6 @@ function forEachHole(tournament, fn) {
   });
 }
 
-// ── Tournament Momentum ──
-// Returns one entry per player with their Stableford points and strokes by
-// round, letting a caller plot a trajectory across the weekend.
-export function tournamentMomentum(tournament) {
-  return tournament.players.map(player => {
-    const rounds = tournament.rounds.map((round, roundIndex) => {
-      if (!round.scores?.[player.id]) return { roundIndex, courseName: round.courseName, points: null, strokes: null, holesPlayed: 0 };
-      const handicap = getPlayingHandicap(round, player);
-      let points = 0, strokes = 0, holesPlayed = 0;
-      round.holes.forEach(hole => {
-        const sc = round.scores[player.id]?.[hole.number];
-        if (!sc) return;
-        strokes += sc;
-        points += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
-        holesPlayed++;
-      });
-      const fullRound = isFullLengthRound(round) && isRoundFullyScoredBy(round, player.id);
-      return { roundIndex, courseName: round.courseName, points: holesPlayed ? points : null, strokes: holesPlayed ? strokes : null, holesPlayed, fullRound };
-    });
-    // min/max are whole-round totals: a nine or part-scored round would read as
-    // a collapse. Fall back to every played round when none is a full one.
-    const playedAll = rounds.filter(r => r.points != null);
-    const playedFull = playedAll.filter(r => r.fullRound);
-    const played = playedFull.length ? playedFull : playedAll;
-    const minPts = played.length ? Math.min(...played.map(r => r.points)) : 0;
-    const maxPts = played.length ? Math.max(...played.map(r => r.points)) : 0;
-    return { player, rounds, minPts, maxPts };
-  });
-}
-
 // ── Clutch on Hardest Holes ──
 // Average points scored by each player on the top-N hardest-SI holes across
 // every completed round. Uses stroke index as the difficulty indicator (the
@@ -1038,46 +992,6 @@ export function warmupVsClosing(tournament, playerId) {
   };
 }
 
-// ── Handicap ROI ──
-// A player whose handicap matches their level averages 36 Stableford points
-// per 18-hole round. Actual / 36 gives a ROI ratio. >1.0 = outperformed
-// handicap; <1.0 = underperformed.
-export function handicapROI(tournament, playerId) {
-  let totalPoints = 0, totalHoles = 0, rounds = 0;
-  const breakdown = [];
-  tournament.rounds.forEach((round, roundIndex) => {
-    if (!round.scores?.[playerId]) return;
-    const player = tournament.players.find(p => p.id === playerId);
-    if (!player) return;
-    const handicap = getPlayingHandicap(round, player);
-    let rp = 0, rh = 0;
-    round.holes.forEach(hole => {
-      const sc = round.scores[playerId]?.[hole.number];
-      if (!sc) return;
-      rp += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
-      rh++;
-    });
-    if (rh > 0) {
-      totalPoints += rp; totalHoles += rh; rounds++;
-      breakdown.push({
-        roundIndex, courseName: round.courseName,
-        actual: rp, expected: 2 * rh, holesPlayed: rh,
-        ratio: +(rp / (2 * rh)).toFixed(2),
-      });
-    }
-  });
-  if (rounds === 0) return null;
-  const expected = 2 * totalHoles;
-  return {
-    actual: totalPoints,
-    expected,
-    ratio: expected > 0 ? +(totalPoints / expected).toFixed(2) : null,
-    holesPlayed: totalHoles,
-    rounds,
-    breakdown,
-  };
-}
-
 // ── Nemesis & Crushed Hole ──
 // For each player, the single worst (fewest points) and best (most points)
 // hole they played, across the tournament. Ties broken by strokes above par.
@@ -1172,112 +1086,6 @@ export function collectiveExtremes(tournament) {
   return { disasters, gimmes };
 }
 
-// ── Pair Synergy ──
-// Combined pair points vs a baseline equal to the sum of the two members'
-// per-hole tournament averages (projected to the holes they played together).
-// Ratio >1 means they lift each other; <1 means they drag each other down.
-export function pairSynergy(tournament) {
-  const playerAvg = {};
-  const playerCount = {};
-  tournament.players.forEach(p => { playerAvg[p.id] = 0; playerCount[p.id] = 0; });
-  forEachHole(tournament, ({ player, points }) => {
-    playerAvg[player.id] += points;
-    playerCount[player.id]++;
-  });
-  tournament.players.forEach(p => {
-    playerAvg[p.id] = playerCount[p.id] ? playerAvg[p.id] / playerCount[p.id] : 0;
-  });
-
-  const pairMap = {};
-  tournament.rounds.forEach((round, roundIndex) => {
-    if (!round.scores || !round.pairs) return;
-    round.pairs.forEach(pair => {
-      if (pair.length < 2) return;
-      const key = [pair[0].id, pair[1].id].sort().join('|');
-      // Snapshot the ROSTER players: pairs persist ids only (thinPairs), and
-      // `members` is rendered by name.
-      if (!pairMap[key]) pairMap[key] = { members: resolvePairs([pair], tournament.players)[0].slice(0, 2), combined: 0, expected: 0, rounds: 0, holesPlayed: 0, roundList: [] };
-      let combined = 0, expected = 0, holes = 0;
-      round.holes.forEach(hole => {
-        const s1 = round.scores[pair[0].id]?.[hole.number];
-        const s2 = round.scores[pair[1].id]?.[hole.number];
-        if (!s1 || !s2) return;
-        const h1 = getPlayingHandicap(round, tournament.players.find(p => p.id === pair[0].id));
-        const h2 = getPlayingHandicap(round, tournament.players.find(p => p.id === pair[1].id));
-        combined += calcStablefordPoints(hole.par, s1, h1, hole.strokeIndex, holeCountOf(round));
-        combined += calcStablefordPoints(hole.par, s2, h2, hole.strokeIndex, holeCountOf(round));
-        expected += playerAvg[pair[0].id] + playerAvg[pair[1].id];
-        holes++;
-      });
-      if (holes > 0) {
-        pairMap[key].combined += combined;
-        pairMap[key].expected += expected;
-        pairMap[key].rounds++;
-        pairMap[key].holesPlayed += holes;
-        pairMap[key].roundList.push({
-          roundIndex, courseName: round.courseName, holesPlayed: holes,
-          combined: +combined.toFixed(1), expected: +expected.toFixed(1),
-          synergy: expected > 0 ? +(combined / expected).toFixed(2) : null,
-        });
-      }
-    });
-  });
-
-  return Object.values(pairMap)
-    .filter(p => p.holesPlayed > 0 && p.expected > 0)
-    .map(p => ({
-      members: p.members,
-      rounds: p.rounds,
-      combined: +p.combined.toFixed(1),
-      expected: +p.expected.toFixed(1),
-      synergy: +(p.combined / p.expected).toFixed(2),
-      holesPlayed: p.holesPlayed,
-      roundList: p.roundList,
-    }))
-    .sort((a, b) => b.synergy - a.synergy);
-}
-
-// ── Pair Coverage ──
-// Per pairing, the % of holes where AT LEAST ONE partner scored 2+
-// Stableford points ("someone saved the hole") plus how many holes BOTH
-// partners blanked (<2 pts) at once — a double-blank sinks the pair
-// regardless of who's carrying. A hole only counts when BOTH partners have a
-// recorded score, same convention as pairSynergy/pairCarryRatio above. Relies
-// on the caller having already stripped scramble-round pairs/scores (see
-// withoutScrambleScores) — same as every other pair aggregate in this file.
-export function pairCoverage(tournament) {
-  const pairMap = {};
-  tournament.rounds.forEach((round) => {
-    if (!round.scores || !round.pairs) return;
-    round.pairs.forEach((pair) => {
-      if (!Array.isArray(pair) || pair.length < 2) return; // singleton pair (odd roster)
-      const key = [pair[0].id, pair[1].id].sort().join('|');
-      if (!pairMap[key]) pairMap[key] = { pair: [pair[0], pair[1]], holes: 0, covered: 0, bothBlanked: 0 };
-      const h1 = getPlayingHandicap(round, tournament.players.find((p) => p.id === pair[0].id));
-      const h2 = getPlayingHandicap(round, tournament.players.find((p) => p.id === pair[1].id));
-      round.holes.forEach((hole) => {
-        const s1 = round.scores[pair[0].id]?.[hole.number];
-        const s2 = round.scores[pair[1].id]?.[hole.number];
-        if (!s1 || !s2) return;
-        const p1 = calcStablefordPoints(hole.par, s1, h1, hole.strokeIndex, holeCountOf(round));
-        const p2 = calcStablefordPoints(hole.par, s2, h2, hole.strokeIndex, holeCountOf(round));
-        pairMap[key].holes += 1;
-        if (p1 >= 2 || p2 >= 2) pairMap[key].covered += 1;
-        else pairMap[key].bothBlanked += 1;
-      });
-    });
-  });
-  return Object.values(pairMap)
-    .filter((p) => p.holes > 0)
-    .map((p) => ({
-      pair: p.pair,
-      holes: p.holes,
-      coveragePct: Math.round((p.covered / p.holes) * 100),
-      bothBlanked: p.bothBlanked,
-    }))
-    .sort((a, b) => b.coveragePct - a.coveragePct);
-}
-
 // ── Pair Carry Ratio ──
 // Within every pair, what share of their combined Stableford points each
 // member contributed. 0.5 is an even split. Higher = carried the pair.
@@ -1322,31 +1130,6 @@ export function pairCarryRatio(tournament) {
       };
     })
     .sort((a, b) => b.imbalance - a.imbalance);
-}
-
-// ── Swing Hole ──
-// The single hole within the given round whose result shifted the cumulative
-// pair-vs-pair points delta the most in magnitude. Returns null if the round
-// has no pairs or no scores.
-export function swingHole(tournament, roundIndex) {
-  const data = pairDifferenceByHole(tournament, roundIndex, { metric: 'points' });
-  if (!data) return null;
-  let best = null;
-  data.holes.forEach(h => {
-    if (h.holeDelta == null) return;
-    const magnitude = Math.abs(h.holeDelta);
-    if (!best || magnitude > best.magnitude) best = { ...h, magnitude };
-  });
-  if (!best) return null;
-  return {
-    pair1: data.pair1, pair2: data.pair2,
-    courseName: data.courseName,
-    holeNumber: best.holeNumber, par: best.par,
-    holeDelta: best.holeDelta,
-    cumulativeAfter: best.cumulative,
-    pair1Total: best.pair1Total,
-    pair2Total: best.pair2Total,
-  };
 }
 
 // ── Par-3 Heartbreak ──
@@ -1595,7 +1378,9 @@ export function matchPlayResults(tournament, { metric = 'points' } = {}) {
       else if (p2Better) { pair1Up--; winner = 'pair2'; }
       holes.push({ holeNumber: hole.number, winner, pair1Score: p1, pair2Score: p2, pair1UpAfter: pair1Up });
       const remaining = totalHoles - (hi + 1);
-      if (closedAt === null && Math.abs(pair1Up) > remaining) {
+      // A match is closed out ("3&2") only with holes still to play; one
+      // decided on the last hole reads "N up".
+      if (closedAt === null && remaining > 0 && Math.abs(pair1Up) > remaining) {
         closedAt = hole.number;
         closedScore = { up: Math.abs(pair1Up), remaining, winner: pair1Up > 0 ? 'pair1' : 'pair2' };
       }
@@ -1619,66 +1404,6 @@ export function matchPlayResults(tournament, { metric = 'points' } = {}) {
       winnerPair, metric,
     };
   });
-}
-
-// ── Pair Config Matrix ──
-// For every 2-vs-2 pair configuration encountered, aggregates hole-by-hole
-// W/T/L between the two sides using combined stableford points. Each round's
-// pairing defines one config; rounds using the same config accumulate.
-export function pairConfigMatrix(tournament) {
-  const configs = {};
-  tournament.rounds.forEach((round, roundIndex) => {
-    if (!round.scores || Object.keys(round.scores).length === 0 || !round.pairs || round.pairs.length < 2) return;
-    // Pairs persist ids only (scoring.js thinPairs); sideA/sideB are rendered
-    // as names by the caller.
-    const [rawPair1, rawPair2] = resolvePairs(round.pairs, tournament.players);
-    if (rawPair1.length < 2 || rawPair2.length < 2) return;
-    const sideAKey = [rawPair1[0].id, rawPair1[1].id].sort().join('+');
-    const sideBKey = [rawPair2[0].id, rawPair2[1].id].sort().join('+');
-    const key = [sideAKey, sideBKey].sort().join(' vs ');
-    if (!configs[key]) configs[key] = { sideA: rawPair1, sideB: rawPair2, holeWins: { A: 0, B: 0, T: 0 }, pointsA: 0, pointsB: 0, rounds: [] };
-
-    const cur = configs[key];
-    // The config's sideA/sideB were fixed by whichever round first created
-    // this entry. A rematch can record its pairs in the opposite order
-    // (round.pairs[0] === the OTHER side this time) — orient this round's
-    // pair1/pair2 onto the stored sides before accumulating, or a flipped
-    // rematch silently credits everything to the wrong team.
-    const curSideAKey = [cur.sideA[0].id, cur.sideA[1].id].sort().join('+');
-    const flipped = sideAKey !== curSideAKey;
-    const pair1 = flipped ? rawPair2 : rawPair1;
-    const pair2 = flipped ? rawPair1 : rawPair2;
-    let roundA = 0, roundB = 0, roundT = 0, roundPtsA = 0, roundPtsB = 0;
-    round.holes.forEach(hole => {
-      let aPts = 0, bPts = 0, complete = true;
-      for (const member of pair1) {
-        const player = tournament.players.find(p => p.id === member.id);
-        const sc = round.scores[player?.id]?.[hole.number];
-        if (!sc || !player) { complete = false; break; }
-        aPts += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex, holeCountOf(round));
-      }
-      if (!complete) return;
-      for (const member of pair2) {
-        const player = tournament.players.find(p => p.id === member.id);
-        const sc = round.scores[player?.id]?.[hole.number];
-        if (!sc || !player) { complete = false; break; }
-        bPts += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex, holeCountOf(round));
-      }
-      if (!complete) return;
-      roundPtsA += aPts; roundPtsB += bPts;
-      if (aPts > bPts) { cur.holeWins.A++; roundA++; }
-      else if (bPts > aPts) { cur.holeWins.B++; roundB++; }
-      else { cur.holeWins.T++; roundT++; }
-    });
-    cur.pointsA += roundPtsA; cur.pointsB += roundPtsB;
-    cur.rounds.push({ roundIndex, courseName: round.courseName, wins: { A: roundA, B: roundB, T: roundT }, points: { A: roundPtsA, B: roundPtsB } });
-  });
-
-  return Object.values(configs).map(c => ({
-    ...c,
-    totalHoles: c.holeWins.A + c.holeWins.B + c.holeWins.T,
-    pointDiff: c.pointsA - c.pointsB,
-  }));
 }
 
 // ── Shot Stats (putts / driver direction / penalties) ──
@@ -2164,48 +1889,6 @@ export function driveScoreImpact(tournament, playerId) {
       short: summarize(buckets.short),
     },
   };
-}
-
-// ── GIR by Drive Result ──
-// For one player, splits per-hole GIR (strokes − putts ≤ par − 2) by what
-// the drive that hole did: hit the fairway (`fairway` OR `super` — same
-// hit-equivalence as shotStats' fairwaysHit% and teeShotImpact) or missed
-// it (`left`/`right`/`short`). Requires BOTH putts and drive logged for the
-// hole — GIR can't be computed without putts, and an unclassified drive
-// can't be bucketed. Drive is excluded on par 3s, same as
-// driveScoreImpact/shotStats (no driver off that tee).
-export function girByDriveResult(tournament, playerId) {
-  const player = (tournament.players || []).find((p) => p.id === playerId);
-  const fairway = [];
-  const miss = [];
-
-  (tournament.rounds || []).forEach((round, roundIndex) => {
-    if (!round.scores?.[playerId] || !player) return;
-    const details = round.shotDetails?.[playerId] || {};
-    (round.holes || []).forEach((hole) => {
-      if (hole.par === 3) return;
-      const d = details[hole.number];
-      if (!d || d.drive == null || d.putts == null) return;
-      const strokes = round.scores[playerId]?.[hole.number];
-      if (strokes == null) return;
-      const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
-      if (gir == null) return;
-      const entry = {
-        roundIndex, courseName: round.courseName,
-        holeNumber: hole.number, par: hole.par, strokes, putts: d.putts, gir,
-      };
-      if (d.drive === 'fairway' || d.drive === 'super') fairway.push(entry);
-      else miss.push(entry);
-    });
-  });
-
-  const summarize = (arr) => ({
-    holes: arr.length,
-    girPct: arr.length ? Math.round((arr.filter((e) => e.gir).length / arr.length) * 100) : 0,
-    breakdown: arr,
-  });
-
-  return { fairway: summarize(fairway), miss: summarize(miss) };
 }
 
 // ── Approach → Score Impact ──
@@ -3331,42 +3014,6 @@ export function sgReconciliation(rounds, playerId, targetHandicap = 0) {
 
 // ── Overview: Playing to Handicap ──
 
-// A golfer playing exactly to their handicap nets 2 Stableford points on
-// every hole (par, net). `delta = points − 2×holesPlayed` measures how far
-// above/below that baseline a player's whole tournament sits — positive
-// means outperforming the handicap overall, negative means underperforming.
-// Always net Stableford points, regardless of the screen's strokes/points
-// toggle (see PtsBadge). Skips players with zero holes played, and sorts
-// best (highest delta) first. Each row also carries a `rounds` breakdown
-// (points/holesPlayed/delta per round) for the detail sheet.
-export function playingToHandicap(tournament) {
-  const rows = tournament.players.map((p) => {
-    let points = 0, holesPlayed = 0;
-    const rounds = [];
-    tournament.rounds.forEach((round, roundIndex) => {
-      if (!round.scores?.[p.id]) return;
-      const handicap = getPlayingHandicap(round, p);
-      let roundPoints = 0, roundHoles = 0;
-      round.holes.forEach((hole) => {
-        const sc = round.scores[p.id]?.[hole.number];
-        if (!sc) return;
-        roundPoints += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
-        roundHoles++;
-      });
-      if (roundHoles === 0) return;
-      points += roundPoints;
-      holesPlayed += roundHoles;
-      rounds.push({
-        roundIndex, courseName: round.courseName,
-        points: roundPoints, holesPlayed: roundHoles, delta: roundPoints - 2 * roundHoles,
-      });
-    });
-    if (holesPlayed === 0) return null;
-    return { player: p, points, holesPlayed, delta: points - 2 * holesPlayed, rounds };
-  }).filter(Boolean);
-  return rows.sort((a, b) => b.delta - a.delta);
-}
-
 // ── Overview: Hot Stretch ──
 
 // The best rolling `windowSize`-hole sum of Stableford points over
@@ -3374,8 +3021,7 @@ export function playingToHandicap(tournament) {
 // the same rule playerStreaks/hallOfShame use, so a window may never span
 // an unscored hole or cross a round boundary even though such gaps are
 // simply absent from the flat per-player entries array. Always net
-// Stableford points, regardless of the screen's strokes/points toggle (see
-// PtsBadge). Players who never have `windowSize` adjacent holes scored are
+// Stableford points. Players who never have `windowSize` adjacent holes scored are
 // omitted entirely (no partial-window fallback). Ties keep the earliest
 // (roundIndex, startHole) window. Returned list is sorted best (highest
 // points) first, ready for a top-3 rendering.

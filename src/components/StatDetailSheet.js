@@ -6,6 +6,7 @@ import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
+import { withAlpha } from '../theme/alpha';
 import { useT } from '../i18n';
 import BottomSheet from './BottomSheet';
 import IconButton from './ui/IconButton';
@@ -210,7 +211,7 @@ const makeStyles = (t) => StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingTop: 14, paddingBottom: 6, marginTop: 2,
-    borderBottomWidth: 1, borderBottomColor: t.accent.primary + '30',
+    borderBottomWidth: 1, borderBottomColor: withAlpha(t.accent.primary, 0.19),
   },
   sectionHeaderText: {
     fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary,

@@ -2,11 +2,8 @@ import { resolvePairs } from '../scoring';
 import {
   pairDifferenceByHole,
   matchPlayResults,
-  pairConfigMatrix,
-  pairSynergy,
   pairCarryRatio,
   pairPerformance,
-  swingHole,
 } from '../statsEngine';
 import { buildTournament, holes18 } from './statsFixtures';
 
@@ -67,30 +64,10 @@ describe('statsEngine surfaces named pair members from thin pairs', () => {
     expect(names(data.pair2)).toEqual(['Cam Fox', 'Dan Oak']);
   });
 
-  test('swingHole carries the resolved pairs through', () => {
-    const swing = swingHole(tournament, 0);
-    expect(names(swing.pair1)).toEqual(['Ann Lee', 'Bob Ray']);
-    expect(names(swing.pair2)).toEqual(['Cam Fox', 'Dan Oak']);
-  });
-
   test('matchPlayResults returns roster players', () => {
     const [round] = matchPlayResults(tournament);
     expect(names(round.pair1)).toEqual(['Ann Lee', 'Bob Ray']);
     expect(names(round.pair2)).toEqual(['Cam Fox', 'Dan Oak']);
-  });
-
-  test('pairConfigMatrix sides are roster players', () => {
-    const [cfg] = pairConfigMatrix(tournament);
-    expect(names(cfg.sideA)).toEqual(['Ann Lee', 'Bob Ray']);
-    expect(names(cfg.sideB)).toEqual(['Cam Fox', 'Dan Oak']);
-  });
-
-  test('pairSynergy members are roster players', () => {
-    const entries = pairSynergy(tournament);
-    expect(entries.length).toBeGreaterThan(0);
-    for (const entry of entries) {
-      expect(names(entry.members).every(Boolean)).toBe(true);
-    }
   });
 
   test('pairCarryRatio members are roster players', () => {
