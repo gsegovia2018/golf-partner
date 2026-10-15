@@ -179,8 +179,12 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   never set for `eas build`/`eas update` (see "Shipping to Android").
 - Swing videos and analysis never leave the phone; the only planned exit is
   the explicit training-data export (plan §7.3).
-- Some screens are large monoliths (`ScorecardScreen`, `StatsScreen`) —
-  prefer extracting components/hooks over growing them further.
+- Some screens are large monoliths (`ScorecardScreen`) — prefer extracting
+  components/hooks over growing them further.
+- Game Stats (`StatsScreen`) is a thin shell: tabs Summary · Rounds · Players ·
+  Rivals live in `src/components/gamestats/`, their data shaping in
+  `src/store/gameStatsView.js` (pure, tested). Plan:
+  `docs/superpowers/plans/2026-10-15-game-stats-redesign.md`.
 - Plans and design specs are tracked under `docs/superpowers/`.
 - i18n (Spanish/English): pure-JS layer in `src/i18n/`, never a native module
   (OTA). User-facing strings go through `useT()`/`t()` and the catalogues in
