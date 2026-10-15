@@ -42,6 +42,56 @@ export function parsePointsTable(text) {
   return nums.every(Number.isFinite) ? nums : null;
 }
 
+export const POINTS_TABLE_MAX_PLACES = 40;
+
+// Each place of the points-table sheet is a text field. Returns the numbers
+// when every field is a whole number >= 0 (1 to 40 places, the same rules as
+// parsePointsTable), else { table: null, badIndex } with the first bad field
+// (-1 when the list itself is empty or too long).
+export function checkPointsDrafts(drafts) {
+  const list = drafts ?? [];
+  if (list.length === 0 || list.length > POINTS_TABLE_MAX_PLACES) return { table: null, badIndex: -1 };
+  const badIndex = list.findIndex((d) => !/^\d+$/.test(String(d ?? '').trim()));
+  if (badIndex >= 0) return { table: null, badIndex };
+  return { table: list.map((d) => Number(String(d).trim())), badIndex: -1 };
+}
+
+// Entry fee as a whole-euro stepper: feeText is what parseFeeCents reads.
+// Steps by 5 EUR, never below 0; '' at 0. Returns null when feeText is invalid.
+export const FEE_STEP_EUROS = 5;
+export function stepFeeText(feeText, direction) {
+  const cents = parseFeeCents(feeText);
+  if (cents == null) return null;
+  const next = Math.max(0, Math.floor(cents / 100) + direction * FEE_STEP_EUROS);
+  return next === 0 ? '' : String(next);
+}
+
+// Calendar months ('YYYY-MM') a season touches, first to last. [] when either
+// date is missing or the end comes before the start.
+export function seasonMonthKeys(startIso, endIso) {
+  if (!startIso || !endIso || startIso > endIso) return [];
+  const [sy, sm] = startIso.split('-').map(Number);
+  const [ey, em] = endIso.split('-').map(Number);
+  const keys = [];
+  for (let i = sy * 12 + (sm - 1); i <= ey * 12 + (em - 1); i += 1) {
+    keys.push(`${Math.floor(i / 12)}-${pad((i % 12) + 1)}`);
+  }
+  return keys;
+}
+
+// League formats the wizard offers. Medal (strokes) formats come later.
+export const LEAGUE_FORMATS = [
+  {
+    key: 'stableford', icon: 'target', section: 'points',
+    labelKey: 'league.format.stableford', subtitleKey: 'league.format.stablefordSub',
+  },
+];
+export const LEAGUE_FORMAT_SECTIONS = [
+  { section: 'points', labelKey: 'league.format.points' },
+  { section: 'strokes', labelKey: 'league.format.strokes' },
+];
+export const DEFAULT_LEAGUE_FORMAT = 'stableford';
+
 // '30' | '30,5' | '' -> cents. Empty means no fee. null when not a money amount.
 export function parseFeeCents(text) {
   const t = String(text ?? '').trim().replace(',', '.');

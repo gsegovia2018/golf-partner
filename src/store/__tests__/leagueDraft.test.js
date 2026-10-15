@@ -1,6 +1,7 @@
 import {
   defaultSeason, parseIsoDate, parsePointsTable, formatPointsTable, parseFeeCents,
   defaultMemberHandicap, parseMemberHandicap, buildCreateArgs, leagueJoinLink,
+  checkPointsDrafts, stepFeeText, seasonMonthKeys, LEAGUE_FORMATS, LEAGUE_FORMAT_SECTIONS,
 } from '../leagueDraft';
 import { DEFAULT_POINTS_TABLE } from '../leagueStandings';
 
@@ -68,4 +69,59 @@ describe('buildCreateArgs', () => {
 
 test('leagueJoinLink', () => {
   expect(leagueJoinLink('https://x.app', 'MULL-7Q4')).toBe('https://x.app/league/MULL-7Q4');
+});
+
+describe('checkPointsDrafts', () => {
+  test('whole numbers pass and become the table', () => {
+    expect(checkPointsDrafts(['500', ' 300 ', '0'])).toEqual({ table: [500, 300, 0], badIndex: -1 });
+  });
+  test('reports the first empty or invalid place', () => {
+    expect(checkPointsDrafts(['500', '', '3']).badIndex).toBe(1);
+    expect(checkPointsDrafts(['500', '3', '1.5', 'x']).badIndex).toBe(2);
+    expect(checkPointsDrafts(['-1']).badIndex).toBe(0);
+  });
+  test('needs at least one and at most 40 places', () => {
+    expect(checkPointsDrafts([])).toEqual({ table: null, badIndex: -1 });
+    expect(checkPointsDrafts(Array(41).fill('1')).table).toBeNull();
+    expect(checkPointsDrafts(Array(40).fill('1')).table).toHaveLength(40);
+  });
+  test('agrees with parsePointsTable', () => {
+    expect(checkPointsDrafts(['500', '300']).table).toEqual(parsePointsTable('500, 300'));
+  });
+});
+
+describe('stepFeeText', () => {
+  test('steps by 5 euros, never below free', () => {
+    expect(stepFeeText('', 1)).toBe('5');
+    expect(stepFeeText('5', 1)).toBe('10');
+    expect(stepFeeText('5', -1)).toBe('');
+    expect(stepFeeText('', -1)).toBe('');
+    expect(stepFeeText('3', -1)).toBe('');
+  });
+  test('stays parseFeeCents-compatible and rejects an invalid text', () => {
+    expect(parseFeeCents(stepFeeText('25', 1))).toBe(3000);
+    expect(stepFeeText('abc', 1)).toBeNull();
+  });
+});
+
+describe('seasonMonthKeys', () => {
+  test('lists each calendar month the season touches', () => {
+    expect(seasonMonthKeys('2026-10-04', '2026-12-31')).toEqual(['2026-10', '2026-11', '2026-12']);
+    expect(seasonMonthKeys('2026-10-31', '2026-10-31')).toEqual(['2026-10']);
+  });
+  test('crosses a year end', () => {
+    expect(seasonMonthKeys('2026-11-15', '2027-02-01')).toEqual(['2026-11', '2026-12', '2027-01', '2027-02']);
+  });
+  test('is empty when a date is missing or the order is wrong', () => {
+    expect(seasonMonthKeys(null, '2026-12-31')).toEqual([]);
+    expect(seasonMonthKeys('2026-12-31', '2026-10-01')).toEqual([]);
+  });
+});
+
+describe('LEAGUE_FORMATS', () => {
+  test('every format sits in a known section', () => {
+    const sections = LEAGUE_FORMAT_SECTIONS.map((x) => x.section);
+    LEAGUE_FORMATS.forEach((f) => expect(sections).toContain(f.section));
+    expect(LEAGUE_FORMATS.map((f) => f.key)).toContain('stableford');
+  });
 });
