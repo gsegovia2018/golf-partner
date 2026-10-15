@@ -123,6 +123,18 @@ describe('Summary tab', () => {
     expect(getAllByTestId('scoremix-legend')).toHaveLength(1);
   });
 
+  test('weekend awards: hole cards, best gross and comeback open ranked sheets', async () => {
+    const { getByTestId } = await open(fixture());
+    expect(getByTestId('award-easiestHole')).toBeTruthy();
+    expect(getByTestId('award-hardestHole')).toBeTruthy();
+    fireEvent.press(getByTestId('award-bestGross'));
+    expect(getByTestId('sheet').props.children).toMatch(/^Best gross round · Javier \| Finished 18-hole rounds/);
+    fireEvent.press(getByTestId('award-comeback'));
+    expect(getByTestId('sheet').props.children).toMatch(/^Comeback · Marcos/);
+    fireEvent.press(getByTestId('award-easiestHole'));
+    expect(getByTestId('sheet').props.children).toMatch(/^Easiest hole \| Highest average/);
+  });
+
   test('an award opens its detail sheet', async () => {
     const { getByTestId } = await open(fixture());
     fireEvent.press(getByTestId('award-bestRound'));
@@ -180,6 +192,17 @@ describe('Rounds tab', () => {
     expect(card.getByText('Tot')).toBeTruthy();
   });
 
+  test('lead story and comeback lines on the round card', async () => {
+    const { getByTestId, getByText, queryByTestId } = await open(fixture({ mode: 'individual' }));
+    fireEvent.press(getByTestId('tab-rounds'));
+    fireEvent.press(getByTestId('round-chip-2'));
+    expect(getByText('Comeback: Marcos was 6 points behind after H10')).toBeTruthy();
+    expect(getByText('Nacho led 13 of 18 holes · 3 lead changes')).toBeTruthy();
+    fireEvent.press(getByTestId('round-chip-1'));
+    expect(queryByTestId('round-comeback')).toBeNull();
+    expect(getByText('Marcos led 11 of 18 holes · No lead changes')).toBeTruthy();
+  });
+
   test('a hole story opens the hole sheet', async () => {
     const { getByTestId, getByText } = await open(fixture({ mode: 'individual' }));
     fireEvent.press(getByTestId('tab-rounds'));
@@ -195,6 +218,9 @@ describe('Players tab', () => {
     expect(getByTestId('player-chip-fx-me').props.accessibilityState.selected).toBe(true);
     expect(getByText('points · 1 of 4')).toBeTruthy();
     expect(getByText('Where you score')).toBeTruthy();
+    expect(getByTestId('best-runs')).toBeTruthy();
+    expect(getByText('Best run · net')).toBeTruthy();
+    expect(getByText(/4 pars or better · 1 birdie or better/)).toBeTruthy();
     expect(getByText('Stroke holes')).toBeTruthy();
     expect(getByText('ROUND HISTORY')).toBeTruthy();
     expect(getByTestId('player-shots')).toBeTruthy();

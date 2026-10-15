@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { useT } from '../../i18n';
 import { pointsText } from '../../lib/pointsText';
 import {
-  scoredRoundIndices, raceSeries, roundResult, scorecardGrid, holeStories,
+  scoredRoundIndices, raceSeries, roundResult, scorecardGrid, holeStories, leadStory, roundComeback,
 } from '../../store/gameStatsView';
 import { pairDifferenceByHole } from '../../store/statsEngine';
 import RaceChart from './RaceChart';
@@ -48,6 +48,8 @@ export default function RoundsTab({ tournament, pairsTournament, roundIndex, onS
 
   const race = useMemo(() => (ri == null ? null : raceSeries(tournament, ri)), [tournament, ri]);
   const result = useMemo(() => (ri == null ? null : roundResult(tournament, ri)), [tournament, ri]);
+  const lead = useMemo(() => (ri == null ? null : leadStory(tournament, ri)), [tournament, ri]);
+  const comeback = useMemo(() => (ri == null ? null : roundComeback(tournament, ri)), [tournament, ri]);
   const stories = useMemo(() => (ri == null ? null : holeStories(tournament, ri)), [tournament, ri]);
   const pairDiff = useMemo(
     () => (ri == null || !pairsTournament ? null : pairDifferenceByHole(pairsTournament, ri, { metric: 'points' })),
@@ -89,6 +91,19 @@ export default function RoundsTab({ tournament, pairsTournament, roundIndex, onS
       <View style={s.card}>
         <SectionTitle>{t('stats.game.round.header', { n: ri + 1, course: round.courseName ?? '' })}</SectionTitle>
         {result && <Text style={[s.strong, { fontSize: 15, marginBottom: 8 }]}>{resultText(result, t)}</Text>}
+        {comeback && (
+          <Text style={[s.sub, { marginBottom: 4 }]} testID="round-comeback">
+            {t('stats.game.round.comeback', { name: firstName(comeback.player), count: comeback.deficit, hole: comeback.afterHole })}
+          </Text>
+        )}
+        {lead && lead.leaders.length > 0 && (
+          <Text style={[s.sub, { marginBottom: 8 }]} testID="round-lead">
+            {[
+              t('stats.game.round.leadLed', { names: joinNames(lead.leaders.filter((l) => l.led === lead.leaders[0].led).map((l) => l.player)), led: lead.leaders[0].led, count: lead.total }),
+              lead.changes > 0 ? t('stats.game.round.leadChanges', { count: lead.changes }) : t('stats.game.round.leadNone'),
+            ].join(' · ')}
+          </Text>
+        )}
         {race.series.length > 0 && <RaceChart data={race} />}
         <Text style={s.sub}>{t('stats.game.race.caption')}</Text>
       </View>

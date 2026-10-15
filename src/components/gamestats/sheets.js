@@ -226,6 +226,61 @@ export function awardSheet(award) {
           tone: a.anchorScore >= 5 ? 'poor' : a.anchorScore > 0 ? 'neutral' : 'good',
         })),
       };
+    case 'bestGross':
+      return {
+        title,
+        subtitle: t(d.nine ? 'stats.game.sheet.grossSubNine' : 'stats.game.sheet.grossSub'),
+        explainer: t('stats.game.sheet.grossExplainer'),
+        rows: d.rows.map((r) => ({
+          key: `${r.player.id}-${r.roundIndex}`,
+          primary: `${firstName(r.player)} · ${roundTag(r.roundIndex)} · ${r.courseName}`,
+          secondary: t('stats.screen.parStrokes', { par: r.par, strokes: r.strokes }),
+          rightPrimary: t('stats.game.award.gross', { strokes: num(r.strokes), vs: r.vs === 0 ? 'E' : signed(r.vs) }),
+          tone: r.strokes === d.rows[0].strokes ? 'excellent' : undefined,
+        })),
+      };
+    case 'comeback':
+      return {
+        title,
+        subtitle: t('stats.game.sheet.comebackSub'),
+        explainer: t('stats.game.sheet.comebackExplainer'),
+        rows: d.map((c) => ({
+          key: `${c.player.id}-${c.roundIndex}`,
+          primary: `${firstName(c.player)} · ${roundTag(c.roundIndex)} · ${c.courseName}`,
+          secondary: t('stats.game.sheet.comebackRow', { count: c.deficit, hole: c.afterHole }),
+          rightPrimary: signed(-c.deficit),
+          tone: c.deficit === d[0].deficit ? 'excellent' : 'neutral',
+        })),
+      };
+    case 'improved':
+      return {
+        title,
+        subtitle: t('stats.game.sheet.improvedSub'),
+        explainer: t('stats.game.sheet.improvedExplainer'),
+        rows: d.map((r) => ({
+          key: r.player.id,
+          primary: r.player.name,
+          secondary: t('stats.game.award.improvedDetail', {
+            from: r.from.roundIndex + 1, a: r.from.points, to: r.to.roundIndex + 1, b: r.to.points,
+          }),
+          rightPrimary: signed(r.gain),
+          tone: r.gain >= 3 ? 'excellent' : r.gain < 0 ? 'poor' : 'neutral',
+        })),
+      };
+    case 'easiestHole':
+    case 'hardestHole':
+      return {
+        title: t(`stats.game.award.title.${award.id}`),
+        subtitle: t(award.id === 'easiestHole' ? 'stats.game.sheet.easiestSub' : 'stats.game.sheet.hardestSub'),
+        explainer: t('stats.game.sheet.holesExplainer'),
+        rows: d.map((h) => ({
+          key: h.key,
+          primary: `${h.courseName} · ${t('stats.screen.hole', { n: h.holeNumber })}`,
+          secondary: t('stats.game.sheet.holeRow', { par: h.par, count: h.scores }),
+          rightPrimary: t('stats.screen.pts', { n: num(h.avgPoints, { decimals: 2 }) }),
+          tone: h.avgPoints >= 2 ? 'good' : h.avgPoints >= 1.5 ? 'neutral' : 'poor',
+        })),
+      };
     default:
       return { title, rows: [] };
   }
