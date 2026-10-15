@@ -188,7 +188,8 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   one played round (`singleRoundIndex`) gets Summary · Scorecard · Players ·
   Rivals and no per-round wording (a guard test in `StatsScreen.test.js`
   enforces it); one Strokes | Points switch (gross by default) drives the
-  score mixes and the scorecards.
+  score mixes and the scorecards. A game with one player (`isSoloGame`) has
+  no tabs: the player's page is the screen.
 - One read-only scorecard for played rounds: `components/scorecard/ShotScorecard`
   (model: `store/scorecardView.js` `scorecardModel`). A score row per player,
   gross strokes tinted by result or points, handicap strokes as dots; players

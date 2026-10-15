@@ -1,6 +1,7 @@
 // Game Stats (Game settings → Statistics): the shell. Loads the game, picks
 // the tab (Summary · Rounds · Players · Rivals; a one-round game gets
-// Summary · Scorecard · Players · Rivals) and owns the one detail sheet and
+// Summary · Scorecard · Players · Rivals; a game with one player gets no
+// tabs, just that player's page) and owns the one detail sheet and
 // the screen-wide Strokes | Points switch. Each tab lives in src/components/gamestats; the numbers come from
 // src/store/gameStatsView + statsEngine. Plan:
 // docs/superpowers/plans/2026-10-15-game-stats-redesign.md.
@@ -17,6 +18,7 @@ import {
 } from '../store/tournamentStore';
 import { withoutScrambleScores } from '../store/statsEngine';
 import { scoredRoundIndices, singleRoundIndex } from '../store/gameStatsView';
+import { isSoloGame } from '../store/scorecardView';
 import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
 import SummaryTab from '../components/gamestats/SummaryTab';
 import RoundsTab from '../components/gamestats/RoundsTab';
@@ -89,6 +91,7 @@ export default function StatsScreen({ navigation, route }) {
 
   const singleIndex = useMemo(() => (statsTournament ? singleRoundIndex(statsTournament) : null), [statsTournament]);
   const single = singleIndex != null;
+  const solo = isSoloGame(statsTournament);
 
   const header = (
     <View style={s.header}>
@@ -158,6 +161,21 @@ export default function StatsScreen({ navigation, route }) {
           <Text style={s.noticeTitle}>{t('stats.game.empty.title')}</Text>
           <Text style={s.noticeText}>{t('stats.game.empty.body')}</Text>
         </View>
+      ) : solo ? (
+        // One player: no rivals, no comparison, no standings — the
+        // player's page is the whole screen.
+        <ScrollView style={s.scroll} contentContainerStyle={s.content} testID="solo-stats">
+          <PlayersTab
+            tournament={statsTournament}
+            selectedId={players[0].id}
+            onSelectPlayer={setPlayerId}
+            onOpenSheet={openSheet}
+            onOpenMyStats={openMyStats}
+            singleIndex={singleIndex}
+            mode={scoreMode}
+            onModeChange={setScoreMode}
+          />
+        </ScrollView>
       ) : (
         <>
           <View style={s.tabs} accessibilityRole="tablist">

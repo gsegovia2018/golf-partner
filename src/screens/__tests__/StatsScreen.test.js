@@ -488,6 +488,43 @@ describe('LeadLines verbs', () => {
   });
 });
 
+// One player: no tabs, the player's page is the screen.
+describe('a solo game', () => {
+  const solo = () => {
+    const t = fixture({ players: 1 });
+    t.rounds = [t.rounds[0]];
+    return t;
+  };
+
+  test('one page with no tab bar: tiles, shots, ledger and charts, nothing about rivals', async () => {
+    const { getByTestId, queryByTestId, getByText, queryByText, queryAllByTestId } = await open(solo());
+    expect(getByTestId('solo-stats')).toBeTruthy();
+    expect(queryAllByTestId(/^tab-/)).toHaveLength(0);
+    expect(getByText('Fin de semana en Cádiz')).toBeTruthy();
+    expect(getByText('points')).toBeTruthy(); // the points tile carries no rank
+    expect(queryByText(/ of 1$/)).toBeNull();
+    expect(getByTestId('player-shots')).toBeTruthy();
+    expect(getByTestId('hole-ledger')).toBeTruthy();
+    expect(getByTestId('player-mix')).toBeTruthy();
+    expect(getByTestId('player-drives')).toBeTruthy();
+    expect(getByTestId('player-putts')).toBeTruthy();
+    expect(queryAllByTestId(/^player-chip-/)).toHaveLength(0);
+    expect(queryByTestId('shot-comparison')).toBeNull();
+    expect(queryByText('Result')).toBeNull();
+    expect(queryByText('Final standings')).toBeNull();
+  });
+
+  test('the ledger is the single-player card: shot rows always shown, no chevrons', async () => {
+    const { getByTestId, queryAllByTestId } = await open(solo());
+    const ledger = within(getByTestId('hole-ledger'));
+    expect(ledger.getAllByText('Putts')).toHaveLength(2);
+    expect(queryAllByTestId(/^card-name-/)).toHaveLength(0);
+    expect(ledger.getByTestId('ledger-total').props.children).toBe('102 strokes · +30 · 36 putts');
+    fireEvent.press(getByTestId('ledger-mode-points'));
+    expect(within(getByTestId('hole-ledger')).getByTestId('ledger-total').props.children).toMatch(/^\d+ points · 102 strokes · 36 putts$/);
+  });
+});
+
 // One played round: a casual game, or a tournament after its first day.
 describe('a one-round game', () => {
   const single = ({ shots = false } = {}) => {
