@@ -25,6 +25,13 @@ describe('fitRect', () => {
 describe('SwingOverlay', () => {
   const props = { width: 350, height: 464, video: VIDEO };
 
+  test('key lines keep only the planes they name', () => {
+    const reference = { ball: [0.57, 0.59], handsAddress: [0.44, 0.5], trailShoulder: [0.4, 0.3], shaftPlaneDeg: 52, shoulderPlaneDeg: 67 };
+    const r = render(<SwingOverlay {...props} reference={reference} keyLines={{ shaft: true, shoulder: false, extra: [] }} />);
+    expect(svgTexts(r)).toContain('Shaft plane 52°');
+    expect(svgTexts(r)).not.toContain('Shoulder plane 67°');
+  });
+
   test('without a still it says so and still draws the overlay', () => {
     const r = render(<SwingOverlay {...props} pose={lm()} club={{ hands: [0.4, 0.5], head: null, hidden: true, source: 'user' }} />);
     expect(r.getByText('Still not available')).toBeTruthy();

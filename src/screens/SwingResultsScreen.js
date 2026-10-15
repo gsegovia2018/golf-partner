@@ -30,7 +30,7 @@ import {
 import { shareSwingExport } from '../swing/shareExport';
 import { nativeApi, getStill, ensureStills } from '../swing/frames';
 import { poseAtFrame } from '../swing/poseAt';
-import { highlightFor } from '../swing/highlights';
+import { highlightFor, keyLinesAt } from '../swing/highlights';
 import {
   checksAt, worstByCheckpoint, unplacedCheckpoint, prioritizeChecks, CHECK_KEY, homeOf, frameOfKey,
 } from '../swing/checkpointChecks';
@@ -300,8 +300,12 @@ export function SwingResultsView({
   const ballOn = ready && CHECKPOINT_KEYS.indexOf(cp) <= CHECKPOINT_KEYS.indexOf('impact') && analysis.reference?.ball;
   const ball = ballOn ? [...analysis.reference.ball, pose?.ball?.r ?? 0.012] : null;
   const highlight = useMemo(() => (ready && selected ? highlightFor(selected, {
+    analysis, cp, poseAt: (f) => poseAtFrame(pose, f), frameOf: (k) => frameOfKey(analysis, k),
+  }) : []), [ready, selected, analysis, cp, pose]);
+  const keyLines = useMemo(() => (ready ? keyLinesAt(cp, {
     analysis, poseAt: (f) => poseAtFrame(pose, f), frameOf: (k) => frameOfKey(analysis, k),
-  }) : []), [ready, selected, analysis, pose]);
+  }) : null), [ready, cp, analysis, pose]);
+  const worst = useMemo(() => (ready ? worstByCheckpoint(checks) : {}), [ready, checks]);
   const fixes = useMemo(() => (ready ? fixesFor(analysis) : []), [ready, analysis]);
   const focusOn = !!selected && (selected.status === 'red' || selected.status === 'yellow');
   const openFixes = (list, index) => setFixSheet({ list, index, open: true });
@@ -310,7 +314,6 @@ export function SwingResultsView({
     if (i >= 0) openFixes(fixes, i);
     else openFixes([{ check, copy: fixCopy(check), drill: drillForCheck(check) }], 0);
   };
-  const worst = useMemo(() => (ready ? worstByCheckpoint(checks) : {}), [ready, checks]);
 
   const pickCp = useCallback((k) => { setCp(k); setOff(0); setSelKey(null); }, []);
   const jumpToCheck = (c) => { pickCp(homeOf(c)); setSelKey(CHECK_KEY(c)); scroll.current?.scrollTo?.({ y: 0, animated: true }); };
@@ -394,6 +397,8 @@ export function SwingResultsView({
                 ball={ball}
                 reference={analysis.reference}
                 highlight={highlight}
+                keyLines={off === 0 ? keyLines : (keyLines && { ...keyLines, extra: [] })}
+                keyTone={worst[cp] === 'red' || worst[cp] === 'yellow' ? focusTone(worst[cp]) : '#4fae8a'}
                 focus={focusOn}
                 tone={focusTone(selected?.status)}
                 label={T.stillA11y(SWING_STRINGS.checkpoint[cp], frame)}

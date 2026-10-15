@@ -27,15 +27,97 @@ const signed = (check) => (check.value > 0 ? `+${valueText(check)}` : valueText(
 const midOf = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 const ok = (p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]);
 
+/** Where the ray a -> b leaves the frame (normalised), so a plane runs to the edge of the picture. */
+export function extendToEdge(a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const t = [
+    dx < 0 ? (0 - a[0]) / dx : dx > 0 ? (1 - a[0]) / dx : Infinity,
+    dy < 0 ? (0 - a[1]) / dy : dy > 0 ? (1 - a[1]) / dy : Infinity,
+  ].reduce((m, v) => (v > 0 && v < m ? v : m), Infinity);
+  return Number.isFinite(t) ? [a[0] + dx * t, a[1] + dy * t] : b;
+}
+
+// The helpers every drawing shares: the golfer's lines to the ground, and the references.
+function toolkit(ctx) {
+  const { analysis, poseAt, frameOf } = ctx;
+  const club = analysis.clubMarks || {};
+  const ref = analysis.reference;
+  const lm = (key, i) => {
+    const row = poseAt(frameOf(key))?.[i];
+    return row && ok(row) ? [row[0], row[1]] : null;
+  };
+  const hands = (k) => (club[k] && ok(club[k].hands) ? club[k].hands : null);
+  const head = (k) => (club[k] && ok(club[k].head) ? club[k].head : null);
+  const plane = (to) => (ref?.ball && to ? { t: 'line', a: ref.ball, b: extendToEdge(ref.ball, to), dash: true, role: 'target' } : null);
+  const shaftPlane = () => plane(ref?.handsAddress);
+  const shoulderPlane = () => plane(ref?.trailShoulder);
+  // Toes and ball as ticks on the ground, so the shaft line has something to land on.
+  const ground = () => {
+    const ball = ref?.ball;
+    if (!ball) return [];
+    const toes = [LM.lToe, LM.rToe].map((i) => lm('address', i)).filter(Boolean);
+    const marks = [];
+    if (toes.length) marks.push([toes.reduce((m, p) => m + p[0], 0) / toes.length, t('swing.overlay.toes')]);
+    marks.push([ball[0], t('swing.overlay.ball')]);
+    return marks.flatMap(([x, name]) => [
+      { t: 'line', a: [x, ball[1] + 0.012], b: [x, ball[1] + 0.035], role: 'target' },
+      { t: 'label', at: [x - 0.03, ball[1] + 0.06], text: name, role: 'target' },
+    ]);
+  };
+  // Your shaft line carried down to ball height.
+  const landing = (k) => {
+    const h = head(k);
+    const g = hands(k);
+    const ball = ref?.ball;
+    if (!h || !g || !ball || g[1] === h[1]) return [];
+    const f = (ball[1] - h[1]) / (g[1] - h[1]);
+    const hit = [h[0] + (g[0] - h[0]) * f, ball[1]];
+    return [{ t: 'line', a: h, b: hit, dash: true }, { t: 'dot', c: hit }];
+  };
+  return { lm, hands, head, shaftPlane, shoulderPlane, ground, landing };
+}
+
+/**
+ * What a checkpoint draws when no check is in focus (design B: each position has its own key lines).
+ * @returns {{ shaft: boolean, shoulder: boolean, extra: object[] }}  which address planes to keep, plus
+ *   the golfer's own lines for that position
+ */
+export function keyLinesAt(cp, ctx) {
+  const none = { shaft: false, shoulder: false, extra: [] };
+  if (!ctx?.analysis) return none;
+  const { lm, ground, landing } = toolkit(ctx);
+  // your shaft line to the ground, with the toes and the ball to land on (no ticks without a line)
+  const down = (k) => {
+    const mine = landing(k);
+    return mine.length ? [...mine, ...ground()] : [];
+  };
+  switch (cp) {
+    case 'address': return { shaft: true, shoulder: true, extra: [] };
+    case 'takeaway':
+    case 'transition':
+    case 'impact': return { ...none, shaft: true };
+    case 'leadArm': return { shaft: true, shoulder: true, extra: down('leadArm') };
+    case 'top': {
+      const left = ctx.analysis.handedness === 'left';
+      const sh = lm('top', left ? LM.rSh : LM.lSh);
+      const wr = lm('top', left ? LM.rWr : LM.lWr);
+      return { ...none, shoulder: true, extra: sh && wr ? [{ t: 'line', a: sh, b: wr }] : [] };
+    }
+    case 'shaftDown': return { ...none, shaft: true, extra: down('shaftDown') };
+    case 'shaftThrough': return { ...none, extra: down('shaftThrough') };
+    default: return none;
+  }
+}
+
 /**
  * @param {object} check  a row of analysis.checks
- * @param {object} ctx  { analysis, poseAt(frame) -> 33 x [x, y, vis] | null, frameOf(key) -> number }
+ * @param {object} ctx  { analysis, cp?, poseAt(frame) -> 33 x [x, y, vis] | null, frameOf(key) -> number }
  * @returns {object[]} primitives (possibly empty)
  */
 export function highlightFor(check, ctx) {
   const { analysis, poseAt, frameOf } = ctx;
   if (!check || !analysis) return [];
-  const club = analysis.clubMarks || {};
   const lm = (key, i) => {
     const row = poseAt(frameOf(key))?.[i];
     return row && ok(row) ? [row[0], row[1]] : null;
@@ -51,8 +133,7 @@ export function highlightFor(check, ctx) {
   const [leadHip, leadKnee, leadSh, leadWr, trailHeel] = left
     ? [LM.rHip, LM.rKnee, LM.rSh, LM.rWr, LM.lHeel]
     : [LM.lHip, LM.lKnee, LM.lSh, LM.lWr, LM.rHeel];
-  const hands = (k) => (club[k] && ok(club[k].hands) ? club[k].hands : null);
-  const head = (k) => (club[k] && ok(club[k].head) ? club[k].head : null);
+  const { hands, head, shaftPlane, shoulderPlane, ground, landing } = toolkit(ctx);
   const text = (at, t) => (ok(at) && t ? [{ t: 'label', at: [at[0] + 0.03, at[1]], text: t }] : []);
   const out = [];
 
@@ -164,30 +245,37 @@ export function highlightFor(check, ctx) {
     }
     case 'clubhead_vs_plane': {
       const h = head(check.cp);
-      return h ? [{ t: 'circle', c: h, r: 0.03 }, ...text(h, signed(check))] : [];
+      const plane = shaftPlane();
+      return h ? [...(plane ? [plane] : []), { t: 'circle', c: h, r: 0.03 }, ...text(h, signed(check))] : [];
     }
     case 'butt_extension':
     case 'shaft_down_shallow':
     case 'shaft_through_steep': {
       const k = homeOf(check);
-      const h = head(k);
-      const g = hands(k);
-      const ball = analysis.reference?.ball;
-      if (!h || !g || !ball || g[1] === h[1]) return [];
-      const t = (ball[1] - h[1]) / (g[1] - h[1]);
-      const hit = [h[0] + (g[0] - h[0]) * t, ball[1]];
-      return [{ t: 'line', a: h, b: hit, dash: true }, { t: 'dot', c: hit }, ...text([hit[0] - 0.3, hit[1] + 0.04], signed(check))];
+      const mine = landing(k);
+      if (!mine.length) return [];
+      const hit = mine[1].c;
+      const plane = check.id === 'shaft_down_shallow' ? shaftPlane() : null;
+      return [...mine, ...text([hit[0], hit[1] - 0.03], signed(check)), ...(plane ? [plane] : []), ...ground()];
     }
     case 'top_direction': {
       const h = hands('top');
       const c = head('top');
       if (!h || !c) return [];
-      return [{ t: 'line', a: h, b: c }, ...text(h, check.dir === 'across' ? 'crossed' : check.dir === 'laid_off' ? 'laid off' : 'on line')];
+      return [{ t: 'line', a: h, b: c }, { t: 'line', a: h, b: [h[0], h[1] + (c[1] < h[1] ? -1 : 1) * Math.hypot(c[0] - h[0], c[1] - h[1])], dash: true, role: 'target' }, ...text(h, check.dir === 'across' ? 'crossed' : check.dir === 'laid_off' ? 'laid off' : 'on line')];
     }
     case 'downswing_path': {
       const pts = ['address', 'takeaway', 'leadArm', 'top'].map(hands).filter(Boolean);
       const sd = hands('shaftDown');
-      return pts.length > 1 ? [{ t: 'poly', pts, dash: true, role: 'target' }, ...(sd ? text(sd, signed(check)) : [])] : [];
+      return pts.length > 1 ? [{ t: 'poly', pts, dash: true, role: 'target' }, ...(sd ? [{ t: 'rect', c: sd, half: 0.018 }, ...text(sd, signed(check))] : [])] : [];
+    }
+    case 'hands_between_planes': {
+      const planes = [shaftPlane(), shoulderPlane()].filter(Boolean);
+      if (planes.length < 2) return [];
+      const k = ctx.cp === 'leadArm' || ctx.cp === 'top' ? ctx.cp : check.at ?? 'leadArm';
+      const g = hands(k);
+      // the value belongs to the position it was read at; elsewhere only the hands are marked
+      return g ? [...planes, { t: 'rect', c: g, half: 0.018 }, ...(!check.at || check.at === k ? text(g, valueText(check)) : [])] : planes;
     }
     case 'finish_balance': {
       const a = lm('finish', leadAnkle);

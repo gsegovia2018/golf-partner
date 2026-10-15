@@ -4,6 +4,7 @@ import Svg, {
   Line, Circle, Rect, Polyline, Text as SvgText,
 } from 'react-native-svg';
 import { SWING_STRINGS } from '../../swing/strings';
+import { extendToEdge } from '../../swing/highlights';
 import { hud } from '../../theme/tokens';
 
 // The still of a checkpoint with everything drawn on it (design B): pose skeleton, hands
@@ -35,17 +36,6 @@ export function fitRect(boxW, boxH, videoW, videoH) {
   return { x: (boxW - w) / 2, y: (boxH - h) / 2, w, h };
 }
 
-/** Where the ray a -> b leaves the frame (normalised), so a plane runs to the edge of the picture. */
-function extendToEdge(a, b) {
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  const t = [
-    dx < 0 ? (0 - a[0]) / dx : dx > 0 ? (1 - a[0]) / dx : Infinity,
-    dy < 0 ? (0 - a[1]) / dy : dy > 0 ? (1 - a[1]) / dy : Infinity,
-  ].reduce((m, v) => (v > 0 && v < m ? v : m), Infinity);
-  return Number.isFinite(t) ? [a[0] + dx * t, a[1] + dy * t] : b;
-}
-
 function Label({ x, y, text, anchor = 'start', color = WHITE }) {
   const common = {
     x, y, fontSize: 10.5, fontWeight: '700', fontFamily: 'PlusJakartaSans-Bold', textAnchor: anchor,
@@ -66,7 +56,7 @@ function PlaneLabel({ p, X, Y, w, text, color }) {
 
 export default function SwingOverlay({
   width, height, video, uri = null, pose = null, club = null, ball = null, reference = null,
-  highlight = [], showPlanes = true, edit = false, focus = false, tone = DEFAULT_TONE, label, style, children, resizeMethod,
+  highlight = [], keyLines = null, keyTone = HIGHLIGHT, showPlanes = true, edit = false, focus = false, tone = DEFAULT_TONE, label, style, children, resizeMethod,
 }) {
   const r = fitRect(width, height, video?.width, video?.height);
   const X = (x) => x * r.w;
@@ -91,6 +81,23 @@ export default function SwingOverlay({
     return { b, e1, e2 };
   })() : null;
 
+  const showShaft = !keyLines || keyLines.shaft;
+  const showShoulder = !keyLines || keyLines.shoulder;
+
+  // One drawing primitive; `c` = { color, w, d, text } decides how it looks (in focus the status
+  // colour and the green target, otherwise the highlight / key-line colours).
+  const drawPrim = (h, key, c) => {
+    switch (h.t) {
+      case 'line': return <Line key={key} x1={X(h.a[0])} y1={Y(h.a[1])} x2={X(h.b[0])} y2={Y(h.b[1])} stroke={c.color} strokeWidth={c.w} strokeDasharray={c.d} />;
+      case 'circle': return <Circle key={key} cx={X(h.c[0])} cy={Y(h.c[1])} r={X(h.r)} fill="none" stroke={c.color} strokeWidth={c.w} strokeDasharray={c.d} />;
+      case 'rect': return <Rect key={key} x={X(h.c[0]) - X(h.half)} y={Y(h.c[1]) - X(h.half)} width={X(h.half) * 2} height={X(h.half) * 2} fill="none" stroke={c.color} strokeWidth={c.w} strokeDasharray={c.d} />;
+      case 'dot': return <Circle key={key} cx={X(h.c[0])} cy={Y(h.c[1])} r={4} fill={c.color} />;
+      case 'poly': return <Polyline key={key} points={h.pts.map((p) => `${X(p[0])},${Y(p[1])}`).join(' ')} fill="none" stroke={c.color} strokeWidth={c.w} strokeDasharray={c.d} />;
+      case 'label': return <Label key={key} x={X(h.at[0])} y={Y(h.at[1]) + 4} text={h.text} anchor={labelAnchor(X(h.at[0]))} color={c.text} />;
+      default: return null;
+    }
+  };
+
   return (
     <View style={[styles.box, { width, height }, style]}>
       <View style={[styles.frame, { left: r.x, top: r.y, width: r.w, height: r.h }]}>
@@ -106,10 +113,10 @@ export default function SwingOverlay({
         <Svg width={r.w} height={r.h} style={StyleSheet.absoluteFill} pointerEvents="none">
           {planes ? (
             <>
-              <Line x1={X(planes.b[0])} y1={Y(planes.b[1])} x2={X(planes.e1[0])} y2={Y(planes.e1[1])} stroke={ACCENT} strokeWidth={1.5} />
-              <Line x1={X(planes.b[0])} y1={Y(planes.b[1])} x2={X(planes.e2[0])} y2={Y(planes.e2[1])} stroke={SOFT} strokeWidth={1.5} strokeDasharray="5 4" />
-              {reference.shaftPlaneDeg != null ? <PlaneLabel p={planes.e1} X={X} Y={Y} w={r.w} text={SWING_STRINGS.overlay.shaftPlane(reference.shaftPlaneDeg)} color={ACCENT} /> : null}
-              {reference.shoulderPlaneDeg != null ? <PlaneLabel p={planes.e2} X={X} Y={Y} w={r.w} text={SWING_STRINGS.overlay.shoulderPlane(reference.shoulderPlaneDeg)} color={SOFT} /> : null}
+              {showShaft ? <Line x1={X(planes.b[0])} y1={Y(planes.b[1])} x2={X(planes.e1[0])} y2={Y(planes.e1[1])} stroke={ACCENT} strokeWidth={1.5} /> : null}
+              {showShoulder ? <Line x1={X(planes.b[0])} y1={Y(planes.b[1])} x2={X(planes.e2[0])} y2={Y(planes.e2[1])} stroke={SOFT} strokeWidth={1.5} strokeDasharray="5 4" /> : null}
+              {showShaft && reference.shaftPlaneDeg != null ? <PlaneLabel p={planes.e1} X={X} Y={Y} w={r.w} text={SWING_STRINGS.overlay.shaftPlane(reference.shaftPlaneDeg)} color={ACCENT} /> : null}
+              {showShoulder && reference.shoulderPlaneDeg != null ? <PlaneLabel p={planes.e2} X={X} Y={Y} w={r.w} text={SWING_STRINGS.overlay.shoulderPlane(reference.shoulderPlaneDeg)} color={SOFT} /> : null}
             </>
           ) : null}
 
@@ -131,21 +138,21 @@ export default function SwingOverlay({
             </>
           ) : null}
 
+          {!focus ? (keyLines?.extra ?? []).map((h, k) => {
+            const target = h.role === 'target';
+            return drawPrim(h, `k${k}`, {
+              color: target ? ACCENT : keyTone, w: target ? 2 : 2.5, d: h.dash ? dash : undefined, text: WHITE,
+            });
+          }) : null}
+
           {highlight.map((h, k) => {
-            const key = `h${k}`;
             const target = focus && h.role === 'target';
-            const color = focus ? (target ? ACCENT : tone) : HIGHLIGHT;
-            const w = focus ? (target ? 2.5 : 3) : 2;
-            const d = h.dash && (!focus || target) ? dash : undefined;
-            switch (h.t) {
-              case 'line': return <Line key={key} x1={X(h.a[0])} y1={Y(h.a[1])} x2={X(h.b[0])} y2={Y(h.b[1])} stroke={color} strokeWidth={w} strokeDasharray={d} />;
-              case 'circle': return <Circle key={key} cx={X(h.c[0])} cy={Y(h.c[1])} r={X(h.r)} fill="none" stroke={color} strokeWidth={w} strokeDasharray={d} />;
-              case 'rect': return <Rect key={key} x={X(h.c[0]) - X(h.half)} y={Y(h.c[1]) - X(h.half)} width={X(h.half) * 2} height={X(h.half) * 2} fill="none" stroke={color} strokeWidth={w} strokeDasharray={d} />;
-              case 'dot': return <Circle key={key} cx={X(h.c[0])} cy={Y(h.c[1])} r={4} fill={color} />;
-              case 'poly': return <Polyline key={key} points={h.pts.map((p) => `${X(p[0])},${Y(p[1])}`).join(' ')} fill="none" stroke={color} strokeWidth={w} strokeDasharray={d} />;
-              case 'label': return <Label key={key} x={X(h.at[0])} y={Y(h.at[1]) + 4} text={h.text} anchor={labelAnchor(X(h.at[0]))} color={focus ? WHITE : HIGHLIGHT} />;
-              default: return null;
-            }
+            return drawPrim(h, `h${k}`, {
+              color: focus ? (target ? ACCENT : tone) : HIGHLIGHT,
+              w: focus ? (target ? 2.5 : 3) : 2,
+              d: h.dash && (!focus || target) ? dash : undefined,
+              text: focus ? WHITE : HIGHLIGHT,
+            });
           })}
 
           {ball ? <Circle cx={X(ball[0])} cy={Y(ball[1])} r={Math.max(10, X(ball[2]) + 4)} fill="none" stroke={WHITE} strokeWidth={2} /> : null}

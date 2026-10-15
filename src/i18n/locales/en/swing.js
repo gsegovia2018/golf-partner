@@ -316,6 +316,8 @@ export default {
   'swing.compare.stillA11y': '{name}, {stills}',
   'swing.overlay.shaftPlane': 'Shaft plane {deg}°',
   'swing.overlay.shoulderPlane': 'Shoulder plane {deg}°',
+  'swing.overlay.toes': 'Toes',
+  'swing.overlay.ball': 'Ball',
   'swing.mark.dockLabel': '{name}, {status}',
   'swing.mark.line.missing': 'Tap the video where the {name} is',
   'swing.mark.placing': 'Placing · {name}',
