@@ -187,7 +187,7 @@ describe('Rounds tab', () => {
     r.holes = r.holes.slice(0, 9).map((h, i) => ({ ...h, strokeIndex: i + 1 }));
     t.rounds = [r];
     const { getByTestId } = await open(t);
-    fireEvent.press(getByTestId('tab-rounds'));
+    fireEvent.press(getByTestId('tab-card'));
     const card = within(getByTestId('scorecard-heatmap'));
     expect(card.queryByText('Out')).toBeNull();
     expect(card.getByText('Tot')).toBeTruthy();
@@ -221,18 +221,25 @@ describe('Rounds tab', () => {
 });
 
 describe('Players tab', () => {
-  test('defaults to me: tiles, where you score, stroke holes, history and shots', async () => {
-    const { getByTestId, getByText } = await open(fixture());
+  test('defaults to me: tiles, where you score, history and the shot charts', async () => {
+    const { getByTestId, getByText, queryByTestId } = await open(fixture());
     fireEvent.press(getByTestId('tab-players'));
     expect(getByTestId('player-chip-fx-me').props.accessibilityState.selected).toBe(true);
     expect(getByText('points · 1 of 4')).toBeTruthy();
     expect(getByText('Where you score')).toBeTruthy();
+    // One diverging chart: par types, nines and stroke holes together.
+    ['par3', 'par4', 'par5', 'front', 'back', 'withStroke', 'withoutStroke'].forEach((k) => expect(getByTestId(`where-${k}`)).toBeTruthy());
     expect(getByTestId('best-runs')).toBeTruthy();
     expect(getByText('Best run · net')).toBeTruthy();
     expect(getByText(/4 pars or better · 1 birdie or better/)).toBeTruthy();
-    expect(getByText('Stroke holes')).toBeTruthy();
     expect(getByText('ROUND HISTORY')).toBeTruthy();
     expect(getByTestId('player-shots')).toBeTruthy();
+    expect(getByTestId('fairway-fan')).toBeTruthy();
+    expect(getByTestId('putt-histogram')).toBeTruthy();
+    expect(getByTestId('player-bounce')).toBeTruthy();
+    // Several rounds: no hole-by-hole ledger; penalties are a line, not a 0 row.
+    expect(queryByTestId('hole-ledger')).toBeNull();
+    expect(getByTestId('player-penalties')).toBeTruthy();
   });
 
   test('a player without shot detail gets no shots section', async () => {
@@ -249,12 +256,18 @@ describe('Players tab', () => {
     expect(getByTestId('sheet').props.children).toMatch(/^R2 · Montecastillo Golf/);
   });
 
-  test('shot comparison appears once two players logged shots', async () => {
+  test('shot comparison appears once two players logged shots, as dot plots', async () => {
     const t = fixture();
+    const one = await open(t);
+    fireEvent.press(one.getByTestId('tab-players'));
+    expect(one.queryByTestId('shot-comparison')).toBeNull();
+    one.unmount();
     t.rounds[0].shotDetails['fx-jav'] = { 1: { putts: 2, drive: 'fairway', teePenalties: 0 } };
     const { getByTestId } = await open(t);
     fireEvent.press(getByTestId('tab-players'));
     expect(getByTestId('shot-comparison')).toBeTruthy();
+    expect(getByTestId('compare-fir')).toBeTruthy();
+    expect(getByTestId('compare-putts')).toBeTruthy();
   });
 });
 
@@ -329,7 +342,8 @@ describe('a Best Ball / Worst Ball game', () => {
     expect(getByText('Best Ball / Worst Ball points · same as the Play leaderboard')).toBeTruthy();
     fireEvent.press(getByRole('tab', { name: 'Stableford' }));
     expect(getByText('30')).toBeTruthy();
-    expect(getByText('Round points · total · vs handicap (2 pts per hole)')).toBeTruthy();
+    // One round: nothing "per round".
+    expect(getByText('Points · vs handicap (2 pts per hole)')).toBeTruthy();
   });
 
   test('a Stableford game keeps Points · Gross · Net', async () => {
@@ -345,16 +359,20 @@ describe('a Best Ball / Worst Ball game', () => {
   });
 
   test('the round result counts each pair once, as the scorecard does', async () => {
-    const { getByTestId, getByText } = await open(bestBallGameFixture());
+    // Played twice, so the Rounds tab (and its result card) is there.
+    const g = bestBallGameFixture();
+    g.rounds.push({ ...g.rounds[0], id: `${g.rounds[0].id}-again` });
+    const { getByTestId, getByText } = await open(g);
     fireEvent.press(getByTestId('tab-rounds'));
     expect(getByText('Marcos & Yeyen beat Molden & Charlie 10–9')).toBeTruthy();
   });
 
-  test('pair cards say their average is combined Stableford', async () => {
+  test('pair cards say their points are combined', async () => {
     const { getByTestId, getAllByText } = await open(bestBallGameFixture());
     fireEvent.press(getByTestId('tab-rivals'));
     expect(getByTestId('pair-avg-bb1|bb2').props.children).toBe('57');
-    expect(getAllByText('1 round · combined Stableford avg')).toHaveLength(2);
+    expect(getAllByText(/^\d+ pts combined$/)).toHaveLength(2);
+    expect(getAllByText('57 pts combined')).toHaveLength(1);
   });
 
   test('in Spanish: Resultado · Stableford · Bruto · Neto', async () => {
@@ -363,7 +381,7 @@ describe('a Best Ball / Worst Ball game', () => {
     expect(tabs(getAllByRole)).toEqual(['Resultado', 'Stableford', 'Bruto', 'Neto']);
     expect(getAllByText('4,5')).toHaveLength(2);
     fireEvent.press(getByText('Rivales'));
-    expect(getAllByText('1 vuelta · Stableford combinado de media')).toHaveLength(2);
+    expect(getAllByText('57 ptos combinados')).toHaveLength(1);
   });
 });
 
@@ -380,13 +398,14 @@ describe('numbers and narrow screens', () => {
     await act(() => setLanguagePref('es'));
     const es = await open(t);
     fireEvent.press(es.getByTestId('tab-players'));
-    expect(within(es.getByTestId('player-shots')).getByText('1,9')).toBeTruthy();
+    expect(within(es.getByTestId('player-shots')).getByText('Putts · 1,9/hoyo')).toBeTruthy();
+    expect(within(es.getByTestId('player-putts')).getByText('34 en 18 hoyos · 1,9/hoyo')).toBeTruthy();
     es.unmount();
     await act(() => setLanguagePref('en'));
     putts(t, Array(18).fill(2)); // exactly 2 per hole still shows its decimal
     const en = await open(t);
     fireEvent.press(en.getByTestId('tab-players'));
-    expect(within(en.getByTestId('player-shots')).getByText('2.0')).toBeTruthy();
+    expect(within(en.getByTestId('player-shots')).getByText('Putts · 2.0/hole')).toBeTruthy();
   });
 
   test('score mix counts, Where you score labels and head-to-head heads never ellipsize', async () => {
@@ -394,11 +413,166 @@ describe('numbers and narrow screens', () => {
     const count = getByTestId('mix-count-fx-me');
     expect(count.props.numberOfLines).toBeUndefined();
     fireEvent.press(getByTestId('tab-players'));
-    expect(getByText('Hardest third (SI)').props.numberOfLines).toBeUndefined();
+    expect(getByText('Without a stroke').props.numberOfLines).toBeUndefined();
     fireEvent.press(getByTestId('tab-rivals'));
     const head = getByTestId('h2h-head-fx-me');
     const style = Object.assign({}, ...[head.props.style].flat(Infinity).filter(Boolean));
     expect(style.letterSpacing).toBe(0);
     expect(style.width).toBeLessThanOrEqual(56);
+  });
+});
+
+// One played round: a casual game, or a tournament after its first day.
+describe('a one-round game', () => {
+  const single = ({ shots = false } = {}) => {
+    const t = fixture();
+    t.rounds = [t.rounds[0]];
+    // Javier logs a few holes so the comparison has two players.
+    if (shots) t.rounds[0].shotDetails['fx-jav'] = { 1: { putts: 2, drive: 'fairway' }, 2: { putts: 1, drive: 'left' } };
+    return t;
+  };
+  const tabIds = (getAllByRole) => getAllByRole('button')
+    .map((b) => b.props.testID ?? '')
+    .filter((id) => /^tab-/.test(id));
+
+  test('tabs Summary · Scorecard · Players · Rivals, header without a round count', async () => {
+    const { getByTestId, queryByTestId, getByText, queryByText, getAllByRole } = await open(single());
+    expect(tabIds(getAllByRole)).toEqual(['tab-summary', 'tab-card', 'tab-players', 'tab-rivals']);
+    expect(getByText('Scorecard')).toBeTruthy();
+    expect(queryByTestId('tab-rounds')).toBeNull();
+    expect(getByText('Fin de semana en Cádiz')).toBeTruthy();
+    expect(queryByText(/1 round/)).toBeNull();
+    fireEvent.press(getByTestId('tab-card'));
+    expect(queryByTestId('round-chip-0')).toBeNull();
+    expect(getByTestId('scorecard-heatmap')).toBeTruthy();
+    expect(getByTestId('pair-difference-chart')).toBeTruthy();
+    expect(getByText('Hole stories')).toBeTruthy();
+  });
+
+  test('in Spanish: Resumen · Tarjeta · Jugadores · Rivales', async () => {
+    await act(() => setLanguagePref('es'));
+    const { getByText, queryByText } = await open(single());
+    ['Resumen', 'Tarjeta', 'Jugadores', 'Rivales'].forEach((x) => expect(getByText(x)).toBeTruthy());
+    expect(queryByText('Vueltas')).toBeNull();
+  });
+
+  test('a route asking for the round opens the Scorecard tab', async () => {
+    const t = single();
+    const { getByTestId } = await open(t, { route: { params: { tournamentId: t.id, roundId: 'fx-r0' } } });
+    expect(getByTestId('tab-card').props.accessibilityState.selected).toBe(true);
+  });
+
+  test('Summary: the race with its lead line, no Best round, a one-round footer', async () => {
+    const { getByTestId, queryByTestId, getByText } = await open(single());
+    const race = within(getByTestId('summary-race'));
+    expect(race.getByTestId('race-chart')).toBeTruthy();
+    expect(race.getByTestId('round-lead')).toBeTruthy();
+    expect(queryByTestId('award-bestRound')).toBeNull();
+    expect(getByText('Points · vs handicap (2 pts per hole)')).toBeTruthy();
+  });
+
+  test('ledger: gross strokes by default, points after the switch, best run follows it', async () => {
+    const { getByTestId } = await open(single());
+    fireEvent.press(getByTestId('tab-players'));
+    const ledger = within(getByTestId('hole-ledger'));
+    expect(getByTestId('ledger-out')).toBeTruthy();
+    expect(getByTestId('ledger-in')).toBeTruthy();
+    // Hole 1: 4 strokes on a par 4 with a handicap stroke = 3 points.
+    expect(ledger.getByTestId('ledger-cell-1').props.children).toBe(4);
+    expect(ledger.getByTestId('ledger-total').props.children).toBe('102 strokes · +30 · 36 putts');
+    expect(within(getByTestId('ledger-out')).getByText('4/7')).toBeTruthy(); // fairways on the front nine
+    fireEvent.press(getByTestId('ledger-mode-points'));
+    const after = within(getByTestId('hole-ledger'));
+    expect(after.getByTestId('ledger-cell-1').props.children).toBe(3);
+    expect(after.getByTestId('ledger-total').props.children).toMatch(/^\d+ points · 102 strokes · 36 putts$/);
+    expect(after.getByText(/holes of 2\+ points \(H\d+–H\d+\)$/)).toBeTruthy();
+  });
+
+  test('a tee penalty is a dot on that hole only; GIR cells and accessibility labels', async () => {
+    const { getByTestId, queryByTestId, getByLabelText } = await open(single());
+    fireEvent.press(getByTestId('tab-players'));
+    const dot = getByTestId('ledger-penalty-12');
+    const style = Object.assign({}, ...[dot.props.style].flat(Infinity).filter(Boolean));
+    expect(style).toMatchObject({ position: 'absolute', width: 6, height: 6, borderRadius: 3 });
+    expect(queryByTestId('ledger-penalty-11')).toBeNull();
+    expect(getByLabelText('Hole 12: tee shot in the fairway, penalty')).toBeTruthy();
+    expect(getByLabelText('Hole 1: tee shot right')).toBeTruthy();
+    expect(getByTestId('ledger-gir-1')).toBeTruthy();
+  });
+
+  test('a player who logged no shots: strokes rows only, a note, no shot charts', async () => {
+    const { getByTestId, queryByTestId } = await open(single());
+    fireEvent.press(getByTestId('tab-players'));
+    fireEvent.press(getByTestId('player-chip-fx-jav'));
+    const ledger = within(getByTestId('hole-ledger'));
+    expect(ledger.queryByText('Putts')).toBeNull();
+    expect(ledger.queryByText('Tee')).toBeNull();
+    expect(ledger.getByTestId('ledger-total').props.children).toMatch(/^\d+ strokes · [+−]?\d+$/);
+    expect(queryByTestId('player-shots')).toBeNull();
+    expect(queryByTestId('fairway-fan')).toBeNull();
+    expect(getByTestId('no-shots-note')).toBeTruthy();
+  });
+
+  test('one Strokes | Points switch for the screen: Summary mix, ledger and player mix', async () => {
+    const { getByTestId } = await open(single());
+    // Gross by default: Marcos made no real birdie, but net ones.
+    expect(getByTestId('mix-count-fx-me').props.children).toBe('0 birdies+');
+    fireEvent.press(getByTestId('mix-mode-points'));
+    expect(getByTestId('mix-count-fx-me').props.children).not.toBe('0 birdies+');
+    fireEvent.press(getByTestId('tab-players'));
+    expect(getByTestId('ledger-mode-points').props.accessibilityState.selected).toBe(true);
+    expect(getByTestId('player-mix-mode-points').props.accessibilityState.selected).toBe(true);
+    fireEvent.press(getByTestId('player-mix-mode-strokes'));
+    expect(getByTestId('ledger-mode-strokes').props.accessibilityState.selected).toBe(true);
+  });
+
+  test('Players tiles: points with rank, strokes to par, vs handicap', async () => {
+    const { getByTestId, getByText } = await open(single());
+    fireEvent.press(getByTestId('tab-players'));
+    expect(getByText(/^points · T?\d of 4$/)).toBeTruthy();
+    expect(getByText('102')).toBeTruthy();
+    expect(getByText('strokes · +30')).toBeTruthy();
+    expect(getByText('vs handicap')).toBeTruthy();
+  });
+
+  // The guard: nothing on any tab may only make sense across rounds.
+  const collect = (node, out = []) => {
+    if (node == null) return out;
+    if (typeof node === 'string') { out.push(node); return out; }
+    if (Array.isArray(node)) { node.forEach((n) => collect(n, out)); return out; }
+    collect(node.children, out);
+    return out;
+  };
+  const FORBIDDEN = {
+    // "round(s)" as a word, R1-style round tags, averages.
+    en: [/\brounds?\b/i, /\bR\d+\b/, /\bavg\b/i, /\baverage\b/i],
+    // "vuelta" in any form (round; the ledger's nines are IDA / VTA), V1 /
+    // R1 tags, "media".
+    es: [/vuelta/i, /\bV\d+\b/, /\bR\d+\b/, /\bmedia\b/i],
+  };
+
+  test.each(['en', 'es'])('guard (%s): no per-round wording on any tab, either mode', async (lang) => {
+    await act(() => setLanguagePref(lang));
+    const utils = await open(single({ shots: true }));
+    const texts = [];
+    const grab = () => texts.push(...collect(utils.toJSON()));
+    ['strokes', 'points'].forEach((mode) => {
+      ['tab-summary', 'tab-card', 'tab-players', 'tab-rivals'].forEach((id) => {
+        fireEvent.press(utils.getByTestId(id));
+        if (id === 'tab-summary') fireEvent.press(utils.getByTestId(`mix-mode-${mode}`));
+        grab();
+        if (id === 'tab-players') {
+          fireEvent.press(utils.getByTestId('player-chip-fx-alv')); // no shots logged
+          grab();
+          fireEvent.press(utils.getByTestId('player-chip-fx-me'));
+        }
+      });
+    });
+    expect(texts.length).toBeGreaterThan(100);
+    // Allowed: the scorecard heatmap's back-nine total row, "Vuelta" (the
+    // glossary keeps Ida / Vuelta for scorecard heads), matched exactly.
+    const allowed = new Set(lang === 'es' ? ['Vuelta'] : []);
+    const hits = texts.filter((x) => !allowed.has(x) && FORBIDDEN[lang].some((re) => re.test(x)));
+    expect(hits).toEqual([]);
   });
 });

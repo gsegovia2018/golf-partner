@@ -1,23 +1,26 @@
-// Players: one player's game — headline tiles, score mix, where the points
-// came from, stroke holes, nines, nemesis, round history and shot detail.
+// Players: one player's game — headline tiles, shot summary, the hole-by-hole
+// ledger (one-round games), score mix, tee shots, putts, where the points
+// came from, bounce-back, nemesis, round history (several rounds) and the
+// comparison with the rest of the group. `singleIndex` is the round of a
+// one-round game (null otherwise): then nothing reads "per round".
 import React, { useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useT } from '../../i18n';
 import ScoreMixBar from '../mystats/ScoreMixBar';
+import FairwayFan from '../mystats/FairwayFan';
 import { isLowSample } from '../mystats/metricTone';
-import { standingsRows, strokeHoleSplit, shotComparison, playerBestRuns } from '../../store/gameStatsView';
 import {
-  playerRoundHistory, playerAvgStableford, playerAvgPerHole, playerScoreDistribution, parTypeSplit,
-  bounceBackRate, frontBackSplit, playerNemesisAndCrushed, shotStats, scramblingStats,
+  standingsRows, playerBestRuns, roundLedger, scoreMix, scoringSplits, puttBuckets, shotComparePlots,
+} from '../../store/gameStatsView';
+import {
+  playerRoundHistory, playerAvgStableford, playerAvgPerHole, bounceBackRate, playerNemesisAndCrushed,
+  shotStats, scramblingStats,
 } from '../../store/statsEngine';
-import { holeDifficultySplit } from '../../store/personalStats';
-import {
-  roundSheet, bucketSheet, frontBackSheet, bounceSheet, nemesisSheet, roundTag,
-} from './sheets';
-import { Chip, SectionTitle, firstName, num, signed, shortName, useStatStyles } from './ui';
-
-const DRIVE_KEYS = ['fairway', 'left', 'right', 'short', 'super'];
+import { roundSheet, bounceSheet, nemesisSheet, roundTag } from './sheets';
+import HoleLedger from './HoleLedger';
+import { Ring, DotRow, PuttHistogram, DivergingBars, ComparePlot } from './charts';
+import { Chip, ModeToggle, SectionTitle, firstName, num, signed, shortName, useStatStyles } from './ui';
 
 function Tile({ value, label, s, tone }) {
   return (
@@ -28,34 +31,44 @@ function Tile({ value, label, s, tone }) {
   );
 }
 
-export default function PlayersTab({ tournament, selectedId, onSelectPlayer, onOpenSheet, onOpenMyStats }) {
+function StripItem({ children, label, s }) {
+  return (
+    <View style={{ flex: 1, alignItems: 'center', gap: 4 }}>
+      <View style={{ height: 58, justifyContent: 'center' }}>{children}</View>
+      <Text style={[s.legendText, { fontSize: 11, textAlign: 'center' }]}>{label}</Text>
+    </View>
+  );
+}
+
+export default function PlayersTab({
+  tournament, selectedId, onSelectPlayer, onOpenSheet, onOpenMyStats, singleIndex = null, mode, onModeChange,
+}) {
   const t = useT();
   const { theme, s } = useStatStyles();
+  const single = singleIndex != null;
   const players = tournament.players;
   const player = players.find((p) => p.id === selectedId) ?? players[0];
   const pid = player?.id;
 
   const data = useMemo(() => {
     if (!pid) return null;
-    const standing = standingsRows(tournament).rows.find((r) => r.player.id === pid);
     return {
-      standing,
+      standing: standingsRows(tournament).rows.find((r) => r.player.id === pid),
       runs: playerBestRuns(tournament, pid),
       history: playerRoundHistory(tournament, pid),
       avgRound: playerAvgStableford(tournament, pid),
       perHole: playerAvgPerHole(tournament, pid),
-      dist: playerScoreDistribution(tournament, pid),
-      parSplit: parTypeSplit(tournament, pid),
-      difficulty: holeDifficultySplit(tournament, pid),
-      strokes: strokeHoleSplit(tournament, pid),
-      frontBack: frontBackSplit(tournament).find((r) => r.player.id === pid) ?? null,
+      ledger: single ? roundLedger(tournament, singleIndex, pid) : null,
+      splits: scoringSplits(tournament, pid),
       bounce: bounceBackRate(tournament).find((r) => r.player.id === pid) ?? null,
       nc: playerNemesisAndCrushed(tournament).find((r) => r.player.id === pid) ?? null,
       shots: shotStats(tournament, pid),
+      putts: puttBuckets(tournament, pid),
       scrambling: scramblingStats(tournament).find((r) => r.player.id === pid) ?? null,
-      comparison: shotComparison(tournament),
+      plots: shotComparePlots(tournament),
     };
-  }, [tournament, pid]);
+  }, [tournament, pid, single, singleIndex]);
+  const dist = useMemo(() => (pid ? scoreMix(tournament, pid, mode) : null), [tournament, pid, mode]);
 
   if (!player) return null;
 
@@ -76,50 +89,104 @@ export default function PlayersTab({ tournament, selectedId, onSelectPlayer, onO
     );
   }
 
-  const { standing, history, dist, parSplit, difficulty, strokes, frontBack, bounce, nc, shots, scrambling, comparison } = data;
+  const { standing, history, ledger, splits, bounce, nc, shots, putts, scrambling, plots } = data;
+  const sheetOpts = { single };
+  const rankLabel = players.length > 1
+    ? t('stats.game.player.totalRank', { place: standing.isTie ? `T${standing.place}` : standing.place, count: players.length })
+    : t('stats.game.player.total');
+  const hasFull = history.some((r) => r.fullRound);
   const runParts = [
     data.runs.par > 0 && t('stats.game.player.runPars', { count: data.runs.par }),
     data.runs.birdie > 0 && t('stats.game.player.runBirdies', { count: data.runs.birdie }),
   ].filter(Boolean);
-  const hasFull = history.some((r) => r.fullRound);
-  const tone = (avg) => theme.scoreColor(avg >= 2 ? 'good' : avg >= 1.5 ? 'neutral' : 'poor');
+  const pct = (k, n) => (n > 0 ? Math.round((k / n) * 100) : 0);
+  const modeToggle = (id) => <ModeToggle value={mode} onChange={onModeChange} testID={id} />;
 
-  const whereRows = [
-    { key: 'p3', label: t('stats.data.parType.par3'), b: { ...parSplit.par3, avg: parSplit.par3.avgPoints } },
-    { key: 'p4', label: t('stats.data.parType.par4'), b: { ...parSplit.par4, avg: parSplit.par4.avgPoints } },
-    { key: 'p5', label: t('stats.data.parType.par5'), b: { ...parSplit.par5, avg: parSplit.par5.avgPoints } },
-    { key: 'hard', label: t('stats.game.player.hardThird'), b: { ...difficulty.hard, avg: difficulty.hard.avgPoints } },
-    { key: 'easy', label: t('stats.game.player.easyThird'), b: { ...difficulty.easy, avg: difficulty.easy.avgPoints } },
-  ].filter((r) => r.b.holes > 0);
+  const toPar = ledger?.total.toPar;
+  const tiles = single ? (
+    <View style={s.tiles}>
+      <Tile s={s} value={num(standing.total)} label={rankLabel} />
+      <Tile
+        s={s}
+        value={ledger.total.strokes == null ? '–' : num(ledger.total.strokes)}
+        label={t('stats.game.player.strokesToPar', { vs: toPar === 0 ? t('stats.game.standings.even') : signed(toPar ?? 0) })}
+      />
+      <Tile s={s} value={signed(standing.vs)} label={t('stats.game.player.vsHcp')} tone={standing.vs >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor')} />
+    </View>
+  ) : (
+    <View style={s.tiles}>
+      <Tile s={s} value={num(standing.total)} label={rankLabel} />
+      <Tile
+        s={s}
+        value={hasFull ? num(data.avgRound, { maxDecimals: 1 }) : '–'}
+        label={t('stats.game.player.avgRound', { perHole: num(data.perHole, { decimals: 2 }) })}
+      />
+      <Tile s={s} value={signed(standing.vs)} label={t('stats.game.player.vsHcp')} tone={standing.vs >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor')} />
+    </View>
+  );
 
-  const lowNines = frontBack && frontBack.rounds.length === 1;
+  const drives = shots.drives;
+  const strip = shots.hasData && (drives.recorded > 0 || shots.gir.eligible > 0 || putts.holes > 0) && (
+    <View style={[s.card, { flexDirection: 'row', gap: 6, paddingHorizontal: 10 }]} testID="player-shots">
+      {drives.recorded > 0 && (
+        <StripItem s={s} label={t('stats.game.shots.fairways')}>
+          <Ring ratio={drives.fairwaysHit / drives.recorded} center={`${drives.fairwaysHit}/${drives.recorded}`} accessibilityLabel={t('stats.game.shots.firA11y', { k: drives.fairwaysHit, n: drives.recorded })} />
+        </StripItem>
+      )}
+      {shots.gir.eligible > 0 && (
+        <StripItem s={s} label={t('stats.game.shots.greens')}>
+          <Ring ratio={shots.gir.holes / shots.gir.eligible} center={`${shots.gir.holes}/${shots.gir.eligible}`} accessibilityLabel={t('stats.game.shots.girA11y', { k: shots.gir.holes, n: shots.gir.eligible })} />
+        </StripItem>
+      )}
+      {putts.holes > 0 && (
+        <StripItem s={s} label={t('stats.game.shots.puttsPerHole', { n: num(putts.total / putts.holes, { decimals: 1 }) })}>
+          <Text style={[s.stat, { fontSize: 20 }]}>{num(putts.total)}</Text>
+        </StripItem>
+      )}
+      {scrambling && (
+        <StripItem s={s} label={t('stats.game.shots.scramblingLabel')}>
+          <Ring ratio={scrambling.saves / scrambling.missedGir} center={`${scrambling.saves}/${scrambling.missedGir}`} accessibilityLabel={t('stats.game.shots.scrA11y', { k: scrambling.saves, n: scrambling.missedGir })} />
+        </StripItem>
+      )}
+    </View>
+  );
+
+  const puttBars = [
+    putts.zero > 0 && { key: 'zero', label: t('stats.game.shots.putts0'), count: putts.zero, tone: 'good' },
+    { key: 'one', label: t('stats.game.shots.putts1'), count: putts.one, tone: 'good' },
+    { key: 'two', label: t('stats.game.shots.putts2'), count: putts.two, tone: 'neutral' },
+    { key: 'three', label: t('stats.game.shots.putts3'), count: putts.three, tone: 'poor' },
+  ].filter(Boolean);
+
+  const splitLabel = (key) => ({
+    par3: t('stats.data.parType.par3'),
+    par4: t('stats.data.parType.par4'),
+    par5: t('stats.data.parType.par5'),
+    front: t('stats.game.where.front'),
+    back: t('stats.game.where.back'),
+    withStroke: t('stats.game.where.withStroke'),
+    withoutStroke: t('stats.game.where.withoutStroke'),
+  })[key];
+  const whereGroups = splits.map((g) => ({
+    key: g.key,
+    label: t(`stats.game.where.group.${g.key}`),
+    items: g.items.map((it) => ({ key: it.key, label: splitLabel(it.key), value: it.avg, text: num(it.avg, { decimals: 2 }) })),
+  }));
+
+  const penaltyLine = (single ? shots.penalties.other > 0 : shots.penalties.total > 0) && (
+    <Text style={[s.sub, { marginBottom: 12 }]} testID="player-penalties">
+      {`${t('stats.game.shots.penalties', { count: shots.penalties.total })} · ${t('stats.game.shots.penSplit', { tee: shots.penalties.tee, other: shots.penalties.other })}`}
+    </Text>
+  );
+
+  const fmtPlot = (key, v) => (key === 'putts' ? num(v, { decimals: 1 }) : `${num(v)}%`);
 
   return (
     <View>
       {chips}
+      {tiles}
 
-      <View style={s.tiles}>
-        <Tile
-          s={s}
-          value={num(standing.total)}
-          label={players.length > 1
-            ? t('stats.game.player.totalRank', { place: standing.isTie ? `T${standing.place}` : standing.place, count: players.length })
-            : t('stats.game.player.total')}
-        />
-        <Tile
-          s={s}
-          value={hasFull ? num(data.avgRound, { maxDecimals: 1 }) : '–'}
-          label={t('stats.game.player.avgRound', { perHole: num(data.perHole, { decimals: 2 }) })}
-        />
-        <Tile
-          s={s}
-          value={signed(standing.vs)}
-          label={t('stats.game.player.vsHcp')}
-          tone={standing.vs >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor')}
-        />
-      </View>
-
-      {runParts.length > 0 && (
+      {!single && runParts.length > 0 && (
         <Text style={[s.sub, { marginBottom: 12 }]} testID="best-runs">
           <Text style={s.strong}>{t('stats.game.player.runLabel')}</Text>
           {'  '}
@@ -127,83 +194,82 @@ export default function PlayersTab({ tournament, selectedId, onSelectPlayer, onO
         </Text>
       )}
 
-      <View style={s.card}>
-        <SectionTitle right={t('stats.game.mix.net')}>{t('stats.game.player.mix')}</SectionTitle>
+      {strip}
+
+      {ledger && (
+        <View style={[s.card, { paddingHorizontal: 10 }]}>
+          <View style={{ paddingHorizontal: 4 }}>
+            <SectionTitle right={modeToggle('ledger-mode')}>{t('stats.game.ledger.title')}</SectionTitle>
+          </View>
+          <HoleLedger ledger={ledger} mode={mode} />
+        </View>
+      )}
+
+      <View style={s.card} testID="player-mix">
+        <SectionTitle right={modeToggle('player-mix-mode')}>{t('stats.game.player.mix')}</SectionTitle>
         <ScoreMixBar distribution={dist} />
       </View>
 
-      {whereRows.length > 0 && (
+      {drives.recorded > 0 && (
+        <View style={s.card} testID="player-drives">
+          <SectionTitle right={t('stats.game.shots.drivesSub', { count: drives.recorded })}>{t('stats.game.shots.drives')}</SectionTitle>
+          <FairwayFan drives={drives} />
+          <Text style={[s.sub, { marginTop: 6 }]}>
+            {t('stats.game.shots.fanCaption', {
+              k: drives.distribution.fairway + drives.distribution.super, n: drives.recorded,
+              sup: drives.distribution.super, short: drives.distribution.short,
+            })}
+          </Text>
+        </View>
+      )}
+
+      {putts.holes > 0 && (
+        <View style={s.card} testID="player-putts">
+          <SectionTitle right={t('stats.game.shots.puttsSub', { count: putts.holes, total: num(putts.total), n: num(putts.total / putts.holes, { decimals: 1 }) })}>
+            {t('stats.game.shots.putts')}
+          </SectionTitle>
+          <PuttHistogram
+            bars={puttBars}
+            accessibilityLabel={puttBars.map((b) => `${b.label}: ${b.count}`).join(', ')}
+          />
+        </View>
+      )}
+
+      {penaltyLine}
+
+      {whereGroups.length > 0 && (
         <View style={s.card}>
           <SectionTitle right={t('stats.screen.ptsPerHoleUnit')}>{t('stats.game.player.where')}</SectionTitle>
-          {whereRows.map((r, i) => (
-            <TouchableOpacity
-              key={r.key}
-              style={[s.row, i === 0 && s.rowFirst]}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              onPress={() => onOpenSheet(bucketSheet(player, r.label, r.b))}
-            >
-              {/* Wraps to two lines rather than ellipsize (Spanish "Tercio más difícil (HCP)"). */}
-              <Text style={s.rowLabel}>{r.label}</Text>
-              <View style={s.barTrack}>
-                <View style={[s.barFill, { width: `${Math.min(100, (r.b.avg / 3) * 100)}%`, backgroundColor: tone(r.b.avg) }]} />
-              </View>
-              <Text style={s.rowValue}>{num(r.b.avg, { decimals: 2 })}</Text>
-            </TouchableOpacity>
-          ))}
+          <DivergingBars
+            groups={whereGroups}
+            caption={t('stats.game.where.caption')}
+            accessibilityLabel={whereGroups.flatMap((g) => g.items.map((it) => `${it.label} ${it.text}`)).join(', ')}
+          />
         </View>
       )}
 
-      {strokes.withStroke.holes + strokes.withoutStroke.holes > 0 && (
-        <View style={s.card}>
-          <SectionTitle>{t('stats.game.player.strokeHoles')}</SectionTitle>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {[
-              { key: 'with', label: t('stats.game.player.withStroke', { count: strokes.withStroke.holes }), b: strokes.withStroke },
-              { key: 'without', label: t('stats.game.player.withoutStroke', { count: strokes.withoutStroke.holes }), b: strokes.withoutStroke },
-            ].map((x) => (
-              <TouchableOpacity
-                key={x.key}
-                style={[s.tile, { borderWidth: 0, backgroundColor: theme.bg.secondary }]}
-                disabled={x.b.holes === 0}
-                accessibilityRole="button"
-                onPress={() => onOpenSheet(bucketSheet(player, x.label, x.b))}
-              >
-                <Text style={s.tileValue}>{x.b.avg == null ? '–' : num(x.b.avg, { decimals: 2 })}</Text>
-                <Text style={s.tileLabel}>{x.label}</Text>
-              </TouchableOpacity>
-            ))}
+      {bounce && (
+        <TouchableOpacity style={s.card} activeOpacity={0.7} accessibilityRole="button" testID="player-bounce" onPress={() => onOpenSheet(bounceSheet(bounce, sheetOpts))}>
+          <SectionTitle right={t('stats.game.player.bounceSub')}>{t('stats.game.player.bounceTitle')}</SectionTitle>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+            <Text style={[s.stat, { fontSize: 22 }]}>{bounce.bounceBacks}</Text>
+            <Text style={s.sub}>{t('stats.game.player.kOfN', { n: bounce.opportunities, pct: pct(bounce.bounceBacks, bounce.opportunities) })}</Text>
+            <View style={s.grow} />
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </View>
-          <Text style={s.note}>{t('stats.game.player.strokeNote')}</Text>
-        </View>
+          <DotRow k={bounce.bounceBacks} n={bounce.opportunities} accessibilityLabel={t('stats.game.player.dotsA11y', { k: bounce.bounceBacks, n: bounce.opportunities })} />
+          {isLowSample(bounce.opportunities) && <Text style={s.note}>{t('stats.game.player.lowSample')}</Text>}
+        </TouchableOpacity>
       )}
 
-      {(frontBack || bounce) && (
-        <View style={s.card}>
-          <SectionTitle>{t('stats.game.player.nines')}</SectionTitle>
-          {frontBack && (
-            <TouchableOpacity style={[s.row, s.rowFirst]} activeOpacity={0.7} accessibilityRole="button" onPress={() => onOpenSheet(frontBackSheet(frontBack))}>
-              <View style={s.grow}>
-                <Text style={s.strong}>
-                  {t('stats.game.player.frontBack', { front: num(frontBack.frontAvg, { decimals: 2 }), back: num(frontBack.backAvg, { decimals: 2 }) })}
-                </Text>
-                <Text style={s.sub}>{t('stats.screen.ptsPerHoleUnit')}</Text>
-              </View>
-              <Feather name="chevron-right" size={16} color={theme.text.muted} />
-            </TouchableOpacity>
-          )}
-          {bounce && (
-            <TouchableOpacity style={[s.row, !frontBack && s.rowFirst]} activeOpacity={0.7} accessibilityRole="button" onPress={() => onOpenSheet(bounceSheet(bounce))}>
-              <View style={s.grow}>
-                <Text style={s.strong}>{t('stats.game.player.bounce', { rate: num(bounce.rate) })}</Text>
-                <Text style={s.sub}>{t('stats.screen.bounce.cardSub', { done: bounce.bounceBacks, total: bounce.opportunities })}</Text>
-              </View>
-              <Feather name="chevron-right" size={16} color={theme.text.muted} />
-            </TouchableOpacity>
-          )}
-          {(lowNines || (bounce && isLowSample(bounce.opportunities))) && (
-            <Text style={s.note}>{t('stats.game.player.lowSample')}</Text>
-          )}
+      {scrambling && (
+        <View style={s.card} testID="player-scrambling">
+          <SectionTitle right={t('stats.game.shots.scramblingSub')}>{t('stats.game.shots.scramblingLabel')}</SectionTitle>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+            <Text style={[s.stat, { fontSize: 22 }]}>{scrambling.saves}</Text>
+            <Text style={s.sub}>{t('stats.game.player.kOfN', { n: scrambling.missedGir, pct: pct(scrambling.saves, scrambling.missedGir) })}</Text>
+          </View>
+          <DotRow k={scrambling.saves} n={scrambling.missedGir} accessibilityLabel={t('stats.game.player.dotsA11y', { k: scrambling.saves, n: scrambling.missedGir })} />
         </View>
       )}
 
@@ -214,116 +280,74 @@ export default function PlayersTab({ tournament, selectedId, onSelectPlayer, onO
             { kind: 'nemesis', e: nc.nemesis, label: t('stats.screen.nc.nemesis'), color: theme.destructive },
             { kind: 'crushed', e: nc.crushed, label: t('stats.screen.nc.crushed'), color: theme.scoreColor('excellent') },
           ].map((x, i) => (
-            <TouchableOpacity key={x.kind} style={[s.row, i === 0 && s.rowFirst]} activeOpacity={0.7} accessibilityRole="button" onPress={() => onOpenSheet(nemesisSheet(player, x.e, x.kind))}>
+            <TouchableOpacity key={x.kind} style={[s.row, i === 0 && s.rowFirst]} activeOpacity={0.7} accessibilityRole="button" onPress={() => onOpenSheet(nemesisSheet(player, x.e, x.kind, sheetOpts))}>
               <View style={s.grow}>
                 <Text style={[s.sectionTitle, { color: x.color }]}>{x.label}</Text>
                 <Text style={s.strong} numberOfLines={1}>
-                  {t('stats.game.player.ncHole', { round: x.e.roundIndex + 1, hole: x.e.holeNumber, course: x.e.courseName })}
+                  {single
+                    ? t('stats.game.player.ncHoleSingle', { hole: x.e.holeNumber, par: x.e.par })
+                    : t('stats.game.player.ncHole', { round: x.e.roundIndex + 1, hole: x.e.holeNumber, course: x.e.courseName })}
                 </Text>
               </View>
-              <Text style={s.sub}>{t('stats.game.player.ncValue', { strokes: x.e.strokes, par: x.e.par, count: x.e.points })}</Text>
+              <Text style={s.sub}>
+                {single
+                  ? t('stats.game.player.ncValueSingle', { strokes: x.e.strokes, count: x.e.points })
+                  : t('stats.game.player.ncValue', { strokes: x.e.strokes, par: x.e.par, count: x.e.points })}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
       )}
 
-      <View style={s.card}>
-        <SectionTitle>{t('stats.screen.history.section')}</SectionTitle>
-        {history.map((r, i) => (
-          <TouchableOpacity key={r.roundIndex} style={[s.row, i === 0 && s.rowFirst]} activeOpacity={0.7} accessibilityRole="button" onPress={() => onOpenSheet(roundSheet(tournament, player, r))}>
-            <Text style={[s.strong, { color: theme.accent.primary, width: 28 }]}>{roundTag(r.roundIndex)}</Text>
-            <View style={s.grow}>
-              <Text style={s.strong} numberOfLines={1}>{r.courseName}</Text>
-              <Text style={s.sub}>{t('stats.screen.history.sub', { count: r.holesPlayed, avg: num(r.avgPerHole, { decimals: 2 }) })}</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={s.strong}>{t('stats.screen.pts', { n: num(r.points) })}</Text>
-              <Text style={s.sub}>{t('stats.screen.str', { n: num(r.strokes) })}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {shots.hasData && (
-        <View style={s.card} testID="player-shots">
-          <SectionTitle right={t('stats.game.shots.rounds', { count: shots.roundsWithData })}>{t('stats.game.shots.title')}</SectionTitle>
-          {shots.putts.holes > 0 && (
-            <>
-              <Text style={[s.sub, { marginBottom: 6 }]}>{t('stats.screen.shots.putting')}</Text>
-              <View style={[s.tiles, { marginBottom: 8 }]}>
-                <Tile s={s} value={num(shots.putts.perRound, { maxDecimals: 1 })} label={t('stats.screen.shots.perRound')} />
-                <Tile s={s} value={num(shots.putts.perHole, { decimals: 1 })} label={t('stats.screen.shots.perHole')} />
-                <Tile s={s} value={num(shots.putts.onePutts)} label={t('stats.screen.shots.onePutts')} />
-                <Tile s={s} value={num(shots.putts.threePuttPlus)} label={t('stats.screen.shots.threePutts')} />
-              </View>
-            </>
-          )}
-          {shots.drives.recorded > 0 ? (
-            <View style={[s.row, s.rowFirst]}>
+      {!single && (
+        <View style={s.card}>
+          <SectionTitle>{t('stats.screen.history.section')}</SectionTitle>
+          {history.map((r, i) => (
+            <TouchableOpacity key={r.roundIndex} style={[s.row, i === 0 && s.rowFirst]} activeOpacity={0.7} accessibilityRole="button" onPress={() => onOpenSheet(roundSheet(tournament, player, r))}>
+              <Text style={[s.strong, { color: theme.accent.primary, width: 28 }]}>{roundTag(r.roundIndex)}</Text>
               <View style={s.grow}>
-                <Text style={s.strong}>{t('stats.game.shots.fir', { pct: num(shots.drives.fairwayPct) })}</Text>
-                <Text style={s.sub}>
-                  {DRIVE_KEYS.filter((k) => shots.drives.distribution[k] > 0)
-                    .map((k) => `${t(`stats.screen.drive.${k}`)} ${shots.drives.distribution[k]}`).join(' · ')}
-                </Text>
+                <Text style={s.strong} numberOfLines={1}>{r.courseName}</Text>
+                <Text style={s.sub}>{t('stats.screen.history.sub', { count: r.holesPlayed, avg: num(r.avgPerHole, { decimals: 2 }) })}</Text>
               </View>
-            </View>
-          ) : (
-            <Text style={s.sub}>{t('stats.screen.shots.noDrives')}</Text>
-          )}
-          {shots.gir.eligible > 0 && (
-            <View style={s.row}>
-              <Text style={[s.strong, s.grow]}>{t('stats.game.shots.gir', { pct: num(shots.gir.pct) })}</Text>
-              <Text style={s.sub}>{t('stats.screen.shots.girHoles', { holes: shots.gir.holes, eligible: shots.gir.eligible })}</Text>
-            </View>
-          )}
-          {scrambling && (
-            <View style={s.row}>
-              <Text style={[s.strong, s.grow]}>{t('stats.game.shots.scrambling', { pct: num(scrambling.pct) })}</Text>
-              <Text style={s.sub}>{t('stats.game.shots.saves', { saves: scrambling.saves, missed: scrambling.missedGir })}</Text>
-            </View>
-          )}
-          <View style={s.row}>
-            <Text style={[s.strong, s.grow]}>{t('stats.game.shots.penalties', { count: shots.penalties.total })}</Text>
-            <Text style={s.sub}>{t('stats.game.shots.penSplit', { tee: shots.penalties.tee, other: shots.penalties.other })}</Text>
-          </View>
-          {onOpenMyStats && (
-            <TouchableOpacity style={[s.row, { justifyContent: 'flex-end' }]} onPress={onOpenMyStats} accessibilityRole="link">
-              <Text style={s.link}>{t('stats.game.shots.career')}</Text>
-              <Feather name="arrow-right" size={14} color={theme.accent.primary} />
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={s.strong}>{t('stats.screen.pts', { n: num(r.points) })}</Text>
+                <Text style={s.sub}>{t('stats.screen.str', { n: num(r.strokes) })}</Text>
+              </View>
             </TouchableOpacity>
-          )}
+          ))}
         </View>
       )}
 
-      {comparison.length >= 2 && (
+      {plots.length > 0 && shots.hasData && (
         <View style={s.card} testID="shot-comparison">
-          <SectionTitle>{t('stats.game.shots.compare')}</SectionTitle>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View>
-              <View style={[s.row, s.rowFirst]}>
-                <Text style={[s.sectionTitle, { width: 84 }]}>{t('stats.game.shots.player')}</Text>
-                {['fir', 'gir', 'putts', 'three', 'pen'].map((k) => (
-                  <Text key={k} style={[s.sectionTitle, { width: 56, textAlign: 'right' }]}>{t(`stats.game.shots.col.${k}`)}</Text>
-                ))}
+          <SectionTitle right={t('stats.game.compare.sub')}>{t('stats.game.compare.title')}</SectionTitle>
+          {plots.map((m) => (
+            <View key={m.key} style={{ marginTop: 6 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+                <Text style={[s.strong, { fontSize: 12 }]}>{t(`stats.game.compare.${m.key}`)}</Text>
+                <Text style={[s.sub, { fontSize: 11 }]}>{t(`stats.game.compare.${m.key}Unit`)}</Text>
               </View>
-              {comparison.map((r) => (
-                <View key={r.player.id} style={s.row}>
-                  <Text style={[s.strong, { width: 84 }]} numberOfLines={1}>{firstName(r.player)}</Text>
-                  {[
-                    r.firPct == null ? '–' : `${num(r.firPct)}%`,
-                    r.girPct == null ? '–' : `${num(r.girPct)}%`,
-                    r.puttsPerHole == null ? '–' : num(r.puttsPerHole, { decimals: 1 }),
-                    r.threePutts == null ? '–' : num(r.threePutts),
-                    num(r.penalties),
-                  ].map((v, i) => (
-                    <Text key={i} style={[s.rowValue, { width: 56 }]}>{v}</Text>
-                  ))}
-                </View>
-              ))}
+              <ComparePlot
+                testID={`compare-${m.key}`}
+                values={m.values.map((v) => ({ ...v, text: fmtPlot(m.key, v.value) }))}
+                max={m.max}
+                selectedId={pid}
+                accessibilityLabel={`${t(`stats.game.compare.${m.key}`)}: ${m.values.map((v) => `${firstName(v.player)} ${fmtPlot(m.key, v.value)}`).join(', ')}`}
+              />
             </View>
-          </ScrollView>
+          ))}
         </View>
+      )}
+
+      {single && !shots.hasData && (
+        <Text style={[s.sub, { marginBottom: 12 }]} testID="no-shots-note">{t('stats.game.shots.none', { name: firstName(player) })}</Text>
+      )}
+
+      {shots.hasData && onOpenMyStats && (
+        <TouchableOpacity style={[s.row, s.rowFirst, { justifyContent: 'flex-end' }]} onPress={onOpenMyStats} accessibilityRole="link">
+          <Text style={s.link}>{t('stats.game.shots.career')}</Text>
+          <Feather name="arrow-right" size={14} color={theme.accent.primary} />
+        </TouchableOpacity>
       )}
     </View>
   );

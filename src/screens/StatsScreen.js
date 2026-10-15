@@ -1,6 +1,7 @@
 // Game Stats (Game settings → Statistics): the shell. Loads the game, picks
-// the tab (Summary · Rounds · Players · Rivals) and owns the one detail
-// sheet. Each tab lives in src/components/gamestats; the numbers come from
+// the tab (Summary · Rounds · Players · Rivals; a one-round game gets
+// Summary · Scorecard · Players · Rivals) and owns the one detail sheet and
+// the screen-wide Strokes | Points switch. Each tab lives in src/components/gamestats; the numbers come from
 // src/store/gameStatsView + statsEngine. Plan:
 // docs/superpowers/plans/2026-10-15-game-stats-redesign.md.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -15,7 +16,7 @@ import {
   loadTournament, getTournament, getActiveTournamentSnapshot, getTournamentSnapshot, roundScoringMode,
 } from '../store/tournamentStore';
 import { withoutScrambleScores } from '../store/statsEngine';
-import { scoredRoundIndices } from '../store/gameStatsView';
+import { scoredRoundIndices, singleRoundIndex } from '../store/gameStatsView';
 import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
 import SummaryTab from '../components/gamestats/SummaryTab';
 import RoundsTab from '../components/gamestats/RoundsTab';
@@ -39,6 +40,8 @@ export default function StatsScreen({ navigation, route }) {
   const [roundIndex, setRoundIndex] = useState(null);
   const [playerId, setPlayerId] = useState(null);
   const [sheet, setSheet] = useState(null);
+  // Shared by the score mixes and the hole-by-hole ledger: gross by default.
+  const [scoreMode, setScoreMode] = useState('strokes');
 
   useEffect(() => {
     const load = routeTournamentId ? getTournament(routeTournamentId) : loadTournament();
@@ -84,6 +87,9 @@ export default function StatsScreen({ navigation, route }) {
   const showPlayer = useCallback((id) => { setPlayerId(id); setTab('players'); }, []);
   const openMyStats = useCallback(() => navigation.navigate('MyStats'), [navigation]);
 
+  const singleIndex = useMemo(() => (statsTournament ? singleRoundIndex(statsTournament) : null), [statsTournament]);
+  const single = singleIndex != null;
+
   const header = (
     <View style={s.header}>
       <IconButton icon="chevron-left" onPress={() => navigation.goBack()} accessibilityLabel={t('common.back')} />
@@ -91,7 +97,7 @@ export default function StatsScreen({ navigation, route }) {
         <Text style={s.title}>{t('stats.screen.title')}</Text>
         {tournament?.name ? (
           <Text style={s.subtitle} numberOfLines={1}>
-            {t('stats.game.header.sub', { name: tournament.name, count: tournament.rounds?.length ?? 0 })}
+            {single ? tournament.name : t('stats.game.header.sub', { name: tournament.name, count: tournament.rounds?.length ?? 0 })}
           </Text>
         ) : null}
       </View>
@@ -133,11 +139,16 @@ export default function StatsScreen({ navigation, route }) {
   const hasScores = scoredRoundIndices(statsTournament).length > 0;
   const tabs = [
     { key: 'summary', label: t('stats.game.tab.summary') },
-    { key: 'rounds', label: t('stats.game.tab.rounds') },
+    single
+      ? { key: 'card', label: t('stats.game.tab.card') }
+      : { key: 'rounds', label: t('stats.game.tab.rounds') },
     { key: 'players', label: t('stats.game.tab.players') },
     players.length > 1 && { key: 'rivals', label: t('stats.game.tab.rivals') },
   ].filter(Boolean);
-  const activeTab = tabs.some((x) => x.key === tab) ? tab : 'summary';
+  // Rounds and Scorecard are the same view: a route that asks for a round
+  // lands on whichever this game has.
+  const wanted = single && tab === 'rounds' ? 'card' : !single && tab === 'card' ? 'rounds' : tab;
+  const activeTab = tabs.some((x) => x.key === wanted) ? wanted : 'summary';
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -162,15 +173,19 @@ export default function StatsScreen({ navigation, route }) {
                 teams={teamInfo.any}
                 onOpenSheet={openSheet}
                 onPlayerPress={showPlayer}
+                singleIndex={singleIndex}
+                mode={scoreMode}
+                onModeChange={setScoreMode}
               />
             )}
-            {activeTab === 'rounds' && (
+            {(activeTab === 'rounds' || activeTab === 'card') && (
               <RoundsTab
                 tournament={statsTournament}
                 pairsTournament={teamInfo.pairsTournament}
-                roundIndex={roundIndex}
+                roundIndex={single ? singleIndex : roundIndex}
                 onSelectRound={setRoundIndex}
                 onOpenSheet={openSheet}
+                single={single}
               />
             )}
             {activeTab === 'players' && (
@@ -180,6 +195,9 @@ export default function StatsScreen({ navigation, route }) {
                 onSelectPlayer={setPlayerId}
                 onOpenSheet={openSheet}
                 onOpenMyStats={openMyStats}
+                singleIndex={singleIndex}
+                mode={scoreMode}
+                onModeChange={setScoreMode}
               />
             )}
             {activeTab === 'rivals' && (
@@ -189,6 +207,7 @@ export default function StatsScreen({ navigation, route }) {
                 fixedTeams={!!tournament.settings?.fixedTeams}
                 defaultPlayerId={meId}
                 onOpenSheet={openSheet}
+                single={single}
               />
             )}
           </ScrollView>

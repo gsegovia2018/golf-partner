@@ -5,7 +5,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { semantic, onDeep } from '../../theme/tokens';
 import { withAlpha } from '../../theme/alpha';
-import { t, tr, formatNumber } from '../../i18n';
+import { t, tr, formatNumber, useT } from '../../i18n';
 
 // A player dropped from the roster stays a thin { id }: render a dash.
 export const firstName = (p) => p?.name?.split(' ')[0] ?? '—';
@@ -120,12 +120,40 @@ export function Segmented({ options, value, onChange, deep }) {
   );
 }
 
+// The screen-wide Strokes | Points switch (the scorecard's Golpes / Puntos
+// control: accent fill on the active side). Same labels as the scorecard.
+export function ModeToggle({ value, onChange, testID }) {
+  const { s } = useStatStyles();
+  const tt = useT();
+  return (
+    <View style={s.mode} testID={testID}>
+      {['strokes', 'points'].map((m) => {
+        const on = m === value;
+        return (
+          <TouchableOpacity
+            key={m}
+            testID={testID ? `${testID}-${m}` : undefined}
+            onPress={() => onChange(m)}
+            hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: on }}
+            style={[s.modeItem, on && s.modeItemOn]}
+          >
+            <Text style={[s.modeText, on && s.modeTextOn]}>{tt(m === 'strokes' ? 'scorecard.grid.strokes' : 'scorecard.grid.points')}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+// `right` is a string (secondary label) or a node (a control).
 export function SectionTitle({ children, right }) {
   const { s } = useStatStyles();
   return (
     <View style={s.sectionRow}>
       <Text style={s.sectionTitle} accessibilityRole="header">{children}</Text>
-      {right ? <Text style={s.sectionRight}>{right}</Text> : null}
+      {typeof right === 'string' ? <Text style={s.sectionRight}>{right}</Text> : (right ?? null)}
     </View>
   );
 }
@@ -178,6 +206,11 @@ function makeStyles(theme) {
     segTextDeep: { color: onDeep.soft },
     segTextOn: { color: theme.text.primary },
     segTextOnDeep: { color: theme.bg.deep },
+    mode: { flexDirection: 'row', backgroundColor: theme.bg.secondary, borderRadius: 999, padding: 2, gap: 2 },
+    modeItem: { minHeight: 28, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 999 },
+    modeItemOn: { backgroundColor: theme.accent.primary },
+    modeText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.text.secondary },
+    modeTextOn: { color: theme.text.inverse },
     legend: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 10 },
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     legendSwatch: { width: 12, height: 12, borderRadius: 3 },

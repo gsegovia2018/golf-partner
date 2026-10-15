@@ -184,7 +184,11 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
 - Game Stats (`StatsScreen`) is a thin shell: tabs Summary · Rounds · Players ·
   Rivals live in `src/components/gamestats/`, their data shaping in
   `src/store/gameStatsView.js` (pure, tested). Plan:
-  `docs/superpowers/plans/2026-10-15-game-stats-redesign.md`.
+  `docs/superpowers/plans/2026-10-15-game-stats-redesign.md`. A game with
+  one played round (`singleRoundIndex`) gets Summary · Scorecard · Players ·
+  Rivals, a hole-by-hole ledger (`HoleLedger`) and no per-round wording (a
+  guard test in `StatsScreen.test.js` enforces it); one Strokes | Points
+  switch (gross by default) drives the score mixes and the ledger.
 - Plans and design specs are tracked under `docs/superpowers/`.
 - i18n (Spanish/English): pure-JS layer in `src/i18n/`, never a native module
   (OTA). User-facing strings go through `useT()`/`t()` and the catalogues in
