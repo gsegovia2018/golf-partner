@@ -40,6 +40,7 @@ import swingDrills from './es/swingDrills';
 import appMisc from './es/appMisc';
 import gameCore from './es/gameCore';
 import statsData from './es/statsData';
+import gameStats from './es/gameStats';
 
 import home from './es/home';
 import setup from './es/setup';
@@ -88,6 +89,7 @@ export const AREAS = {
   swingCues,
   swingDrills,
   statsData,
+  gameStats,
   gameCore,
   appMisc,
 };
@@ -134,6 +136,7 @@ export default {
   ...swingCues,
   ...swingDrills,
   ...statsData,
+  ...gameStats,
   ...gameCore,
   ...appMisc,
 };
