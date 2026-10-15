@@ -1751,8 +1751,10 @@ export function playerPartnerSplits(tournament, playerId) {
     if (!isRoundPlayed(round, idx, tournament) || !round.pairs?.length) return;
     const myPair = round.pairs.find((pr) => pr.some((p) => p.id === playerId));
     if (!myPair) return;
-    const partner = myPair.find((p) => p.id !== playerId);
-    if (!partner) return;
+    const partnerRef = myPair.find((p) => p.id !== playerId);
+    if (!partnerRef) return;
+    // Stored pairs are thin ({id}) — resolve against the roster for the name.
+    const partner = players.find((p) => p.id === partnerRef.id) ?? partnerRef;
     const hasAnyScore = Object.values(round.scores?.[playerId] ?? {}).some((s) => s != null);
     if (!hasAnyScore) return;
     const totals = roundTotals(round, players);

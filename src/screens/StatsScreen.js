@@ -1372,12 +1372,13 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
     });
   };
 
+  const wcRange = { start: wc?.range?.warmupStart, end: wc?.range?.warmupEnd, from: wc?.range?.closingStart, to: wc?.range?.closingEnd };
   const openWarmupClosing = () => setSheet({
     title: t('stats.screen.warmup.title', { name: player.name }),
-    subtitle: t('stats.screen.warmup.subtitle', { warm: num(wc.warmup.avgPoints), close: num(wc.closing.avgPoints) }),
+    subtitle: t('stats.screen.warmup.subtitle', { warm: num(wc.warmup.avgPoints), close: num(wc.closing.avgPoints), ...wcRange }),
     explainer: t('stats.screen.warmup.explainer'),
     rows: [
-      { key: 'sec-w', section: true, label: t('stats.screen.warmup.label') },
+      { key: 'sec-w', section: true, label: t('stats.screen.warmup.label', wcRange) },
       ...wc.warmup.breakdown.map((b, i) => ({
         key: `w-${i}`,
         primary: `${roundTag(b.roundIndex)} · ${b.courseName} · H${b.holeNumber}`,
@@ -1385,7 +1386,7 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
         rightPrimary: ptsLabel(b.points),
         tone: toneForPoints(b.points),
       })),
-      { key: 'sec-c', section: true, label: t('stats.screen.warmup.closingLabel') },
+      { key: 'sec-c', section: true, label: t('stats.screen.warmup.closingLabel', wcRange) },
       ...wc.closing.breakdown.map((b, i) => ({
         key: `c-${i}`,
         primary: `${roundTag(b.roundIndex)} · ${b.courseName} · H${b.holeNumber}`,
@@ -1650,12 +1651,12 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
               <TouchableOpacity style={s.card} onPress={openWarmupClosing} activeOpacity={0.7}>
                 <View style={s.wcRow}>
                   <View style={s.wcCol}>
-                    <Text style={s.wcLabel}>{t('stats.screen.warmup.label')}</Text>
+                    <Text style={s.wcLabel}>{t('stats.screen.warmup.label', wcRange)}</Text>
                     <Text style={[s.wcValue, { color: theme.scoreColor(wc.warmup.avgPoints >= 2 ? 'good' : 'neutral') }]}>{num(wc.warmup.avgPoints)}</Text>
                     <Text style={s.wcSub}>{t('stats.screen.nHoles', { count: wc.warmup.holes })}</Text>
                   </View>
                   <View style={s.wcCol}>
-                    <Text style={s.wcLabel}>{t('stats.screen.warmup.closingLabel')}</Text>
+                    <Text style={s.wcLabel}>{t('stats.screen.warmup.closingLabel', wcRange)}</Text>
                     <Text style={[s.wcValue, { color: theme.scoreColor(wc.closing.avgPoints >= 2 ? 'good' : 'neutral') }]}>{num(wc.closing.avgPoints)}</Text>
                     <Text style={s.wcSub}>{t('stats.screen.nHoles', { count: wc.closing.holes })}</Text>
                   </View>
