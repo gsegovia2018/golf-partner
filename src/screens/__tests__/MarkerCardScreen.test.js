@@ -63,6 +63,16 @@ describe('MarkerCardScreen', () => {
     expect(getByText("You're confirming the strokes shown; Marcos's league result is worked out from them once you do. No account needed. This code works once.")).toBeTruthy();
   });
 
+  test('a medal card shows strokes only; a Stableford card keeps the Points toggle', async () => {
+    store.getMarkerCard.mockResolvedValue({ ...CARD, format: 'medal_net', toPar: 20 });
+    const medal = await renderReady();
+    expect(medal.queryByText('Points')).toBeNull();
+    medal.unmount();
+    store.getMarkerCard.mockResolvedValue({ ...CARD, format: 'stableford' });
+    const pts = await renderReady();
+    expect(pts.getByText('Points')).toBeTruthy();
+  });
+
   test('takes the token from route params when routed', async () => {
     await renderReady({ route: { params: { token: 'tok-route' } } });
     expect(store.getMarkerCard).toHaveBeenCalledWith('tok-route');

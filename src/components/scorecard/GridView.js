@@ -339,7 +339,9 @@ export function resolveScorecardRows({ round, settings, players, meId, isBestBal
 
 // `rowLabel` replaces the "You" label of a single-row card — for a card that
 // isn't the viewer's own (the marker page). Ignored with 2+ rows.
-export function ScorecardTable({ round, players, scores, onSetScore, editable, mode, meId, handicapsOverride, showTotalsCard = true, highlightCurrentHole = false, rowLabel = null }) {
+// `strokesOnly` drops every points surface (the Strokes/Points toggle and the
+// points totals) — for a medal league card, which is scored in strokes.
+export function ScorecardTable({ round, players, scores, onSetScore, editable, mode, meId, handicapsOverride, showTotalsCard = true, highlightCurrentHole = false, rowLabel = null, strokesOnly = false }) {
   const t = useT();
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
@@ -406,6 +408,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
   return (
     <View style={s.soloBoard}>
       {/* Strokes / Points toggle — sits above both nines in either layout. */}
+      {!strokesOnly && (
       <View style={s.soloModeToggleRow}>
         {['strokes', 'points'].map((m) => {
           const active = displayMode === m;
@@ -424,6 +427,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
           );
         })}
       </View>
+      )}
 
       <View style={sideBySide ? s.soloNinesRow : s.soloNinesStack}>
         <View style={sideBySide ? s.soloNineFlex : null}>
@@ -488,11 +492,15 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
             <Text style={s.soloTotalLabel}>{t('scorecard.grid.strokesTotal')}</Text>
             <Text style={s.soloTotalNumber}>{playerTotals[0].str || '·'}</Text>
           </View>
-          <View style={s.soloTotalDivider} />
-          <View style={s.soloTotalCol}>
-            <Text style={s.soloTotalLabel}>{t('scorecard.grid.pointsTotal')}</Text>
-            <Text style={[s.soloTotalNumber, { color: theme.accent.primary }]}>{playerTotals[0].pts}</Text>
-          </View>
+          {!strokesOnly && (
+            <>
+              <View style={s.soloTotalDivider} />
+              <View style={s.soloTotalCol}>
+                <Text style={s.soloTotalLabel}>{t('scorecard.grid.pointsTotal')}</Text>
+                <Text style={[s.soloTotalNumber, { color: theme.accent.primary }]}>{playerTotals[0].pts}</Text>
+              </View>
+            </>
+          )}
           <View style={s.soloTotalDivider} />
           <View style={s.soloTotalCol}>
             <Text style={s.soloTotalLabel}>{t('scorecard.grid.vsPar')}</Text>
@@ -516,7 +524,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
             <Text style={[s.multiTotalColHeaderLabel, { flex: 1 }]} />
             <Text style={[s.multiTotalColHeaderLabel, { width: 48, textAlign: 'right' }]}>{t('shared.unit.str').toUpperCase()}</Text>
             <Text style={[s.multiTotalColHeaderLabel, { width: 40, textAlign: 'right' }]}>{t('scorecard.grid.vsPar')}</Text>
-            <Text style={[s.multiTotalColHeaderLabel, { width: 46, textAlign: 'right' }]}>{unitText('pts').toUpperCase()}</Text>
+            {!strokesOnly && <Text style={[s.multiTotalColHeaderLabel, { width: 46, textAlign: 'right' }]}>{unitText('pts').toUpperCase()}</Text>}
           </View>
           {playerTotals.map(({ player, str, pts, vsParLabel }) => {
             const isLeader = leader && player.id === leader.player.id && leader.pts > 0;
@@ -527,7 +535,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
                 </Text>
                 <Text style={s.multiTotalStr}>{str || '·'}</Text>
                 <Text style={s.multiTotalVsPar}>{vsParLabel}</Text>
-                <Text style={[s.multiTotalPts, isLeader && { color: theme.accent.primary }]}>{pts}</Text>
+                {!strokesOnly && <Text style={[s.multiTotalPts, isLeader && { color: theme.accent.primary }]}>{pts}</Text>}
               </View>
             );
           })}

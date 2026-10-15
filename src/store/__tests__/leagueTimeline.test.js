@@ -151,6 +151,16 @@ describe('describeCardEvent', () => {
     expect(d(ev('added', { data: { points: 30 } })).title.key).toBe('league.timeline.addedPts');
   });
 
+  test('a medal league reads the event score through its format; Stableford is unchanged', () => {
+    const sub = (to_par, format) => d(ev('submitted', { data: { to_par } }), { format }).title.params.score;
+    expect(sub(-7, 'medal_net')).toBe('net −7');
+    expect(sub(4, 'medal_gross')).toBe('+4');
+    expect(sub(0, 'medal_gross')).toBe('E');
+    expect(d(ev('added', { data: { to_par: -3 } }), { format: 'medal_net' }).title.params.score).toBe('net −3');
+    expect(sub(-7, 'stableford')).toBe('−7');
+    expect(sub(-7, undefined)).toBe('−7');
+  });
+
   test('returned keeps the marker note and is amber', () => {
     expect(d(ev('returned', { actorName: 'Borja', note: 'Hole 13 was a 6.' })))
       .toMatchObject({ icon: 'corner-up-left', tone: 'warn', note: 'Hole 13 was a 6.', title: { params: { name: 'Borja' } } });

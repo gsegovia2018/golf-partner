@@ -284,6 +284,7 @@ export default function LeagueCardScreen({ navigation, route }) {
           meId={meId}
           members={data?.members}
           monthKey={card.monthKey}
+          format={format}
         />
 
         {scored && !!course?.holes && (

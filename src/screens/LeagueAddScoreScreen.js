@@ -13,6 +13,7 @@ import { useT, tr } from '../i18n';
 import { useLeague } from '../hooks/useLeague';
 import { scoreCard } from '../store/leagueRules';
 import { parseIsoDate } from '../store/leagueDraft';
+import { isMedalFormat } from '../store/leagueStandings';
 import { lastDayOfMonth } from '../lib/calendar';
 import {
   courseSnapshot, courseFromSnapshot, courseProblem, UNRATED_TEE_PROBLEM, scoresComplete, applyStrokeText,
@@ -161,6 +162,7 @@ export default function LeagueAddScoreScreen({ navigation, route }) {
               onSetScore={(_playerId, holeNumber, text) => setStrokes((prev) => applyStrokeText(prev, holeNumber, text))}
               editable={() => true}
               mode="stableford"
+              strokesOnly={isMedalFormat(data?.league?.format)}
               meId={ME}
             />
           </>

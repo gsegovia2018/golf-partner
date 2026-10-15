@@ -137,6 +137,17 @@ describe('LeagueValidateScreen', () => {
       expect(queryByText('Stableford pts')).toBeNull();
     });
 
+    test('the validate grid shows strokes only (no Points toggle); Stableford keeps it', async () => {
+      medal('medal_net');
+      const first = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+      await first.findByText('Submit');
+      await waitFor(() => expect(first.queryByText('Points')).toBeNull());
+      first.unmount();
+      const second = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+      await second.findByText('Submit');
+      expect(second.getByText('Points')).toBeTruthy();
+    });
+
     test('gross: strokes to par without the handicap', async () => {
       medal('medal_gross');
       store.confirmLeagueCardByPartner.mockResolvedValue(partner);

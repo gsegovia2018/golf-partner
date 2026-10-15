@@ -2,6 +2,7 @@
 // stored event into what the card screen draws. No I/O, no React, no strings:
 // messages are { key, params } descriptors rendered with tr() (docs/i18n.md).
 import { postByFor } from './leagueRules';
+import { t as i18nT } from '../i18n';
 import { formatToPar } from './leagueStandings';
 
 export const COLLAPSED_EVENTS = 3;
@@ -29,11 +30,13 @@ const CHIP = {
 // note (quoted text | null), at }.
 // opts: meId; fmt(isoOrDate) -> 'Sat 10 Oct 13:41' (a stand-in is used in tests);
 // someone: the word for an actor with no known name; monthKey: the card's month;
+// format: the league's format, so a medal event's to_par reads 'net −7' / '+4'
+// (events carry no format of their own; default Stableford).
 // members: the league's members, to name an actor who has an account but no
 // stored actorName (actorName wins; "someone" is the last fallback).
 export function describeCardEvent(ev, opts = {}) {
   const {
-    meId = null, fmt = (d) => new Date(d).toISOString(), someone = 'Someone', monthKey = null, members = [],
+    meId = null, fmt = (d) => new Date(d).toISOString(), someone = 'Someone', monthKey = null, members = [], format = 'stableford',
   } = opts;
   const data = ev?.data ?? {};
   const member = ev?.actorUserId ? (members ?? []).find((m) => m.userId === ev.actorUserId) : null;
@@ -48,6 +51,12 @@ export function describeCardEvent(ev, opts = {}) {
   });
   const how = ev?.how && CHIP[ev.how] ? { key: CHIP[ev.how] } : null;
   const course = data.course_name ?? null;
+  // to_par is only on medal events; a Stableford league keeps the bare figure.
+  // Medal: 'net −7' / '+4' (leagueView.formatScore's medal branch, inlined to
+  // avoid an import cycle with leagueView).
+  const scoreText = (v) => (format === 'medal_net'
+    ? i18nT('league.scoring.netToPar', { score: formatToPar(v) })
+    : formatToPar(v));
 
   switch (ev?.kind) {
     case 'announced': {
@@ -77,14 +86,14 @@ export function describeCardEvent(ev, opts = {}) {
       const hasScore = data.to_par != null;
       const key = resubmit ? (hasScore ? 'league.timeline.resubmittedScore' : hasPts ? 'league.timeline.resubmittedPts' : 'league.timeline.resubmitted')
         : (hasScore ? 'league.timeline.submittedScore' : hasPts ? 'league.timeline.submittedPts' : 'league.timeline.submitted');
-      return row('send', null, { key, params: { points: data.points, score: hasScore ? formatToPar(data.to_par) : undefined } }, {
+      return row('send', null, { key, params: { points: data.points, score: hasScore ? scoreText(data.to_par) : undefined } }, {
         detail: data.after_return ? { key: 'league.timeline.afterReturn' } : null,
       });
     }
     case 'added':
       return row('send', null, {
         key: data.to_par != null ? 'league.timeline.addedScore' : data.points != null ? 'league.timeline.addedPts' : 'league.timeline.added',
-        params: { points: data.points, score: data.to_par != null ? formatToPar(data.to_par) : undefined },
+        params: { points: data.points, score: data.to_par != null ? scoreText(data.to_par) : undefined },
       });
     case 'sent_to_marker':
       return row('user-check', null, {
