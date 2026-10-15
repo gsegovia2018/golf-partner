@@ -1,8 +1,11 @@
 import { weekendFixture } from './fixtures/gameStatsFixture';
+import { bestBallGameFixture } from './fixtures/bestBallGameFixture';
 import {
   scoredRoundIndices, standingsRows, progression, raceSeries, roundResult, matchPlayRounds, scorecardGrid,
-  holeStories, strokeHoleSplit, awardsList, h2hGrid, shotComparison,
+  holeStories, strokeHoleSplit, awardsList, h2hGrid, shotComparison, resultStandings,
 } from '../gameStatsView';
+import { roundLeaderboard, tournamentLeaderboardResolved, calcBestWorstBall } from '../tournamentStore';
+import { pairsMatchRoundTally } from '../scoring';
 
 const ids = (list) => list.map((x) => (x.player ?? x).id);
 
@@ -76,6 +79,59 @@ describe('standingsRows', () => {
   });
 });
 
+describe('resultStandings (the Play leaderboard)', () => {
+  const rowsOf = (res) => res.rows.map((r) => [r.player.id, r.points, r.place, r.isTie]);
+
+  test('best ball game: the round board in best/worst-ball points, not Stableford', () => {
+    const t = bestBallGameFixture();
+    const res = resultStandings(t);
+    expect(res.mode).toBe('bestball');
+    expect(res.sameAsStableford).toBe(false);
+    // Same figures and order as the Play board; fewer strokes break the tie.
+    expect(res.rows.map((r) => [r.player.id, r.points]))
+      .toEqual(roundLeaderboard(t, t.rounds[0]).entries.map((e) => [e.player.id, e.points]));
+    expect(rowsOf(res)).toEqual([
+      ['bb1', 5, 1, false], ['bb2', 5, 2, false], ['bb3', 4.5, 3, false], ['bb4', 4.5, 4, false],
+    ]);
+    // Individual Stableford tells another story (Molden second).
+    expect(standingsRows(t).rows.map((r) => [r.player.id, r.total]))
+      .toEqual([['bb1', 30], ['bb3', 29], ['bb2', 27], ['bb4', 25]]);
+  });
+
+  test('Stableford with partners: Play shows the individual total, same as Points', () => {
+    const t = weekendFixture();
+    const res = resultStandings(t);
+    expect(res.mode).toBe('stableford');
+    expect(res.sameAsStableford).toBe(true);
+    expect(res.rows.map((r) => [r.player.id, r.points]))
+      .toEqual(standingsRows(t).rows.map((r) => [r.player.id, r.total]));
+  });
+
+  test('a tournament uses the overall board, mixed modes included', () => {
+    const bb = weekendFixture();
+    bb.settings.scoringMode = 'bestball';
+    expect(resultStandings(bb).rows.map((r) => [r.player.id, r.points]))
+      .toEqual(tournamentLeaderboardResolved(bb).entries.map((e) => [e.player.id, e.points]));
+    expect(resultStandings(bb).sameAsStableford).toBe(false);
+
+    const mixed = weekendFixture();
+    mixed.rounds[1].scoringMode = 'bestball';
+    const res = resultStandings(mixed);
+    expect(res.mode).toBe('stableford');
+    expect(res.sameAsStableford).toBe(true);
+  });
+
+  test('a mixed tournament with a scramble round counts it as Play does', () => {
+    const t = weekendFixture();
+    t.rounds[0].scoringMode = 'scramblepairs';
+    const res = resultStandings(t);
+    expect(res.mode).toBe('stableford');
+    expect(res.rows.map((r) => [r.player.id, r.points]))
+      .toEqual(tournamentLeaderboardResolved(t).entries.map((e) => [e.player.id, e.points]));
+    expect(res.sameAsStableford).toBe(false);
+  });
+});
+
 describe('scoredRoundIndices', () => {
   test('skips rounds without scores', () => {
     const t = weekendFixture();
@@ -127,6 +183,26 @@ describe('roundResult', () => {
     expect(r.sides.map((s) => [s.members.map((m) => m.id), s.points])).toEqual([
       [['fx-me', 'fx-jav'], 38], [['fx-alv', 'fx-nac'], 37],
     ]);
+  });
+
+  test('best ball: each pair once, equal to the scorecard match panel (best + worst balls won)', () => {
+    const t = bestBallGameFixture();
+    const r = roundResult(t, 0);
+    const bw = calcBestWorstBall(t.rounds[0], t.players);
+    const team = (k) => bw.bestBall[k] + bw.worstBall[k];
+    expect(r.kind).toBe('teams');
+    expect(r.sides.map((s) => [s.members.map((m) => m.id), s.points])).toEqual([
+      [['bb1', 'bb2'], team('pair1')], [['bb3', 'bb4'], team('pair2')],
+    ]);
+    expect(r.sides.map((s) => s.points)).toEqual([10, 9]);
+  });
+
+  test('pairs match play: each pair once, equal to the match tally', () => {
+    const t = bestBallGameFixture();
+    t.settings.scoringMode = 'pairsmatchplay';
+    const r = roundResult(t, 0);
+    const tally = pairsMatchRoundTally(t.rounds[0], t.players);
+    expect(r.sides.map((s) => s.points).sort()).toEqual([tally.team1, tally.team2].sort());
   });
 
   test('an individual round lists who played, best first', () => {
