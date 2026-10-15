@@ -57,7 +57,7 @@ export default function LeagueStatsScreen({ navigation, route }) {
     if (!data) return null;
     const { league, members, cardsByMonth } = data;
     const active = members.filter((m) => !m.leftAt);
-    const table = seasonTable(active, cardsByMonth, league.pointsTable, { participationPoints: league.participationPoints });
+    const table = seasonTable(active, cardsByMonth, league.pointsTable, { participationPoints: league.participationPoints, format: league.format });
     const scored = Object.keys(cardsByMonth)
       .filter((m) => cardsByMonth[m].some((c) => c.status === 'confirmed' && !needsApproval(c))).sort();
     return { league, members, active, cardsByMonth, table, scored };

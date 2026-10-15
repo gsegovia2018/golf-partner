@@ -2,8 +2,11 @@ import {
   defaultSeason, parseIsoDate, parsePointsTable, formatPointsTable, parseFeeCents,
   defaultMemberHandicap, parseMemberHandicap, buildCreateArgs, leagueJoinLink,
   checkPointsDrafts, stepFeeText, seasonMonthKeys, LEAGUE_FORMATS, LEAGUE_FORMAT_SECTIONS,
+  MEDAL_FORMATS_ENABLED, leagueFormats, DEFAULT_LEAGUE_FORMAT,
 } from '../leagueDraft';
-import { DEFAULT_POINTS_TABLE } from '../leagueStandings';
+import { DEFAULT_POINTS_TABLE, LEAGUE_FORMAT_KEYS } from '../leagueStandings';
+import en from '../../i18n/locales/en';
+import es from '../../i18n/locales/es';
 
 describe('defaultSeason', () => {
   test('runs from today to 31 December', () => {
@@ -123,5 +126,34 @@ describe('LEAGUE_FORMATS', () => {
     const sections = LEAGUE_FORMAT_SECTIONS.map((x) => x.section);
     LEAGUE_FORMATS.forEach((f) => expect(sections).toContain(f.section));
     expect(LEAGUE_FORMATS.map((f) => f.key)).toContain('stableford');
+  });
+});
+
+describe('medal formats (plan 2026-10-15-league-medal-play.md)', () => {
+  test('the wizard offers Stableford only until MEDAL_FORMATS_ENABLED', () => {
+    expect(MEDAL_FORMATS_ENABLED).toBe(false);
+    expect(LEAGUE_FORMATS.map((f) => f.key)).toEqual(['stableford']);
+    expect(leagueFormats(false)).toEqual(LEAGUE_FORMATS);
+  });
+
+  test('enabled, both medal formats follow Stableford in the strokes section, translated', () => {
+    const all = leagueFormats(true);
+    expect(all.map((f) => [f.key, f.section, f.icon])).toEqual([
+      ['stableford', 'points', 'target'], ['medal_net', 'strokes', 'flag'], ['medal_gross', 'strokes', 'flag'],
+    ]);
+    expect(all.map((f) => f.key)).toEqual(LEAGUE_FORMAT_KEYS);
+    all.forEach((f) => [f.labelKey, f.subtitleKey].forEach((k) => {
+      expect(typeof en[k]).toBe('string');
+      expect(typeof es[k]).toBe('string');
+    }));
+    expect(en['league.format.medalNet']).toBe('Medal play, net');
+    expect(en['league.format.medalGrossSub']).toBe('Fewest strokes, no handicap, against par (+4). Hole out every hole.');
+  });
+
+  test('buildCreateArgs passes the format, Stableford by default', () => {
+    const base = { name: 'X', seasonStart: '2026-10-04', seasonEnd: '2026-12-31' };
+    expect(buildCreateArgs(base).format).toBe(DEFAULT_LEAGUE_FORMAT);
+    expect(DEFAULT_LEAGUE_FORMAT).toBe('stableford');
+    expect(buildCreateArgs({ ...base, format: 'medal_net' }).format).toBe('medal_net');
   });
 });

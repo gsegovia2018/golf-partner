@@ -171,13 +171,13 @@ BEGIN
     r IS NOT NULL AND r #>> '{league,name}' = 'Board Smoke', left(txt, 300));
   PERFORM pg_temp.pb_ok('top-level keys are exactly cards, league, members',
     pg_temp.pb_keyset(r) = 'cards,league,members', pg_temp.pb_keyset(r));
-  PERFORM pg_temp.pb_ok('league keys are exactly name, participation_points, points_table, season_end, season_start',
-    pg_temp.pb_keyset(r -> 'league') = 'name,participation_points,points_table,season_end,season_start',
+  PERFORM pg_temp.pb_ok('league keys are exactly format, name, participation_points, points_table, season_end, season_start',
+    pg_temp.pb_keyset(r -> 'league') = 'format,name,participation_points,points_table,season_end,season_start',
     pg_temp.pb_keyset(r -> 'league'));
   PERFORM pg_temp.pb_ok('every member has exactly active, key, name',
     (SELECT bool_and(pg_temp.pb_keyset(m) = 'active,key,name') FROM jsonb_array_elements(r -> 'members') m), NULL);
-  PERFORM pg_temp.pb_ok('every card has exactly course, member, month, points, status',
-    (SELECT bool_and(pg_temp.pb_keyset(c) = 'course,member,month,points,status') FROM jsonb_array_elements(r -> 'cards') c), NULL);
+  PERFORM pg_temp.pb_ok('every card has exactly course, member, month, points, status, to_par',
+    (SELECT bool_and(pg_temp.pb_keyset(c) = 'course,member,month,points,status,to_par') FROM jsonb_array_elements(r -> 'cards') c), NULL);
   PERFORM pg_temp.pb_ok('no forbidden key anywhere in the JSON',
     NOT EXISTS (SELECT 1 FROM pg_temp.pb_keys(r) k
                  WHERE k ~* '(user|email|handicap|hcp|photo|avatar|proof|hole|gross|differential|slope|rating|tee|marker|confirm|invite|token|id$)'),

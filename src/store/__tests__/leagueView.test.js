@@ -4,6 +4,7 @@ import {
   tiePlaces, rankNotes, monthStanding, standingCells, monthLine, payoutPreview, stepParticipation,
   yourCardState, myMonthCard, monthCardsView, cardActions, voidedNote, voidReasonText, autoWithdrawNote,
   formatNetDiff, formatNetDiffSigned, netDiffTone, myRoundScored, markerAskedLine, firstName, initials, cardBreakdown, leagueNameMatches,
+  formatScore,
 } from '../leagueView';
 import { tr, setLanguagePref } from '../../i18n';
 
@@ -744,5 +745,62 @@ describe('cards that take the month (R15b) on the board and card screen', () => 
   test('voidReasonText joins the reason and the note', () => {
     expect(voidReasonText('Wrong tee', '  yellows ')).toBe('Wrong tee: yellows');
     expect(voidReasonText('Other', '')).toBe('Other');
+  });
+});
+
+// Medal play (plan 2026-10-15-league-medal-play.md).
+describe('formatScore', () => {
+  afterEach(() => setLanguagePref('en'));
+
+  test('Stableford points, medal net and gross to par, true minus sign, level = E', () => {
+    expect(formatScore(36)).toBe('36 pts');
+    expect(formatScore(36, 'stableford')).toBe('36 pts');
+    expect(formatScore(-2, 'medal_net')).toBe('net −2');
+    expect(formatScore(0, 'medal_net')).toBe('net E');
+    expect(formatScore(3, 'medal_net')).toBe('net +3');
+    expect(formatScore(-2, 'medal_gross')).toBe('−2');
+    expect(formatScore(0, 'medal_gross')).toBe('E');
+    expect(formatScore('4', 'medal_gross')).toBe('+4');
+    expect(formatScore(null, 'medal_net')).toBe('—');
+    expect(formatScore(undefined)).toBe('—');
+  });
+
+  test('Spanish, and a translator passed in', async () => {
+    await setLanguagePref('es');
+    expect(formatScore(36)).toBe('36 ptos');
+    expect(formatScore(-2, 'medal_net')).toBe('neto −2');
+    expect(formatScore(0, 'medal_gross')).toBe('par');
+    const t = (key, params) => `${key}:${JSON.stringify(params ?? {})}`;
+    expect(formatScore(-1, 'medal_net', t)).toBe('league.scoring.netToPar:{"score":"−1"}');
+  });
+});
+
+describe('medal sorting', () => {
+  const ms = [{ userId: 'a' }, { userId: 'b' }, { userId: 'c' }];
+  const mc = (userId, toPar, points, status = 'confirmed') => ({ userId, status, toPar, points, monthKey: '2026-10', holes: {} });
+  const byMonth = { '2026-10': [mc('a', 4, 40), mc('b', -1, 30), mc('c', null, 45)] };
+
+  test('monthRows: fewest to par first in a medal league, most points first otherwise', () => {
+    expect(monthRows(ms, byMonth, '2026-10', NOW, 'medal_net').map((r) => r.member.userId)).toEqual(['b', 'a', 'c']);
+    expect(monthRows(ms, byMonth, '2026-10', NOW).map((r) => r.member.userId)).toEqual(['c', 'a', 'b']);
+    expect(viewableCards(ms, byMonth, '2026-10', 'medal_gross').map((c) => c.userId)).toEqual(['b', 'a', 'c']);
+  });
+
+  test('monthBoard ranks by to par and carries cardScore; a card without to par is unrated', () => {
+    const board = monthBoard(ms, byMonth, '2026-10', [100, 50, 25], NOW, { format: 'medal_net' });
+    expect(board.confirmed.map((r) => [r.member.userId, r.place, r.cardScore, r.cardPoints, r.unrated]))
+      .toEqual([['b', 1, -1, 30, false], ['a', 2, 4, 40, false], ['c', null, null, null, true]]);
+  });
+
+  test('monthStanding uses the league format and returns the score', () => {
+    const snapshot = { league: { pointsTable: [100, 50], participationPoints: 0, format: 'medal_gross' }, members: ms, cardsByMonth: byMonth };
+    expect(monthStanding(snapshot, '2026-10', 'b', NOW)).toMatchObject({ place: 1, score: -1, points: 30, of: 2 });
+    expect(monthStanding({ ...snapshot, league: { ...snapshot.league, format: 'stableford' } }, '2026-10', 'b', NOW))
+      .toMatchObject({ place: 3, score: 30, points: 30, of: 3 });
+  });
+
+  test('leagueSummary ranks the season by the league format', () => {
+    const snapshot = { league: { pointsTable: [100, 50], participationPoints: 0, format: 'medal_net' }, members: ms, cardsByMonth: byMonth };
+    expect(leagueSummary(snapshot, 'b', NOW).table[0]).toMatchObject({ userId: 'b', total: 100 });
   });
 });

@@ -28,10 +28,12 @@ const K = 'league.error.';
 const ENTRIES = [
   ['already_member', /^You are already in this league, so you can't take (.+)'s spot\.$/, 'alreadyMember', (m) => ({ name: m[1] })],
   ['already_void', /^This card is already void\.$/, 'alreadyVoid'],
+  ['bad_format', /^Pick a league format: Stableford, medal play net or medal play gross\.$/, 'badFormat'],
   ['before_tee_time', /^You can post this card once your tee time has passed\.$/, 'beforeTeeTime'],
   ['card_exists', /^You already have your (\w+) card\.$/, 'cardExists', (m) => ({ monthKey: monthKeyOf(m[1]) })],
   ['holes_mismatch', /^This card doesn't match your scores in the game on holes?: (.+?)\. Wait for every hole to sync/, 'holesMismatch',
     (m) => ({ holes: m[1].trim(), count: m[1].split(',').length })],
+  ['format_locked', /^The format can't change once the league has a card\.$/, 'formatLocked'],
   ['implausible_tee', /^This tee's slope or course rating can't be right/, 'implausibleTee'],
   ['incomplete_card', /^A league card needs a score on every hole, 1 to 18\.$/, 'incompleteCard18'],
   ['incomplete_card', /^Every hole of a league card needs a score, a par and a stroke index\.$/, 'incompleteCard'],

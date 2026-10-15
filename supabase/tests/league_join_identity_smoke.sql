@@ -58,7 +58,7 @@ BEGIN
       AND (r->>'handicap_cap')::numeric = 28 AND (r->>'archived')::boolean = false, r::text);
   INSERT INTO join_smoke (name, ok, detail) VALUES ('anon preview exposes exactly the whitelisted keys',
     (SELECT array_agg(k ORDER BY k) FROM jsonb_object_keys(r) k)
-      = ARRAY['admin_first_name','archived','entry_fee_cents','handicap_cap','invitees','member_count','name'], r::text);
+      = ARRAY['admin_first_name','archived','entry_fee_cents','format','handicap_cap','invitees','member_count','name'], r::text);
   INSERT INTO join_smoke (name, ok, detail) VALUES ('anon preview: unknown code -> NULL',
     public.get_league_invite_preview('ZZZZZZZZ') IS NULL, NULL);
 END $$;

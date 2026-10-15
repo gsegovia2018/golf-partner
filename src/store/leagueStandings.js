@@ -1,22 +1,48 @@
 // League standings: pure functions of the league's cards (no I/O).
 // Plan: docs/superpowers/plans/2026-10-04-league.md (section 4.1); ranked by
-// Stableford since docs/superpowers/plans/2026-10-13-league-review-followups.md (R1, R2).
+// Stableford since docs/superpowers/plans/2026-10-13-league-review-followups.md (R1, R2);
+// medal play since docs/superpowers/plans/2026-10-15-league-medal-play.md.
 import { assignPlacements } from './leaderboardPlacement';
 import { needsApproval } from './leagueRules';
 
 export const DEFAULT_POINTS_TABLE = [500, 300, 190, 135, 110, 90, 75, 60, 45, 35, 25, 15];
 
-// More Stableford points is better; equal points are a tie (no tie-break).
-const byPointsDesc = (a, b) => b.cardPoints - a.cardPoints;
+// A league's format (leagues.format): what a month ranks by.
+//   stableford   card.points (net Stableford), more is better
+//   medal_net    card.toPar (gross - playing handicap - par), fewer is better
+//   medal_gross  card.toPar (gross - par), fewer is better
+export const LEAGUE_FORMAT_KEYS = ['stableford', 'medal_net', 'medal_gross'];
+export const isMedalFormat = (format) => format === 'medal_net' || format === 'medal_gross';
+
+const toNumber = (v) => {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+// The value a card ranks by in `format`: its Stableford points, or its strokes
+// to par in a medal league. null when the server hasn't scored it for that.
+export function cardScore(card, format = 'stableford') {
+  return toNumber(isMedalFormat(format) ? card?.toPar : card?.points);
+}
+
+// Sort two ranking values best first for `format`; a null value goes last.
+// Equal values compare 0 (a tie: no tie-break).
+export function compareScores(a, b, format = 'stableford') {
+  const x = a == null ? null : Number(a);
+  const y = b == null ? null : Number(b);
+  if (x === y) return 0;
+  if (x == null) return 1;
+  if (y == null) return -1;
+  return isMedalFormat(format) ? x - y : y - x;
+}
+
+// Is ranking value `a` better than `b` in `format`?
+const isBetter = (a, b, format) => compareScores(a, b, format) < 0;
+
 const byTotalDesc = (a, b) => b.total - a.total;
 
 const memberId = (m) => (typeof m === 'string' ? m : m?.userId);
-
-const pointsOf = (card) => {
-  if (card?.points == null || card.points === '') return null;
-  const n = Number(card.points);
-  return Number.isFinite(n) ? n : null;
-};
 
 const netDiffOf = (card) => {
   if (card?.netDifferential == null || card.netDifferential === '') return null;
@@ -32,37 +58,46 @@ function sharedPoints(table, place, size) {
   return sum / size;
 }
 
-// One month's results, ranked by the card's net Stableford points, highest
-// first (the server scores every card). `members` are user ids or `{userId}`.
-// Only confirmed cards count (a not-announced one only once an admin approved
-// it); a member's best card is the one with the most points. Season points =
-// the place's table share, but at least `participationPoints` for every ranked
-// card (R2; no card = 0). A confirmed card without points (never scored) is
-// not ranked: { place: null, unrated: true, seasonPoints: 0 }. Members without
-// a confirmed card get place null and 0 points. Unranked rows follow the
-// ranked ones. A confirmed card from someone no longer in `members` (a member
-// who left keeps past cards) still ranks. Rows carry the ranking value
-// `cardPoints` and the card's `netDifferential` (secondary information).
-// Ranked rows also carry `tieSize` (members on that place) and `floored`
-// (the floor lifted the row above its table share).
-export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE, { participationPoints = 0 } = {}) {
+// One month's results, ranked by the card's ranking value for the league's
+// `format` (the server scores every card): net Stableford points, most first,
+// or strokes to par in a medal league, fewest first. `members` are user ids
+// or `{userId}`. Only confirmed cards count (a not-announced one only once an
+// admin approved it); a member's best card is the one with the best value.
+// Season points = the place's table share, but at least `participationPoints`
+// for every ranked card (R2; no card = 0). Equal values tie and share the
+// summed table points (no tie-break). A confirmed card without a value for
+// the format (never scored) is not ranked: { place: null, unrated: true,
+// seasonPoints: 0 }. Members without a confirmed card get place null and 0
+// points. Unranked rows follow the ranked ones. A confirmed card from someone
+// no longer in `members` (a member who left keeps past cards) still ranks.
+// Rows carry the ranking value `cardScore`, the card's Stableford `cardPoints`
+// (the same value in a Stableford league) and its `netDifferential`
+// (secondary information). Ranked rows also carry `tieSize` (members on that
+// place) and `floored` (the floor lifted the row above its table share).
+export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE, { participationPoints = 0, format = 'stableford' } = {}) {
   const floor = Math.max(0, Number(participationPoints) || 0);
+  const medal = isMedalFormat(format);
+  const byScore = (a, b) => compareScores(a.cardScore, b.cardScore, format);
   const best = new Map();
   const unrated = new Set();
   for (const c of cards ?? []) {
     if (c?.status !== 'confirmed' || needsApproval(c)) continue;
-    const cardPoints = pointsOf(c);
-    if (cardPoints == null) {
+    const score = cardScore(c, format);
+    if (score == null) {
       unrated.add(c.userId);
       continue;
     }
-    if (!best.has(c.userId) || cardPoints > best.get(c.userId).cardPoints) {
-      best.set(c.userId, { cardPoints, netDifferential: netDiffOf(c) });
+    if (!best.has(c.userId) || isBetter(score, best.get(c.userId).cardScore, format)) {
+      best.set(c.userId, {
+        cardScore: score,
+        cardPoints: medal ? toNumber(c.points) : score,
+        netDifferential: netDiffOf(c),
+      });
     }
   }
 
-  const ranked = [...best].map(([userId, b]) => ({ userId, ...b })).sort(byPointsDesc);
-  const placed = assignPlacements(ranked, byPointsDesc);
+  const ranked = [...best].map(([userId, b]) => ({ userId, ...b })).sort(byScore);
+  const placed = assignPlacements(ranked, byScore);
   const sizes = {};
   placed.forEach((r) => { sizes[r.place] = (sizes[r.place] ?? 0) + 1; });
 
@@ -74,6 +109,7 @@ export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE,
       isTie: r.isTie,
       tieSize: sizes[r.place],
       netDifferential: r.netDifferential,
+      cardScore: r.cardScore,
       cardPoints: r.cardPoints,
       seasonPoints: Math.max(share, floor),
       // The place's own share is under the floor: the row got "points for playing".
@@ -86,22 +122,24 @@ export function monthResults(cards, members, pointsTable = DEFAULT_POINTS_TABLE,
     if (seen.has(userId)) continue;
     seen.add(userId);
     rows.push({
-      userId, place: null, isTie: false, unrated: true, netDifferential: null, cardPoints: null, seasonPoints: 0,
+      userId, place: null, isTie: false, unrated: true, netDifferential: null, cardScore: null, cardPoints: null, seasonPoints: 0,
     });
   }
   for (const m of members ?? []) {
     const userId = memberId(m);
     if (seen.has(userId)) continue;
     seen.add(userId);
+    // No card: Stableford keeps its historical 0; a medal value of 0 would
+    // read as level par, so it is null there.
     rows.push({
-      userId, place: null, isTie: false, netDifferential: null, cardPoints: 0, seasonPoints: 0,
+      userId, place: null, isTie: false, netDifferential: null, cardScore: medal ? null : 0, cardPoints: 0, seasonPoints: 0,
     });
   }
   return rows;
 }
 
 // Season table over `cardsByMonth` ({ 'YYYY-MM': cards[] }). `options` are
-// monthResults' ({ participationPoints }).
+// monthResults' ({ participationPoints, format }).
 // lastMonthDelta = season points earned in the most recent month that has any
 // confirmed card (0 when there is none).
 export function seasonTable(members, cardsByMonth, pointsTable = DEFAULT_POINTS_TABLE, options = {}) {

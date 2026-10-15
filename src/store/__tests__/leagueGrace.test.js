@@ -145,3 +145,15 @@ test('lastMinute is one minute before the close', () => {
   expect(lastMinute(OCT_4_0000).toISOString()).toBe(OCT_3_2359.toISOString());
   expect(lastMinute(null)).toBeNull();
 });
+
+describe('graceMonth order by format', () => {
+  test('others are listed best first: most points, or fewest to par in a medal league', () => {
+    const cards = [
+      app({ userId: 'adm', points: 40, toPar: 5, markerName: 'X' }),
+      app({ userId: 'pab', points: 30, toPar: -2, markerName: 'Y' }),
+    ];
+    expect(graceMonth(snap(cards), OCT_2_1420, 'me').pending.map((p) => p.userId)).toEqual(['adm', 'pab']);
+    expect(graceMonth(snap(cards, { league: { format: 'medal_net' } }), OCT_2_1420, 'me').pending.map((p) => p.userId))
+      .toEqual(['pab', 'adm']);
+  });
+});

@@ -1,4 +1,6 @@
-import { monthResults, seasonTable, DEFAULT_POINTS_TABLE } from '../leagueStandings';
+import {
+  monthResults, seasonTable, DEFAULT_POINTS_TABLE, cardScore, compareScores, isMedalFormat,
+} from '../leagueStandings';
 
 // Ranked by net Stableford points, higher is better. The net differential is
 // secondary and carried through as netDifferential.
@@ -98,7 +100,7 @@ describe('monthResults', () => {
     const rows = monthResults([card('a', 30)], ['z', 'a', 'y']);
     expect(rows.map((r) => r.userId)).toEqual(['a', 'z', 'y']);
     expect(rows[1]).toEqual({
-      userId: 'z', place: null, isTie: false, netDifferential: null, cardPoints: 0, seasonPoints: 0,
+      userId: 'z', place: null, isTie: false, netDifferential: null, cardScore: 0, cardPoints: 0, seasonPoints: 0,
     });
     expect(rows[2].place).toBeNull();
   });
@@ -146,7 +148,7 @@ describe('monthResults', () => {
     );
     expect(rows.map((r) => [r.userId, r.place])).toEqual([['b', 1], ['a', null], ['c', null], ['d', null]]);
     expect(rows[1]).toEqual({
-      userId: 'a', place: null, isTie: false, unrated: true, netDifferential: null, cardPoints: null, seasonPoints: 0,
+      userId: 'a', place: null, isTie: false, unrated: true, netDifferential: null, cardScore: null, cardPoints: null, seasonPoints: 0,
     });
     expect(rows[3].unrated).toBeUndefined();
   });
@@ -281,5 +283,93 @@ describe('monthResults tie size and floor flag', () => {
   test('no floor, no flag', () => {
     const rows = monthResults([c('a', 40), c('b', 30)], ['a', 'b'], [500]);
     expect(rows.map((r) => r.floored)).toEqual([false, false]);
+  });
+});
+
+// Medal play (plan 2026-10-15-league-medal-play.md): the month ranks by
+// toPar, fewest first; points stay on the card as secondary information.
+describe('medal formats', () => {
+  const mcard = (userId, toPar, points = 30, status = 'confirmed') => ({
+    userId, status, toPar, points, netDifferential: 1.5,
+  });
+
+  test('cardScore and compareScores follow the format; null sorts last', () => {
+    const c = { points: '36', toPar: '-2' };
+    expect(cardScore(c)).toBe(36);
+    expect(cardScore(c, 'medal_net')).toBe(-2);
+    expect(cardScore(c, 'medal_gross')).toBe(-2);
+    expect(cardScore({ points: 36, toPar: null }, 'medal_net')).toBeNull();
+    expect(compareScores(38, 36)).toBeLessThan(0);
+    expect(compareScores(-2, 3, 'medal_net')).toBeLessThan(0);
+    expect(compareScores(3, -2, 'medal_gross')).toBeGreaterThan(0);
+    expect(compareScores(null, 50, 'medal_net')).toBeGreaterThan(0);
+    expect(compareScores(4, 4, 'medal_gross')).toBe(0);
+    expect(isMedalFormat('medal_net') && isMedalFormat('medal_gross') && !isMedalFormat('stableford')).toBe(true);
+  });
+
+  test('ranks by toPar ascending, not by points', () => {
+    const rows = monthResults(
+      [mcard('a', 3, 40), mcard('b', -2, 30), mcard('c', 0, 35)],
+      ['a', 'b', 'c'], DEFAULT_POINTS_TABLE, { format: 'medal_net' },
+    );
+    expect(rows.map((r) => [r.userId, r.place, r.cardScore, r.cardPoints, r.seasonPoints])).toEqual([
+      ['b', 1, -2, 30, 500],
+      ['c', 2, 0, 35, 300],
+      ['a', 3, 3, 40, 190],
+    ]);
+  });
+
+  test('equal toPar ties and shares the summed table points; the next player is 4th', () => {
+    const rows = Object.fromEntries(monthResults(
+      [mcard('a', -1), mcard('b', 2), mcard('c', 2), mcard('d', 5)],
+      ['a', 'b', 'c', 'd'], DEFAULT_POINTS_TABLE, { format: 'medal_gross' },
+    ).map((r) => [r.userId, r]));
+    expect(rows.b).toMatchObject({ place: 2, isTie: true, tieSize: 2, seasonPoints: 245 });
+    expect(rows.c).toMatchObject({ place: 2, isTie: true, seasonPoints: 245 });
+    expect(rows.d).toMatchObject({ place: 4, isTie: false, seasonPoints: 135 });
+  });
+
+  test('a confirmed card without toPar is unrated, even with points', () => {
+    const rows = monthResults([mcard('a', null, 40), mcard('b', 1)], ['a', 'b', 'c'], DEFAULT_POINTS_TABLE, { format: 'medal_net' });
+    expect(rows.map((r) => [r.userId, r.place])).toEqual([['b', 1], ['a', null], ['c', null]]);
+    expect(rows[1]).toMatchObject({ unrated: true, cardScore: null, seasonPoints: 0 });
+    // No card: no value (0 would read as level par).
+    expect(rows[2]).toMatchObject({ cardScore: null, seasonPoints: 0 });
+    expect(rows[2].unrated).toBeUndefined();
+  });
+
+  test("a member's best card is the lowest toPar", () => {
+    const rows = monthResults(
+      [mcard('a', 4, 40), mcard('a', -3, 25), mcard('b', 0)],
+      ['a', 'b'], DEFAULT_POINTS_TABLE, { format: 'medal_net' },
+    );
+    expect(rows[0]).toMatchObject({ userId: 'a', place: 1, cardScore: -3, cardPoints: 25 });
+  });
+
+  test('participation points and approval apply as in Stableford', () => {
+    const rows = Object.fromEntries(monthResults(
+      [mcard('a', 0), mcard('b', 1), { ...mcard('c', -9), notAnnounced: true }],
+      ['a', 'b', 'c'], [10], { format: 'medal_gross', participationPoints: 5 },
+    ).map((r) => [r.userId, r]));
+    expect(rows.a).toMatchObject({ place: 1, seasonPoints: 10 });
+    expect(rows.b).toMatchObject({ place: 2, seasonPoints: 5, floored: true });
+    expect(rows.c).toMatchObject({ place: null, seasonPoints: 0 });
+  });
+
+  test('Stableford rows carry cardScore equal to cardPoints, and ignore toPar', () => {
+    const rows = monthResults([mcard('a', 9, 38), mcard('b', -4, 30)], ['a', 'b']);
+    expect(rows.map((r) => [r.userId, r.cardScore, r.cardPoints])).toEqual([['a', 38, 38], ['b', 30, 30]]);
+  });
+
+  test('seasonTable passes the format through', () => {
+    const cardsByMonth = {
+      '2026-09': [mcard('a', 2, 40), mcard('b', -1, 30)],
+      '2026-10': [mcard('a', 0, 40), mcard('b', 1, 30)],
+    };
+    const medal = seasonTable(['a', 'b'], cardsByMonth, [100, 50], { format: 'medal_net' });
+    expect(medal.map((r) => [r.userId, r.total])).toEqual([['a', 150], ['b', 150]]);
+    expect(medal[0].byMonth['2026-09']).toMatchObject({ place: 2 });
+    const stableford = seasonTable(['a', 'b'], cardsByMonth, [100, 50]);
+    expect(stableford.map((r) => [r.userId, r.total])).toEqual([['a', 200], ['b', 100]]);
   });
 });

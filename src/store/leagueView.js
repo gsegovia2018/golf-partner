@@ -4,10 +4,12 @@ import {
   cardMonth, isMissed, needsApproval, deadlineInfo, takesMonth, canReschedule, canWithdraw, autoWithdrawAt,
   isMonthClosed, OFFAPP_NOTICE_HOURS, MAX_RESCHEDULES, POST_WINDOW_HOURS, madridDay,
 } from './leagueRules';
-import { seasonTable, monthResults } from './leagueStandings';
+import {
+  seasonTable, monthResults, cardScore, compareScores, isMedalFormat,
+} from './leagueStandings';
 import { isRatedTee, netDoubleBogeyCap } from './handicapIndex';
 import { calcExtraShots, calcStablefordPoints } from './scoring';
-import { formatNumber, formatOrdinal, formatDate } from '../i18n';
+import { formatNumber, formatOrdinal, formatDate, t as i18nT } from '../i18n';
 import { splitVoidReason } from './leagueTimeline';
 
 // 'YYYY-MM' (or 'YYYY-MM-01') -> 'October' / 'Oct' ('octubre' / 'oct'), in
@@ -25,6 +27,20 @@ export const ordinal = (n) => formatOrdinal(n);
 export function formatPoints(n) {
   const v = Number(n) || 0;
   return formatNumber(v, { decimals: Number.isInteger(v) ? 0 : 1 });
+}
+
+// A card's ranking value as shown, for the league's format:
+//   stableford   36 -> '36 pts'
+//   medal_net    -2 -> 'net −2', 0 -> 'net E', 3 -> 'net +3'
+//   medal_gross  -2 -> '−2', 0 -> 'E', 4 -> '+4'
+// (true minus sign; Spanish 'ptos' / 'neto' / 'par'). null -> '—'. `t` is the
+// translator (useT() in a component); the module's t by default.
+export function formatScore(value, format = 'stableford', t = i18nT) {
+  if (value == null || value === '' || !Number.isFinite(Number(value))) return '—';
+  const v = Number(value);
+  if (!isMedalFormat(format)) return t('league.scoring.pts', { points: formatPoints(v) });
+  const toPar = v === 0 ? t('league.scoring.level') : `${v < 0 ? '−' : '+'}${formatNumber(Math.abs(v))}`;
+  return format === 'medal_net' ? t('league.scoring.netToPar', { score: toPar }) : toPar;
 }
 
 // A net differential in words (lower is better): -2.4 -> '2.4 better',
@@ -167,23 +183,24 @@ export function cardStatus(card, now = new Date()) {
   }
 }
 
-// Members with this month's card, best first: confirmed by Stableford points
-// (most first, unscored after), then submitted, playing, announced, not posted, then nobody.
-export function monthRows(members, cardsByMonth, month, now = new Date()) {
+// Members with this month's card, best first: confirmed by the league's
+// ranking value (`format`: Stableford points most first, medal to par fewest
+// first; unscored after), then submitted, playing, announced, not posted, then nobody.
+export function monthRows(members, cardsByMonth, month, now = new Date(), format = 'stableford') {
   const cards = cardsByMonth?.[month] ?? [];
   const rows = (members ?? []).filter((m) => !m.leftAt).map((m) => {
     const card = cards.find((c) => c.userId === m.userId && c.status !== 'void') ?? null;
     return { member: m, card, ...cardStatus(card, now) };
   });
   const rank = (r) => (r.card ? STATUS_RANK[r.card.status] ?? 4 : 5);
-  const pts = (r) => (r.card?.points == null ? -Infinity : Number(r.card.points));
-  return rows.sort((a, b) => rank(a) - rank(b) || (pts(a) === pts(b) ? 0 : pts(b) - pts(a)));
+  return rows.sort((a, b) => rank(a) - rank(b)
+    || compareScores(cardScore(a.card, format), cardScore(b.card, format), format));
 }
 
 // The month's cards that can be opened read-only: scored (submitted or
 // confirmed, so `holes` is set), never void. Same order as monthRows.
-export function viewableCards(members, cardsByMonth, month) {
-  return monthRows(members, cardsByMonth, month)
+export function viewableCards(members, cardsByMonth, month, format = 'stableford') {
+  return monthRows(members, cardsByMonth, month, new Date(), format)
     .map((r) => r.card)
     .filter((c) => c && (c.status === 'confirmed' || c.status === 'submitted') && c.holes);
 }
@@ -198,7 +215,8 @@ function waitingReasonMsg(card) {
 }
 
 // The month board, grouped for the board's month view. Only the confirmed
-// group ranks, by Stableford points (most first); an unscored confirmed card
+// group ranks, by the league's ranking value (options.format: Stableford
+// points most first, medal to par fewest first); an unscored confirmed card
 // is listed after the ranked ones with place null and `unrated: true`.
 // `seasonPoints` is the table points the place earns if the month ended now
 // (at least `participationPoints`). waiting = submitted, onCourse = playing or announced
@@ -208,21 +226,20 @@ function waitingReasonMsg(card) {
 // card past its deadline counts), listed apart from onCourse and noCard.
 // voided = no live card but a void one that still takes the month (pass them
 // as options.voidCards; cardsByMonth leaves void out).
-export function monthBoard(members, cardsByMonth, month, pointsTable, now = new Date(), { participationPoints = 0, voidCards = [] } = {}) {
+export function monthBoard(members, cardsByMonth, month, pointsTable, now = new Date(), { participationPoints = 0, voidCards = [], format = 'stableford' } = {}) {
   const active = (members ?? []).filter((m) => !m.leftAt);
   const cards = (cardsByMonth?.[month] ?? []).filter((c) => c.status !== 'void');
-  // Most points first; a card without points after.
-  const pts = (c) => (c.points == null ? -Infinity : Number(c.points));
-  const byPoints = (a, b) => (pts(a) === pts(b) ? 0 : pts(b) - pts(a));
+  // Best value first; a card without one after.
+  const byPoints = (a, b) => compareScores(cardScore(a, format), cardScore(b, format), format);
   const bestCard = (userId, ok) => cards.filter((c) => c.userId === userId && ok(c)).sort(byPoints)[0] ?? null;
   const confirmed = [];
-  for (const r of monthResults(cards, active, pointsTable, { participationPoints })) {
+  for (const r of monthResults(cards, active, pointsTable, { participationPoints, format })) {
     const member = (members ?? []).find((m) => m.userId === r.userId);
     if ((r.place == null && !r.unrated) || !member) continue;
     const card = bestCard(r.userId, (c) => c.status === 'confirmed' && !needsApproval(c));
     confirmed.push({
       member, card, place: r.place, isTie: r.isTie, unrated: !!r.unrated,
-      netDifferential: r.netDifferential, cardPoints: r.cardPoints, seasonPoints: r.seasonPoints,
+      netDifferential: r.netDifferential, cardScore: r.cardScore, cardPoints: r.cardPoints, seasonPoints: r.seasonPoints,
       tieSize: r.tieSize, floored: !!r.floored,
       howMsg: HOW_CONFIRMED.has(card.confirmation) ? V(`how.${card.confirmation}`) : null,
     });
@@ -370,7 +387,7 @@ export function myMonthCard(cardsByMonth, cards, month, userId) {
 // that member's void ones.
 export function monthCardsView(snapshot, month, viewerId, now = new Date()) {
   const { members, cardsByMonth, cards } = snapshot ?? {};
-  const live = monthRows(members, cardsByMonth, month, now).map((r) => r.card).filter(Boolean);
+  const live = monthRows(members, cardsByMonth, month, now, snapshot?.league?.format).map((r) => r.card).filter(Boolean);
   const seen = new Set(live.map((c) => c.userId));
   const active = new Set((members ?? []).filter((m) => !m.leftAt).map((m) => m.userId));
   const extra = [];
@@ -521,16 +538,17 @@ export function myRoundScored(tournament, roundId, userId, playerId = null) {
 }
 
 // My standing in one month of a league snapshot: { place, isTie, of, points,
-// seasonPoints, floored } for my counting card, or null when I have none.
-// `of` = the cards that rank that month.
+// score, seasonPoints, floored } for my counting card, or null when I have
+// none. `of` = the cards that rank that month; `score` = the ranking value
+// for the league's format (= points in a Stableford league).
 export function monthStanding({ league, members, cardsByMonth }, month, userId, now = new Date()) {
   const board = monthBoard(members, cardsByMonth, month, league.pointsTable, now,
-    { participationPoints: league.participationPoints });
+    { participationPoints: league.participationPoints, format: league.format });
   const ranked = board.confirmed.filter((r) => r.place != null);
   const row = ranked.find((r) => r.member.userId === userId);
   if (!row) return null;
   return {
-    place: row.place, isTie: row.isTie, of: ranked.length, points: row.cardPoints,
+    place: row.place, isTie: row.isTie, of: ranked.length, points: row.cardPoints, score: row.cardScore,
     seasonPoints: row.seasonPoints, floored: row.floored,
   };
 }
@@ -605,7 +623,7 @@ export const stepParticipation = (value, direction) => Math.max(0, (Number(value
 export function leagueSummary(snapshot, meId, now = new Date()) {
   const { league, members, cardsByMonth } = snapshot;
   const table = seasonTable((members ?? []).filter((m) => !m.leftAt), cardsByMonth, league.pointsTable,
-    { participationPoints: league.participationPoints });
+    { participationPoints: league.participationPoints, format: league.format });
   const position = positionMessage(table, meId, cardsByMonth);
   return { table, position, month: position ? monthLine(snapshot, meId, now) : null };
 }
