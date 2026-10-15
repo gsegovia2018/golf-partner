@@ -79,13 +79,31 @@ export function seasonMonthKeys(startIso, endIso) {
   return keys;
 }
 
-// League formats the wizard offers. Medal (strokes) formats come later.
-export const LEAGUE_FORMATS = [
+// Medal play (strokes against par) is scored by the server
+// (20261020000000) but the screens don't show it yet: the wizard offers it
+// once this is true (plan 2026-10-15-league-medal-play.md, PR B).
+export const MEDAL_FORMATS_ENABLED = false;
+
+const STABLEFORD_FORMAT = {
+  key: 'stableford', icon: 'target', section: 'points',
+  labelKey: 'league.format.stableford', subtitleKey: 'league.format.stablefordSub',
+};
+const MEDAL_FORMATS = [
   {
-    key: 'stableford', icon: 'target', section: 'points',
-    labelKey: 'league.format.stableford', subtitleKey: 'league.format.stablefordSub',
+    key: 'medal_net', icon: 'flag', section: 'strokes',
+    labelKey: 'league.format.medalNet', subtitleKey: 'league.format.medalNetSub',
+  },
+  {
+    key: 'medal_gross', icon: 'flag', section: 'strokes',
+    labelKey: 'league.format.medalGross', subtitleKey: 'league.format.medalGrossSub',
   },
 ];
+
+// The formats the wizard offers (leagues.format keys).
+export function leagueFormats(medalEnabled = MEDAL_FORMATS_ENABLED) {
+  return medalEnabled ? [STABLEFORD_FORMAT, ...MEDAL_FORMATS] : [STABLEFORD_FORMAT];
+}
+export const LEAGUE_FORMATS = leagueFormats();
 export const LEAGUE_FORMAT_SECTIONS = [
   { section: 'points', labelKey: 'league.format.points' },
   { section: 'strokes', labelKey: 'league.format.strokes' },
@@ -117,9 +135,11 @@ export function parseMemberHandicap(text, cap = DEFAULT_HANDICAP_CAP) {
 
 // Draft -> createLeague() argument. `members` = [{ userId, handicap }] with the
 // creator first, then [{ name, handicap }] for people not in the app.
+// `format` is a leagues.format key (DEFAULT_LEAGUE_FORMAT when not given).
 export function buildCreateArgs({
   name, seasonStart, seasonEnd, pointsTable = DEFAULT_POINTS_TABLE, cap = DEFAULT_HANDICAP_CAP,
   feeCents = 0, participationPoints = DEFAULT_PARTICIPATION_POINTS, members = [],
+  format = DEFAULT_LEAGUE_FORMAT,
 }) {
   return {
     name: String(name ?? '').trim(),
@@ -129,6 +149,7 @@ export function buildCreateArgs({
     cap,
     feeCents,
     participationPoints,
+    format,
     members: members.map((m) => (m.userId
       ? { userId: m.userId, handicap: m.handicap ?? null }
       : { name: String(m.name ?? '').trim(), handicap: m.handicap ?? null })),

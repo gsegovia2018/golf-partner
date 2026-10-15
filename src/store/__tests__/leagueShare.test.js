@@ -261,6 +261,7 @@ describe('public board', () => {
     const snap = publicBoardSnapshot(payload);
     expect(snap.league).toEqual({
       name: 'Mulligan', seasonStart: '2026-01-01', seasonEnd: '2026-12-31', pointsTable: [500, 300, 190], participationPoints: 10,
+      format: 'stableford',
     });
     expect(snap.members.find((m) => m.userId === 'k9').leftAt).toBe('left');
     expect(Object.keys(snap.cardsByMonth).sort()).toEqual(['2026-09', '2026-10']);
@@ -287,6 +288,22 @@ describe('public board', () => {
     });
     expect(publicBoardView(snap, '2026-10', NOW, 'en').rows[0].name).toBe('Golfer');
     expect(publicBoardView(snap, '2026-10', NOW, 'es').rows[0].name).toBe('Jugador');
+  });
+
+  test('a medal board keeps cards with to_par and ranks them fewest first', () => {
+    const snap = publicBoardSnapshot({
+      ...payload,
+      league: { ...payload.league, format: 'medal_net' },
+      cards: [
+        { month: '2026-10-01', member: 'k1', status: 'confirmed', points: 41, to_par: 3, course: 'RCG Sotogrande' },
+        { month: '2026-10-01', member: 'k2', status: 'confirmed', points: 33, to_par: -2, course: 'El Saler' },
+        { month: '2026-10-01', member: 'k3', status: 'confirmed', points: 45, to_par: null, course: 'La Moraleja' },
+      ],
+    });
+    expect(snap.league.format).toBe('medal_net');
+    expect(snap.cardsByMonth['2026-10'].map((c) => [c.userId, c.toPar])).toEqual([['k1', 3], ['k2', -2]]);
+    const v = publicBoardView(snap, '2026-10', NOW);
+    expect(v.rows.map((r) => [r.key, r.place, r.course, r.league])).toEqual([['k2', 1, 'El Saler', 500], ['k1', 2, 'RCG Sotogrande', 300]]);
   });
 
   test('a member who left still ranks in their month', () => {

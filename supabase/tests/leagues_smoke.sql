@@ -471,11 +471,11 @@ BEGIN
   INSERT INTO league_smoke (name, ok, detail) VALUES ('anon get_marker_card returns only the whitelist',
     -- Compared as sets (<@ both ways) so collation order cannot matter.
     (SELECT array_agg(k) FROM jsonb_object_keys(r) k)
-      <@ ARRAY['course','date','differential','expires_at','gross','holes','league_name','month','net_differential',
-             'player_first_name','playing_handicap','points','rating','slope','tee']
+      <@ ARRAY['course','date','differential','expires_at','format','gross','holes','league_name','month','net_differential',
+             'player_first_name','playing_handicap','points','rating','slope','tee','to_par']
     AND (SELECT array_agg(k) FROM jsonb_object_keys(r) k)
-      @> ARRAY['course','date','differential','expires_at','gross','holes','league_name','month','net_differential',
-             'player_first_name','playing_handicap','points','rating','slope','tee']
+      @> ARRAY['course','date','differential','expires_at','format','gross','holes','league_name','month','net_differential',
+             'player_first_name','playing_handicap','points','rating','slope','tee','to_par']
     AND r->>'player_first_name' = 'Pablo' AND jsonb_array_length(r->'holes') = 18
     AND r->>'league_name' = 'Club del Mulligan' AND r->>'month' = '2026-10-01'
     AND r->'holes'->0 = '{"n":1,"par":5,"si":3,"strokes":5}'::jsonb

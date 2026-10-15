@@ -1,6 +1,9 @@
 // English catalogue: league batch 7 (leagueScoring). See docs/i18n.md.
 export default {
   'league.scoring.pts': '{points} pts',
+  // Strokes to par in a medal league: level par, and the net value ('net −2').
+  'league.scoring.level': 'E',
+  'league.scoring.netToPar': 'net {score}',
 
   'league.addScore.titleCard': 'Add your score',
   'league.addScore.titleNew': 'Add a card',

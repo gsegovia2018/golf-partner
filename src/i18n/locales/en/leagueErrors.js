@@ -12,6 +12,8 @@ export default {
   // Server refusals with a hint.
   'league.error.alreadyMember': "You are already in this league, so you can't take {name}'s spot.",
   'league.error.alreadyVoid': 'This card is already void.',
+  'league.error.badFormat': 'Pick a league format: Stableford, medal play net or medal play gross.',
+  'league.error.formatLocked': "The format can't change once the league has a card.",
   'league.error.beforeTeeTime': 'You can post this card once your tee time has passed.',
   'league.error.cardExists': 'You already have your {month} card.',
   'league.error.holesMismatch': {

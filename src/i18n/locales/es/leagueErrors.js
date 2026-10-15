@@ -11,6 +11,8 @@ export default {
   // Server refusals with a hint.
   'league.error.alreadyMember': 'Ya estás en esta liga, así que no puedes ocupar la plaza de {name}.',
   'league.error.alreadyVoid': 'Esta tarjeta ya está anulada.',
+  'league.error.badFormat': 'Elige un formato de liga: Stableford, medal play neto o medal play bruto.',
+  'league.error.formatLocked': 'El formato no se puede cambiar cuando la liga ya tiene una tarjeta.',
   'league.error.beforeTeeTime': 'Podrás enviar esta tarjeta cuando haya pasado tu hora de salida.',
   'league.error.cardExists': 'Ya tienes tu tarjeta de {month}.',
   'league.error.holesMismatch': {

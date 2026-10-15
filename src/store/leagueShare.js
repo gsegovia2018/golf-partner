@@ -17,7 +17,7 @@
 // local part or the username (20261018000000). No public name -> "Golfer" /
 // "Jugador".
 import { t, formatNumber, formatDate, formatTime, formatOrdinal } from '../i18n';
-import { monthResults, seasonTable } from './leagueStandings';
+import { monthResults, seasonTable, cardScore } from './leagueStandings';
 import {
   monthBoard, monthStanding, lastScoredMonth, daysLeftInMonth, currentMonthKey, firstName,
 } from './leagueView';
@@ -80,9 +80,12 @@ const memberNameOf = (members, userId, lang) => {
 };
 const linkLines = (url, lang) => (url ? ['', t('league.share.msg.liveBoard', { url }, lang)] : []);
 const active = (members) => (members ?? []).filter((m) => !m.leftAt);
-const optsOf = (league) => ({ participationPoints: league?.participationPoints ?? 0 });
+const optsOf = (league) => ({
+  participationPoints: league?.participationPoints ?? 0, format: league?.format ?? 'stableford',
+});
 
-// The ranked rows of a month: { place, isTie, name, points, course, seasonPoints }.
+// The ranked rows of a month: { place, isTie, name, points, score, course,
+// seasonPoints } (score: the ranking value for the league's format).
 export function rankedMonthRows(snapshot, month, now = new Date(), lang) {
   const { league, members, cardsByMonth } = snapshot;
   const board = monthBoard(members, cardsByMonth, month, league.pointsTable, now, optsOf(league));
@@ -93,6 +96,7 @@ export function rankedMonthRows(snapshot, month, now = new Date(), lang) {
     name: shareName(publicDisplayName(r.member), lang),
     display: publicDisplayName(r.member),
     points: r.cardPoints,
+    score: r.cardScore,
     course: r.card?.course?.name ?? null,
     seasonPoints: r.seasonPoints,
   }));
@@ -266,22 +270,27 @@ export function announcementMessage({
 // get_public_league_board's payload as the snapshot shape the standings
 // helpers read ({ league, members, cardsByMonth }); null for no board.
 // Member keys stand in for user ids; every card counts (the server sends
-// only counting ones). A member without a display name has name null: the
-// views show the neutral label.
+// only counting ones: scored for the league's format). A member without a
+// display name has name null: the views show the neutral label. A server
+// before 20261020000000 sends no format: Stableford.
 export function publicBoardSnapshot(payload) {
   if (!payload || typeof payload !== 'object' || !payload.league) return null;
   const l = payload.league;
+  const format = l.format ?? 'stableford';
   const members = (payload.members ?? []).map((m) => ({
     userId: m.key, displayName: m.name, publicName: m.name ?? null, leftAt: m.active === false ? 'left' : null,
   }));
   const cardsByMonth = {};
   for (const c of payload.cards ?? []) {
-    if (c?.status !== 'confirmed' || c.points == null) continue;
-    const monthKey = String(c.month ?? '').slice(0, 7);
-    (cardsByMonth[monthKey] ??= []).push({
-      userId: c.member, status: 'confirmed', points: Number(c.points), month: c.month, monthKey,
-      course: c.course ? { name: c.course } : null,
-    });
+    const card = {
+      userId: c?.member, status: 'confirmed',
+      points: c?.points == null ? null : Number(c.points),
+      toPar: c?.to_par == null ? null : Number(c.to_par),
+      month: c?.month, monthKey: String(c?.month ?? '').slice(0, 7),
+      course: c?.course ? { name: c.course } : null,
+    };
+    if (c?.status !== 'confirmed' || cardScore(card, format) == null) continue;
+    (cardsByMonth[card.monthKey] ??= []).push(card);
   }
   return {
     league: {
@@ -290,6 +299,7 @@ export function publicBoardSnapshot(payload) {
       seasonEnd: l.season_end,
       pointsTable: Array.isArray(l.points_table) ? l.points_table.map(Number) : [],
       participationPoints: Number(l.participation_points) || 0,
+      format,
     },
     members,
     cardsByMonth,
@@ -314,7 +324,8 @@ export function publicBoardView(snapshot, scope, now = new Date(), lang) {
   const results = monthResults(cardsByMonth[scope] ?? [], active(members), league.pointsTable, optsOf(league))
     .filter((r) => r.place != null);
   const rows = results.map((r) => {
-    const card = (cardsByMonth[scope] ?? []).find((c) => c.userId === r.userId && c.points === r.cardPoints);
+    const card = (cardsByMonth[scope] ?? [])
+      .find((c) => c.userId === r.userId && cardScore(c, league.format) === r.cardScore);
     return {
       key: r.userId, place: r.place, isTie: r.isTie, name: memberNameOf(members, r.userId, lang),
       course: card?.course?.name ?? null, points: r.cardPoints, league: r.seasonPoints,

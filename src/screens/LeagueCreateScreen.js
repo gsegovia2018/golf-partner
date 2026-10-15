@@ -62,7 +62,8 @@ export default function LeagueCreateScreen({ navigation }) {
   const [pointsText, setPointsText] = useState(formatPointsTable(DEFAULT_POINTS_TABLE));
   const [capText, setCapText] = useState(String(DEFAULT_HANDICAP_CAP));
   const [feeText, setFeeText] = useState('');
-  // Chosen but not sent anywhere yet: Stableford is the only format today.
+  // Sent to create_league. The wizard offers Stableford only until
+  // MEDAL_FORMATS_ENABLED (leagueDraft).
   const [format, setFormat] = useState(DEFAULT_LEAGUE_FORMAT);
   const [addOpen, setAddOpen] = useState(false);
   const [participationPoints, setParticipationPoints] = useState(DEFAULT_PARTICIPATION_POINTS);
@@ -147,7 +148,7 @@ export default function LeagueCreateScreen({ navigation }) {
       ];
       const result = await createLeague(buildCreateArgs({
         name, seasonStart: startIso, seasonEnd: endIso, pointsTable, cap: effectiveCap,
-        feeCents: feeCents ?? 0, participationPoints, members,
+        feeCents: feeCents ?? 0, participationPoints, members, format,
       }));
       if (mountedRef.current) setCreated(result);
     } catch (e) {

@@ -133,6 +133,37 @@ describe('RPC params', () => {
     expect(lastRpc()[1]).not.toHaveProperty('p_participation_points');
   });
 
+  test('createLeague / updateLeagueRules send the format only when given', async () => {
+    ok({ id: 'L1', invite_code: 'ABC123' });
+    await createLeague({ name: 'Tour', seasonStart: '2026-01-01', seasonEnd: '2026-12-31', format: 'medal_net' });
+    expect(lastRpc()[1]).toMatchObject({ p_format: 'medal_net' });
+    ok({ id: 'L1', invite_code: 'ABC123' });
+    await createLeague({ name: 'Tour', seasonStart: '2026-01-01', seasonEnd: '2026-12-31' });
+    expect(lastRpc()[1]).not.toHaveProperty('p_format');
+    await updateLeagueRules('L1', { format: 'medal_gross' });
+    expect(lastRpc()).toEqual(['update_league_rules', {
+      p_league: 'L1', p_name: null, p_season_start: null, p_season_end: null, p_points_table: null,
+      p_cap: null, p_fee_cents: null, p_format: 'medal_gross',
+    }]);
+    await updateLeagueRules('L1', { name: 'New' });
+    expect(lastRpc()[1]).not.toHaveProperty('p_format');
+  });
+
+  test('summary, preview and card results carry the format and toPar', async () => {
+    ok({ id: 'L1', name: 'Tour', format: 'medal_net' });
+    expect(await getLeagueByCode('abc')).toMatchObject({ format: 'medal_net' });
+    ok({ name: 'Tour', format: 'medal_gross' });
+    expect(await getLeagueInvitePreview('abc')).toMatchObject({ format: 'medal_gross' });
+    ok({ name: 'Tour' });
+    expect(await getLeagueInvitePreview('abc')).toMatchObject({ format: 'stableford' });
+    ok({ id: 'C1', status: 'submitted', points: 36, to_par: -2 });
+    expect(await submitLeagueCard({ cardId: 'C1', holes: {}, gross: 0, points: 0, playingHandicap: 0 }))
+      .toMatchObject({ points: 36, toPar: -2 });
+    ok({ id: 'C2', month: '2026-10-01', status: 'submitted', not_announced: true, to_par: 4 });
+    expect(await addUnannouncedLeagueCard({ leagueId: 'L1', course: { name: 'X' }, holes: {} }))
+      .toMatchObject({ id: 'C2', toPar: 4 });
+  });
+
   test('getLeagueByCode maps the summary, null for unknown code', async () => {
     ok({
       id: 'L1', name: 'Tour', season_start: '2026-01-01', season_end: '2026-12-31',
@@ -141,7 +172,7 @@ describe('RPC params', () => {
     });
     expect(await getLeagueByCode('abc')).toEqual({
       id: 'L1', name: 'Tour', seasonStart: '2026-01-01', seasonEnd: '2026-12-31',
-      pointsTable: [500, 300], handicapCap: 30, entryFeeCents: 0, archived: false,
+      pointsTable: [500, 300], handicapCap: 30, entryFeeCents: 0, format: 'stableford', archived: false,
       adminName: 'Marcos', memberCount: 7, proposedHandicap: 18, isMember: false, invitees: [],
     });
     expect(lastRpc()).toEqual(['get_league_by_code', { p_code: 'abc' }]);
@@ -325,7 +356,7 @@ describe('RPC params', () => {
     // An older server returns no score: the new fields read null.
     expect(res).toEqual({
       id: 'C1', status: 'submitted', notAnnounced: true, firstShotAt: '2026-10-04T09:00:00Z',
-      points: null, gross: null, netDifferential: null, playingHandicap: null, teeVerified: null,
+      points: null, toPar: null, gross: null, netDifferential: null, playingHandicap: null, teeVerified: null,
     });
     expect(lastRpc()).toEqual(['submit_league_card', {
       p_card: 'C1', p_holes: { 1: 5 }, p_gross: 5, p_points: 1, p_playing_handicap: 20,
@@ -348,7 +379,7 @@ describe('RPC params', () => {
       leagueId: 'L1', course: { name: 'X' }, playedOn: '2026-10-03', holes: { 1: 4 },
       gross: 4, points: 2, playingHandicap: 18,
     });
-    expect(res).toEqual({ id: 'C2', month: '2026-10-01', status: 'submitted', notAnnounced: true });
+    expect(res).toEqual({ id: 'C2', month: '2026-10-01', status: 'submitted', notAnnounced: true, toPar: null });
     expect(lastRpc()).toEqual(['add_unannounced_league_card', {
       p_league: 'L1', p_course: { name: 'X' }, p_tee_time: null, p_played_on: '2026-10-03',
       p_holes: { 1: 4 }, p_gross: 4, p_points: 2, p_playing_handicap: 18,
@@ -707,6 +738,14 @@ describe('reads and cache', () => {
     expect(rowToCard({ ...cardRow(), tee_verified: true })).toMatchObject({ teeVerified: true });
     expect(rowToCard({ ...cardRow(), tee_verified: false })).toMatchObject({ teeVerified: false });
     expect(rowToCard(cardRow())).toMatchObject({ teeVerified: null });
+  });
+
+  test('rowToLeague maps the format, Stableford from a server without it; rowToCard maps to_par', () => {
+    expect(rowToLeague({ id: 'L1', format: 'medal_net' })).toMatchObject({ format: 'medal_net' });
+    expect(rowToLeague({ id: 'L1' })).toMatchObject({ format: 'stableford' });
+    expect(rowToCard({ ...cardRow(), to_par: -3 })).toMatchObject({ toPar: -3 });
+    expect(rowToCard({ ...cardRow(), to_par: 0 })).toMatchObject({ toPar: 0 });
+    expect(rowToCard(cardRow())).toMatchObject({ toPar: null });
   });
 
   test('rowToLeague maps participation points; a server without the column means 0', () => {

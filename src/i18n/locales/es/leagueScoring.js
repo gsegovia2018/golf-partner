@@ -1,6 +1,9 @@
 // Spanish catalogue: league batch 7 (leagueScoring). See docs/i18n.md.
 export default {
   'league.scoring.pts': '{points} ptos',
+  // Golpes respecto al par en una liga medal: al par, y el neto ('neto −2').
+  'league.scoring.level': 'par',
+  'league.scoring.netToPar': 'neto {score}',
 
   'league.addScore.titleCard': 'Añade tu resultado',
   'league.addScore.titleNew': 'Añadir una tarjeta',

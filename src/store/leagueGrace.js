@@ -6,6 +6,7 @@ import {
   isMissed, needsApproval, isMonthClosed, monthClosesAt, resubmitBy,
 } from './leagueRules';
 import { currentMonthKey } from './leagueView';
+import { cardScore, compareScores } from './leagueStandings';
 
 const MINUTE_MS = 60000;
 
@@ -44,11 +45,9 @@ export function pendingState(card, now = new Date()) {
 // (same order as leagueView.cardStatus).
 export const approvalReason = (card) => (card.teeVerified === false ? 'handTee' : 'notAnnounced');
 
-const byPoints = (a, b) => {
-  const pa = a.card.points == null ? -Infinity : Number(a.card.points);
-  const pb = b.card.points == null ? -Infinity : Number(b.card.points);
-  return pa === pb ? 0 : pb - pa;
-};
+// Best ranking value first for the league's format (Stableford points most
+// first, medal to par fewest first); a card without one after.
+const byScore = (format) => (a, b) => compareScores(cardScore(a.card, format), cardScore(b.card, format), format);
 
 // The previous month while it is still open and has cards that are not final,
 // else null. `snapshot` is what getLeague returns ({ league, members,
@@ -77,6 +76,7 @@ export function graceMonth(snapshot, now = new Date(), meId = null) {
     });
   }
   if (pending.length === 0) return null;
+  const byPoints = byScore(snapshot.league?.format);
   pending.sort((a, b) => (b.isMe - a.isMe) || byPoints(a, b));
 
   const mine = pending.find((p) => p.isMe) ?? null;

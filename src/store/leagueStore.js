@@ -113,6 +113,9 @@ export function rowToLeague(r) {
     // The public board link (/league-board/<token>) is on unless an admin
     // switched it off (20261017000000). The token comes from getLeagueShareLink.
     publicBoardEnabled: r.public_board_enabled !== false,
+    // What a month ranks by (20261020000000): 'stableford' | 'medal_net' |
+    // 'medal_gross'. A server without the column has only Stableford.
+    format: r.format ?? 'stableford',
   };
 }
 
@@ -174,8 +177,13 @@ export function rowToCard(r) {
     playingHandicap: r.playing_handicap ?? null,
     holes: r.holes ?? null,
     gross: r.gross ?? null,
-    // Ranking value (more is better): Stableford points, computed by the server.
+    // Ranking value of a Stableford league (more is better): Stableford
+    // points, computed by the server for every card.
     points: r.points ?? null,
+    // Ranking value of a medal league (fewer is better): strokes to par, net
+    // or gross by the league's format, computed by the server. null for a
+    // Stableford league, a card not scored yet, or a server before 20261020000000.
+    toPar: r.to_par ?? null,
     // Secondary information, also computed by the server. null = the card's
     // tee had no slope/rating (cards from before rated tees were required).
     differential: num(r.differential),
@@ -301,6 +309,7 @@ function summaryToCamel(s) {
     pointsTable: s.points_table ?? [],
     handicapCap: s.handicap_cap == null ? 30 : Number(s.handicap_cap),
     entryFeeCents: s.entry_fee_cents ?? 0,
+    format: s.format ?? 'stableford',
     archived: !!s.archived,
     adminName: s.admin_name ?? null,
     memberCount: s.member_count ?? 0,
@@ -477,13 +486,19 @@ export async function getLeague(leagueId) {
 // members: [{ userId, handicap }] or, for someone not in the app yet,
 // [{ name, handicap }] (a reserved spot they claim from the invite link).
 // participationPoints: season points every counting card earns at least;
-// omitted = the server default (10). Returns { id, inviteCode }.
+// omitted = the server default (10). format: 'stableford' | 'medal_net' |
+// 'medal_gross'; omitted = the server default ('stableford'). An unknown
+// format is refused (hint 'bad_format'). Returns { id, inviteCode }.
 export async function createLeague({
   name, seasonStart, seasonEnd, pointsTable = null, cap = null, feeCents = 0, members = [],
-  participationPoints = null,
+  participationPoints = null, format = null,
 }) {
-  // Sent only when set, so the call still matches a server without the argument.
-  const extra = participationPoints == null ? {} : { p_participation_points: participationPoints };
+  // Sent only when set (and the format only when it isn't the default), so a
+  // Stableford create still matches a server without the argument.
+  const extra = {
+    ...(participationPoints == null ? {} : { p_participation_points: participationPoints }),
+    ...(format == null || format === 'stableford' ? {} : { p_format: format }),
+  };
   const d = await rpc('create_league', {
     ...extra,
     p_name: name,
@@ -526,6 +541,7 @@ export async function getLeagueInvitePreview(code) {
     memberCount: p.member_count ?? 0,
     entryFeeCents: p.entry_fee_cents ?? 0,
     handicapCap: p.handicap_cap == null ? 30 : Number(p.handicap_cap),
+    format: p.format ?? 'stableford',
     archived: !!p.archived,
     invitees: inviteesToCamel(p.invitees),
   };
@@ -572,12 +588,18 @@ export async function setLeagueFeePaid(leagueId, userId, paid) {
   await rpc('set_league_fee_paid', { p_league: leagueId, p_user: userId, p_paid: paid });
 }
 
-// Admin. Omitted fields keep their current value.
+// Admin. Omitted fields keep their current value. `format` can't change once
+// the league has a card that isn't void (hint 'format_locked'; the same
+// format again is fine).
 export async function updateLeagueRules(leagueId, {
-  name, seasonStart, seasonEnd, pointsTable, cap, feeCents, participationPoints,
+  name, seasonStart, seasonEnd, pointsTable, cap, feeCents, participationPoints, format,
 } = {}) {
-  // Sent only when set, so the call still matches a server without the argument.
-  const extra = participationPoints == null ? {} : { p_participation_points: participationPoints };
+  // Sent only when set (and the format only when it isn't the default), so a
+  // Stableford create still matches a server without the argument.
+  const extra = {
+    ...(participationPoints == null ? {} : { p_participation_points: participationPoints }),
+    ...(format == null || format === 'stableford' ? {} : { p_format: format }),
+  };
   await rpc('update_league_rules', {
     ...extra,
     p_league: leagueId,
@@ -741,7 +763,8 @@ export async function notifyLeagueTeeOff(cardId) {
 // still sent for older servers but ignored (20261015000000). Server hints
 // include 'incomplete_card', 'holes_mismatch' (an app card that differs from
 // the game) and 'unrated_tee'. Returns { id, status, notAnnounced, firstShotAt,
-// points, playingHandicap, teeVerified } (the last three null from an older server).
+// points, toPar, gross, netDifferential, playingHandicap, teeVerified } (the
+// scores null from an older server; toPar null in a Stableford league).
 export async function submitLeagueCard({
   cardId, holes, gross, points, playingHandicap, playedOn = null,
 }) {
@@ -759,6 +782,7 @@ export async function submitLeagueCard({
     notAnnounced: !!d.not_announced,
     firstShotAt: d.first_shot_at ?? null,
     points: d.points ?? null,
+    toPar: d.to_par ?? null,
     gross: d.gross ?? null,
     netDifferential: num(d.net_differential),
     playingHandicap: d.playing_handicap ?? null,
@@ -768,7 +792,8 @@ export async function submitLeagueCard({
 
 // Off-app card with no announcement: created already submitted and labelled
 // "Not announced in the app". Scored by the server like submitLeagueCard.
-// Returns { id, month, status, notAnnounced }.
+// Returns { id, month, status, notAnnounced, toPar } (toPar null in a
+// Stableford league or from an older server).
 export async function addUnannouncedLeagueCard({
   leagueId, course, teeTime = null, playedOn = null, holes, gross, points, playingHandicap,
 }) {
@@ -782,7 +807,9 @@ export async function addUnannouncedLeagueCard({
     p_points: points,
     p_playing_handicap: playingHandicap,
   });
-  return { id: d.id, month: d.month, status: d.status, notAnnounced: !!d.not_announced };
+  return {
+    id: d.id, month: d.month, status: d.status, notAnnounced: !!d.not_announced, toPar: d.to_par ?? null,
+  };
 }
 
 // Owner. An off-app card's tee time can move while it is at least 2 hours

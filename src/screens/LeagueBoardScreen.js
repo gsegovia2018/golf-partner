@@ -56,7 +56,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
     if (!data) return null;
     const { league, members, cardsByMonth } = data;
     const active = members.filter((m) => !m.leftAt);
-    const table = seasonTable(active, cardsByMonth, league.pointsTable, { participationPoints: league.participationPoints });
+    const table = seasonTable(active, cardsByMonth, league.pointsTable, { participationPoints: league.participationPoints, format: league.format });
     const last = lastScoredMonth(cardsByMonth);
     const scoredMonths = Object.keys(cardsByMonth)
       .filter((m) => cardsByMonth[m].some((c) => c.status === 'confirmed' && !needsApproval(c)))
@@ -118,7 +118,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const { league, members, active, cardsByMonth, table, last, scoredMonths } = view;
   const nameOf = (userId) => memberName(members, userId, meId);
   const openCard = (month, userId) => navigation.navigate('LeagueCard', { leagueId, month, userId });
-  const viewable = (month) => new Set(viewableCards(members, cardsByMonth, month).map((c) => c.userId));
+  const viewable = (month) => new Set(viewableCards(members, cardsByMonth, month, league.format).map((c) => c.userId));
   const noCardsYet = !last;
   const curKey = currentMonthKey(now);
   const curMonth = monthLong(curKey);
@@ -146,10 +146,10 @@ export default function LeagueBoardScreen({ navigation, route }) {
     boardTitle = left === 0
       ? t('league.home.titleLastDay', { month: curMonth.toUpperCase() })
       : t('league.home.titleDaysLeft', { month: curMonth.toUpperCase(), count: left });
-    const board = monthBoard(members, cardsByMonth, curKey, league.pointsTable, now, { participationPoints: league.participationPoints, voidCards: data?.cards });
+    const board = monthBoard(members, cardsByMonth, curKey, league.pointsTable, now, { participationPoints: league.participationPoints, voidCards: data?.cards, format: league.format });
     // Any card this month opens: live, missed and voided ones show their status.
     const canOpen = new Set([
-      ...monthRows(members, cardsByMonth, curKey, now).filter((r) => r.card).map((r) => r.member.userId),
+      ...monthRows(members, cardsByMonth, curKey, now, league.format).filter((r) => r.card).map((r) => r.member.userId),
       ...board.voided.map((r) => r.member.userId),
     ]);
     const rowOf = (member) => ({
@@ -317,7 +317,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
   } else {
     boardTitle = t('league.home.titleResults', { month: monthLong(activeScope).toUpperCase() });
     const canOpen = viewable(activeScope);
-    const results = monthResults(cardsByMonth[activeScope], active, league.pointsTable, { participationPoints: league.participationPoints });
+    const results = monthResults(cardsByMonth[activeScope], active, league.pointsTable, { participationPoints: league.participationPoints, format: league.format });
     const ranked = results.filter((r) => r.place != null || r.unrated);
     const inGrace = !!grace && activeScope === graceKey;
     const waitingIds = new Set(inGrace ? grace.pending.map((p) => p.userId) : []);
@@ -400,7 +400,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const finalKey = route?.params?.finalMonth ?? (
     isMonthClosed(prevKey, now) && now.getTime() - monthClosesAt(prevKey).getTime() < 14 * 86400000 ? prevKey : null);
   const finalMonth = !archived && finalKey && monthResults(cardsByMonth[finalKey] ?? [], active, league.pointsTable,
-    { participationPoints: league.participationPoints }).some((r) => r.place != null) ? finalKey : null;
+    { participationPoints: league.participationPoints, format: league.format }).some((r) => r.place != null) ? finalKey : null;
   // The header's share icon follows the board: the month so far, the season,
   // or a past month's results.
   const sheetMode = share?.mode === 'board'

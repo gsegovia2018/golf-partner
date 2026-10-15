@@ -564,6 +564,244 @@ SELECT 'scoring backup table is closed to anon and authenticated (or dropped)',
            AND NOT has_table_privilege('authenticated', to_regclass('public.league_cards_scoring_backup'), 'SELECT')),
        CASE WHEN to_regclass('public.league_cards_scoring_backup') IS NULL THEN 'table dropped' END;
 
+-- 6) Medal play (20261020000000_league_medal_play.sql) ---------------------------------
+-- hcng on the library tee: gross 86, par 72. Ana (women's pair) plays off
+-- ph 23 -> net to par 86 - 23 - 72 = -9, gross to par 86 - 72 = +14.
+-- Gonzalo's card `hgon` = hcng with holes 1, 2, 5 at 3 and hole 4 at 15:
+-- still gross 86, men's ph 20 -> net to par -6, but 48 Stableford points (the
+-- 15 on a par 5 scores 0 either way): more points than Ana's 45, worse to par.
+INSERT INTO ss_ctx SELECT 'hgon', (v::jsonb || '{"1":3,"2":3,"5":3,"4":15}'::jsonb)::text FROM ss_ctx WHERE k = 'hcng';
+
+SELECT set_config('request.jwt.claims', '{"sub":"b1000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE r jsonb; v_hint text;
+        ana_gon jsonb := '[{"user_id":"b1000000-0000-4000-8000-00000000000a","handicap":18},
+                           {"user_id":"b1000000-0000-4000-8000-00000000000b","handicap":18}]'::jsonb;
+        ana jsonb := '[{"user_id":"b1000000-0000-4000-8000-00000000000a","handicap":18}]'::jsonb;
+BEGIN
+  r := public.create_league('Stableford Smoke', '2026-01-01', '2027-12-31', NULL, 30, 0, ana, 10, 'stableford');
+  INSERT INTO ss_ctx VALUES ('lgS', r->>'id');
+  r := public.create_league('Medal Net Smoke', '2026-01-01', '2027-12-31', NULL, 30, 0, ana_gon, 10, 'medal_net');
+  INSERT INTO ss_ctx VALUES ('lgN', r->>'id'), ('codeN', r->>'invite_code');
+  r := public.create_league(p_name => 'Medal Gross Smoke', p_season_start => '2026-01-01', p_season_end => '2027-12-31',
+         p_points_table => NULL, p_cap => 30, p_fee_cents => 0, p_members => ana, p_format => 'medal_gross');
+  INSERT INTO ss_ctx VALUES ('lgG', r->>'id');
+  -- The 7-argument call (installed builds) still creates a Stableford league.
+  r := public.create_league('Format Lock Smoke', '2026-01-01', '2027-12-31', NULL, 30, 0, ana);
+  INSERT INTO ss_ctx VALUES ('lgL', r->>'id');
+
+  BEGIN
+    PERFORM public.create_league('Bad Format', '2026-01-01', '2027-12-31', NULL, 30, 0, ana, 10, 'matchplay');
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('create_league refuses an unknown format', false, 'no error');
+  EXCEPTION WHEN others THEN
+    GET STACKED DIAGNOSTICS v_hint = PG_EXCEPTION_HINT;
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('create_league refuses an unknown format',
+      SQLSTATE = 'P0001' AND v_hint = 'bad_format', SQLSTATE || ' ' || v_hint || ' ' || SQLERRM);
+  END;
+END $$;
+RESET ROLE;
+INSERT INTO ss_smoke (name, ok, detail)
+SELECT 'create_league stores each format (7-argument call: stableford); nothing left by the refused one',
+       string_agg(name || '=' || format, ',' ORDER BY name)
+         = 'Format Lock Smoke=stableford,Medal Gross Smoke=medal_gross,Medal Net Smoke=medal_net,Stableford Smoke=stableford'
+       AND (SELECT format FROM public.leagues WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='league')) = 'stableford'
+       AND NOT EXISTS (SELECT 1 FROM public.leagues WHERE name = 'Bad Format'),
+       string_agg(name || '=' || format, ',' ORDER BY name)
+  FROM public.leagues
+ WHERE id IN (SELECT v::uuid FROM ss_ctx WHERE k IN ('lgS','lgN','lgG','lgL'));
+
+SELECT set_config('request.jwt.claims', '{"sub":"b1000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+SELECT public.join_league((SELECT v FROM ss_ctx WHERE k='codeN'), 18);
+
+-- Cards: Ana in all three, Gonzalo in the net league.
+SELECT set_config('request.jwt.claims', '{"sub":"b1000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE r jsonb; lib jsonb := (SELECT v::jsonb FROM ss_ctx WHERE k='lib');
+        h jsonb := (SELECT v::jsonb FROM ss_ctx WHERE k='hcng');
+BEGIN
+  r := public.add_unannounced_league_card((SELECT v::uuid FROM ss_ctx WHERE k='lgS'), lib, NULL, '2027-03-02', h, 86, 30, 20);
+  INSERT INTO ss_ctx VALUES ('cardMS', r->>'id');
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('stableford league: add returns to_par null, points as before',
+    r ? 'to_par' AND r->'to_par' = 'null'::jsonb AND (r->>'points')::int = 45, r::text);
+  r := public.add_unannounced_league_card((SELECT v::uuid FROM ss_ctx WHERE k='lgN'), lib, NULL, '2027-03-02', h, 86, 30, 20);
+  INSERT INTO ss_ctx VALUES ('cardMN', r->>'id');
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('medal net league: add returns net to par -9 (86 - ph 23 - par 72)',
+    (r->>'to_par')::int = -9 AND (r->>'points')::int = 45 AND (r->>'playing_handicap')::int = 23, r::text);
+  r := public.add_unannounced_league_card((SELECT v::uuid FROM ss_ctx WHERE k='lgG'), lib, NULL, '2027-03-02', h, 86, 30, 20);
+  INSERT INTO ss_ctx VALUES ('cardMG', r->>'id');
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('medal gross league: add returns gross to par +14 (86 - par 72)',
+    (r->>'to_par')::int = 14 AND (r->>'points')::int = 45, r::text);
+
+  -- submit_league_card stores and returns to_par too (an announced off-app card).
+  r := public.announce_league_card((SELECT v::uuid FROM ss_ctx WHERE k='lgG'), 'offapp', lib, now() + interval '2 hours');
+  INSERT INTO ss_ctx VALUES ('cardMG2', r->>'id');
+  PERFORM pg_temp.ss_rewind((r->>'id')::uuid, interval '5 hours');
+  r := public.submit_league_card((r->>'id')::uuid, h, 1, 99, -54, NULL);
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('medal gross league: submit returns to_par +14',
+    (r->>'to_par')::int = 14 AND (r->>'gross')::int = 86, r::text);
+END $$;
+SELECT set_config('request.jwt.claims', '{"sub":"b1000000-0000-4000-8000-00000000000b","role":"authenticated"}', true);
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := public.add_unannounced_league_card((SELECT v::uuid FROM ss_ctx WHERE k='lgN'),
+         (SELECT v::jsonb FROM ss_ctx WHERE k='lib'), NULL, '2027-03-03',
+         (SELECT v::jsonb FROM ss_ctx WHERE k='hgon'), 86, 30, 20);
+  INSERT INTO ss_ctx VALUES ('cardMN2', r->>'id');
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('medal net league: Gonzalo 48 pts but net to par -6',
+    (r->>'to_par')::int = -6 AND (r->>'points')::int = 48 AND (r->>'gross')::int = 86 AND (r->>'playing_handicap')::int = 20,
+    r::text);
+END $$;
+RESET ROLE;
+INSERT INTO ss_smoke (name, ok, detail)
+SELECT 'to_par stored: NULL for Stableford, -9 net, +14 gross (add and submit), -6 net; timeline carries it',
+       (SELECT to_par IS NULL AND points = 45 FROM public.league_cards WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='cardMS'))
+       AND (SELECT to_par FROM public.league_cards WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='cardMN')) = -9
+       AND (SELECT to_par FROM public.league_cards WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='cardMG')) = 14
+       AND (SELECT to_par FROM public.league_cards WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='cardMG2')) = 14
+       AND (SELECT to_par FROM public.league_cards WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='cardMN2')) = -6
+       AND (SELECT (data->>'to_par')::int FROM public.league_card_events
+             WHERE card_id = (SELECT v::uuid FROM ss_ctx WHERE k='cardMN') AND kind = 'added') = -9
+       AND (SELECT (data->>'to_par')::int FROM public.league_card_events
+             WHERE card_id = (SELECT v::uuid FROM ss_ctx WHERE k='cardMG2') AND kind = 'submitted') = 14,
+       NULL;
+INSERT INTO ss_smoke (name, ok, detail)
+SELECT 'league_card_score returns par; league_card_to_par by format',
+       (public.league_card_score(c.holes, c.course, c.league_handicap) ->> 'par')::int = 72
+       AND public.league_card_to_par(public.league_card_score(c.holes, c.course, c.league_handicap), 'medal_net') = -9
+       AND public.league_card_to_par(public.league_card_score(c.holes, c.course, c.league_handicap), 'medal_gross') = 14
+       AND public.league_card_to_par(public.league_card_score(c.holes, c.course, c.league_handicap), 'stableford') IS NULL
+       AND public.league_card_to_par(NULL, 'medal_net') IS NULL,
+       public.league_card_score(c.holes, c.course, c.league_handicap)::text
+  FROM public.league_cards c WHERE c.id = (SELECT v::uuid FROM ss_ctx WHERE k='cardMN');
+
+-- Confirm both net cards (an admin's approval, as for any unannounced card):
+-- the notification carries format and to_par.
+UPDATE public.league_cards SET approved_by = 'b1000000-0000-4000-8000-00000000000a', approved_at = now()
+ WHERE id IN (SELECT v::uuid FROM ss_ctx WHERE k IN ('cardMN','cardMN2'));
+SELECT public.league_confirm_card((SELECT v::uuid FROM ss_ctx WHERE k='cardMN'), 'photo', NULL, 'Smoke Club', NULL);
+SELECT public.league_confirm_card((SELECT v::uuid FROM ss_ctx WHERE k='cardMN2'), 'photo', NULL, 'Smoke Club', NULL);
+INSERT INTO ss_smoke (name, ok, detail)
+SELECT 'league_card_confirmed notification carries format and to_par',
+       count(*) = 1 AND bool_and(data->>'format' = 'medal_net' AND (data->>'to_par')::int = -9
+                                 AND user_id = 'b1000000-0000-4000-8000-00000000000b'),
+       string_agg(data::text, ' | ')
+  FROM public.notifications
+ WHERE type = 'league_card_confirmed' AND entity_id = (SELECT v::uuid FROM ss_ctx WHERE k='cardMN');
+
+-- Readers return the format; the public board ranks a medal league fewest first.
+SELECT set_config('request.jwt.claims', '{"sub":"b1000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE r jsonb; tok text;
+BEGIN
+  r := public.get_league_by_code((SELECT v FROM ss_ctx WHERE k='codeN'));
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('get_league_by_code returns the format', r->>'format' = 'medal_net', r::text);
+  tok := public.get_league_share_link((SELECT v::uuid FROM ss_ctx WHERE k='lgN'));
+  INSERT INTO ss_ctx VALUES ('tokN', tok);
+END $$;
+SELECT set_config('request.jwt.claims', '{"role":"anon"}', true);
+SET LOCAL ROLE anon;
+DO $$
+DECLARE r jsonb;
+BEGIN
+  r := public.get_league_invite_preview((SELECT v FROM ss_ctx WHERE k='codeN'));
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('anon invite preview returns the format', r->>'format' = 'medal_net', r::text);
+  r := public.get_public_league_board((SELECT v FROM ss_ctx WHERE k='tokN'));
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('public board, medal net: format, cards ordered by to_par ascending (not by points)',
+    r #>> '{league,format}' = 'medal_net'
+    AND (SELECT array_agg((c->>'to_par')::int ORDER BY o) FROM jsonb_array_elements(r->'cards') WITH ORDINALITY x(c, o)) = ARRAY[-9, -6]
+    AND (SELECT array_agg((c->>'points')::int ORDER BY o) FROM jsonb_array_elements(r->'cards') WITH ORDINALITY x(c, o)) = ARRAY[45, 48],
+    r::text);
+END $$;
+RESET ROLE;
+-- A confirmed medal card without to_par doesn't count on the board.
+UPDATE public.league_cards SET to_par = NULL WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='cardMN2');
+SELECT set_config('request.jwt.claims', '{"role":"anon"}', true);
+SET LOCAL ROLE anon;
+DO $$
+DECLARE r jsonb := public.get_public_league_board((SELECT v FROM ss_ctx WHERE k='tokN'));
+BEGIN
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('public board, medal: a card with no to_par is not counted',
+    jsonb_array_length(r->'cards') = 1 AND (r->'cards'->0->>'to_par')::int = -9, r::text);
+END $$;
+RESET ROLE;
+UPDATE public.league_cards SET to_par = -6 WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='cardMN2');
+
+-- The format lock (update_league_rules).
+SELECT set_config('request.jwt.claims', '{"sub":"b1000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE lid uuid := (SELECT v::uuid FROM ss_ctx WHERE k='lgL'); r jsonb; v_hint text;
+BEGIN
+  PERFORM public.update_league_rules(lid, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'medal_net');
+  PERFORM public.update_league_rules(lid, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'medal_net');
+  INSERT INTO ss_smoke (name, ok, detail)
+  SELECT 'update_league_rules changes the format before any card (and the same again)', format = 'medal_net', format
+    FROM public.leagues WHERE id = lid;
+  BEGIN
+    PERFORM public.update_league_rules(lid, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'bogus');
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('update_league_rules refuses an unknown format', false, 'no error');
+  EXCEPTION WHEN others THEN
+    GET STACKED DIAGNOSTICS v_hint = PG_EXCEPTION_HINT;
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('update_league_rules refuses an unknown format',
+      SQLSTATE = 'P0001' AND v_hint = 'bad_format', SQLSTATE || ' ' || v_hint || ' ' || SQLERRM);
+  END;
+
+  r := public.add_unannounced_league_card(lid, (SELECT v::jsonb FROM ss_ctx WHERE k='lib'), NULL, '2027-05-02',
+         (SELECT v::jsonb FROM ss_ctx WHERE k='hcng'), 86, 30, 20);
+  INSERT INTO ss_ctx VALUES ('cardML', r->>'id');
+  INSERT INTO ss_smoke (name, ok, detail) VALUES ('a card in a league switched to medal net is scored to par',
+    (r->>'to_par')::int = -9, r::text);
+
+  BEGIN
+    PERFORM public.update_league_rules(lid, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'medal_gross');
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('format change after a card -> format_locked', false, 'no error');
+  EXCEPTION WHEN others THEN
+    GET STACKED DIAGNOSTICS v_hint = PG_EXCEPTION_HINT;
+    INSERT INTO ss_smoke (name, ok, detail) VALUES ('format change after a card -> format_locked',
+      SQLSTATE = 'P0001' AND v_hint = 'format_locked', SQLSTATE || ' ' || v_hint || ' ' || SQLERRM);
+  END;
+  -- The same format, and a call without one, are fine.
+  PERFORM public.update_league_rules(lid, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'medal_net');
+  PERFORM public.update_league_rules(lid, 'Format Lock Smoke 2', NULL, NULL, NULL, NULL, NULL);
+  INSERT INTO ss_smoke (name, ok, detail)
+  SELECT 'same format after a card is allowed; a call without a format keeps it', format = 'medal_net' AND name = 'Format Lock Smoke 2',
+         name || ' / ' || format
+    FROM public.leagues WHERE id = lid;
+END $$;
+RESET ROLE;
+-- Only non-void cards lock it.
+UPDATE public.league_cards SET status = 'void' WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='cardML');
+SELECT set_config('request.jwt.claims', '{"sub":"b1000000-0000-4000-8000-00000000000a","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+SELECT public.update_league_rules((SELECT v::uuid FROM ss_ctx WHERE k='lgL'), NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'stableford');
+RESET ROLE;
+INSERT INTO ss_smoke (name, ok, detail)
+SELECT 'with only void cards the format can change again', format = 'stableford', format
+  FROM public.leagues WHERE id = (SELECT v::uuid FROM ss_ctx WHERE k='lgL');
+
+INSERT INTO ss_smoke (name, ok, detail)
+SELECT 'every scored, non-void card stores the to_par its league''s format gives',
+       count(*) = 0, string_agg(c.id::text, ',')
+  FROM public.league_cards c JOIN public.leagues l ON l.id = c.league_id
+ WHERE c.status <> 'void' AND c.holes IS NOT NULL
+   AND c.to_par IS DISTINCT FROM public.league_card_to_par(
+         public.league_card_score(c.holes, c.course, c.league_handicap), l.format);
+
+INSERT INTO ss_smoke (name, ok, detail)
+SELECT 'grants: the new create_league / update_league_rules for authenticated, not anon; league_card_to_par for nobody',
+       has_function_privilege('authenticated', 'public.create_league(text, date, date, int[], numeric, int, jsonb, int, text)', 'EXECUTE')
+   AND NOT has_function_privilege('anon', 'public.create_league(text, date, date, int[], numeric, int, jsonb, int, text)', 'EXECUTE')
+   AND has_function_privilege('authenticated', 'public.update_league_rules(uuid, text, date, date, int[], numeric, int, int, text)', 'EXECUTE')
+   AND NOT has_function_privilege('anon', 'public.update_league_rules(uuid, text, date, date, int[], numeric, int, int, text)', 'EXECUTE')
+   AND NOT has_function_privilege('authenticated', 'public.league_card_to_par(jsonb, text)', 'EXECUTE')
+   AND NOT has_function_privilege('anon', 'public.league_card_to_par(jsonb, text)', 'EXECUTE')
+   AND NOT has_function_privilege('authenticated', 'public.league_card_score(jsonb, jsonb, numeric)', 'EXECUTE'),
+       NULL;
+
 -- Verdict ------------------------------------------------------------------------------------
 DO $$
 DECLARE v_failed text;

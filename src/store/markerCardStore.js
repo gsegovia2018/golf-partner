@@ -38,6 +38,7 @@ async function rpc(fn, args) {
  * @returns {Promise<{playerFirstName:string, course:string, tee:string|null,
  *   slope:number|null, rating:number|null, date:string|null,
  *   playingHandicap:number|null, gross:number|null, points:number|null,
+ *   format:'stableford'|'medal_net'|'medal_gross', toPar:number|null,
  *   differential:number|null, netDifferential:number|null, expiresAt:string,
  *   bound:boolean, signedInName:string|null, leagueName:string|null, month:string|null,
  *   holes:Array<{n:number, par:number, si:number, strokes:number|null}>}>}
@@ -54,6 +55,10 @@ export async function getMarkerCard(token) {
     playingHandicap: d.playing_handicap ?? null,
     gross: d.gross ?? null,
     points: d.points ?? null,
+    // The league's format and the card's strokes to par (medal leagues;
+    // null otherwise). A server before 20261020000000 sends neither.
+    format: d.format ?? 'stableford',
+    toPar: d.to_par ?? null,
     differential: d.differential == null ? null : Number(d.differential),
     netDifferential: d.net_differential == null ? null : Number(d.net_differential),
     expiresAt: d.expires_at,
