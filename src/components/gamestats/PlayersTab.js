@@ -207,7 +207,7 @@ export default function PlayersTab({ tournament, selectedId, onSelectPlayer, onO
                   {t('stats.game.player.ncHole', { round: x.e.roundIndex + 1, hole: x.e.holeNumber, course: x.e.courseName })}
                 </Text>
               </View>
-              <Text style={s.sub}>{t('stats.game.player.ncValue', { strokes: x.e.strokes, par: x.e.par, points: x.e.points })}</Text>
+              <Text style={s.sub}>{t('stats.game.player.ncValue', { strokes: x.e.strokes, par: x.e.par, count: x.e.points })}</Text>
             </TouchableOpacity>
           ))}
         </View>

@@ -28,26 +28,48 @@ function GrowRow({ style, children }) {
   return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
 }
 
+// The four bands (colour + label + count). Shared by the bar and the
+// stand-alone legend so the two always agree.
+function mixSegments(distribution, theme, t) {
+  const d = distribution ?? {};
+  return [
+    { key: 'birdie', label: t('stats.my.mix.birdiePlus'), count: (d.eagles ?? 0) + (d.birdies ?? 0), color: theme.accent.primary },
+    { key: 'par', label: t('stats.my.mix.par'), count: d.pars ?? 0, color: '#7fb59f' },
+    { key: 'bogey', label: t('stats.my.mix.bogey'), count: d.bogeys ?? 0, color: '#e7d7b4' },
+    { key: 'double', label: t('stats.my.mix.doublePlus'), count: (d.doubles ?? 0) + (d.worse ?? 0), color: theme.isDark ? '#b57070' : '#d9a29a' },
+  ];
+}
+
+// One legend for several bars (no counts): the Game Stats "everyone" card.
+export function ScoreMixLegend() {
+  const { theme } = useTheme();
+  const t = useT();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+  return (
+    <View style={s.legend} testID="scoremix-legend">
+      {mixSegments(null, theme, t).map((seg) => (
+        <View key={seg.key} style={s.legendItem}>
+          <View style={[s.legendDot, { backgroundColor: seg.color }]} />
+          <Text style={s.legendText}>{seg.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 // ONE horizontal stacked bar showing the share of holes ending birdie+ /
 // par / bogey / double+, fed by the same `stats.distribution` counts the
 // scoring-pattern rows use — this component never recomputes stats.
 // buildCourseBreakdown()'s `summary.scoreMix` carries the same
 // {eagles,birdies,pars,bogeys,doubles,worse} keys (plus an ignored `total`),
 // so CourseStatsScreen passes it straight in as `distribution`.
-export default function ScoreMixBar({ distribution }) {
+// `legend={false}` drops the per-bar legend (pair it with ScoreMixLegend).
+export default function ScoreMixBar({ distribution, legend = true }) {
   const { theme } = useTheme();
   const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
-  const segments = useMemo(() => {
-    const d = distribution ?? {};
-    return [
-      { key: 'birdie', label: t('stats.my.mix.birdiePlus'), count: (d.eagles ?? 0) + (d.birdies ?? 0), color: theme.accent.primary },
-      { key: 'par', label: t('stats.my.mix.par'), count: d.pars ?? 0, color: '#7fb59f' },
-      { key: 'bogey', label: t('stats.my.mix.bogey'), count: d.bogeys ?? 0, color: '#e7d7b4' },
-      { key: 'double', label: t('stats.my.mix.doublePlus'), count: (d.doubles ?? 0) + (d.worse ?? 0), color: theme.isDark ? '#b57070' : '#d9a29a' },
-    ];
-  }, [distribution, theme, t]);
+  const segments = useMemo(() => mixSegments(distribution, theme, t), [distribution, theme, t]);
 
   const total = segments.reduce((sum, seg) => sum + seg.count, 0);
   if (total <= 0) return null;
@@ -70,16 +92,18 @@ export default function ScoreMixBar({ distribution }) {
           ))}
         </GrowRow>
       </View>
-      <View style={s.legend}>
-        {shown.map((seg) => (
-          <View key={seg.key} style={s.legendItem} testID={`scoremix-legend-${seg.key}`}>
-            <View style={[s.legendDot, { backgroundColor: seg.color }]} />
-            <Text style={s.legendText}>
-              {seg.label} <Text style={s.legendCount}>{seg.count}</Text>
-            </Text>
-          </View>
-        ))}
-      </View>
+      {legend && (
+        <View style={s.legend}>
+          {shown.map((seg) => (
+            <View key={seg.key} style={s.legendItem} testID={`scoremix-legend-${seg.key}`}>
+              <View style={[s.legendDot, { backgroundColor: seg.color }]} />
+              <Text style={s.legendText}>
+                {seg.label} <Text style={s.legendCount}>{seg.count}</Text>
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }

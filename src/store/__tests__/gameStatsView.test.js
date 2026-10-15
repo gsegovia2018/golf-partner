@@ -1,6 +1,6 @@
 import { weekendFixture } from './fixtures/gameStatsFixture';
 import {
-  scoredRoundIndices, standingsRows, progression, raceSeries, roundResult, scorecardGrid,
+  scoredRoundIndices, standingsRows, progression, raceSeries, roundResult, matchPlayRounds, scorecardGrid,
   holeStories, strokeHoleSplit, awardsList, h2hGrid, shotComparison,
 } from '../gameStatsView';
 
@@ -139,6 +139,21 @@ describe('roundResult', () => {
   });
 });
 
+describe('matchPlayRounds', () => {
+  test('Stableford-with-partners rounds are never match play', () => {
+    expect(matchPlayRounds(weekendFixture())).toEqual([]);
+  });
+
+  test('a pairs match play round carries its real result', () => {
+    const t = weekendFixture();
+    t.rounds[1].scoringMode = 'pairsmatchplay';
+    const list = matchPlayRounds(t);
+    expect(list.map((r) => r.roundIndex)).toEqual([1]);
+    expect(list[0].result).toEqual(roundResult(t, 1));
+    expect(list[0].result.kind).toBe('teams');
+  });
+});
+
 describe('scorecardGrid', () => {
   test('cells carry points and handicap strokes; Out / In / Tot totals', () => {
     const g = scorecardGrid(weekendFixture(), 2, ['fx-me', 'fx-nac']);
@@ -198,7 +213,7 @@ describe('awardsList', () => {
     expect(list.slice(0, firstShame).every((a) => a.tone === 'glory')).toBe(true);
     expect(list.slice(firstShame).every((a) => a.tone === 'shame')).toBe(true);
     expect(order.slice(0, 3)).toEqual(['bestRound', 'hotStretch', 'birdiesNet']);
-    expect(list[0]).toMatchObject({ value: { key: 'stats.game.award.pts', params: { n: 24 } } });
+    expect(list[0]).toMatchObject({ value: { key: 'stats.game.award.pts', params: { count: 24 } } });
     expect(ids(list[0].players)).toEqual(['fx-me']);
     expect(order).toEqual(expect.arrayContaining(['worstHole', 'coldStreak', 'gift', 'collapse', 'anchor']));
   });

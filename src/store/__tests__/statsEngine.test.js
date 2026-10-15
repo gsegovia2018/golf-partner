@@ -479,6 +479,32 @@ describe('pairPerformance', () => {
   });
 });
 
+describe('matchPlayResults — scoreline', () => {
+  const players = ['a', 'b', 'c', 'd'].map((id) => ({ id, name: id.toUpperCase(), handicap: 0 }));
+  const holes = [1, 2, 3].map((n) => ({ number: n, par: 4, strokeIndex: n }));
+  const round = (pairA) => ({
+    courseName: 'X', holes, pairs: [[{ id: 'a' }, { id: 'b' }], [{ id: 'c' }, { id: 'd' }]],
+    playerHandicaps: { a: 0, b: 0, c: 0, d: 0 },
+    scores: {
+      a: Object.fromEntries(holes.map((h, i) => [h.number, pairA[i]])),
+      b: { 1: 4, 2: 4, 3: 4 }, c: { 1: 4, 2: 4, 3: 4 }, d: { 1: 4, 2: 4, 3: 4 },
+    },
+  });
+
+  test('a match decided on the last hole reads "N up", never "N&0"', () => {
+    const [r] = matchPlayResults({ players, rounds: [round([4, 3, 3])] });
+    expect(r.closedAt).toBeNull();
+    expect(r.scoreline).toBe('2 up');
+    expect(r.scorelineMsg).toEqual({ key: 'stats.data.matchPlay.up', params: { count: 2 } });
+  });
+
+  test('closed with holes to play reads "X&Y"', () => {
+    const [r] = matchPlayResults({ players, rounds: [round([3, 3, 4])] });
+    expect(r.closedAt).toBe(2);
+    expect(r.scoreline).toBe('2&1');
+  });
+});
+
 describe('matchPlayResults — skip rounds with no scores recorded at all', () => {
   test('an empty scores object produces no phantom match-play card', () => {
     const players = [

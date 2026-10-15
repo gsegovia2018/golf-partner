@@ -114,11 +114,13 @@ describe('Summary tab', () => {
   });
 
   test('progression chart with the lead caption, awards and score mix', async () => {
-    const { getByTestId, getByText } = await open(fixture());
+    const { getByTestId, getAllByTestId, getByText } = await open(fixture());
     expect(getByTestId('progression-chart')).toBeTruthy();
     expect(getByText('Marcos took the lead for good in R2.')).toBeTruthy();
     expect(getByTestId('award-bestRound')).toBeTruthy();
     expect(getByText('Score mix · everyone')).toBeTruthy();
+    // One shared legend, not one per player.
+    expect(getAllByTestId('scoremix-legend')).toHaveLength(1);
   });
 
   test('an award opens its detail sheet', async () => {
@@ -162,6 +164,8 @@ describe('Rounds tab', () => {
     fireEvent.press(getByTestId('round-chip-2'));
     expect(getByText('Marcos & Javier beat Álvaro & Nacho 38–37')).toBeTruthy();
     expect(getByTestId('pair-difference-chart')).toBeTruthy();
+    // Count-aware caption: "1 lead change", never "1 lead changes".
+    expect(getByText('Álvaro & Nacho won by 7 pts · 1 lead change')).toBeTruthy();
   });
 
   test('a 9-hole round has a Tot row only', async () => {
@@ -230,12 +234,29 @@ describe('Rivals tab', () => {
   test('teams only with real team rounds', async () => {
     const teams = await open(fixture());
     fireEvent.press(teams.getByTestId('tab-rivals'));
-    expect(teams.getByText('MATCH PLAY')).toBeTruthy();
+    expect(teams.getByText('PAIR CARDS')).toBeTruthy();
+    expect(teams.getByText('Partner splits')).toBeTruthy();
     teams.unmount();
     const solo = await open(fixture({ mode: 'individual' }));
     fireEvent.press(solo.getByTestId('tab-rivals'));
-    expect(solo.queryByText('MATCH PLAY')).toBeNull();
+    expect(solo.queryByText('PAIR CARDS')).toBeNull();
     expect(solo.queryByText('Partner splits')).toBeNull();
+  });
+
+  test('match play lists only match play rounds, with the same result as Rounds', async () => {
+    const partners = await open(fixture());
+    fireEvent.press(partners.getByTestId('tab-rivals'));
+    expect(partners.queryByTestId('match-play-results')).toBeNull();
+    partners.unmount();
+    const t = fixture();
+    t.rounds[0].scoringMode = 'pairsmatchplay';
+    const mp = await open(t);
+    fireEvent.press(mp.getByTestId('tab-rounds'));
+    const roundLine = mp.getByText(/ beat | level on /).props.children;
+    fireEvent.press(mp.getByTestId('tab-rivals'));
+    const list = within(mp.getByTestId('match-play-results'));
+    expect(list.getByText(roundLine)).toBeTruthy();
+    expect(list.getAllByText(/^R\d$/)).toHaveLength(1);
   });
 
   test('partner splits hide with fixed teams', async () => {

@@ -61,9 +61,9 @@ export default function PairDifferenceChart({ data }) {
         </View>
       </View>
       <Text style={s.summary}>
-        {data.finalDelta === 0
-          ? t('stats.game.pairDiff.level', { changes: data.crossovers })
-          : t('stats.game.pairDiff.final', { leader, n: num(Math.abs(data.finalDelta)), changes: data.crossovers })}
+        {`${data.finalDelta === 0
+          ? t('stats.game.pairDiff.level')
+          : t('stats.game.pairDiff.wonBy', { leader, count: num(Math.abs(data.finalDelta)) })} · ${t('stats.game.pairDiff.changes', { count: data.crossovers })}`}
       </Text>
     </View>
   );

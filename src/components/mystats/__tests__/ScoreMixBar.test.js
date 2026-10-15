@@ -1,7 +1,7 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
-import ScoreMixBar from '../ScoreMixBar';
+import ScoreMixBar, { ScoreMixLegend } from '../ScoreMixBar';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(() => new Promise(() => {})),
@@ -90,5 +90,18 @@ describe('ScoreMixBar', () => {
       expect(getByTestId(`scoremix-segment-${key}`)).toBeTruthy();
     });
     expect(getByText('Par 8')).toBeTruthy();
+  });
+});
+
+describe('ScoreMixBar without its legend', () => {
+  test('legend={false} keeps the bar and drops the per-bar legend', () => {
+    const { getByTestId, queryByTestId } = render(wrap(<ScoreMixBar distribution={distribution} legend={false} />));
+    expect(getByTestId('scoremix-segment-par')).toBeTruthy();
+    expect(queryByTestId('scoremix-legend-par')).toBeNull();
+  });
+
+  test('ScoreMixLegend lists the four bands without counts', () => {
+    const { getByText } = render(wrap(<ScoreMixLegend />));
+    expect(getByText('Par')).toBeTruthy();
   });
 });

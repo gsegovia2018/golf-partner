@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text } from 'react-native';
 import { useT } from '../../i18n';
 import LeaderboardCard from '../LeaderboardCard';
-import ScoreMixBar from '../mystats/ScoreMixBar';
+import ScoreMixBar, { ScoreMixLegend } from '../mystats/ScoreMixBar';
 import { standingsRows, progression, awardsList } from '../../store/gameStatsView';
 import { playerScoreDistribution } from '../../store/statsEngine';
 import ProgressionChart from './ProgressionChart';
@@ -47,7 +47,7 @@ export default function SummaryTab({ tournament, teams, onOpenSheet, onPlayerPre
       : (r.perRound[0]?.partial ? t('stats.game.standings.holesPlayed', { count: r.perRound[0].holes }) : null),
     points: r.total == null ? '–' : num(r.total),
     sub: vsText(r.vs) ?? '',
-    pointsLabel: r.total == null ? undefined : t(`stats.game.standings.a11y.${metric}`, { n: num(r.total) }),
+    pointsLabel: r.total == null ? undefined : t(`stats.game.standings.a11y.${metric}`, { count: num(r.total) }),
     onPress: onPlayerPress ? () => onPlayerPress(r.player.id) : undefined,
   }));
 
@@ -89,11 +89,15 @@ export default function SummaryTab({ tournament, teams, onOpenSheet, onPlayerPre
         <View style={s.card}>
           <SectionTitle right={t('stats.game.mix.net')}>{t('stats.game.mix.title')}</SectionTitle>
           {mixes.map(({ player, dist }, i) => (
-            <View key={player.id} style={[{ paddingVertical: 8 }, i > 0 && s.divider]}>
-              <Text style={[s.strong, { marginBottom: 6 }]} numberOfLines={1}>{firstName(player)}</Text>
-              <ScoreMixBar distribution={dist} />
+            <View key={player.id} style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 }, i > 0 && s.divider]}>
+              <Text style={[s.strong, { width: 64, fontSize: 13 }]} numberOfLines={1}>{firstName(player)}</Text>
+              <View style={s.grow}><ScoreMixBar distribution={dist} legend={false} /></View>
+              <Text style={[s.sub, { width: 64, textAlign: 'right' }]} numberOfLines={1}>
+                {t('stats.game.mix.birdies', { count: dist.eagles + dist.birdies })}
+              </Text>
             </View>
           ))}
+          <ScoreMixLegend />
         </View>
       )}
     </View>

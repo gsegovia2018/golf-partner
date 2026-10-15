@@ -1,7 +1,7 @@
 // Builders for the StatDetailSheet content ({ title, subtitle, explainer, rows })
 // the Game Stats tabs open. Presentation only: every number comes from the
 // engine records the tabs already hold. Call at render/event time (uses t()).
-import { t, tr } from '../../i18n';
+import { t } from '../../i18n';
 import { getPlayingHandicap, calcStablefordPoints } from '../../store/tournamentStore';
 import { holeCountOf } from '../../store/scoring';
 import { firstName, joinNames, num, signed } from './ui';
@@ -91,7 +91,7 @@ export function awardSheet(award) {
       const winners = d.rounds.flatMap((r) => r.holes.filter((h) => h.winner));
       return {
         title,
-        subtitle: t('stats.game.award.skinsDetail', { total: d.totalSkins }),
+        subtitle: t('stats.game.award.skinsDetail', { count: d.totalSkins }),
         explainer: t('stats.screen.skins.explainerPoints'),
         rows: [
           section('table', t('stats.game.sheet.skinsTable')),
@@ -164,7 +164,7 @@ export function awardSheet(award) {
     case 'gift':
       return {
         title,
-        subtitle: t('stats.game.award.gift', { n: num(d.value) }),
+        subtitle: t('stats.game.award.gift', { count: num(d.value) }),
         explainer: t('stats.screen.shame.giftExplainer'),
         rows: rowsByPlayer(d.entries, (e) => e.breakdown.map((b) => ({
           key: `${e.player.id}-${e.roundIndex}-${e.holeNumber}-${b.playerId}`,
@@ -177,7 +177,7 @@ export function awardSheet(award) {
     case 'collapse':
       return {
         title,
-        subtitle: t('stats.game.award.collapse', { n: num(d.value) }),
+        subtitle: t('stats.game.award.collapse', { count: num(d.value) }),
         explainer: t('stats.screen.shame.collapseExplainer'),
         rows: rowsByPlayer(d.entries, (e) => e.breakdown.map((b) => ({
           key: `${e.player.id}-${e.roundIndex}-${b.holeNumber}`,
@@ -302,28 +302,6 @@ export function duelSheet(p1, p2, result) {
         tone: h.p1Points === h.p2Points ? 'neutral' : 'good',
       };
     }),
-  };
-}
-
-// Match-play result text: "3&2", or a descriptor ("Halved" / "N up").
-export const scorelineText = (round) => (round.scorelineMsg ? tr(round.scorelineMsg) : round.scoreline);
-
-export function matchPlaySheet(round) {
-  const andSep = t('stats.screen.andSep');
-  const a = round.pair1.map(firstName).join(andSep);
-  const b = round.pair2.map(firstName).join(andSep);
-  const winner = round.winnerPair ? round.winnerPair.map(firstName).join(andSep) : t('stats.screen.matchPlay.halved');
-  return {
-    title: `${roundTag(round.roundIndex)} · ${a} ${t('shared.teams.vs')} ${b}`,
-    subtitle: t('stats.screen.matchPlay.subtitle', { scoreline: scorelineText(round), winner }),
-    explainer: t(`stats.screen.matchPlay.explainerPoints${round.closedAt ? 'Closed' : ''}`, { hole: round.closedAt }),
-    rows: round.holes.map((h, i) => ({
-      key: `${i}`,
-      primary: t('stats.screen.hole', { n: h.holeNumber }),
-      secondary: `${a} ${h.pair1Score ?? '—'} · ${b} ${h.pair2Score ?? '—'}`,
-      rightPrimary: h.winner === 'pair1' ? a : h.winner === 'pair2' ? b : h.winner == null ? '—' : t('stats.screen.matchPlay.halve'),
-      tone: h.winner ? 'excellent' : 'neutral',
-    })),
   };
 }
 

@@ -15,7 +15,8 @@ import PairDifferenceChart from './PairDifferenceChart';
 import { holeSheet } from './sheets';
 import { Chip, SectionTitle, firstName, joinNames, num, useStatStyles } from './ui';
 
-function resultText(result, t) {
+// The one-line result of a round; Rivals reuses it for match play rounds.
+export function resultText(result, t) {
   if (!result) return null;
   if (result.kind === 'teams') {
     const [a, b] = result.sides;

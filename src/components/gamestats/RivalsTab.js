@@ -5,10 +5,11 @@ import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useT } from '../../i18n';
 import { withAlpha } from '../../theme/alpha';
-import { h2hGrid } from '../../store/gameStatsView';
-import { headToHead, matchPlayResults, pairPerformance, pairCarryRatio } from '../../store/statsEngine';
+import { h2hGrid, matchPlayRounds } from '../../store/gameStatsView';
+import { headToHead, pairPerformance, pairCarryRatio } from '../../store/statsEngine';
 import { playerPartnerSplits } from '../../store/tournamentStore';
-import { duelSheet, matchPlaySheet, pairCardSheet, splitsSheet, scorelineText, roundTag } from './sheets';
+import { duelSheet, pairCardSheet, splitsSheet, roundTag } from './sheets';
+import { resultText } from './RoundsTab';
 import { Chip, SectionTitle, firstName, num, signed, shortName, useStatStyles } from './ui';
 
 const NAME_W = 76;
@@ -20,6 +21,7 @@ export default function RivalsTab({ tournament, pairsTournament, fixedTeams, def
   const { theme, s } = useStatStyles();
   const players = tournament.players;
   const grid = useMemo(() => h2hGrid(tournament), [tournament]);
+  const matches = useMemo(() => matchPlayRounds(tournament), [tournament]);
   const maxAbs = Math.max(1, ...grid.flat().filter(Boolean).map((c) => Math.abs(c.net)));
 
   const teams = useMemo(() => {
@@ -28,7 +30,6 @@ export default function RivalsTab({ tournament, pairsTournament, fixedTeams, def
     const key = (ids) => [...ids].sort().join('|');
     const carryBy = new Map(carry.map((c) => [key(c.members.map((m) => m.id)), c]));
     return {
-      matches: matchPlayResults(pairsTournament).filter((r) => r.available),
       cards: pairPerformance(pairsTournament).map((p) => ({
         ...p, key: key(p.players.map((x) => x.id)), carry: carryBy.get(key(p.players.map((x) => x.id))) ?? null,
       })),
@@ -104,26 +105,18 @@ export default function RivalsTab({ tournament, pairsTournament, fixedTeams, def
         <Text style={s.note}>{t('stats.game.rivals.h2hLegend')}</Text>
       </View>
 
-      {teams && teams.matches.length > 0 && (
-        <View style={s.card}>
+      {matches.length > 0 && (
+        <View style={s.card} testID="match-play-results">
           <SectionTitle>{t('stats.screen.matchPlay.section')}</SectionTitle>
-          {teams.matches.map((m, i) => {
-            const andSep = t('stats.screen.andSep');
-            return (
-              <TouchableOpacity key={m.roundIndex} style={[s.row, i === 0 && s.rowFirst]} activeOpacity={0.7} accessibilityRole="button" onPress={() => onOpenSheet(matchPlaySheet(m))}>
-                <Text style={[s.strong, { color: theme.accent.primary, width: 28 }]}>{roundTag(m.roundIndex)}</Text>
-                <View style={s.grow}>
-                  <Text style={s.strong} numberOfLines={1}>
-                    {`${m.pair1.map(firstName).join(andSep)} ${t('shared.teams.vs')} ${m.pair2.map(firstName).join(andSep)}`}
-                  </Text>
-                  <Text style={s.sub} numberOfLines={1}>
-                    {m.winnerPair ? t('stats.game.rivals.won', { names: m.winnerPair.map(firstName).join(andSep) }) : t('stats.screen.matchPlay.halved')}
-                  </Text>
-                </View>
-                <Text style={[s.strong, { color: m.winnerPair ? theme.scoreColor('excellent') : theme.text.secondary }]}>{scorelineText(m)}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {matches.map((m, i) => (
+            <View key={m.roundIndex} style={[s.row, i === 0 && s.rowFirst]}>
+              <Text style={[s.strong, { color: theme.accent.primary, width: 28 }]}>{roundTag(m.roundIndex)}</Text>
+              <View style={s.grow}>
+                <Text style={s.strong}>{resultText(m.result, t)}</Text>
+                <Text style={s.sub} numberOfLines={1}>{m.courseName}</Text>
+              </View>
+            </View>
+          ))}
         </View>
       )}
 

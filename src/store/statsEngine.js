@@ -1378,7 +1378,9 @@ export function matchPlayResults(tournament, { metric = 'points' } = {}) {
       else if (p2Better) { pair1Up--; winner = 'pair2'; }
       holes.push({ holeNumber: hole.number, winner, pair1Score: p1, pair2Score: p2, pair1UpAfter: pair1Up });
       const remaining = totalHoles - (hi + 1);
-      if (closedAt === null && Math.abs(pair1Up) > remaining) {
+      // A match is closed out ("3&2") only with holes still to play; one
+      // decided on the last hole reads "N up".
+      if (closedAt === null && remaining > 0 && Math.abs(pair1Up) > remaining) {
         closedAt = hole.number;
         closedScore = { up: Math.abs(pair1Up), remaining, winner: pair1Up > 0 ? 'pair1' : 'pair2' };
       }

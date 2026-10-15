@@ -230,6 +230,18 @@ export function roundResult(tournament, roundIndex) {
   return { kind: 'individual', mode, unit: board.unit, entries };
 }
 
+// ── Match play rounds ──
+// The rounds actually played as match play (1v1 match play or pairs match
+// play), each with its real result — the same roundResult the Rounds tab
+// shows. Rounds in any other mode never appear here.
+const MATCH_PLAY_MODES = new Set(['matchplay', 'pairsmatchplay']);
+export function matchPlayRounds(tournament) {
+  return scoredRoundIndices(tournament)
+    .filter((ri) => MATCH_PLAY_MODES.has(roundScoringMode(tournament, tournament.rounds[ri])))
+    .map((ri) => ({ roundIndex: ri, courseName: tournament.rounds[ri].courseName, result: roundResult(tournament, ri) }))
+    .filter((r) => r.result && (r.result.kind === 'teams' ? r.result.sides.length >= 2 : r.result.entries.length >= 2));
+}
+
 // ── Scorecard ──
 // One row per hole with a cell per player (points, strokes, handicap strokes),
 // plus Out / In / Tot rows (a 9-hole round has Tot only). A total is null
@@ -348,7 +360,7 @@ export function awardsList(tournament, { teams = false } = {}) {
     const e = net.bestRound.entries;
     push({
       id: 'bestRound', icon: 'award', tone: 'glory', players: e.map((x) => x.player),
-      value: { key: 'stats.game.award.pts', params: { n: net.bestRound.value } },
+      value: { key: 'stats.game.award.pts', params: { count: net.bestRound.value } },
       detail: e.length === 1
         ? { key: 'stats.game.award.roundCourse', params: { round: e[0].roundIndex + 1, course: e[0].courseName } }
         : tiedDetail(e.length),
@@ -359,7 +371,7 @@ export function awardsList(tournament, { teams = false } = {}) {
   if (hot) {
     push({
       id: 'hotStretch', icon: 'trending-up', tone: 'glory', players: [hot.player],
-      value: { key: 'stats.game.award.pts', params: { n: hot.points } },
+      value: { key: 'stats.game.award.pts', params: { count: hot.points } },
       detail: { key: 'stats.game.award.stretch', params: { round: hot.roundIndex + 1, from: hot.startHole, to: hot.endHole } },
       data: hot,
     });
@@ -396,7 +408,7 @@ export function awardsList(tournament, { teams = false } = {}) {
       push({
         id: 'skins', icon: 'disc', tone: 'glory', players: kings.map((r) => r.player),
         value: { key: 'stats.game.award.skins', params: { count: top.skins } },
-        detail: { key: 'stats.game.award.skinsDetail', params: { total: skins.totalSkins } },
+        detail: { key: 'stats.game.award.skinsDetail', params: { count: skins.totalSkins } },
         data: skins,
       });
     }
@@ -444,7 +456,7 @@ export function awardsList(tournament, { teams = false } = {}) {
     const e = shame.gift.entries;
     push({
       id: 'gift', icon: 'gift', tone: 'shame', players: uniquePlayers(e.map((x) => x.player)),
-      value: { key: 'stats.game.award.gift', params: { n: shame.gift.value } },
+      value: { key: 'stats.game.award.gift', params: { count: shame.gift.value } },
       detail: e.length === 1 ? placeDetail(e[0]) : tiedDetail(e.length),
       data: shame.gift,
     });
@@ -453,7 +465,7 @@ export function awardsList(tournament, { teams = false } = {}) {
     const e = shame.collapse.entries;
     push({
       id: 'collapse', icon: 'corner-right-down', tone: 'shame', players: uniquePlayers(e.map((x) => x.player)),
-      value: { key: 'stats.game.award.collapse', params: { n: shame.collapse.value } },
+      value: { key: 'stats.game.award.collapse', params: { count: shame.collapse.value } },
       detail: e.length === 1
         ? { key: 'stats.game.award.collapseDetail', params: { round: e[0].roundIndex + 1, front: e[0].front, back: e[0].back } }
         : tiedDetail(e.length),
