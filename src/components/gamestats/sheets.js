@@ -245,8 +245,8 @@ export function awardSheet(award) {
         subtitle: t('stats.game.sheet.comebackSub'),
         explainer: t('stats.game.sheet.comebackExplainer'),
         rows: d.map((c) => ({
-          key: `${c.player.id}-${c.roundIndex}`,
-          primary: `${firstName(c.player)} · ${roundTag(c.roundIndex)} · ${c.courseName}`,
+          key: `${c.players[0].id}-${c.roundIndex}`,
+          primary: `${joinNames(c.players)} ·${roundTag(c.roundIndex)} · ${c.courseName}`,
           secondary: t('stats.game.sheet.comebackRow', { count: c.deficit, hole: c.afterHole }),
           rightPrimary: signed(-c.deficit),
           tone: c.deficit === d[0].deficit ? 'excellent' : 'neutral',

@@ -29,12 +29,19 @@ function build(rounds, names = ['a', 'b']) {
 }
 const same = (n, st = 4) => Array.from({ length: n }, () => st);
 
+// The weekend fixture scored as an individual game (no partner result card).
+function indivFixture() {
+  const t = weekendFixture();
+  t.settings.scoringMode = 'individual';
+  return t;
+}
+
 describe('leadStory', () => {
   test('holes led outright; ties hold no lead; a change needs a different outright leader', () => {
     // running a: 2,3,6,9  b: 2,4,6,7 -> tie, b, tie, a
     const story = leadStory(build([{ cards: { a: [4, 5, 3, 3], b: [4, 4, 4, 5] } }]), 0);
     expect(story.total).toBe(4);
-    expect(story.leaders.map((l) => [l.player.id, l.led])).toEqual([['a', 1], ['b', 1]]);
+    expect(story.leaders.map((l) => [l.players[0].id, l.led])).toEqual([['a', 1], ['b', 1]]);
     expect(story.changes).toBe(1);
   });
 
@@ -61,7 +68,7 @@ describe('leadStory', () => {
   });
 
   test('the weekend fixture: R3 changes hands three times', () => {
-    const story = leadStory(weekendFixture(), 2);
+    const story = leadStory(indivFixture(), 2);
     expect(story.changes).toBe(3);
     expect(story.leaders.map((l) => l.led)).toEqual([13, 4, 1]);
   });
@@ -72,7 +79,7 @@ describe('roundComeback', () => {
     const t = build([{ cards: { a: [6, 6, 6, 3, 3, 3, 3, 3, 3], b: same(9) } }]);
     const cb = roundComeback(t, 0);
     expect(cb).toMatchObject({ deficit: 6, afterHole: 3, roundIndex: 0 });
-    expect(cb.player.id).toBe('a');
+    expect(cb.players[0].id).toBe('a');
   });
 
   test('under 3 behind, wire to wire, or a lone player is no comeback', () => {
@@ -89,12 +96,12 @@ describe('roundComeback', () => {
     // a and b both finish on 12; b was 0-2-... behind a at the start, a was never behind
     const t = build([{ cards: { a: [3, 3, 3, 6, 6, 6], b: [6, 6, 6, 3, 3, 3] } }]);
     const cb = roundComeback(t, 0);
-    expect(cb.player.id).toBe('b');
+    expect(cb.players[0].id).toBe('b');
     expect(cb.deficit).toBe(9);
   });
 
   test('the weekend fixture: Marcos came back in R1 (3) and R3 (6), none in R2', () => {
-    const t = weekendFixture();
+    const t = indivFixture();
     expect(roundComeback(t, 0)).toMatchObject({ deficit: 3, afterHole: 9 });
     expect(roundComeback(t, 1)).toBeNull();
     expect(roundComeback(t, 2)).toMatchObject({ deficit: 6, afterHole: 10, courseName: 'Golf El Puerto' });
@@ -226,10 +233,63 @@ describe('weekend story awards', () => {
     expect(list.find((a) => a.id === 'improved')).toMatchObject({
       value: { params: { count: 36 } }, detail: { params: { from: 1, a: 18, to: 2, b: 54 } },
     });
-    const w = awardsList(weekendFixture());
+    const w = awardsList(indivFixture());
     expect(w.find((a) => a.id === 'comeback')).toMatchObject({
       detail: { key: 'stats.game.award.comebackDetail', params: { round: 3, count: 6, hole: 10 } },
     });
     expect(w.map((a) => a.id)).not.toContain('improved');
+  });
+});
+
+describe('team rounds follow the result card', () => {
+  // Pairs [a,b] v [c,d]; running pair points per hole decide lead and comeback.
+  const team = (cards, mode = 'stableford') => {
+    const t = build([{ cards }], ['a', 'b', 'c', 'd']);
+    t.settings.scoringMode = mode;
+    t.rounds[0].pairs = [[{ id: 'a' }, { id: 'b' }], [{ id: 'c' }, { id: 'd' }]];
+    return t;
+  };
+  const ids = (players) => players.map((p) => p.id).join('');
+
+  test('lead story names the pairs and sums members', () => {
+    // ab: 0,0,6,12 ; cd: 4,8,12,16 -> cd lead every hole
+    const t = team({ a: [6, 6, 3, 3], b: [6, 6, 3, 3], c: same(4), d: same(4) });
+    const story = leadStory(t, 0);
+    expect(story.team).toBe(true);
+    expect(story.leaders.map((l) => [ids(l.players), l.led])).toEqual([['cd', 4]]);
+    expect(story.changes).toBe(0);
+    // ab: 0,6,12,18 ; cd: 4,4,4,4 -> cd, ab, ab, ab
+    const swing = team({ a: [6, 3, 3, 3], b: [6, 3, 3, 3], c: [4, 6, 6, 6], d: [4, 6, 6, 6] });
+    const s2 = leadStory(swing, 0);
+    expect(s2.changes).toBe(1);
+    expect(s2.leaders.map((l) => [ids(l.players), l.led])).toEqual([['ab', 3], ['cd', 1]]);
+  });
+
+  test('comeback belongs to the winning pair, never the losing one', () => {
+    const lose = team({ a: [6, 6, 3, 3, 3], b: [6, 6, 3, 3, 3], c: same(5), d: same(5) });
+    expect(roundComeback(lose, 0)).toBeNull();
+    // ab: 0,0,6,12,18,24 ; cd: 4,8,12,16,20,24 -> level, both win; ab trailed by 8 after H2
+    const win = team({ a: [6, 6, 3, 3, 3, 3], b: [6, 6, 3, 3, 3, 3], c: same(6), d: same(6) });
+    const cb = roundComeback(win, 0);
+    expect(cb).toMatchObject({ team: true, deficit: 8, afterHole: 2 });
+    expect(ids(cb.players)).toBe('ab');
+    expect(ids(awardsList(win).find((a) => a.id === 'comeback').players)).toBe('ab');
+  });
+
+  test('best ball and match play rounds have no running-points story', () => {
+    const cards = { a: same(4), b: same(4), c: same(4), d: same(4) };
+    expect(leadStory(team(cards, 'bestball'), 0)).toBeNull();
+    expect(roundComeback(team(cards, 'pairsmatchplay'), 0)).toBeNull();
+    const mp = build([{ cards: { a: same(4), b: same(4) } }]);
+    mp.settings.scoringMode = 'matchplay';
+    expect(leadStory(mp, 0)).toBeNull();
+  });
+
+  test('the weekend fixture R1 (pairs): the winning pair leads, no comeback for the losers', () => {
+    const t = weekendFixture();
+    const story = leadStory(t, 0);
+    expect(story.team).toBe(true);
+    expect(story.leaders[0].players.map((p) => p.id).sort()).toEqual(['fx-alv', 'fx-jav']);
+    expect(roundComeback(t, 0)).toBeNull();
   });
 });

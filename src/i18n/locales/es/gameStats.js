@@ -136,6 +136,10 @@ export default {
     one: "Remontada: {name} iba {count} punto por detrás tras el H{hole}",
     other: "Remontada: {name} iba {count} puntos por detrás tras el H{hole}",
   },
+  "stats.game.round.comebackTeam": {
+    one: "Remontada: {name} iban {count} punto por detrás tras el H{hole}",
+    other: "Remontada: {name} iban {count} puntos por detrás tras el H{hole}",
+  },
   "stats.game.round.leadLed": {
     one: "{names} lideró {led} de {count} hoyo",
     other: "{names} lideró {led} de {count} hoyos",

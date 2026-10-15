@@ -137,6 +137,10 @@ export default {
     one: "Comeback: {name} was {count} point behind after H{hole}",
     other: "Comeback: {name} was {count} points behind after H{hole}",
   },
+  "stats.game.round.comebackTeam": {
+    one: "Comeback: {name} were {count} point behind after H{hole}",
+    other: "Comeback: {name} were {count} points behind after H{hole}",
+  },
   "stats.game.round.leadLed": {
     one: "{names} led {led} of {count} hole",
     other: "{names} led {led} of {count} holes",

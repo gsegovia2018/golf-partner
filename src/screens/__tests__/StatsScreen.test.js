@@ -203,6 +203,14 @@ describe('Rounds tab', () => {
     expect(getByText('Marcos led 11 of 18 holes · No lead changes')).toBeTruthy();
   });
 
+  test('a team round tells its story about the pairs, matching the result card', async () => {
+    const { getByTestId, getByText, queryByTestId } = await open(fixture());
+    fireEvent.press(getByTestId('tab-rounds'));
+    expect(getByText(/^Javier & Álvaro beat Marcos & Nacho/)).toBeTruthy();
+    expect(getByText(/^Javier & Álvaro led \d+ of 18 holes/)).toBeTruthy();
+    expect(queryByTestId('round-comeback')).toBeNull();
+  });
+
   test('a hole story opens the hole sheet', async () => {
     const { getByTestId, getByText } = await open(fixture({ mode: 'individual' }));
     fireEvent.press(getByTestId('tab-rounds'));

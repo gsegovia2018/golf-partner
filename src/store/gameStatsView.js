@@ -340,63 +340,95 @@ export function strokeHoleSplit(tournament, playerId) {
   return { withStroke: sum(acc.with), withoutStroke: sum(acc.without) };
 }
 
-// ── Lead story (one round) ──
-// Reads the per-player running points of raceSeries. At each hole the outright
-// leader is the only player holding the top running total among those still
-// scoring; a tie holds no lead. Holes counted are the ones anyone has scored.
-function leadersByHole(race) {
+// ── Competitors of a round's story (lead, comeback) ──
+// The same sides the round result card shows: pairs when the card shows pair
+// totals (Stableford with partners: a pair's running points are the sum of its
+// members', carried flat once a member stops), players when it shows an
+// individual board. Rounds whose card is a match play or best/worst-ball
+// scoreline have no running-points story, so they return null rather than
+// contradict the card.
+function storyCompetitors(tournament, roundIndex) {
+  const result = roundResult(tournament, roundIndex);
+  if (!result) return null;
+  const race = raceSeries(tournament, roundIndex);
+  if (result.kind === 'teams') {
+    if (result.mode !== 'stableford') return null;
+    const carried = (x) => {
+      let last = 0;
+      return x.values.slice(1).map((v) => { if (v != null) last = v; return v ?? last; });
+    };
+    const lines = new Map(race.series.map((x) => [x.player.id, x]));
+    const series = result.sides.map((side) => {
+      const mine = side.members.map((m) => lines.get(m.id)).filter(Boolean);
+      if (!mine.length) return null;
+      const flat = mine.map(carried);
+      const values = [0, ...race.holes.map((_, h) => (
+        mine.some((x) => x.values[h + 1] != null) ? flat.reduce((s, f) => s + f[h], 0) : null
+      ))];
+      return { players: side.members, team: true, values, total: values.filter((v) => v != null).pop() ?? 0 };
+    }).filter(Boolean).sort((a, b) => b.total - a.total);
+    return { holes: race.holes, series };
+  }
+  if (MATCH_PLAY_MODES.has(result.mode)) return null;
+  return {
+    holes: race.holes,
+    series: race.series.map((x) => ({ players: [x.player], team: false, values: x.values, total: x.total })),
+  };
+}
+
+function leadersByHole(story) {
   const leaders = [];
-  race.holes.forEach((_, h) => {
-    const live = race.series.filter((x) => x.values[h + 1] != null);
+  story.holes.forEach((_, h) => {
+    const live = story.series.filter((x) => x.values[h + 1] != null);
     if (live.length === 0) return;
     const top = Math.max(...live.map((x) => x.values[h + 1]));
     const at = live.filter((x) => x.values[h + 1] === top);
-    leaders.push(at.length === 1 ? at[0].player.id : null);
+    leaders.push(at.length === 1 ? at[0] : null);
   });
   return leaders;
 }
 
-// { total, leaders: [{ player, led }] (most holes led first, only players who
-// led), changes } — null with fewer than two players on the card.
+// { team, total, leaders: [{ players, led }] (most holes led first, only sides
+// that led), changes } — null with fewer than two sides on the card.
 export function leadStory(tournament, roundIndex) {
-  const race = raceSeries(tournament, roundIndex);
-  if (race.series.length < 2) return null;
-  const sequence = leadersByHole(race);
+  const story = storyCompetitors(tournament, roundIndex);
+  if (!story || story.series.length < 2) return null;
+  const sequence = leadersByHole(story);
   const led = new Map();
   let changes = 0;
   let prev = null;
-  sequence.forEach((id) => {
-    if (!id) return;
-    led.set(id, (led.get(id) ?? 0) + 1);
-    if (prev && id !== prev) changes++;
-    prev = id;
+  sequence.forEach((side) => {
+    if (!side) return;
+    led.set(side, (led.get(side) ?? 0) + 1);
+    if (prev && side !== prev) changes++;
+    prev = side;
   });
-  const leaders = race.series
-    .filter((x) => led.has(x.player.id))
-    .map((x) => ({ player: x.player, led: led.get(x.player.id) }))
+  const leaders = story.series
+    .filter((x) => led.has(x))
+    .map((x) => ({ players: x.players, led: led.get(x) }))
     .sort((a, b) => b.led - a.led);
-  return { total: sequence.length, leaders, changes };
+  return { team: story.series[0].team, total: sequence.length, leaders, changes };
 }
 
 // ── Comeback (one round) ──
-// The round's winner(s) by individual points and the biggest gap they faced to
-// the best running total of anyone else, with the hole it was first reached
-// after. Only a deficit of COMEBACK_MIN or more counts.
+// The round's winning side(s) and the biggest gap they faced to the best
+// running total of any other side, with the hole it was first reached after.
+// Only a deficit of COMEBACK_MIN or more counts.
 const COMEBACK_MIN = 3;
 export function roundComeback(tournament, roundIndex) {
-  const race = raceSeries(tournament, roundIndex);
-  if (race.series.length < 2) return null;
-  const topTotal = race.series[0].total;
+  const story = storyCompetitors(tournament, roundIndex);
+  if (!story || story.series.length < 2) return null;
+  const topTotal = story.series[0].total;
   let best = null;
-  race.series.filter((x) => x.total === topTotal).forEach((winner) => {
-    race.holes.forEach((_, h) => {
+  story.series.filter((x) => x.total === topTotal).forEach((winner) => {
+    story.holes.forEach((_, h) => {
       const mine = winner.values[h + 1];
       if (mine == null) return;
-      const others = race.series.filter((x) => x !== winner && x.values[h + 1] != null).map((x) => x.values[h + 1]);
+      const others = story.series.filter((x) => x !== winner && x.values[h + 1] != null).map((x) => x.values[h + 1]);
       if (!others.length) return;
       const deficit = Math.max(...others) - mine;
       if (deficit >= COMEBACK_MIN && (!best || deficit > best.deficit)) {
-        best = { player: winner.player, deficit, afterHole: race.holes[h] };
+        best = { players: winner.players, team: winner.team, deficit, afterHole: story.holes[h] };
       }
     });
   });
@@ -587,7 +619,7 @@ export function awardsList(tournament, { teams = false } = {}) {
   if (comebacks.length) {
     const top = comebacks.filter((c) => c.deficit === comebacks[0].deficit);
     push({
-      id: 'comeback', icon: 'rotate-ccw', tone: 'glory', players: uniquePlayers(top.map((c) => c.player)),
+      id: 'comeback', icon: 'rotate-ccw', tone: 'glory', players: uniquePlayers(top.flatMap((c) => c.players)),
       value: { key: 'stats.game.award.comebackValue' },
       detail: top.length === 1
         ? { key: 'stats.game.award.comebackDetail', params: { round: top[0].roundIndex + 1, count: top[0].deficit, hole: top[0].afterHole } }

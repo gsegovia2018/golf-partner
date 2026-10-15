@@ -93,13 +93,13 @@ export default function RoundsTab({ tournament, pairsTournament, roundIndex, onS
         {result && <Text style={[s.strong, { fontSize: 15, marginBottom: 8 }]}>{resultText(result, t)}</Text>}
         {comeback && (
           <Text style={[s.sub, { marginBottom: 4 }]} testID="round-comeback">
-            {t('stats.game.round.comeback', { name: firstName(comeback.player), count: comeback.deficit, hole: comeback.afterHole })}
+            {t(comeback.team ? 'stats.game.round.comebackTeam' : 'stats.game.round.comeback', { name: joinNames(comeback.players), count: comeback.deficit, hole: comeback.afterHole })}
           </Text>
         )}
         {lead && lead.leaders.length > 0 && (
           <Text style={[s.sub, { marginBottom: 8 }]} testID="round-lead">
             {[
-              t('stats.game.round.leadLed', { names: joinNames(lead.leaders.filter((l) => l.led === lead.leaders[0].led).map((l) => l.player)), led: lead.leaders[0].led, count: lead.total }),
+              t('stats.game.round.leadLed', { names: joinNames(lead.leaders.filter((l) => l.led === lead.leaders[0].led).flatMap((l) => l.players)), led: lead.leaders[0].led, count: lead.total }),
               lead.changes > 0 ? t('stats.game.round.leadChanges', { count: lead.changes }) : t('stats.game.round.leadNone'),
             ].join(' · ')}
           </Text>
