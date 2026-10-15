@@ -252,7 +252,7 @@ export function runChecks(input) {
         const s = worst.ex <= 0 ? 'green' : worst.ex <= 4 ? 'yellow' : 'red';
         push(m, s, round(Math.max(0, worst.ex), 0), 'cm',
           s === 'green' ? T.checkText.hands_between_planes_ok : T.checkText.hands_between_planes(worst.ex, worst.dir, T.checkpoint[worst.k].toLowerCase()),
-          { dir: worst.dir });
+          { dir: worst.dir, at: worst.k });
       }
     }
   }

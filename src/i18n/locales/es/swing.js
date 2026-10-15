@@ -319,6 +319,8 @@ export default {
   'swing.compare.stillA11y': '{name}, {stills}',
   'swing.overlay.shaftPlane': 'Plano del palo {deg}°',
   'swing.overlay.shoulderPlane': 'Plano de los hombros {deg}°',
+  'swing.overlay.toes': 'Puntas',
+  'swing.overlay.ball': 'Bola',
   'swing.mark.dockLabel': '{name}, {status}',
   'swing.mark.line.missing': 'Toca el vídeo para colocar: {name}',
   'swing.mark.placing': 'Colocando · {name}',

@@ -46,8 +46,8 @@ export function worstAt(checks, cp) {
 
 export const worstByCheckpoint = (checks) => Object.fromEntries(CHECKPOINT_KEYS.map((k) => [k, worstAt(checks, k)]));
 
-/** The checkpoint to show for a check (its first home). */
-export const homeOf = (check) => (HOME[check.id] || ['impact'])[0];
+/** The checkpoint to show for a check: where it was read worst (`at`), else its first home. */
+export const homeOf = (check) => check.at ?? (HOME[check.id] || ['impact'])[0];
 
 /**
  * The checks grouped for the priority list: red, yellow, unknown (not measured), green. Each group
