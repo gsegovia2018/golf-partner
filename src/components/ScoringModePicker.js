@@ -433,3 +433,7 @@ const makeStyles = (theme) => StyleSheet.create({
     color: theme.isDark ? theme.text.primary : theme.text.inverse,
   },
 });
+
+// The compact field + sheet styles, shared with the league format field so the
+// two pickers cannot drift apart.
+export { makeStyles as scoringPickerStyles };

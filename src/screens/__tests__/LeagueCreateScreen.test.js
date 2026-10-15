@@ -27,7 +27,7 @@ async function toReview(utils, { pickFriends = true, morePoints = false } = {}) 
   fireEvent.changeText(getByPlaceholderText('El Club del Mulligan'), '  El Club  ');
   fireEvent.press(getByText('Next'));
   await findByText('How does it work?');
-  fireEvent.changeText(utils.getByPlaceholderText('0'), '30');
+  for (let i = 0; i < 6; i += 1) fireEvent.press(utils.getByLabelText('Raise entry fee'));
   if (morePoints) fireEvent.press(utils.getByLabelText('More points'));
   fireEvent.press(getByText('Next'));
   await findByText("Who's playing?");
@@ -70,22 +70,56 @@ describe('LeagueCreateScreen', () => {
     ]);
   });
 
-  test('points for playing starts at 10, steps by 5 and is sent with the league', async () => {
+  test('rules step: format field, points summary, points for playing steps by 5', async () => {
     const utils = render(wrap(<LeagueCreateScreen navigation={navigation} />));
     fireEvent.changeText(utils.getByPlaceholderText('El Club del Mulligan'), 'El Club');
     fireEvent.press(utils.getByText('Next'));
     await utils.findByText('How does it work?');
-    expect(utils.getByText('Most Stableford points wins')).toBeTruthy();
+    expect(utils.getByText('One card a month, 18 holes, any rated course.')).toBeTruthy();
+    expect(utils.getByText('Stableford, net')).toBeTruthy();
+    expect(utils.getByText(/12 places · 1st gets 500/)).toBeTruthy();
     expect(utils.getByLabelText('Points for playing, 10')).toBeTruthy();
-    expect(utils.getByText(/13th on/)).toBeTruthy();
     fireEvent.press(utils.getByLabelText('Fewer points'));
     fireEvent.press(utils.getByLabelText('Fewer points'));
     expect(utils.getByLabelText('Fewer points').props.accessibilityState.disabled).toBe(true);
-    expect(utils.getByText(/Playing past 12th scores the same as not playing/)).toBeTruthy();
     fireEvent.press(utils.getByLabelText('More points'));
     fireEvent.press(utils.getByLabelText('More points'));
     fireEvent.press(utils.getByLabelText('More points'));
     expect(utils.getByLabelText('Points for playing, 15')).toBeTruthy();
+  });
+
+  test('the points sheet saves a new table that reaches createLeague', async () => {
+    const utils = render(wrap(<LeagueCreateScreen navigation={navigation} />));
+    fireEvent.changeText(utils.getByPlaceholderText('El Club del Mulligan'), 'El Club');
+    fireEvent.press(utils.getByText('Next'));
+    await utils.findByText('How does it work?');
+    fireEvent.press(utils.getByLabelText('Points per place'));
+    fireEvent.changeText(utils.getByLabelText('Points for 1st place'), '600');
+    fireEvent.press(utils.getByText('Save'));
+    expect(utils.getByText(/12 places · 1st gets 600/)).toBeTruthy();
+    fireEvent.press(utils.getByText('Next'));
+    await utils.findByText("Who's playing?");
+    fireEvent.press(utils.getByText('Next'));
+    await utils.findByText('REVIEW & CONFIRM');
+    fireEvent.press(utils.getByText('Create league'));
+    await waitFor(() => expect(createLeague).toHaveBeenCalledTimes(1));
+    expect(createLeague.mock.calls[0][0].pointsTable[0]).toBe(600);
+  });
+
+  test('the season hint counts the monthly cards; the add-someone tile reveals the name input', async () => {
+    const utils = render(wrap(<LeagueCreateScreen navigation={navigation} />));
+    expect(utils.getByText(/monthly card/)).toBeTruthy();
+    fireEvent.changeText(utils.getByPlaceholderText('El Club del Mulligan'), 'El Club');
+    fireEvent.press(utils.getByText('Next'));
+    await utils.findByText('How does it work?');
+    fireEvent.press(utils.getByText('Next'));
+    await utils.findByText("Who's playing?");
+    expect(utils.queryByLabelText('Name of someone not in the app')).toBeNull();
+    fireEvent.press(utils.getByText('Add someone not in the app'));
+    fireEvent.changeText(utils.getByLabelText('Name of someone not in the app'), 'Nacho');
+    fireEvent.press(utils.getByLabelText('Add to the league'));
+    expect(utils.getByText('Joins from the link')).toBeTruthy();
+    expect(utils.getByLabelText('Name of someone not in the app')).toBeTruthy();
   });
 
   test('the chosen points for playing reach createLeague', async () => {

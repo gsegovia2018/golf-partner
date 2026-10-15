@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  Share, Clipboard, ActivityIndicator,
+  Share, Clipboard, Image,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
@@ -12,7 +12,7 @@ import PostCreateInviteModal from '../components/PostCreateInviteModal';
 import DateField from '../components/DateField';
 import { wizardSteps, isStepValid } from './setupWizard';
 import { useTheme } from '../theme/ThemeContext';
-import { onDeep } from '../theme/tokens';
+import { onDeep, semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import { loadProfile } from '../store/profileStore';
 import { listFriends, getCachedFriends } from '../store/friendStore';
@@ -21,9 +21,12 @@ import { DEFAULT_POINTS_TABLE } from '../store/leagueStandings';
 import {
   DEFAULT_HANDICAP_CAP, DEFAULT_PARTICIPATION_POINTS, defaultSeason, parseIsoDate, parsePointsTable, formatPointsTable,
   parseFeeCents, defaultMemberHandicap, parseMemberHandicap, buildCreateArgs, leagueJoinLink,
+  seasonMonthKeys, stepFeeText, DEFAULT_LEAGUE_FORMAT,
 } from '../store/leagueDraft';
-import { formatEuros } from '../store/leagueView';
-import PointsForPlaying from '../components/league/PointsForPlaying';
+import { formatEuros, stepParticipation } from '../store/leagueView';
+import Stepper from '../components/ui/Stepper';
+import LeagueFormatField from '../components/league/LeagueFormatField';
+import PointsTableSheet from '../components/league/PointsTableSheet';
 import LeagueHero from '../components/league/LeagueHero';
 import { useT, formatNumber, formatDate } from '../i18n';
 import { shareOrigin } from '../lib/shareOrigin';
@@ -59,6 +62,10 @@ export default function LeagueCreateScreen({ navigation }) {
   const [pointsText, setPointsText] = useState(formatPointsTable(DEFAULT_POINTS_TABLE));
   const [capText, setCapText] = useState(String(DEFAULT_HANDICAP_CAP));
   const [feeText, setFeeText] = useState('');
+  // Chosen but not sent anywhere yet: Stableford is the only format today.
+  const [format, setFormat] = useState(DEFAULT_LEAGUE_FORMAT);
+  const [pointsSheetOpen, setPointsSheetOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [participationPoints, setParticipationPoints] = useState(DEFAULT_PARTICIPATION_POINTS);
   const [profile, setProfile] = useState(null);
   const [friends, setFriends] = useState([]);
@@ -87,6 +94,7 @@ export default function LeagueCreateScreen({ navigation }) {
   const feeCents = parseFeeCents(feeText);
   const startIso = parseIsoDate(seasonStart);
   const endIso = parseIsoDate(seasonEnd);
+  const seasonMonths = seasonMonthKeys(startIso, endIso).map((k) => formatDate(`${k}-01`, 'monthName'));
 
   useEffect(() => {
     let cancelled = false;
@@ -221,47 +229,123 @@ export default function LeagueCreateScreen({ navigation }) {
       {startIso && endIso && startIso > endIso && (
         <Text style={s.errorText}>{t('league.create.seasonOrder')}</Text>
       )}
+      {seasonMonths.length > 0 && (
+        <Text style={s.hint}>
+          {t('league.create.seasonMonths', { count: seasonMonths.length, months: seasonMonths.join(', ') })}
+        </Text>
+      )}
     </>
   );
 
-  const ruleRow = (icon, title, sub, last) => (
-    <View style={[s.ruleRow, !last && s.rowDivider]}>
-      <Feather name={icon} size={16} color={theme.accent.primary} style={s.ruleIcon} />
-      <View style={{ flex: 1 }}>
-        <Text style={s.ruleTitle}>{title}</Text>
-        <Text style={s.ruleSub}>{sub}</Text>
-      </View>
-    </View>
-  );
+  const capValue = Number.isFinite(cap) ? cap : DEFAULT_HANDICAP_CAP;
+  const pointsInvalid = !pointsTable;
 
   const renderRulesStep = () => (
     <>
       <Text style={s.stepOverline}>{t('league.create.overlineRules')}</Text>
       <Text style={s.stepPrompt}>{t('league.create.rulesPrompt')}</Text>
       <Text style={s.stepSubtitle}>{t('league.create.rulesSubtitle')}</Text>
+
+      <Text style={s.fieldLabel}>{t('league.create.format')}</Text>
+      <LeagueFormatField value={format} onChange={setFormat} />
+
+      <Text style={[s.fieldLabel, { marginTop: 18 }]}>{t('league.create.seasonScoring')}</Text>
       <View style={s.card}>
-        {ruleRow('calendar', t('league.join.ruleOneCard'), t('league.create.ruleOneCardSub'))}
-        {ruleRow('target', t('league.rules.formatTitle'), t('league.rules.formatBody', { cap: formatNumber(effectiveCap) }), true)}
+        <TouchableOpacity
+          style={[s.settingRow, s.rowDivider]}
+          onPress={() => setPointsSheetOpen(true)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={t('league.create.pointsPerPlace')}
+        >
+          <View style={s.settingText}>
+            <Text style={s.ruleTitle}>{t('league.create.pointsPerPlace')}</Text>
+            <Text style={[s.ruleSub, pointsInvalid && s.ruleSubError]}>
+              {pointsTable
+                ? t('league.create.pointsSummary', { count: pointsTable.length, first: formatNumber(pointsTable[0]) })
+                : t('league.create.pointsSetError')}
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={theme.text.muted} />
+        </TouchableOpacity>
+
+        <View style={[s.settingRow, s.rowDivider]}>
+          <View style={s.settingText}>
+            <Text style={s.ruleTitle}>{t('league.rules.playing')}</Text>
+            <Text style={s.ruleSub}>{t('league.create.playingSub')}</Text>
+          </View>
+          <Stepper
+            valueLabel={String(participationPoints)}
+            valueA11y={t('league.rules.playingValue', { points: participationPoints })}
+            onStep={(d) => setParticipationPoints(stepParticipation(participationPoints, d))}
+            canDecrease={participationPoints > 0}
+            decreaseLabel={t('league.rules.playingFewer')}
+            increaseLabel={t('league.rules.playingMore')}
+          />
+        </View>
+
+        <View style={[s.settingRow, s.rowDivider]}>
+          <View style={s.settingText}>
+            <Text style={s.ruleTitle}>{t('league.create.handicapCap')}</Text>
+          </View>
+          <Stepper
+            valueLabel={formatNumber(capValue)}
+            valueA11y={t('league.create.capValueA11y', { cap: formatNumber(capValue) })}
+            onStep={(d) => setCapText(String(Math.min(54, Math.max(0, capValue + d))))}
+            canDecrease={capValue > 0}
+            canIncrease={capValue < 54}
+            decreaseLabel={t('league.create.capLower')}
+            increaseLabel={t('league.create.capRaise')}
+          />
+        </View>
+
+        <View style={s.settingRow}>
+          <View style={s.settingText}>
+            <Text style={s.ruleTitle}>{t('league.create.entryFeeLabel')}</Text>
+            <Text style={s.ruleSub}>{t('league.create.feeSub')}</Text>
+          </View>
+          <Stepper
+            valueLabel={feeCents ? formatEuros(feeCents) : t('league.create.feeFree')}
+            valueA11y={t('league.create.feeValueA11y', { fee: feeCents ? formatEuros(feeCents) : t('league.create.feeFree') })}
+            onStep={(d) => {
+              const next = stepFeeText(feeText, d);
+              if (next != null) setFeeText(next);
+            }}
+            canDecrease={!!feeCents}
+            decreaseLabel={t('league.create.feeLower')}
+            increaseLabel={t('league.create.feeRaise')}
+          />
+        </View>
       </View>
 
-      <Text style={s.fieldLabel}>{t('league.create.pointsTable')}</Text>
-      {input({ value: pointsText, onChangeText: setPointsText, autoCapitalize: 'none', keyboardType: 'numbers-and-punctuation' })}
-      <Text style={s.hint}>{t('league.rules.tieHint')}</Text>
-      {!pointsTable && <Text style={s.errorText}>{t('league.create.pointsError')}</Text>}
-
-      <PointsForPlaying value={participationPoints} onChange={setParticipationPoints} pointsTable={pointsTable} />
-
-      <Text style={s.fieldLabel}>{t('league.create.handicapCap')}</Text>
-      {input({ value: capText, onChangeText: setCapText, keyboardType: 'decimal-pad' })}
-      {!(Number.isFinite(cap) && cap >= 0 && cap <= 54) && (
-        <Text style={s.errorText}>{t('league.create.capError')}</Text>
-      )}
-
-      <Text style={s.fieldLabel}>{t('league.create.entryFee')}</Text>
-      {input({ placeholder: '0', value: feeText, onChangeText: setFeeText, keyboardType: 'decimal-pad' })}
-      <Text style={s.hint}>{t('league.create.feeHint')}</Text>
-      {feeCents == null && <Text style={s.errorText}>{t('league.create.feeError')}</Text>}
+      <PointsTableSheet
+        visible={pointsSheetOpen}
+        table={pointsTable ?? []}
+        onSave={(table) => { setPointsText(formatPointsTable(table)); setPointsSheetOpen(false); }}
+        onClose={() => setPointsSheetOpen(false)}
+      />
     </>
+  );
+
+  const avatar = (name, url) => (
+    <View style={s.avatar}>
+      {url
+        ? <Image source={{ uri: url }} style={s.avatarImg} />
+        : <Text style={s.avatarText}>{(name ?? '?').slice(0, 2).toUpperCase()}</Text>}
+    </View>
+  );
+
+  const hcpField = (value, onChangeText, a11y) => (
+    <TextInput
+      style={s.hcpInput}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={t('league.create.hcpPh')}
+      placeholderTextColor={theme.text.muted}
+      keyboardType="decimal-pad"
+      keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+      accessibilityLabel={a11y}
+    />
   );
 
   const renderMembersStep = () => (
@@ -273,23 +357,23 @@ export default function LeagueCreateScreen({ navigation }) {
       </Text>
 
       <View style={s.memberCard}>
+        {avatar(profile?.displayName, profile?.avatarUrl)}
         <View style={{ flex: 1 }}>
           <Text style={s.memberName}>{profile?.displayName ? t('league.create.youNamed', { name: profile.displayName }) : t('league.create.you')}</Text>
           <Text style={s.memberSub}>{t('league.create.admin')}</Text>
         </View>
-        <TextInput
-          style={s.hcpInput}
-          value={myHcpText}
-          onChangeText={setMyHcpText}
-          placeholder={t('league.create.hcpPh')}
-          placeholderTextColor={theme.text.muted}
-          keyboardType="decimal-pad"
-          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-          accessibilityLabel={t('league.create.yourHcpA11y')}
-        />
+        {hcpField(myHcpText, setMyHcpText, t('league.create.yourHcpA11y'))}
       </View>
 
-      {friendsLoading && <ActivityIndicator color={theme.accent.primary} style={{ marginVertical: 12 }} />}
+      {friendsLoading && [0, 1, 2].map((i) => (
+        <View key={i} style={s.memberCard} testID="friend-skeleton">
+          <View style={[s.avatar, s.skeleton]} />
+          <View style={{ flex: 1 }}>
+            <View style={[s.skeleton, { width: '45%', height: 12, borderRadius: 6 }]} />
+            <View style={[s.skeleton, { width: '30%', height: 10, borderRadius: 5, marginTop: 6 }]} />
+          </View>
+        </View>
+      ))}
       {!friendsLoading && friends.length === 0 && (
         <View style={s.emptyHint}>
           <Feather name="users" size={14} color={theme.text.muted} style={{ marginRight: 8 }} />
@@ -308,47 +392,48 @@ export default function LeagueCreateScreen({ navigation }) {
               accessibilityState={{ checked: on }}
               accessibilityLabel={f.displayName}
             >
-              <View style={[s.check, on && s.checkOn]}>
-                {on && <Feather name="check" size={12} color={theme.text.inverse} />}
-              </View>
+              {avatar(f.displayName, f.avatarUrl)}
               <View style={{ flex: 1 }}>
                 <Text style={s.memberName} numberOfLines={1}>{f.displayName}</Text>
                 <Text style={s.memberSub}>{f.handicap != null ? t('league.create.profileHcp', { hcp: formatNumber(f.handicap) }) : t('league.create.fromFriends')}</Text>
               </View>
             </TouchableOpacity>
-            {on && (
-              <TextInput
-                style={s.hcpInput}
-                value={picked[f.userId]}
-                onChangeText={(text) => setPicked((prev) => ({ ...prev, [f.userId]: text }))}
-                placeholder={t('league.create.hcpPh')}
-                placeholderTextColor={theme.text.muted}
-                keyboardType="decimal-pad"
-                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                accessibilityLabel={t('league.create.memberHcpA11y', { name: f.displayName })}
-              />
+            {on && hcpField(
+              picked[f.userId],
+              (text) => setPicked((prev) => ({ ...prev, [f.userId]: text })),
+              t('league.create.memberHcpA11y', { name: f.displayName }),
             )}
+            <TouchableOpacity
+              style={s.checkSlot}
+              onPress={() => togglePicked(f)}
+              accessible={false}
+              importantForAccessibility="no"
+            >
+              <View style={[s.check, on && s.checkOn]}>
+                {on && <Feather name="check" size={12} color={theme.text.inverse} />}
+              </View>
+            </TouchableOpacity>
           </View>
         );
       })}
 
-      <Text style={[s.stepOverline, { marginTop: 14 }]}>{t('league.create.notInApp')}</Text>
+      {invitees.length > 0 && (
+        <Text style={[s.stepOverline, { marginTop: 14 }]}>{t('league.create.notInApp')}</Text>
+      )}
       {invitees.map((i) => (
         <View key={i.key} style={s.memberCard}>
+          <View style={[s.avatar, s.avatarInvitee]}>
+            <Feather name="link" size={15} color={theme.accent.primary} />
+          </View>
           <View style={{ flex: 1 }}>
             <Text style={s.memberName} numberOfLines={1}>{i.name}</Text>
             <Text style={s.memberSub}>{t('league.create.joinsFromLink')}</Text>
           </View>
-          <TextInput
-            style={s.hcpInput}
-            value={i.hcpText}
-            onChangeText={(text) => setInvitees((prev) => prev.map((p) => (p.key === i.key ? { ...p, hcpText: text } : p)))}
-            placeholder={t('league.create.hcpPh')}
-            placeholderTextColor={theme.text.muted}
-            keyboardType="decimal-pad"
-            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            accessibilityLabel={t('league.create.memberHcpA11y', { name: i.name })}
-          />
+          {hcpField(
+            i.hcpText,
+            (text) => setInvitees((prev) => prev.map((p) => (p.key === i.key ? { ...p, hcpText: text } : p))),
+            t('league.create.memberHcpA11y', { name: i.name }),
+          )}
           <TouchableOpacity
             style={s.removeBtn}
             onPress={() => setInvitees((prev) => prev.filter((p) => p.key !== i.key))}
@@ -359,31 +444,44 @@ export default function LeagueCreateScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       ))}
-      <View style={s.addRow}>
-        <TextInput
-          style={[s.input, s.addInput]}
-          value={newName}
-          onChangeText={setNewName}
-          onSubmitEditing={addInvitee}
-          placeholder={t('league.create.newNamePh')}
-          placeholderTextColor={theme.text.muted}
-          autoCapitalize="words"
-          returnKeyType="done"
-          maxLength={NAME_MAX}
-          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-          selectionColor={theme.accent.primary}
-          accessibilityLabel={t('league.create.newNameA11y')}
-        />
+      {!addOpen ? (
         <TouchableOpacity
-          style={[s.addBtn, !newName.trim() && { opacity: 0.5 }]}
-          onPress={addInvitee}
-          disabled={!newName.trim()}
+          style={s.addTile}
+          onPress={() => setAddOpen(true)}
+          activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel={t('league.create.addA11y')}
         >
-          <Feather name="plus" size={20} color={theme.text.inverse} />
+          <Feather name="plus" size={16} color={theme.accent.primary} />
+          <Text style={s.addTileText}>{t('league.create.addSomeone')}</Text>
         </TouchableOpacity>
-      </View>
+      ) : (
+        <View style={s.addRow}>
+          <TextInput
+            style={[s.input, s.addInput]}
+            value={newName}
+            onChangeText={setNewName}
+            onSubmitEditing={addInvitee}
+            placeholder={t('league.create.newNamePh')}
+            placeholderTextColor={theme.text.muted}
+            autoCapitalize="words"
+            autoFocus
+            returnKeyType="done"
+            maxLength={NAME_MAX}
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            selectionColor={theme.accent.primary}
+            accessibilityLabel={t('league.create.newNameA11y')}
+          />
+          <TouchableOpacity
+            style={[s.addBtn, !newName.trim() && { opacity: 0.5 }]}
+            onPress={addInvitee}
+            disabled={!newName.trim()}
+            accessibilityRole="button"
+            accessibilityLabel={t('league.create.addA11y')}
+          >
+            <Feather name="plus" size={20} color={theme.text.inverse} />
+          </TouchableOpacity>
+        </View>
+      )}
     </>
   );
 
@@ -402,6 +500,7 @@ export default function LeagueCreateScreen({ navigation }) {
         />
         <View style={s.chipRow}>
           <View style={s.chip}><Text style={s.chipText}>{t('league.join.members', { count: memberCount })}</Text></View>
+          <View style={s.chip}><Text style={s.chipText}>{`${fmtDate(startIso)} – ${fmtDate(endIso)}`}</Text></View>
           <View style={s.chip}><Text style={s.chipText}>{t('league.create.netStableford')}</Text></View>
         </View>
       </View>
@@ -545,7 +644,7 @@ function makeStyles(theme) {
       letterSpacing: 1.8, textTransform: 'uppercase', marginBottom: 6,
     },
     stepPrompt: {
-      fontFamily: 'PlusJakartaSans-Bold', fontSize: 24, lineHeight: 30, color: theme.text.primary, letterSpacing: -0.3,
+      fontFamily: 'PlayfairDisplay-Bold', fontSize: 26, color: theme.text.primary, letterSpacing: -0.3,
     },
     stepSubtitle: {
       fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13,
@@ -556,9 +655,9 @@ function makeStyles(theme) {
       marginBottom: 6, marginTop: 8,
     },
     input: {
-      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
-      color: theme.text.primary, borderRadius: 10, borderWidth: 1, borderColor: theme.border.default,
-      padding: 14, marginBottom: 8, fontSize: 15, fontFamily: 'PlusJakartaSans-Medium',
+      backgroundColor: theme.bg.card, color: theme.text.primary, borderRadius: 12, borderWidth: 1,
+      borderColor: cardBorder, padding: 13, marginBottom: 8, fontSize: 15, fontFamily: 'PlusJakartaSans-Bold',
+      ...(theme.isDark ? {} : theme.shadow.card),
     },
     hint: {
       fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17, marginBottom: 8,
@@ -572,10 +671,11 @@ function makeStyles(theme) {
       overflow: 'hidden', marginBottom: 12, ...(theme.isDark ? {} : theme.shadow.card),
     },
     rowDivider: { borderBottomWidth: 1, borderBottomColor: theme.border.subtle },
-    ruleRow: { flexDirection: 'row', alignItems: 'center', padding: 14 },
-    ruleIcon: { marginRight: 12 },
+    settingRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
+    settingText: { flex: 1 },
     ruleTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14 },
     ruleSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
+    ruleSubError: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive },
     reviewRow: { flexDirection: 'row', alignItems: 'center', padding: 14 },
     reviewIcon: { marginRight: 12 },
 
@@ -588,10 +688,27 @@ function makeStyles(theme) {
     memberTap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
     memberName: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15 },
     memberSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
+    checkSlot: { paddingLeft: 12, paddingVertical: 4 },
     check: {
       width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: theme.border.default,
-      alignItems: 'center', justifyContent: 'center', marginRight: 12,
+      alignItems: 'center', justifyContent: 'center',
     },
+    avatar: {
+      width: 34, height: 34, borderRadius: 17, marginRight: 12, overflow: 'hidden',
+      backgroundColor: theme.isDark ? theme.bg.secondary : '#006747', alignItems: 'center', justifyContent: 'center',
+    },
+    avatarImg: { width: '100%', height: '100%' },
+    avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 13 },
+    avatarInvitee: {
+      backgroundColor: 'transparent', borderWidth: 1.5, borderStyle: 'dashed', borderColor: theme.accent.primary,
+    },
+    skeleton: { backgroundColor: theme.bg.secondary },
+    addTile: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 52,
+      backgroundColor: theme.accent.light, borderRadius: 16, borderWidth: 1.5, borderStyle: 'dashed',
+      borderColor: theme.accent.primary + '40', marginTop: 4,
+    },
+    addTileText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
     checkOn: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
     hcpInput: {
       width: 64, textAlign: 'center', color: theme.text.primary, borderRadius: 10, borderWidth: 1,
