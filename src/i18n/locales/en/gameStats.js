@@ -12,12 +12,16 @@ export default {
 
   "stats.game.standings.title": "Final standings",
   "stats.game.standings.points": "Points",
+  "stats.game.standings.result": "Result",
+  "stats.game.standings.stableford": "Stableford",
   "stats.game.standings.gross": "Gross",
   "stats.game.standings.net": "Net",
   "stats.game.standings.even": "E",
   "stats.game.standings.partial": "{value} ({holes} h)",
   "stats.game.standings.holesPlayed": { one: "{count} hole played", other: "{count} holes played" },
   "stats.game.standings.footer.points": "Round points · total · vs handicap (2 pts per hole)",
+  "stats.game.standings.footer.result": "{mode} points · same as the Play leaderboard",
+  "stats.game.standings.footer.resultHoles": "{mode} · holes won · same as the Play leaderboard",
   "stats.game.standings.footer.gross": "Finished rounds only · gross strokes · to par",
   "stats.game.standings.footer.net": "Finished rounds only · net strokes · to par",
   "stats.game.standings.a11y.points": { one: "{count} point", other: "{count} points" },
@@ -25,6 +29,7 @@ export default {
   "stats.game.standings.a11y.net": { one: "{count} net stroke", other: "{count} net strokes" },
 
   "stats.game.prog.title": "How it unfolded",
+  "stats.game.prog.titleStableford": "How it unfolded · Stableford",
   "stats.game.prog.start": "Start",
   "stats.game.prog.wire": "{name} led after every round.",
   "stats.game.prog.took": "{name} took the lead for good in R{round}.",
@@ -220,4 +225,5 @@ export default {
   "stats.game.rivals.h2hLegend": "Wins-losses-ties on Stableford points, hole by hole.",
   "stats.game.rivals.cellA11y": "{a} against {b}: won {w}, lost {l}, tied {tie}",
   "stats.game.rivals.splits": "Partner splits",
+  "stats.game.rivals.pairSub": { one: "{count} round · combined Stableford avg", other: "{count} rounds · combined Stableford avg" },
 };

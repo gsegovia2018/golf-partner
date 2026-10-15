@@ -156,7 +156,13 @@ export default function StatsScreen({ navigation, route }) {
           </View>
           <ScrollView key={activeTab} style={s.scroll} contentContainerStyle={s.content}>
             {activeTab === 'summary' && (
-              <SummaryTab tournament={statsTournament} teams={teamInfo.any} onOpenSheet={openSheet} onPlayerPress={showPlayer} />
+              <SummaryTab
+                tournament={statsTournament}
+                resultTournament={tournament}
+                teams={teamInfo.any}
+                onOpenSheet={openSheet}
+                onPlayerPress={showPlayer}
+              />
             )}
             {activeTab === 'rounds' && (
               <RoundsTab

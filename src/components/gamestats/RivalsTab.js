@@ -64,7 +64,17 @@ export default function RivalsTab({ tournament, pairsTournament, fixedTeams, def
             <View style={{ flexDirection: 'row' }}>
               <View style={{ width: NAME_W }} />
               {players.map((p) => (
-                <Text key={p.id} style={[s.sectionTitle, { width: CELL_W, textAlign: 'center', textTransform: 'none', fontSize: 11 }]} numberOfLines={1}>
+                // No section-title letter spacing: at 1.5 neighbouring names ran
+                // into each other ("MarcosMolden"). Same short names and size as
+                // the scorecard heatmap's heads, kept inside the cell.
+                <Text
+                  key={p.id}
+                  testID={`h2h-head-${p.id}`}
+                  style={[s.sectionTitle, { width: CELL_W, paddingHorizontal: 2, textAlign: 'center', textTransform: 'none', fontSize: 11, letterSpacing: 0 }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                >
                   {shortName(p, players)}
                 </Text>
               ))}
@@ -131,10 +141,11 @@ export default function RivalsTab({ tournament, pairsTournament, fixedTeams, def
                   <Text style={[s.strong, s.grow]} numberOfLines={1}>
                     {t('stats.screen.join.two', { a: firstName(card.players[0]), b: firstName(card.players[1]) })}
                   </Text>
-                  <Text style={s.strong}>{t('stats.screen.hole.avgPts', { avg: num(card.avgPoints) })}</Text>
+                  <Text style={s.stat} testID={`pair-avg-${card.key}`}>{num(card.avgPoints, { maxDecimals: 1 })}</Text>
                   <Feather name="chevron-right" size={16} color={theme.text.muted} />
                 </View>
-                <Text style={s.sub}>{t('stats.screen.pairs.rounds', { count: card.rounds })}</Text>
+                {/* The figure is both partners' Stableford added up, whatever the mode. */}
+                <Text style={s.sub}>{t('stats.game.rivals.pairSub', { count: card.rounds })}</Text>
                 {shareA != null && (
                   <View style={{ marginTop: 6 }}>
                     <View style={{ flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', gap: 2 }}>
