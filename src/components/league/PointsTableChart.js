@@ -10,7 +10,9 @@ const COMPACT_PLACES = 6;
 // Season points per finishing place, drawn as bars and edited in place.
 //   table     initial number[] (read once, on mount)
 //   onChange  (number[] | null) => void; null while any place has no number
-export default function PointsTableChart({ table, onChange }) {
+// `style` overrides the wrapper (the wizard draws it as a card row; Settings
+// inside a form card drops the row padding and divider).
+export default function PointsTableChart({ table, onChange, style }) {
   const t = useT();
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -43,7 +45,7 @@ export default function PointsTableChart({ table, onChange }) {
   };
 
   return (
-    <View style={s.wrap}>
+    <View style={[s.wrap, style]}>
       <Text style={s.title}>{t('league.points.title')}</Text>
       <Text style={s.hint}>{t('league.points.hint')}</Text>
 

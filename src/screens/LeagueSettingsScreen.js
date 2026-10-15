@@ -370,6 +370,7 @@ export default function LeagueSettingsScreen({ navigation, route }) {
             {/* The chart reads its table once, on mount: this card only renders
                 once the league has loaded, so it starts from the real table. */}
             <PointsTableChart
+              style={{ paddingHorizontal: 0, borderBottomWidth: 0 }}
               table={league.pointsTable}
               onChange={(table) => setPointsText(table ? formatPointsTable(table) : '')}
             />
