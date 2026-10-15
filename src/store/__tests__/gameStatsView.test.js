@@ -1,7 +1,7 @@
 import { weekendFixture } from './fixtures/gameStatsFixture';
 import { bestBallGameFixture } from './fixtures/bestBallGameFixture';
 import {
-  scoredRoundIndices, standingsRows, progression, raceSeries, roundResult, matchPlayRounds, scorecardGrid,
+  scoredRoundIndices, standingsRows, progression, raceSeries, roundResult, matchPlayRounds, roundCard,
   holeStories, strokeHoleSplit, awardsList, h2hGrid, shotComparison, resultStandings,
 } from '../gameStatsView';
 import { roundLeaderboard, tournamentLeaderboardResolved, calcBestWorstBall } from '../tournamentStore';
@@ -230,22 +230,22 @@ describe('matchPlayRounds', () => {
   });
 });
 
-describe('scorecardGrid', () => {
-  test('cells carry points and handicap strokes; Out / In / Tot totals', () => {
-    const g = scorecardGrid(weekendFixture(), 2, ['fx-me', 'fx-nac']);
-    expect(g.holes[0].cells[0]).toEqual({ playerId: 'fx-me', points: 2, strokes: 6, extra: 1 });
-    expect(g.holes[17].cells[1].points).toBeNull();
-    expect(g.totals.map((x) => [x.key, x.par, x.values])).toEqual([
-      ['out', 36, [8, 13]], ['in', 36, [14, 7]], ['tot', 72, [22, 20]],
-    ]);
+describe('roundCard', () => {
+  test('rows carry points and handicap strokes; out / in totals per row', () => {
+    const card = roundCard(weekendFixture(), 2, ['fx-nac', 'fx-me'], 'fx-me');
+    expect(card.rows.map((r) => r.id)).toEqual(['fx-me', 'fx-nac']);
+    expect(card.rows[0].nines[0].cells[0]).toMatchObject({ points: 2, strokes: 6, extra: 1 });
+    expect(card.rows[1].nines[1].cells[8].points).toBeNull();
+    expect(card.nines.map((n) => [n.key, n.par])).toEqual([['out', 36], ['in', 36]]);
+    expect(card.rows.map((r) => r.nines.map((n) => n.points))).toEqual([[8, 14], [13, 7]]);
+    expect(card.rows.map((r) => r.total.points)).toEqual([22, 20]);
   });
 
-  test('a 9-hole round has a Tot row only', () => {
-    const g = scorecardGrid(nineHoleTournament(), 0, ['a', 'b']);
-    expect(g.nine).toBe(true);
-    expect(g.totals.map((x) => x.key)).toEqual(['tot']);
+  test('a 9-hole round is one tot block', () => {
+    const card = roundCard(nineHoleTournament(), 0, ['a', 'b']);
+    expect(card.nines.map((n) => n.key)).toEqual(['tot']);
     // 9-hole maths: handicap 9 over SI 1-9 is one stroke on every hole.
-    expect(g.holes.every((h) => h.cells[1].extra === 1)).toBe(true);
+    expect(card.rows[1].nines[0].cells.every((c) => c.extra === 1)).toBe(true);
   });
 });
 

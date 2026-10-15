@@ -157,18 +157,61 @@ describe('Summary tab', () => {
 });
 
 describe('Rounds tab', () => {
-  test('round chips, result, race and scorecard with Out / In / Tot', async () => {
+  test('round chips, result, race and the scorecard with Out / In', async () => {
     const { getByTestId, getByText } = await open(fixture({ mode: 'individual' }));
     fireEvent.press(getByTestId('tab-rounds'));
     expect(getByText('R1 · Real Club de Golf de Sevilla')).toBeTruthy();
     fireEvent.press(getByTestId('round-chip-2'));
     expect(getByText('Marcos wins with 22 pts, Nacho next on 20 pts')).toBeTruthy();
     expect(getByTestId('race-chart')).toBeTruthy();
-    const card = within(getByTestId('scorecard-heatmap'));
-    expect(card.getByText('Out')).toBeTruthy();
-    expect(card.getByText('In')).toBeTruthy();
-    expect(card.getByText('Tot')).toBeTruthy();
+    const card = within(getByTestId('shot-scorecard'));
+    expect(card.getByText('OUT')).toBeTruthy();
+    expect(card.getByText('IN')).toBeTruthy();
+    expect(card.queryByText('TOT')).toBeNull();
     expect(getByText('Hole stories')).toBeTruthy();
+  });
+
+  test('scorecard: everyone has a row, me first; my shots start open, a tap closes them', async () => {
+    const { getByTestId, getAllByTestId } = await open(fixture({ mode: 'individual' }));
+    fireEvent.press(getByTestId('tab-rounds'));
+    fireEvent.press(getByTestId('round-chip-2'));
+    const card = within(getByTestId('shot-scorecard'));
+    const names = getAllByTestId(/^card-name-/).map((n) => n.props.testID);
+    // Two nines, four rows each, in roster order with me first.
+    expect(names.slice(0, 4)).toEqual(['card-name-fx-me', 'card-name-fx-jav', 'card-name-fx-alv', 'card-name-fx-nac']);
+    const me = getAllByTestId('card-name-fx-me')[0];
+    expect(me.props.accessibilityState.expanded).toBe(true);
+    expect(card.getAllByText('putts')).toHaveLength(2); // one sub-row per nine
+    expect(card.getByTestId('card-fx-me-penalty-12')).toBeTruthy();
+    fireEvent.press(me);
+    expect(card.queryByText('putts')).toBeNull();
+    expect(getAllByTestId('card-name-fx-me')[0].props.accessibilityState.expanded).toBe(false);
+    fireEvent.press(getAllByTestId('card-name-fx-me')[1]);
+    expect(card.getAllByText('putts')).toHaveLength(2);
+  });
+
+  test('scorecard: a player without shots has no chevron and does not open', async () => {
+    const { getByTestId, getAllByTestId } = await open(fixture({ mode: 'individual' }));
+    fireEvent.press(getByTestId('tab-rounds'));
+    const jav = getAllByTestId('card-name-fx-jav')[0];
+    expect(jav.props.accessibilityRole).toBeUndefined();
+    expect(jav.props.onPress).toBeUndefined();
+    expect(within(getByTestId('shot-scorecard')).queryByTestId('card-fx-jav-gir-1')).toBeNull();
+  });
+
+  test('scorecard: Strokes | Points switches the cells and the nine totals', async () => {
+    const { getByTestId } = await open(fixture({ mode: 'individual' }));
+    fireEvent.press(getByTestId('tab-rounds'));
+    fireEvent.press(getByTestId('round-chip-2'));
+    const out = () => within(getByTestId('ledger-out'));
+    expect(out().getByTestId('card-fx-me-cell-1').props.children).toBe(6);
+    expect(getByTestId('card-fx-me-total-out').props.children).toBe('54');
+    expect(getByTestId('card-fx-me-total-in').props.children).toBe('48');
+    fireEvent.press(getByTestId('card-mode-points'));
+    expect(out().getByTestId('card-fx-me-cell-1').props.children).toBe('2');
+    expect(getByTestId('card-fx-me-total-out').props.children).toBe('8');
+    expect(getByTestId('card-fx-nac-total-out').props.children).toBe('13');
+    expect(getByTestId('card-fx-me-total-in').props.children).toBe('14');
   });
 
   test('a team round shows pair totals and the pair-vs-pair chart', async () => {
@@ -181,16 +224,16 @@ describe('Rounds tab', () => {
     expect(getByText('Álvaro & Nacho won by 7 pts · 1 lead change')).toBeTruthy();
   });
 
-  test('a 9-hole round has a Tot row only', async () => {
+  test('a 9-hole round is one block with a Tot column', async () => {
     const t = fixture({ mode: 'individual' });
     const r = t.rounds[0];
     r.holes = r.holes.slice(0, 9).map((h, i) => ({ ...h, strokeIndex: i + 1 }));
     t.rounds = [r];
     const { getByTestId } = await open(t);
     fireEvent.press(getByTestId('tab-card'));
-    const card = within(getByTestId('scorecard-heatmap'));
-    expect(card.queryByText('Out')).toBeNull();
-    expect(card.getByText('Tot')).toBeTruthy();
+    const card = within(getByTestId('shot-scorecard'));
+    expect(card.queryByText('OUT')).toBeNull();
+    expect(card.getByText('TOT')).toBeTruthy();
   });
 
   test('lead story and comeback lines on the round card', async () => {
@@ -445,6 +488,43 @@ describe('LeadLines verbs', () => {
   });
 });
 
+// One player: no tabs, the player's page is the screen.
+describe('a solo game', () => {
+  const solo = () => {
+    const t = fixture({ players: 1 });
+    t.rounds = [t.rounds[0]];
+    return t;
+  };
+
+  test('one page with no tab bar: tiles, shots, ledger and charts, nothing about rivals', async () => {
+    const { getByTestId, queryByTestId, getByText, queryByText, queryAllByTestId } = await open(solo());
+    expect(getByTestId('solo-stats')).toBeTruthy();
+    expect(queryAllByTestId(/^tab-/)).toHaveLength(0);
+    expect(getByText('Fin de semana en Cádiz')).toBeTruthy();
+    expect(getByText('points')).toBeTruthy(); // the points tile carries no rank
+    expect(queryByText(/ of 1$/)).toBeNull();
+    expect(getByTestId('player-shots')).toBeTruthy();
+    expect(getByTestId('hole-ledger')).toBeTruthy();
+    expect(getByTestId('player-mix')).toBeTruthy();
+    expect(getByTestId('player-drives')).toBeTruthy();
+    expect(getByTestId('player-putts')).toBeTruthy();
+    expect(queryAllByTestId(/^player-chip-/)).toHaveLength(0);
+    expect(queryByTestId('shot-comparison')).toBeNull();
+    expect(queryByText('Result')).toBeNull();
+    expect(queryByText('Final standings')).toBeNull();
+  });
+
+  test('the ledger is the single-player card: shot rows always shown, no chevrons', async () => {
+    const { getByTestId, queryAllByTestId } = await open(solo());
+    const ledger = within(getByTestId('hole-ledger'));
+    expect(ledger.getAllByText('Putts')).toHaveLength(2);
+    expect(queryAllByTestId(/^card-name-/)).toHaveLength(0);
+    expect(ledger.getByTestId('ledger-total').props.children).toBe('102 strokes · +30 · 36 putts');
+    fireEvent.press(getByTestId('ledger-mode-points'));
+    expect(within(getByTestId('hole-ledger')).getByTestId('ledger-total').props.children).toMatch(/^\d+ points · 102 strokes · 36 putts$/);
+  });
+});
+
 // One played round: a casual game, or a tournament after its first day.
 describe('a one-round game', () => {
   const single = ({ shots = false } = {}) => {
@@ -467,7 +547,7 @@ describe('a one-round game', () => {
     expect(queryByText(/1 round/)).toBeNull();
     fireEvent.press(getByTestId('tab-card'));
     expect(queryByTestId('round-chip-0')).toBeNull();
-    expect(getByTestId('scorecard-heatmap')).toBeTruthy();
+    expect(getByTestId('shot-scorecard')).toBeTruthy();
     expect(getByTestId('pair-difference-chart')).toBeTruthy();
     expect(getByText('Hole stories')).toBeTruthy();
   });
@@ -526,7 +606,7 @@ describe('a one-round game', () => {
     expect(within(getByTestId('ledger-out')).getByText('4/7')).toBeTruthy(); // fairways on the front nine
     fireEvent.press(getByTestId('ledger-mode-points'));
     const after = within(getByTestId('hole-ledger'));
-    expect(after.getByTestId('ledger-cell-1').props.children).toBe(3);
+    expect(after.getByTestId('ledger-cell-1').props.children).toBe('3');
     expect(after.getByTestId('ledger-total').props.children).toMatch(/^\d+ points · 102 strokes · 36 putts$/);
     expect(after.getByText(/holes of 2\+ points \(H\d+–H\d+\)$/)).toBeTruthy();
   });

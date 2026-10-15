@@ -11,14 +11,14 @@ import ScoreMixBar from '../mystats/ScoreMixBar';
 import FairwayFan from '../mystats/FairwayFan';
 import { isLowSample } from '../mystats/metricTone';
 import {
-  standingsRows, playerBestRuns, roundLedger, scoreMix, scoringSplits, puttBuckets, shotComparePlots,
+  standingsRows, playerBestRuns, roundCard, scoreMix, scoringSplits, puttBuckets, shotComparePlots,
 } from '../../store/gameStatsView';
 import {
   playerRoundHistory, playerAvgStableford, playerAvgPerHole, bounceBackRate, playerNemesisAndCrushed,
   shotStats, scramblingStats,
 } from '../../store/statsEngine';
 import { roundSheet, bounceSheet, nemesisSheet, roundTag } from './sheets';
-import HoleLedger from './HoleLedger';
+import ShotScorecard from '../scorecard/ShotScorecard';
 import { Ring, DotRow, PuttHistogram, DivergingBars, ComparePlot } from './charts';
 import { Chip, ModeToggle, SectionTitle, firstName, num, signed, shortName, useStatStyles } from './ui';
 
@@ -58,7 +58,7 @@ export default function PlayersTab({
       history: playerRoundHistory(tournament, pid),
       avgRound: playerAvgStableford(tournament, pid),
       perHole: playerAvgPerHole(tournament, pid),
-      ledger: single ? roundLedger(tournament, singleIndex, pid) : null,
+      card: single ? roundCard(tournament, singleIndex, [pid], pid) : null,
       splits: scoringSplits(tournament, pid),
       bounce: bounceBackRate(tournament).find((r) => r.player.id === pid) ?? null,
       nc: playerNemesisAndCrushed(tournament).find((r) => r.player.id === pid) ?? null,
@@ -89,7 +89,7 @@ export default function PlayersTab({
     );
   }
 
-  const { standing, history, ledger, splits, bounce, nc, shots, putts, scrambling, plots } = data;
+  const { standing, history, card, splits, bounce, nc, shots, putts, scrambling, plots } = data;
   const sheetOpts = { single };
   const rankLabel = players.length > 1
     ? t('stats.game.player.totalRank', { place: standing.isTie ? `T${standing.place}` : standing.place, count: players.length })
@@ -102,6 +102,7 @@ export default function PlayersTab({
   const pct = (k, n) => (n > 0 ? Math.round((k / n) * 100) : 0);
   const modeToggle = (id) => <ModeToggle value={mode} onChange={onModeChange} testID={id} />;
 
+  const ledger = card?.rows[0] ?? null;
   const toPar = ledger?.total.toPar;
   const tiles = single ? (
     <View style={s.tiles}>
@@ -196,12 +197,12 @@ export default function PlayersTab({
 
       {strip}
 
-      {ledger && (
+      {card && (
         <View style={[s.card, { paddingHorizontal: 10 }]}>
           <View style={{ paddingHorizontal: 4 }}>
             <SectionTitle right={modeToggle('ledger-mode')}>{t('stats.game.ledger.title')}</SectionTitle>
           </View>
-          <HoleLedger ledger={ledger} mode={mode} />
+          <ShotScorecard key={pid} card={card} mode={mode} />
         </View>
       )}
 
