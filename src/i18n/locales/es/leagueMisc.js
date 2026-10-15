@@ -3,6 +3,7 @@ export default {
   'league.holeGrid.out': 'IDA',
   'league.holeGrid.in': 'VUELTA',
   'league.holeGrid.hole': 'Hoyo {n}, {strokes} golpes, {points} puntos',
+  'league.holeGrid.holeStrokes': 'Hoyo {n}, {strokes} golpes',
   'league.holeGrid.holeCapped': 'Hoyo {n}, {strokes} golpes, {points} puntos, cuenta como {counted}',
   'league.holeGrid.legend': '○ 3+ ptos   □ 0 ptos   número pequeño = puntos',
   'league.holeGrid.legendCapped': '○ 3+ ptos   □ 0 ptos   número pequeño = puntos   discontinuo = limitado, la insignia es lo que cuenta',
@@ -77,6 +78,8 @@ export default {
   'league.stats.monthsCount': { one: '{count} mes', other: '{count} meses' },
   'league.stats.youPts': 'Tú {points} ptos',
   'league.stats.namePts': '{name} {points} ptos',
+  'league.stats.youScore': 'Tú {score}',
+  'league.stats.nameScore': '{name} {score}',
 
   'league.home.statsA11y': 'Estadísticas',
   'league.home.settingsA11y': 'Ajustes de la liga',

@@ -2,6 +2,7 @@
 // stored event into what the card screen draws. No I/O, no React, no strings:
 // messages are { key, params } descriptors rendered with tr() (docs/i18n.md).
 import { postByFor } from './leagueRules';
+import { formatToPar } from './leagueStandings';
 
 export const COLLAPSED_EVENTS = 3;
 
@@ -72,15 +73,18 @@ export function describeCardEvent(ev, opts = {}) {
     case 'submitted': {
       const resubmit = !!data.resubmit;
       const hasPts = data.points != null;
-      const key = resubmit ? (hasPts ? 'league.timeline.resubmittedPts' : 'league.timeline.resubmitted')
-        : (hasPts ? 'league.timeline.submittedPts' : 'league.timeline.submitted');
-      return row('send', null, { key, params: { points: data.points } }, {
+      // A medal league's event carries to_par: that is the score shown, not points.
+      const hasScore = data.to_par != null;
+      const key = resubmit ? (hasScore ? 'league.timeline.resubmittedScore' : hasPts ? 'league.timeline.resubmittedPts' : 'league.timeline.resubmitted')
+        : (hasScore ? 'league.timeline.submittedScore' : hasPts ? 'league.timeline.submittedPts' : 'league.timeline.submitted');
+      return row('send', null, { key, params: { points: data.points, score: hasScore ? formatToPar(data.to_par) : undefined } }, {
         detail: data.after_return ? { key: 'league.timeline.afterReturn' } : null,
       });
     }
     case 'added':
       return row('send', null, {
-        key: data.points != null ? 'league.timeline.addedPts' : 'league.timeline.added', params: { points: data.points },
+        key: data.to_par != null ? 'league.timeline.addedScore' : data.points != null ? 'league.timeline.addedPts' : 'league.timeline.added',
+        params: { points: data.points, score: data.to_par != null ? formatToPar(data.to_par) : undefined },
       });
     case 'sent_to_marker':
       return row('user-check', null, {

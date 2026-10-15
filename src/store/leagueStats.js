@@ -4,7 +4,9 @@
 // card's Stableford points, higher is better, like the board (an unapproved
 // not-announced card is left out of the grid and rivals, as on the board); a
 // card without points (never scored) is never the best. The net differential
-// rides along as secondary information.
+// rides along as secondary information. In a medal league (`format`) the
+// grid and rivals compare strokes to par instead, fewest first; the honours
+// and leaders are Stableford-only (the screen hides them there).
 // Plans: docs/superpowers/plans/2026-10-05-league-stats-and-board.md,
 // docs/superpowers/plans/2026-10-13-league-review-followups.md (R1).
 import { calcExtraShots, calcStablefordPoints } from './scoring';
@@ -12,6 +14,7 @@ import { formatNumber, formatOrdinal } from '../i18n';
 import { memberNameMsg } from './leagueView';
 import { dayLabel, timeLabel } from './leagueOffApp';
 import { needsApproval } from './leagueRules';
+import { cardScore, compareScores } from './leagueStandings';
 
 export const MIN_HONOUR_CARDS = 3; // fewer confirmed cards than this: no honours
 export const MIN_STAT_CARDS = 3; // fewer cards than this: a player's average is not shown
@@ -256,11 +259,11 @@ export function statLeaders(cardsByMonth, members, statKey) {
 
 // ---- Season grid -----------------------------------------------------------
 
-// userId -> best confirmed card of one month: the most points; a card
-// without points only when the member has no scored one.
-function bestByUser(cards) {
-  const pts = (c) => pointsOf(c) ?? -Infinity;
-  const better = (a, b) => pts(a) > pts(b);
+// userId -> best confirmed card of one month: the best ranking value for
+// `format` (most points, or fewest strokes to par); a card without one only
+// when the member has no scored one.
+function bestByUser(cards, format = 'stableford') {
+  const better = (a, b) => compareScores(cardScore(a, format), cardScore(b, format), format) < 0;
   const best = new Map();
   confirmed(cards).filter((c) => !needsApproval(c)).forEach((c) => {
     if (!best.has(c.userId) || better(c, best.get(c.userId))) best.set(c.userId, c);
@@ -268,15 +271,17 @@ function bestByUser(cards) {
   return best;
 }
 
-// Members x months: [{ userId, cells: [{ month, points, netDifferential, unrated, cardId, best }] }].
+// Members x months: [{ userId, cells: [{ month, points, score, netDifferential, unrated, cardId, best }] }].
 // Rows follow `members` (pass them in season-table order). cardId is null with
-// no confirmed card; unrated: a confirmed card with no points (not ranked);
-// `best` marks the month's most points (ties all best). netDifferential is the
+// no confirmed card; unrated: a confirmed card with no ranking value (not
+// ranked); `score` is the ranking value for `format` (= points in a Stableford
+// league) and `best` marks the month's best (ties all best). netDifferential is the
 // best card's, secondary information (null on a tee that had no rating).
-export function seasonGrid(cardsByMonth, members, monthKeys) {
+export function seasonGrid(cardsByMonth, members, monthKeys, format = 'stableford') {
   const perMonth = Object.fromEntries(monthKeys.map((month) => {
-    const best = bestByUser(cardsByMonth?.[month]);
-    const top = Math.max(-Infinity, ...[...best.values()].map((c) => pointsOf(c) ?? -Infinity));
+    const best = bestByUser(cardsByMonth?.[month], format);
+    const scores = [...best.values()].map((c) => cardScore(c, format)).filter((v) => v != null);
+    const top = scores.length ? [...scores].sort((a, b) => compareScores(a, b, format))[0] : null;
     return [month, { best, top }];
   }));
   return (members ?? []).map((m) => ({
@@ -284,13 +289,15 @@ export function seasonGrid(cardsByMonth, members, monthKeys) {
     cells: monthKeys.map((month) => {
       const card = perMonth[month].best.get(m.userId);
       const points = card ? pointsOf(card) : null;
+      const score = card ? cardScore(card, format) : null;
       return {
         month,
         points,
+        score,
         netDifferential: card ? netDiffOf(card) : null,
-        unrated: !!card && points == null,
+        unrated: !!card && score == null,
         cardId: card?.id ?? null,
-        best: points != null && points === perMonth[month].top,
+        best: score != null && score === perMonth[month].top,
       };
     }),
   }));
@@ -299,12 +306,13 @@ export function seasonGrid(cardsByMonth, members, monthKeys) {
 // ---- Rivals ----------------------------------------------------------------
 
 // Months where both players have a ranked (scored, confirmed) card, newest
-// first: [{ month, a, b }] with each side's Stableford points (higher wins).
-export function rivalMonths(cardsByMonth, a, b) {
+// first: [{ month, a, b }] with each side's ranking value (Stableford points,
+// higher wins; strokes to par in a medal league, lower wins).
+export function rivalMonths(cardsByMonth, a, b, format = 'stableford') {
   return Object.keys(cardsByMonth ?? {}).sort().reverse().flatMap((month) => {
-    const best = bestByUser(cardsByMonth[month]);
-    const pa = pointsOf(best.get(a));
-    const pb = pointsOf(best.get(b));
+    const best = bestByUser(cardsByMonth[month], format);
+    const pa = cardScore(best.get(a), format);
+    const pb = cardScore(best.get(b), format);
     return pa != null && pb != null ? [{ month, a: pa, b: pb }] : [];
   });
 }
@@ -313,13 +321,13 @@ export function rivalMonths(cardsByMonth, a, b) {
 // the months both have a ranked card, closest rivalry first (smallest gap
 // between won and lost, then most months); members I never shared a month
 // with go last.
-export function rivals(cardsByMonth, members, meId) {
+export function rivals(cardsByMonth, members, meId, format = 'stableford') {
   const rows = (members ?? []).filter((m) => m.userId !== meId).map((m) => {
-    const months = rivalMonths(cardsByMonth, meId, m.userId);
+    const months = rivalMonths(cardsByMonth, meId, m.userId, format);
     return {
       userId: m.userId,
-      won: months.filter((x) => x.a > x.b).length,
-      lost: months.filter((x) => x.a < x.b).length,
+      won: months.filter((x) => compareScores(x.a, x.b, format) < 0).length,
+      lost: months.filter((x) => compareScores(x.a, x.b, format) > 0).length,
       level: months.filter((x) => x.a === x.b).length,
       months: months.length,
     };

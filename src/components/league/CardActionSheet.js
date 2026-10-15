@@ -15,12 +15,13 @@ import DateField from '../DateField';
 import { useT, tr } from '../../i18n';
 import { POST_WINDOW_HOURS, OFFAPP_NOTICE_HOURS, postByFor } from '../../store/leagueRules';
 import { buildTeeTime, localDateText, localTimeText } from '../../store/leagueOffApp';
-import { VOID_REASONS, voidReasonText, autoWithdrawNote } from '../../store/leagueView';
+import { VOID_REASONS, voidReasonText, autoWithdrawNote, cardValueText } from '../../store/leagueView';
+import { isMedalFormat } from '../../store/leagueStandings';
 import { clockWithDay } from './DeadlineLine';
 import { stamp } from './stamp';
 
 export default function CardActionSheet({
-  visible, kind, card, who, isOwn, monthLabel, busy, error, onConfirm, onCancel,
+  visible, kind, card, who, isOwn, monthLabel, busy, error, onConfirm, onCancel, format = 'stableford',
 }) {
   const { theme } = useTheme();
   const t = useT();
@@ -45,8 +46,10 @@ export default function CardActionSheet({
   const reopenUntil = new Date(now.getTime() + POST_WINDOW_HOURS * 3600000);
   const course = card?.course?.name;
   const reasonLabel = t(VOID_REASONS.find((r) => r.id === reasonId).key);
-  const pts = card?.points != null ? String(card.points) : null;
-  const scoreText = pts != null ? t('league.actions.approve.points', { points: pts }) : t('league.actions.approve.word');
+  const medal = isMedalFormat(format);
+  const pts = medal ? cardValueText(card, format, t) : card?.points != null ? String(card.points) : null;
+  const scoreText = pts == null ? t('league.actions.approve.word')
+    : medal ? pts : t('league.actions.approve.points', { points: pts });
   const auto = kind === 'withdraw' ? autoWithdrawNote(card, stamp) : null;
 
   let copy = { title: '', lead: '', consequence: '', then: '', action: '', danger: false };
@@ -93,8 +96,8 @@ export default function CardActionSheet({
     };
   } else if (kind === 'void') {
     const stops = pts != null
-      ? t(isOwn ? 'league.actions.void.stopsOwn' : 'league.actions.void.stops', {
-        name: who, points: pts, course: course ?? '', month: monthLabel,
+      ? t(`league.actions.void.${isOwn ? 'stopsOwn' : 'stops'}${medal ? 'Score' : ''}`, {
+        name: who, points: pts, score: pts, course: course ?? '', month: monthLabel,
       })
       : t(isOwn ? 'league.actions.void.stopsOwnNoPts' : 'league.actions.void.stopsNoPts', { name: who, month: monthLabel });
     copy = {

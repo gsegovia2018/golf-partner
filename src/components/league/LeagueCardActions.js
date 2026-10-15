@@ -24,7 +24,7 @@ const RUN = {
 };
 
 export default function LeagueCardActions({
-  card, who, monthLabel, isOwner, items, menuOpen, onMenuClose, onDone, onShare,
+  card, who, monthLabel, isOwner, items, menuOpen, onMenuClose, onDone, onShare, format,
 }) {
   const { theme } = useTheme();
   const t = useT();
@@ -96,6 +96,7 @@ export default function LeagueCardActions({
         card={card}
         who={who}
         isOwn={isOwner}
+        format={format}
         monthLabel={monthLabel}
         busy={busy}
         error={error}

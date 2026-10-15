@@ -14,12 +14,13 @@ import { fetchTournament } from '../store/tournamentRepo';
 import { readLocal } from '../store/tournamentStore';
 import {
   submitLeagueCard, confirmLeagueCardByPartner, getLeagueMarkerCandidates, requestLeagueMarker,
-  remindLeagueMarker, cancelLeagueMarkerRequest, getLeagueCard,
+  remindLeagueMarker, cancelLeagueMarkerRequest, getLeagueCard, getLeagueCached, getLeague,
 } from '../store/leagueStore';
 import { scoreCard, cardMonth } from '../store/leagueRules';
 import {
-  monthName, formatNetDiffSigned, firstName, markerAskedLine,
+  monthName, formatNetDiffSigned, firstName, markerAskedLine, formatScore, formatToPar,
 } from '../store/leagueView';
+import { isMedalFormat } from '../store/leagueStandings';
 import { UNRATED_TEE_PROBLEM } from '../store/leagueOffApp';
 import { leagueCardsOf } from '../store/leagueSetup';
 import { useT, tr } from '../i18n';
@@ -88,6 +89,22 @@ export default function LeagueValidateScreen({ navigation, route }) {
   // its month, frozen league handicap and, once submitted, the server's score.
   const [serverCard, setServerCard] = useState(null);
   const autoChecked = useRef(false);
+  // The league's format (cache first, then live): a medal league shows the
+  // card's strokes to par where a Stableford one shows points.
+  const [format, setFormat] = useState('stableford');
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      let found = null;
+      try {
+        found = (await getLeagueCached(leagueId))?.snapshot?.league?.format ?? null;
+        if (!found) found = (await getLeague(leagueId))?.league?.format ?? null;
+      } catch { /* no format: Stableford */ }
+      if (alive && found) setFormat(found);
+    })();
+    return () => { alive = false; };
+  }, [leagueId]);
+  const medal = isMedalFormat(format);
 
   const load = useCallback(async () => {
     const loaded = await loadTournament(tournamentId);
@@ -140,6 +157,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
     return {
       round, roundNumber, player, strokes, gross, points, playingHandicap, snapshot, missing,
       rated, adjustedGross, differential, netDifferential, leagueHandicap: Number(leagueHandicap) || 0, estimate,
+      par: holes.reduce((a, h) => a + (Number(h.par) || 0), 0),
     };
   }, [tournament, roundId, cardId, user?.id, serverCard?.leagueHandicap]);
 
@@ -320,6 +338,10 @@ export default function LeagueValidateScreen({ navigation, route }) {
   const serverScored = serverCard?.points != null
     && (serverCard.status === 'submitted' || serverCard.status === 'confirmed');
   const shownPoints = serverScored ? serverCard.points : card.points;
+  // A medal league's value: strokes to par (the server's, else the preview's).
+  const previewToPar = missing.length > 0 ? null : card.gross - (format === 'medal_net' ? playingHandicap : 0) - card.par;
+  const shownToPar = serverScored ? serverCard.toPar ?? null : previewToPar;
+  const shownValue = medal ? shownToPar : shownPoints;
   const shownGross = serverScored ? serverCard.gross : card.gross;
   const shownNetDiff = serverScored ? serverCard.netDifferential : netDifferential;
   // Not announced in time, or a tee entered by hand: it counts once an admin
@@ -439,10 +461,12 @@ export default function LeagueValidateScreen({ navigation, route }) {
                 )}
               </View>
             </View>
-            {rated && shownPoints != null && (
+            {rated && shownValue != null && (
               <Text style={s.waitingNet}>
-                <Text style={{ fontFamily: 'PlusJakartaSans-ExtraBold' }}>{t('league.scoring.pts', { points: shownPoints })}</Text>
-                {t('league.validate.countsOnceConfirmed')}
+                <Text style={{ fontFamily: 'PlusJakartaSans-ExtraBold' }}>
+                  {medal ? formatScore(shownToPar, format, t) : t('league.scoring.pts', { points: shownPoints })}
+                </Text>
+                {t(medal ? 'league.validate.countsOnceConfirmedMedal' : 'league.validate.countsOnceConfirmed')}
               </Text>
             )}
             <View style={s.btnRow}>
@@ -485,8 +509,8 @@ export default function LeagueValidateScreen({ navigation, route }) {
         {confirmed && rated && shownNetDiff != null && (
           <View style={s.resultCard}>
             <View style={s.resultHead}>
-              <Text style={[s.resultValue, { color: theme.text.primary }]}>{shownPoints}</Text>
-              <Text style={s.resultKey}>{t('league.card.stableford')}</Text>
+              <Text style={[s.resultValue, { color: theme.text.primary }]}>{medal ? formatToPar(shownToPar) : shownPoints}</Text>
+              <Text style={s.resultKey}>{t(format === 'medal_net' ? 'league.card.netToPar' : format === 'medal_gross' ? 'league.card.grossToPar' : 'league.card.stableford')}</Text>
             </View>
             <Text style={s.resultSub}>
               {serverScored

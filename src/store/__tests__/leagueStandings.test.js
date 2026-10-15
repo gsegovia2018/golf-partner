@@ -373,3 +373,10 @@ describe('medal formats', () => {
     expect(stableford.map((r) => [r.userId, r.total])).toEqual([['a', 200], ['b', 100]]);
   });
 });
+
+describe('formatToPar', () => {
+  const { formatToPar } = require('../leagueStandings');
+  test('bare strokes to par with a true minus sign', () => {
+    expect([formatToPar(-3), formatToPar('0'), formatToPar(7), formatToPar(null), formatToPar('x')]).toEqual(['−3', 'E', '+7', '—', '—']);
+  });
+});

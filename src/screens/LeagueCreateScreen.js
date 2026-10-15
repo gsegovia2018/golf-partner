@@ -21,7 +21,7 @@ import { DEFAULT_POINTS_TABLE } from '../store/leagueStandings';
 import {
   DEFAULT_HANDICAP_CAP, DEFAULT_PARTICIPATION_POINTS, defaultSeason, parseIsoDate, parsePointsTable, formatPointsTable,
   parseFeeCents, defaultMemberHandicap, parseMemberHandicap, buildCreateArgs, leagueJoinLink,
-  seasonMonthKeys, stepFeeText, DEFAULT_LEAGUE_FORMAT,
+  seasonMonthKeys, stepFeeText, DEFAULT_LEAGUE_FORMAT, LEAGUE_FORMATS,
 } from '../store/leagueDraft';
 import { formatEuros, stepParticipation } from '../store/leagueView';
 import Stepper from '../components/ui/Stepper';
@@ -238,6 +238,10 @@ export default function LeagueCreateScreen({ navigation }) {
   );
 
   const capValue = Number.isFinite(cap) ? cap : DEFAULT_HANDICAP_CAP;
+  // The chosen format as a short chip (Stableford keeps its own wording).
+  const formatChip = format === 'stableford'
+    ? t('league.create.netStableford')
+    : t((LEAGUE_FORMATS.find((f) => f.key === format) ?? LEAGUE_FORMATS[0]).labelKey);
 
   const renderRulesStep = () => (
     <>
@@ -270,20 +274,22 @@ export default function LeagueCreateScreen({ navigation }) {
           />
         </View>
 
-        <View style={[s.settingRow, s.rowDivider]}>
-          <View style={s.settingText}>
-            <Text style={s.ruleTitle}>{t('league.create.handicapCap')}</Text>
+        {format !== 'medal_gross' && (
+          <View style={[s.settingRow, s.rowDivider]}>
+            <View style={s.settingText}>
+              <Text style={s.ruleTitle}>{t('league.create.handicapCap')}</Text>
+            </View>
+            <Stepper
+              valueLabel={formatNumber(capValue)}
+              valueA11y={t('league.create.capValueA11y', { cap: formatNumber(capValue) })}
+              onStep={(d) => setCapText(String(Math.min(54, Math.max(0, capValue + d))))}
+              canDecrease={capValue > 0}
+              canIncrease={capValue < 54}
+              decreaseLabel={t('league.create.capLower')}
+              increaseLabel={t('league.create.capRaise')}
+            />
           </View>
-          <Stepper
-            valueLabel={formatNumber(capValue)}
-            valueA11y={t('league.create.capValueA11y', { cap: formatNumber(capValue) })}
-            onStep={(d) => setCapText(String(Math.min(54, Math.max(0, capValue + d))))}
-            canDecrease={capValue > 0}
-            canIncrease={capValue < 54}
-            decreaseLabel={t('league.create.capLower')}
-            increaseLabel={t('league.create.capRaise')}
-          />
-        </View>
+        )}
 
         <View style={s.settingRow}>
           <View style={s.settingText}>
@@ -480,7 +486,7 @@ export default function LeagueCreateScreen({ navigation }) {
         <View style={s.chipRow}>
           <View style={s.chip}><Text style={s.chipText}>{t('league.join.members', { count: memberCount })}</Text></View>
           <View style={s.chip}><Text style={s.chipText}>{`${fmtDate(startIso)} – ${fmtDate(endIso)}`}</Text></View>
-          <View style={s.chip}><Text style={s.chipText}>{t('league.create.netStableford')}</Text></View>
+          <View style={s.chip}><Text style={s.chipText}>{formatChip}</Text></View>
         </View>
       </View>
 
@@ -499,7 +505,7 @@ export default function LeagueCreateScreen({ navigation }) {
           <View style={{ flex: 1 }}>
             <Text style={s.ruleTitle}>{t('league.create.rules')}</Text>
             <Text style={s.ruleSub} numberOfLines={2}>
-              {t('league.create.rulesSummary', {
+              {t(format === 'medal_gross' ? 'league.create.rulesSummaryGross' : 'league.create.rulesSummary', {
                 cap: formatNumber(effectiveCap),
                 fee: feeCents ? t('league.join.entryFee', { fee: formatEuros(feeCents) }) : t('league.join.noEntryFee'),
                 table: formatPointsTable(pointsTable),
@@ -538,7 +544,7 @@ export default function LeagueCreateScreen({ navigation }) {
             chips={[
               t('league.join.members', { count: memberCount }),
               `${fmtDate(startIso)} – ${fmtDate(endIso)}`,
-              t('league.create.netStableford'),
+              formatChip,
             ]}
           />
 

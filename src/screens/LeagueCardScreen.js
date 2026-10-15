@@ -25,8 +25,9 @@ import { isMissed, needsApproval, isMonthClosed } from '../store/leagueRules';
 import { shareCardAction } from '../store/leagueShare';
 import {
   monthName, netDiffTone, cardBreakdown, monthStanding, standingCells, currentMonthKey,
-  monthCardsView, cardActions, voidedNote,
+  monthCardsView, cardActions, voidedNote, formatToPar,
 } from '../store/leagueView';
+import { isMedalFormat } from '../store/leagueStandings';
 import { memberName } from '../lib/leagueNames';
 
 // A member's card, read-only, with ‹ › to flick through that month's cards
@@ -127,17 +128,21 @@ export default function LeagueCardScreen({ navigation, route }) {
     ? (breakdown.rated ? t('league.cardScreen.teeRated', { tee: course.tee, slope: formatNumber(breakdown.slope), rating: formatNumber(breakdown.rating) }) : course.tee)
     : null;
   const subline = [course?.name, teeText, played].filter(Boolean).join(' · ');
-  // Stableford points are the headline (the league ranks by them).
-  const valueText = card.points != null ? formatNumber(card.points) : t('league.cardScreen.unrated');
-  const valueKey = card.points != null ? t('league.card.stableford') : t('league.cardScreen.notRanked');
+  // The league's ranking value is the headline: Stableford points, or strokes to par in a medal league.
+  const format = data?.league?.format;
+  const medal = isMedalFormat(format);
+  const ranked = medal ? card.toPar != null : card.points != null;
+  const valueText = !ranked ? t('league.cardScreen.unrated') : medal ? formatToPar(card.toPar) : formatNumber(card.points);
+  const valueKey = !ranked ? t('league.cardScreen.notRanked') : t(format === 'medal_net' ? 'league.card.netToPar' : format === 'medal_gross' ? 'league.card.grossToPar' : 'league.card.stableford');
+  const diffKey = (base) => (medal ? `${base}Medal` : base);
   const handTee = card.teeVerified === false;
   const standing = scored && !awaiting && !missed
     ? monthStanding(data, month, card.userId, now) : null;
   const cells = standing ? standingCells(standing, { month, current: month === currentMonthKey(now) }) : null;
   const diffTone = netDiffTone(card.netDifferential);
   const diffValue = card.netDifferential == null ? null : formatNumber(Math.abs(Math.round(card.netDifferential * 10) / 10), { decimals: 1 });
-  const diffText = diffValue == null ? t('league.card.diffNone')
-    : t(diffTone === 'better' ? 'league.card.diffBetter' : diffTone === 'worse' ? 'league.card.diffWorse' : 'league.card.diffLevel',
+  const diffText = diffValue == null ? t(diffKey('league.card.diffNone'))
+    : t(diffKey(diffTone === 'better' ? 'league.card.diffBetter' : diffTone === 'worse' ? 'league.card.diffWorse' : 'league.card.diffLevel'),
       { value: diffValue, handicap: formatNumber(card.leagueHandicap, { decimals: 1 }) || '—' });
   const atStart = idx === 0;
   const atEnd = idx === cards.length - 1;
@@ -176,9 +181,9 @@ export default function LeagueCardScreen({ navigation, route }) {
           <View style={s.card}>
             <View style={l.headRow}>
               <View style={l.valueRow}>
-                {card.points != null ? (
+                {ranked ? (
                   <>
-                    <Text style={[l.value, { color: theme.text.muted }]}>{formatNumber(card.points)}</Text>
+                    <Text style={[l.value, { color: theme.text.muted }]}>{medal ? formatToPar(card.toPar) : formatNumber(card.points)}</Text>
                     <Text style={l.valueKey}>{t('league.void.notCounted')}</Text>
                   </>
                 ) : <Text style={s.cardTitle}>{badge}</Text>}
@@ -253,6 +258,7 @@ export default function LeagueCardScreen({ navigation, route }) {
           who={who}
           monthLabel={monthLabel}
           isOwner={isOwner}
+          format={format}
           items={items}
           menuOpen={menuOpen}
           onMenuClose={() => setMenuOpen(false)}
@@ -282,7 +288,7 @@ export default function LeagueCardScreen({ navigation, route }) {
 
         {scored && !!course?.holes && (
           <View style={l.holeGrid}>
-            <CardHoleGrid perHole={breakdown.perHole} />
+            <CardHoleGrid perHole={breakdown.perHole} medal={medal} />
           </View>
         )}
 

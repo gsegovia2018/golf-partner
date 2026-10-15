@@ -33,6 +33,9 @@ describe('LeagueListSection', () => {
     const ranked = render(<LeagueListSection navigation={{}} rows={[{ ...base, month: { key: 'league.play.monthRank', params: { monthKey: '2026-10', points: '36', place: '3rd' } } }]} />);
     expect(ranked.getByText('36 pts in October')).toBeTruthy();
     expect(ranked.getByText('3rd of the month so far')).toBeTruthy();
+    const medal = render(<LeagueListSection navigation={{}} rows={[{ ...base, month: { key: 'league.play.monthRankScore', params: { monthKey: '2026-10', score: 'net −2', place: '3rd' } } }]} />);
+    expect(medal.getByText('net −2 in October')).toBeTruthy();
+    expect(medal.getByText('3rd of the month so far')).toBeTruthy();
     const last = render(<LeagueListSection navigation={{}} rows={[{ ...base, month: { key: 'league.play.monthNoneLast', params: { monthKey: '2026-10' } } }]} />);
     expect(last.getByText('Last day')).toBeTruthy();
     const live = render(<LeagueListSection navigation={{}} rows={[{ ...base, month: { key: 'league.play.monthLive', params: { monthKey: '2026-10' } } }]} />);

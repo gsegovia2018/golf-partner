@@ -130,10 +130,11 @@ describe('LEAGUE_FORMATS', () => {
 });
 
 describe('medal formats (plan 2026-10-15-league-medal-play.md)', () => {
-  test('the wizard offers Stableford only until MEDAL_FORMATS_ENABLED', () => {
-    expect(MEDAL_FORMATS_ENABLED).toBe(false);
-    expect(LEAGUE_FORMATS.map((f) => f.key)).toEqual(['stableford']);
-    expect(leagueFormats(false)).toEqual(LEAGUE_FORMATS);
+  test('the wizard offers all three formats now MEDAL_FORMATS_ENABLED is on', () => {
+    expect(MEDAL_FORMATS_ENABLED).toBe(true);
+    expect(LEAGUE_FORMATS.map((f) => f.key)).toEqual(['stableford', 'medal_net', 'medal_gross']);
+    expect(leagueFormats(true)).toEqual(LEAGUE_FORMATS);
+    expect(leagueFormats(false).map((f) => f.key)).toEqual(['stableford']);
   });
 
   test('enabled, both medal formats follow Stableford in the strokes section, translated', () => {

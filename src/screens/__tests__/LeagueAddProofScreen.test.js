@@ -52,6 +52,12 @@ describe('LeagueAddProofScreen', () => {
     await choosePhoto(utils);
   });
 
+  test('off-app in a medal league: the summary shows strokes to par, the numbers sent are unchanged', async () => {
+    const utils = render(wrap(<LeagueAddProofScreen navigation={nav()} route={params({ format: 'medal_gross' })} />));
+    expect(utils.getByText('Golf Olivar · Sat 4 Oct · +18 · gross 90')).toBeTruthy();
+    expect(submitDisabled(utils)).toBe(true);
+  });
+
   test('unannounced: adds, uploads, attaches with the marker, then returns to the board', async () => {
     const navigation = nav();
     const utils = render(wrap(<LeagueAddProofScreen navigation={navigation} route={params()} />));
@@ -114,6 +120,12 @@ describe('LeagueAddProofScreen', () => {
       expect(store.addUnannouncedLeagueCard).not.toHaveBeenCalled();
       expect(store.uploadLeagueProof).toHaveBeenCalledWith('L1', 'c9', 'file:///card.jpg');
       expect(store.attachLeagueProof).toHaveBeenCalledWith('c9', 'L1/c9.jpg', 'photo', 'Lucía');
+    });
+
+    test('a medal league card reads its score in the summary line', () => {
+      mockUseLeague.mockReturnValue({ data: { league: { format: 'medal_net' }, cardsByMonth: { '2025-10': [{ ...appCard, toPar: -2 }] } } });
+      const utils = render(wrap(<LeagueAddProofScreen navigation={nav()} route={appRoute('photo')} />));
+      expect(utils.getByText('Centro Nacional · Sat 4 Oct · net −2 · gross 88')).toBeTruthy();
     });
 
     test('official result: the toggle starts on and attaches as "official"', async () => {

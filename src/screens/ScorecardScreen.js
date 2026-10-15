@@ -2147,6 +2147,7 @@ export default function ScorecardScreen({ navigation, route }) {
       {view === 'hole' ? (
         <HoleView
           leaguePlayers={leaguePlayers}
+          medalLeague={leagueLayer.medal}
           round={round}
           roundIndex={roundIndex}
           players={players}

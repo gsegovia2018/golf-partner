@@ -81,6 +81,21 @@ describe('MonthClosingBanner', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('LeagueMarkerQR', { leagueId: 'L1', cardId: 'c1' });
   });
 
+  test('a medal league shows the score instead of points, in the banner and the ghost rows', () => {
+    const medalCards = cards.map((c, i) => ({ ...c, toPar: [-2, 3, 0, 5][i] }));
+    const snap = { league: { format: 'medal_net' }, members, cardsByMonth: { '2026-09': medalCards } };
+    const grace = graceMonth(snap, NOW, 'adm');
+    const admin = render(wrap(
+      <MonthClosingBanner grace={grace} navigation={navigation} leagueId="L1" nameOf={nameOf} now={NOW} format="medal_net" />,
+    ));
+    expect(admin.getByText('net +3 · Not announced in the app')).toBeTruthy();
+    expect(admin.getByText('net E · Tee entered by hand')).toBeTruthy();
+    expect(admin.queryByText(/pts/)).toBeNull();
+    const t = (k, p) => `${k}${p ? JSON.stringify(p) : ''}`;
+    const sec = ghostSection(graceMonth(snap, NOW, 'me'), t, { nameOf, now: NOW, onOpen: () => {}, format: 'medal_net' });
+    expect(sec.rows.map((r) => r.points).sort()).toEqual(['+3', '+5', 'E', '−2']);
+  });
+
   test('member: the footer counts the others and switches to the month', () => {
     const onSeeMonth = jest.fn();
     const { getByText } = renderBanner('me', { onSeeMonth });

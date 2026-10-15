@@ -89,6 +89,8 @@ export default {
   'league.actions.void.stopsNoPts': 'La tarjeta de {name} deja de contar para {month}.',
   'league.actions.void.stopsOwn': 'Tus {points} ptos en {course} dejan de contar para {month}.',
   'league.actions.void.stopsOwnNoPts': 'Tu tarjeta deja de contar para {month}.',
+  'league.actions.void.stopsScore': 'La tarjeta de {name} ({score}) en {course} deja de contar para {month}.',
+  'league.actions.void.stopsOwnScore': 'Tu tarjeta ({score}) en {course} deja de contar para {month}.',
   'league.actions.void.keeps': 'La clasificación y la tabla de la temporada se actualizan al momento. {name} no puede jugar otra tarjeta de {month}.',
   'league.actions.void.keepsOwn': 'La clasificación y la tabla de la temporada se actualizan al momento. No puedes jugar otra tarjeta de {month}.',
   'league.actions.void.done': 'Tarjeta anulada. Miembros avisados.',

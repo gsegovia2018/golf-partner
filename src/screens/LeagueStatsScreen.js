@@ -11,15 +11,16 @@ import { useT, formatDate } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
-import { seasonTable } from '../store/leagueStandings';
+import { seasonTable, isMedalFormat, compareScores } from '../store/leagueStandings';
 import { needsApproval } from '../store/leagueRules';
-import { currentMonthKey } from '../store/leagueView';
+import { currentMonthKey, formatScore, formatToPar } from '../store/leagueView';
 import { memberName } from '../lib/leagueNames';
 import {
   MIN_HONOUR_CARDS, MIN_STAT_CARDS, monthHonours, monthSummary, statLeaders, seasonGrid, pointsBand, rivals, rivalMonths,
 } from '../store/leagueStats';
 
 const TABS = ['honours', 'leaders', 'grid', 'rivals'];
+const MEDAL_TABS = ['grid', 'rivals'];
 const STAT_CHIPS = ['avg', 'birdies', 'blobs', 'par3', 'backNine'];
 const HONOUR_ICON = {
   card: 'award', hole: 'target', streak: 'trending-up', closer: 'flag',
@@ -48,7 +49,13 @@ export default function LeagueStatsScreen({ navigation, route }) {
   const meId = user?.id ?? null;
   const leagueId = route?.params?.leagueId;
   const { data, stale, loading, refreshing, error, reload, refresh } = useLeague(navigation, leagueId);
-  const [tab, setTab] = useState('honours');
+  const [tabState, setTab] = useState('honours');
+  // A medal league has no honours or leaders (they are per-hole Stableford):
+  // the season grid and the rivals, with strokes to par.
+  const format = data?.league?.format ?? 'stableford';
+  const medal = isMedalFormat(format);
+  const tabs = medal ? MEDAL_TABS : TABS;
+  const tab = tabs.includes(tabState) ? tabState : tabs[0];
   const [month, setMonth] = useState(null);
   const [statKey, setStatKey] = useState('avg');
   const [openRival, setOpenRival] = useState(null);
@@ -192,18 +199,20 @@ export default function LeagueStatsScreen({ navigation, route }) {
 
   const renderGrid = () => {
     if (scored.length === 0) return <Text style={s.emptyNote}>{t('league.stats.gridEmpty')}</Text>;
-    const grid = seasonGrid(cardsByMonth, table, scored);
-    // Stableford point bands (the month ranks by points).
-    const high = (c) => pointsBand(c.points) === 'high';
+    const grid = seasonGrid(cardsByMonth, table, scored, format);
+    // Stableford point bands (the month ranks by points); a medal grid has none.
+    const high = (c) => !medal && pointsBand(c.points) === 'high';
     const BAND_STYLE = { high: s.cellHigh, mid: s.cellMid, low: s.cellLow };
     const cellStyle = (c) => {
       if (c.cardId == null) return [s.cell, s.cellNone];
       if (c.unrated) return [s.cell, s.cellLow];
-      return [s.cell, BAND_STYLE[pointsBand(c.points)], c.best && { borderWidth: 2, borderColor: gold }];
+      return [s.cell, !medal && BAND_STYLE[pointsBand(c.points)], c.best && { borderWidth: 2, borderColor: gold }];
     };
     const cellLabel = (c, row) => (c.unrated
       ? t('league.stats.cellUnrated', { name: nameOf(row.userId), month: monthLong(c.month) })
-      : t('league.stats.cell', { name: nameOf(row.userId), month: monthLong(c.month), points: c.points }));
+      : medal
+        ? t('league.stats.cellScore', { name: nameOf(row.userId), month: monthLong(c.month), score: formatScore(c.score, format, t) })
+        : t('league.stats.cell', { name: nameOf(row.userId), month: monthLong(c.month), points: c.points }));
     return (
       <>
         <View style={s.card}>
@@ -228,7 +237,7 @@ export default function LeagueStatsScreen({ navigation, route }) {
                       accessibilityLabel={c.cardId == null ? undefined : cellLabel(c, row)}
                     >
                       <Text style={[s.cellText, high(c) && s.cellTextHigh, (c.cardId == null || c.unrated) && s.muted]}>
-                        {c.cardId == null ? '–' : c.unrated ? t('league.stats.nr') : String(c.points)}
+                        {c.cardId == null ? '–' : c.unrated ? t('league.stats.nr') : medal ? formatToPar(c.score) : String(c.points)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -238,9 +247,9 @@ export default function LeagueStatsScreen({ navigation, route }) {
           </ScrollView>
         </View>
         <View style={s.legend}>
-          <View style={s.legendItem}><View style={[s.swatch, s.cellHigh]} /><Text style={s.legendText}>{t('league.stats.band.high')}</Text></View>
-          <View style={s.legendItem}><View style={[s.swatch, s.cellMid]} /><Text style={s.legendText}>{t('league.stats.band.mid')}</Text></View>
-          <View style={s.legendItem}><View style={[s.swatch, s.cellLow]} /><Text style={s.legendText}>{t('league.stats.band.low')}</Text></View>
+          {!medal && <View style={s.legendItem}><View style={[s.swatch, s.cellHigh]} /><Text style={s.legendText}>{t('league.stats.band.high')}</Text></View>}
+          {!medal && <View style={s.legendItem}><View style={[s.swatch, s.cellMid]} /><Text style={s.legendText}>{t('league.stats.band.mid')}</Text></View>}
+          {!medal && <View style={s.legendItem}><View style={[s.swatch, s.cellLow]} /><Text style={s.legendText}>{t('league.stats.band.low')}</Text></View>}
           <View style={s.legendItem}><Text style={[s.legendText, s.muted]}>{t('league.stats.nr')}</Text><Text style={s.legendText}>{t('league.stats.nrLegend')}</Text></View>
           <View style={s.legendItem}><View style={[s.swatch, { borderWidth: 2, borderColor: gold }]} /><Text style={s.legendText}>{t('league.stats.monthWinner')}</Text></View>
         </View>
@@ -251,7 +260,7 @@ export default function LeagueStatsScreen({ navigation, route }) {
   // ---- Rivals --------------------------------------------------------------
 
   const renderRivals = () => {
-    const rows = rivals(cardsByMonth, active, meId);
+    const rows = rivals(cardsByMonth, active, meId, format);
     if (rows.length === 0) return <Text style={s.emptyNote}>{t('league.stats.rivalsEmpty')}</Text>;
     return (
       <View style={s.card}>
@@ -280,11 +289,17 @@ export default function LeagueStatsScreen({ navigation, route }) {
                   {r.months === 0 ? '–' : `${r.won}–${r.lost}`}
                 </Text>
               </TouchableOpacity>
-              {open && rivalMonths(cardsByMonth, meId, r.userId).map((m) => (
+              {open && rivalMonths(cardsByMonth, meId, r.userId, format).map((m) => (
                 <View key={m.month} style={s.monthRow}>
                   <Text style={s.monthRowMonth}>{monthShort(m.month)}</Text>
-                  <Text style={[s.monthRowText, m.a > m.b && s.winner]}>{t('league.stats.youPts', { points: m.a })}</Text>
-                  <Text style={[s.monthRowText, m.b > m.a && s.winner]}>{t('league.stats.namePts', { name: nameOf(r.userId), points: m.b })}</Text>
+                  <Text style={[s.monthRowText, compareScores(m.a, m.b, format) < 0 && s.winner]}>
+                    {medal ? t('league.stats.youScore', { score: formatScore(m.a, format, t) }) : t('league.stats.youPts', { points: m.a })}
+                  </Text>
+                  <Text style={[s.monthRowText, compareScores(m.b, m.a, format) < 0 && s.winner]}>
+                    {medal
+                      ? t('league.stats.nameScore', { name: nameOf(r.userId), score: formatScore(m.b, format, t) })
+                      : t('league.stats.namePts', { name: nameOf(r.userId), points: m.b })}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -298,7 +313,7 @@ export default function LeagueStatsScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {header}
       <View style={s.tabs}>
-        {TABS.map((tb) => (
+        {tabs.map((tb) => (
           <TouchableOpacity
             key={tb}
             style={[s.tab, tab === tb && s.tabOn]}

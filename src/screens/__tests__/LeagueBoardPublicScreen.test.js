@@ -54,6 +54,26 @@ describe('LeagueBoardPublicScreen', () => {
     expect(getByText('Read-only. Names show as first name and initial.')).toBeTruthy();
   });
 
+  test('a medal league shows to-par scores, the right column header and the ranking order', async () => {
+    store.getPublicLeagueBoard.mockResolvedValue({
+      ...payload,
+      league: { ...payload.league, format: 'medal_net' },
+      cards: [
+        { month: '2026-10-01', member: 'k1', status: 'confirmed', points: 41, to_par: 3, course: 'RCG Sotogrande' },
+        { month: '2026-10-01', member: 'k3', status: 'confirmed', points: 30, to_par: -2, course: 'La Moraleja' },
+      ],
+    });
+    view = render(wrap(<LeagueBoardPublicScreen token={TOKEN} />));
+    const { getByText, findByText, getByLabelText, queryByText } = view;
+    await findByText('El Club');
+    expect(getByText('Ana P. leads · net −2')).toBeTruthy();
+    expect(getByText('−2')).toBeTruthy();
+    expect(getByText('+3')).toBeTruthy();
+    expect(getByText('NET', { includeHiddenElements: true })).toBeTruthy();
+    expect(queryByText('PTS', { includeHiddenElements: true })).toBeNull();
+    expect(getByLabelText('1, Ana P.: net −2, 500 league points')).toBeTruthy();
+  });
+
   test('chips: Season and the previous month', async () => {
     store.getPublicLeagueBoard.mockResolvedValue(payload);
     view = render(wrap(<LeagueBoardPublicScreen token={TOKEN} />));

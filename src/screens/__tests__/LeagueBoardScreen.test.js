@@ -612,6 +612,57 @@ describe('LeagueBoardScreen', () => {
     expect(getByText('not ranked')).toBeTruthy();
     expect(getByText('Your card has no slope or rating. Shown, not ranked.')).toBeTruthy();
   });
+
+  describe('medal leagues', () => {
+    const medalCard = (userId, status, toPar, extra = {}) => card(userId, status, toPar == null ? null : 36, { toPar, ...extra });
+    const medalSnap = (format) => snapshot({
+      league: { format },
+      members: [member('me', 'Marcos'), member('javi', 'Javi'), member('nacho', 'Nacho')],
+      cardsByMonth: {
+        [THIS_MONTH]: [
+          medalCard('javi', 'confirmed', 3, { course: { name: 'Olivar' } }),
+          medalCard('me', 'confirmed', -2, { course: { name: 'Olivar' }, confirmedByName: 'Javi' }),
+          medalCard('nacho', 'submitted', 0, { course: { name: 'Centro' } }),
+        ],
+      },
+    });
+
+    test('net: fewest strokes to par ranks first, NET column, "net -2" in my block, strokes-based footer', async () => {
+      store.getLeague.mockResolvedValue(medalSnap('medal_net'));
+      const { getByText, queryByText, getAllByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+      await waitFor(() => getByText('Confirmed · 2'));
+      expect(getByText('NET', { includeHiddenElements: true })).toBeTruthy();
+      expect(queryByText('PTS', { includeHiddenElements: true })).toBeNull();
+      // Marcos (-2) is 1st with +500, Javi (+3) 2nd with +300.
+      expect(getByText('−2')).toBeTruthy();
+      expect(getByText('+3')).toBeTruthy();
+      expect(getByText('+500')).toBeTruthy();
+      expect(getByText('+300')).toBeTruthy();
+      // The waiting row shows its to par too ('E'), and my block names the net score.
+      expect(getByText('E')).toBeTruthy();
+      expect(getAllByText(/net −2 · 1st so far/).length).toBeGreaterThan(0);
+      expect(getByText(/^NET = strokes against par after handicap, fewest first\./)).toBeTruthy();
+      expect(queryByText(/Stableford/)).toBeNull();
+    });
+
+    test('gross: GROSS column and its footer', async () => {
+      store.getLeague.mockResolvedValue(medalSnap('medal_gross'));
+      const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+      await waitFor(() => getByText('Confirmed · 2'));
+      expect(getByText('GROSS', { includeHiddenElements: true })).toBeTruthy();
+      expect(getByText(/^GROSS = strokes against par, fewest first\./)).toBeTruthy();
+    });
+
+    test('a confirmed card without to par is listed as not ranked', async () => {
+      const snap = medalSnap('medal_net');
+      snap.cardsByMonth[THIS_MONTH].push(medalCard('lucia', 'confirmed', null));
+      snap.members.push(member('lucia', 'Lucía'));
+      store.getLeague.mockResolvedValue(snap);
+      const { getByText } = render(wrap(<LeagueBoardScreen navigation={makeNav()} route={route} />));
+      await waitFor(() => getByText('Confirmed · 3'));
+      expect(getByText('Lucía')).toBeTruthy();
+    });
+  });
 });
 
 describe('LeagueBoardScreen in Spanish', () => {

@@ -21,11 +21,11 @@ import { useMinuteClock } from '../hooks/useMinuteClock';
 import { isMissed, needsApproval, deadlineInfo, isMonthClosed, monthClosesAt, postOpensLater } from '../store/leagueRules';
 import { LEAGUE_FINAL_ENABLED } from '../store/leagueFinal';
 import { seasonPhase } from '../store/leagueSetup';
-import { seasonTable, monthResults } from '../store/leagueStandings';
+import { seasonTable, monthResults, isMedalFormat } from '../store/leagueStandings';
 import { graceMonth } from '../store/leagueGrace';
 import {
   formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard, rankNotes, placeLabel,
-  leaguePointsText, monthStanding,
+  leaguePointsText, monthStanding, formatScore, formatToPar, formatKey,
   daysLeftInMonth, collapseSeasonRows, currentMonthKey, yourCardState, myMonthCard, voidedNote, myRoundScored, viewableCards, monthRows,
 } from '../store/leagueView';
 import { memberName } from '../lib/leagueNames';
@@ -120,6 +120,13 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const openCard = (month, userId) => navigation.navigate('LeagueCard', { leagueId, month, userId });
   const viewable = (month) => new Set(viewableCards(members, cardsByMonth, month, league.format).map((c) => c.userId));
   const noCardsYet = !last;
+  const { format } = league;
+  const medal = isMedalFormat(format);
+  // A card's ranking value in a board cell: Stableford points as the number, medal to par bare ('−2', 'E').
+  const cellValue = (card) => {
+    if (medal) return formatToPar(card.toPar);
+    return card.points != null ? String(card.points) : '—';
+  };
   const curKey = currentMonthKey(now);
   const curMonth = monthLong(curKey);
   const archived = !!league.archivedAt;
@@ -169,7 +176,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
         label: t('league.home.secConfirmed', { count: board.confirmed.length }),
         icon: 'check',
         gold: true,
-        cols: [t('league.board.colPts'), t('league.board.colLeague')],
+        cols: [t(formatKey('league.board.colPts', format)), t('league.board.colLeague')],
         rows: board.confirmed.map((r) => ({
           ...rowOf(r.member),
           place: r.place,
@@ -177,8 +184,8 @@ export default function LeagueBoardScreen({ navigation, route }) {
           unranked: r.unrated,
           muted: r.unrated,
           white: !r.unrated,
-          points: r.unrated ? t('league.home.unrated') : formatNumber(r.cardPoints),
-          pointsLabel: r.unrated ? undefined : t('league.board.stablefordPoints', { count: r.cardPoints }),
+          points: r.unrated ? t('league.home.unrated') : medal ? formatToPar(r.cardScore) : formatNumber(r.cardPoints),
+          pointsLabel: r.unrated ? undefined : medal ? formatScore(r.cardScore, format, t) : t('league.board.stablefordPoints', { count: r.cardPoints }),
           sub: r.unrated ? t('league.home.notRanked') : r.seasonPoints > 0 ? `+${leaguePointsText(r.seasonPoints)}` : null,
           subLabel: r.unrated || !(r.seasonPoints > 0) ? undefined : t('league.board.leaguePoints', { count: r.seasonPoints }),
           subGold: !r.unrated,
@@ -195,7 +202,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
           place: null,
           unranked: true,
           muted: true,
-          points: r.card.points != null ? String(r.card.points) : '—',
+          points: cellValue(r.card),
           sub: t('league.home.pending'),
           detail: detailOf(r.card, r.card.course?.name, tr(r.reasonMsg)),
         })),
@@ -233,7 +240,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
           place: null,
           unranked: true,
           muted: true,
-          points: r.card.points != null ? String(r.card.points) : '—',
+          points: cellValue(r.card),
           sub: t('league.home.notCounted'),
           detail: detailOf(r.card, r.card.course?.name, t('league.home.needsApproval')),
         })),
@@ -284,7 +291,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
       },
     ].filter(Boolean);
     const unratedNow = board.confirmed.filter((r) => r.unrated).map((r) => r.member.userId);
-    boardFooter = tr({ key: 'league.board.footMonth', params: { monthKey: curKey } })
+    boardFooter = tr({ key: formatKey('league.board.footMonth', format), params: { monthKey: curKey } })
       + (unratedNow.length > 0 ? ` ${unratedNote(unratedNow)}` : '');
   } else if (activeScope === 'season' || !pastScopes.includes(activeScope)) {
     boardTitle = last ? t('league.home.titleSeasonAfter', { month: monthLong(last).toUpperCase() }) : t('league.home.titleSeason');
@@ -328,14 +335,14 @@ export default function LeagueBoardScreen({ navigation, route }) {
         label: t('league.board.cards', { count: ranked.length }),
         icon: 'check',
         gold: true,
-        cols: [t('league.board.colPts'), t('league.board.colLeague')],
+        cols: [t(formatKey('league.board.colPts', format)), t('league.board.colLeague')],
         rows: ranked.map((r) => ({
           key: r.userId,
           place: r.place,
           isTie: r.isTie,
           name: nameOf(r.userId),
-          points: r.unrated ? t('league.home.unrated') : formatNumber(r.cardPoints),
-          pointsLabel: r.unrated ? undefined : t('league.board.stablefordPoints', { count: r.cardPoints }),
+          points: r.unrated ? t('league.home.unrated') : medal ? formatToPar(r.cardScore) : formatNumber(r.cardPoints),
+          pointsLabel: r.unrated ? undefined : medal ? formatScore(r.cardScore, format, t) : t('league.board.stablefordPoints', { count: r.cardPoints }),
           white: !r.unrated,
           sub: r.unrated ? t('league.home.notRanked') : `+${leaguePointsText(r.seasonPoints)}`,
           subLabel: r.unrated ? undefined : t('league.board.leaguePoints', { count: r.seasonPoints }),
@@ -356,11 +363,11 @@ export default function LeagueBoardScreen({ navigation, route }) {
     const unrated = results.filter((r) => r.unrated).map((r) => r.userId);
     if (unrated.length > 0) boardFooter = unratedNote(unrated);
     else if (ranked.some((r) => r.floored)) boardFooter = t('league.board.footPast', { points: formatNumber(league.participationPoints) });
-    else boardFooter = t('league.board.footPastTies');
+    else boardFooter = t(formatKey('league.board.footPastTies', format));
     if (inGrace) {
       const close = closeInfo(grace.closesAt, now);
       boardTitle = t('league.grace.boardTitle', { month: monthLong(graceKey), when: `${close.weekdayShort} ${close.clock}` });
-      boardSections.push(ghostSection(grace, t, { nameOf, now, onOpen: (userId) => openCard(graceKey, userId) }));
+      boardSections.push(ghostSection(grace, t, { nameOf, now, format, onOpen: (userId) => openCard(graceKey, userId) }));
       boardFooter = t('league.grace.footer', { weekday: close.weekday });
     }
   }
@@ -413,7 +420,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
   // A card an admin voided (or one played after a withdrawal) still takes the
   // month: it shows here instead of the announce buttons.
   const myCard = myMonthCard(cardsByMonth, data?.cards, curKey, meId);
-  const mine = yourCardState(myCard);
+  const mine = yourCardState(myCard, format);
   // Where my counting card stands in the open month (confirmed, counted).
   const standing = mine.kind === 'confirmed' && !needsApproval(mine.card)
     ? monthStanding({ league, members, cardsByMonth }, curKey, meId, now) : null;
@@ -627,6 +634,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
             grace={grace}
             navigation={navigation}
             leagueId={leagueId}
+            format={format}
             nameOf={nameOf}
             now={now}
             onSeeMonth={() => setScope(graceKey)}

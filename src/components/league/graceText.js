@@ -5,7 +5,8 @@
 import { formatDate, formatTime } from '../../i18n';
 import { madridDay } from '../../store/leagueRules';
 import { approvalReason, lastMinute } from '../../store/leagueGrace';
-import { formatPoints } from '../../store/leagueView';
+import { formatPoints, formatToPar } from '../../store/leagueView';
+import { isMedalFormat } from '../../store/leagueStandings';
 
 const MADRID = 'Europe/Madrid';
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -76,7 +77,7 @@ export function graceLine(entry, t, { closesAt, now = new Date() }) {
 
 // The board's "Not counted yet" section for the closing month: dashed
 // position, dimmed points, one status line each. Rows open the card.
-export function ghostSection(grace, t, { nameOf, now, onOpen }) {
+export function ghostSection(grace, t, { nameOf, now, onOpen, format = 'stableford' }) {
   return {
     key: 'notCounted',
     label: t('league.grace.notCounted', { count: grace.pending.length }),
@@ -89,7 +90,7 @@ export function ghostSection(grace, t, { nameOf, now, onOpen }) {
       place: null,
       unranked: true,
       muted: true,
-      points: e.card.points != null ? formatPoints(e.card.points) : '—',
+      points: isMedalFormat(format) ? formatToPar(e.card.toPar) : e.card.points != null ? formatPoints(e.card.points) : '—',
       detail: graceLine(e, t, { closesAt: grace.closesAt, now }),
       onPress: onOpen ? () => onOpen(e.userId) : undefined,
     })),

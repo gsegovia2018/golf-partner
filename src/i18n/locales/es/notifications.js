@@ -50,6 +50,10 @@ export default {
   'notif.cardConfirmed.title': 'Tarjeta confirmada',
   'notif.cardConfirmed.body': 'La {card} de {actor} está confirmada',
   'notif.cardConfirmed.bodyPoints': 'La {card} de {actor} está confirmada · {points} pts',
+  'notif.cardConfirmed.bodyScore': 'La {card} de {actor} está confirmada · {score}',
+  // Golpes respecto al par en una liga medal: al par, y el neto ('neto −2').
+  'notif.score.level': 'par',
+  'notif.score.net': 'neto {score}',
   'notif.markerIssue.title': 'El marcador ha devuelto tu tarjeta',
   'notif.markerIssue.note': '{marker}: {note}',
   'notif.markerIssue.flagged': '{marker} ha señalado tu tarjeta',

@@ -141,6 +141,16 @@ describe('describeCardEvent', () => {
     expect(d(ev('submitted')).title.key).toBe('league.timeline.submitted');
   });
 
+  test('a medal league event carries to_par: the score is shown instead of points', () => {
+    expect(d(ev('submitted', { data: { points: 40, to_par: -2 } })).title)
+      .toEqual({ key: 'league.timeline.submittedScore', params: { points: 40, score: '−2' } });
+    expect(d(ev('submitted', { data: { to_par: 0, resubmit: true } })).title)
+      .toEqual({ key: 'league.timeline.resubmittedScore', params: { points: undefined, score: 'E' } });
+    expect(d(ev('added', { data: { points: 30, to_par: 5 } })).title)
+      .toEqual({ key: 'league.timeline.addedScore', params: { points: 30, score: '+5' } });
+    expect(d(ev('added', { data: { points: 30 } })).title.key).toBe('league.timeline.addedPts');
+  });
+
   test('returned keeps the marker note and is amber', () => {
     expect(d(ev('returned', { actorName: 'Borja', note: 'Hole 13 was a 6.' })))
       .toMatchObject({ icon: 'corner-up-left', tone: 'warn', note: 'Hole 13 was a 6.', title: { params: { name: 'Borja' } } });

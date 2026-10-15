@@ -152,6 +152,19 @@ describe('league notifications', () => {
     expect(at({})).toBe("Pablo's October card is confirmed");
   });
 
+  test('card confirmed in a medal league speaks the score by format; Stableford stays as is', () => {
+    const at = (extra) => renderNotification('league_card_confirmed', { ...base, month: '2026-10-01', ...extra }).body;
+    expect(at({ format: 'medal_net', to_par: -2, points: 36 })).toBe("Pablo's October card is confirmed \u00b7 net \u22122");
+    expect(at({ format: 'medal_net', to_par: 0 })).toBe("Pablo's October card is confirmed \u00b7 net E");
+    expect(at({ format: 'medal_gross', to_par: 4 })).toBe("Pablo's October card is confirmed \u00b7 +4");
+    expect(at({ format: 'medal_gross', to_par: '12', points: 20 })).toBe("Pablo's October card is confirmed \u00b7 +12");
+    // A medal card with no to_par falls back to the points, then to the bare line.
+    expect(at({ format: 'medal_net', to_par: null, points: 36 })).toBe("Pablo's October card is confirmed \u00b7 36 pts");
+    expect(at({ format: 'medal_net', to_par: null })).toBe("Pablo's October card is confirmed");
+    // A Stableford league ignores to_par.
+    expect(at({ format: 'stableford', to_par: -2, points: 36 })).toBe("Pablo's October card is confirmed \u00b7 36 pts");
+  });
+
   test('marker issue includes the note', () => {
     const r = renderNotification('league_marker_issue', { ...base, marker_name: 'Ana', note: 'hole 4' });
     expect(r.body).toBe('Ana flagged your card: hole 4');
@@ -357,6 +370,10 @@ describe('renderNotification in Spanish', () => {
     expect(r.body).toBe('Pablo jugará la tarjeta de octubre en Sotogrande');
     expect(es('league_card_confirmed', { ...base, month: '2026-10-01', points: 38 }).body)
       .toBe('La tarjeta de octubre de Pablo está confirmada · 38 pts');
+    expect(es('league_card_confirmed', { ...base, month: '2026-10-01', format: 'medal_net', to_par: -2 }).body)
+      .toBe('La tarjeta de octubre de Pablo está confirmada · neto \u22122');
+    expect(es('league_card_confirmed', { ...base, month: '2026-10-01', format: 'medal_gross', to_par: 0 }).body)
+      .toBe('La tarjeta de octubre de Pablo está confirmada · par');
     expect(es('league_card_auto_withdrawn', { ...base, month: '2026-10-01', course_name: 'Sotogrande' }).body)
       .toBe('Se ha retirado tu tarjeta de octubre en Sotogrande: no se jugó ningún golpe en las 24 horas posteriores a la salida. Puedes jugar otra este mes.');
   });

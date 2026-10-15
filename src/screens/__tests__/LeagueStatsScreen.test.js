@@ -122,6 +122,55 @@ describe('LeagueStatsScreen', () => {
     expect(getByText('Javi 30 pts')).toBeTruthy();
   });
 
+  describe('medal leagues', () => {
+    // To par per month: marcos beats javi in Jul and Aug, javi wins Sep.
+    const TO_PAR = {
+      '2025-07': { me: -1, javi: 3, nacho: 6 },
+      '2025-08': { me: 2, javi: 4, nacho: -3 },
+      '2025-09': { me: 5, javi: 0, nacho: 2 },
+    };
+    const medalCards = Object.fromEntries(Object.entries(cardsByMonth).map(([month, list]) => [
+      month, list.map((c) => ({ ...c, toPar: TO_PAR[month][c.userId] })),
+    ]));
+    const medalSnapshot = (format = 'medal_net') => {
+      const snap = snapshot({ cardsByMonth: medalCards });
+      snap.league.format = format;
+      return snap;
+    };
+
+    test('only the season grid and the rivals remain, grid first, with the to-par values and no point bands', async () => {
+      const { getByText, queryByText, getAllByText } = await open(medalSnapshot());
+      expect(queryByText('Honours')).toBeNull();
+      expect(queryByText('Leaders')).toBeNull();
+      expect(getByText('Month winner')).toBeTruthy(); // the grid is the first tab
+      expect(getByText('−1')).toBeTruthy();
+      expect(getByText('+6')).toBeTruthy();
+      expect(getByText('E')).toBeTruthy();
+      expect(getAllByText('−3').length).toBe(1);
+      expect(queryByText('36+ pts')).toBeNull();
+      expect(queryByText('Under 33 pts')).toBeNull();
+      expect(queryByText('September honours')).toBeNull();
+    });
+
+    test('rivals: the lower to par wins the month, and the months read "net -1"', async () => {
+      const { getByText } = await open(medalSnapshot());
+      fireEvent.press(getByText('Rivals'));
+      // vs Javi: won Jul (-1 < 3) and Aug (2 < 4), lost Sep (5 > 0): 2-1.
+      expect(getByText('2–1')).toBeTruthy();
+      fireEvent.press(getByText('Javi'));
+      expect(getByText('You net +5')).toBeTruthy();
+      expect(getByText('Javi net E')).toBeTruthy();
+    });
+
+    test('a gross league shows the bare score in the rivals list', async () => {
+      const { getByText } = await open(medalSnapshot('medal_gross'));
+      fireEvent.press(getByText('Rivals'));
+      fireEvent.press(getByText('Javi'));
+      expect(getByText('You +5')).toBeTruthy();
+      expect(getByText('Javi E')).toBeTruthy();
+    });
+  });
+
   test('no cards yet: friendly empty state', async () => {
     const { getByText } = await open(snapshot({ cardsByMonth: {} }));
     expect(getByText(/No confirmed cards yet/)).toBeTruthy();

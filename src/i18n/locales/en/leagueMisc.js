@@ -3,6 +3,7 @@ export default {
   'league.holeGrid.out': 'OUT',
   'league.holeGrid.in': 'IN',
   'league.holeGrid.hole': 'Hole {n}, {strokes} strokes, {points} points',
+  'league.holeGrid.holeStrokes': 'Hole {n}, {strokes} strokes',
   'league.holeGrid.holeCapped': 'Hole {n}, {strokes} strokes, {points} points, counts as {counted}',
   'league.holeGrid.legend': '○ 3+ pts   □ 0 pts   small number = points',
   'league.holeGrid.legendCapped': '○ 3+ pts   □ 0 pts   small number = points   dashed = capped, badge counts',
@@ -77,6 +78,8 @@ export default {
   'league.stats.monthsCount': { one: '{count} month', other: '{count} months' },
   'league.stats.youPts': 'You {points} pts',
   'league.stats.namePts': '{name} {points} pts',
+  'league.stats.youScore': 'You {score}',
+  'league.stats.nameScore': '{name} {score}',
 
   'league.home.statsA11y': 'Stats',
   'league.home.settingsA11y': 'League settings',

@@ -10,8 +10,9 @@ import { LEAGUE_FORMATS, LEAGUE_FORMAT_SECTIONS } from '../../store/leagueDraft'
 
 // The league's scoring format, drawn exactly like the New Game scoring-mode
 // field. With one option there is nothing to choose, so the field is plain
-// text (no chevron, not pressable).
-export default function LeagueFormatField({ value, onChange }) {
+// text (no chevron, not pressable). `disabled` shows the same, dimmed (a
+// league whose format is locked).
+export default function LeagueFormatField({ value, onChange, disabled = false }) {
   const t = useT();
   const { theme } = useTheme();
   const s = scoringPickerStyles(theme);
@@ -19,7 +20,7 @@ export default function LeagueFormatField({ value, onChange }) {
   const [open, setOpen] = useState(false);
 
   const current = LEAGUE_FORMATS.find((f) => f.key === value) ?? LEAGUE_FORMATS[0];
-  const choosable = LEAGUE_FORMATS.length > 1;
+  const choosable = LEAGUE_FORMATS.length > 1 && !disabled;
   const body = (
     <>
       <Feather name={current.icon} size={20} color={theme.accent.primary} />
@@ -32,7 +33,11 @@ export default function LeagueFormatField({ value, onChange }) {
   );
 
   if (!choosable) {
-    return <View style={s.field} accessibilityRole="text">{body}</View>;
+    return (
+      <View style={[s.field, disabled && { opacity: 0.6 }]} accessibilityRole="text" accessibilityState={{ disabled }}>
+        {body}
+      </View>
+    );
   }
 
   return (

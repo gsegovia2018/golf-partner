@@ -22,7 +22,10 @@ import LeagueHero from '../components/league/LeagueHero';
 import { useT, formatNumber, formatDate, getLanguage } from '../i18n';
 import { getPublicLeagueBoard } from '../store/publicLeagueBoardStore';
 import { publicBoardSnapshot, publicBoardView, publicBoardScopes } from '../store/leagueShare';
-import { currentMonthKey, leaguePointsText } from '../store/leagueView';
+import {
+  currentMonthKey, leaguePointsText, formatScore, formatToPar, formatKey,
+} from '../store/leagueView';
+import { isMedalFormat } from '../store/leagueStandings';
 
 const POLL_MS = 60000;
 const SITE = 'golf-partner.vercel.app';
@@ -112,6 +115,8 @@ export default function LeagueBoardPublicScreen(props) {
     body = state('link', t('league.public.offTitle'), t('league.public.offText'), false);
   } else {
     const view = publicBoardView(snapshot, active, now, getLanguage());
+    const { format } = snapshot.league;
+    const medal = isMedalFormat(format);
     const season = active === 'season';
     const leader = view.rows[0];
     let heroLine;
@@ -126,7 +131,8 @@ export default function LeagueBoardPublicScreen(props) {
     }
     const leaderLine = leader && (season
       ? (leader.league > 0 ? t('league.public.seasonLeader', { name: leader.name, points: leaguePointsText(leader.league) }) : null)
-      : t('league.public.leader', { name: leader.name, points: formatNumber(leader.points) }));
+      : medal ? t('league.public.leaderScore', { name: leader.name, score: formatScore(leader.score, format, t) })
+        : t('league.public.leader', { name: leader.name, points: formatNumber(leader.points) }));
     const place = (r) => `${r.isTie ? 'T' : ''}${r.place}`;
 
     const chips = scopes.length > 1 ? (
@@ -165,7 +171,7 @@ export default function LeagueBoardPublicScreen(props) {
       label: t('league.public.colPlayer'),
       icon: season ? 'award' : 'check',
       gold: true,
-      cols: season ? [t('league.board.colTotal'), t('league.board.colLast')] : [t('league.board.colPts'), t('league.board.colLeague')],
+      cols: season ? [t('league.board.colTotal'), t('league.board.colLast')] : [t(formatKey('league.board.colPts', format)), t('league.board.colLeague')],
       rows: view.rows.map((r) => (season ? {
         key: r.key,
         place: r.place,
@@ -182,10 +188,14 @@ export default function LeagueBoardPublicScreen(props) {
         name: r.name,
         detail: r.course ?? undefined,
         white: true,
-        points: formatNumber(r.points),
-        pointsLabel: t('league.public.row', {
-          place: place(r), name: r.name, points: formatNumber(r.points), league: leaguePointsText(r.league),
-        }),
+        points: medal ? formatToPar(r.score) : formatNumber(r.points),
+        pointsLabel: medal
+          ? t('league.public.rowScore', {
+            place: place(r), name: r.name, score: formatScore(r.score, format, t), league: leaguePointsText(r.league),
+          })
+          : t('league.public.row', {
+            place: place(r), name: r.name, points: formatNumber(r.points), league: leaguePointsText(r.league),
+          }),
         sub: `+${leaguePointsText(r.league)}`,
         subGold: true,
       })),

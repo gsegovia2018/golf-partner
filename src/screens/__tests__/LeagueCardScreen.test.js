@@ -115,6 +115,38 @@ describe('LeagueCardScreen', () => {
     expect(getByText('Javi · October card')).toBeTruthy();
   });
 
+  test('a medal league leads with the strokes to par and shows strokes only in the grid', async () => {
+    const snap = snapshot([
+      card('javi', 'confirmed', 38, { toPar: -2 }),
+      card('nacho', 'confirmed', 30, { toPar: 4 }),
+    ]);
+    store.getLeague.mockResolvedValue({ ...snap, league: { ...snap.league, format: 'medal_net', pointsTable: [500, 300] } });
+    const { getByText, queryByText, getAllByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
+    await waitFor(() => getByText('Javi · October card'));
+    expect(getByText('−2')).toBeTruthy();
+    expect(getByText('Net to par')).toBeTruthy();
+    expect(queryByText('Stableford pts')).toBeNull();
+    expect(getByText('1st')).toBeTruthy();
+    expect(getByText('+500')).toBeTruthy();
+    // Gross stays on the card; the grid has the strokes but no points legend.
+    expect(getByText('Playing handicap 18 · Gross 90')).toBeTruthy();
+    expect(getAllByText('5').length).toBeGreaterThan(0);
+    expect(queryByText(/small number = points/)).toBeNull();
+    expect(getByText(/the ranking uses strokes to par\.$/)).toBeTruthy();
+  });
+
+  test('a gross medal league says "Gross to par", and a card without to par is not ranked', async () => {
+    const snap = snapshot([card('javi', 'confirmed', 38, { toPar: 6 }), card('nacho', 'confirmed', 30, { toPar: null })]);
+    store.getLeague.mockResolvedValue({ ...snap, league: { ...snap.league, format: 'medal_gross', pointsTable: [500] } });
+    const { getByText, getByLabelText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
+    await waitFor(() => getByText('Javi · October card'));
+    expect(getByText('+6')).toBeTruthy();
+    expect(getByText('Gross to par')).toBeTruthy();
+    fireEvent.press(getByLabelText('Next card'));
+    expect(getByText('Nacho · October card')).toBeTruthy();
+    expect(getByText('not ranked')).toBeTruthy();
+  });
+
   test('my own card is titled "You"', async () => {
     store.getLeague.mockResolvedValue(snapshot([card('me', 'confirmed', 36)]));
     const { getByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('me')} />));
@@ -333,6 +365,20 @@ describe('LeagueCardScreen', () => {
     expect(getByText('Javi’s 30 pts at La Moraleja will count for October.')).toBeTruthy();
     fireEvent.press(lastOf(getAllByText('Approve card')));
     await waitFor(() => expect(store.approveLeagueCard).toHaveBeenCalledWith('c-javi'));
+  });
+
+  test('in a medal league the approve sheet and the void sheet name the score, not points', async () => {
+    openMonth();
+    const snap = snapshot([
+      card('javi', 'submitted', 30, { source: 'offapp', notAnnounced: true, toPar: -2, course: { name: 'La Moraleja', tee: 'Yellow', slope: 125, rating: 72, holes } }),
+    ]);
+    store.getLeague.mockResolvedValue({ ...snap, league: { ...snap.league, format: 'medal_net' } });
+    const { getByText, getByLabelText, queryByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
+    await waitFor(() => getByText('Awaiting an admin\'s approval · not counted yet'));
+    fireEvent.press(getByLabelText('Card actions'));
+    fireEvent.press(getByText('Approve card'));
+    expect(getByText('Javi’s net −2 at La Moraleja will count for October.')).toBeTruthy();
+    expect(queryByText(/pts/)).toBeNull();
   });
 
   test('the owner of an off-app announced card changes the tee time; not once it has passed', async () => {

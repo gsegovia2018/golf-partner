@@ -135,6 +135,7 @@ export default {
   'scorecard.player.hcpExtra': 'HCP {handicap}  ·  +{extra} en este hoyo',
   'scorecard.player.pickedUpA11y': 'Retirado con {count} golpes — toca para borrar',
   'scorecard.player.pickupA11y': 'Retirado con {count} golpes',
+  'scorecard.player.medalNote': 'Liga medal: hay que terminar todos los hoyos.',
   'scorecard.player.ghostA11y': 'Hoyo {hole}, {name}: {value} anotado por {author}, sin verificar por ti',
   'scorecard.player.ghostAcceptA11y': 'Hoyo {hole}, {name}: {value} anotado por {author}, sin verificar por ti — toca para aceptar',
   'scorecard.player.strokesA11y': 'Golpes en el hoyo {hole}',

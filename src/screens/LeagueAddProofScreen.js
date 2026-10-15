@@ -10,7 +10,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useLeague } from '../hooks/useLeague';
 import { useT, tr } from '../i18n';
 import { pickMedia } from '../lib/mediaCapture';
-import { formatPoints } from '../store/leagueView';
+import { cardValueText } from '../store/leagueView';
 import {
   proofSummary, dayLabel, submitOffAppCard, clearDraft,
 } from '../store/leagueOffApp';
@@ -40,10 +40,11 @@ export default function LeagueAddProofScreen({ navigation, route }) {
   const s = makeOffAppStyles(theme);
   const {
     leagueId, cardId = null, snapshot = null, playedOn = null, strokes = null,
-    leagueHandicap = 0, resume = false, source = 'offapp', kind = 'photo',
+    leagueHandicap = 0, resume = false, source = 'offapp', kind = 'photo', format: formatParam = null,
   } = route?.params ?? {};
   const fromCard = resume || source === 'app';
   const { data } = useLeague(navigation, fromCard ? leagueId : null);
+  const format = formatParam ?? data?.league?.format ?? 'stableford';
 
   const [photoUri, setPhotoUri] = useState(null);
   const [markerName, setMarkerName] = useState('');
@@ -59,13 +60,13 @@ export default function LeagueAddProofScreen({ navigation, route }) {
       const c = findCard(data, cardId);
       if (!c) return null;
       return {
-        line: [c.course?.name, dayLabel(c.playedOn), c.points != null ? t('league.scoring.pts', { points: formatPoints(c.points) }) : null,
+        line: [c.course?.name, dayLabel(c.playedOn), cardValueText(c, format, t),
           c.gross != null ? t('league.addProof.gross', { gross: c.gross }) : null].filter(Boolean).join(' · '),
       };
     }
-    const res = proofSummary({ snapshot, playedOn, strokes, leagueHandicap });
+    const res = proofSummary({ snapshot, playedOn, strokes, leagueHandicap, format });
     return { ...res, line: tr(res.line) };
-  }, [fromCard, data, cardId, snapshot, playedOn, strokes, leagueHandicap, t]);
+  }, [fromCard, data, cardId, snapshot, playedOn, strokes, leagueHandicap, format, t]);
 
   async function capture(source) {
     setError(null);

@@ -89,6 +89,48 @@ describe('LeagueCreateScreen', () => {
     expect(utils.getByLabelText('Points for playing, 15')).toBeTruthy();
   });
 
+  test('the wizard offers the medal formats; net keeps the cap row, the review chip names the format', async () => {
+    const utils = render(wrap(<LeagueCreateScreen navigation={navigation} />));
+    fireEvent.changeText(utils.getByPlaceholderText('El Club del Mulligan'), 'El Club');
+    fireEvent.press(utils.getByText('Next'));
+    await utils.findByText('How does it work?');
+    fireEvent.press(utils.getByLabelText(/League format: Stableford/));
+    expect(utils.getByText('Medal play, net')).toBeTruthy();
+    expect(utils.getByText('Medal play, gross')).toBeTruthy();
+    fireEvent.press(utils.getByText('Medal play, net'));
+    expect(utils.getByText('Handicap cap')).toBeTruthy();
+    for (let i = 0; i < 6; i += 1) fireEvent.press(utils.getByLabelText('Raise entry fee'));
+    fireEvent.press(utils.getByText('Next'));
+    await utils.findByText("Who's playing?");
+    fireEvent.press(utils.getByText('Next'));
+    await utils.findByText('REVIEW & CONFIRM');
+    expect(utils.getAllByText('Medal play, net').length).toBeGreaterThan(0);
+    expect(utils.queryByText('Net Stableford')).toBeNull();
+    fireEvent.press(utils.getByText('Create league'));
+    await waitFor(() => expect(createLeague).toHaveBeenCalledTimes(1));
+    expect(createLeague.mock.calls[0][0].format).toBe('medal_net');
+  });
+
+  test('a gross medal league has no handicap cap row and its review line leaves the cap out', async () => {
+    const utils = render(wrap(<LeagueCreateScreen navigation={navigation} />));
+    fireEvent.changeText(utils.getByPlaceholderText('El Club del Mulligan'), 'El Club');
+    fireEvent.press(utils.getByText('Next'));
+    await utils.findByText('How does it work?');
+    expect(utils.getByText('Handicap cap')).toBeTruthy();
+    fireEvent.press(utils.getByLabelText(/League format: Stableford/));
+    fireEvent.press(utils.getByText('Medal play, gross'));
+    expect(utils.queryByText('Handicap cap')).toBeNull();
+    fireEvent.press(utils.getByText('Next'));
+    await utils.findByText("Who's playing?");
+    fireEvent.press(utils.getByText('Next'));
+    await utils.findByText('REVIEW & CONFIRM');
+    expect(utils.queryByText(/cap 30/)).toBeNull();
+    expect(utils.getAllByText('Medal play, gross').length).toBeGreaterThan(0);
+    fireEvent.press(utils.getByText('Create league'));
+    await waitFor(() => expect(createLeague).toHaveBeenCalledTimes(1));
+    expect(createLeague.mock.calls[0][0].format).toBe('medal_gross');
+  });
+
   test('editing the points chart reaches createLeague; an empty place blocks Next', async () => {
     const utils = render(wrap(<LeagueCreateScreen navigation={navigation} />));
     fireEvent.changeText(utils.getByPlaceholderText('El Club del Mulligan'), 'El Club');

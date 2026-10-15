@@ -299,3 +299,39 @@ test('pointsBand shades the season grid by Stableford points', () => {
   expect([40, 36, 35, 33, 32, 0].map(pointsBand)).toEqual(['high', 'high', 'mid', 'mid', 'low', 'low']);
   expect(pointsBand(null)).toBeNull();
 });
+
+describe('medal leagues: season grid and rivals compare strokes to par, fewest first', () => {
+  const med = (userId, toPar, extra = {}) => cardOf(userId, { toPar, points: 30, ...extra });
+
+  test('seasonGrid takes the lowest to par as best, a null to par is unrated', () => {
+    const grid = seasonGrid({
+      '2026-09': [med('a', 3), med('b', -1), med('c', null)],
+    }, members, ['2026-09'], 'medal_net');
+    const cell = (u) => grid.find((r) => r.userId === u).cells[0];
+    expect(cell('a')).toMatchObject({ score: 3, best: false, unrated: false });
+    expect(cell('b')).toMatchObject({ score: -1, best: true });
+    expect(cell('c')).toMatchObject({ score: null, unrated: true, best: false });
+    // Same cards read as Stableford: points rule, so everyone ties at 30.
+    expect(seasonGrid({ '2026-09': [med('a', 3), med('b', -1)] }, members, ['2026-09'])[0].cells[0])
+      .toMatchObject({ score: 30, points: 30, best: true });
+  });
+
+  test('a member keeps their lowest to par of the month', () => {
+    const grid = seasonGrid({ '2026-09': [med('a', 5), med('a', 1)] }, members, ['2026-09'], 'medal_gross');
+    expect(grid[0].cells[0].score).toBe(1);
+  });
+
+  test('rivalMonths and rivals: the lower to par wins', () => {
+    const cards = {
+      '2026-08': [med('a', -2), med('b', 1)],
+      '2026-09': [med('a', 4), med('b', 0)],
+      '2026-10': [med('a', 2), med('b', 2)],
+    };
+    expect(rivalMonths(cards, 'a', 'b', 'medal_net').map((m) => [m.month, m.a, m.b]))
+      .toEqual([['2026-10', 2, 2], ['2026-09', 4, 0], ['2026-08', -2, 1]]);
+    const row = rivals(cards, members, 'a', 'medal_net').find((r) => r.userId === 'b');
+    expect(row).toMatchObject({ won: 1, lost: 1, level: 1, months: 3 });
+    // Stableford default is untouched: equal points everywhere is all level.
+    expect(rivals(cards, members, 'a').find((r) => r.userId === 'b')).toMatchObject({ won: 0, lost: 0, level: 3 });
+  });
+});

@@ -13,6 +13,7 @@ import { loadProfile } from '../store/profileStore';
 import { getLeagueByCode, getLeagueInvitee, joinLeague } from '../store/leagueStore';
 import { defaultMemberHandicap, parseMemberHandicap } from '../store/leagueDraft';
 import { formatEuros, currentMonthKey } from '../store/leagueView';
+import { isMedalFormat } from '../store/leagueStandings';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { attachEmailToGuest, isEmailTakenError } from '../lib/guestAccount';
@@ -236,7 +237,9 @@ export default function JoinLeagueScreen({ navigation, route }) {
         <Text style={s.overline}>{t('league.join.howItWorks')}</Text>
         <View style={s.card}>
           {rule('calendar', t('league.join.ruleOneCard'), t('league.join.ruleOneCardSub'))}
-          {rule('target', t('league.join.ruleNet'), t('league.join.ruleNetSub', { cap: formatNumber(league.handicapCap) }))}
+          {league.format === 'medal_net' && rule('target', t('league.join.ruleMedalNet'), t('league.join.ruleMedalNetSub', { cap: formatNumber(league.handicapCap) }))}
+          {league.format === 'medal_gross' && rule('target', t('league.join.ruleMedalGross'), t('league.join.ruleMedalGrossSub'))}
+          {!isMedalFormat(league.format) && rule('target', t('league.join.ruleNet'), t('league.join.ruleNetSub', { cap: formatNumber(league.handicapCap) }))}
           {rule('check-circle', t('league.join.ruleMarker'), t('league.join.ruleMarkerSub'))}
           {rule('award', league.entryFeeCents > 0 ? t('league.join.ruleFee', { fee: formatEuros(league.entryFeeCents) }) : t('league.join.ruleNoFee'),
             league.entryFeeCents > 0

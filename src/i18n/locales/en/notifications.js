@@ -50,6 +50,10 @@ export default {
   'notif.cardConfirmed.title': 'Card confirmed',
   'notif.cardConfirmed.body': "{actor}'s {card} is confirmed",
   'notif.cardConfirmed.bodyPoints': "{actor}'s {card} is confirmed · {points} pts",
+  'notif.cardConfirmed.bodyScore': "{actor}'s {card} is confirmed · {score}",
+  // Strokes to par in a medal league: level par, and the net value ('net −2').
+  'notif.score.level': 'E',
+  'notif.score.net': 'net {score}',
   'notif.markerIssue.title': 'Marker sent your card back',
   'notif.markerIssue.note': '{marker}: {note}',
   'notif.markerIssue.flagged': '{marker} flagged your card',

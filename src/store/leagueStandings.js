@@ -4,6 +4,7 @@
 // medal play since docs/superpowers/plans/2026-10-15-league-medal-play.md.
 import { assignPlacements } from './leaderboardPlacement';
 import { needsApproval } from './leagueRules';
+import { formatNumber, t as i18nT } from '../i18n';
 
 export const DEFAULT_POINTS_TABLE = [500, 300, 190, 135, 110, 90, 75, 60, 45, 35, 25, 15];
 
@@ -19,6 +20,14 @@ const toNumber = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
+
+// Strokes to par bare, for a board column whose header says net or gross:
+// -2 -> '−2' (true minus sign), 0 -> 'E', 4 -> '+4'. null -> '—'.
+export function formatToPar(value, t = i18nT) {
+  if (value == null || value === '' || !Number.isFinite(Number(value))) return '—';
+  const v = Number(value);
+  return v === 0 ? t('league.scoring.level') : `${v < 0 ? '−' : '+'}${formatNumber(Math.abs(v))}`;
+}
 
 // The value a card ranks by in `format`: its Stableford points, or its strokes
 // to par in a medal league. null when the server hasn't scored it for that.

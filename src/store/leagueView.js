@@ -5,7 +5,7 @@ import {
   isMonthClosed, OFFAPP_NOTICE_HOURS, MAX_RESCHEDULES, POST_WINDOW_HOURS, madridDay,
 } from './leagueRules';
 import {
-  seasonTable, monthResults, cardScore, compareScores, isMedalFormat,
+  seasonTable, monthResults, cardScore, compareScores, isMedalFormat, formatToPar,
 } from './leagueStandings';
 import { isRatedTee, netDoubleBogeyCap } from './handicapIndex';
 import { calcExtraShots, calcStablefordPoints } from './scoring';
@@ -39,9 +39,22 @@ export function formatScore(value, format = 'stableford', t = i18nT) {
   if (value == null || value === '' || !Number.isFinite(Number(value))) return '—';
   const v = Number(value);
   if (!isMedalFormat(format)) return t('league.scoring.pts', { points: formatPoints(v) });
-  const toPar = v === 0 ? t('league.scoring.level') : `${v < 0 ? '−' : '+'}${formatNumber(Math.abs(v))}`;
+  const toPar = formatToPar(v, t);
   return format === 'medal_net' ? t('league.scoring.netToPar', { score: toPar }) : toPar;
 }
+
+// A card's ranking value as shown for `format` ('36 pts', 'net −2'), or null
+// when it has none.
+export function cardValueText(card, format = 'stableford', t = i18nT) {
+  const v = cardScore(card, format);
+  return v == null ? null : formatScore(v, format, t);
+}
+
+export { formatToPar };
+
+// Catalogue key of a format's copy variant: league.board.footMonth stays the
+// Stableford text, ...Net / ...Gross are the medal ones.
+export const formatKey = (base, format) => (format === 'medal_net' ? `${base}Net` : format === 'medal_gross' ? `${base}Gross` : base);
 
 // A net differential in words (lower is better): -2.4 -> '2.4 better',
 // 3.1 -> '3.1 worse', 0 -> 'level', null -> '—'.
@@ -340,22 +353,27 @@ export function markerAskedLine(requestedAt, expiresAt, now = new Date()) {
 // A withdrawn card (or a void from before voidKind) is 'none': the month is
 // free. An admin's void, or a withdrawn card that was played anyway, keeps the
 // month taken (R15b), so the board shows that card instead of offering Announce.
-export function yourCardState(card) {
+export function yourCardState(card, format = 'stableford') {
   if (!card) return { kind: 'none' };
+  // The ranking value as a message descriptor (render with tr()).
+  const valueMsg = (c) => {
+    if (isMedalFormat(format)) return c.toPar != null ? { key: 'league.scoring.score', params: { score: formatScore(c.toPar, format) } } : null;
+    return c.points != null ? { key: 'league.scoring.pts', params: { points: formatPoints(c.points) } } : null;
+  };
   if (card.status === 'void') {
     if (!takesMonth(card)) return { kind: 'none' };
     return {
       kind: 'voided',
       voidKind: card.voidKind,
       course: card.course?.name ?? null,
-      pts: card.points != null ? { key: 'league.scoring.pts', params: { points: formatPoints(card.points) } } : null,
+      pts: valueMsg(card),
       reason: card.voidedReason ?? null,
       card,
     };
   }
   const course = card.course?.name ?? null;
   // Message descriptor (render with tr()).
-  const pts = card.points != null ? { key: 'league.scoring.pts', params: { points: formatPoints(card.points) } } : null;
+  const pts = valueMsg(card);
   const hasNet = card.netDifferential != null;
   return {
     kind: card.status,
@@ -583,6 +601,12 @@ export function monthLine(snapshot, userId, now = new Date()) {
   if (isMissed(card, now)) return { key: 'league.play.monthMissed', params: { monthKey } };
   const standing = monthStanding(snapshot, monthKey, userId, now);
   if (!standing) return { key: 'league.play.monthLive', params: { monthKey } };
+  if (isMedalFormat(snapshot.league.format)) {
+    return {
+      key: 'league.play.monthRankScore',
+      params: { monthKey, score: formatScore(standing.score, snapshot.league.format), place: placeLabel(standing.place, standing.isTie) },
+    };
+  }
   return {
     key: 'league.play.monthRank',
     params: { monthKey, points: formatNumber(standing.points), place: placeLabel(standing.place, standing.isTie) },

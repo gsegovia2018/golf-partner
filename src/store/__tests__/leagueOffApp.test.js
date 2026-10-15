@@ -105,6 +105,15 @@ describe('helpers', () => {
     expect(tr(line)).toBe(`Golf Olivar · Sat 4 Oct · ${points} pts · gross 90`);
   });
 
+  test('proofSummary in a medal league shows the strokes to par, like the server', () => {
+    const args = { snapshot: courseSnapshot(course, null), playedOn: '2025-10-04', strokes: full(5), leagueHandicap: 18 };
+    // gross 90, par 72, playing handicap 19
+    expect(tr(proofSummary({ ...args, format: 'medal_net' }).line)).toBe('Golf Olivar · Sat 4 Oct · net −1 · gross 90');
+    expect(tr(proofSummary({ ...args, format: 'medal_gross' }).line)).toBe('Golf Olivar · Sat 4 Oct · +18 · gross 90');
+    // The numbers the RPCs need are unchanged.
+    expect(proofSummary({ ...args, format: 'medal_net' }).gross).toBe(90);
+  });
+
   test('proofSummary also returns the net differential (course-level slope/rating here)', () => {
     // 18.0 x 120/113 + (71.5 - 72) = 19.1 - 0.5 = 18.6 -> 19; all bogeys, nothing capped.
     // (113/120) x (90 - 71.5) = 17.4; 17.4 - 18 = -0.6.
