@@ -6,11 +6,13 @@
 import {
   getPlayingHandicap, calcStablefordPoints, calcExtraShots, roundLeaderboard, roundScoringMode,
 } from './tournamentStore';
-import { holeCountOf, isRoundFullyScoredBy, resolvePairs } from './scoring';
+import {
+  holeCountOf, isRoundFullyScoredBy, isFullLengthRound, resolvePairs,
+} from './scoring';
 import {
   tournamentHighlights, hotStretch, skinsLeaderboard, hallOfShame, par3Heartbreak,
   pickupChampion, anchor, zeroHero, bestWorstHoles, chaosHoles, collectiveExtremes,
-  headToHead, shotStats,
+  headToHead, shotStats, playerStreaks,
 } from './statsEngine';
 
 // Modes whose round result is a team result when the round carries pairs.
@@ -338,6 +340,190 @@ export function strokeHoleSplit(tournament, playerId) {
   return { withStroke: sum(acc.with), withoutStroke: sum(acc.without) };
 }
 
+// ── Competitors of a round's story (lead, comeback) ──
+// The same sides the round result card shows: pairs when the card shows pair
+// totals (Stableford with partners: a pair's running points are the sum of its
+// members', carried flat once a member stops), players when it shows an
+// individual board. Rounds whose card is a match play or best/worst-ball
+// scoreline have no running-points story, so they return null rather than
+// contradict the card.
+function storyCompetitors(tournament, roundIndex) {
+  const result = roundResult(tournament, roundIndex);
+  if (!result) return null;
+  const race = raceSeries(tournament, roundIndex);
+  if (result.kind === 'teams') {
+    if (result.mode !== 'stableford') return null;
+    const carried = (x) => {
+      let last = 0;
+      return x.values.slice(1).map((v) => { if (v != null) last = v; return v ?? last; });
+    };
+    const lines = new Map(race.series.map((x) => [x.player.id, x]));
+    const series = result.sides.map((side) => {
+      const mine = side.members.map((m) => lines.get(m.id)).filter(Boolean);
+      if (!mine.length) return null;
+      const flat = mine.map(carried);
+      const values = [0, ...race.holes.map((_, h) => (
+        mine.some((x) => x.values[h + 1] != null) ? flat.reduce((s, f) => s + f[h], 0) : null
+      ))];
+      return { players: side.members, team: true, values, total: values.filter((v) => v != null).pop() ?? 0 };
+    }).filter(Boolean).sort((a, b) => b.total - a.total);
+    return { holes: race.holes, series };
+  }
+  if (MATCH_PLAY_MODES.has(result.mode)) return null;
+  return {
+    holes: race.holes,
+    series: race.series.map((x) => ({ players: [x.player], team: false, values: x.values, total: x.total })),
+  };
+}
+
+function leadersByHole(story) {
+  const leaders = [];
+  story.holes.forEach((_, h) => {
+    const live = story.series.filter((x) => x.values[h + 1] != null);
+    if (live.length === 0) return;
+    const top = Math.max(...live.map((x) => x.values[h + 1]));
+    const at = live.filter((x) => x.values[h + 1] === top);
+    leaders.push(at.length === 1 ? at[0] : null);
+  });
+  return leaders;
+}
+
+// { team, total, leaders: [{ players, led }] (most holes led first, only sides
+// that led), changes } — null with fewer than two sides on the card.
+export function leadStory(tournament, roundIndex) {
+  const story = storyCompetitors(tournament, roundIndex);
+  if (!story || story.series.length < 2) return null;
+  const sequence = leadersByHole(story);
+  const led = new Map();
+  let changes = 0;
+  let prev = null;
+  sequence.forEach((side) => {
+    if (!side) return;
+    led.set(side, (led.get(side) ?? 0) + 1);
+    if (prev && side !== prev) changes++;
+    prev = side;
+  });
+  const leaders = story.series
+    .filter((x) => led.has(x))
+    .map((x) => ({ players: x.players, led: led.get(x) }))
+    .sort((a, b) => b.led - a.led);
+  return { team: story.series[0].team, total: sequence.length, leaders, changes };
+}
+
+// ── Comeback (one round) ──
+// The round's winning side(s) and the biggest gap they faced to the best
+// running total of any other side, with the hole it was first reached after.
+// Only a deficit of COMEBACK_MIN or more counts.
+const COMEBACK_MIN = 3;
+export function roundComeback(tournament, roundIndex) {
+  const story = storyCompetitors(tournament, roundIndex);
+  if (!story || story.series.length < 2) return null;
+  const topTotal = story.series[0].total;
+  let best = null;
+  story.series.filter((x) => x.total === topTotal).forEach((winner) => {
+    story.holes.forEach((_, h) => {
+      const mine = winner.values[h + 1];
+      if (mine == null) return;
+      const others = story.series.filter((x) => x !== winner && x.values[h + 1] != null).map((x) => x.values[h + 1]);
+      if (!others.length) return;
+      const deficit = Math.max(...others) - mine;
+      if (deficit >= COMEBACK_MIN && (!best || deficit > best.deficit)) {
+        best = { players: winner.players, team: winner.team, deficit, afterHole: story.holes[h] };
+      }
+    });
+  });
+  if (!best) return null;
+  return { ...best, roundIndex, courseName: tournament.rounds[roundIndex].courseName };
+}
+
+// ── Personal best runs (net) ──
+// Longest runs within a round, net of handicap strokes. A par run needs 2+
+// holes to be worth showing, a birdie run 1+.
+export function playerBestRuns(tournament, playerId) {
+  const st = playerStreaks(tournament, playerId);
+  return {
+    par: st.bestParStreak >= 2 ? st.bestParStreak : 0,
+    birdie: st.bestBirdieStreak >= 1 ? st.bestBirdieStreak : 0,
+  };
+}
+
+// ── Weekend holes ──
+// Average Stableford points per physical hole across every scored round (a
+// hole is keyed by courseId, else course name, plus its number); holes with
+// fewer than 2 scores are left out. Easiest (highest average) first.
+export function weekendHoleRanking(tournament) {
+  const map = new Map();
+  scoredRoundIndices(tournament).forEach((ri) => {
+    const round = tournament.rounds[ri];
+    (tournament.players ?? []).forEach((player) => {
+      holeEntries(round, player).forEach((e) => {
+        const key = `${round.courseId ?? round.courseName}|${e.hole.number}`;
+        const rec = map.get(key) ?? {
+          key, courseName: round.courseName, holeNumber: e.hole.number, par: e.hole.par,
+          roundIndex: ri, rounds: [], total: 0, scores: 0,
+        };
+        if (!rec.rounds.includes(ri)) rec.rounds.push(ri);
+        rec.total += e.points;
+        rec.scores += 1;
+        map.set(key, rec);
+      });
+    });
+  });
+  return [...map.values()]
+    .filter((h) => h.scores >= 2)
+    .map((h) => ({ ...h, avgPoints: Math.round((h.total / h.scores) * 100) / 100 }))
+    .sort((a, b) => (b.avgPoints - a.avgPoints) || (a.roundIndex - b.roundIndex) || (a.holeNumber - b.holeNumber));
+}
+
+// Every finished round per player, with points, gross strokes and par.
+function finishedRounds(tournament) {
+  const rows = [];
+  scoredRoundIndices(tournament).forEach((ri) => {
+    const round = tournament.rounds[ri];
+    (tournament.players ?? []).forEach((player) => {
+      if (!isRoundFullyScoredBy(round, player.id)) return;
+      const entries = holeEntries(round, player);
+      rows.push({
+        player, roundIndex: ri, courseName: round.courseName, full: isFullLengthRound(round),
+        points: entries.reduce((s, e) => s + e.points, 0),
+        strokes: entries.reduce((s, e) => s + e.strokes, 0),
+        par: entries.reduce((s, e) => s + e.hole.par, 0),
+      });
+    });
+  });
+  return rows;
+}
+
+// Finished rounds, lowest gross first. Full-length rounds only, unless there
+// are none: then nine-hole rounds, with `nine` set.
+export function grossRounds(tournament) {
+  const all = finishedRounds(tournament);
+  const full = all.filter((r) => r.full);
+  const pool = full.length ? full : all;
+  return {
+    nine: full.length === 0 && pool.length > 0,
+    rows: pool.map((r) => ({ ...r, vs: r.strokes - r.par }))
+      .sort((a, b) => (a.strokes - b.strokes) || (a.roundIndex - b.roundIndex)),
+  };
+}
+
+// Per player with 2+ finished full-length rounds: points gained from the first
+// to the last one, biggest gain first.
+export function improvementRows(tournament) {
+  const byPlayer = new Map();
+  finishedRounds(tournament).filter((r) => r.full).forEach((r) => {
+    byPlayer.set(r.player.id, [...(byPlayer.get(r.player.id) ?? []), r]);
+  });
+  return [...byPlayer.values()]
+    .filter((list) => list.length >= 2)
+    .map((list) => {
+      const from = list[0];
+      const to = list[list.length - 1];
+      return { player: from.player, from, to, gain: to.points - from.points };
+    })
+    .sort((a, b) => b.gain - a.gain);
+}
+
 // ── Awards ──
 // The Summary strip: glory first, then shame. Each award carries the players
 // it names, a value and a detail descriptor, and the engine record (`data`)
@@ -413,6 +599,70 @@ export function awardsList(tournament, { teams = false } = {}) {
       });
     }
   }
+
+  // Weekend-wide glory.
+  const grossBest = grossRounds(tournament);
+  if (grossBest.rows.length) {
+    const top = grossBest.rows.filter((r) => r.strokes === grossBest.rows[0].strokes);
+    const vs = top[0].vs === 0 ? 'E' : `${top[0].vs > 0 ? '+' : '−'}${Math.abs(top[0].vs)}`;
+    push({
+      id: 'bestGross', icon: 'flag', tone: 'glory', players: uniquePlayers(top.map((r) => r.player)),
+      value: { key: grossBest.nine ? 'stats.game.award.grossNine' : 'stats.game.award.gross', params: { strokes: top[0].strokes, vs } },
+      detail: top.length === 1
+        ? { key: 'stats.game.award.roundCourse', params: { round: top[0].roundIndex + 1, course: top[0].courseName } }
+        : tiedDetail(top.length),
+      data: grossBest,
+    });
+  }
+  const comebacks = scoredRoundIndices(tournament).map((ri) => roundComeback(tournament, ri)).filter(Boolean)
+    .sort((a, b) => b.deficit - a.deficit);
+  if (comebacks.length) {
+    const top = comebacks.filter((c) => c.deficit === comebacks[0].deficit);
+    push({
+      id: 'comeback', icon: 'rotate-ccw', tone: 'glory', players: uniquePlayers(top.flatMap((c) => c.players)),
+      value: { key: 'stats.game.award.comebackValue' },
+      detail: top.length === 1
+        ? { key: 'stats.game.award.comebackDetail', params: { round: top[0].roundIndex + 1, count: top[0].deficit, hole: top[0].afterHole } }
+        : tiedDetail(top.length),
+      data: comebacks,
+    });
+  }
+  const improved = improvementRows(tournament);
+  if (improved.length && improved[0].gain >= 3) {
+    const top = improved.filter((r) => r.gain === improved[0].gain);
+    push({
+      id: 'improved', icon: 'arrow-up-right', tone: 'glory', players: top.map((r) => r.player),
+      value: { key: 'stats.game.award.improvedValue', params: { count: top[0].gain } },
+      detail: top.length === 1
+        ? {
+          key: 'stats.game.award.improvedDetail',
+          params: { from: top[0].from.roundIndex + 1, a: top[0].from.points, to: top[0].to.roundIndex + 1, b: top[0].to.points },
+        }
+        : tiedDetail(top.length),
+      data: improved,
+    });
+  }
+  // Easiest / hardest hole of the weekend: no player, so the card is labelled
+  // by the hole. Needs 2+ played rounds (one round is Rounds → Hole stories).
+  const holeRanking = scoredRoundIndices(tournament).length >= 2 ? weekendHoleRanking(tournament) : [];
+  const holeAward = (id, tone, icon, ranked) => {
+    const lead = ranked[0];
+    const tied = ranked.filter((h) => h.avgPoints === lead.avgPoints).length - 1;
+    const many = lead.rounds.length > 1;
+    push({
+      id, icon, tone, players: [],
+      label: { key: 'stats.game.award.holeLabel', params: { hole: lead.holeNumber } },
+      value: { key: 'stats.game.story.avg', params: { n: lead.avgPoints } },
+      detail: {
+        key: `stats.game.award.${many ? 'holeWhereMany' : 'holeWhere'}${tied > 0 ? 'Tied' : ''}`,
+        params: {
+          round: lead.roundIndex + 1, course: lead.courseName, hole: lead.holeNumber, par: lead.par, count: many ? lead.rounds.length : tied, tied,
+        },
+      },
+      data: ranked.slice(0, 10),
+    });
+  };
+  if (holeRanking.length) holeAward('easiestHole', 'glory', 'smile', holeRanking);
 
   // Shame.
   const shame = hallOfShame(tournament, { metric: 'points' });
@@ -502,6 +752,10 @@ export function awardsList(tournament, { teams = false } = {}) {
         data: anchorStat,
       });
     }
+  }
+  if (holeRanking.length) {
+    const hardest = [...holeRanking].sort((a, b) => (a.avgPoints - b.avgPoints) || (a.roundIndex - b.roundIndex) || (a.holeNumber - b.holeNumber));
+    holeAward('hardestHole', 'shame', 'frown', hardest);
   }
   return out;
 }

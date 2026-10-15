@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { useT } from '../../i18n';
 import ScoreMixBar from '../mystats/ScoreMixBar';
 import { isLowSample } from '../mystats/metricTone';
-import { standingsRows, strokeHoleSplit, shotComparison } from '../../store/gameStatsView';
+import { standingsRows, strokeHoleSplit, shotComparison, playerBestRuns } from '../../store/gameStatsView';
 import {
   playerRoundHistory, playerAvgStableford, playerAvgPerHole, playerScoreDistribution, parTypeSplit,
   bounceBackRate, frontBackSplit, playerNemesisAndCrushed, shotStats, scramblingStats,
@@ -40,6 +40,7 @@ export default function PlayersTab({ tournament, selectedId, onSelectPlayer, onO
     const standing = standingsRows(tournament).rows.find((r) => r.player.id === pid);
     return {
       standing,
+      runs: playerBestRuns(tournament, pid),
       history: playerRoundHistory(tournament, pid),
       avgRound: playerAvgStableford(tournament, pid),
       perHole: playerAvgPerHole(tournament, pid),
@@ -76,6 +77,10 @@ export default function PlayersTab({ tournament, selectedId, onSelectPlayer, onO
   }
 
   const { standing, history, dist, parSplit, difficulty, strokes, frontBack, bounce, nc, shots, scrambling, comparison } = data;
+  const runParts = [
+    data.runs.par > 0 && t('stats.game.player.runPars', { count: data.runs.par }),
+    data.runs.birdie > 0 && t('stats.game.player.runBirdies', { count: data.runs.birdie }),
+  ].filter(Boolean);
   const hasFull = history.some((r) => r.fullRound);
   const tone = (avg) => theme.scoreColor(avg >= 2 ? 'good' : avg >= 1.5 ? 'neutral' : 'poor');
 
@@ -113,6 +118,14 @@ export default function PlayersTab({ tournament, selectedId, onSelectPlayer, onO
           tone={standing.vs >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor')}
         />
       </View>
+
+      {runParts.length > 0 && (
+        <Text style={[s.sub, { marginBottom: 12 }]} testID="best-runs">
+          <Text style={s.strong}>{t('stats.game.player.runLabel')}</Text>
+          {'  '}
+          {runParts.join(' · ')}
+        </Text>
+      )}
 
       <View style={s.card}>
         <SectionTitle right={t('stats.game.mix.net')}>{t('stats.game.player.mix')}</SectionTitle>
