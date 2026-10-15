@@ -1,5 +1,7 @@
 // Rounds: one round at a time — the result, the race, the scorecard and the
-// holes that told the story.
+// holes that told the story. In a one-round game (`single`) this is the
+// Scorecard tab: no round chips and no result card (Summary carries the
+// race and its lead / comeback lines).
 import React, { useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -39,7 +41,34 @@ export function resultText(result, t) {
   });
 }
 
-export default function RoundsTab({ tournament, pairsTournament, roundIndex, onSelectRound, onOpenSheet }) {
+// The comeback and lead-change lines under a round's result.
+export function LeadLines({ lead, comeback }) {
+  const t = useT();
+  const { s } = useStatStyles();
+  const leaders = lead?.leaders?.length
+    ? lead.leaders.filter((l) => l.led === lead.leaders[0].led).flatMap((l) => l.players)
+    : [];
+  return (
+    <>
+      {comeback && (
+        <Text style={[s.sub, { marginBottom: 4 }]} testID="round-comeback">
+          {t(comeback.team || comeback.players.length > 1 ? 'stats.game.round.comebackTeam' : 'stats.game.round.comeback', { name: joinNames(comeback.players), count: comeback.deficit, hole: comeback.afterHole })}
+        </Text>
+      )}
+      {leaders.length > 0 && (
+        <Text style={[s.sub, { marginBottom: 8 }]} testID="round-lead">
+          {[
+            // A pair, or players tied on holes led, take the plural verb.
+            t(leaders.length > 1 ? 'stats.game.round.leadLedMany' : 'stats.game.round.leadLed', { names: joinNames(leaders), led: lead.leaders[0].led, count: lead.total }),
+            lead.changes > 0 ? t('stats.game.round.leadChanges', { count: lead.changes }) : t('stats.game.round.leadNone'),
+          ].join(' · ')}
+        </Text>
+      )}
+    </>
+  );
+}
+
+export default function RoundsTab({ tournament, pairsTournament, roundIndex, onSelectRound, onOpenSheet, single = false }) {
   const t = useT();
   const { theme, s } = useStatStyles();
   const scored = useMemo(() => scoredRoundIndices(tournament), [tournament]);
@@ -62,9 +91,11 @@ export default function RoundsTab({ tournament, pairsTournament, roundIndex, onS
 
   if (ri == null) return <Text style={s.empty}>{t('stats.game.empty.body')}</Text>;
 
+  // One round: the average is over the players, so say so.
+  const avgKey = single ? 'stats.game.story.perPlayer' : 'stats.game.story.avg';
   const storyRows = [
-    stories.easiest && { key: 'easy', label: t('stats.game.story.easiest'), color: theme.scoreColor('excellent'), hole: stories.easiest, value: t('stats.game.story.avg', { n: num(stories.easiest.avgPoints, { decimals: 2 }) }) },
-    stories.hardest && stories.hardest !== stories.easiest && { key: 'hard', label: t('stats.game.story.hardest'), color: theme.destructive, hole: stories.hardest, value: t('stats.game.story.avg', { n: num(stories.hardest.avgPoints, { decimals: 2 }) }) },
+    stories.easiest && { key: 'easy', label: t('stats.game.story.easiest'), color: theme.scoreColor('excellent'), hole: stories.easiest, value: t(avgKey, { n: num(stories.easiest.avgPoints, { decimals: 2 }) }) },
+    stories.hardest && stories.hardest !== stories.easiest && { key: 'hard', label: t('stats.game.story.hardest'), color: theme.destructive, hole: stories.hardest, value: t(avgKey, { n: num(stories.hardest.avgPoints, { decimals: 2 }) }) },
     stories.chaos && { key: 'chaos', label: t('stats.game.story.chaos'), color: theme.info, hole: stories.chaos, value: t('stats.game.story.range', { min: stories.chaos.minStrokes, max: stories.chaos.maxStrokes }) },
     ...stories.cruised.map((h) => ({ key: `c${h.holeNumber}`, label: t('stats.game.story.cruised'), color: theme.scoreColor('excellent'), hole: h, value: t('stats.game.story.cruisedValue') })),
     ...stories.wrecked.map((h) => ({ key: `w${h.holeNumber}`, label: t('stats.game.story.wrecked'), color: theme.destructive, hole: h, value: t('stats.game.story.wreckedValue') })),
@@ -72,7 +103,7 @@ export default function RoundsTab({ tournament, pairsTournament, roundIndex, onS
 
   return (
     <View>
-      {scored.length > 1 && (
+      {!single && scored.length > 1 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16, marginBottom: 12 }} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
           {scored.map((i) => (
             <Chip
@@ -88,25 +119,15 @@ export default function RoundsTab({ tournament, pairsTournament, roundIndex, onS
         </ScrollView>
       )}
 
-      <View style={s.card}>
-        <SectionTitle>{t('stats.game.round.header', { n: ri + 1, course: round.courseName ?? '' })}</SectionTitle>
-        {result && <Text style={[s.strong, { fontSize: 15, marginBottom: 8 }]}>{resultText(result, t)}</Text>}
-        {comeback && (
-          <Text style={[s.sub, { marginBottom: 4 }]} testID="round-comeback">
-            {t(comeback.team ? 'stats.game.round.comebackTeam' : 'stats.game.round.comeback', { name: joinNames(comeback.players), count: comeback.deficit, hole: comeback.afterHole })}
-          </Text>
-        )}
-        {lead && lead.leaders.length > 0 && (
-          <Text style={[s.sub, { marginBottom: 8 }]} testID="round-lead">
-            {[
-              t('stats.game.round.leadLed', { names: joinNames(lead.leaders.filter((l) => l.led === lead.leaders[0].led).flatMap((l) => l.players)), led: lead.leaders[0].led, count: lead.total }),
-              lead.changes > 0 ? t('stats.game.round.leadChanges', { count: lead.changes }) : t('stats.game.round.leadNone'),
-            ].join(' · ')}
-          </Text>
-        )}
-        {race.series.length > 0 && <RaceChart data={race} />}
-        <Text style={s.sub}>{t('stats.game.race.caption')}</Text>
-      </View>
+      {!single && (
+        <View style={s.card}>
+          <SectionTitle>{t('stats.game.round.header', { n: ri + 1, course: round.courseName ?? '' })}</SectionTitle>
+          {result && <Text style={[s.strong, { fontSize: 15, marginBottom: 8 }]}>{resultText(result, t)}</Text>}
+          <LeadLines lead={lead} comeback={comeback} />
+          {race.series.length > 0 && <RaceChart data={race} />}
+          <Text style={s.sub}>{t('stats.game.race.caption')}</Text>
+        </View>
+      )}
 
       {pairDiff && (
         <View style={s.card}>
@@ -132,7 +153,7 @@ export default function RoundsTab({ tournament, pairsTournament, roundIndex, onS
               style={[s.row, i === 0 && s.rowFirst]}
               activeOpacity={0.7}
               accessibilityRole="button"
-              onPress={() => onOpenSheet(holeSheet(row.hole, row.label, null))}
+              onPress={() => onOpenSheet(holeSheet(row.hole, row.label, null, { single }))}
             >
               <View style={s.grow}>
                 <Text style={[s.sectionTitle, { color: row.color }]}>{row.label}</Text>

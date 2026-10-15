@@ -25,7 +25,7 @@ export default function AwardsStrip({ awards, onOpen }) {
       testID="awards-strip"
     >
       {awards.map((a) => {
-        const title = t(`stats.game.award.title.${a.id}`);
+        const title = t(a.titleKey ?? `stats.game.award.title.${a.id}`);
         const names = a.label ? trn(a.label) : joinNames(a.players);
         const value = trn(a.value);
         const detail = trn(a.detail);

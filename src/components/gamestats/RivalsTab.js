@@ -1,5 +1,7 @@
 // Rivals: the head-to-head grid (net hole wins) and, with real team rounds,
-// match play results, pair cards and partner splits.
+// match play results, pair cards and partner splits. A one-round game
+// (`single`) keeps the grid and the pair cards: its match play result is the
+// standings' Result, and with one partner each there is no split to compare.
 import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -16,7 +18,7 @@ const NAME_W = 76;
 const CELL_W = 56;
 const CELL_H = 46;
 
-export default function RivalsTab({ tournament, pairsTournament, fixedTeams, defaultPlayerId, onOpenSheet }) {
+export default function RivalsTab({ tournament, pairsTournament, fixedTeams, defaultPlayerId, onOpenSheet, single = false }) {
   const t = useT();
   const { theme, s } = useStatStyles();
   const players = tournament.players;
@@ -39,8 +41,8 @@ export default function RivalsTab({ tournament, pairsTournament, fixedTeams, def
   const [splitId, setSplitId] = useState(defaultPlayerId ?? players[0]?.id);
   const splitPlayer = players.find((p) => p.id === splitId) ?? players[0];
   const splits = useMemo(
-    () => (pairsTournament && !fixedTeams && splitPlayer ? playerPartnerSplits(pairsTournament, splitPlayer.id) : null),
-    [pairsTournament, fixedTeams, splitPlayer],
+    () => (pairsTournament && !fixedTeams && !single && splitPlayer ? playerPartnerSplits(pairsTournament, splitPlayer.id) : null),
+    [pairsTournament, fixedTeams, single, splitPlayer],
   );
 
   const cellBg = (net) => {
@@ -51,7 +53,7 @@ export default function RivalsTab({ tournament, pairsTournament, fixedTeams, def
   const openDuel = (i, j) => {
     const p1 = players[i];
     const p2 = players[j];
-    onOpenSheet(duelSheet(p1, p2, headToHead(tournament, p1.id, p2.id)));
+    onOpenSheet(duelSheet(p1, p2, headToHead(tournament, p1.id, p2.id), { single }));
   };
 
   return (
@@ -115,7 +117,7 @@ export default function RivalsTab({ tournament, pairsTournament, fixedTeams, def
         <Text style={s.note}>{t('stats.game.rivals.h2hLegend')}</Text>
       </View>
 
-      {matches.length > 0 && (
+      {!single && matches.length > 0 && (
         <View style={s.card} testID="match-play-results">
           <SectionTitle>{t('stats.screen.matchPlay.section')}</SectionTitle>
           {matches.map((m, i) => (
@@ -136,7 +138,7 @@ export default function RivalsTab({ tournament, pairsTournament, fixedTeams, def
           {teams.cards.map((card, i) => {
             const shareA = card.carry ? Math.round(card.carry.shares[0].share * 100) : null;
             return (
-              <TouchableOpacity key={card.key} testID={`pair-card-${card.key}`} style={[s.row, i === 0 && s.rowFirst, { flexDirection: 'column', alignItems: 'stretch' }]} activeOpacity={0.7} accessibilityRole="button" onPress={() => onOpenSheet(pairCardSheet(card))}>
+              <TouchableOpacity key={card.key} testID={`pair-card-${card.key}`} style={[s.row, i === 0 && s.rowFirst, { flexDirection: 'column', alignItems: 'stretch' }]} activeOpacity={0.7} accessibilityRole="button" onPress={() => onOpenSheet(pairCardSheet(card, { single }))}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={[s.strong, s.grow]} numberOfLines={1}>
                     {t('stats.screen.join.two', { a: firstName(card.players[0]), b: firstName(card.players[1]) })}
@@ -145,7 +147,9 @@ export default function RivalsTab({ tournament, pairsTournament, fixedTeams, def
                   <Feather name="chevron-right" size={16} color={theme.text.muted} />
                 </View>
                 {/* The figure is both partners' Stableford added up, whatever the mode. */}
-                <Text style={s.sub}>{t('stats.game.rivals.pairSub', { count: card.rounds })}</Text>
+                <Text style={s.sub}>
+                  {single ? t('stats.game.rivals.pairCombined', { n: num(card.avgPoints) }) : t('stats.game.rivals.pairSub', { count: card.rounds })}
+                </Text>
                 {shareA != null && (
                   <View style={{ marginTop: 6 }}>
                     <View style={{ flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', gap: 2 }}>
