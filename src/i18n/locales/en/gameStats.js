@@ -11,6 +11,7 @@ export default {
   "stats.game.error.body": "It was deleted or you're offline with no saved copy. Go back and pick it again.",
 
   "stats.game.standings.title": "Final standings",
+  "stats.game.standings.titleSingle": "Result",
   "stats.game.standings.points": "Points",
   "stats.game.standings.result": "Result",
   "stats.game.standings.stableford": "Stableford",
@@ -143,6 +144,10 @@ export default {
   "stats.game.round.comebackTeam": {
     one: "Comeback: {name} were {count} point behind after H{hole}",
     other: "Comeback: {name} were {count} points behind after H{hole}",
+  },
+  "stats.game.round.leadLedMany": {
+    one: "{names} led {led} of {count} hole",
+    other: "{names} led {led} of {count} holes",
   },
   "stats.game.round.leadLed": {
     one: "{names} led {led} of {count} hole",

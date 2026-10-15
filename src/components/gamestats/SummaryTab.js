@@ -111,7 +111,7 @@ export default function SummaryTab({
   return (
     <View>
       <LeaderboardCard
-        title={t('stats.game.standings.title')}
+        title={t(single ? 'stats.game.standings.titleSingle' : 'stats.game.standings.title')}
         // Four options don't fit beside the title at phone width: they get
         // their own row under it.
         headerRight={result ? null : segmented}

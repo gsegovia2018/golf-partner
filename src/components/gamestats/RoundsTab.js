@@ -45,17 +45,21 @@ export function resultText(result, t) {
 export function LeadLines({ lead, comeback }) {
   const t = useT();
   const { s } = useStatStyles();
+  const leaders = lead?.leaders?.length
+    ? lead.leaders.filter((l) => l.led === lead.leaders[0].led).flatMap((l) => l.players)
+    : [];
   return (
     <>
       {comeback && (
         <Text style={[s.sub, { marginBottom: 4 }]} testID="round-comeback">
-          {t(comeback.team ? 'stats.game.round.comebackTeam' : 'stats.game.round.comeback', { name: joinNames(comeback.players), count: comeback.deficit, hole: comeback.afterHole })}
+          {t(comeback.team || comeback.players.length > 1 ? 'stats.game.round.comebackTeam' : 'stats.game.round.comeback', { name: joinNames(comeback.players), count: comeback.deficit, hole: comeback.afterHole })}
         </Text>
       )}
-      {lead && lead.leaders.length > 0 && (
+      {leaders.length > 0 && (
         <Text style={[s.sub, { marginBottom: 8 }]} testID="round-lead">
           {[
-            t('stats.game.round.leadLed', { names: joinNames(lead.leaders.filter((l) => l.led === lead.leaders[0].led).flatMap((l) => l.players)), led: lead.leaders[0].led, count: lead.total }),
+            // A pair, or players tied on holes led, take the plural verb.
+            t(leaders.length > 1 ? 'stats.game.round.leadLedMany' : 'stats.game.round.leadLed', { names: joinNames(leaders), led: lead.leaders[0].led, count: lead.total }),
             lead.changes > 0 ? t('stats.game.round.leadChanges', { count: lead.changes }) : t('stats.game.round.leadNone'),
           ].join(' · ')}
         </Text>

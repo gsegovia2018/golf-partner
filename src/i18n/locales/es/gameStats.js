@@ -11,6 +11,7 @@ export default {
   "stats.game.error.body": "Se ha borrado o estás sin conexión y sin copia guardada. Vuelve atrás y elígela otra vez.",
 
   "stats.game.standings.title": "Clasificación final",
+  "stats.game.standings.titleSingle": "Resultado",
   "stats.game.standings.points": "Puntos",
   "stats.game.standings.result": "Resultado",
   "stats.game.standings.stableford": "Stableford",
@@ -142,6 +143,10 @@ export default {
   "stats.game.round.comebackTeam": {
     one: "Remontada: {name} iban {count} punto por detrás tras el H{hole}",
     other: "Remontada: {name} iban {count} puntos por detrás tras el H{hole}",
+  },
+  "stats.game.round.leadLedMany": {
+    one: "{names} lideraron {led} de {count} hoyo",
+    other: "{names} lideraron {led} de {count} hoyos",
   },
   "stats.game.round.leadLed": {
     one: "{names} lideró {led} de {count} hoyo",

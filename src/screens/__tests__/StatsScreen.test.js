@@ -422,6 +422,29 @@ describe('numbers and narrow screens', () => {
   });
 });
 
+describe('LeadLines verbs', () => {
+  const { LeadLines } = jest.requireActual('../../components/gamestats/RoundsTab');
+  const ana = { id: 'a', name: 'Ana Ruiz' };
+  const bea = { id: 'b', name: 'Bea Gil' };
+  const lines = (props) => render(<ThemeProvider><LeadLines {...props} /></ThemeProvider>);
+
+  test.each([
+    ['en', 'Comeback: Ana & Bea were 4 points behind after H9', 'Ana & Bea led 10 of 18 holes · 2 lead changes', 'Ana led 10 of 18 holes · 2 lead changes'],
+    ['es', 'Remontada: Ana y Bea iban 4 puntos por detrás tras el H9', 'Ana y Bea lideraron 10 de 18 hoyos · 2 cambios de líder', 'Ana lideró 10 de 18 hoyos · 2 cambios de líder'],
+  ])('%s: a pair is plural, one player singular', async (lang, comeback, pairLead, soloLead) => {
+    await act(() => setLanguagePref(lang));
+    const pair = lines({
+      comeback: { players: [ana, bea], team: true, deficit: 4, afterHole: 9 },
+      lead: { team: true, total: 18, changes: 2, leaders: [{ players: [ana, bea], led: 10 }] },
+    });
+    expect(pair.getByTestId('round-comeback').props.children).toBe(comeback);
+    expect(pair.getByTestId('round-lead').props.children).toBe(pairLead);
+    pair.unmount();
+    const solo = lines({ lead: { team: false, total: 18, changes: 2, leaders: [{ players: [ana], led: 10 }] } });
+    expect(solo.getByTestId('round-lead').props.children).toBe(soloLead);
+  });
+});
+
 // One played round: a casual game, or a tournament after its first day.
 describe('a one-round game', () => {
   const single = ({ shots = false } = {}) => {
@@ -454,6 +477,26 @@ describe('a one-round game', () => {
     const { getByText, queryByText } = await open(single());
     ['Resumen', 'Tarjeta', 'Jugadores', 'Rivales'].forEach((x) => expect(getByText(x)).toBeTruthy());
     expect(queryByText('Vueltas')).toBeNull();
+  });
+
+  test('standings are titled Result / Resultado', async () => {
+    const en = await open(single());
+    expect(en.getByText('Result')).toBeTruthy();
+    expect(en.queryByText('Final standings')).toBeNull();
+    en.unmount();
+    await act(() => setLanguagePref('es'));
+    const es = await open(single());
+    expect(es.getByText('Resultado')).toBeTruthy();
+    expect(es.queryByText('Clasificación final')).toBeNull();
+  });
+
+  test('a pair leading takes the plural verb (en / es)', async () => {
+    const en = await open(single());
+    expect(en.getByTestId('round-lead').props.children).toMatch(/^\S+ & \S+ led \d+ of 18 holes/);
+    en.unmount();
+    await act(() => setLanguagePref('es'));
+    const es = await open(single());
+    expect(es.getByTestId('round-lead').props.children).toMatch(/^\S+ y \S+ lideraron \d+ de 18 hoyos/);
   });
 
   test('a route asking for the round opens the Scorecard tab', async () => {
