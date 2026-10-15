@@ -62,12 +62,7 @@ describe('LeagueSettingsScreen', () => {
     const { getByText, getByDisplayValue, getByLabelText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
     await waitFor(() => getByDisplayValue('El Club'));
     fireEvent.changeText(getByDisplayValue('El Club'), 'El Club 2');
-    fireEvent.press(getByLabelText('1st place, 500 points'));
-    fireEvent.changeText(getByLabelText('Points for 1st place'), '400');
-    fireEvent.press(getByLabelText('2nd place, 300 points'));
-    fireEvent.changeText(getByLabelText('Points for 2nd place'), '250');
-    fireEvent.press(getByLabelText('3rd place, 190 points'));
-    fireEvent.changeText(getByLabelText('Points for 3rd place'), '100');
+    fireEvent.changeText(getByDisplayValue('500, 300, 190'), '400, 250, 100');
     fireEvent.changeText(getByLabelText('Handicap cap'), '28');
     fireEvent.press(getByLabelText('More points'));
     fireEvent.press(getByText('Save rules'));
@@ -75,29 +70,6 @@ describe('LeagueSettingsScreen', () => {
       name: 'El Club 2', seasonStart: '2026-01-01', seasonEnd: '2026-12-31',
       pointsTable: [400, 250, 100], cap: 28, feeCents: 3000, participationPoints: 15,
     }));
-  });
-
-  test('the points table is the bar chart, starting from the league\'s table', async () => {
-    store.getLeague.mockResolvedValue(snapshot());
-    const { getByLabelText, queryByDisplayValue } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
-    await waitFor(() => getByLabelText('1st place, 500 points'));
-    getByLabelText('2nd place, 300 points');
-    getByLabelText('3rd place, 190 points');
-    expect(queryByDisplayValue('500, 300, 190')).toBeNull();
-  });
-
-  test('a place left empty blocks saving until it has a number', async () => {
-    store.getLeague.mockResolvedValue(snapshot());
-    const { getByText, getByLabelText } = render(wrap(<LeagueSettingsScreen navigation={navigation} route={route} />));
-    await waitFor(() => getByLabelText('3rd place, 190 points'));
-    fireEvent.press(getByLabelText('3rd place, 190 points'));
-    fireEvent.changeText(getByLabelText('Points for 3rd place'), '');
-    fireEvent.press(getByText('Save rules'));
-    expect(store.updateLeagueRules).not.toHaveBeenCalled();
-    fireEvent.changeText(getByLabelText('Points for 3rd place'), '90');
-    fireEvent.press(getByText('Save rules'));
-    await waitFor(() => expect(store.updateLeagueRules).toHaveBeenCalledTimes(1));
-    expect(store.updateLeagueRules.mock.calls[0][1].pointsTable).toEqual([500, 300, 90]);
   });
 
   test('with no card yet the admin can change the format; only a change reaches updateLeagueRules', async () => {

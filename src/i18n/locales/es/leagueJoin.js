@@ -116,6 +116,7 @@ export default {
   "league.create.rulesPrompt": "¿Cómo funciona?",
   "league.create.rulesSubtitle": "Una tarjeta al mes, 18 hoyos, en cualquier campo con rating.",
   "league.create.ruleOneCardSub": "18 hoyos, en cualquier campo con valoración. Anuncia antes del primer golpe.",
+  "league.create.pointsTable": "Tabla de puntos (1.º, 2.º, 3.º…)",
   "league.create.pointsError": "Escribe números enteros separados por comas.",
   "league.create.handicapCap": "Tope de hándicap",
   "league.create.capError": "El tope debe estar entre 0 y 54.",

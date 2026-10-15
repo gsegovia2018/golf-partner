@@ -116,6 +116,7 @@ export default {
   "league.create.rulesPrompt": "How does it work?",
   "league.create.rulesSubtitle": "One card a month, 18 holes, any rated course.",
   "league.create.ruleOneCardSub": "18 holes, any rated course. Announce before the first shot.",
+  "league.create.pointsTable": "Points table (1st, 2nd, 3rd…)",
   "league.create.pointsError": "Enter whole numbers separated by commas.",
   "league.create.handicapCap": "Handicap cap",
   "league.create.capError": "The cap must be between 0 and 54.",
