@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing, driveLieFromDetail, driveLieBreakdown, driveDistanceAverage, approachMissTendency, approachMissCost, scramblingByMissType, teeClubAccuracy, approachMissByDistance, par5Performance, sgVsGroup, realClubDistances } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, collectiveExtremes, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, hotStretch, nemesisEncore, courseDNA, warmupVsClosing, driveLieFromDetail, driveLieBreakdown, driveDistanceAverage, approachMissTendency, approachMissCost, scramblingByMissType, teeClubAccuracy, approachMissByDistance, par5Performance, sgVsGroup, realClubDistances } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -479,138 +479,8 @@ describe('pairPerformance', () => {
   });
 });
 
-describe('pairCoverage', () => {
-  // handicap 0 for both partners → no extra shots, points = 2 + par - strokes
-  // (floored at 0). Hole 1: A birdies (3 pts) while B blanks (0 pts) — the
-  // pair is "covered" because at least one partner cleared 2 pts. Hole 2:
-  // both partners blank — a double-blank.
-  const players = [
-    { id: 'a', name: 'A', handicap: 0 },
-    { id: 'b', name: 'B', handicap: 0 },
-  ];
-  const [A, B] = players;
-  const holes = [
-    { number: 1, par: 4, strokeIndex: 1 },
-    { number: 2, par: 4, strokeIndex: 2 },
-  ];
-
-  test('reports coverage% (>=1 partner scored >=2 pts) and the both-blanked count', () => {
-    const tournament = {
-      players,
-      rounds: [{
-        courseName: 'R1',
-        holes,
-        pairs: [[A, B]],
-        scores: {
-          a: { 1: 3, 2: 6 }, // hole1: 3 pts (covers) · hole2: 0 pts (blanked)
-          b: { 1: 6, 2: 6 }, // hole1: 0 pts · hole2: 0 pts (blanked)
-        },
-      }],
-    };
-
-    const result = pairCoverage(tournament);
-    expect(result).toHaveLength(1);
-    expect(result[0].pair.map(p => p.id).sort()).toEqual(['a', 'b']);
-    expect(result[0].holes).toBe(2);
-    expect(result[0].coveragePct).toBe(50);
-    expect(result[0].bothBlanked).toBe(1);
-  });
-
-  test('only counts a hole when BOTH partners have a recorded score', () => {
-    const tournament = {
-      players,
-      rounds: [{
-        courseName: 'R1',
-        holes,
-        pairs: [[A, B]],
-        scores: {
-          a: { 1: 3 }, // hole2 unscored for A — hole2 must not count at all
-          b: { 1: 6, 2: 6 },
-        },
-      }],
-    };
-
-    const result = pairCoverage(tournament);
-    expect(result[0].holes).toBe(1);
-    expect(result[0].coveragePct).toBe(100);
-    expect(result[0].bothBlanked).toBe(0);
-  });
-
-  test('skips rounds with no pairs or no scores (scramble rounds already blanked by withoutScrambleScores)', () => {
-    const t = mixedModeTournament();
-    const clean = withoutScrambleScores(t);
-    // R2 is the scramblepairs round — its pairs/scores are nulled by
-    // withoutScrambleScores, so it must not contribute any holes. Only R1
-    // (18 holes) and R3 (front 9) count: pair p1/p2 loses R3 hole 5 to p2's
-    // gap (18+8=26), pair p3/p4 has no gap (18+9=27). If R2 leaked in, both
-    // totals would be 18 holes higher.
-    const result = pairCoverage(clean);
-    const ab = result.find(p => p.pair.map(x => x.id).sort().join(',') === 'p1,p2');
-    const cd = result.find(p => p.pair.map(x => x.id).sort().join(',') === 'p3,p4');
-    expect(ab.holes).toBe(26);
-    expect(cd.holes).toBe(27);
-  });
-
-  test('skips singleton pairs from odd rosters instead of crashing', () => {
-    const three = [
-      { id: 'a', name: 'A', handicap: 0 },
-      { id: 'b', name: 'B', handicap: 0 },
-      { id: 'c', name: 'C', handicap: 0 },
-    ];
-    const tournament = {
-      players: three,
-      rounds: [{
-        courseName: 'Test',
-        holes: [{ number: 1, par: 4, strokeIndex: 1 }],
-        pairs: [[three[0], three[1]], [three[2]]],
-        scores: { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 6 } },
-      }],
-    };
-    expect(() => pairCoverage(tournament)).not.toThrow();
-    expect(pairCoverage(tournament)).toHaveLength(1);
-  });
-});
-
-describe('pairConfigMatrix — orients each round onto the config\'s canonical sides', () => {
-  test('a rematch with pair1/pair2 flipped still credits the same side, not the opponent', () => {
-    // A/B is the dominant team in BOTH rounds. R3 stores the pairing with
-    // sides flipped (pair1 = C/D, pair2 = A/B) — same two teams, same
-    // rematch, just recorded in the other order. The aggregate must still
-    // show A/B winning both holes, not a 1-1 split from mislabeling R3's
-    // pair1/pair2 as "side A"/"side B" verbatim.
-    const players = [
-      { id: 'a', name: 'A', handicap: 0 },
-      { id: 'b', name: 'B', handicap: 0 },
-      { id: 'c', name: 'C', handicap: 0 },
-      { id: 'd', name: 'D', handicap: 0 },
-    ];
-    const [A, B, C, D] = players;
-    const hole = [{ number: 1, par: 4, strokeIndex: 1 }];
-    const round1 = {
-      courseName: 'R1',
-      holes: hole,
-      pairs: [[A, B], [C, D]],
-      scores: { a: { 1: 3 }, b: { 1: 3 }, c: { 1: 6 }, d: { 1: 6 } }, // AB pts 6, CD pts 0
-    };
-    const round3 = {
-      courseName: 'R3',
-      holes: hole,
-      pairs: [[C, D], [A, B]], // same teams, sides flipped in storage order
-      scores: { a: { 1: 3 }, b: { 1: 3 }, c: { 1: 6 }, d: { 1: 6 } }, // AB pts 6, CD pts 0
-    };
-    const tournament = { players, rounds: [round1, round3] };
-
-    const configs = pairConfigMatrix(tournament);
-    expect(configs).toHaveLength(1);
-    const [config] = configs;
-    expect(config.holeWins).toEqual({ A: 2, B: 0, T: 0 });
-    expect(config.pointsA).toBe(12);
-    expect(config.pointsB).toBe(0);
-  });
-});
-
-describe('matchPlayResults / pairConfigMatrix — skip rounds with no scores recorded at all', () => {
-  test('an empty scores object produces no phantom match-play card or config round', () => {
+describe('matchPlayResults — skip rounds with no scores recorded at all', () => {
+  test('an empty scores object produces no phantom match-play card', () => {
     const players = [
       { id: 'a', name: 'A', handicap: 0 },
       { id: 'b', name: 'B', handicap: 0 },
@@ -636,11 +506,6 @@ describe('matchPlayResults / pairConfigMatrix — skip rounds with no scores rec
     const mp = matchPlayResults(tournament);
     expect(mp[0].available).toBe(true);
     expect(mp[1].available).toBe(false);
-
-    const configs = pairConfigMatrix(tournament);
-    expect(configs).toHaveLength(1);
-    expect(configs[0].rounds).toHaveLength(1);
-    expect(configs[0].rounds[0].roundIndex).toBe(0);
   });
 });
 
@@ -1509,103 +1374,6 @@ describe('driveScoreImpact', () => {
   });
 });
 
-describe('girByDriveResult', () => {
-  // Non-par-3 holes only (drive isn't logged on a par 3) — 1,3,4 fairway +
-  // 10 super count as hits, 6,7,9 as misses. GIR = strokes - putts <= par - 2.
-  const holes = [
-    { number: 1, par: 4, strokeIndex: 1 },
-    { number: 2, par: 3, strokeIndex: 2 },
-    { number: 3, par: 5, strokeIndex: 3 },
-    { number: 4, par: 4, strokeIndex: 4 },
-    { number: 6, par: 5, strokeIndex: 6 },
-    { number: 7, par: 4, strokeIndex: 7 },
-    { number: 9, par: 5, strokeIndex: 9 },
-    { number: 10, par: 4, strokeIndex: 10 },
-  ];
-
-  test('splits GIR% by fairway hit vs a miss (super is a hit; left/right/short are misses)', () => {
-    const scores = {
-      1: 4,  // fairway, par4, putts 2 → 4-2=2 <= 2 → GIR
-      3: 6,  // fairway, par5, putts 3 → 6-3=3 <= 3 → GIR
-      4: 5,  // fairway, par4, putts 2 → 5-2=3 <= 2 → NOT GIR
-      6: 7,  // left, par5, putts 2 → 7-2=5 <= 3 → NOT GIR
-      7: 4,  // right, par4, putts 2 → 4-2=2 <= 2 → GIR
-      9: 5,  // short, par5, putts 2 → 5-2=3 <= 3 → GIR
-      10: 6, // super, par4, putts 2 → 6-2=4 <= 2 → NOT GIR
-    };
-    const shotDetails = {
-      p1: {
-        1: { drive: 'fairway', putts: 2 },
-        3: { drive: 'fairway', putts: 3 },
-        4: { drive: 'fairway', putts: 2 },
-        6: { drive: 'left', putts: 2 },
-        7: { drive: 'right', putts: 2 },
-        9: { drive: 'short', putts: 2 },
-        10: { drive: 'super', putts: 2 },
-      },
-    };
-    const t = {
-      players: [{ id: 'p1', handicap: 0 }],
-      rounds: [{ courseName: 'C', holes, scores: { p1: scores }, shotDetails }],
-    };
-
-    const r = girByDriveResult(t, 'p1');
-    expect(r.fairway.holes).toBe(4); // holes 1, 3, 4 + the super drive on 10
-    expect(r.fairway.girPct).toBe(50); // 2/4
-    expect(r.miss.holes).toBe(3);
-    expect(r.miss.girPct).toBe(67); // 2/3
-  });
-
-  test('a super drive lands in the fairway bucket, not the miss bucket (hit-equivalent, as in shotStats/teeShotImpact)', () => {
-    const h = [{ number: 1, par: 4, strokeIndex: 1 }];
-    const shotDetails = { p1: { 1: { drive: 'super', putts: 2 } } };
-    const t = {
-      players: [{ id: 'p1', handicap: 0 }],
-      rounds: [{ courseName: 'C', holes: h, scores: { p1: { 1: 4 } }, shotDetails }],
-    };
-
-    const r = girByDriveResult(t, 'p1');
-    expect(r.fairway.holes).toBe(1);
-    expect(r.fairway.girPct).toBe(100);
-    expect(r.miss.holes).toBe(0);
-  });
-
-  test('skips holes where drive or putts is missing, and excludes par-3s even if a drive is logged there', () => {
-    const h = [
-      { number: 1, par: 4, strokeIndex: 1 }, // drive only, no putts → skip
-      { number: 2, par: 4, strokeIndex: 2 }, // putts only, no drive → skip
-      { number: 3, par: 3, strokeIndex: 3 }, // par 3 with a (bogus) drive logged → skip
-    ];
-    const shotDetails = {
-      p1: {
-        1: { drive: 'fairway' },
-        2: { putts: 2 },
-        3: { drive: 'fairway', putts: 1 },
-      },
-    };
-    const t = {
-      players: [{ id: 'p1', handicap: 0 }],
-      rounds: [{ courseName: 'C', holes: h, scores: { p1: { 1: 4, 2: 4, 3: 3 } }, shotDetails }],
-    };
-
-    const r = girByDriveResult(t, 'p1');
-    expect(r.fairway.holes).toBe(0);
-    expect(r.miss.holes).toBe(0);
-  });
-
-  test('skips scramble rounds (shotDetails blanked by withoutScrambleScores)', () => {
-    const t = mixedModeTournament();
-    const clean = withoutScrambleScores(t);
-    // mixedModeTournament's fixtures never log shotDetails at all, so both
-    // buckets stay empty — the point is this must not throw when a round's
-    // shotDetails is null (R2, the scramble round).
-    expect(() => girByDriveResult(clean, 'p1')).not.toThrow();
-    const r = girByDriveResult(clean, 'p1');
-    expect(r.fairway.holes).toBe(0);
-    expect(r.miss.holes).toBe(0);
-  });
-});
-
 describe('puttDeepDive', () => {
   test('reports no data when no putts are logged', () => {
     const h = holes18();
@@ -2378,32 +2146,6 @@ describe('collectiveExtremes — qualifies on round participants, not the whole 
   });
 });
 
-describe('holeDifficultyMap — honest averages', () => {
-  it('reports null (not 0) avgPoints/avgStrokes for a hole nobody scored', () => {
-    const holes = [
-      { number: 1, par: 4, strokeIndex: 1 },
-      { number: 2, par: 4, strokeIndex: 2 },
-    ];
-    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
-    const round = {
-      courseName: 'Test Course',
-      holes,
-      playerHandicaps: { p1: 0 },
-      scores: { p1: { 1: 4 } }, // hole 2 never scored by anyone
-    };
-    const t = buildTournament({ players, rounds: [round] });
-
-    const map = holeDifficultyMap(t, 0);
-    const hole1 = map.find(h => h.holeNumber === 1);
-    const hole2 = map.find(h => h.holeNumber === 2);
-
-    expect(hole1.avgPoints).toBe(2); // par → 2 + (4-4) = 2
-    expect(hole1.avgStrokes).toBe(4);
-    expect(hole2.avgPoints).toBeNull();
-    expect(hole2.avgStrokes).toBeNull();
-  });
-});
-
 describe('bestWorstHoles — sample guards, overlap-free split, round scope', () => {
   // Helper: one hole scored identically by two players at handicap 0, so
   // avgPoints = 2 + (par - strokes).
@@ -2629,65 +2371,6 @@ describe('hallOfShame.gift — fires with as few as 3 players', () => {
 });
 
 // ── Task 16: Overview metrics — Playing to Handicap, Hot Stretch ──
-
-describe('playingToHandicap', () => {
-  it('computes points, holesPlayed and delta = points − 2×holesPlayed, sorted best-first', () => {
-    // handicap 0 for both players → extra shots are always 0, so points on
-    // each hole are simply 2 + par − strokes. 4 holes, all par 4.
-    const holes = [1, 2, 3, 4].map((n) => ({ number: n, par: 4, strokeIndex: n }));
-    const players = [
-      { id: 'p1', name: 'Alice', handicap: 0 },
-      { id: 'p2', name: 'Bob', handicap: 0 },
-      { id: 'p3', name: 'Cara', handicap: 0 }, // never plays — must be skipped
-    ];
-    const round = {
-      courseName: 'Test Course',
-      holes,
-      playerHandicaps: { p1: 0, p2: 0, p3: 0 },
-      scores: {
-        // p1 strokes 4,4,3,5 → points 2,2,3,1 → total 8 over 4 holes → delta 8-8=0
-        p1: { 1: 4, 2: 4, 3: 3, 4: 5 },
-        // p2 strokes 3,3,3,3 → points 3,3,3,3 → total 12 over 4 holes → delta 12-8=4
-        p2: { 1: 3, 2: 3, 3: 3, 4: 3 },
-      },
-    };
-    const t = buildTournament({ players, rounds: [round] });
-
-    const result = playingToHandicap(t);
-
-    expect(result.map((r) => r.player.id)).toEqual(['p2', 'p1']);
-    expect(result[0]).toMatchObject({ points: 12, holesPlayed: 4, delta: 4 });
-    expect(result[1]).toMatchObject({ points: 8, holesPlayed: 4, delta: 0 });
-    // p3 never played a hole — must not appear at all.
-    expect(result.some((r) => r.player.id === 'p3')).toBe(false);
-  });
-
-  it('sums points/holesPlayed/delta across multiple rounds and exposes a per-round breakdown', () => {
-    const holes = [1, 2].map((n) => ({ number: n, par: 4, strokeIndex: n }));
-    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
-    const roundA = {
-      courseName: 'Course A', holes, playerHandicaps: { p1: 0 },
-      // strokes 4,4 → points 2,2 → 4 pts over 2 holes → round delta 4-4=0
-      scores: { p1: { 1: 4, 2: 4 } },
-    };
-    const roundB = {
-      courseName: 'Course B', holes, playerHandicaps: { p1: 0 },
-      // strokes 3,3 → points 3,3 → 6 pts over 2 holes → round delta 6-4=2
-      scores: { p1: { 1: 3, 2: 3 } },
-    };
-    const t = buildTournament({ players, rounds: [roundA, roundB] });
-
-    const result = playingToHandicap(t);
-
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ points: 10, holesPlayed: 4, delta: 2 });
-    expect(result[0].rounds.map((r) => ({ roundIndex: r.roundIndex, points: r.points, holesPlayed: r.holesPlayed, delta: r.delta })))
-      .toEqual([
-        { roundIndex: 0, points: 4, holesPlayed: 2, delta: 0 },
-        { roundIndex: 1, points: 6, holesPlayed: 2, delta: 2 },
-      ]);
-  });
-});
 
 describe('hotStretch', () => {
   it('finds the best rolling windowSize-hole sum, ties keep the earliest window', () => {

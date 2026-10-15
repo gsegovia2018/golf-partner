@@ -1,6 +1,6 @@
 import {
   playerAvgStableford, playerAvgPerHole, playerRoundHistory, strokeIndexAccuracy,
-  hallOfShame, bounceBackRate, warmupVsClosing, tournamentMomentum, courseDNA,
+  hallOfShame, bounceBackRate, warmupVsClosing, courseDNA,
 } from '../statsEngine';
 import { playerPartnerSplits } from '../tournamentStore';
 import { holes18, buildTournament } from './statsFixtures';
@@ -121,9 +121,8 @@ describe('warmupVsClosing labels follow the round length', () => {
   });
 });
 
-describe('tournamentMomentum / courseDNA ignore partial rounds in round totals', () => {
+describe('courseDNA ignores partial rounds in round totals', () => {
   const H18 = holes18();
-  const H9 = h9();
   const part = fill(H18, (h) => h.par);
   delete part[10]; // part-scored eighteen on the same course
   const t = buildTournament({
@@ -132,19 +131,6 @@ describe('tournamentMomentum / courseDNA ignore partial rounds in round totals',
       { courseName: 'X', courseId: 'x', holes: H18, playerHandicaps: ph, scores: { a: fill(H18, (h) => h.par) } },
       { courseName: 'X', courseId: 'x', holes: H18, playerHandicaps: ph, scores: { a: part } },
     ],
-  });
-  it('momentum min/max skip the part-scored round', () => {
-    const a = tournamentMomentum(t).find((m) => m.player.id === 'a');
-    expect(a.minPts).toBe(36);
-    expect(a.maxPts).toBe(36);
-    expect(a.rounds.map((r) => r.fullRound)).toEqual([true, false]);
-  });
-  it('momentum min/max skip a nine-hole round', () => {
-    const nine = buildTournament({ players, rounds: [
-      t.rounds[0],
-      { courseName: 'Y', holes: H9, playerHandicaps: ph, scores: { a: fill(H9, (h) => h.par) } },
-    ] });
-    expect(tournamentMomentum(nine).find((m) => m.player.id === 'a').minPts).toBe(36);
   });
   it('course DNA roundPoints averages full rounds only', () => {
     const c = courseDNA(t).find((r) => r.player.id === 'a').courses[0];
