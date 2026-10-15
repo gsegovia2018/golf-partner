@@ -12,12 +12,16 @@ export default {
 
   "stats.game.standings.title": "Clasificación final",
   "stats.game.standings.points": "Puntos",
+  "stats.game.standings.result": "Resultado",
+  "stats.game.standings.stableford": "Stableford",
   "stats.game.standings.gross": "Bruto",
   "stats.game.standings.net": "Neto",
   "stats.game.standings.even": "Par",
   "stats.game.standings.partial": "{value} ({holes} h)",
   "stats.game.standings.holesPlayed": { one: "{count} hoyo jugado", other: "{count} hoyos jugados" },
   "stats.game.standings.footer.points": "Puntos por vuelta · total · frente al hándicap (2 ptos por hoyo)",
+  "stats.game.standings.footer.result": "Puntos {mode} · igual que la clasificación de Jugar",
+  "stats.game.standings.footer.resultHoles": "{mode} · hoyos ganados · igual que la clasificación de Jugar",
   "stats.game.standings.footer.gross": "Solo vueltas terminadas · golpes brutos · frente al par",
   "stats.game.standings.footer.net": "Solo vueltas terminadas · golpes netos · frente al par",
   "stats.game.standings.a11y.points": { one: "{count} punto", other: "{count} puntos" },
@@ -25,6 +29,7 @@ export default {
   "stats.game.standings.a11y.net": { one: "{count} golpe neto", other: "{count} golpes netos" },
 
   "stats.game.prog.title": "Cómo fue",
+  "stats.game.prog.titleStableford": "Cómo fue · Stableford",
   "stats.game.prog.start": "Inicio",
   "stats.game.prog.wire": "{name} fue líder después de cada vuelta.",
   "stats.game.prog.took": "{name} se puso líder para siempre en la V{round}.",
@@ -219,4 +224,5 @@ export default {
   "stats.game.rivals.h2hLegend": "Ganados-perdidos-empatados con puntos Stableford, hoyo a hoyo.",
   "stats.game.rivals.cellA11y": "{a} contra {b}: ganados {w}, perdidos {l}, empatados {tie}",
   "stats.game.rivals.splits": "Según la pareja",
+  "stats.game.rivals.pairSub": { one: "{count} vuelta · Stableford combinado de media", other: "{count} vueltas · Stableford combinado de media" },
 };

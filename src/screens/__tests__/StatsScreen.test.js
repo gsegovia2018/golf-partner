@@ -4,6 +4,7 @@ import { ThemeProvider } from '../../theme/ThemeContext';
 import { setLanguagePref } from '../../i18n';
 import StatsScreen from '../StatsScreen';
 import { weekendFixture } from '../../store/__tests__/fixtures/gameStatsFixture';
+import { bestBallGameFixture } from '../../store/__tests__/fixtures/bestBallGameFixture';
 
 // loadTournament() resolves in a microtask after the first render; flush it.
 const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
@@ -310,5 +311,94 @@ describe('StatsScreen in Spanish', () => {
     expect(getByText('Vueltas')).toBeTruthy();
     expect(getByText('Rivales')).toBeTruthy();
     expect(getByText('Clasificación final')).toBeTruthy();
+  });
+});
+
+// The phone walkthrough's game: one round of Best Ball / Worst Ball.
+describe('a Best Ball / Worst Ball game', () => {
+  const tabs = (getAllByRole) => getAllByRole('tab').map((x) => within(x).queryAllByText(/./).map((n) => n.props.children).join(''));
+
+  test('standings default to the Play result, with Stableford, Gross and Net beside it', async () => {
+    const { getAllByRole, getByRole, getAllByText, getByText, queryByText } = await open(bestBallGameFixture());
+    expect(tabs(getAllByRole)).toEqual(['Result', 'Stableford', 'Gross', 'Net']);
+    expect(getByRole('tab', { name: 'Result' }).props.accessibilityState.selected).toBe(true);
+    // Marcos 5, Yeyen 5, Molden 4.5, Charlie 4.5: the Play board, not 30/29/27/25.
+    expect(getAllByText('5')).toHaveLength(2);
+    expect(getAllByText('4.5')).toHaveLength(2);
+    expect(queryByText('30')).toBeNull();
+    expect(getByText('Best Ball / Worst Ball points · same as the Play leaderboard')).toBeTruthy();
+    fireEvent.press(getByRole('tab', { name: 'Stableford' }));
+    expect(getByText('30')).toBeTruthy();
+    expect(getByText('Round points · total · vs handicap (2 pts per hole)')).toBeTruthy();
+  });
+
+  test('a Stableford game keeps Points · Gross · Net', async () => {
+    const { getAllByRole, queryByRole } = await open(fixture());
+    expect(tabs(getAllByRole)).toEqual(['Points', 'Gross', 'Net']);
+    expect(queryByRole('tab', { name: 'Result' })).toBeNull();
+  });
+
+  test('a best ball tournament titles its progression as Stableford, with no lead caption', async () => {
+    const { getByText, queryByText } = await open(fixture({ mode: 'bestball' }));
+    expect(getByText('How it unfolded · Stableford')).toBeTruthy();
+    expect(queryByText('Marcos took the lead for good in R2.')).toBeNull();
+  });
+
+  test('the round result counts each pair once, as the scorecard does', async () => {
+    const { getByTestId, getByText } = await open(bestBallGameFixture());
+    fireEvent.press(getByTestId('tab-rounds'));
+    expect(getByText('Marcos & Yeyen beat Molden & Charlie 10–9')).toBeTruthy();
+  });
+
+  test('pair cards say their average is combined Stableford', async () => {
+    const { getByTestId, getAllByText } = await open(bestBallGameFixture());
+    fireEvent.press(getByTestId('tab-rivals'));
+    expect(getByTestId('pair-avg-bb1|bb2').props.children).toBe('57');
+    expect(getAllByText('1 round · combined Stableford avg')).toHaveLength(2);
+  });
+
+  test('in Spanish: Resultado · Stableford · Bruto · Neto', async () => {
+    await act(() => setLanguagePref('es'));
+    const { getAllByRole, getAllByText, getByText } = await open(bestBallGameFixture());
+    expect(tabs(getAllByRole)).toEqual(['Resultado', 'Stableford', 'Bruto', 'Neto']);
+    expect(getAllByText('4,5')).toHaveLength(2);
+    fireEvent.press(getByText('Rivales'));
+    expect(getAllByText('1 vuelta · Stableford combinado de media')).toHaveLength(2);
+  });
+});
+
+describe('numbers and narrow screens', () => {
+  const putts = (t, list) => {
+    const r = t.rounds[0];
+    r.holes.forEach((h, i) => { r.shotDetails['fx-me'][h.number].putts = list[i]; });
+  };
+
+  test('putts per hole keep one decimal in both languages', async () => {
+    const t = fixture();
+    t.rounds = [t.rounds[0]];
+    putts(t, [1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2]); // 34 over 18
+    await act(() => setLanguagePref('es'));
+    const es = await open(t);
+    fireEvent.press(es.getByTestId('tab-players'));
+    expect(within(es.getByTestId('player-shots')).getByText('1,9')).toBeTruthy();
+    es.unmount();
+    await act(() => setLanguagePref('en'));
+    putts(t, Array(18).fill(2)); // exactly 2 per hole still shows its decimal
+    const en = await open(t);
+    fireEvent.press(en.getByTestId('tab-players'));
+    expect(within(en.getByTestId('player-shots')).getByText('2.0')).toBeTruthy();
+  });
+
+  test('score mix counts, Where you score labels and head-to-head heads never ellipsize', async () => {
+    const { getByTestId, getByText } = await open(fixture());
+    const count = getByTestId('mix-count-fx-me');
+    expect(count.props.numberOfLines).toBeUndefined();
+    fireEvent.press(getByTestId('tab-players'));
+    expect(getByText('Hardest third (SI)').props.numberOfLines).toBeUndefined();
+    fireEvent.press(getByTestId('tab-rivals'));
+    const head = getByTestId('h2h-head-fx-me');
+    const style = Object.assign({}, ...[head.props.style].flat(Infinity).filter(Boolean));
+    expect(style.letterSpacing).toBe(0);
+    expect(style.width).toBeLessThanOrEqual(56);
   });
 });

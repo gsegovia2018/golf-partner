@@ -143,7 +143,8 @@ export default function PlayersTab({ tournament, selectedId, onSelectPlayer, onO
               accessibilityRole="button"
               onPress={() => onOpenSheet(bucketSheet(player, r.label, r.b))}
             >
-              <Text style={s.rowLabel} numberOfLines={1}>{r.label}</Text>
+              {/* Wraps to two lines rather than ellipsize (Spanish "Tercio más difícil (HCP)"). */}
+              <Text style={s.rowLabel}>{r.label}</Text>
               <View style={s.barTrack}>
                 <View style={[s.barFill, { width: `${Math.min(100, (r.b.avg / 3) * 100)}%`, backgroundColor: tone(r.b.avg) }]} />
               </View>
@@ -250,8 +251,8 @@ export default function PlayersTab({ tournament, selectedId, onSelectPlayer, onO
             <>
               <Text style={[s.sub, { marginBottom: 6 }]}>{t('stats.screen.shots.putting')}</Text>
               <View style={[s.tiles, { marginBottom: 8 }]}>
-                <Tile s={s} value={num(shots.putts.perRound)} label={t('stats.screen.shots.perRound')} />
-                <Tile s={s} value={num(shots.putts.perHole)} label={t('stats.screen.shots.perHole')} />
+                <Tile s={s} value={num(shots.putts.perRound, { maxDecimals: 1 })} label={t('stats.screen.shots.perRound')} />
+                <Tile s={s} value={num(shots.putts.perHole, { decimals: 1 })} label={t('stats.screen.shots.perHole')} />
                 <Tile s={s} value={num(shots.putts.onePutts)} label={t('stats.screen.shots.onePutts')} />
                 <Tile s={s} value={num(shots.putts.threePuttPlus)} label={t('stats.screen.shots.threePutts')} />
               </View>
@@ -312,7 +313,7 @@ export default function PlayersTab({ tournament, selectedId, onSelectPlayer, onO
                   {[
                     r.firPct == null ? '–' : `${num(r.firPct)}%`,
                     r.girPct == null ? '–' : `${num(r.girPct)}%`,
-                    r.puttsPerHole == null ? '–' : num(r.puttsPerHole),
+                    r.puttsPerHole == null ? '–' : num(r.puttsPerHole, { decimals: 1 }),
                     r.threePutts == null ? '–' : num(r.threePutts),
                     num(r.penalties),
                   ].map((v, i) => (

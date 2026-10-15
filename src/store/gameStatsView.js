@@ -5,14 +5,16 @@
 // as small structured values the components turn into copy.
 import {
   getPlayingHandicap, calcStablefordPoints, calcExtraShots, roundLeaderboard, roundScoringMode,
+  tournamentLeaderboardResolved,
 } from './tournamentStore';
+import { assignPlacements, comparatorForBoardMode } from './leaderboardPlacement';
 import {
   holeCountOf, isRoundFullyScoredBy, isFullLengthRound, resolvePairs,
 } from './scoring';
 import {
   tournamentHighlights, hotStretch, skinsLeaderboard, hallOfShame, par3Heartbreak,
   pickupChampion, anchor, zeroHero, bestWorstHoles, chaosHoles, collectiveExtremes,
-  headToHead, shotStats, playerStreaks,
+  headToHead, shotStats, playerStreaks, withoutScrambleScores,
 } from './statsEngine';
 
 // Modes whose round result is a team result when the round carries pairs.
@@ -138,6 +140,31 @@ export function standingsRows(tournament, { metric = 'points' } = {}) {
     roundIndices,
     rows: [...assignPlaces(ranked, (r) => `${r.counted}|${r.vs}`), ...unranked],
   };
+}
+
+// ── Result standings ──
+// The game's real result: the very board the Play screen leaderboard shows
+// (HomeScreen's resolvedBoard: a casual game → its round's board in the
+// round's own mode; a tournament → tournamentLeaderboardResolved, which is the
+// Stableford total for mixed modes), placed with that board's own comparator.
+// Takes the RAW tournament, not the scramble-sanitised one, so a scramble
+// round counts exactly as Play counts it. `sameAsStableford` is true when the
+// board is the individual Stableford total the Points view already shows
+// (individual, Stableford with partners), so Summary needs no Result view.
+export function resultStandings(tournament) {
+  const rounds = tournament?.rounds ?? [];
+  const board = tournament?.kind === 'game'
+    ? roundLeaderboard(tournament, rounds[0] ?? null)
+    : tournamentLeaderboardResolved(tournament);
+  const rows = assignPlacements(board.entries.filter((e) => e.player), comparatorForBoardMode(board.mode));
+  let sameAsStableford = false;
+  if (board.mode === 'individual' || board.mode === 'stableford') {
+    const points = new Map(
+      standingsRows(withoutScrambleScores(tournament)).rows.map((r) => [r.player.id, r.total ?? 0]),
+    );
+    sameAsStableford = rows.every((r) => (points.get(r.player.id) ?? 0) === r.points);
+  }
+  return { mode: board.mode, unit: board.unit, rows, sameAsStableford };
 }
 
 // ── Progression ──
