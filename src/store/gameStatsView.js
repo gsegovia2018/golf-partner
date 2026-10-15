@@ -16,6 +16,7 @@ import {
   pickupChampion, anchor, zeroHero, bestWorstHoles, chaosHoles, collectiveExtremes,
   headToHead, shotStats, playerStreaks, withoutScrambleScores, playerScoreDistribution,
 } from './statsEngine';
+import { scorecardModel, grossResult } from './scorecardView';
 
 // Modes whose round result is a team result when the round carries pairs.
 const TEAM_RESULT_MODES = new Set(['stableford', 'bestball', 'pairsmatchplay']);
@@ -269,48 +270,6 @@ export function matchPlayRounds(tournament) {
     .filter((ri) => MATCH_PLAY_MODES.has(roundScoringMode(tournament, tournament.rounds[ri])))
     .map((ri) => ({ roundIndex: ri, courseName: tournament.rounds[ri].courseName, result: roundResult(tournament, ri) }))
     .filter((r) => r.result && (r.result.kind === 'teams' ? r.result.sides.length >= 2 : r.result.entries.length >= 2));
-}
-
-// ── Scorecard ──
-// One row per hole with a cell per player (points, strokes, handicap strokes),
-// plus Out / In / Tot rows (a 9-hole round has Tot only). A total is null
-// for a player with no score in that stretch.
-export function scorecardGrid(tournament, roundIndex, playerIds) {
-  const round = tournament?.rounds?.[roundIndex];
-  if (!round) return { holes: [], totals: [], nine: false };
-  const players = playerIds
-    .map((id) => (tournament.players ?? []).find((p) => p.id === id))
-    .filter(Boolean);
-  const byPlayer = new Map(players.map((p) => [p.id, new Map(holeEntries(round, p).map((e) => [e.hole.number, e]))]));
-  const holeCount = holeCountOf(round);
-  const holes = (round.holes ?? []).map((hole) => ({
-    number: hole.number,
-    par: hole.par,
-    si: hole.strokeIndex,
-    cells: players.map((p) => {
-      const e = byPlayer.get(p.id).get(hole.number);
-      const handicap = getPlayingHandicap(round, p);
-      return {
-        playerId: p.id,
-        points: e ? e.points : null,
-        strokes: e ? e.strokes : null,
-        extra: calcExtraShots(handicap, hole.strokeIndex, holeCount),
-      };
-    }),
-  }));
-  const span = (key, list) => ({
-    key,
-    par: list.reduce((s, h) => s + h.par, 0),
-    values: players.map((_, pi) => {
-      const pts = list.map((h) => h.cells[pi].points).filter((v) => v != null);
-      return pts.length ? pts.reduce((s, v) => s + v, 0) : null;
-    }),
-  });
-  const nine = holes.length <= 9;
-  const totals = nine
-    ? [span('tot', holes)]
-    : [span('out', holes.slice(0, 9)), span('in', holes.slice(9)), span('tot', holes)];
-  return { holes, totals, nine };
 }
 
 // The tournament with every round but one blanked, so the tournament-wide
@@ -834,16 +793,8 @@ export function singleRoundIndex(tournament) {
   return scored.length === 1 ? scored[0] : null;
 }
 
-// Gross result of one hole against par, the scorecard's classes.
-export function grossResult(par, strokes) {
-  if (!par || !strokes) return null;
-  const vs = strokes - par;
-  if (vs <= -2) return 'eagle';
-  if (vs === -1) return 'birdie';
-  if (vs === 0) return 'par';
-  if (vs === 1) return 'bogey';
-  return 'double';
-}
+// Gross result of one hole against par (the scorecard's classes).
+export { grossResult };
 
 const GROSS_LEVEL = { eagle: 4, birdie: 3, par: 2, bogey: 1, double: 0 };
 
@@ -862,71 +813,18 @@ export function scoreMix(tournament, playerId, mode) {
   return playerScoreDistribution(tournament, playerId, { metric: mode === 'points' ? 'points' : 'strokes' });
 }
 
-const FAIRWAY_DRIVES = new Set(['fairway', 'super']);
-
-// ── Hole-by-hole ledger (one player, one round) ──
-// One cell per hole (strokes, points, gross result, putts, drive, tee
-// penalties, GIR) and a total per nine: an 18-hole round splits into out /
-// in like the scorecard, a 9-hole round has one 'tot' block. Shot fields are
-// null where the player logged nothing; drives only count on par 4s and 5s
-// (as shotStats does).
-export function roundLedger(tournament, roundIndex, playerId) {
+// ── Scorecard (one round) ──
+// The round's scorecard for Game Stats: Stableford points (the stats unit),
+// rows for `playerIds` in roster order with `meId` first. One player's row
+// is the hole-by-hole ledger (`rows[0]`): per hole strokes, points, gross
+// result, handicap strokes, putts, drive (par 4s and 5s), tee penalties, GIR,
+// and a total per nine.
+export function roundCard(tournament, roundIndex, playerIds, meId = null) {
   const round = tournament?.rounds?.[roundIndex];
-  const player = (tournament?.players ?? []).find((p) => p.id === playerId);
-  if (!round || !player) return null;
-  const byHole = new Map(holeEntries(round, player).map((e) => [e.hole.number, e]));
-  const details = round.shotDetails?.[playerId] ?? {};
-  const cells = (round.holes ?? []).map((hole) => {
-    const e = byHole.get(hole.number);
-    const d = details[hole.number] ?? null;
-    const strokes = e ? e.strokes : null;
-    const putts = d?.putts ?? null;
-    return {
-      number: hole.number,
-      par: hole.par,
-      strokes,
-      points: e ? e.points : null,
-      gross: e ? grossResult(hole.par, strokes) : null,
-      putts,
-      drive: hole.par !== 3 ? (d?.drive ?? null) : null,
-      penalties: d?.teePenalties ?? 0,
-      gir: strokes != null && putts != null ? strokes - putts <= hole.par - 2 : null,
-    };
-  });
-  const sumOf = (list, key) => {
-    const vals = list.map((c) => c[key]).filter((v) => v != null);
-    return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
-  };
-  const block = (key, list) => {
-    const drives = list.filter((c) => c.drive != null);
-    const girs = list.filter((c) => c.gir != null);
-    return {
-      key,
-      cells: list,
-      par: list.reduce((s, c) => s + c.par, 0),
-      strokes: sumOf(list, 'strokes'),
-      points: sumOf(list, 'points'),
-      putts: sumOf(list, 'putts'),
-      fairways: { hit: drives.filter((c) => FAIRWAY_DRIVES.has(c.drive)).length, of: drives.length },
-      gir: { hit: girs.filter((c) => c.gir).length, of: girs.length },
-    };
-  };
-  const nines = cells.length > 9
-    ? [block('out', cells.slice(0, 9)), block('in', cells.slice(9))]
-    : [block('tot', cells)];
-  const played = cells.filter((c) => c.strokes != null);
-  const strokes = sumOf(played, 'strokes');
-  return {
-    nines,
-    hasShots: cells.some((c) => c.putts != null || c.drive != null || c.penalties > 0),
-    total: {
-      holes: played.length,
-      strokes,
-      toPar: strokes == null ? null : strokes - played.reduce((s, c) => s + c.par, 0),
-      points: sumOf(played, 'points'),
-      putts: sumOf(cells, 'putts'),
-    },
-  };
+  const wanted = new Set(playerIds);
+  const players = (tournament?.players ?? []).filter((p) => wanted.has(p.id));
+  if (!round || players.length === 0) return null;
+  return scorecardModel({ round, players, meId });
 }
 
 // Longest run of consecutive scored holes that are gross par or better

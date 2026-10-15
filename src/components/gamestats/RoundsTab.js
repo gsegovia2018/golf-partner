@@ -1,5 +1,5 @@
-// Rounds: one round at a time — the result, the race, the scorecard and the
-// holes that told the story. In a one-round game (`single`) this is the
+// Rounds: one round at a time — the result, the race, the scorecard (with
+// shots, on the shared Strokes | Points switch) and the holes that told the story. In a one-round game (`single`) this is the
 // Scorecard tab: no round chips and no result card (Summary carries the
 // race and its lead / comeback lines).
 import React, { useMemo } from 'react';
@@ -8,14 +8,14 @@ import { Feather } from '@expo/vector-icons';
 import { useT } from '../../i18n';
 import { pointsText } from '../../lib/pointsText';
 import {
-  scoredRoundIndices, raceSeries, roundResult, scorecardGrid, holeStories, leadStory, roundComeback,
+  scoredRoundIndices, raceSeries, roundResult, roundCard, holeStories, leadStory, roundComeback,
 } from '../../store/gameStatsView';
 import { pairDifferenceByHole } from '../../store/statsEngine';
 import RaceChart from './RaceChart';
-import ScorecardHeatmap, { HeatLegend } from './ScorecardHeatmap';
+import ShotScorecard from '../scorecard/ShotScorecard';
 import PairDifferenceChart from './PairDifferenceChart';
 import { holeSheet } from './sheets';
-import { Chip, SectionTitle, firstName, joinNames, num, useStatStyles } from './ui';
+import { Chip, ModeToggle, SectionTitle, firstName, joinNames, num, useStatStyles } from './ui';
 
 // The one-line result of a round; Rivals reuses it for match play rounds.
 export function resultText(result, t) {
@@ -68,7 +68,9 @@ export function LeadLines({ lead, comeback }) {
   );
 }
 
-export default function RoundsTab({ tournament, pairsTournament, roundIndex, onSelectRound, onOpenSheet, single = false }) {
+export default function RoundsTab({
+  tournament, pairsTournament, roundIndex, onSelectRound, onOpenSheet, single = false, meId = null, mode = 'strokes', onModeChange,
+}) {
   const t = useT();
   const { theme, s } = useStatStyles();
   const scored = useMemo(() => scoredRoundIndices(tournament), [tournament]);
@@ -84,9 +86,9 @@ export default function RoundsTab({ tournament, pairsTournament, roundIndex, onS
     () => (ri == null || !pairsTournament ? null : pairDifferenceByHole(pairsTournament, ri, { metric: 'points' })),
     [pairsTournament, ri],
   );
-  const grid = useMemo(
-    () => (race ? scorecardGrid(tournament, ri, race.series.map((x) => x.player.id)) : null),
-    [tournament, ri, race],
+  const card = useMemo(
+    () => (race ? roundCard(tournament, ri, race.series.map((x) => x.player.id), meId) : null),
+    [tournament, ri, race, meId],
   );
 
   if (ri == null) return <Text style={s.empty}>{t('stats.game.empty.body')}</Text>;
@@ -136,11 +138,13 @@ export default function RoundsTab({ tournament, pairsTournament, roundIndex, onS
         </View>
       )}
 
-      {grid && race.series.length > 0 && (
-        <View style={s.card}>
-          <SectionTitle right={t('stats.game.card.hint')}>{t('stats.game.card.title')}</SectionTitle>
-          <ScorecardHeatmap grid={grid} players={race.series.map((x) => x.player)} />
-          <HeatLegend />
+      {card && (
+        <View style={[s.card, { paddingHorizontal: 10 }]}>
+          <View style={{ paddingHorizontal: 4 }}>
+            <SectionTitle right={<ModeToggle value={mode} onChange={onModeChange} testID="card-mode" />}>{t('stats.game.card.title')}</SectionTitle>
+          </View>
+          {/* Keyed by round: each round opens with my shots expanded again. */}
+          <ShotScorecard key={ri} card={card} mode={mode} />
         </View>
       )}
 

@@ -186,6 +186,9 @@ export default function StatsScreen({ navigation, route }) {
                 onSelectRound={setRoundIndex}
                 onOpenSheet={openSheet}
                 single={single}
+                meId={meId}
+                mode={scoreMode}
+                onModeChange={setScoreMode}
               />
             )}
             {activeTab === 'players' && (

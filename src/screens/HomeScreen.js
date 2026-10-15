@@ -56,7 +56,10 @@ import { unreadCount } from '../store/notificationStore';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { useAuth } from '../context/AuthContext';
 import { shouldOfferPostCreateEditorInvite } from './setupWizard';
-import { ScorecardTable, resolveScorecardRows } from '../components/scorecard/GridView';
+import { resolveScorecardRows } from '../components/scorecard/GridView';
+import ShotScorecard from '../components/scorecard/ShotScorecard';
+import { ModeToggle } from '../components/gamestats/ui';
+import { scorecardModel } from '../store/scorecardView';
 import { useT, tr, formatDate } from '../i18n';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
@@ -1717,19 +1720,20 @@ export default function HomeScreen({ navigation, route }) {
           repeats the leaderboard — show the read-only hole-by-hole card instead. */}
       {isGame && isPast && tournament.rounds[0] && (
         <View style={s.card} testID="finished-game-scorecard">
-          <View style={s.cardTitleRow}>
-            <View style={s.cardTitleLeft}>
-              <Text style={s.cardTitle}>{tx('home.card.scorecardTitle')}</Text>
-              {tournament.rounds[0].courseName && (
-                <Text style={s.cardTitleCourse} numberOfLines={1}>{' · '}{tournament.rounds[0].courseName}</Text>
-              )}
-            </View>
-          </View>
-          <ReadOnlyScorecard
+          <PastRoundScorecard
             round={tournament.rounds[0]}
             settings={tournament.settings}
             players={tournament.players}
             meId={tournament.meId}
+            s={s}
+            title={(
+              <View style={s.cardTitleLeft}>
+                <Text style={s.cardTitle}>{tx('home.card.scorecardTitle')}</Text>
+                {tournament.rounds[0].courseName && (
+                  <Text style={s.cardTitleCourse} numberOfLines={1}>{' · '}{tournament.rounds[0].courseName}</Text>
+                )}
+              </View>
+            )}
           />
         </View>
       )}
@@ -2422,7 +2426,7 @@ const RoundPage = React.memo(function RoundPage({
         </View>
       )}
       {scorecardSettings && hasScores ? (
-        <ReadOnlyScorecard round={round} settings={scorecardSettings} players={players} meId={meId} />
+        <PastRoundScorecard round={round} settings={scorecardSettings} players={players} meId={meId} s={s} />
       ) : hasScores || revealed ? (
         <RoundScoreboard round={round} players={players} meId={meId} showRunning={showRunning} scoringMode={scoringMode} />
       ) : (
@@ -2432,25 +2436,25 @@ const RoundPage = React.memo(function RoundPage({
   );
 });
 
-// Hole-by-hole card of a past round — no taps, no totals card (the
-// leaderboard above already carries them).
-function ReadOnlyScorecard({ round, settings, players, meId }) {
-  const { mode, rowPlayers, rowHandicaps, effectiveMeId } = resolveScorecardRows({
-    round, settings, players, meId,
-  });
+// Hole-by-hole card of a played round, with the shots players logged — read
+// only, no totals card (the leaderboard above already carries them). Points
+// follow the round's mode; scramble rounds show one row per team. `title`
+// sits left of the card's own Strokes | Points switch.
+function PastRoundScorecard({ round, settings, players, meId, s, title = null }) {
+  const [mode, setMode] = useState('strokes');
+  const card = useMemo(() => {
+    const rows = resolveScorecardRows({ round, settings, players, meId });
+    return scorecardModel({
+      round, players: rows.rowPlayers, meId: rows.effectiveMeId, mode: rows.mode, handicaps: rows.rowHandicaps,
+    });
+  }, [round, settings, players, meId]);
   return (
     <View testID="past-round-scorecard">
-      <ScorecardTable
-        round={round}
-        players={rowPlayers}
-        scores={round.scores ?? {}}
-        onSetScore={() => {}}
-        editable={() => false}
-        mode={mode}
-        meId={effectiveMeId}
-        handicapsOverride={rowHandicaps}
-        showTotalsCard={false}
-      />
+      <View style={s.cardTitleRow}>
+        {title ?? <View style={s.cardTitleLeft} />}
+        <ModeToggle value={mode} onChange={setMode} testID="past-round-mode" />
+      </View>
+      <ShotScorecard card={card} mode={mode} />
     </View>
   );
 }

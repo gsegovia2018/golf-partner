@@ -1,8 +1,11 @@
 import { weekendFixture } from './fixtures/gameStatsFixture';
 import {
-  singleRoundIndex, grossResult, cellLevel, scoreMix, roundLedger, ledgerBestRun, scoringSplits,
+  singleRoundIndex, grossResult, cellLevel, scoreMix, roundCard, ledgerBestRun, scoringSplits,
   puttBuckets, shotComparePlots, awardsList,
 } from '../gameStatsView';
+
+// One player's ledger: the single-row scorecard.
+const roundLedger = (t, ri, pid) => roundCard(t, ri, [pid], pid).rows[0];
 
 const oneRound = () => {
   const t = weekendFixture();

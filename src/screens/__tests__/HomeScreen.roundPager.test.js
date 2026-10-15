@@ -445,6 +445,13 @@ test('a finished casual game shows the read-only scorecard instead of ROUND SCOR
   await waitFor(() => expect(view.getByTestId('finished-game-scorecard')).toBeTruthy());
   expect(view.queryByText('ROUND SCORES')).toBeNull();
   expect(view.getByText('SCORECARD')).toBeTruthy();
+  // The shot scorecard: a row per player, me first, strokes by default.
+  const card = within(view.getByTestId('finished-game-scorecard'));
+  expect(card.getByTestId('shot-scorecard')).toBeTruthy();
+  expect(card.getAllByTestId(/^card-name-/).map((n) => n.props.testID)).toEqual(['card-name-p1', 'card-name-p2']);
+  expect(card.getByTestId('card-p1-cell-1').props.children).toBe(4);
+  fireEvent.press(card.getByTestId('past-round-mode-points'));
+  expect(card.getByTestId('card-p1-cell-1').props.children).toBe('2'); // a par, no strokes
 });
 
 test('a casual game with every hole scored counts as past without a finish stamp', async () => {
