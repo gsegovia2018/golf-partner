@@ -544,6 +544,7 @@ export default function LeagueValidateScreen({ navigation, route }) {
           scores={{ [player.id]: strokes }}
           editable={() => false}
           mode="stableford"
+          strokesOnly={medal}
           meId={player.id}
           handicapsOverride={{ [player.id]: serverScored && serverCard.playingHandicap != null ? serverCard.playingHandicap : playingHandicap }}
         />

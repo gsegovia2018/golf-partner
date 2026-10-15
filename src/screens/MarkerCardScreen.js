@@ -19,6 +19,7 @@ import { ScorecardTable } from '../components/scorecard/GridView';
 import { useTheme } from '../theme/ThemeContext';
 import { onDeep } from '../theme/tokens';
 import { getMarkerCard, confirmMarkerCard } from '../store/markerCardStore';
+import { isMedalFormat } from '../store/leagueStandings';
 import { leagueErrorText } from '../lib/leagueErrorText';
 import { useT, t as translate, formatDate, formatNumber } from '../i18n';
 
@@ -207,6 +208,7 @@ export default function MarkerCardScreen(props) {
           onSetScore={() => {}}
           editable={() => false}
           mode="stableford"
+          strokesOnly={isMedalFormat(card.format)}
           meId={ROW_ID}
           rowLabel={firstName.slice(0, 3).toUpperCase()}
         />

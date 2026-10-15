@@ -158,6 +158,46 @@ describe('ScorecardTable showTotalsCard', () => {
   });
 });
 
+// strokesOnly — a medal league card is scored in strokes: no Points toggle and
+// no points total, while every other caller keeps both.
+describe('ScorecardTable strokesOnly', () => {
+  const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+  const players = [{ id: 'p1', name: 'Ann Lee', handicap: 10 }];
+  const scores = { p1: Object.fromEntries(holes.map((h) => [h.number, 5])) };
+  const table = (extra = {}) => (
+    <ThemeProvider>
+      <ScorecardTable
+        round={{ holes }}
+        players={players}
+        scores={scores}
+        onSetScore={() => {}}
+        editable={() => false}
+        mode="stableford"
+        meId="p1"
+        {...extra}
+      />
+    </ThemeProvider>
+  );
+
+  test('default keeps the Strokes/Points toggle and the points total', async () => {
+    const { getByText } = render(table());
+    await flush();
+    expect(getByText('Strokes')).toBeTruthy();
+    expect(getByText('Points')).toBeTruthy();
+    expect(getByText('POINTS')).toBeTruthy();
+  });
+
+  test('strokesOnly renders no points toggle or total, but still the strokes and totals', async () => {
+    const { queryByText, getByText, getAllByText } = render(table({ strokesOnly: true }));
+    await flush();
+    expect(queryByText('Points')).toBeNull();
+    expect(queryByText('Strokes')).toBeNull();
+    expect(queryByText('POINTS')).toBeNull();
+    expect(getByText('STROKES')).toBeTruthy();
+    expect(getAllByText('5').length).toBeGreaterThan(0);
+  });
+});
+
 // Regression test for a crash reviewing a past best-ball round in table mode:
 // round.pairs persists ids only (store/scoring.js thinPairs), so the match
 // strip's `p.name.split(' ')` threw "Cannot read properties of undefined".

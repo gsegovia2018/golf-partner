@@ -10,14 +10,14 @@ import { useT, tr } from '../../i18n';
 import { describeCardEvent, visibleEvents } from '../../store/leagueTimeline';
 import { stamp } from './stamp';
 
-export default function CardTimeline({ events, loading, error, onRetry, meId, monthKey, members }) {
+export default function CardTimeline({ events, loading, error, onRetry, meId, monthKey, members, format }) {
   const { theme } = useTheme();
   const t = useT();
   const l = useMemo(() => makeStyles(theme), [theme]);
   const [expanded, setExpanded] = useState(false);
   const rows = useMemo(
-    () => (events ?? []).map((ev) => describeCardEvent(ev, { meId, fmt: stamp, someone: t('league.timeline.someone'), monthKey, members })),
-    [events, meId, monthKey, members, t],
+    () => (events ?? []).map((ev) => describeCardEvent(ev, { meId, fmt: stamp, someone: t('league.timeline.someone'), monthKey, members, format })),
+    [events, meId, monthKey, members, format, t],
   );
   const { shown, hidden } = visibleEvents(rows, expanded);
   const tone = (name) => {
