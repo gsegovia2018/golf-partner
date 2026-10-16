@@ -124,9 +124,15 @@ export default {
   "stats.explainer.par5.subtitle": "Resultado en los hoyos alcanzables",
   "stats.explainer.par5.explainer": "Tasa de birdie o mejor, resultado medio respecto al par y frecuencia con la que estuviste en regulación (en el green en tres golpes) en tus pares 5. Para saber si llegaste en tres hacen falta los putts registrados del hoyo.",
 
-  "stats.explainer.coachPractice.title": "Plan de práctica",
-  "stats.explainer.coachPractice.subtitle": "Ejercicios adaptados a tus mayores fugas",
-  "stats.explainer.coachPractice.explainer": "Cada bloque une tu mayor fuga medida con un ejercicio concreto y un objetivo para superarlo, de modo que una sesión de práctica se aprueba o se suspende de forma objetiva. La línea de “valor” usa la aproximación de que 1 golpe ganado ≈ 1 punto Stableford por vuelta.\n\nEl orden viene del panel del entrenador: las fugas que hay que arreglar primero tienen el primer bloque, una segunda área mantiene la práctica equilibrada y la pauta para el campo no necesita nada de campo de prácticas.",
+  "stats.explainer.coachDiagnosis.title": "Diagnóstico",
+  "stats.explainer.coachDiagnosis.subtitle": "Dónde pierdes golpes y por qué",
+  "stats.explainer.coachDiagnosis.explainer": "Cada zona se mide con la misma moneda: golpes por vuelta frente a tu hándicap objetivo (casi lo mismo que puntos Stableford). Una zona solo cuenta como pérdida cuando te cuesta al menos 0,4 golpes por vuelta y hay suficientes vueltas y hoyos detrás. La confianza compara la pérdida con lo que varía de una vuelta a otra.\n\nLa causa sale de reglas fijas sobre los golpes que has registrado, así que cada frase lleva sus cifras. Dos pérdidas se consideran empatadas cuando están dentro del margen de error una de otra. Comprobar nombra el único dato que el entrenador volverá a medir cuando fijes un objetivo.",
+  "stats.explainer.weeklyPlan.title": "Plan semanal",
+  "stats.explainer.weeklyPlan.subtitle": "Tus minutos de práctica, repartidos según dónde pierdes golpes",
+  "stats.explainer.weeklyPlan.explainer": "El plan reparte los minutos que elijas entre campo de prácticas, juego corto, putts y la próxima vuelta: cerca de la mitad para tu objetivo, un cuarto para la segunda pérdida y un poco para mantener un punto fuerte. Cada ejercicio tiene un objetivo que superar.\n\nEl nivel sube cada dos vueltas que juegas tras fijar un objetivo (hasta el 3) y se mantiene si el objetivo empeora. El entrenador no ve tu práctica, solo tus vueltas, así que el progreso sigue a las vueltas. El plan se rehace después de cada vuelta.",
+  "stats.explainer.swingLink.title": "Vínculo con el swing",
+  "stats.explainer.swingLink.subtitle": "Cuándo el análisis del swing puede explicar una pérdida",
+  "stats.explainer.swingLink.explainer": "Una tabla fija indica qué fallos del swing suelen verse como qué fallos en el campo, con el palo correcto. \"Encaja con\" significa que tu último análisis muestra un fallo de esa lista para esta pérdida; nunca es una prueba, porque un swing analizado no es una vuelta.\n\nLos análisis de más de 60 días se consideran antiguos. Los vídeos y resultados del swing nunca salen de tu móvil.",
 
   "stats.explainer.playSmarter.title": "Juega con cabeza",
   "stats.explainer.playSmarter.subtitle": "Decisiones en el campo que dan puntos sin practicar",
