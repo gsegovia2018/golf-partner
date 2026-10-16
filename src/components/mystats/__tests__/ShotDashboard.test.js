@@ -77,6 +77,29 @@ describe('ShotDashboard target-gap hero surface', () => {
   });
 });
 
+describe('ShotDashboard headline: the real score gap', () => {
+  const recon = {
+    ...baseSG.reconciliation, rounds: 4, gapAvg: -4.3, residualAvg: -3.3,
+  };
+  test('shows the reconciled gap, split into tracked and untracked', () => {
+    const r = renderDash({ ...baseSG, total: -1.0, reconciliation: recon });
+    expect(r.getByText('-4.3 strokes a round')).toBeTruthy();
+    expect(r.getByText('vs a typical scratch golfer')).toBeTruthy();
+    expect(r.getByText('Tracked shots explain -1.0 · untracked -3.3')).toBeTruthy();
+    expect(r.queryByText('From tracked shots only')).toBeNull();
+  });
+  test('names the target handicap', () => {
+    const r = render(<ShotDashboard stats={{ strokesGained: { ...baseSG, reconciliation: recon } }} targetHandicap={10} onInfo={jest.fn()} />);
+    expect(r.getByText('vs a typical 10 handicap')).toBeTruthy();
+  });
+  test('falls back to the categories sum, labelled tracked shots only, without a complete round', () => {
+    const r = renderDash({ ...baseSG, total: -1.2 });
+    expect(r.getByText('-1.20 / round')).toBeTruthy();
+    expect(r.getByText('From tracked shots only')).toBeTruthy();
+    expect(r.queryByTestId('sg-hero-split')).toBeNull();
+  });
+});
+
 describe('ShotDashboard category board', () => {
   test('under-sampled category renders a locked row with unlock progress', () => {
     const r = renderDash();

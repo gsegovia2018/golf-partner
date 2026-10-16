@@ -209,6 +209,17 @@ export function tieBand(a, b) {
   return Math.max(TIE_MIN, (a?.se ?? 0) + (b?.se ?? 0));
 }
 
+// The untracked residual of the score gap (duffs, second chips, far misses)
+// when it is a real leak (≤ −LEAK_MIN) and bigger than the top leak: the
+// category chain then explains the minority of the gap, and the card says so.
+// → { residual, gap } (strokes a round, negative = worse) | null
+export function untrackedDominant(stats, top) {
+  const r = stats?.strokesGained?.reconciliation;
+  if (!top || !(r?.rounds > 0) || r.residualAvg == null || r.gapAvg == null) return null;
+  if (r.residualAvg > -LEAK_MIN || Math.abs(r.residualAvg) <= Math.abs(top.strokesPerRound)) return null;
+  return { residual: r.residualAvg, gap: r.gapAvg };
+}
+
 // → { leaks, top, tie, candidate, insufficient, categories, targetHandicap }
 //   leaks        ranked leaks (strokesPerRound ≤ −LEAK_MIN, confidence ≥ low)
 //   top          leaks[0] or null

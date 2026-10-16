@@ -68,6 +68,17 @@ describe('WeeklyPlanCard: split, sessions and the course task', () => {
     expect(r.getAllByText(/^Pass: /).length).toBeGreaterThan(1);
   });
 
+  test('a session drill opens the detail sheet with how to do it', () => {
+    const r = renderPlan(onePutting(), { minutesPerWeek: 120 });
+    const row = r.getAllByTestId('drill-putt-lag-ladder')[0];
+    expect(row.props.accessibilityRole).toBe('button');
+    expect(StyleSheet.flatten(row.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    fireEvent.press(row);
+    expect(r.getByText('How to do it')).toBeTruthy();
+    expect(r.getByText(/^Take 10 putts from 8 m to one hole/)).toBeTruthy();
+    expect(r.getByTestId('drill-level-1')).toBeTruthy();
+  });
+
   test('the course task tile carries the task and no minutes budget', () => {
     const r = renderPlan(onePutting());
     expect(r.getByTestId('session-course-task')).toBeTruthy();

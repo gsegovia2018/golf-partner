@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import DiagnosisCard from '../DiagnosisCard';
@@ -28,6 +29,18 @@ const renderCard = (stats, opts = {}, props = {}) => render(wrap(
   />,
 ));
 
+describe('DiagnosisCard: untracked-dominant gap', () => {
+  const recon = (residualAvg) => ({ strokesGained: { reconciliation: { rounds: 5, gapAvg: -4.3, residualAvg } } });
+  test('says most of the gap is untracked, at the top of the Leak step', () => {
+    const r = renderCard({ ...onePutting(), ...recon(-3.3) });
+    expect(r.getByText(/Most of your gap \(-3\.3 of -4\.3\) is strokes the coach can't see by category/)).toBeTruthy();
+  });
+  test('says nothing when the top leak is the bigger part', () => {
+    const r = renderCard({ ...onePutting(), ...recon(-0.9) });
+    expect(r.queryByTestId('untracked-note')).toBeNull();
+  });
+});
+
 describe('DiagnosisCard: one clear leak', () => {
   test('renders the Leak, Why, Fix and Check rail with the real numbers', () => {
     const stats = onePutting();
@@ -52,7 +65,7 @@ describe('DiagnosisCard: one clear leak', () => {
   test('Fix lists the drills with level and pass target, the on-course task and the matching tip', () => {
     const r = renderCard(onePutting());
     expect(r.getByText(/^Lag ladder/)).toBeTruthy();
-    expect(r.getAllByText(/^Level 1$/).length).toBeGreaterThan(0);
+    expect(r.getAllByText(/^Level 1 of 3$/).length).toBeGreaterThan(0);
     expect(r.getByText('Pass: 7 of 10 finish inside 1 m of the hole')).toBeTruthy();
     expect(r.getByText('Next round')).toBeTruthy();
     expect(r.getByText('On the course, track every putt from 6+ m and count the three-putts.')).toBeTruthy();
@@ -105,7 +118,7 @@ describe('DiagnosisCard: one clear leak', () => {
     const stats = onePutting();
     const onCommit = jest.fn();
     const r = renderCard(stats, {}, { onCommitFocus: onCommit });
-    fireEvent.press(r.getByLabelText('Make this my focus'));
+    fireEvent.press(r.getByLabelText('Work on this'));
     expect(onCommit).toHaveBeenCalledTimes(1);
     const arg = onCommit.mock.calls[0][0];
     expect(arg.leak.id).toBe('leak:putting:6+');
@@ -114,10 +127,30 @@ describe('DiagnosisCard: one clear leak', () => {
     expect(arg.swingId).toBeUndefined();
   });
 
+  test('the button says what it does and one line under it says what the coach then does', () => {
+    const r = renderCard(onePutting());
+    expect(r.getByText('Work on this')).toBeTruthy();
+    expect(r.queryByText('Make this my focus')).toBeNull();
+    expect(r.getByTestId('focus-explain')).toHaveTextContent(
+      "The coach tracks three-putt rate from 6+ m over your next rounds, tells you after 2 rounds if it's improving, and levels up your plan.",
+    );
+  });
+
+  test('a tie explains once, without naming one metric', () => {
+    const r = renderCard(tieStats());
+    expect(r.getAllByTestId('focus-explain')).toHaveLength(1);
+    expect(r.getByTestId('focus-explain')).toHaveTextContent(/^The coach tracks its metric over your next rounds, tells you after 2 rounds/);
+  });
+
+  test('no explanation without a button', () => {
+    const r = renderCard(onePutting(), {}, { focusActive: true });
+    expect(r.queryByTestId('focus-explain')).toBeNull();
+  });
+
   test('no focus button without a handler', () => {
     const stats = onePutting();
     const r = render(wrap(<DiagnosisCard week={week(stats)} diagnosis={stats.coachDiagnosis} />));
-    expect(r.queryByLabelText('Make this my focus')).toBeNull();
+    expect(r.queryByLabelText('Work on this')).toBeNull();
   });
 });
 
@@ -132,10 +165,10 @@ describe('DiagnosisCard: two close leaks', () => {
     expect(r.getByText('Leak 2 · Off the tee')).toBeTruthy();
     expect(r.getByTestId('diagnosis-chain-1')).toBeTruthy();
     expect(r.getByTestId('diagnosis-chain-2')).toBeTruthy();
-    expect(r.queryByLabelText('Make this my focus')).toBeNull();
-    fireEvent.press(r.getByLabelText('Focus: Approach'));
+    expect(r.queryByLabelText('Work on this')).toBeNull();
+    fireEvent.press(r.getByLabelText('Work on Approach'));
     expect(onCommit.mock.calls[0][0].leak.category).toBe('approach');
-    fireEvent.press(r.getByLabelText('Focus: Off the tee'));
+    fireEvent.press(r.getByLabelText('Work on Off the tee'));
     expect(onCommit.mock.calls[1][0].leak.category).toBe('offTheTee');
   });
 
@@ -156,7 +189,7 @@ describe('DiagnosisCard: few rounds and no shot detail', () => {
     expect(r.getByText('needs 1 more round')).toBeTruthy();
     expect(r.getByText('needs 1 more round, 4 more holes')).toBeTruthy();
     expect(r.getAllByText('Insufficient')).toHaveLength(2);
-    expect(r.queryByLabelText('Make this my focus')).toBeNull();
+    expect(r.queryByLabelText('Work on this')).toBeNull();
     expect(r.queryByText('Fix first')).toBeNull();
   });
 
@@ -183,10 +216,10 @@ describe('DiagnosisCard: focus in progress', () => {
     const r = renderCard(stats, { focus: focusRecord(), verdict: verdictOf() }, { focusActive: true });
     expect(r.getByText('Your focus')).toBeTruthy();
     expect(r.queryByText('Fix first')).toBeNull();
-    expect(r.queryByLabelText('Make this my focus')).toBeNull();
+    expect(r.queryByLabelText('Work on this')).toBeNull();
     expect(r.getByText('Short misses from 100-150 m: now 48%, was 71% when you committed.')).toBeTruthy();
     // level 2 drills carry the level 2 pass target
-    expect(r.getAllByText(/^Level 2$/).length).toBeGreaterThan(0);
+    expect(r.getAllByText(/^Level 2 of 3$/).length).toBeGreaterThan(0);
     expect(r.getByText('Pass: 10 of 15 inside a green-sized 12 m circle')).toBeTruthy();
   });
 });
@@ -206,7 +239,7 @@ describe('DiagnosisCard: the swing line (six states)', () => {
   test('linked swing id travels with the committed focus', () => {
     const onCommit = jest.fn();
     const r = renderCard(teeLeft(), { swings: [driverSwing()] }, props({ onCommitFocus: onCommit }));
-    fireEvent.press(r.getByLabelText('Make this my focus'));
+    fireEvent.press(r.getByLabelText('Work on this'));
     expect(onCommit.mock.calls[0][0].swingId).toBe('sw-driver');
   });
 
@@ -260,6 +293,36 @@ describe('DiagnosisCard: the swing line (six states)', () => {
   test('the swing drill joins the Fix step when linked', () => {
     const r = renderCard(teeLeft(), { swings: [driverSwing()], minutesPerWeek: 90 }, props());
     expect(r.getAllByText('Swing drill').length).toBeGreaterThan(0);
+  });
+});
+
+describe('DiagnosisCard: drill detail sheet', () => {
+  test('a drill row is a 44 px button that opens the sheet with the instruction and three levels', () => {
+    const r = renderCard(onePutting());
+    const row = r.getByTestId('drill-putt-lag-ladder');
+    expect(row.props.accessibilityRole).toBe('button');
+    expect(StyleSheet.flatten(row.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(r.queryByText('How to do it')).toBeNull();
+    fireEvent.press(row);
+    expect(r.getByText('How to do it')).toBeTruthy();
+    expect(r.getByText(/^Take 10 putts from 8 m to one hole/)).toBeTruthy();
+    expect(r.getByText('Pass target')).toBeTruthy();
+    [1, 2, 3].forEach((n) => expect(r.getByTestId(`drill-level-${n}`)).toBeTruthy());
+    expect(r.getByText('8 of 10 finish inside 1 m of the hole, from 10 m')).toBeTruthy();
+    // only the current level is marked
+    expect(r.getAllByText(/your level/)).toHaveLength(1);
+    expect(r.getByTestId('drill-level-1')).toHaveTextContent(/your level/);
+    expect(r.getByText('You move up a level every 2 rounds you play while working on this; without a focus it stays at level 1.')).toBeTruthy();
+  });
+
+  test('a swing drill shows its instruction and pass target, no levels', () => {
+    const r = renderCard(teeLeft(), { swings: [driverSwing()], minutesPerWeek: 90 }, { swingSupport: ANDROID });
+    const row = r.getAllByText('Swing drill')[0];
+    fireEvent.press(row);
+    expect(r.getByText('How to do it')).toBeTruthy();
+    expect(r.getByText('Pass target')).toBeTruthy();
+    expect(r.queryByTestId('drill-level-1')).toBeNull();
+    expect(r.queryByText(/your level/)).toBeNull();
   });
 });
 

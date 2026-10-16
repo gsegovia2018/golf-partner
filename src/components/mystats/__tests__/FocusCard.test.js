@@ -150,14 +150,14 @@ describe('CoachHero focus button', () => {
   test('button commits the insight', () => {
     const onCommit = jest.fn();
     const r = render(<CoachHero insight={insight} onCommitFocus={onCommit} focusActive={false} />);
-    fireEvent.press(r.getByLabelText('Make this my focus'));
+    fireEvent.press(r.getByLabelText('Work on this'));
     expect(onCommit).toHaveBeenCalledWith(insight);
   });
   test('hidden while a focus is active or without handler', () => {
     const withFocus = render(<CoachHero insight={insight} onCommitFocus={jest.fn()} focusActive />);
-    expect(withFocus.queryByLabelText('Make this my focus')).toBeNull();
+    expect(withFocus.queryByLabelText('Work on this')).toBeNull();
     const noHandler = render(<CoachHero insight={insight} />);
-    expect(noHandler.queryByLabelText('Make this my focus')).toBeNull();
+    expect(noHandler.queryByLabelText('Work on this')).toBeNull();
   });
   test('shows the points equivalent when present', () => {
     const r = render(<CoachHero insight={{ ...insight, pointsPerRound: -1.8 }} />);

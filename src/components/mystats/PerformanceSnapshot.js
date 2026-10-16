@@ -55,6 +55,11 @@ export default function PerformanceSnapshot({
   // Matches the metric the verdict above the chart is drawn from.
   const diffSeries = formSeries.metrics?.avgDifferential ?? [];
   const hasStrokesGained = strokesGained?.total != null;
+  // The real score gap (categories + untracked) when a complete round exists;
+  // otherwise the categories sum, said to be tracked shots only.
+  const recon = strokesGained?.reconciliation;
+  const hasGap = recon?.rounds > 0 && recon.gapAvg != null;
+  const gap = hasGap ? recon.gapAvg : strokesGained?.total;
 
   return (
     <SectionCard title={t('stats.my.snapshot.title')}>
@@ -70,14 +75,18 @@ export default function PerformanceSnapshot({
             style={[
               s.panelValue,
               hasStrokesGained && {
-                color: strokesGained.total >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor'),
+                color: gap >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor'),
               },
             ]}
           >
-            {hasStrokesGained ? `${strokesGained.total >= 0 ? '+' : ''}${formatNumber(strokesGained.total, { decimals: 2 })}` : '-'}
+            {hasStrokesGained ? `${gap >= 0 ? '+' : ''}${formatNumber(gap, { decimals: 2 })}` : '-'}
           </Text>
           <View style={s.targetRow}>
-            <Text style={s.panelMeta}>{hasStrokesGained ? sgTitle(targetHandicap) : t('stats.my.snapshot.noTarget')}</Text>
+            <Text style={s.panelMeta}>
+              {hasStrokesGained
+                ? (hasGap ? sgTitle(targetHandicap) : `${sgTitle(targetHandicap)} · ${t('stats.my.shots.trackedOnly')}`)
+                : t('stats.my.snapshot.noTarget')}
+            </Text>
             {onChangeTarget ? (
               <PressableScale
                 onPress={onChangeTarget}
