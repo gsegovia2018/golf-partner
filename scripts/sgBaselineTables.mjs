@@ -10,7 +10,7 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const {
-  HANDICAP_ANCHORS, buildTables, lookup, model, DRIVE_DISTANCE_ANCHORS, DRIVE_MIX_ANCHORS,
+  HANDICAP_ANCHORS, buildTables, lookup, DRIVE_DISTANCE_ANCHORS, DRIVE_MIX_ANCHORS,
   PENALTIES_ANCHORS, SCORE_VS_PAR_ANCHORS,
 } = require('./lib/sgBaselineModel.js');
 
