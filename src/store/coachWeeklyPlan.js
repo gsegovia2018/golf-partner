@@ -101,7 +101,7 @@ function poolFor({ causeId, category, bucket }) {
 }
 
 // The cause's on-course task for the next round, tied to the cause (§4.2 block 4).
-function courseTaskFor({ causeId, category, bucket }) {
+export function courseTaskFor({ causeId, category, bucket }) {
   const b = bucket ?? null;
   if (causeId) {
     const rest = causeId.replace(/^cause:/, '');
