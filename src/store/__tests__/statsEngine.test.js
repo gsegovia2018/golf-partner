@@ -1043,6 +1043,8 @@ describe('sgSeason with offTheTee', () => {
     });
     expect(season.perRound[0].byCategory.offTheTee).toBeCloseTo(18 * 0.095, 1);
     expect(season.perRound[0].byCategory.putting).toBeDefined();
+    expect(season.perRound[0].sampleHolesByCategory.aroundGreen).toBe(0);
+    expect(season.perRound[0].sampleHolesByCategory.putting).toBe(18);
   });
   test('legacy rounds without drive buckets leave offTheTee unsampled', () => {
     const legacy = makeRound(holes18, Array.from({ length: 18 }, () => ({

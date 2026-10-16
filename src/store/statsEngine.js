@@ -2914,7 +2914,12 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
       sampleHolesByCategory[category] += categorySample;
     });
     sampleHoles += r.sampleHoles;
-    perRound.push({ index: i, total: r.total, sampleHoles: r.sampleHoles, byCategory: r.byCategory });
+    perRound.push({
+      index: i, total: r.total, sampleHoles: r.sampleHoles, byCategory: r.byCategory,
+      // Which categories this round actually sampled: an unsampled one reads
+      // 0 in byCategory, so per-round spreads must filter on this.
+      sampleHolesByCategory: r.sampleHolesByCategory,
+    });
   });
   if (sampleHoles < SG_SEASON_MIN_SAMPLE) {
     return {
