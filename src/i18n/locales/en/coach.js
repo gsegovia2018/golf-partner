@@ -11,9 +11,12 @@ export default {
   // ── Causes: putting ────────────────────────────────────────────────────
   'stats.my.coach.cause.putting.lag': 'putts from {bucket} m that three-putt ({count} of {total}, {pct}%), averaging {avgPutts} putts.',
   'stats.my.coach.cause.putting.lag.bench': 'putts from {bucket} m that three-putt ({count} of {total}, {pct}%), averaging {avgPutts} putts (a {hcp} handicap averages {expected}).',
+  'stats.my.coach.cause.putting.lag.bench.scratch': 'putts from {bucket} m that three-putt ({count} of {total}, {pct}%), averaging {avgPutts} putts (a scratch player averages {expected}).',
   'stats.my.coach.cause.putting.short': 'short putts from {bucket} m, averaging {avgPutts} putts across {total} tries.',
   'stats.my.coach.cause.putting.short.bench': 'short putts from {bucket} m, averaging {avgPutts} putts across {total} tries (a {hcp} handicap averages {expected}).',
+  'stats.my.coach.cause.putting.short.bench.scratch': 'short putts from {bucket} m, averaging {avgPutts} putts across {total} tries (a scratch player averages {expected}).',
   'stats.my.coach.cause.putting.general.bench': 'putting overall, at {per18} putts per 18 holes (a {hcp} handicap averages {benchPer18}) and {threePutts} three-putts (average {benchThreePutts}).',
+  'stats.my.coach.cause.putting.general.bench.scratch': 'putting overall, at {per18} putts per 18 holes (a scratch player averages {benchPer18}) and {threePutts} three-putts (average {benchThreePutts}).',
 
   // ── Causes: approach ───────────────────────────────────────────────────
   'stats.my.coach.cause.approach.short': 'approach shots from {bucket} m that finish short ({count} of {total} misses, {pct}%; {missPct}% of approaches from there miss the green).',
@@ -22,22 +25,29 @@ export default {
   'stats.my.coach.cause.approach.bunker': 'approach shots from {bucket} m that finish in a bunker ({count} of {total} misses, {pct}%; your sand saves are {sandPct}% over {sandAttempts} tries).',
   'stats.my.coach.cause.approach.distance': 'approach shots from {bucket} m, costing {cost} strokes each across {shots} shots.',
   'stats.my.coach.cause.approach.distance.bench': 'approach shots from {bucket} m, costing {cost} strokes each across {shots} shots (more than a {hcp} handicap usually loses there).',
+  'stats.my.coach.cause.approach.distance.bench.scratch': 'approach shots from {bucket} m, costing {cost} strokes each across {shots} shots (more than a scratch player usually loses there).',
 
   // ── Causes: off the tee ────────────────────────────────────────────────
   'stats.my.coach.cause.tee.trouble.driver': 'drives that finish in sand or trouble ({count} of {total}, {pct}%).',
   'stats.my.coach.cause.tee.penalty.driver': 'driver tee shots that end in a penalty ({count} of {total} holes, {pct}%).',
   'stats.my.coach.cause.tee.penalty.driver.bench': 'driver tee shots that end in a penalty ({count} of {total} holes, {pct}%; a {hcp} handicap averages {benchPct}%).',
+  'stats.my.coach.cause.tee.penalty.driver.bench.scratch': 'driver tee shots that end in a penalty ({count} of {total} holes, {pct}%; a scratch player averages {benchPct}%).',
   'stats.my.coach.cause.tee.side': 'drives that miss {side} ({count} of {misses} misses, {pct}% of all drives).',
   'stats.my.coach.cause.tee.side.bench': 'drives that miss {side} ({count} of {misses} misses, {pct}% of all drives; a {hcp} handicap misses {benchPct}% that way).',
+  'stats.my.coach.cause.tee.side.bench.scratch': 'drives that miss {side} ({count} of {misses} misses, {pct}% of all drives; a scratch player misses {benchPct}% that way).',
   'stats.my.coach.cause.tee.distance.bench': 'short drives: {distance} m against {benchDistance} m for a {hcp} handicap, over {drives} drives.',
+  'stats.my.coach.cause.tee.distance.bench.scratch': 'short drives: {distance} m against {benchDistance} m for a scratch player, over {drives} drives.',
 
   // ── Causes: short game and penalties ───────────────────────────────────
   'stats.my.coach.cause.short.sand': 'sand saves ({sandPct}% in {sandAttempts} tries, against {nonSandPct}% from other lies in {nonSandAttempts} tries).',
   'stats.my.coach.cause.short.chip.bench': 'up-and-downs ({pct}% over {attempts} tries, against {expectedPct}% expected for a {hcp} handicap).',
+  'stats.my.coach.cause.short.chip.bench.scratch': 'up-and-downs ({pct}% over {attempts} tries, against {expectedPct}% expected for a scratch player).',
   'stats.my.coach.cause.penalty.tee': 'penalties off the tee ({count} of your {total} penalties).',
   'stats.my.coach.cause.penalty.tee.bench': 'penalties off the tee ({count} of your {total} penalties, {perRound} a round against {benchPerRound} for a {hcp} handicap).',
+  'stats.my.coach.cause.penalty.tee.bench.scratch': 'penalties off the tee ({count} of your {total} penalties, {perRound} a round against {benchPerRound} for a scratch player).',
   'stats.my.coach.cause.penalty.other': 'penalties from other shots ({count} of your {total} penalties).',
   'stats.my.coach.cause.penalty.other.bench': 'penalties from other shots ({count} of your {total} penalties, {perRound} a round against {benchPerRound} for a {hcp} handicap).',
+  'stats.my.coach.cause.penalty.other.bench.scratch': 'penalties from other shots ({count} of your {total} penalties, {perRound} a round against {benchPerRound} for a scratch player).',
 
   // ── Swing link ─────────────────────────────────────────────────────────
   'stats.my.coach.swing.linked.consistent': 'Your {club} swing recorded {date} shows {fault}, the fault that usually causes this.',
@@ -148,6 +158,7 @@ export default {
   'stats.my.coach.ui.fix.more': '+{count} more in this week\'s plan',
   'stats.my.coach.ui.check.line': '{metric}: now {value}.',
   'stats.my.coach.ui.check.line.bench': '{metric}: now {value} (a {hcp} handicap: {bench}).',
+  'stats.my.coach.ui.check.line.bench.scratch': '{metric}: now {value} (scratch: {bench}).',
   'stats.my.coach.ui.check.line.base': '{metric}: now {value}, was {baseline} when you committed.',
   'stats.my.coach.ui.check.noValue': '{metric}: not enough data to read yet.',
   'stats.my.coach.ui.check.when': 'Read again after {rounds} rounds; the verdict settles at {settles}.',

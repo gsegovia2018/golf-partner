@@ -74,6 +74,15 @@ describe('DiagnosisCard: one clear leak', () => {
     expect(render(wrap(<DiagnosisCard week={three} diagnosis={stats.coachDiagnosis} roundCount={stats.roundCount} swingSupport={WEB} />)).queryByTestId('fix-more')).toBeNull();
   });
 
+  test('Check at target 0 says scratch, never "a 0 handicap"', () => {
+    const stats = onePutting();
+    const w = week(stats);
+    w.chains[0].check = { ...w.chains[0].check, value: 0.5, unit: 'sgPerShot', benchmark: 1.2, hcp: 0, baseline: null };
+    const r = render(wrap(<DiagnosisCard week={w} diagnosis={stats.coachDiagnosis} roundCount={stats.roundCount} swingSupport={WEB} />));
+    expect(r.queryByText(/a 0 handicap/)).toBeNull();
+    expect(r.getByText(/\(scratch: /)).toBeTruthy();
+  });
+
   test('Check names the metric, now, the benchmark where one exists, and when it re-reads', () => {
     const r = renderCard(onePutting());
     // threePuttRate from 6+ m has no table benchmark: the line is value only

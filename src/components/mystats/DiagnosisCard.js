@@ -206,6 +206,10 @@ function CheckLines({ check, isFocus, s, t }) {
   if (check.value == null) line = t('stats.my.coach.ui.check.noValue', { metric });
   else if (isFocus && check.baseline != null) {
     line = t('stats.my.coach.ui.check.line.base', { metric, value, baseline: metricValueText(check.unit, check.baseline) });
+  } else if (check.benchmark != null && check.hcp === 0) {
+    line = t('stats.my.coach.ui.check.line.bench.scratch', {
+      metric, value, bench: metricValueText(check.unit, check.benchmark),
+    });
   } else if (check.benchmark != null && check.hcp > 0) {
     line = t('stats.my.coach.ui.check.line.bench', {
       metric, value, hcp: formatNumber(check.hcp), bench: metricValueText(check.unit, check.benchmark),

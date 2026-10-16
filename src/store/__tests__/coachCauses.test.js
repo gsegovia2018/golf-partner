@@ -63,6 +63,13 @@ describe('putting', () => {
     shots: { putts: { holes: 54, per18, threePuttPer18: three } },
   });
 
+  test('at target 0 the benchmark sentence says scratch: a .scratch key without the hcp param', () => {
+    const c = causesForLeak(leak('putting'), base({ ...generalShots(34, 3), targetHandicap: 0 })).primary;
+    expect(c.msg.key).toBe('stats.my.coach.cause.putting.general.bench.scratch');
+    expect(c.msg.params).not.toHaveProperty('hcp');
+    expect(causesForLeak(leak('putting'), base(generalShots(34, 3))).primary.msg.params).toHaveProperty('hcp');
+  });
+
   test('general fires against the benchmark row, possible, and never without a row', () => {
     const l = leak('putting');
     const c = causesForLeak(l, base(generalShots(34, 3))).primary;
@@ -138,6 +145,9 @@ describe('approach', () => {
     expect(c).toMatchObject({ id: 'cause:approach:distance', strength: 'consistent', metricKey: 'sg.approach.bucket.150-200' });
     expect(c.evidence).toMatchObject({ bestBucket: '50-100', bestPerShot: 0.1 });
     expect(c.msg.key).toBe('stats.my.coach.cause.approach.distance.bench');
+    const scratch = causesForLeak(dist(), base({ targetHandicap: 0 })).primary;
+    expect(scratch.msg.key).toBe('stats.my.coach.cause.approach.distance.bench.scratch');
+    expect(scratch.msg.params).not.toHaveProperty('hcp');
     const withShort = apprStats('150-200', missRow({ shortRate: 70 }));
     expect(primaryId(dist(), withShort)).toBe('cause:approach:short');
     expect(causesForLeak(dist(), withShort).alsoPossible).toEqual([]);

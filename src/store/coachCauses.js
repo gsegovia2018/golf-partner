@@ -73,6 +73,14 @@ const finite = (v) => Number.isFinite(v);
 const round1 = (v) => Math.round(v * 10) / 10;
 const round2 = (v) => Math.round(v * 100) / 100;
 const dec1 = (v) => n(round1(v), { decimals: 1 });
+
+// A benchmark sentence names the target handicap; at 0 it says "scratch"
+// instead, through the key's `.scratch` sibling (no `hcp` param).
+function benchMsg(ctx, key, params) {
+  if (ctx.target !== 0) return msg(key, params);
+  const { hcp, ...rest } = params; // eslint-disable-line no-unused-vars
+  return msg(`${key}.scratch`, rest);
+}
 const rankOf = (strength) => STRENGTHS.indexOf(strength);
 const lowerSide = (side) => lower(msg(`stats.my.fan.${side}`));
 const KEY = 'stats.my.coach.cause.';
@@ -143,7 +151,7 @@ function lagRule(leak, stats, ctx) {
     metricKey: `putting.threePuttRate.${bucket}`,
     sample: attempts,
     msg: hasBench
-      ? msg(`${KEY}putting.lag.bench`, { ...params, expected: dec1(row.expectedPutts), hcp: n(ctx.target) })
+      ? benchMsg(ctx, `${KEY}putting.lag.bench`, { ...params, expected: dec1(row.expectedPutts), hcp: n(ctx.target) })
       : msg(`${KEY}putting.lag`, params),
   });
 }
@@ -161,7 +169,7 @@ function shortPuttRule(leak, stats, ctx) {
     metricKey: `sg.putting.bucket.${bucket}`,
     sample: attempts,
     msg: hasBench
-      ? msg(`${KEY}putting.short.bench`, { ...params, expected: dec1(row.expectedPutts), hcp: n(ctx.target) })
+      ? benchMsg(ctx, `${KEY}putting.short.bench`, { ...params, expected: dec1(row.expectedPutts), hcp: n(ctx.target) })
       : msg(`${KEY}putting.short`, params),
   });
 }
@@ -185,7 +193,7 @@ function generalPuttingRule(leak, stats, ctx) {
     },
     metricKey: puttsOver ? 'putting.per18' : 'putting.threePuttsPer18',
     sample: putts.sample.holes,
-    msg: msg(`${KEY}putting.general.bench`, {
+    msg: benchMsg(ctx, `${KEY}putting.general.bench`, {
       per18: dec1(putts.value),
       benchPer18: dec1(ctx.bench.puttsPerRound),
       threePutts: dec1(threes?.value ?? 0),
@@ -298,7 +306,7 @@ function approachDistanceRule(leak, stats, ctx) {
     metricKey: `sg.approach.bucket.${bucket}`,
     sample: child.sample.shots,
     msg: hasBench
-      ? msg(`${KEY}approach.distance.bench`, { ...params, hcp: n(ctx.target) })
+      ? benchMsg(ctx, `${KEY}approach.distance.bench`, { ...params, hcp: n(ctx.target) })
       : msg(`${KEY}approach.distance`, params),
   });
 }
@@ -338,7 +346,7 @@ function teeTroubleRule(leak, stats, ctx) {
     metricKey: 'tee.penaltyPct.driver',
     sample: pen.sample.shots,
     msg: row
-      ? msg(`${KEY}tee.penalty.driver.bench`, { ...params, benchPct: row.teePenaltyPct, hcp: n(ctx.target) })
+      ? benchMsg(ctx, `${KEY}tee.penalty.driver.bench`, { ...params, benchPct: row.teePenaltyPct, hcp: n(ctx.target) })
       : msg(`${KEY}tee.penalty.driver`, params),
   });
 }
@@ -374,7 +382,7 @@ function teeSideRule(leak, stats, ctx) {
     metricKey: `tee.missSideShare.${side}`,
     sample: share.sample.shots,
     msg: finite(benchPct)
-      ? msg(`${KEY}tee.side.bench`, { ...params, benchPct, hcp: n(ctx.target) })
+      ? benchMsg(ctx, `${KEY}tee.side.bench`, { ...params, benchPct, hcp: n(ctx.target) })
       : msg(`${KEY}tee.side`, params),
   });
 }
@@ -392,7 +400,7 @@ function teeDistanceRule(leak, stats, ctx, found) {
     benchmark: { source: 'target', targetHandicap: ctx.target, driveDistance: bench },
     metricKey: 'tee.distance',
     sample: d.sample.shots,
-    msg: msg(`${KEY}tee.distance.bench`, {
+    msg: benchMsg(ctx, `${KEY}tee.distance.bench`, {
       distance: n(Math.round(d.value), { decimals: 0 }),
       benchDistance: n(Math.round(bench), { decimals: 0 }),
       drives: d.sample.shots,
@@ -440,7 +448,7 @@ function chipRule(leak, stats, ctx) {
     benchmark: { source: 'target', targetHandicap: ctx.target, upAndDownRate: expectedPct },
     metricKey: 'short.upDownRate',
     sample: u.sample.shots,
-    msg: msg(`${KEY}short.chip.bench`, {
+    msg: benchMsg(ctx, `${KEY}short.chip.bench`, {
       pct: u.value, expectedPct, attempts: u.sample.shots, hcp: n(ctx.target),
     }),
   });
@@ -470,7 +478,7 @@ function penaltyRule(leak, stats, ctx) {
     metricKey: isTee ? 'penalties.perRound.tee' : 'penalties.perRound.other',
     sample: total,
     msg: hasBench
-      ? msg(`${KEY}${isTee ? 'penalty.tee' : 'penalty.other'}.bench`, {
+      ? benchMsg(ctx, `${KEY}${isTee ? 'penalty.tee' : 'penalty.other'}.bench`, {
         ...params, perRound: dec1(perRound), benchPerRound: dec1(benchPerRound), hcp: n(ctx.target),
       })
       : msg(`${KEY}${isTee ? 'penalty.tee' : 'penalty.other'}`, params),

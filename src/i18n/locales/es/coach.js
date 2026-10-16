@@ -11,9 +11,12 @@ export default {
   // ── Causes: putting ────────────────────────────────────────────────────
   'stats.my.coach.cause.putting.lag': 'putts desde {bucket} m que acaban en tres putts ({count} de {total}, {pct}%), con un promedio de {avgPutts} putts.',
   'stats.my.coach.cause.putting.lag.bench': 'putts desde {bucket} m que acaban en tres putts ({count} de {total}, {pct}%), con un promedio de {avgPutts} putts (un hándicap de {hcp} promedia {expected}).',
+  'stats.my.coach.cause.putting.lag.bench.scratch': 'putts desde {bucket} m que acaban en tres putts ({count} de {total}, {pct}%), con un promedio de {avgPutts} putts (un jugador scratch promedia {expected}).',
   'stats.my.coach.cause.putting.short': 'putts cortos desde {bucket} m, con un promedio de {avgPutts} putts en {total} intentos.',
   'stats.my.coach.cause.putting.short.bench': 'putts cortos desde {bucket} m, con un promedio de {avgPutts} putts en {total} intentos (un hándicap de {hcp} promedia {expected}).',
+  'stats.my.coach.cause.putting.short.bench.scratch': 'putts cortos desde {bucket} m, con un promedio de {avgPutts} putts en {total} intentos (un jugador scratch promedia {expected}).',
   'stats.my.coach.cause.putting.general.bench': 'el putt en general, con {per18} putts por cada 18 hoyos (un hándicap de {hcp} promedia {benchPer18}) y {threePutts} tres putts (promedio {benchThreePutts}).',
+  'stats.my.coach.cause.putting.general.bench.scratch': 'el putt en general, con {per18} putts por cada 18 hoyos (un jugador scratch promedia {benchPer18}) y {threePutts} tres putts (promedio {benchThreePutts}).',
 
   // ── Causes: approach ───────────────────────────────────────────────────
   'stats.my.coach.cause.approach.short': 'golpes de aproximación desde {bucket} m que se quedan cortos ({count} de {total} fallos, {pct}%; el {missPct}% de las aproximaciones desde esa distancia no caen en el green).',
@@ -22,22 +25,29 @@ export default {
   'stats.my.coach.cause.approach.bunker': 'golpes de aproximación desde {bucket} m que acaban en búnker ({count} de {total} fallos, {pct}%; tus salvados de arena son del {sandPct}% en {sandAttempts} intentos).',
   'stats.my.coach.cause.approach.distance': 'golpes de aproximación desde {bucket} m, que cuestan {cost} golpes cada uno en {shots} intentos.',
   'stats.my.coach.cause.approach.distance.bench': 'golpes de aproximación desde {bucket} m, que cuestan {cost} golpes cada uno en {shots} intentos (más de lo que suele perder un hándicap de {hcp}).',
+  'stats.my.coach.cause.approach.distance.bench.scratch': 'golpes de aproximación desde {bucket} m, que cuestan {cost} golpes cada uno en {shots} intentos (más de lo que suele perder un jugador scratch).',
 
   // ── Causes: off the tee ────────────────────────────────────────────────
   'stats.my.coach.cause.tee.trouble.driver': 'salidas que acaban en búnker o en zona difícil ({count} de {total}, {pct}%).',
   'stats.my.coach.cause.tee.penalty.driver': 'salidas con el driver que acaban en penalización ({count} de {total} hoyos, {pct}%).',
   'stats.my.coach.cause.tee.penalty.driver.bench': 'salidas con el driver que acaban en penalización ({count} de {total} hoyos, {pct}%; un hándicap de {hcp} promedia el {benchPct}%).',
+  'stats.my.coach.cause.tee.penalty.driver.bench.scratch': 'salidas con el driver que acaban en penalización ({count} de {total} hoyos, {pct}%; un jugador scratch promedia el {benchPct}%).',
   'stats.my.coach.cause.tee.side': 'salidas que fallan a la {side} ({count} de {misses} fallos, {pct}% de todas las salidas).',
   'stats.my.coach.cause.tee.side.bench': 'salidas que fallan a la {side} ({count} de {misses} fallos, {pct}% de todas las salidas; un hándicap de {hcp} falla así el {benchPct}%).',
+  'stats.my.coach.cause.tee.side.bench.scratch': 'salidas que fallan a la {side} ({count} de {misses} fallos, {pct}% de todas las salidas; un jugador scratch falla así el {benchPct}%).',
   'stats.my.coach.cause.tee.distance.bench': 'salidas cortas: {distance} m frente a {benchDistance} m para un hándicap de {hcp}, en {drives} salidas.',
+  'stats.my.coach.cause.tee.distance.bench.scratch': 'salidas cortas: {distance} m frente a {benchDistance} m para un jugador scratch, en {drives} salidas.',
 
   // ── Causes: short game and penalties ───────────────────────────────────
   'stats.my.coach.cause.short.sand': 'salvados de arena ({sandPct}% en {sandAttempts} intentos, frente al {nonSandPct}% desde otras posiciones en {nonSandAttempts} intentos).',
   'stats.my.coach.cause.short.chip.bench': 'up & down ({pct}% en {attempts} intentos, frente al {expectedPct}% esperado para un hándicap de {hcp}).',
+  'stats.my.coach.cause.short.chip.bench.scratch': 'up & down ({pct}% en {attempts} intentos, frente al {expectedPct}% esperado para un jugador scratch).',
   'stats.my.coach.cause.penalty.tee': 'penalizaciones desde la salida ({count} de tus {total} penalizaciones).',
   'stats.my.coach.cause.penalty.tee.bench': 'penalizaciones desde la salida ({count} de tus {total} penalizaciones, {perRound} por vuelta frente a {benchPerRound} de un hándicap de {hcp}).',
+  'stats.my.coach.cause.penalty.tee.bench.scratch': 'penalizaciones desde la salida ({count} de tus {total} penalizaciones, {perRound} por vuelta frente a {benchPerRound} de un jugador scratch).',
   'stats.my.coach.cause.penalty.other': 'penalizaciones en otros golpes ({count} de tus {total} penalizaciones).',
   'stats.my.coach.cause.penalty.other.bench': 'penalizaciones en otros golpes ({count} de tus {total} penalizaciones, {perRound} por vuelta frente a {benchPerRound} de un hándicap de {hcp}).',
+  'stats.my.coach.cause.penalty.other.bench.scratch': 'penalizaciones en otros golpes ({count} de tus {total} penalizaciones, {perRound} por vuelta frente a {benchPerRound} de un jugador scratch).',
 
   // ── Swing link ─────────────────────────────────────────────────────────
   'stats.my.coach.swing.linked.consistent': 'Tu swing con el {club} grabado el {date} muestra {fault}, el fallo que suele provocar esto.',
@@ -148,6 +158,7 @@ export default {
   'stats.my.coach.ui.fix.more': '+{count} más en el plan de esta semana',
   'stats.my.coach.ui.check.line': '{metric}: ahora {value}.',
   'stats.my.coach.ui.check.line.bench': '{metric}: ahora {value} (un hándicap de {hcp}: {bench}).',
+  'stats.my.coach.ui.check.line.bench.scratch': '{metric}: ahora {value} (scratch: {bench}).',
   'stats.my.coach.ui.check.line.base': '{metric}: ahora {value}, antes {baseline} cuando fijaste el objetivo.',
   'stats.my.coach.ui.check.noValue': '{metric}: aún no hay datos suficientes para medirlo.',
   'stats.my.coach.ui.check.when': 'Se vuelve a medir tras {rounds} vueltas; el veredicto se asienta a las {settles}.',
