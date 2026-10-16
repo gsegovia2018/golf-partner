@@ -224,3 +224,14 @@ describe('coach catalogue', () => {
     expect(storeSource('coachWeeklyPlan.js')).toContain("'stats.my.coach.plan.'");
   });
 });
+
+describe('Spanish coach copy: "objetivo" never means the focus', () => {
+  // objetivo = the target handicap or a pass target; the focus is "foco".
+  const ALLOWED = /hándicap objetivo|^Objetivo: \{target\}$|^Objetivo del ejercicio$/i;
+  test('every es coach string that says objetivo is a target handicap or a pass target', () => {
+    Object.entries(es).filter(([k]) => k.startsWith('stats.my.coach.')).forEach(([key, value]) => {
+      const text = typeof value === 'string' ? value : Object.values(value).join(' ');
+      if (/objetivo/i.test(text)) expect({ key, ok: ALLOWED.test(text) }).toEqual({ key, ok: true });
+    });
+  });
+});

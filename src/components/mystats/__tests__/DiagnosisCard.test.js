@@ -118,7 +118,7 @@ describe('DiagnosisCard: one clear leak', () => {
     const stats = onePutting();
     const onCommit = jest.fn();
     const r = renderCard(stats, {}, { onCommitFocus: onCommit });
-    fireEvent.press(r.getByLabelText('Make this my focus'));
+    fireEvent.press(r.getByLabelText('Work on this'));
     expect(onCommit).toHaveBeenCalledTimes(1);
     const arg = onCommit.mock.calls[0][0];
     expect(arg.leak.id).toBe('leak:putting:6+');
@@ -127,10 +127,30 @@ describe('DiagnosisCard: one clear leak', () => {
     expect(arg.swingId).toBeUndefined();
   });
 
+  test('the button says what it does and one line under it says what the coach then does', () => {
+    const r = renderCard(onePutting());
+    expect(r.getByText('Work on this')).toBeTruthy();
+    expect(r.queryByText('Make this my focus')).toBeNull();
+    expect(r.getByTestId('focus-explain')).toHaveTextContent(
+      "The coach tracks three-putt rate from 6+ m over your next rounds, tells you after 2 rounds if it's improving, and levels up your plan.",
+    );
+  });
+
+  test('a tie explains once, without naming one metric', () => {
+    const r = renderCard(tieStats());
+    expect(r.getAllByTestId('focus-explain')).toHaveLength(1);
+    expect(r.getByTestId('focus-explain')).toHaveTextContent(/^The coach tracks its metric over your next rounds, tells you after 2 rounds/);
+  });
+
+  test('no explanation without a button', () => {
+    const r = renderCard(onePutting(), {}, { focusActive: true });
+    expect(r.queryByTestId('focus-explain')).toBeNull();
+  });
+
   test('no focus button without a handler', () => {
     const stats = onePutting();
     const r = render(wrap(<DiagnosisCard week={week(stats)} diagnosis={stats.coachDiagnosis} />));
-    expect(r.queryByLabelText('Make this my focus')).toBeNull();
+    expect(r.queryByLabelText('Work on this')).toBeNull();
   });
 });
 
@@ -145,10 +165,10 @@ describe('DiagnosisCard: two close leaks', () => {
     expect(r.getByText('Leak 2 · Off the tee')).toBeTruthy();
     expect(r.getByTestId('diagnosis-chain-1')).toBeTruthy();
     expect(r.getByTestId('diagnosis-chain-2')).toBeTruthy();
-    expect(r.queryByLabelText('Make this my focus')).toBeNull();
-    fireEvent.press(r.getByLabelText('Focus: Approach'));
+    expect(r.queryByLabelText('Work on this')).toBeNull();
+    fireEvent.press(r.getByLabelText('Work on Approach'));
     expect(onCommit.mock.calls[0][0].leak.category).toBe('approach');
-    fireEvent.press(r.getByLabelText('Focus: Off the tee'));
+    fireEvent.press(r.getByLabelText('Work on Off the tee'));
     expect(onCommit.mock.calls[1][0].leak.category).toBe('offTheTee');
   });
 
@@ -169,7 +189,7 @@ describe('DiagnosisCard: few rounds and no shot detail', () => {
     expect(r.getByText('needs 1 more round')).toBeTruthy();
     expect(r.getByText('needs 1 more round, 4 more holes')).toBeTruthy();
     expect(r.getAllByText('Insufficient')).toHaveLength(2);
-    expect(r.queryByLabelText('Make this my focus')).toBeNull();
+    expect(r.queryByLabelText('Work on this')).toBeNull();
     expect(r.queryByText('Fix first')).toBeNull();
   });
 
@@ -196,7 +216,7 @@ describe('DiagnosisCard: focus in progress', () => {
     const r = renderCard(stats, { focus: focusRecord(), verdict: verdictOf() }, { focusActive: true });
     expect(r.getByText('Your focus')).toBeTruthy();
     expect(r.queryByText('Fix first')).toBeNull();
-    expect(r.queryByLabelText('Make this my focus')).toBeNull();
+    expect(r.queryByLabelText('Work on this')).toBeNull();
     expect(r.getByText('Short misses from 100-150 m: now 48%, was 71% when you committed.')).toBeTruthy();
     // level 2 drills carry the level 2 pass target
     expect(r.getAllByText(/^Level 2 of 3$/).length).toBeGreaterThan(0);
@@ -219,7 +239,7 @@ describe('DiagnosisCard: the swing line (six states)', () => {
   test('linked swing id travels with the committed focus', () => {
     const onCommit = jest.fn();
     const r = renderCard(teeLeft(), { swings: [driverSwing()] }, props({ onCommitFocus: onCommit }));
-    fireEvent.press(r.getByLabelText('Make this my focus'));
+    fireEvent.press(r.getByLabelText('Work on this'));
     expect(onCommit.mock.calls[0][0].swingId).toBe('sw-driver');
   });
 

@@ -328,7 +328,7 @@ export default {
   "stats.my.coach.group.watch": "Watch",
   "stats.my.coach.hero.emptyTitle": "No coach insight yet",
   "stats.my.coach.hero.emptyReason": "Play more scored rounds to unlock a useful practice priority.",
-  "stats.my.coach.hero.makeFocus": "Make this my focus",
+  "stats.my.coach.hero.makeFocus": "Work on this",
   "stats.my.coach.board.title": "Coach Board",
   "stats.my.coach.board.improve.title": "Improve now",
   "stats.my.coach.board.improve.description": "Biggest leaks and smaller gains to chase next.",

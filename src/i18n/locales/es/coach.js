@@ -136,7 +136,7 @@ export default {
 
   // ── Interfaz de la pestaña del entrenador: cadena de diagnóstico ───────
   'stats.my.coach.ui.diag.title': 'Diagnóstico',
-  'stats.my.coach.ui.badge.focus': 'Tu objetivo',
+  'stats.my.coach.ui.badge.focus': 'Tu foco',
   'stats.my.coach.ui.step.leak': 'Pérdida',
   'stats.my.coach.ui.step.why': 'Por qué',
   'stats.my.coach.ui.step.fix': 'Qué hacer',
@@ -166,12 +166,14 @@ export default {
   'stats.my.coach.ui.check.line': '{metric}: ahora {value}.',
   'stats.my.coach.ui.check.line.bench': '{metric}: ahora {value} (un hándicap de {hcp}: {bench}).',
   'stats.my.coach.ui.check.line.bench.scratch': '{metric}: ahora {value} (scratch: {bench}).',
-  'stats.my.coach.ui.check.line.base': '{metric}: ahora {value}, antes {baseline} cuando fijaste el objetivo.',
+  'stats.my.coach.ui.check.line.base': '{metric}: ahora {value}, antes {baseline} cuando empezaste este foco.',
   'stats.my.coach.ui.check.noValue': '{metric}: aún no hay datos suficientes para medirlo.',
   'stats.my.coach.ui.check.when': 'Se vuelve a medir tras {rounds} vueltas; el veredicto se asienta a las {settles}.',
-  'stats.my.coach.ui.focus.tie': 'Objetivo: {area}',
+  'stats.my.coach.ui.focus.tie': 'Trabajar en {area}',
+  'stats.my.coach.ui.focus.explain': 'El entrenador sigue {metric} en tus próximas vueltas, te dice a las {rounds} vueltas si mejoras y sube de nivel tu plan.',
+  'stats.my.coach.ui.focus.explain.generic': 'El entrenador sigue su métrica en tus próximas vueltas, te dice a las {rounds} vueltas si mejoras y sube de nivel tu plan.',
   'stats.my.coach.ui.tie.title': 'Dos pérdidas demasiado igualadas',
-  'stats.my.coach.ui.tie.reason': '{a} ({sa} golpes) y {b} ({sb} golpes) están dentro del margen de error una de otra, así que el plan reparte la semana 45 / 45. Elige una para fijarla.',
+  'stats.my.coach.ui.tie.reason': '{a} ({sa} golpes) y {b} ({sb} golpes) están dentro del margen de error una de otra, así que el plan reparte la semana 45 / 45. Elige una para trabajar en ella.',
   'stats.my.coach.ui.tie.leak': 'Pérdida {n} · {area}',
 
   // ── Interfaz: línea de swing ───────────────────────────────────────────
@@ -189,12 +191,12 @@ export default {
   'stats.my.coach.ui.few.chip': 'Insuficiente',
   'stats.my.coach.ui.few.fix': 'Juega otra vuelta y anota putts, distancia del primer putt y aproximaciones en la tarjeta.',
   'stats.my.coach.ui.nodetail.title': 'Aún no hay detalle de golpes',
-  'stats.my.coach.ui.nodetail.leak': '{rounds} con resultado, pero sin putts ni aproximaciones anotados, así que no se puede medir nada frente a tu objetivo.',
+  'stats.my.coach.ui.nodetail.leak': '{rounds} con resultado, pero sin putts ni aproximaciones anotados, así que no se puede medir nada frente a tu hándicap objetivo.',
   'stats.my.coach.ui.nodetail.fix': 'Activa el seguimiento de putts y aproximaciones en Ajustes y anótalos durante 3 vueltas.',
   'stats.my.coach.ui.candidate.title': 'Nada te cuesta claramente todavía',
   'stats.my.coach.ui.candidate.leak': 'La candidata más grande es {area}, con {strokes} golpes por vuelta, a partir de {holes}. Es demasiado poco para llamarla pérdida.',
   'stats.my.coach.ui.noLeak.title': 'Ahora no hay ninguna pérdida clara',
-  'stats.my.coach.ui.noLeak.leak': 'Nada de lo que has registrado te cuesta golpes frente a tu objetivo. Sigue anotando y el entrenador avisará cuando eso cambie.',
+  'stats.my.coach.ui.noLeak.leak': 'Nada de lo que has registrado te cuesta golpes frente a tu hándicap objetivo. Sigue anotando y el entrenador avisará cuando eso cambie.',
 
   // ── Interfaz: valores de la comprobación y nombres de métricas ─────────
   'stats.my.coach.ui.unit.sgPerRound': '{value} SG / vuelta',
@@ -237,16 +239,16 @@ export default {
   'stats.my.coach.ui.kind.course': 'En el campo',
   'stats.my.coach.ui.kind.part': '{kind} · sesión {part}',
   'stats.my.coach.ui.level.line': 'Nivel {level} de 3 · {rounds} desde el {date}',
-  'stats.my.coach.ui.level.none': 'Nivel 1 de 3 · fija un objetivo y el plan sube de nivel con tus vueltas',
+  'stats.my.coach.ui.level.none': 'Nivel 1 de 3 · elige un foco y el plan sube de nivel con tus vueltas',
 
-  // ── Interfaz: tarjeta del objetivo ─────────────────────────────────────
+  // ── Interfaz: tarjeta del foco ─────────────────────────────────────
   'stats.my.coach.ui.focus.early': 'Primera lectura: {rounds} jugadas, el veredicto se asienta a las {settles}.',
-  'stats.my.coach.ui.focus.before': 'Al fijarlo',
+  'stats.my.coach.ui.focus.before': 'Al empezar',
   'stats.my.coach.ui.focus.now': 'Ahora',
-  'stats.my.coach.ui.focus.ready': 'Listo para avanzar: termina este objetivo y elige el siguiente.',
+  'stats.my.coach.ui.focus.ready': 'Listo para avanzar: termina este foco y elige el siguiente.',
   'stats.my.coach.ui.focus.targetChanged': 'Hándicap objetivo cambiado a {to} el {date}: el veredicto se reinicia con los números de hoy.',
   'stats.my.coach.ui.focus.noData': 'Todavía no hay lectura de esta métrica.',
-  'stats.my.coach.ui.notice.v1Closed': 'Se cerró tu objetivo anterior; elige uno nuevo.',
+  'stats.my.coach.ui.notice.v1Closed': 'Se cerró tu foco anterior; elige uno nuevo.',
   'stats.my.coach.ui.notice.dismiss': 'Descartar',
 
   // ── Interfaz: panel ────────────────────────────────────────────────────

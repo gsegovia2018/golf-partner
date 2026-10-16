@@ -8,6 +8,7 @@ import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import { GoldBadge, EvidenceChip, DrillLine } from './CoachBits';
 import { formatConfidence } from './CoachInsightRow';
+import { MIN_VERDICT_ROUNDS } from '../../store/coachFocus';
 import { renderMsg, renderDatedMsg, metricValueText, msgText } from './msg';
 
 const MIN_ROUNDS = 3;
@@ -56,6 +57,20 @@ export default function DiagnosisCard({
     );
   };
 
+  // One line under the focus button(s): what the coach does once it is pressed.
+  // A single chain names its metric; a tie (two metrics) says it generically.
+  const focusExplain = (chain) => {
+    const label = !tie && chain.check?.label ? renderMsg(chain.check.label) : null;
+    const rounds = MIN_VERDICT_ROUNDS;
+    return (
+      <Text style={s.line2} testID="focus-explain">
+        {label
+          ? t('stats.my.coach.ui.focus.explain', { metric: label.charAt(0).toLocaleLowerCase() + label.slice(1), rounds })
+          : t('stats.my.coach.ui.focus.explain.generic', { rounds })}
+      </Text>
+    );
+  };
+
   if (hasChain) {
     const badge = kind === 'focus' ? t('stats.my.coach.ui.badge.focus') : t('stats.my.coach.group.fixFirst');
     return (
@@ -81,13 +96,23 @@ export default function DiagnosisCard({
                 <Chain chain={chain} untracked={i === 0 ? untracked : null} {...chainProps} />
               </View>
             ))}
-            {!focusActive && onCommitFocus ? <View style={s.btnRow}>{chains.map((c) => focusButton(c, true))}</View> : null}
+            {!focusActive && onCommitFocus ? (
+              <>
+                <View style={s.btnRow}>{chains.map((c) => focusButton(c, true))}</View>
+                {focusExplain(chains[0])}
+              </>
+            ) : null}
           </>
         ) : (
           <>
             <Text style={s.kicker}>{kickerText(t, chains[0].leak)}</Text>
             <Chain chain={chains[0]} untracked={untracked} {...chainProps} />
-            {!focusActive && onCommitFocus ? <View style={s.btnRow}>{focusButton(chains[0], false)}</View> : null}
+            {!focusActive && onCommitFocus ? (
+              <>
+                <View style={s.btnRow}>{focusButton(chains[0], false)}</View>
+                {focusExplain(chains[0])}
+              </>
+            ) : null}
           </>
         )}
       </SectionCard>

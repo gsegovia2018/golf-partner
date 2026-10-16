@@ -169,9 +169,11 @@ export default {
   'stats.my.coach.ui.check.line.base': '{metric}: now {value}, was {baseline} when you committed.',
   'stats.my.coach.ui.check.noValue': '{metric}: not enough data to read yet.',
   'stats.my.coach.ui.check.when': 'Read again after {rounds} rounds; the verdict settles at {settles}.',
-  'stats.my.coach.ui.focus.tie': 'Focus: {area}',
+  'stats.my.coach.ui.focus.tie': 'Work on {area}',
+  'stats.my.coach.ui.focus.explain': 'The coach tracks {metric} over your next rounds, tells you after {rounds} rounds if it\'s improving, and levels up your plan.',
+  'stats.my.coach.ui.focus.explain.generic': 'The coach tracks its metric over your next rounds, tells you after {rounds} rounds if it\'s improving, and levels up your plan.',
   'stats.my.coach.ui.tie.title': 'Two leaks too close to call',
-  'stats.my.coach.ui.tie.reason': '{a} ({sa} strokes) and {b} ({sb} strokes) are within each other\'s error bars, so the plan splits the week 45 / 45. Pick one to pin it.',
+  'stats.my.coach.ui.tie.reason': '{a} ({sa} strokes) and {b} ({sb} strokes) are within each other\'s error bars, so the plan splits the week 45 / 45. Pick one to work on it.',
   'stats.my.coach.ui.tie.leak': 'Leak {n} · {area}',
 
   // ── Coach tab UI: swing line ───────────────────────────────────────────

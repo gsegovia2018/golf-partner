@@ -56,7 +56,7 @@ describe('My Stats components in Spanish', () => {
   });
   test('the diagnosis chain renders in Spanish: rail, symptom, cause, drills, task, check', () => {
     const stats = onePutting();
-    const { getByText, getAllByText } = render(wrap(
+    const { getByText, getAllByText, getByTestId } = render(wrap(
       <DiagnosisCard week={week(stats)} diagnosis={stats.coachDiagnosis} onCommitFocus={() => {}} />,
     ));
     expect(getByText('Corrige primero')).toBeTruthy();
@@ -73,14 +73,17 @@ describe('My Stats components in Spanish', () => {
     expect(getByText('Próxima vuelta')).toBeTruthy();
     expect(getByText('Porcentaje de tres putts desde 6+ m: ahora 31%.')).toBeTruthy();
     expect(getByText('Se vuelve a medir tras 2 vueltas; el veredicto se asienta a las 4.')).toBeTruthy();
-    expect(getByText('Fijar como mi objetivo')).toBeTruthy();
+    expect(getByText('Trabajar en esto')).toBeTruthy();
+    expect(getByTestId('focus-explain')).toHaveTextContent(
+      'El entrenador sigue porcentaje de tres putts desde 6+ m en tus próximas vueltas, te dice a las 2 vueltas si mejoras y sube de nivel tu plan.',
+    );
   });
 
   test('tie, swing line and web fallback in Spanish', () => {
     const tie = tieStats();
     const a = render(wrap(<DiagnosisCard week={week(tie)} diagnosis={tie.coachDiagnosis} onCommitFocus={() => {}} />));
     expect(a.getByText('Dos pérdidas demasiado igualadas')).toBeTruthy();
-    expect(a.getByLabelText('Objetivo: Aproximación')).toBeTruthy();
+    expect(a.getByLabelText('Trabajar en Aproximación')).toBeTruthy();
     const tee = teeLeft();
     const linked = render(wrap(<DiagnosisCard week={week(tee, { swings: [driverSwing()] })} diagnosis={tee.coachDiagnosis} swingSupport={{ supported: true }} onOpenSwing={() => {}} />));
     expect(linked.getByText(/Tu swing con el driver grabado el 4 oct muestra over the top/)).toBeTruthy();
@@ -101,7 +104,7 @@ describe('My Stats components in Spanish', () => {
     expect(r.getByText('Primera lectura: 3 vueltas jugadas, el veredicto se asienta a las 4.')).toBeTruthy();
     expect(r.getByText('Fallos cortos desde 100-150 m')).toBeTruthy();
     expect(render(wrap(<CoachTab stats={onePutting()} week={week(onePutting())} targetHandicap={15} />)).getByText('Más hallazgos')).toBeTruthy();
-    expect(r.getByLabelText('Terminar objetivo')).toBeTruthy();
+    expect(r.getByLabelText('Terminar foco')).toBeTruthy();
   });
 });
 
