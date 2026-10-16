@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Image, Text, StyleSheet } from 'react-native';
 import Svg, {
-  Line, Circle, Rect, Polyline, Text as SvgText,
+  G, Line, Circle, Rect, Polyline, Text as SvgText,
 } from 'react-native-svg';
 import { SWING_STRINGS } from '../../swing/strings';
 import { extendToEdge } from '../../swing/highlights';
@@ -86,14 +86,26 @@ export default function SwingOverlay({
 
   // One drawing primitive; `c` = { color, w, d, text } decides how it looks (in focus the status
   // colour and the green target, otherwise the highlight / key-line colours).
+  // A dark halo under every stroke, so a line stays readable on grass, sky or a dark shirt.
+  const halo = (key, el, w) => (
+    <G key={key}>
+      {React.cloneElement(el, { stroke: INK, strokeOpacity: 0.55, strokeWidth: w + 2.5, strokeDasharray: undefined })}
+      {el}
+    </G>
+  );
   const drawPrim = (h, key, c) => {
+    const el = strokeOf(h, c);
+    if (!el) return null;
+    return h.t === 'dot' || h.t === 'label' ? <G key={key}>{el}</G> : halo(key, el, c.w);
+  };
+  const strokeOf = (h, c) => {
     switch (h.t) {
-      case 'line': return <Line key={key} x1={X(h.a[0])} y1={Y(h.a[1])} x2={X(h.b[0])} y2={Y(h.b[1])} stroke={c.color} strokeWidth={c.w} strokeDasharray={c.d} />;
-      case 'circle': return <Circle key={key} cx={X(h.c[0])} cy={Y(h.c[1])} r={X(h.r)} fill="none" stroke={c.color} strokeWidth={c.w} strokeDasharray={c.d} />;
-      case 'rect': return <Rect key={key} x={X(h.c[0]) - X(h.half)} y={Y(h.c[1]) - X(h.half)} width={X(h.half) * 2} height={X(h.half) * 2} fill="none" stroke={c.color} strokeWidth={c.w} strokeDasharray={c.d} />;
-      case 'dot': return <Circle key={key} cx={X(h.c[0])} cy={Y(h.c[1])} r={4} fill={c.color} />;
-      case 'poly': return <Polyline key={key} points={h.pts.map((p) => `${X(p[0])},${Y(p[1])}`).join(' ')} fill="none" stroke={c.color} strokeWidth={c.w} strokeDasharray={c.d} />;
-      case 'label': return <Label key={key} x={X(h.at[0])} y={Y(h.at[1]) + 4} text={h.text} anchor={labelAnchor(X(h.at[0]))} color={c.text} />;
+      case 'line': return <Line x1={X(h.a[0])} y1={Y(h.a[1])} x2={X(h.b[0])} y2={Y(h.b[1])} stroke={c.color} strokeWidth={c.w} strokeDasharray={c.d} />;
+      case 'circle': return <Circle cx={X(h.c[0])} cy={Y(h.c[1])} r={X(h.r)} fill="none" stroke={c.color} strokeWidth={c.w} strokeDasharray={c.d} />;
+      case 'rect': return <Rect x={X(h.c[0]) - X(h.half)} y={Y(h.c[1]) - X(h.half)} width={X(h.half) * 2} height={X(h.half) * 2} fill="none" stroke={c.color} strokeWidth={c.w} strokeDasharray={c.d} />;
+      case 'dot': return <Circle cx={X(h.c[0])} cy={Y(h.c[1])} r={4} fill={c.color} />;
+      case 'poly': return <Polyline points={h.pts.map((p) => `${X(p[0])},${Y(p[1])}`).join(' ')} fill="none" stroke={c.color} strokeWidth={c.w} strokeDasharray={c.d} />;
+      case 'label': return <Label x={X(h.at[0])} y={Y(h.at[1]) + 4} text={h.text} anchor={labelAnchor(X(h.at[0]))} color={c.text} />;
       default: return null;
     }
   };
@@ -113,8 +125,8 @@ export default function SwingOverlay({
         <Svg width={r.w} height={r.h} style={StyleSheet.absoluteFill} pointerEvents="none">
           {planes ? (
             <>
-              {showShaft ? <Line x1={X(planes.b[0])} y1={Y(planes.b[1])} x2={X(planes.e1[0])} y2={Y(planes.e1[1])} stroke={ACCENT} strokeWidth={1.5} /> : null}
-              {showShoulder ? <Line x1={X(planes.b[0])} y1={Y(planes.b[1])} x2={X(planes.e2[0])} y2={Y(planes.e2[1])} stroke={SOFT} strokeWidth={1.5} strokeDasharray="5 4" /> : null}
+              {showShaft ? halo('ps', <Line x1={X(planes.b[0])} y1={Y(planes.b[1])} x2={X(planes.e1[0])} y2={Y(planes.e1[1])} stroke={ACCENT} strokeWidth={2} />, 2) : null}
+              {showShoulder ? halo('pu', <Line x1={X(planes.b[0])} y1={Y(planes.b[1])} x2={X(planes.e2[0])} y2={Y(planes.e2[1])} stroke={SOFT} strokeWidth={2} strokeDasharray="5 4" />, 2) : null}
               {showShaft && reference.shaftPlaneDeg != null ? <PlaneLabel p={planes.e1} X={X} Y={Y} w={r.w} text={SWING_STRINGS.overlay.shaftPlane(reference.shaftPlaneDeg)} color={ACCENT} /> : null}
               {showShoulder && reference.shoulderPlaneDeg != null ? <PlaneLabel p={planes.e2} X={X} Y={Y} w={r.w} text={SWING_STRINGS.overlay.shoulderPlane(reference.shoulderPlaneDeg)} color={SOFT} /> : null}
             </>

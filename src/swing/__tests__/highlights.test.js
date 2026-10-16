@@ -87,3 +87,15 @@ describe('key lines and references', () => {
     expect(keyLinesAt('finish', kctx)).toEqual({ shaft: false, shoulder: false, extra: [] });
   });
 });
+
+describe('references without a clubhead', () => {
+  test('shaft down shallow still draws the original plane and the ticks when the clubhead is hidden', () => {
+    const out = highlightFor({ id: 'shaft_down_shallow', status: 'unknown', value: null, unit: null }, {
+      analysis: { handedness: 'right', clubMarks: { shaftDown: { hands: [0.42, 0.55], head: null } }, reference: { ball: [0.6, 0.85], handsAddress: [0.45, 0.6], trailShoulder: [0.4, 0.35] } },
+      poseAt: () => flat(),
+      frameOf: () => 1,
+    });
+    expect(out.find((p) => p.t === 'line' && p.dash && p.role === 'target')).toMatchObject({ a: [0.6, 0.85] });
+    expect(out.some((p) => p.t === 'dot')).toBe(false);
+  });
+});

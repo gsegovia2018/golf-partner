@@ -86,8 +86,11 @@ describe('SwingOverlay', () => {
 
     test('on: target is the accent and dashed, you is the tone and solid', () => {
       const r = render(<SwingOverlay {...full} focus tone="#e0b24d" pose={null} club={null} />);
-      const [target, you] = lines(r);
       const rgb = (n) => n.props.stroke.payload & 0xffffff; // react-native-svg packs colours as ARGB numbers
+      // every stroke sits on a dark halo (#0a0d10) drawn first; the coloured strokes are the others
+      const halos = lines(r).filter((n) => rgb(n) === 0x0a0d10);
+      const [target, you] = lines(r).filter((n) => rgb(n) !== 0x0a0d10);
+      expect(halos).toHaveLength(2);
       expect(rgb(target)).toBe(0x4fae8a);
       expect(target.props.strokeWidth).toBe(2.5);
       expect(target.props.strokeDasharray).toEqual(['4', '3']);
