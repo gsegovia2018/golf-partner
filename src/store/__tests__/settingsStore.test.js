@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   DEFAULT_APP_SETTINGS, getAppSettings, updateAppSettings,
   hydrateAppSettings, subscribeAppSettings, __resetAppSettingsForTests,
-  SETTINGS_KEY, SETTINGS_DIRTY_KEY, SETTINGS_USER_KEY,
+  SETTINGS_KEY, SETTINGS_DIRTY_KEY, SETTINGS_USER_KEY, mergeAppSettings, PRACTICE_MINUTES_OPTIONS,
 } from '../settingsStore';
 import * as profileStore from '../profileStore';
 
@@ -303,4 +303,38 @@ test('concurrent update during mirror load is not clobbered', async () => {
   } finally {
     spy.mockRestore();
   }
+});
+
+test('practiceMinutesPerWeek defaults to 60 and is one of 30/60/90/120', () => {
+  expect(DEFAULT_APP_SETTINGS.practiceMinutesPerWeek).toBe(60);
+  expect(PRACTICE_MINUTES_OPTIONS).toEqual([30, 60, 90, 120]);
+});
+
+test('practiceMinutesPerWeek syncs: a write goes up in the profile blob', async () => {
+  profileStore.upsertProfile.mockResolvedValue();
+  await updateAppSettings({ practiceMinutesPerWeek: 90 });
+  expect(getAppSettings().practiceMinutesPerWeek).toBe(90);
+  expect(profileStore.upsertProfile).toHaveBeenCalledWith({
+    settings: expect.objectContaining({ practiceMinutesPerWeek: 90 }),
+  });
+});
+
+test('an old settings blob without practiceMinutesPerWeek reads the default', () => {
+  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, { gpsEnabled: false, units: 'yards' });
+  expect(merged.practiceMinutesPerWeek).toBe(60);
+  expect(merged.gpsEnabled).toBe(false);
+});
+
+test('a server blob with a saved practiceMinutesPerWeek is adopted on hydrate', async () => {
+  profileStore.loadProfile.mockResolvedValue({ userId: 'u1', settings: { practiceMinutesPerWeek: 120 } });
+  await hydrateAppSettings();
+  expect(getAppSettings().practiceMinutesPerWeek).toBe(120);
+});
+
+test('practiceMinutesPerWeek ignores values outside 30/60/90/120', () => {
+  [45, '90', null, 0, NaN, {}].forEach((bad) => {
+    expect(mergeAppSettings(DEFAULT_APP_SETTINGS, { practiceMinutesPerWeek: bad }).practiceMinutesPerWeek).toBe(60);
+  });
+  const at30 = { ...DEFAULT_APP_SETTINGS, practiceMinutesPerWeek: 30 };
+  expect(mergeAppSettings(at30, { practiceMinutesPerWeek: 45 }).practiceMinutesPerWeek).toBe(30);
 });

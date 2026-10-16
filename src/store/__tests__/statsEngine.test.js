@@ -829,6 +829,8 @@ describe('approachMissByDistance', () => {
     expect(r.buckets['150-200'].attempts).toBe(2);
     expect(r.buckets['150-200'].missRate).toBe(50);
     expect(r.buckets['150-200'].shortRate).toBe(100);
+    expect(r.buckets['150-200'].misses).toBe(1);
+    expect(r.buckets['150-200'].directionKnown).toBe(1);
     expect(r.buckets['0-50'].attempts).toBe(1);
   });
 });
@@ -1041,6 +1043,8 @@ describe('sgSeason with offTheTee', () => {
     });
     expect(season.perRound[0].byCategory.offTheTee).toBeCloseTo(18 * 0.095, 1);
     expect(season.perRound[0].byCategory.putting).toBeDefined();
+    expect(season.perRound[0].sampleHolesByCategory.aroundGreen).toBe(0);
+    expect(season.perRound[0].sampleHolesByCategory.putting).toBe(18);
   });
   test('legacy rounds without drive buckets leave offTheTee unsampled', () => {
     const legacy = makeRound(holes18, Array.from({ length: 18 }, () => ({

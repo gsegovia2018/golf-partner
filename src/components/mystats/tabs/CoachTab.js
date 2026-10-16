@@ -4,35 +4,72 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useT, formatNumber } from '../../../i18n';
 import PressableScale from '../../ui/PressableScale';
-import CoachHero from '../CoachHero';
+import DiagnosisCard from '../DiagnosisCard';
+import WeeklyPlanCard from '../WeeklyPlanCard';
 import CoachBoard from '../CoachBoard';
 import FocusCard from '../FocusCard';
 import PlaySmarterCard from '../PlaySmarterCard';
-import PracticePlanCard from '../PracticePlanCard';
 import SectionCard from '../SectionCard';
 import TrendLineChart from '../TrendLineChart';
 
 // Memoised: the six stats tabs all stay mounted behind the pager, so without
 // this every tab commit re-renders all of them and blocks the swipe.
-function CoachTab({ stats, onInfo, targetHandicap, onChangeTarget, focus, focusVerdict, onCommitFocus, onEndFocus }) {
+// Composition only (spec §12): target row, one-time notice, focus (only with a
+// focus), diagnosis, weekly plan, current form, the board folded as "More
+// findings", then the Play smarter tips the chain does not already show.
+// `week` comes from store/coachWeek.js buildCoachWeek.
+function CoachTab({
+  stats, onInfo, targetHandicap, onChangeTarget, focus, focusVerdict, onCommitFocus, onEndFocus,
+  week = null, onChangeMinutes, swingSupport, onRecordSwing, onOpenSwing, focusNotice = null, onDismissNotice,
+}) {
   const { theme } = useTheme();
+  const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { metrics = {}, form = {}, formSeries = {}, coach = {} } = stats ?? {};
-  const priorityInsight = coach.board?.fixFirst?.[0] ?? coach.hero;
+  const fixFirstIds = (coach.board?.fixFirst ?? []).map((insight) => insight.id).filter(Boolean);
+  const shown = new Set(week?.shownTipIds ?? []);
+  const tips = (stats?.coachStrategy ?? []).filter((tip) => !shown.has(tip.id));
 
   return (
     <View style={s.wrap}>
       <TargetBenchmarkRow targetHandicap={targetHandicap} onChangeTarget={onChangeTarget} />
-      {focus ? <FocusCard focus={focus} verdict={focusVerdict} onEndFocus={onEndFocus} /> : null}
+      {focusNotice ? (
+        <View style={s.notice} testID="focus-notice">
+          <Feather name="info" size={14} color={theme.info} />
+          <Text style={s.noticeText}>{t('stats.my.coach.ui.notice.v1Closed')}</Text>
+          {onDismissNotice ? (
+            <PressableScale
+              onPress={onDismissNotice}
+              accessibilityRole="button"
+              accessibilityLabel={t('stats.my.coach.ui.notice.dismiss')}
+              style={s.noticeBtn}
+            >
+              <Text style={s.noticeBtnText}>{t('stats.my.coach.ui.notice.dismiss')}</Text>
+            </PressableScale>
+          ) : null}
+        </View>
+      ) : null}
+      {focus ? <FocusCard focus={focus} verdict={focusVerdict} onEndFocus={onEndFocus} onInfo={onInfo} /> : null}
+      <DiagnosisCard
+        week={week}
+        diagnosis={stats?.coachDiagnosis}
+        roundCount={stats?.roundCount ?? 0}
+        focusActive={!!focus}
+        onCommitFocus={onCommitFocus}
+        onInfo={onInfo}
+        swingSupport={swingSupport}
+        onRecordSwing={onRecordSwing}
+        onOpenSwing={onOpenSwing}
+      />
+      <WeeklyPlanCard week={week} focus={focus} verdict={focusVerdict} onChangeMinutes={onChangeMinutes} onInfo={onInfo} />
       <FormTrendCard form={form} formSeries={formSeries} metrics={metrics} />
-      <CoachHero insight={priorityInsight} onCommitFocus={onCommitFocus} focusActive={!!focus} />
       <CoachBoard
         board={coach.board}
-        practicePlan={coach.practicePlan}
-        excludeInsightIds={priorityInsight?.id ? [priorityInsight.id] : []}
+        weekPills={week?.pills}
+        excludeInsightIds={fixFirstIds}
+        collapsible
       />
-      <PlaySmarterCard tips={stats?.coachStrategy} onInfo={onInfo} />
-      <PracticePlanCard plan={coach.practicePlan} onInfo={onInfo} />
+      <PlaySmarterCard tips={tips} onInfo={onInfo} />
     </View>
   );
 }
@@ -152,6 +189,19 @@ function makeStyles(theme) {
       gap: 6,
       paddingHorizontal: theme.spacing.xs,
     },
+    notice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      padding: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border.default,
+      backgroundColor: theme.bg.card,
+    },
+    noticeText: { ...theme.typography.caption, color: theme.text.primary, flex: 1 },
+    noticeBtn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: theme.spacing.sm },
+    noticeBtnText: { ...theme.typography.caption, color: theme.info, fontWeight: '800' },
     targetText: { ...theme.typography.caption, color: theme.text.secondary, flexShrink: 1 },
     formHead: {
       flexDirection: 'row',

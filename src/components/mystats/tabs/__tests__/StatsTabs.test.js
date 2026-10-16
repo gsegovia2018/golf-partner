@@ -7,6 +7,9 @@ import BreakdownTab from '../BreakdownTab';
 import CoachTab from '../CoachTab';
 import FormTab from '../FormTab';
 import ShotsTab from '../ShotsTab';
+import { onePutting, week as coachWeek } from '../../__tests__/coachFixtures';
+
+const coachFixture = onePutting();
 
 // Several cards below (Career Milestones, Score Mix, …) count up via
 // CountUpText on real setTimeout/requestAnimationFrame timers that outlive
@@ -109,10 +112,11 @@ function baseStats() {
     },
     coach: {
       hero: {
-        id: 'putting:6-m-putts',
+        id: 'leak:putting:6+',
         group: 'fixFirst',
         area: 'putting',
         areaLabel: 'Putting',
+        category: 'putting',
         title: '6+ m putts',
         reason: 'Long first putts are costing shots against your target.',
         metric: '-0.81 SG / putt',
@@ -122,7 +126,7 @@ function baseStats() {
       },
       board: {
         fixFirst: [{
-          id: 'putting:6-m-putts',
+          id: 'leak:putting:6+',
           group: 'fixFirst',
           area: 'putting',
           areaLabel: 'Putting',
@@ -134,7 +138,7 @@ function baseStats() {
           tone: 'bad',
         }],
         keepDoing: [{
-          id: 'driving:fairway-drives',
+          id: 'strength:offTheTee',
           group: 'keepDoing',
           area: 'driving',
           areaLabel: 'Driving',
@@ -150,30 +154,6 @@ function baseStats() {
         nextGains: [],
         watch: [],
       },
-      practicePlan: [
-        {
-          id: 'practice-putting',
-          role: 'practiceFirst',
-          sourceInsightId: 'putting:6-m-putts',
-          title: '6+ m putts distance ladder',
-          instruction: 'Roll sets from 6, 9 and 12 m and finish inside a club length.',
-          reason: 'Distance control reduces three-putt damage.',
-        },
-        {
-          id: 'practice-driving',
-          role: 'secondaryFocus',
-          sourceInsightId: 'driving:fairway-drives',
-          title: 'Stock tee-shot rehearsal',
-          instruction: 'Rehearse the tee shot that keeps you in play.',
-          reason: 'This is already a scoring strength.',
-        },
-        {
-          id: 'practice-cue',
-          role: 'onCourseCue',
-          title: 'Choose pace before line',
-          instruction: 'Commit to speed on long putts before aiming.',
-        },
-      ],
     },
   };
 }
@@ -472,24 +452,32 @@ describe('My Stats tabs', () => {
     expect(view.getByTestId('sparkline-expanded-girPct')).toBeTruthy();
   });
 
-  test('CoachTab renders form trend first, fix-first priority, board, and practice plan', async () => {
-    const { findByText, findAllByText, queryByText } = render(wrap(
-      <CoachTab stats={baseStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
+  test('CoachTab renders the diagnosis, the weekly plan, current form and the folded board', async () => {
+    const stats = {
+      ...baseStats(), coachDiagnosis: coachFixture.coachDiagnosis, coachStrategy: [], roundCount: 12, targetHandicap: 14,
+    };
+    const { findByText, queryByText, getByTestId } = render(wrap(
+      <CoachTab stats={stats} week={coachWeek(stats)} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
     ));
     await flush();
 
     expect(await findByText('Current form')).toBeTruthy();
     expect(await findByText('Improving lately')).toBeTruthy();
-    expect((await findAllByText('6+ m putts')).length).toBeGreaterThan(0);
-    expect(await findByText('Long first putts are the biggest leak.')).toBeTruthy();
+    expect(await findByText('Diagnosis')).toBeTruthy();
+    expect(await findByText('Fix first')).toBeTruthy();
+    expect(await findByText('This week')).toBeTruthy();
     expect(await findByText('Coach Board')).toBeTruthy();
+    // the priority insight lives in the diagnosis, the rest of the board is folded
+    expect(await findByText('More findings')).toBeTruthy();
+    expect(queryByText('Stock tee shot')).toBeNull();
+    fireEvent.press(getByTestId('more-findings'));
     expect(await findByText('Protect')).toBeTruthy();
+    expect(await findByText('Stock tee shot')).toBeTruthy();
+    expect(queryByText('6+ m putts')).toBeNull();
     expect(queryByText('Performance Snapshot')).toBeNull();
     expect(queryByText('Strokes gained by area')).toBeNull();
     expect(queryByText('Evidence behind it')).toBeNull();
-    expect(await findByText('Stock tee shot')).toBeTruthy();
-    expect(await findByText('Plan: Secondary focus')).toBeTruthy();
-    expect(await findByText('Practice Plan')).toBeTruthy();
+    expect(queryByText('Practice Plan')).toBeNull();
   });
 
   test('CoachTab shows which target handicap the coaching is benchmarked against', async () => {

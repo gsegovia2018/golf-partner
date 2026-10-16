@@ -1,4 +1,4 @@
-import { DRILLS, drillsForInsight } from '../coachDrills';
+import { DRILLS, drillsForInsight, drillsForCause } from '../coachDrills';
 
 describe('DRILLS catalog', () => {
   test('every drill is complete and well-formed', () => {
@@ -44,5 +44,67 @@ describe('drillsForInsight', () => {
     expect(drillsForInsight({ area: 'form', title: 'Points / round' })[0].area).toBe('scoring');
     expect(drillsForInsight({ area: 'nonsense', title: 'x' })[0].area).toBe('scoring');
     expect(drillsForInsight(null)).toEqual([]);
+  });
+});
+
+describe('drill causes, kind, minutes and levels', () => {
+  const KINDS = ['range', 'shortGame', 'putting', 'course'];
+  test('every drill has a kind, 10-25 minutes and three levels', () => {
+    DRILLS.forEach((d) => {
+      expect(KINDS).toContain(d.kind);
+      expect(d.minutes).toBeGreaterThanOrEqual(10);
+      expect(d.minutes).toBeLessThanOrEqual(25);
+      expect(d.levels).toHaveLength(3);
+      d.levels.forEach((level) => expect(level.passTarget.length).toBeGreaterThan(5));
+      expect(d.levels[0].passTarget).toBe(d.passTarget);
+      expect(Array.isArray(d.causes)).toBe(true);
+    });
+  });
+  test('every cause a drill names is a known cause id shape', () => {
+    DRILLS.forEach((d) => d.causes.forEach((c) => expect(c).toMatch(/^cause:[a-z]+(:[a-z]+)*$/)));
+  });
+});
+
+describe('drillsForCause', () => {
+  const ids = (causeId) => drillsForCause(causeId).map((d) => d.id);
+  test('cause-matched drills come first, then the rest of the cause area', () => {
+    expect(ids('cause:putting:lag')).toEqual([
+      'putt-lag-ladder', 'putt-circle-4m',
+      'putt-clock-2m', 'putt-gate-short', 'putt-tap-in-pressure', 'putt-mixed-ladder', 'putt-short-circle-80pct',
+    ]);
+  });
+  test('approach short misses rank the club-up drills first', () => {
+    expect(ids('cause:approach:short')).toEqual([
+      'appr-green-reps-125', 'appr-long-iron-reps', 'appr-club-up-back-half',
+      'appr-wedge-ladder', 'appr-distance-windows', 'appr-layup-ladder', 'appr-call-your-half', 'appr-start-line-gate',
+    ]);
+  });
+  test('a cause served outside its area still ranks first (bunker)', () => {
+    const list = drillsForCause('cause:approach:bunker');
+    expect(list[0].id).toBe('sg-bunker-first-out');
+    expect(list.slice(1).every((d) => d.area === 'approach')).toBe(true);
+  });
+  test('tee and penalty causes map to their drill areas', () => {
+    expect(drillsForCause('cause:tee:side:left')[0].id).toBe('tee-fairway-window');
+    expect(ids('cause:penalty:other').slice(0, 2)).toEqual(['pen-smart-drop-review', 'pen-provisional-plan']);
+    expect(drillsForCause('cause:short:chip')[0].area).toBe('shortGame');
+  });
+  test('unknown or non-cause ids return an empty list', () => {
+    expect(drillsForCause('cause:nope:x')).toEqual([]);
+    expect(drillsForCause('leak:putting')).toEqual([]);
+    expect(drillsForCause(undefined)).toEqual([]);
+  });
+  test('the six new drills exist and serve their causes', () => {
+    const NEW = {
+      'appr-club-up-back-half': 'cause:approach:short',
+      'appr-start-line-gate': 'cause:approach:side:right',
+      'tee-shape-window': 'cause:tee:side:left',
+      'putt-short-circle-80pct': 'cause:putting:short',
+      'sg-chip-landing-ladder': 'cause:short:chip',
+      'pen-provisional-plan': 'cause:penalty:other',
+    };
+    Object.entries(NEW).forEach(([id, cause]) => {
+      expect(DRILLS.find((d) => d.id === id).causes).toContain(cause);
+    });
   });
 });

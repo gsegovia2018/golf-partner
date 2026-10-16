@@ -50,7 +50,12 @@ export const DEFAULT_APP_SETTINGS = {
   // (not a Set — must be JSON-serializable); replaces wholesale on patch,
   // same as `bag`.
   handicapExcludedRounds: [],
+  // Weekly practice time the Coach plan is sized to (coach v2 spec §4/§12).
+  // One of PRACTICE_MINUTES_OPTIONS; anything else reads the default.
+  practiceMinutesPerWeek: 60,
 };
+
+export const PRACTICE_MINUTES_OPTIONS = [30, 60, 90, 120];
 
 // One level deep: object-valued keys (statGroups, notifications) merge
 // key-wise; everything else replaces. Arrays always replace wholesale, but
@@ -62,6 +67,10 @@ export function mergeAppSettings(base, patch) {
   for (const [k, v] of Object.entries(patch ?? {})) {
     if (k === 'handicapExcludedRounds') {
       out[k] = sanitizeHandicapExcludedRounds(v, base[k]);
+      continue;
+    }
+    if (k === 'practiceMinutesPerWeek') {
+      out[k] = PRACTICE_MINUTES_OPTIONS.includes(v) ? v : base[k];
       continue;
     }
     out[k] = v && typeof v === 'object' && !Array.isArray(v) ? { ...base[k], ...v } : v;
