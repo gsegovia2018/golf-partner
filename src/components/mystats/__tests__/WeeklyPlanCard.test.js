@@ -25,6 +25,8 @@ describe('WeeklyPlanCard: minutes picker', () => {
       const radio = r.getByLabelText(`${m} minutes`);
       expect(radio.props.accessibilityRole).toBe('radio');
       expect(radio.props.accessibilityState.checked).toBe(m === 90);
+      // react-native-web only reads aria-checked, so the option must pass it too
+      expect(r.UNSAFE_getAllByProps({ testID: `minutes-${m}` })[0].props['aria-checked']).toBe(m === 90);
     });
     expect(r.getByText('min / week')).toBeTruthy();
   });

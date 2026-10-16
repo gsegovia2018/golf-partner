@@ -54,6 +54,7 @@ export default function WeeklyPlanCard({ week, focus, verdict, onChangeMinutes, 
                   onPress={() => onChangeMinutes?.(m)}
                   accessibilityRole="radio"
                   accessibilityState={{ checked: on }}
+                  aria-checked={on}
                   accessibilityLabel={t('stats.my.coach.ui.week.option', { minutes: m })}
                   style={[s.opt, on && s.optOn]}
                   testID={`minutes-${m}`}
