@@ -2,7 +2,7 @@ import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingH
 import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore, resolvePairs, holeCountOf, isFullLengthRound, isRoundFullyScoredBy } from './scoring';
 import {
   expectedFromBucket, expectedStrokes, BUCKETS,
-  PAR_ANCHOR_DISTANCE, benchmarkTeeShotDistance, expectedPenaltiesPerRound,
+  PAR_ANCHOR_DISTANCE, benchmarkTeeShotDistance, expectedPenaltiesPerRound, typicalScoreVsPar,
 } from './strokesGainedBaseline';
 import { clubDistances } from '../lib/shotStats';
 
@@ -2726,8 +2726,8 @@ function approachStartLie(d, par) {
 const MIN_REMAINING_DISTANCE = 30;
 
 // Benchmark-drive model (spec §1.2): compare the drive's end position against
-// the end position of the target handicap's typical drive (fairway lie) on a
-// fixed anchor-length hole. Both sides spend exactly one stroke, so no -1
+// the end position of the target handicap's typical tee shot (its distance and
+// lie mix) on a fixed anchor-length hole. Both sides spend exactly one stroke, so no -1
 // term. Penalty strokes stay in sgPenalties — not double-counted here.
 export function sgOffTheTee(round, playerId, targetHandicap = 0) {
   const byHole = round?.shotDetails?.[playerId];
@@ -2741,8 +2741,10 @@ export function sgOffTheTee(round, playerId, targetHandicap = 0) {
     if (lie == null || dist == null) return null;
     // Benchmark against the same tee club: a deliberate club-down is judged
     // vs that club's typical shot, not scored as a short drive.
+    // The benchmark is the target's TYPICAL tee shot — its distance and its
+    // lie mix (fairway / rough / sand / trouble), not a fairway-only drive.
     const bench = expectedStrokes(
-      'fairway',
+      'typicalDrive',
       Math.max(MIN_REMAINING_DISTANCE, anchor - benchmarkTeeShotDistance(targetHandicap, d?.teeClub ?? 'driver')),
       targetHandicap,
     );
@@ -2958,8 +2960,9 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
 
 // ── SG Reconciliation ──
 // "Where the strokes go": ties SG categories back to real scores. Expected
-// score = par + targetHandicap (scaled by holes played) — the plain meaning
-// of playing to a handicap; needs no course data. The residual absorbs
+// score = par + the typical score of the target handicap (scaled by holes
+// played) — what a golfer of that index actually averages; needs no course
+// data. The residual absorbs
 // everything the categories don't measure (lay-ups, punch-outs, holes with
 // partial detail), so the panel always sums exactly instead of pretending
 // full attribution.
@@ -2980,7 +2983,11 @@ export function sgReconciliation(rounds, playerId, targetHandicap = 0) {
       holesPlayed += 1;
     });
     if (holesPlayed === 0) return;
-    const expected = parPlayed + targetHandicap * (holesPlayed / 18);
+    // What a typical golfer of the target handicap actually averages (a
+    // handicap is "best 8 of 20", so par + index is a good day, not a typical
+    // one) — the same typical golfer the SG baselines are calibrated to, so a
+    // typical round leaves ~0 in the residual.
+    const expected = parPlayed + typicalScoreVsPar(targetHandicap) * (holesPlayed / 18);
     const gap = expected - actual;
     const explained = SG_CATEGORIES.reduce((sum, c) => sum + r.byCategory[c], 0);
     perRound.push({
