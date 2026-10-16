@@ -68,7 +68,7 @@ describe('My Stats components in Spanish', () => {
     expect(getByText('Confianza alta')).toBeTruthy();
     expect(getByText(/^La mayor parte viene de putts desde 6\+ m que acaban en tres putts \(18 de 58, 31%\), con un promedio de 2,5 putts/)).toBeTruthy();
     expect(getByText(/^Escalera de lag putt/)).toBeTruthy();
-    expect(getAllByText(/^Nivel 1$/).length).toBeGreaterThan(0);
+    expect(getAllByText(/^Nivel 1 de 3$/).length).toBeGreaterThan(0);
     expect(getByText('Objetivo: 7 de 10 acaban a menos de 1 m del hoyo')).toBeTruthy();
     expect(getByText('Próxima vuelta')).toBeTruthy();
     expect(getByText('Porcentaje de tres putts desde 6+ m: ahora 31%.')).toBeTruthy();

@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import DiagnosisCard from '../DiagnosisCard';
@@ -64,7 +65,7 @@ describe('DiagnosisCard: one clear leak', () => {
   test('Fix lists the drills with level and pass target, the on-course task and the matching tip', () => {
     const r = renderCard(onePutting());
     expect(r.getByText(/^Lag ladder/)).toBeTruthy();
-    expect(r.getAllByText(/^Level 1$/).length).toBeGreaterThan(0);
+    expect(r.getAllByText(/^Level 1 of 3$/).length).toBeGreaterThan(0);
     expect(r.getByText('Pass: 7 of 10 finish inside 1 m of the hole')).toBeTruthy();
     expect(r.getByText('Next round')).toBeTruthy();
     expect(r.getByText('On the course, track every putt from 6+ m and count the three-putts.')).toBeTruthy();
@@ -198,7 +199,7 @@ describe('DiagnosisCard: focus in progress', () => {
     expect(r.queryByLabelText('Make this my focus')).toBeNull();
     expect(r.getByText('Short misses from 100-150 m: now 48%, was 71% when you committed.')).toBeTruthy();
     // level 2 drills carry the level 2 pass target
-    expect(r.getAllByText(/^Level 2$/).length).toBeGreaterThan(0);
+    expect(r.getAllByText(/^Level 2 of 3$/).length).toBeGreaterThan(0);
     expect(r.getByText('Pass: 10 of 15 inside a green-sized 12 m circle')).toBeTruthy();
   });
 });
@@ -272,6 +273,36 @@ describe('DiagnosisCard: the swing line (six states)', () => {
   test('the swing drill joins the Fix step when linked', () => {
     const r = renderCard(teeLeft(), { swings: [driverSwing()], minutesPerWeek: 90 }, props());
     expect(r.getAllByText('Swing drill').length).toBeGreaterThan(0);
+  });
+});
+
+describe('DiagnosisCard: drill detail sheet', () => {
+  test('a drill row is a 44 px button that opens the sheet with the instruction and three levels', () => {
+    const r = renderCard(onePutting());
+    const row = r.getByTestId('drill-putt-lag-ladder');
+    expect(row.props.accessibilityRole).toBe('button');
+    expect(StyleSheet.flatten(row.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(r.queryByText('How to do it')).toBeNull();
+    fireEvent.press(row);
+    expect(r.getByText('How to do it')).toBeTruthy();
+    expect(r.getByText(/^Take 10 putts from 8 m to one hole/)).toBeTruthy();
+    expect(r.getByText('Pass target')).toBeTruthy();
+    [1, 2, 3].forEach((n) => expect(r.getByTestId(`drill-level-${n}`)).toBeTruthy());
+    expect(r.getByText('8 of 10 finish inside 1 m of the hole, from 10 m')).toBeTruthy();
+    // only the current level is marked
+    expect(r.getAllByText(/your level/)).toHaveLength(1);
+    expect(r.getByTestId('drill-level-1')).toHaveTextContent(/your level/);
+    expect(r.getByText('You move up a level every 2 rounds you play while working on this; without a focus it stays at level 1.')).toBeTruthy();
+  });
+
+  test('a swing drill shows its instruction and pass target, no levels', () => {
+    const r = renderCard(teeLeft(), { swings: [driverSwing()], minutesPerWeek: 90 }, { swingSupport: ANDROID });
+    const row = r.getAllByText('Swing drill')[0];
+    fireEvent.press(row);
+    expect(r.getByText('How to do it')).toBeTruthy();
+    expect(r.getByText('Pass target')).toBeTruthy();
+    expect(r.queryByTestId('drill-level-1')).toBeNull();
+    expect(r.queryByText(/your level/)).toBeNull();
   });
 });
 
