@@ -2,6 +2,7 @@ const {
   HANDICAP_ANCHORS, buildTables, lookup, DRIVE_DISTANCE_ANCHORS, PENALTIES_ANCHORS, SCORE_VS_PAR_ANCHORS,
 } = require('../lib/sgBaselineModel');
 const { SHOT_HANDICAP_BENCHMARKS } = require('../../src/store/shotBenchmarks');
+const { BASELINES } = require('../../src/store/strokesGainedBaseline');
 
 const tables = buildTables();
 const E = (lie, h, d) => lookup(tables[lie].distances, tables[lie].byHandicap[h], d);
@@ -42,6 +43,15 @@ describe('sgBaselineModel tables', () => {
     SHOT_HANDICAP_BENCHMARKS.forEach((row) => {
       const i = HANDICAP_ANCHORS.indexOf(row.handicap);
       expect(SCORE_VS_PAR_ANCHORS[i]).toBeCloseTo(row.avgScoreVsPar, 0);
+    });
+  });
+  test('the committed BASELINES literal matches the model (regenerate with node scripts/sgBaselineTables.mjs)', () => {
+    expect(Object.keys(BASELINES).sort()).toEqual(Object.keys(tables).sort());
+    Object.entries(tables).forEach(([lie, { distances, byHandicap }]) => {
+      expect(BASELINES[lie].distances).toEqual(distances);
+      HANDICAP_ANCHORS.forEach((h) => {
+        expect(BASELINES[lie].byHandicap[h]).toEqual(byHandicap[h].map((v) => Number(v.toFixed(2))));
+      });
     });
   });
 });

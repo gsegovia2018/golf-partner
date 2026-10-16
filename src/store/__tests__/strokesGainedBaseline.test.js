@@ -1,135 +1,113 @@
 import {
-  BASELINES, BASELINES_SCRATCH,
-  expectedStrokes, expectedFromBucket,
-  BASELINES_AMATEUR, AMATEUR_ANCHOR_HANDICAP,
-  benchmarkDriveDistance, PAR_ANCHOR_DISTANCE, BUCKETS,
-  expectedPenaltiesPerRound,
+  BASELINES, BUCKETS, HANDICAP_ANCHORS, SG_BASELINE_VERSION,
+  expectedStrokes, expectedFromBucket, interpHandicap, typicalDriveMix,
+  benchmarkDriveDistance, benchmarkTeeShotDistance, PAR_ANCHOR_DISTANCE,
+  expectedPenaltiesPerRound, typicalScoreVsPar,
 } from '../strokesGainedBaseline';
 
 describe('BASELINES', () => {
-  test('every category is sorted ascending by distance', () => {
-    Object.entries(BASELINES).forEach(([_lie, rows]) => {
-      for (let i = 1; i < rows.length; i++) {
-        expect(rows[i].distance).toBeGreaterThan(rows[i - 1].distance);
-      }
+  test('one row set per lie, every anchor present, sorted, monotone in handicap', () => {
+    expect(HANDICAP_ANCHORS).toEqual([0, 5, 10, 15, 20, 25, 30, 36, 54]);
+    ['tee', 'fairway', 'rough', 'sand', 'recovery', 'greenside', 'green'].forEach((lie) => {
+      const { distances, byHandicap } = BASELINES[lie];
+      for (let i = 1; i < distances.length; i++) expect(distances[i]).toBeGreaterThan(distances[i - 1]);
+      HANDICAP_ANCHORS.forEach((h, k) => {
+        expect(byHandicap[h]).toHaveLength(distances.length);
+        if (k > 0) byHandicap[h].forEach((v, r) => expect(v).toBeGreaterThanOrEqual(byHandicap[HANDICAP_ANCHORS[k - 1]][r]));
+      });
     });
+    expect(SG_BASELINE_VERSION).toBe(2);
+  });
+  test('greenside and sand carry an explicit 20 m row (the only distance the engine reads)', () => {
+    expect(BASELINES.greenside.distances).toContain(20);
+    expect(BASELINES.sand.distances).toContain(20);
   });
 });
 
-describe('expectedStrokes', () => {
-  test('returns exact row when distance matches', () => {
-    const fairway150m = BASELINES_SCRATCH.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1);
-    expect(expectedStrokes('fairway', 137.2)).toBeCloseTo(fairway150m.expected);
-  });
-  test('interpolates between rows', () => {
-    const a = BASELINES.fairway[0];
-    const b = BASELINES.fairway[1];
-    const mid = (a.distance + b.distance) / 2;
-    const expectedMid = (a.expected + b.expected) / 2;
-    expect(expectedStrokes('fairway', mid)).toBeCloseTo(expectedMid, 2);
-  });
-  test('clamps below minimum distance', () => {
-    const min = BASELINES.green[0];
-    expect(expectedStrokes('green', 0)).toBeCloseTo(min.expected);
-  });
-  test('clamps above maximum distance', () => {
-    const rows = BASELINES.fairway;
-    const max = rows[rows.length - 1];
-    expect(expectedStrokes('fairway', max.distance + 100)).toBeCloseTo(max.expected);
-  });
-  test('unknown lie returns null', () => {
-    expect(expectedStrokes('lava', 150)).toBeNull();
-  });
-});
-
-describe('expectedFromBucket', () => {
-  test('maps bucket key to midpoint then to expected', () => {
-    const v = expectedFromBucket('approach', '100-150');
-    expect(v).toBeCloseTo(expectedStrokes('fairway', 125));
-  });
-});
-
-describe('BASELINES_AMATEUR', () => {
-  test('every category is sorted ascending by distance', () => {
-    Object.entries(BASELINES_AMATEUR).forEach(([_lie, rows]) => {
-      for (let i = 1; i < rows.length; i++) {
-        expect(rows[i].distance).toBeGreaterThan(rows[i - 1].distance);
-      }
-    });
-  });
-  test('amateur values are worse than scratch at same distance', () => {
-    expect(BASELINES_AMATEUR.fairway[0].expected)
-      .toBeGreaterThan(BASELINES_SCRATCH.fairway[0].expected);
-    expect(BASELINES_AMATEUR.green[2].expected)
-      .toBeGreaterThan(BASELINES_SCRATCH.green[2].expected);
-  });
-  test('AMATEUR_ANCHOR_HANDICAP is 14', () => {
-    expect(AMATEUR_ANCHOR_HANDICAP).toBe(14);
+describe('interpHandicap', () => {
+  const v = [0, 5, 10, 15, 20, 25, 30, 36, 54]; // identity on the anchors
+  test('exact on anchors, linear between, extrapolates past both ends, never clamps', () => {
+    expect(interpHandicap(v, 15)).toBe(15);
+    expect(interpHandicap(v, 12.5)).toBeCloseTo(12.5, 10);
+    expect(interpHandicap(v, 40)).toBeCloseTo(40, 10);
+    expect(interpHandicap(v, 60)).toBeCloseTo(60, 10);
+    expect(interpHandicap(v, -2)).toBeCloseTo(-2, 10);
+    expect(interpHandicap(v, null)).toBe(0);
   });
 });
 
 describe('expectedStrokes(lie, distance, targetHandicap)', () => {
-  test('targetHandicap=0 returns scratch values (Phase B regression)', () => {
-    expect(expectedStrokes('fairway', 137.2, 0))
-      .toBeCloseTo(BASELINES_SCRATCH.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1).expected);
+  test('anchor rows read back exactly; distance interpolates and clamps', () => {
+    expect(expectedStrokes('fairway', 125, 0)).toBeCloseTo(BASELINES.fairway.byHandicap[0][4], 10);
+    expect(expectedStrokes('fairway', 125, 15)).toBeCloseTo(BASELINES.fairway.byHandicap[15][4], 10);
+    const a = BASELINES.green.byHandicap[0];
+    expect(expectedStrokes('green', 0, 0)).toBeCloseTo(a[0], 10);                       // clamp low
+    expect(expectedStrokes('green', 100, 0)).toBeCloseTo(a[a.length - 1], 10);          // clamp high
+    expect(expectedStrokes('green', (0.91 + 1.83) / 2, 0)).toBeCloseTo((a[0] + a[1]) / 2, 10);
   });
-  test('targetHandicap=14 returns amateur values', () => {
-    expect(expectedStrokes('fairway', 137.2, 14))
-      .toBeCloseTo(BASELINES_AMATEUR.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1).expected);
+  test('default target is scratch; unknown lie is null', () => {
+    expect(expectedStrokes('fairway', 125)).toBeCloseTo(expectedStrokes('fairway', 125, 0), 10);
+    expect(expectedStrokes('lava', 150)).toBeNull();
   });
-  test('targetHandicap=7 returns midpoint between scratch and amateur', () => {
-    const s = BASELINES_SCRATCH.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1).expected;
-    const a = BASELINES_AMATEUR.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1).expected;
-    expect(expectedStrokes('fairway', 137.2, 7)).toBeCloseTo((s + a) / 2, 3);
-  });
-  test('targetHandicap=28 extrapolates at t=2', () => {
-    const s = BASELINES_SCRATCH.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1).expected;
-    const a = BASELINES_AMATEUR.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1).expected;
-    expect(expectedStrokes('fairway', 137.2, 28)).toBeCloseTo(s + 2 * (a - s), 3);
-  });
-  test('targetHandicap>28 clamps to t=2', () => {
-    expect(expectedStrokes('fairway', 137.2, 50))
-      .toBeCloseTo(expectedStrokes('fairway', 137.2, 28));
-  });
-  test('targetHandicap default is 0 (no arg)', () => {
-    expect(expectedStrokes('fairway', 137.2))
-      .toBeCloseTo(expectedStrokes('fairway', 137.2, 0));
-  });
-});
-
-describe('expectedFromBucket(category, bucketKey, targetHandicap)', () => {
-  test('passes targetHandicap through to expectedStrokes', () => {
-    const direct = expectedStrokes('fairway', 125, 10);
-    const via = expectedFromBucket('approach', '100-150', 10);
-    expect(via).toBeCloseTo(direct);
-  });
-});
-
-describe('drive benchmark constants', () => {
-  test('driveDist bucket midpoints', () => {
-    expect(BUCKETS.driveDist).toEqual({
-      '0-150': 135, '150-180': 165, '180-210': 195, '210-240': 225, '240+': 255,
+  test('no clamp: 28, 30 and 40 differ, and every lie is non-decreasing in the target', () => {
+    const lies = ['tee', 'fairway', 'rough', 'sand', 'recovery', 'greenside', 'green', 'typicalDrive'];
+    const dist = { tee: 125, fairway: 125, rough: 125, sand: 20, recovery: 91.4, greenside: 20, green: 4.5, typicalDrive: 135 };
+    lies.forEach((lie) => {
+      expect(expectedStrokes(lie, dist[lie], 30)).toBeGreaterThan(expectedStrokes(lie, dist[lie], 28));
+      expect(expectedStrokes(lie, dist[lie], 40)).toBeGreaterThan(expectedStrokes(lie, dist[lie], 30));
+      let prev = -Infinity;
+      for (let h = 0; h <= 60; h += 0.5) { const v = expectedStrokes(lie, dist[lie], h); expect(v).toBeGreaterThanOrEqual(prev - 1e-12); prev = v; }
     });
   });
-  test('par anchors', () => {
-    expect(PAR_ANCHOR_DISTANCE).toEqual({ 4: 340, 5: 470 });
+  test('typicalDrive is the target\'s lie mix and sits above a fairway-only drive', () => {
+    const mix = typicalDriveMix(15);
+    expect(mix.fairway + mix.rough + mix.sand + mix.recovery).toBeCloseTo(1, 10);
+    const mixed = mix.fairway * expectedStrokes('fairway', 135, 15) + mix.rough * expectedStrokes('rough', 135, 15)
+      + mix.sand * expectedStrokes('sand', 135, 15) + mix.recovery * expectedStrokes('recovery', 135, 15);
+    expect(expectedStrokes('typicalDrive', 135, 15)).toBeCloseTo(mixed, 10);
+    expect(expectedStrokes('typicalDrive', 135, 15)).toBeGreaterThan(expectedStrokes('fairway', 135, 15));
   });
-  test('benchmarkDriveDistance blends 230 (scratch) to 200 (14 hcp) and clamps', () => {
-    expect(benchmarkDriveDistance(0)).toBe(230);
-    expect(benchmarkDriveDistance(14)).toBe(200);
-    expect(benchmarkDriveDistance(7)).toBe(215);
-    expect(benchmarkDriveDistance(28)).toBe(170);
-    expect(benchmarkDriveDistance(50)).toBe(170); // clamped at t = 2
-    expect(benchmarkDriveDistance()).toBe(230);   // default scratch
+  test('published sanity: 10 hcp from 100 yd fairway ≈ 3.3 (Arccos 3.38); scratch 6 ft putt ≈ 1.33; typical 15 chip node 2.75', () => {
+    expect(expectedStrokes('fairway', 91.4, 10)).toBeCloseTo(3.30, 1);
+    expect(expectedStrokes('green', 1.83, 0)).toBeCloseTo(1.33, 2);
+    expect(expectedStrokes('greenside', 20, 15)).toBeCloseTo(2.75, 2);
   });
 });
 
-describe('expectedPenaltiesPerRound', () => {
-  test('anchored at 0 (scratch) and 1.0 (14 hcp), clamped at 2.0', () => {
-    expect(expectedPenaltiesPerRound(0)).toBe(0);
-    expect(expectedPenaltiesPerRound()).toBe(0);
-    expect(expectedPenaltiesPerRound(14)).toBeCloseTo(1.0, 10);
-    expect(expectedPenaltiesPerRound(25)).toBeCloseTo(25 / 14, 10);
-    expect(expectedPenaltiesPerRound(50)).toBeCloseTo(2.0, 10);
+describe('expectedFromBucket', () => {
+  test('maps bucket key to midpoint then to expected, threading the target', () => {
+    expect(expectedFromBucket('approach', '100-150')).toBeCloseTo(expectedStrokes('fairway', 125), 10);
+    expect(expectedFromBucket('firstPutt', '3-6', 10)).toBeCloseTo(expectedStrokes('green', 4.5, 10), 10);
+    expect(expectedFromBucket('approach', '0-50', 0)).toBeCloseTo(BASELINES.fairway.byHandicap[0][0], 10); // 25 m row, no clamp to 45.7
+  });
+});
+
+describe('drive, penalty and score anchors', () => {
+  test('bucket midpoints and par anchors unchanged', () => {
+    expect(BUCKETS.driveDist).toEqual({ '0-150': 135, '150-180': 165, '180-210': 195, '210-240': 225, '240+': 255 });
+    expect(PAR_ANCHOR_DISTANCE).toEqual({ 4: 340, 5: 470 });
+  });
+  test('benchmarkDriveDistance: 230 scratch, 205 at 15, 180 at 30, keeps falling past 36', () => {
+    expect(benchmarkDriveDistance(0)).toBe(230);
+    expect(benchmarkDriveDistance(15)).toBe(205);
+    expect(benchmarkDriveDistance(30)).toBe(180);
+    expect(benchmarkDriveDistance(7)).toBeCloseTo(218.4, 1);
+    expect(benchmarkDriveDistance(40)).toBeLessThan(benchmarkDriveDistance(36));
+    expect(benchmarkDriveDistance()).toBe(230);
+    expect(benchmarkTeeShotDistance(0, 'iron')).toBeCloseTo(230 * 0.78, 10);
+  });
+  test('expectedPenaltiesPerRound: 0.5 scratch, 1.7 at 15, 3.1 at 30, 1.62 at 14, rising past 36', () => {
+    expect(expectedPenaltiesPerRound(0)).toBe(0.5);
+    expect(expectedPenaltiesPerRound()).toBe(0.5);
+    expect(expectedPenaltiesPerRound(15)).toBeCloseTo(1.7, 10);
+    expect(expectedPenaltiesPerRound(14)).toBeCloseTo(1.62, 10);
+    expect(expectedPenaltiesPerRound(30)).toBeCloseTo(3.1, 10);
+    expect(expectedPenaltiesPerRound(50)).toBeGreaterThan(expectedPenaltiesPerRound(36));
+  });
+  test('typicalScoreVsPar follows the Shot Scope rows and extrapolates', () => {
+    expect(typicalScoreVsPar(0)).toBe(2.0);
+    expect(typicalScoreVsPar(15)).toBe(18.4);
+    expect(typicalScoreVsPar(18)).toBeCloseTo(18.4 + 0.6 * (23.2 - 18.4), 10);
+    expect(typicalScoreVsPar(30)).toBe(36.5);
   });
 });
