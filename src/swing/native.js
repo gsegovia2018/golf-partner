@@ -23,6 +23,12 @@ export const CAPTURE_API_VERSION = 2;
 // the last full-resolution still while dragging and fills in on release.
 export const PROXY_API_VERSION = 3;
 
+// The learned club detector (plan 2026-10-16) arrived in apiVersion 4: with `clubModel: true`, pass 2
+// also proposes the clubhead at the other checkpoints (`source: 'model' | 'model-shaft'`). Gated on
+// its own, like proxies: an apiVersion 2/3 binary keeps analysing, marking and scrubbing with
+// today's address / impact proposals, and ignores the flag.
+export const CLUB_MODEL_API_VERSION = 4;
+
 // Finished text in the active language: call at the moment it is shown (docs/i18n.md).
 export const updateAppMessage = () => t('misc.swing.updateApp');
 
@@ -96,6 +102,12 @@ export function captureSupport() {
 export function proxySupport() {
   const s = swingSupport();
   return s.supported && s.apiVersion >= PROXY_API_VERSION;
+}
+
+/** Does this binary run the learned club detector in pass 2 (apiVersion >= CLUB_MODEL_API_VERSION)? */
+export function clubModelSupport() {
+  const s = swingSupport();
+  return s.supported && s.apiVersion >= CLUB_MODEL_API_VERSION;
 }
 
 function requireCapture() {
@@ -178,13 +190,20 @@ export async function analyzePose(path, opts = {}) {
  * - proxies (apiVersion 3, D28): with `proxyEvery` > 0 and `proxyDir`, every proxyEvery-th frame of
  *   the whole clip as a small JPEG (short side 160 px, q70), `<proxyDir>/<frame>.jpg`; an older
  *   binary ignores both fields and returns no `proxies`.
- * - timings: { totalMs, decodeMs, addressDecodeMs, jpegWaitMs, onsetMs, shaftMs, decoded, stills, proxies, proxyMs }.
+ * - clubModel (apiVersion 4): with `clubModel: true` the learned detector also proposes the clubhead at the
+ *   other checkpoints: `source: 'model'` (head box) or `'model-shaft'` (shaft-box corner), `conf` = the
+ *   detector's score (0.03-0.95, not the edge ratio), `hidden` always false, plus `boxes` (display px).
+ *   An older binary ignores the flag and returns no `club`.
+ * - timings: { totalMs, decodeMs, addressDecodeMs, jpegWaitMs, onsetMs, shaftMs, decoded, stills, proxies, proxyMs,
+ *   clubMs, clubFrames, clubFailures, clubDelegate }  (club* only from apiVersion 4).
  * @param {{ frames: Array<{ key, i, hands?: [x, y], neighbours?: number }>, ball?: { x, y, r } | null,
  *   expectedShaftPx?: number, addressSearch?: { run: [a, b], latest, quiet: [a, b], minRun } | null,
- *   outDir: string, proxyEvery?: number, proxyDir?: string }} opts  hands and ball normalised; expectedShaftPx in display px
+ *   outDir: string, proxyEvery?: number, proxyDir?: string, clubModel?: boolean }} opts  hands and ball normalised; expectedShaftPx in display px
  * @returns {Promise<{ stills: { [key]: { [frame]: string } },
- *   shaft: { [frame]: { head: [x, y] | null, hidden, conf, source: 'edge'|'prior', angleDeg?, lengthPx? } },
- *   addressFrame: number | null, proxies: { every, count } | null, timings: object }>}
+ *   shaft: { [frame]: { head: [x, y] | null, hidden, conf, source: 'model'|'model-shaft'|'edge'|'prior',
+ *     boxes?: Array<{ cls: 'shaft'|'head'|'hands', score, box: [x1, y1, x2, y2] }>, angleDeg?, lengthPx? } },
+ *   addressFrame: number | null, proxies: { every, count } | null, timings: object,
+ *   club?: { model, input, conf, nms } | null }>}
  */
 export async function extractCheckpoints(path, opts) {
   return requireSupported().extractCheckpoints(path, opts);

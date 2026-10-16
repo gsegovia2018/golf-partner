@@ -69,7 +69,7 @@ describe('runAnalysis', () => {
     expect(first.checks.filter((c) => c.status === 'unknown').length).toBeGreaterThan(0);
     expect(o1.pose.pass2).toBeUndefined();
     const [, , o2] = store.saveAnalysis.mock.calls[1];
-    expect(o2.pose.pass2).toEqual({ shaft: {}, addressFrame: lab.expected.addressFrame });
+    expect(o2.pose.pass2).toEqual({ shaft: {}, addressFrame: lab.expected.addressFrame, club: null });
     expect(o2.thumb).toMatch(/556\.jpg$/);
   });
 
@@ -123,6 +123,20 @@ describe('runAnalysis', () => {
     expect(v2.extractCheckpoints.mock.calls[0][1]).not.toHaveProperty('proxyDir');
   });
 
+  test('apiVersion 4 binary is asked for the club model and its club block is stored; an older one is not asked', async () => {
+    const club = { model: 'club_yolox_tiny_v1', input: 640, conf: 0.03, nms: 0.45 };
+    const v4 = makeApi({ clubModelSupport: () => true, extractCheckpoints: jest.fn(async () => ({ shaft: {}, addressFrame: lab.expected.addressFrame, stills: {}, club })) });
+    frames.nativeApi.mockReturnValue(v4);
+    await runAnalysis('s1');
+    expect(v4.extractCheckpoints.mock.calls[0][1]).toMatchObject({ clubModel: true });
+    expect(store.saveAnalysis.mock.calls.at(-1)[2].pose.pass2.club).toEqual(club);
+    const v3 = makeApi({ clubModelSupport: () => false });
+    frames.nativeApi.mockReturnValue(v3);
+    await runAnalysis('s1');
+    expect(v3.extractCheckpoints.mock.calls[0][1]).not.toHaveProperty('clubModel');
+    expect(store.saveAnalysis.mock.calls.at(-1)[2].pose.pass2.club).toBeNull();
+  });
+
   test('pass 2 gets the address window of the first analysis (detect.py clubhead_onset)', async () => {
     const api = makeApi();
     frames.nativeApi.mockReturnValue(api);
@@ -158,7 +172,7 @@ describe('runAnalysis', () => {
     expect(cm.impact.head[1] * H).toBeCloseTo(504, 6);
     expect(cm.top).toMatchObject({ source: 'prior', head: null });
     const [, , o2] = store.saveAnalysis.mock.calls[1];
-    expect(o2.pose.pass2).toEqual({ shaft, addressFrame: lab.expected.addressFrame, timings });
+    expect(o2.pose.pass2).toEqual({ shaft, addressFrame: lab.expected.addressFrame, timings, club: null });
 
     // a saved user mark at impact beats the native proposal on the next analysis
     const userMarks = {

@@ -87,6 +87,15 @@ describe('analyze: native clubhead seeds and approximations', () => {
     expect(analyze(native(), { pass2: mk(0.2) }).clubMarks.impact.source).toBe('prior');
   });
 
+  test('a low-score model candidate at shaft down is a placed head: shaft_down_shallow gets a status', () => {
+    const base = analyze(native(), { pass2 });
+    const f = base.checkpoints.shaftDown.i;
+    expect(byId(base, 'shaft_down_shallow').status).toBe('unknown');
+    const a = analyze(native(), { pass2: { ...pass2, shaft: { [f]: { head: [260, 430], hidden: false, conf: 0.05, source: 'model' } } } });
+    expect(a.clubMarks.shaftDown.source).toBe('model');
+    expect(byId(a, 'shaft_down_shallow').status).not.toBe('unknown');
+  });
+
   test('frame-doubled slow-mo is approximate and flagged on impact checks', () => {
     const a = analyze(native(), { pass2, probe: { duplicateFrameRatio: 0.6 } });
     expect(a.approximate).toBe(true);

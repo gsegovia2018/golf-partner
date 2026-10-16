@@ -1,4 +1,4 @@
-import { resolveClub, CANDIDATE_MIN_CONF } from '../club';
+import { resolveClub, CANDIDATE_MIN_CONF, MODEL_MIN_CONF } from '../club';
 
 const hands = { x: 200, y: 400 };
 const ball = { x: 273, y: 505 };
@@ -40,5 +40,22 @@ describe('resolveClub (plan 5.3, D16)', () => {
     expect(resolveClub('impact', hands, null, null, ball).priorHead).toEqual(ball);
     expect(resolveClub('top', hands, null, null, ball).priorHead).toBeUndefined();
     expect(resolveClub('impact', hands, null, null, null).priorHead).toBeUndefined();
+  });
+
+  test('a model candidate is accepted at a low score and its source is carried through', () => {
+    expect(MODEL_MIN_CONF).toBe(0.03);
+    expect(resolveClub('top', hands, { head: [300, 120], hidden: false, conf: 0.05, source: 'model' }, null))
+      .toEqual({ hands, head: { x: 300, y: 120 }, hidden: false, source: 'model', conf: 0.05 });
+    expect(resolveClub('top', hands, { head: [300, 120], hidden: false, conf: 0.05, source: 'model-shaft' }, null))
+      .toMatchObject({ head: { x: 300, y: 120 }, source: 'model-shaft' });
+  });
+
+  test('a model candidate under its floor falls back to the prior; edge still needs 0.35', () => {
+    expect(resolveClub('top', hands, { head: [1, 2], conf: 0.02, source: 'model' }, null)).toMatchObject({ head: null, source: 'prior' });
+    expect(resolveClub('top', hands, { head: [1, 2], conf: 0.05, source: 'edge' }, null)).toMatchObject({ head: null, source: 'prior' });
+  });
+
+  test('a user mark still wins over a model candidate', () => {
+    expect(resolveClub('top', hands, { head: [1, 1], conf: 0.9, source: 'model' }, { head: { x: 5, y: 6 } })).toMatchObject({ head: { x: 5, y: 6 }, source: 'user' });
   });
 });
