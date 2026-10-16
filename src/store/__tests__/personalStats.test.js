@@ -1012,10 +1012,10 @@ describe('computeMyStats', () => {
     expect(stats.driveImpact.buckets.right).toMatchObject({ holes: 6, avgPoints: 0, avgVsPar: 2 });
     expect(stats.approachImpact.buckets['200+']).toMatchObject({ holes: 6, avgPoints: 0, girRate: 0 });
     expect(stats.puttDive).toMatchObject({ hasData: true, twoPuttPct: 67 });
-    expect(stats.puttingTarget.buckets['6+']).toMatchObject({ attempts: 6, sgPerPutt: -0.81 });
-    // +0.43 (was −0.09): a 200+ miss to a greenside lie now uses a realistic
-    // greenside node instead of a recovery-from-trouble node.
-    expect(stats.approachTarget.buckets['200+']).toMatchObject({ holes: 6, avgSg: 0.43 });
+    expect(stats.puttingTarget.buckets['6+']).toMatchObject({ attempts: 6, sgPerPutt: -0.89 });
+    // −0.02 (was +0.43): per-handicap baselines — a 230 m miss to a greenside
+    // lie is about par for the target.
+    expect(stats.approachTarget.buckets['200+']).toMatchObject({ holes: 6, avgSg: -0.02 });
     expect(stats.actionPlan.strengths).toEqual(expect.arrayContaining([
       expect.objectContaining({ area: 'Driving', label: 'Super drives' }),
     ]));
@@ -1697,7 +1697,7 @@ describe('careerMilestones', () => {
 });
 
 // 18-hole round where every hole is a 2-putt (or 1-putt) from the 2-3 m bucket.
-// E(green, 2.5 m, scratch) = 1.60984 → 2-putt SG/hole = -0.39016, 1-putt = +0.60984.
+// E(green, 2.5 m, scratch) = 1.506 → 2-putt SG/hole = −0.494, 1-putt = +0.506.
 function puttingRound(putts) {
   const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
   return {
@@ -1718,9 +1718,9 @@ describe('computeSgFormDelta', () => {
     const history = [puttingRound(2), puttingRound(2), puttingRound(2)];
     const recent = [puttingRound(1)];
     const deltas = computeSgFormDelta([...history, ...recent], { n: 1, targetHandicap: 0 });
-    // previous: 18·(-0.39016) = -7.023; recent: 18·(+0.60984) = +10.977
-    expect(deltas.putting.previous).toBeCloseTo(-7.02, 1);
-    expect(deltas.putting.recent).toBeCloseTo(10.98, 1);
+    // E(green, 2.5 m, scratch) = 1.506: previous 18·(1.506 − 2) = −8.90; recent 18·(1.506 − 1) = +9.11
+    expect(deltas.putting.previous).toBeCloseTo(-8.90, 1);
+    expect(deltas.putting.recent).toBeCloseTo(9.10, 1);
     expect(deltas.putting.delta).toBeCloseTo(18.0, 1);
     expect(deltas.putting.direction).toBe('up');
   });
