@@ -27,6 +27,9 @@
 //                         -> { [frame]: 'file://.../frames/<frame>.jpg' }
 //       any frame by index (the Edit marks scrubber). One sequential decode, never a seek per
 //       frame.
+//   detectClub({ frames: [{ frame, still, grip }], video, pxPerCm, scenery })      (apiVersion 5, see native.js)
+//                         -> { frames: { [frame]: { head: [x, y] px | null, hidden, conf, source, boxes } }, timings }
+//       the club detector on the stills of chosen frames (clubOnDemand.js); releaseClub() closes it.
 //   cancelAnalysis()      optional; stops a running analyzePose / extractCheckpoints.
 //
 // Stills always live in <swing dir>/frames/<frame>.jpg, so getStill() finds them without

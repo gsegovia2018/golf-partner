@@ -18,6 +18,8 @@ import {
 import { trackX } from '../../swing/scrub';
 import { SWING_STRINGS } from '../../swing/strings';
 import { fixtureNative, TRUTH, W, H } from '../../swing/__tests__/helpers';
+import { detectClub, releaseClub, clubOnDemandSupport } from '../../swing/native';
+import { resetClubOnDemand } from '../../swing/clubOnDemand';
 
 const lab = require('../../swing/__tests__/fixtures/lab-d15-pass1.json');
 
@@ -53,6 +55,12 @@ jest.mock('../../swing/frames', () => ({
   ensureStills: jest.fn(() => Promise.resolve({})),
 }));
 
+jest.mock('../../swing/native', () => ({
+  clubOnDemandSupport: jest.fn(() => false),
+  detectClub: jest.fn(),
+  releaseClub: jest.fn(() => Promise.resolve()),
+}));
+
 const M = SWING_STRINGS.mark;
 const STILL = 'file:///doc/swings/s1/frames/x.jpg';
 const ball = { x: TRUTH.ball.x / W, y: TRUTH.ball.y / H, r: 2.1 / W };
@@ -77,10 +85,10 @@ const SEEDED_POSE = { ...pose, pass2: { ...pose.pass2, shaft: seeds(FIRST) } };
 const SEEDED = analyze(SEEDED_POSE, { ...base, pass2: SEEDED_POSE.pass2 });
 
 function setup({
-  analysis = FIRST, marks = null, checkpoint = 'leadArm', mode, missing = false, seeded = false,
+  analysis = FIRST, marks = null, checkpoint = 'leadArm', mode, missing = false, seeded = false, poseOverride = null,
 } = {}) {
   store.readAnalysis.mockResolvedValue(missing ? null : seeded ? SEEDED : analysis);
-  store.readPose.mockResolvedValue(seeded ? SEEDED_POSE : pose);
+  store.readPose.mockResolvedValue(poseOverride ?? (seeded ? SEEDED_POSE : pose));
   store.readProbe.mockResolvedValue(probe);
   store.readMarks.mockResolvedValue(marks);
   const listeners = {};
@@ -938,5 +946,124 @@ describe('dragging a mark does not touch React or the analysis until release', (
     await press(u.getByLabelText(M.nudge.right));
     await press(u.getByTestId('mark-confirm'));
     expect(dockLabel(u, 'hands')).toBe(M.dockLabel('Hands', 'Confirmed'));
+  });
+});
+
+describe('club on demand: the model proposes a clubhead on the frame the golfer chose', () => {
+  const f = FIRST.checkpoints.impact.i + 2;
+  // an answer the test releases by hand, in display px of the decoded frame
+  const later = () => {
+    let resolve;
+    const promise = new Promise((r) => { resolve = r; });
+    return {
+      promise,
+      answer: (frame, head = [0.4 * W, 0.5 * H]) => act(async () => {
+        resolve({ frames: { [frame]: { head, hidden: false, conf: 0.7, source: 'model', boxes: [] } }, timings: {} });
+      }),
+    };
+  };
+  const headStatus = (u) => dockLabel(u, 'head');
+  const asks = () => detectClub.mock.calls.map((c) => c[0]).filter((q) => q.frames.length); // the warm-up has none
+
+  beforeEach(() => {
+    resetClubOnDemand();
+    clubOnDemandSupport.mockReturnValue(true);
+    detectClub.mockReset();
+  });
+  afterAll(() => { clubOnDemandSupport.mockReturnValue(false); });
+
+  test('"Use frame N" asks once with the frame\'s still and the grip; the dot lands as proposed, never confirmed', async () => {
+    const d = later();
+    detectClub.mockReturnValue(d.promise);
+    const u = await open({ checkpoint: 'impact' });
+    await chooseFrame(u, f);
+    expect(asks()).toHaveLength(1);
+    const q = asks()[0];
+    expect(q.frames).toHaveLength(1);
+    expect(q.frames[0]).toMatchObject({ frame: f, still: STILL });
+    expect(q.frames[0].grip).toHaveLength(2);
+    expect(q.video).toEqual({ width: W, height: H });
+    expect(q.pxPerCm).toBeGreaterThan(0);
+    expect(q.scenery).toEqual([]); // analysed before apiVersion 5: no scenery filter
+    expect(headStatus(u)).toBe(M.dockLabel('Clubhead', 'Missing'));
+    await d.answer(f);
+    expect(headStatus(u)).toBe(M.dockLabel('Clubhead', 'Proposed'));
+    await press(u.getByLabelText(M.primary.editSave));
+    const label = savedMarks().frames.find((m) => m.checkpoint === 'impact');
+    expect(label.head).toMatchObject({ proposedSource: 'model', proposedAt: f, confirmed: true });
+    expect(label.head.proposed).toEqual([0.4, 0.5]);
+  });
+
+  test('passes the scenery pass 2 stored', async () => {
+    const scenery = [{ cls: 'head', box: [1, 2, 3, 4] }];
+    const withScenery = { ...pose, pass2: { ...pose.pass2, club: { model: 'm', scenery } } };
+    detectClub.mockResolvedValue({ frames: {} });
+    const u = await open({ checkpoint: 'impact', poseOverride: withScenery });
+    await chooseFrame(u, f);
+    expect(asks()[0].scenery).toEqual(scenery);
+  });
+
+  test('a head hidden before the answer arrives stays hidden', async () => {
+    const d = later();
+    detectClub.mockReturnValue(d.promise);
+    const u = await open({ checkpoint: 'impact' });
+    await chooseFrame(u, f);
+    await press(dock(u, 'head'));
+    await press(u.getByTestId('mark-hidden'));
+    await d.answer(f);
+    expect(headStatus(u)).toBe(M.dockLabel('Clubhead', 'Hidden'));
+  });
+
+  test('an answer for a frame that is no longer chosen is ignored', async () => {
+    const first = later();
+    detectClub.mockReturnValueOnce(first.promise).mockResolvedValue({ frames: {} });
+    const u = await open({ checkpoint: 'impact' });
+    await chooseFrame(u, f);
+    await chooseFrame(u, f + 1);
+    await first.answer(f);
+    expect(u.getByTestId('mark-pospill').props.accessibilityLabel).toBe(M.posPill('P7', 'Impact', f + 1, true));
+    expect(headStatus(u)).toBe(M.dockLabel('Clubhead', 'Missing'));
+  });
+
+  test('an answer during a drag is held and applied after the drop', async () => {
+    const d = later();
+    detectClub.mockReturnValue(d.promise);
+    const u = await open({ checkpoint: 'impact' });
+    await chooseFrame(u, f);
+    const [x, y] = px(FIRST.clubMarks.impact.hands);
+    await grant([x, y]);
+    await move([x + 10, y]);
+    await d.answer(f);
+    expect(headStatus(u)).toBe(M.dockLabel('Clubhead', 'Missing'));
+    await release([x + 10, y]);
+    expect(headStatus(u)).toBe(M.dockLabel('Clubhead', 'Proposed'));
+  });
+
+  test('apiVersion 4: nothing is asked and the head is Missing as before', async () => {
+    clubOnDemandSupport.mockReturnValue(false);
+    const u = await open({ checkpoint: 'impact' });
+    await chooseFrame(u, f);
+    expect(detectClub).not.toHaveBeenCalled(); // no warm-up either
+    expect(headStatus(u)).toBe(M.dockLabel('Clubhead', 'Missing'));
+  });
+
+  test('the proposed frame of a swing pass 2 saw with the model asks nothing', async () => {
+    const modelled = { ...SEEDED_POSE, pass2: { ...SEEDED_POSE.pass2, club: { model: 'm' } } };
+    const u = await open({ checkpoint: 'impact', seeded: true, poseOverride: modelled });
+    await press(u.getByTestId('mark-change-frame'));
+    await press(u.getByTestId('mark-use-frame'));
+    expect(asks()).toHaveLength(0);
+  });
+
+  test('the first scrub away from the proposal warms the detector; closing releases it', async () => {
+    detectClub.mockResolvedValue({ frames: {} });
+    const u = await open({ checkpoint: 'impact' });
+    await press(u.getByTestId('mark-change-frame'));
+    await press(u.getByTestId(`zoom-${f}`));
+    await press(u.getByTestId(`zoom-${f + 1}`));
+    expect(detectClub).toHaveBeenCalledTimes(1);
+    expect(detectClub.mock.calls[0][0].frames).toEqual([]);
+    u.unmount();
+    expect(releaseClub).toHaveBeenCalled();
   });
 });
