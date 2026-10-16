@@ -132,6 +132,32 @@ describe('saveAnalysis / marks', () => {
     expect(marks.video.width).toBe(478);
   });
 
+  it('puts the consequences and the analysis-time handedness on the index row (coach swing link)', async () => {
+    const row = await store.createSwing({ videoUri: 'file:///picked/clip.mp4' });
+    await store.saveAnalysis(row.id, { ...analysisFixture, handedness: 'left', main: { fault: 'over_the_top', consequences: ['early_extension'] } });
+    expect(store.getSwing(row.id)).toMatchObject({ consequences: ['early_extension'], handedness: 'left' });
+    expect(JSON.parse(await AsyncStorage.getItem('golf_swings.v1'))[0]).toMatchObject({ consequences: ['early_extension'], handedness: 'left' });
+  });
+
+  it('defaults consequences to [] and handedness to the profile when the analysis lacks them', async () => {
+    await store.setSwingProfile({ handedness: 'left' });
+    const row = await store.createSwing({ videoUri: 'file:///picked/clip.mp4' });
+    const { handedness, ...noHand } = analysisFixture;
+    await store.saveAnalysis(row.id, noHand);
+    expect(store.getSwing(row.id)).toMatchObject({ consequences: [], handedness: 'left' });
+  });
+
+  it('rows saved before the fields existed hydrate untouched', async () => {
+    await AsyncStorage.setItem('golf_swings.v1', JSON.stringify([
+      { id: '1', createdAt: '2026-10-01T10:00:00.000Z', name: '1', status: 'ready', source: 'import', club: 'driver', mainFault: 'flip', marked: { state: 'none', count: 0 } },
+    ]));
+    await store.hydrateSwings();
+    const r = store.getSwing('1');
+    expect(r.mainFault).toBe('flip');
+    expect(r.consequences).toBeUndefined();
+    expect(r.handedness).toBeUndefined();
+  });
+
   it('keeps existing marks when the analysis is re-saved, and round-trips saveMarks', async () => {
     const row = await store.createSwing({ videoUri: 'file:///picked/clip.mp4' });
     await store.saveAnalysis(row.id, analysisFixture);
