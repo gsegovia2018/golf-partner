@@ -4,6 +4,7 @@
 // The copy lives in the catalogue (stats.explainer.<infoKey>.*); this module
 // only maps an infoKey to message descriptors, so it stays language-neutral.
 import { tr, formatNumber } from '../../i18n';
+import { typicalScoreVsPar } from '../../store/strokesGainedBaseline';
 
 export const statExplainerKeys = [
   'recentForm', 'strengths', 'pointsPerRound', 'scoreDifferential', 'strokesVsPar',
@@ -23,8 +24,11 @@ const KEY_SET = new Set(statExplainerKeys);
 export function getStatExplainer(infoKey, { targetHandicap } = {}) {
   if (!KEY_SET.has(infoKey)) return null;
   const base = `stats.explainer.${infoKey}`;
+  const sgParams = infoKey === 'strokesGained'
+    ? { typicalOverPar: formatNumber(typicalScoreVsPar(targetHandicap ?? 0), { maxDecimals: 1 }) }
+    : undefined;
   if (infoKey === 'strokesGained' && targetHandicap != null && targetHandicap !== 0) {
-    const params = { handicap: formatNumber(targetHandicap, { maxDecimals: 2 }) };
+    const params = { handicap: formatNumber(targetHandicap, { maxDecimals: 2 }), ...sgParams };
     return {
       title: { key: `${base}.titleTarget`, params },
       subtitle: { key: `${base}.subtitleTarget`, params },
@@ -34,7 +38,7 @@ export function getStatExplainer(infoKey, { targetHandicap } = {}) {
   return {
     title: { key: `${base}.title` },
     subtitle: { key: `${base}.subtitle` },
-    explainer: { key: `${base}.explainer` },
+    explainer: { key: `${base}.explainer`, ...(sgParams ? { params: sgParams } : {}) },
   };
 }
 
