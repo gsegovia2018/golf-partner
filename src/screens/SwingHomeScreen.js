@@ -269,6 +269,7 @@ export default function SwingHomeScreen({ navigation }) {
               <>
                 <Text style={s.footer}>{T.footer(swings.length, formatBytes(storageBytes()))}</Text>
                 <Text style={s.footerSub}>{T.attribution}</Text>
+                <Text style={s.footerSub}>{T.attributionClub}</Text>
               </>
             ) : null}
           </>

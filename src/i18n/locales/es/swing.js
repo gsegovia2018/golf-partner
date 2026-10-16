@@ -21,6 +21,7 @@ export default {
   'swing.home.deleteSwing': 'Eliminar swing',
   'swing.home.compareWith': 'Comparar con otro swing',
   'swing.home.attribution': 'Detección de postura con MediaPipe (Apache 2.0).',
+  'swing.home.attributionClub': 'Detector del palo: YOLOX (Apache 2.0), entrenado con golf-club-tracking de club-head-tracking (CC BY 4.0).',
   'swing.home.pickTwo': 'Elige dos swings para comparar',
   'swing.home.compareShort': 'Comparar estos dos',
   'swing.home.comparePick': 'Elige dos swings',
