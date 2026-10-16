@@ -102,3 +102,31 @@ describe('buildStrategyTips', () => {
     }
   });
 });
+
+describe('buildStrategyTips causeId', () => {
+  test('each rule tip carries the cause it matches', () => {
+    const stats = {
+      roundCount: 5,
+      approachTarget: { buckets: { '150-200': { holes: 10, avgSg: -0.4 }, '50-100': { holes: 9, avgSg: 0.0 } } },
+      driveLies: { drives: 20, byLie: { fairway: 8, rough: 6, sand: 3, trouble: 3 }, troubleRate: 0.3 },
+      puttingTarget: { buckets: { '6+': { attempts: 12, sgPerPutt: -0.3, threePuttRate: 33 } } },
+      driveImpact: { buckets: { left: { holes: 12, avgPoints: 1.2 }, right: { holes: 3, avgPoints: 1.8 }, fairway: { holes: 20, avgPoints: 2.1 } } },
+      upAndDown: { byLie: { sand: { attempts: 8, conversions: 1, rate: 0.125 }, nonSand: { attempts: 12, conversions: 6, rate: 0.5 } } },
+      strokesGained: { byCategory: { offTheTee: -0.6 }, roundsByCategory: { approach: 5, putting: 6 } },
+      bunkerVisits: { avgPerRound: 2.4 },
+    };
+    const causeOf = (id) => buildStrategyTips(stats).find((t) => t.id === id)?.causeId;
+    expect(causeOf('layup-150-200')).toBe('cause:approach:distance');
+    expect(causeOf('tee-club-down')).toBe('cause:tee:trouble:driver');
+    expect(causeOf('lag-first-6plus')).toBe('cause:putting:lag');
+    expect(causeOf('tee-miss-side')).toBe('cause:tee:side:left');
+    expect(causeOf('avoid-short-side-sand')).toBe('cause:short:sand');
+  });
+  test('the miss-side tip names the right side when the misses go right', () => {
+    const stats = {
+      roundCount: 5,
+      driveImpact: { buckets: { left: { holes: 3, avgPoints: 1.8 }, right: { holes: 12, avgPoints: 1.2 }, fairway: { holes: 20, avgPoints: 2.1 } } },
+    };
+    expect(buildStrategyTips(stats).find((t) => t.id === 'tee-miss-side').causeId).toBe('cause:tee:side:right');
+  });
+});
