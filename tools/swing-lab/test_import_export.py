@@ -35,12 +35,18 @@ MARKS = {
 }
 
 
-def make_zip(path):
+POSE = {"pass2": {"shaft": {"560": {"head": [280, 720], "hidden": False, "conf": 0.8, "source": "model",
+                                    "boxes": [{"cls": "head", "score": 0.8, "box": [270, 710, 290, 730]}]}}}}
+
+
+def make_zip(path, pose=None):
     with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as z:
         z.writestr("swing.json", json.dumps(META))
         z.writestr("analysis.json", json.dumps(ANALYSIS))
         z.writestr("marks.json", json.dumps(MARKS))
         z.writestr("video.mp4", b"VIDEO")
+        if pose:
+            z.writestr("pose.json", json.dumps(pose))
 
 
 class ImportExportTest(unittest.TestCase):
@@ -97,6 +103,28 @@ class ImportExportTest(unittest.TestCase):
             truth = json.loads((lab / "out" / clip / "truth.json").read_text())
             self.assertEqual(truth["source"], "manual")
             self.assertEqual(truth["checkpoints"]["impact"]["frame"], 560)
+
+    def test_pose_json_is_kept_when_the_export_has_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lab = Path(tmp) / "lab"
+            src = Path(tmp) / "with.swing.zip"
+            make_zip(src, POSE)
+            clip, _ = ie.import_export(src, lab)
+            self.assertEqual(json.loads((lab / "out" / clip / "pose.json").read_text()), POSE)
+            folder = Path(tmp) / "folder"  # an unpacked export works too
+            folder.mkdir()
+            for name, body in (("swing.json", META), ("analysis.json", ANALYSIS), ("marks.json", MARKS), ("pose.json", POSE)):
+                (folder / name).write_text(json.dumps(body))
+            (folder / "video.mp4").write_bytes(b"VIDEO")
+            clip, _ = ie.import_export(folder, Path(tmp) / "lab2")
+            self.assertTrue((Path(tmp) / "lab2" / "out" / clip / "pose.json").exists())
+
+    def test_no_pose_json_writes_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "x.swing.zip"
+            make_zip(src)
+            clip, _ = ie.import_export(src, Path(tmp) / "lab")
+            self.assertFalse((Path(tmp) / "lab" / "out" / clip / "pose.json").exists())
 
     def test_rejects_other_files(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -64,4 +64,24 @@ Unpack it into a lab test case:
 `python3 -I import_export.py ~/Downloads/<name>.swing.zip [--clip NAME]` (a folder holding the four files also works).
 It writes `clips/<clip>.mp4` (default clip name `swing-<date>-<id8>`) and `out/<clip>/truth.json` in the shape above
 (`source: "manual"`; the app's normalised coordinates become pixels of the video's display size; a hidden clubhead gets `head: null`).
+If the export also holds `pose.json` (pass-2 club output, `pass2.shaft[frame]` = `head`, `source`, `boxes`) it is copied to
+`out/<clip>/pose.json`; `eval_yolo.py <clip> --from-export out/<clip>/pose.json` scores the phone's own boxes against `truth.json`.
 Then `detect.py <clip>` and `eval.py` as usual. Tests: `python3 -m unittest test_import_export` from this directory.
+
+## Club detector under the phone's rules (plan 2026-10-16-swing-club-detector, L1)
+`models/` is git-ignored, so the table lives here. Run 2 epoch 8 (`models/yolox-club-v2/epoch_8.pth`), conf 0.03,
+`~/.venvs/swing-yolox/bin/python -I eval_yolo.py --yolox <ckpt> --conf 0.03 [--hands pose] [--frames checkpoints]`
+(`--rescore yolox` re-scores the saved dets). 16 marked heads over the three clips:
+
+| hands anchor / frames | found | median | ≤5 cm | ≤10 cm | worst | top | transition | leadArm |
+|---|---|---|---|---|---|---|---|---|
+| box / all (2026-10 bar) | 16/16 | 4.1 cm | 9 | 11 | 101.4 cm (transition) | 26.7 / 13.9 / 8.2 | 101.4 | 2.2 / 2.1 / 3.6 |
+| pose / all | 16/16 | 4.0 cm | 10 | 12 | 101.4 cm (transition) | 4.1 / 13.9 / 8.2 | 101.4 | 2.2 / 2.1 / 3.6 |
+| pose / checkpoints (13 frames) | 16/16 | 4.0 cm | 10 | 12 | 101.4 cm (transition) | 4.1 / 13.9 / 8.2 | 101.4 | 2.2 / 2.1 / 3.6 |
+
+Per-position cells are the clips in order marcos-10-10 / 88125330 / b5e60f31 (transition is marked on the first only).
+Static rule on the 13 frames: no true head is dropped under any setting tried. The spare club at the left edge of
+`marcos-2026-10-10` is fully dropped at the default 0.5; on `swing-2026-10-13-88125330` 9 of its 23 low-confidence
+(0.03-0.14) boxes survive at 0.5 (the dense rule also leaves 121 of 349), because the detector flickers and the box holds
+only 5 of 11 places. `--static-frac 0.3` drops all of them with scores unchanged (a swung head holds address + the impact
+place = 2 of 11). The plan's fallback (`--static ends`, >=70 % and address and finish) is stricter on these clips and keeps all of them.

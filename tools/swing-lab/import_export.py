@@ -6,6 +6,8 @@
 Writes (inside the lab directory, both git-ignored):
     clips/<clip>.mp4          the original video
     out/<clip>/truth.json     the corrected marks, in the shape CONTRACT.md describes
+    out/<clip>/pose.json      the app's pose.json (pass-2 club output), only when the export has one;
+                              eval_yolo.py --from-export scores it
 
 The export is the app's `swing-export/1` bundle: swing.json, analysis.json, marks.json and
 video.mp4. A folder holding those four files works too. Standard library only.
@@ -129,6 +131,15 @@ def read_bundle(src):
     return meta, json.loads(z.read("analysis.json")), json.loads(z.read("marks.json")), (lambda: z.open("video.mp4"))
 
 
+def read_pose(src):
+    """The export's optional pose.json (it carries pass2.shaft), as text, or None."""
+    src = Path(src)
+    if src.is_dir():
+        return (src / "pose.json").read_text() if (src / "pose.json").exists() else None
+    with zipfile.ZipFile(src) as z:
+        return z.read("pose.json").decode() if "pose.json" in z.namelist() else None
+
+
 def import_export(src, lab_dir, clip=None):
     meta, analysis, marks, open_video = read_bundle(src)
     if meta.get("schema") != EXPORT_SCHEMA:
@@ -144,6 +155,9 @@ def import_export(src, lab_dir, clip=None):
     with open_video() as fin, open(lab / "clips" / f"{clip}.mp4", "wb") as fout:
         shutil.copyfileobj(fin, fout)
     (out / "truth.json").write_text(json.dumps(truth, indent=2))
+    pose = read_pose(src)
+    if pose is not None:
+        (out / "pose.json").write_text(pose)
     return clip, truth
 
 
