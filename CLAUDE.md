@@ -167,13 +167,19 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   decode, MediaPipe pose in `PoseAnalyzer.kt`, pass-2 `extractCheckpoints` in
   `Checkpoints.kt`, Camera2 high-speed capture in `camera/`); pure JS analysis
   in `src/swing/`; screens `Swing*Screen.js`. Plan: `docs/superpowers/plans/2026-10-11-swing-analyzer.md`.
-- Swing `apiVersion` gate: native `API_VERSION` (`GolfSwingModule.kt`, currently 3)
+- Swing `apiVersion` gate: native `API_VERSION` (`GolfSwingModule.kt`, currently 4)
   vs JS `REQUIRED_API_VERSION` (`src/swing/native.js`, currently 2): a binary below
   REQUIRED shows "Update the app" instead of crashing. Bump native on every contract
   change; raise REQUIRED only when the bundle cannot work without the new methods.
   Additive features get their own gate instead: `CAPTURE_API_VERSION` 2 (recording)
-  and `PROXY_API_VERSION` 3 (pass-2 scrub proxies, D28), so older binaries still
+  and `PROXY_API_VERSION` 3 (pass-2 scrub proxies, D28), and `CLUB_MODEL_API_VERSION`
+  4 (learned club detector, `clubModelSupport()`), so older binaries still
   analyse and mark.
+- Club model (plan `2026-10-16-swing-club-detector.md`): the `club_yolox_tiny_v1.tflite`
+  asset and the `litert` dependency are native (APK, `preview-arm64`). Pass 2 runs it on
+  the 13 checkpoint frames, GPU delegate with CPU fallback (`timings.clubMs ≤ 2000`;
+  1.5 s on a Pixel 8 Pro). The model ships fp32: LiteRT 1.4 on CPU splits an fp16-weight graph. The lab that trains and
+  exports it is `tools/swing-lab` (`train_yolox.py`, `export_tflite.py`, `eval_yolo.py`).
 - Swing native change ⇒ new APK (`preview-arm64`); JS-only ⇒ OTA. Dev build
   `GOLF_APP_VARIANT=dev` (`com.golfpartner.app.dev`, scheme `golf-dev`) is
   never set for `eas build`/`eas update` (see "Shipping to Android").

@@ -12,11 +12,26 @@ android {
     versionCode 1
     versionName "1.0.0"
   }
+  // BuildConfig.DEBUG gates clubSelfTest; its golden frames are the unit tests' fixtures,
+  // merged into debug assets only (never in a release APK)
+  buildFeatures {
+    buildConfig true
+  }
+  sourceSets {
+    debug.assets.srcDirs += ['src/test/resources']
+  }
 }
 
 dependencies {
   // Same MediaPipe release as the swing lab (tools/swing-lab runs mediapipe 1.1.0),
   // so the phone and the lab run one pose graph on one model file.
   implementation "com.google.mediapipe:tasks-vision:1.1.0"
+  // The club detector's runtime (plan 2026-10-16 §3.3): the LiteRT interpreter (ex TensorFlow Lite,
+  // Apache-2.0), CPU/XNNPACK. Its own libtensorflowlite_jni.so beside MediaPipe's statically linked
+  // copy: separate libraries, no shared symbols. 1.x: the plain Interpreter, no transitive deps.
+  implementation "com.google.ai.edge.litert:litert:1.4.2"
+  // its GPU delegate (plan §4.3 lever c): used only where CompatibilityList allows it, else CPU
+  implementation "com.google.ai.edge.litert:litert-gpu:1.4.2"
+  implementation "com.google.ai.edge.litert:litert-gpu-api:1.4.2"
   testImplementation "junit:junit:4.13.2"
 }

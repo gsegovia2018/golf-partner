@@ -125,6 +125,8 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
       const proxies = api.proxySupport?.()
         ? { proxyEvery: PROXY_EVERY, proxyDir: proxyDir(swingId).uri, proxyRange: proxyWindow(first, pose.video?.frameCount ?? 0) }
         : {};
+      // apiVersion 4: also ask for the learned club detector; an older binary is not asked
+      const club = api.clubModelSupport?.() ? { clubModel: true } : {};
       const r = await api.extractCheckpoints(path, {
         frames: PASS2_KEYS.map((key) => ({
           key, i: frameOfKey(first, key), hands: first.clubMarks[key].hands, neighbours: 2,
@@ -134,6 +136,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
         addressSearch: first.addressSearch ?? null,
         outDir: dir.uri,
         ...proxies,
+        ...club,
       });
       if (isCancelled()) return { cancelled: true };
       const p2 = { shaft: r?.shaft ?? {}, addressFrame: r?.addressFrame ?? null };
@@ -141,6 +144,8 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
       // the proxies written ({ every, from, to, count, failed }): stored with the pose, which every
       // re-analysis reads back, so the canvas knows them without looking at the disk
       if (r?.proxies) p2.proxies = r.proxies;
+      // what ran ({ model, input, conf, nms }) or null: says whether a stored swing was analysed with the model
+      p2.club = r?.club ?? null;
       // The club and marks as they are now, not as they were when the run started.
       const latest = await readMarks(swingId);
       const second = analyze(pose, {

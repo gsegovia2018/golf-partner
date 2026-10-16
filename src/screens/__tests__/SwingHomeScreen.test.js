@@ -96,6 +96,7 @@ describe('SwingHomeScreen', () => {
     expect(getAllByText('6').length).toBeGreaterThan(0);
     expect(getByText('2 swings · 184 MB on this phone · swipe a row or long-press it for more')).toBeTruthy();
     expect(getByText(/MediaPipe/)).toBeTruthy();
+    expect(getByText(/YOLOX .*CC BY 4\.0/)).toBeTruthy();
   });
 
   test('a swing still being analysed or failed says so instead of a fault', () => {

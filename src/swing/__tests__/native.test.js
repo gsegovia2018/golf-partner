@@ -159,3 +159,25 @@ describe('scrub proxies (D28): apiVersion 3, gated on their own', () => {
     expect(load({ mod: null }).native.proxySupport()).toBe(false);
   });
 });
+
+describe('learned club detector: apiVersion 4, gated on its own', () => {
+  it('apiVersion 4: model proposals on', () => {
+    const { native } = load({ mod: fakeModule(4) });
+    expect(native.swingSupport().supported).toBe(true);
+    expect(native.clubModelSupport()).toBe(true);
+    expect(native.CLUB_MODEL_API_VERSION).toBe(4);
+    expect(native.REQUIRED_API_VERSION).toBe(2);
+  });
+
+  it('apiVersion 3: still analyses and writes proxies, but no club model', () => {
+    const { native } = load({ mod: fakeModule(3) });
+    expect(native.swingSupport().supported).toBe(true);
+    expect(native.proxySupport()).toBe(true);
+    expect(native.clubModelSupport()).toBe(false);
+  });
+
+  it('no module (web, or an APK without it): no club model', () => {
+    expect(load({ os: 'web' }).native.clubModelSupport()).toBe(false);
+    expect(load({ mod: null }).native.clubModelSupport()).toBe(false);
+  });
+});

@@ -21,6 +21,7 @@
 //                                    addressSearch: { run, latest, quiet, minRun } | null, outDir })
 //                         -> { stills: { [key]: { [frame]: 'file://.../frames/<frame>.jpg' } },
 //                              shaft: { [frame]: { head: [x, y] px | null, hidden, conf, source } },
+//                              (source 'edge' | 'prior', or from apiVersion 4 'model' | 'model-shaft'; see native.js),
 //                              addressFrame: number | null, timings }   (pass 2, plan 3 and D16)
 //   extractFrames(videoPath, { frames: number[], outDir })
 //                         -> { [frame]: 'file://.../frames/<frame>.jpg' }

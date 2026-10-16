@@ -82,6 +82,7 @@ export const SWING_STRINGS = build({
     deleteSwing: L,
     compareWith: L,
     attribution: L,
+    attributionClub: L,
     pickTwo: L,
     picked: (n) => t('swing.home.picked', { n }),
     compare: (a, b) => t('swing.home.compare', { a, b }),
