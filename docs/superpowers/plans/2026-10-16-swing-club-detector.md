@@ -86,7 +86,7 @@ Why not bit-exact end to end: `YuvFrame.toRgb` scales nearest-neighbour and conv
 
 **The 13 checkpoint frames pass 2 already decodes, nothing more** — plus the moved address frame when `ClubheadOnset` moves it (its short second decode already revisits that frame). Not the ± 2 neighbours (65 frames, 5× the cost, and `chooseFrame` in `editMarks.js` resets the head to Missing on any frame other than the proposal's, so neighbour proposals would be unused today), not a sparse sample of the swing span.
 
-The static rule still works on 13 frames because they are spread from address to finish: a spare club on the ground, a bag, a pole or a line on the mat occupies the same box in all 13 (≥ 50 % → dropped), while the swung clubhead sits in one place only at address and for the three frames around impact (4 of 13 = 31 %, under the 50 % threshold — but close enough that the rule must count **distinct checkpoints, not frames**, and must exempt the `head` class from being counted against itself across `preImpact / impact / postImpact`: those three count as one place). The lab item L1 re-runs `drop_static` restricted to the 13 checkpoint frames of each clip to confirm the two scenery clips still lose their spare club and no true head is dropped; if it does not hold, the fallback is "static = present in ≥ 70 % and also present at address and finish".
+The static rule still works on 13 frames because they are spread from address to finish. It votes per **checkpoint place, not frame**: `preImpact / impact / postImpact` count as one place (the head sits still there), so the 13 frames are **11 places**, and a box (same class, IoU ≥ 0.5) present at **≥ 30 % of the places (≥ 4 of 11) is scenery** — a spare club on the ground, a bag, a pole, a line on the mat. The swung clubhead holds 2 places (address, impact: 18 %) and survives; `hands` boxes are never dropped. L1 settled the threshold on the lab clips: 0.5 left part of a spare club on one clip, 0.3 drops it and drops no true head (owner/lead decision, 2026-10-16). The "≥ 70 % and present at address and finish" variant stays in `eval_yolo.py` (`--static ends`) as the fallback if a later clip disagrees.
 
 ### 4.2 Where it runs in `Checkpoints.run()`
 
@@ -122,7 +122,7 @@ The lab numbers used the detector's own `hands` box as the anchor for the shaft-
 shaft: { [frame]: {
   head: [x, y] | null, hidden, conf,
   source: 'model' | 'model-shaft' | 'edge' | 'prior',   // new values: model = head box, model-shaft = shaft-box corner
-  boxes?: [ { cls: 'shaft'|'head'|'hands', score, box: [x1, y1, x2, y2] } ],   // display px, after the static drop; model sources only
+  boxes?: [ { cls: 'shaft'|'head'|'hands', score, box: [x1, y1, x2, y2] } ],   // display px, after the static drop, ≤ 10; on every frame the detector ran on (also when edge / prior wins)
   angleDeg?, lengthPx?                                     // edge only, as today
 } }
 timings: { …, clubMs, clubFrames, clubFailures, clubDelegate }

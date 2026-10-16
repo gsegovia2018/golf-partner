@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
 import java.io.File
+import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
@@ -44,6 +45,8 @@ internal class Pass2Request(
   val proxyEvery: Int = 0,
   val proxyDir: String? = null,
   val proxyRange: IntRange? = null,
+  /** The learned club detector (plan 2026-10-16) on the checkpoint frames; false = today's output, unchanged. */
+  val clubModel: Boolean = false,
 )
 
 /**
@@ -53,6 +56,10 @@ internal class Pass2Request(
  * the radial shaft search at address and impact only, seeded with hands → ball. Every other
  * checkpoint gets a `prior` entry: v1 does no shaft tracking (D16). A second short decode
  * only when the address moved onto frames whose stills the first one didn't write.
+ *
+ * With [Pass2Request.clubModel] (plan 2026-10-16 §4.2) the learned detector also runs on the
+ * final checkpoint frames, after the decode and while the JPEG pool finishes: its head (or
+ * shaft-box corner) wins over the edge search and the prior at every checkpoint where it finds one.
  */
 internal class Checkpoints(
   private val context: Context,
@@ -137,6 +144,20 @@ internal class Checkpoints(
     val proxiesWritten = AtomicInteger()
     val proxyFailures = AtomicInteger()
     val proxyNs = AtomicLong()
+    // The club detector's inputs: each checkpoint frame stretched to 640 × 640 RGB on the decoder
+    // thread (1.2 MB each, so the frame can be a reused scratch one), inferred after the decode.
+    val clubFrames = if (req.clubModel) cps.map { it.frame }.filter { it in 0 until n }.toSet() else emptySet()
+    val clubInputs = ConcurrentHashMap<Int, ByteArray>()
+    val clubFailures = AtomicInteger()
+    fun clubInput(f: Int, y: YuvFrame) {
+      try {
+        val px = ByteArray(ClubDecode.SIZE * ClubDecode.SIZE * 3)
+        y.toRgb(ClubDecode.SIZE, ClubDecode.SIZE, ByteBuffer.wrap(px))
+        clubInputs[f] = px
+      } catch (e: Exception) {
+        clubFailures.incrementAndGet()
+      }
+    }
     // A proxy is a convenience: one that fails is counted and skipped, never fails pass 2. After a
     // cancel (the swing is being deleted) nothing more is written into its folder.
     fun proxy(f: Int, y: YuvFrame) {
@@ -186,8 +207,10 @@ internal class Checkpoints(
     var waitMs = 0L
     var onset: Int? = null
     var addressShaft: ShaftFound? = null
+    var clubMs = 0L
+    var clubDets: Map<Int, List<ClubBox>>? = null
     try {
-      val wanted = stills + onsetFrames + listOfNotNull(addr?.frame, imp?.frame) + proxyFrames
+      val wanted = stills + onsetFrames + listOfNotNull(addr?.frame, imp?.frame) + proxyFrames + clubFrames
       var t = SystemClock.elapsedRealtime()
       decodeSplit(path, wanted, keep = { it in stills }) { f, y ->
         if (f in onsetFrames) patches[f] = y.grayStrip(onsetRect!!, 1)
@@ -198,6 +221,7 @@ internal class Checkpoints(
           shaftNs.addAndGet(System.nanoTime() - s)
         }
         if (f in proxyFrames) proxy(f, y)
+        if (f in clubFrames) clubInput(f, y)
         if (f in stills) encode(f, y)
       }
       mainMs = SystemClock.elapsedRealtime() - t
@@ -213,6 +237,7 @@ internal class Checkpoints(
           t = SystemClock.elapsedRealtime()
           decodeSpan(path, missing + at, keep = { it in missing }, handle = { f2, y ->
             if (f2 == at) addrGrays[f2] = y.grayStrip(addrRoi!!, step)
+            if (f2 == at && req.clubModel) clubInput(f2, y)
             if (f2 in missing) encode(f2, y)
           })
           addrMs = SystemClock.elapsedRealtime() - t
@@ -222,6 +247,12 @@ internal class Checkpoints(
           addressShaft = seeded(g, addr.hands!!, ball!!, exp, ballD)
           shaftNs.addAndGet(System.nanoTime() - s)
         }
+      }
+      if (req.clubModel) {
+        t = SystemClock.elapsedRealtime()
+        clubDets = club(cps, onset, clubInputs, clubFailures)
+        clubInputs.clear()
+        clubMs = SystemClock.elapsedRealtime() - t
       }
       t = SystemClock.elapsedRealtime()
       for (j in synchronized(jobs) { jobs.toList() }) {
@@ -247,10 +278,14 @@ internal class Checkpoints(
       c.key to (at - c.neighbours..at + c.neighbours).mapNotNull { f -> written[f]?.let { f.toString() to it } }.toMap()
     }
     // D16: no search outside address and impact; the UI shows those as "place the clubhead"
-    val shaft = LinkedHashMap<String, Any?>()
-    for (c in cps) shaft[finalFrames.getValue(c.key).toString()] = prior()
-    if (addr != null) shaft[finalFrames.getValue("address").toString()] = addressShaft?.let { entry(it) } ?: prior()
-    if (imp != null) shaft[imp.frame.toString()] = impactShaft.get()?.let { entry(it) } ?: prior()
+    val base = LinkedHashMap<String, Map<String, Any?>>()
+    for (c in cps) base[finalFrames.getValue(c.key).toString()] = prior()
+    if (addr != null) base[finalFrames.getValue("address").toString()] = addressShaft?.let { entry(it) } ?: prior()
+    if (imp != null) base[imp.frame.toString()] = impactShaft.get()?.let { entry(it) } ?: prior()
+    // the learned detector, where it ran, wins over both (plan 2026-10-16 §4.2.4)
+    val grips = HashMap<Int, Pt?>()
+    for (c in cps) grips.putIfAbsent(finalFrames.getValue(c.key), c.hands)
+    val shaft = ClubRules.merge(base, clubDets, grips, pxPerCm)
 
     val timings = mapOf(
       "totalMs" to (SystemClock.elapsedRealtime() - t0).toInt(),
@@ -265,6 +300,11 @@ internal class Checkpoints(
       "proxies" to proxiesWritten.get(),
       "proxyMs" to (proxyNs.get() / 1_000_000).toInt(),
       "proxyFailures" to proxyFailures.get(),
+    ) + if (!req.clubModel) emptyMap() else mapOf(
+      "clubMs" to clubMs.toInt(),
+      "clubFrames" to (clubDets?.size ?: 0),
+      "clubFailures" to clubFailures.get(),
+      "clubDelegate" to ClubDetector.DELEGATE,
     )
     Log.i(
       PoseAnalyzer.TAG,
@@ -279,7 +319,50 @@ internal class Checkpoints(
         "failed" to proxyFailures.get(),
       )
     }
-    return mapOf("stills" to stillsOut, "shaft" to shaft, "addressFrame" to addressFrame, "proxies" to proxies, "timings" to timings)
+    if (req.clubModel) {
+      Log.i(PoseAnalyzer.TAG, "pass2 club frames=${clubDets?.size ?: 0} ms=$clubMs failures=${clubFailures.get()} sources=${shaft.values.groupingBy { it["source"] }.eachCount()}")
+    }
+    val out = mapOf("stills" to stillsOut, "shaft" to shaft, "addressFrame" to addressFrame, "proxies" to proxies, "timings" to timings)
+    // what ran (stored as pose.pass2.club); null when the detector could not run at all
+    return if (!req.clubModel) out else out + ("club" to clubDets?.let {
+      mapOf("model" to ClubDetector.MODEL, "input" to ClubDecode.SIZE, "conf" to ClubDecode.CONF, "nms" to ClubDecode.NMS_IOU)
+    })
+  }
+
+  /**
+   * The detector on the final checkpoint frames (the moved address included), sequentially on
+   * this thread: frame → display-px boxes after the static drop, or null when it could not run
+   * (no model, no runtime, an interpreter error at load). A frame that fails is left out. Both
+   * are counted in [failures] and never fail pass 2: those frames keep today's entries.
+   */
+  private fun club(cps: List<CheckpointSpec>, onset: Int?, inputs: Map<Int, ByteArray>, failures: AtomicInteger): Map<Int, List<ClubBox>>? {
+    val places = LinkedHashMap<Int, String>()
+    for (c in cps) places.putIfAbsent(if (c.key == "address" && onset != null) onset else c.frame, ClubRules.place(c.key))
+    val sx = track.dispW / ClubDecode.SIZE.toDouble()
+    val sy = track.dispH / ClubDecode.SIZE.toDouble()
+    val dets = LinkedHashMap<Int, List<ClubBox>>()
+    try {
+      ClubDetector.open(context).use { d ->
+        for (f in places.keys.sorted()) {
+          if (cancelled()) throw CancelledException()
+          val px = inputs[f] ?: continue
+          try {
+            dets[f] = d.detect(px).map { it.scaled(sx, sy) }
+          } catch (e: Exception) {
+            failures.incrementAndGet()
+            Log.w(PoseAnalyzer.TAG, "club detector failed at frame $f", e)
+          }
+        }
+      }
+    } catch (e: CancelledException) {
+      throw e
+    } catch (e: Throwable) {
+      // also LinkageError: a binary without the runtime's native library
+      failures.incrementAndGet()
+      Log.w(PoseAnalyzer.TAG, "club detector unavailable, keeping today's proposals", e)
+      return null
+    }
+    return ClubRules.dropStatic(dets, places)
   }
 
   /**
