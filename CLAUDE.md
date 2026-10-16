@@ -177,7 +177,8 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   analyse and mark.
 - Club model (plan `2026-10-16-swing-club-detector.md`): the `club_yolox_tiny_v1.tflite`
   asset and the `litert` dependency are native (APK, `preview-arm64`). Pass 2 runs it on
-  the 13 checkpoint frames on CPU (`timings.clubMs ≤ 2000`). The lab that trains and
+  the 13 checkpoint frames, GPU delegate with CPU fallback (`timings.clubMs ≤ 2000`;
+  1.5 s on a Pixel 8 Pro). The model ships fp32: LiteRT 1.4 on CPU splits an fp16-weight graph. The lab that trains and
   exports it is `tools/swing-lab` (`train_yolox.py`, `export_tflite.py`, `eval_yolo.py`).
 - Swing native change ⇒ new APK (`preview-arm64`); JS-only ⇒ OTA. Dev build
   `GOLF_APP_VARIANT=dev` (`com.golfpartner.app.dev`, scheme `golf-dev`) is

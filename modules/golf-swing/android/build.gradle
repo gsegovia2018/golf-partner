@@ -30,5 +30,8 @@ dependencies {
   // Apache-2.0), CPU/XNNPACK. Its own libtensorflowlite_jni.so beside MediaPipe's statically linked
   // copy: separate libraries, no shared symbols. 1.x: the plain Interpreter, no transitive deps.
   implementation "com.google.ai.edge.litert:litert:1.4.2"
+  // its GPU delegate (plan §4.3 lever c): used only where CompatibilityList allows it, else CPU
+  implementation "com.google.ai.edge.litert:litert-gpu:1.4.2"
+  implementation "com.google.ai.edge.litert:litert-gpu-api:1.4.2"
   testImplementation "junit:junit:4.13.2"
 }

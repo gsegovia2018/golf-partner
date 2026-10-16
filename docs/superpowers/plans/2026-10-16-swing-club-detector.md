@@ -153,6 +153,14 @@ The canvas shows exactly what it shows today for address and impact — a propos
 5. **APK:** `npx eas-cli build -p android --profile preview-arm64` (the native change: dependency, Kotlin, asset), install, repeat step 4 on that build (release, not debug: XNNPACK threading and R8 can differ), then `GOLF_ANDROID_BUILD_ARCHS=arm64-v8a npx eas-cli fingerprint:compare <hash>` before any OTA — run without a generated `android/` folder (CLAUDE.md Wear OS note). Swings analysed before the APK keep their stored `pass2` (no lazy re-run; `reanalyzeForClub` never calls native); a golfer re-analyses to get model proposals, and confirmed marks are kept because `runAnalysis` reads `marks.json` for the second `analyze()`.
 6. **OTA afterwards:** the JS items ship OTA with `--branch preview`; on the older APK runtime the gate keeps `clubModel` off and nothing else differs. The owner's phone is on the master-APK runtime (memory `ota-runtimes-split.md`): the new APK replaces that runtime, so the OTA command targets the new fingerprint from then on.
 
+### 6.7 Device round, 2026-10-16 (Pixel 8 Pro, Android 17): what changed
+
+- **`clubSelfTest` passes** on the phone: the interpreter matches the lab's boxes (IoU ≥ 0.99, score ± 0.000001 on CPU); LiteRT and MediaPipe load in one process (R7 closed).
+- **fp16 weights were slow on CPU:** LiteRT 1.4.2's XNNPACK took 203 of 397 nodes (the 83 `DEQUANTIZE` and the convolutions fed by them stayed on reference kernels), 116 partitions, ≈ 600 ms/frame. The **fp32** export (no `DEQUANTIZE`) gives 286 of 314 nodes, 6 partitions, ≈ 310 ms/frame. The asset is now fp32 (20.4 MB).
+- **CPU still missed the budget** (release build, 13 frames: `clubMs` 4065, pass 2 7.4 s). Lever (c) was taken: the **GPU delegate** (`litert-gpu` + `litert-gpu-api` 1.4.2, used only where `CompatibilityList` allows it, CPU fallback on any failure), self-test passing (worst IoU 0.91 from fp16 GPU compute), **`clubMs` 1456** in a release build, pass 2 4.6 s (≈ 3.3 s without the detector). `timings.clubDelegate` reports what ran.
+- **Port fidelity on real decoding:** on the 10-14 clip the phone's head boxes match the lab model on the same 13 frames within 1 cm on 12; the 13th is P6 (head behind the thigh), where two candidates at score 0.05–0.08 swap order.
+- **APK:** release arm64 grows ≈ +27 MB (model 20.4 + LiteRT 4.5 + GPU 2.6), not the +12 MB of §3.2.
+
 ## 7. Licences and attribution
 
 | Component | Licence | Obligation | Where |

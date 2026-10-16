@@ -5,6 +5,8 @@ import android.os.SystemClock
 import android.util.Log
 import org.json.JSONObject
 import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.gpu.CompatibilityList
+import org.tensorflow.lite.gpu.GpuDelegate
 import java.io.FileInputStream
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -15,14 +17,22 @@ import kotlin.math.max
 
 /**
  * The learned club detector (plan 2026-10-16 §3–4): YOLOX-tiny fine-tuned on the Golf Club
- * Tracking dataset, `club_yolox_tiny_v1.tflite` (fp16 weights, fp32 compute) on the LiteRT
- * interpreter, CPU (XNNPACK) with [THREADS] threads. One instance per pass 2, used from one
- * thread; [close] frees the interpreter. Pre- and post-processing are [ClubDecode] / [ClubRules].
+ * Tracking dataset, `club_yolox_tiny_v1.tflite` (fp32: LiteRT 1.4's XNNPACK splits an fp16-weight
+ * graph into ~116 partitions, 2× slower on a Pixel 8 Pro) on the LiteRT interpreter: the GPU
+ * delegate where LiteRT's compatibility list allows it, else CPU (XNNPACK) with [THREADS] threads.
+ * One instance per pass 2, used from one thread; [close] frees the interpreter and the delegate.
+ * Pre- and post-processing are [ClubDecode] / [ClubRules].
  */
-internal class ClubDetector private constructor(private val interpreter: Interpreter, private val nchw: Boolean) : AutoCloseable {
+internal class ClubDetector private constructor(
+  private val interpreter: Interpreter,
+  private val nchw: Boolean,
+  private val gpu: GpuDelegate?,
+) : AutoCloseable {
+  /** 'gpu' or 'cpu': what this instance runs on (timings.clubDelegate). */
+  val delegate: String get() = if (gpu != null) "gpu" else "cpu"
+
   companion object {
     const val MODEL = "club_yolox_tiny_v1"
-    const val DELEGATE = "cpu"
     private const val THREADS = 4
     private const val FIXTURES = "club"
 
@@ -40,7 +50,19 @@ internal class ClubDetector private constructor(private val interpreter: Interpr
           rewind()
         }
       }
-      val interp = Interpreter(model, Interpreter.Options().setNumThreads(THREADS))
+      // GPU first (MediaPipe already runs pose there); any failure to build it falls back to CPU
+      var gpu: GpuDelegate? = null
+      val interp = try {
+        val compat = CompatibilityList()
+        if (!compat.isDelegateSupportedOnThisDevice) throw UnsupportedOperationException("gpu not on the compatibility list")
+        gpu = GpuDelegate(compat.bestOptionsForThisDevice)
+        Interpreter(model, Interpreter.Options().addDelegate(gpu))
+      } catch (e: Throwable) {
+        gpu?.close()
+        gpu = null
+        Log.i(PoseAnalyzer.TAG, "club detector on cpu: ${e.message}")
+        Interpreter(model, Interpreter.Options().setNumThreads(THREADS))
+      }
       try {
         val s = ClubDecode.SIZE
         val inShape = interp.getInputTensor(0).shape().toList()
@@ -51,9 +73,10 @@ internal class ClubDetector private constructor(private val interpreter: Interpr
         }
         val outShape = interp.getOutputTensor(0).shape().toList()
         check(outShape == listOf(1, ClubDecode.ROWS, ClubDecode.COLS)) { "club model output $outShape" }
-        return ClubDetector(interp, nchw)
+        return ClubDetector(interp, nchw, gpu)
       } catch (e: Throwable) {
         interp.close()
+        gpu?.close()
         throw e
       }
     }
@@ -67,7 +90,9 @@ internal class ClubDetector private constructor(private val interpreter: Interpr
     fun selfTest(context: Context): Map<String, Any?> {
       val clips = (context.assets.list(FIXTURES) ?: emptyArray()).filter { it.endsWith(".input.bin") }.map { it.removeSuffix(".input.bin") }.sorted()
       val rows = ArrayList<Map<String, Any?>>()
+      var delegate = "cpu"
       open(context).use { d ->
+        delegate = d.delegate
         for (clip in clips) {
           val bgr = context.assets.open("$FIXTURES/$clip.input.bin").use { it.readBytes() }
           val rgb = ByteArray(bgr.size)
@@ -111,7 +136,7 @@ internal class ClubDetector private constructor(private val interpreter: Interpr
           )
         }
       }
-      val out = mapOf("passed" to (rows.isNotEmpty() && rows.all { it["passed"] == true }), "model" to MODEL, "delegate" to DELEGATE, "clips" to rows)
+      val out = mapOf("passed" to (rows.isNotEmpty() && rows.all { it["passed"] == true }), "model" to MODEL, "delegate" to delegate, "clips" to rows)
       Log.i(PoseAnalyzer.TAG, "clubSelfTest $out")
       return out
     }
@@ -134,5 +159,8 @@ internal class ClubDetector private constructor(private val interpreter: Interpr
   /** Boxes of one frame in 640-px model units, after decode + NMS. */
   fun detect(rgb: ByteArray): List<ClubBox> = ClubDecode.boxes(infer(rgb))
 
-  override fun close() = interpreter.close()
+  override fun close() {
+    interpreter.close()
+    gpu?.close()
+  }
 }

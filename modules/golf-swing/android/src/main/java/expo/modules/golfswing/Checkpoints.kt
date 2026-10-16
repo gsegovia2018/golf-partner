@@ -209,6 +209,7 @@ internal class Checkpoints(
     var addressShaft: ShaftFound? = null
     var clubMs = 0L
     var clubDets: Map<Int, List<ClubBox>>? = null
+    var clubDelegate = "cpu"
     try {
       val wanted = stills + onsetFrames + listOfNotNull(addr?.frame, imp?.frame) + proxyFrames + clubFrames
       var t = SystemClock.elapsedRealtime()
@@ -250,7 +251,7 @@ internal class Checkpoints(
       }
       if (req.clubModel) {
         t = SystemClock.elapsedRealtime()
-        clubDets = club(cps, onset, clubInputs, clubFailures)
+        clubDets = club(cps, onset, clubInputs, clubFailures) { clubDelegate = it }
         clubInputs.clear()
         clubMs = SystemClock.elapsedRealtime() - t
       }
@@ -304,7 +305,7 @@ internal class Checkpoints(
       "clubMs" to clubMs.toInt(),
       "clubFrames" to (clubDets?.size ?: 0),
       "clubFailures" to clubFailures.get(),
-      "clubDelegate" to ClubDetector.DELEGATE,
+      "clubDelegate" to clubDelegate,
     )
     Log.i(
       PoseAnalyzer.TAG,
@@ -335,7 +336,9 @@ internal class Checkpoints(
    * (no model, no runtime, an interpreter error at load). A frame that fails is left out. Both
    * are counted in [failures] and never fail pass 2: those frames keep today's entries.
    */
-  private fun club(cps: List<CheckpointSpec>, onset: Int?, inputs: Map<Int, ByteArray>, failures: AtomicInteger): Map<Int, List<ClubBox>>? {
+  private fun club(
+    cps: List<CheckpointSpec>, onset: Int?, inputs: Map<Int, ByteArray>, failures: AtomicInteger, onDelegate: (String) -> Unit,
+  ): Map<Int, List<ClubBox>>? {
     val places = LinkedHashMap<Int, String>()
     for (c in cps) places.putIfAbsent(if (c.key == "address" && onset != null) onset else c.frame, ClubRules.place(c.key))
     val sx = track.dispW / ClubDecode.SIZE.toDouble()
@@ -343,6 +346,7 @@ internal class Checkpoints(
     val dets = LinkedHashMap<Int, List<ClubBox>>()
     try {
       ClubDetector.open(context).use { d ->
+        onDelegate(d.delegate)
         for (f in places.keys.sorted()) {
           if (cancelled()) throw CancelledException()
           val px = inputs[f] ?: continue
