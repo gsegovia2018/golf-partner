@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Swing lab — export the YOLOX-tiny club detector to TFLite (fp16 weights) + golden fixtures (L2).
+"""Swing lab — export the YOLOX-tiny club detector to TFLite (fp32) + golden fixtures (L2).
 
 Plan: docs/superpowers/plans/2026-10-16-swing-club-detector.md §3 (export), §6.2 (acceptance).
 
@@ -9,8 +9,9 @@ What it does
      tensor [1, 8400, 8] = (cx, cy, w, h, obj, cls_shaft, cls_head, cls_hands) in 640-px units,
      obj / cls already sigmoided. NMS is NOT in the graph (Kotlin: ClubDecode).
   2. Converts with litert-torch (Google, Apache-2.0; the renamed `ai-edge-torch`, whose 0.7.x
-     package is only a shim over it) to fp32 TFLite, then casts the weights to fp16 with
-     ai-edge-quantizer's FLOAT_CASTING (fp16 weights + DEQUANTIZE ops, fp32 compute).
+     package is only a shim over it) to fp32 TFLite. The asset ships fp32: an fp16-weight copy (ai-edge-quantizer FLOAT_CASTING,
+     DEQUANTIZE ops) ran ~2x slower on the phone's LiteRT 1.4 CPU path (116 XNNPACK partitions,
+     plan 2026-10-16 §6.7), so it is no longer written.
   3. Checks the TFLite model against PyTorch on every marked, visible clubhead of the lab clips
      (out/<clip>/truth.json; frames read with cv2 like eval_yolo.py): same decode + class-wise NMS
      (numpy, mirrors the Kotlin ClubDecode), best `head` box centre within 2 px and score within
@@ -33,7 +34,7 @@ mode uses it, in another venv). It refuses to run if ultralytics is importable i
 refuses checkpoints that are not YOLOX state dicts from train_yolox.py.
 
 Setup: `uv venv -p 3.11 ~/.venvs/swing-export && uv pip install -p ~/.venvs/swing-export/bin/python
-litert-torch ai-edge-litert ai-edge-quantizer torch torchvision opencv-python-headless numpy loguru
+litert-torch ai-edge-litert torch torchvision opencv-python-headless numpy loguru
 tabulate pycocotools thop psutil tqdm packaging`  (ai-edge-torch installs the same stack).
 Usage: ~/.venvs/swing-export/bin/python -I export_tflite.py [--ckpt models/yolox-club-v2/epoch_8.pth]
        [--out models/club] [--app <worktree>] [--no-copy]
@@ -88,21 +89,13 @@ def load_model(ckpt: Path) -> torch.nn.Module:
     return model.eval()
 
 
-def convert(model: torch.nn.Module, out: Path) -> tuple[Path, Path]:
+def convert(model: torch.nn.Module, out: Path) -> Path:
     import litert_torch
-    from ai_edge_quantizer import quantizer
     nhwc = litert_torch.to_channel_last_io(model, args=[0]).eval()
     sample = (torch.rand(1, SIZE, SIZE, 3) * 255,)
     f32 = out / "club_yolox_tiny_fp32.tflite"
     litert_torch.convert(nhwc, sample).export(str(f32))
-    q = quantizer.Quantizer(str(f32))
-    q.load_quantization_recipe([{
-        "regex": ".*", "operation": "*", "algorithm_key": "float_casting",
-        "op_config": {"weight_tensor_config": {"num_bits": 16, "dtype": "FLOAT"},
-                      "compute_precision": "FLOAT", "explicit_dequantize": True}}])
-    f16 = out / "club_yolox_tiny_fp16.tflite"
-    q.quantize().export_model(str(f16), overwrite=True)
-    return f32, f16
+    return f32
 
 
 def decode_nms(raw: np.ndarray, conf: float = CONF, iou_thr: float = NMS_IOU) -> list[dict]:
@@ -168,10 +161,10 @@ def main() -> None:
     a.out.mkdir(parents=True, exist_ok=True)
 
     model = load_model(a.ckpt)
-    f32, f16 = convert(model, a.out)
+    f32 = convert(model, a.out)
 
     from ai_edge_litert.interpreter import Interpreter
-    it = Interpreter(str(f16), num_threads=4)
+    it = Interpreter(str(f32), num_threads=4)
     it.allocate_tensors()
     inp, outp = it.get_input_details()[0], it.get_output_details()[0]
     in_shape, out_shape = [int(v) for v in inp["shape"]], [int(v) for v in outp["shape"]]
@@ -223,7 +216,7 @@ def main() -> None:
 
     # ---- speed (Mac CPU, XNNPACK, 4 threads) -----------------------------------------------------
     warm = ms[2:] if len(ms) > 2 else ms
-    print(f"TFLite fp16 CPU (XNNPACK, 4 threads, Mac): median {np.median(warm):.0f} ms/frame, "
+    print(f"TFLite fp32 CPU (XNNPACK, 4 threads, Mac): median {np.median(warm):.0f} ms/frame, "
           f"min {min(warm):.0f}, max {max(warm):.0f} over {len(warm)} frames")
 
     # ---- golden fixtures: impact frame per clip ------------------------------------------------
@@ -251,16 +244,16 @@ def main() -> None:
             "boxes640": boxes, "boxesDisplay": disp}, indent=1))
     sizes = {p.name: p.stat().st_size for p in sorted(fx.iterdir())}
 
-    digest = sha256(f16)
+    digest = sha256(f32)
     info = {"ckpt": str(a.ckpt), "ckptSha256": sha256(a.ckpt), "sha256": digest,
-            "bytes": f16.stat().st_size, "input": in_shape, "output": out_shape,
+            "bytes": f32.stat().st_size, "input": in_shape, "output": out_shape,
             "layout": "input float32 NHWC BGR 0..255, output float32 [1,8400,8]",
             "maxCentrePx": max_d, "maxScore": max_s, "pass": ok_all,
             "cpuMsMedian": float(np.median(warm)), "fixtures": sizes}
     (a.out / "export.json").write_text(json.dumps(info, indent=1))
     (a.out / "EXPORT.md").write_text(
         f"# Club detector export (L2)\n\n- checkpoint `{a.ckpt}` sha256 `{info['ckptSha256']}`\n"
-        f"- asset `{ASSET}` sha256 `{digest}`, {info['bytes']} bytes (fp16 weights, fp32 compute)\n"
+        f"- asset `{ASSET}` sha256 `{digest}`, {info['bytes']} bytes (fp32)\n"
         f"- input `{in_shape}` float32 **NHWC**, channels **B,G,R**, values 0..255, no normalisation, "
         f"frame stretched to 640x640\n- output `{out_shape}` float32 (cx, cy, w, h, obj, shaft, head, hands), "
         f"decoded in-graph, sigmoid applied; **NMS is outside the graph**\n"
@@ -276,7 +269,7 @@ def main() -> None:
         assets.mkdir(parents=True, exist_ok=True)
         shutil.rmtree(res, ignore_errors=True)
         res.mkdir(parents=True)
-        shutil.copy2(f16, assets / ASSET)
+        shutil.copy2(f32, assets / ASSET)
         for p in fx.iterdir():
             shutil.copy2(p, res / p.name)
         print(f"copied {ASSET} -> {assets}\ncopied {len(sizes)} fixture files -> {res}")
