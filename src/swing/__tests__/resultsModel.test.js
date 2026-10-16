@@ -106,8 +106,11 @@ describe('highlights', () => {
     expect(prims.find((p) => p.t === 'label').text).toMatch(/^\+\d+ cm$/);
   });
 
-  test('checks that need a clubhead draw nothing while it is unplaced', () => {
-    expect(highlightFor(row(unmarked, 'butt_extension'), ctx(unmarked))).toEqual([]);
+  test('checks that need a clubhead draw only their references while it is unplaced', () => {
+    // no shaft line, no landing dot, no value: just the toe and ball ticks to judge against
+    const butt = highlightFor(row(unmarked, 'butt_extension'), ctx(unmarked));
+    expect(butt.every((p) => p.role === 'target')).toBe(true);
+    expect(butt.some((p) => p.t === 'dot')).toBe(false);
     expect(highlightFor(row(unmarked, 'shaft_angle_impact'), ctx(unmarked))).toEqual([]);
   });
 });
