@@ -22,12 +22,31 @@ const total = (p) => p.sessions.reduce((a, s) => a + s.minutes, 0);
 const drillsOf = (p) => p.sessions.flatMap((s) => s.drills);
 
 describe('sizing', () => {
-  it.each([30, 60, 90, 120])('sessions sum to the %i min budget within 5', (m) => {
+  it.each([30, 60, 90, 120])('sessions never exceed the %i min budget', (m) => {
+    [base({ minutesPerWeek: m }), base({ minutesPerWeek: m, diagnosis: diag({ leaks: [putting] }) })].forEach((input) => {
+      const p = buildWeeklyPlan(input);
+      expect(total(p)).toBeLessThanOrEqual(m);
+      expect(total(p)).toBeGreaterThan(m - 25);
+    });
     const p = buildWeeklyPlan(base({ minutesPerWeek: m }));
-    expect(Math.abs(total(p) - m)).toBeLessThanOrEqual(5);
-    expect(p.sessions.length).toBeLessThanOrEqual(4);
     p.sessions.forEach((s) => expect(s.minutes).toBeGreaterThanOrEqual(10));
     expect(p.courseTask.key).toBe('stats.my.coach.plan.course.putting.lag');
+  });
+
+  it('a session is at most 45 min: a bigger block splits into numbered sessions of the same kind', () => {
+    const single = diag({ leaks: [putting] });
+    [60, 90, 120].forEach((m) => {
+      const p = buildWeeklyPlan(base({ minutesPerWeek: m, diagnosis: single }));
+      p.sessions.forEach((s) => expect(s.minutes).toBeLessThanOrEqual(45));
+      expect(total(p)).toBeLessThanOrEqual(m);
+    });
+    const p = buildWeeklyPlan(base({ minutesPerWeek: 120, diagnosis: single }));
+    const putts = p.sessions.filter((s) => s.kind === 'putting');
+    expect(putts.length).toBeGreaterThan(1);
+    expect(putts.map((s) => s.part)).toEqual(putts.map((_, i) => i + 1));
+    putts.forEach((s) => expect(s.parts).toBe(putts.length));
+    expect(new Set(p.sessions.map((s) => s.id)).size).toBe(p.sessions.length);
+    expect(buildWeeklyPlan(base({ minutesPerWeek: 30 })).sessions[0]).toMatchObject({ part: 1, parts: 1 });
   });
 
   it('30 min is one session (the focus block) plus the on-course task', () => {
@@ -49,7 +68,7 @@ describe('sizing', () => {
       minutesPerWeek: 60,
     }));
     // distinct leak id, same category is skipped for the second block -> no second session
-    expect(same.sessions.map((s) => s.kind)).toEqual(['putting']);
+    expect(new Set(same.sessions.map((s) => s.kind))).toEqual(new Set(['putting']));
   });
 
   it('a second leak of the focus kind merges into the focus session', () => {
@@ -59,7 +78,7 @@ describe('sizing', () => {
       diagnosis: diag({ leaks: [putting, penalties, aroundGreen] }), minutesPerWeek: 90,
     }));
     expect(p.sessions.map((s) => s.kind)).toContain('course');
-    expect(new Set(p.sessions.map((s) => s.kind)).size).toBe(p.sessions.length);
+    expect(p.sessions.every((s) => s.minutes <= 45)).toBe(true);
   });
 
   it('nothing renders under 10 min', () => {
@@ -73,7 +92,7 @@ describe('allocation', () => {
   it('focus block is at least 50 % unless tie; second leak gets its own session', () => {
     const p = buildWeeklyPlan(base({ minutesPerWeek: 120 }));
     expect(p.mode).toBe('focus');
-    const focusMin = p.sessions.find((s) => s.roles.includes('focus')).minutes;
+    const focusMin = drillsOf(p).filter((d) => d.role === 'focus').reduce((a, d) => a + d.minutes, 0);
     expect(focusMin / total(p)).toBeGreaterThanOrEqual(0.5);
     expect(p.sessions.find((s) => s.roles.includes('second')).kind).toBe('range');
   });
@@ -138,9 +157,10 @@ describe('swing', () => {
 
   it('the swing drill joins the range session and replaces the keep block', () => {
     const p = buildWeeklyPlan(base({ diagnosis: teeDiag, causes: causes('cause:tee:side:right'), swingLink: link, minutesPerWeek: 90 }));
-    const range = p.sessions.find((s) => s.kind === 'range');
-    expect(range.roles).toContain('swing');
-    expect(range.drills.some((d) => d.source === 'swing')).toBe(true);
+    const ranges = p.sessions.filter((s) => s.kind === 'range');
+    expect(ranges.flatMap((s) => s.roles)).toContain('swing');
+    expect(drillsOf(p).some((d) => d.source === 'swing')).toBe(true);
+    expect(total(p)).toBeLessThanOrEqual(90);
     expect(p.swing.fault).toBe('over_the_top');
     expect(p.sessions.every((s) => !s.roles.includes('keep'))).toBe(true);
   });
@@ -188,11 +208,11 @@ describe('collect plan', () => {
     });
     expect(p.mode).toBe('collect');
     expect(p.collectReason).toBe(reason);
-    expect(p.sessions).toHaveLength(1);
     expect(p.sessions[0].why.key).toBe(`stats.my.coach.plan.why.collect.${reason}`);
     expect(p.logAsk.key).toBe('stats.my.coach.plan.log.collect');
     expect(p.courseTask.key).toBe('stats.my.coach.plan.course.collect');
-    expect(Math.abs(total(p) - 60)).toBeLessThanOrEqual(5);
+    expect(total(p)).toBeLessThanOrEqual(60);
+    p.sessions.forEach((s) => expect(s.minutes).toBeLessThanOrEqual(45));
   });
 
   it('survives an empty input', () => {

@@ -60,7 +60,7 @@ describe('WeeklyPlanCard: split, sessions and the course task', () => {
     const r = renderPlan(onePutting(), { minutesPerWeek: 120 });
     expect(r.getByTestId('session-putting')).toBeTruthy();
     expect(r.getByTestId('session-range')).toBeTruthy();
-    expect(r.getByText('Putting is your focus, the biggest leak right now.')).toBeTruthy();
+    expect(r.getAllByText('Putting is your focus, the biggest leak right now.').length).toBeGreaterThan(0);
     expect(r.getByText('Approach is the second biggest leak.')).toBeTruthy();
     expect(r.getByText(/^Lag ladder/)).toBeTruthy();
     expect(r.getAllByText(/^Pass: /).length).toBeGreaterThan(1);
@@ -82,7 +82,7 @@ describe('WeeklyPlanCard: split, sessions and the course task', () => {
 
   test('a tie gives both leaks time; same-kind blocks share one tile', () => {
     const r = renderPlan(tieStats(), { minutesPerWeek: 90 });
-    expect(r.getByText('Approach is level with the second leak, so it gets equal time.')).toBeTruthy();
+    expect(r.getAllByText('Approach is level with the second leak, so it gets equal time.').length).toBeGreaterThan(0);
     expect(r.getByTestId('session-range')).toBeTruthy();
     expect(r.getByText('Wedge ladder', { exact: false })).toBeTruthy(); // approach block
     expect(r.getByText('Fairway window', { exact: false })).toBeTruthy(); // off the tee block
@@ -96,7 +96,7 @@ describe('WeeklyPlanCard: split, sessions and the course task', () => {
 
   test('collect plan with its logging ask when rounds are few', () => {
     const r = renderPlan(fewRounds());
-    expect(r.getByText('Not enough tracked data yet to choose a focus.')).toBeTruthy();
+    expect(r.getAllByText('Not enough tracked data yet to choose a focus.').length).toBeGreaterThan(0);
     expect(r.getByText('On the course, keep score with shot detail so the next plan has data.')).toBeTruthy();
   });
 

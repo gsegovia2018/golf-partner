@@ -80,7 +80,7 @@ describe('My Stats components in Spanish', () => {
     const tie = tieStats();
     const a = render(wrap(<DiagnosisCard week={week(tie)} diagnosis={tie.coachDiagnosis} onCommitFocus={() => {}} />));
     expect(a.getByText('Dos pérdidas demasiado igualadas')).toBeTruthy();
-    expect(a.getByLabelText('Objetivo: Approach')).toBeTruthy();
+    expect(a.getByLabelText('Objetivo: Aproximación')).toBeTruthy();
     const tee = teeLeft();
     const linked = render(wrap(<DiagnosisCard week={week(tee, { swings: [driverSwing()] })} diagnosis={tee.coachDiagnosis} swingSupport={{ supported: true }} onOpenSwing={() => {}} />));
     expect(linked.getByText(/Tu swing con el driver grabado el 4 oct muestra over the top/)).toBeTruthy();

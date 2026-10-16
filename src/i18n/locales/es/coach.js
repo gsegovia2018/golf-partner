@@ -216,6 +216,7 @@ export default {
   'stats.my.coach.ui.kind.shortGame': 'Juego corto',
   'stats.my.coach.ui.kind.putting': 'Putts',
   'stats.my.coach.ui.kind.course': 'En el campo',
+  'stats.my.coach.ui.kind.part': '{kind} · sesión {part}',
   'stats.my.coach.ui.level.line': 'Nivel {level} de 3 · {rounds} desde el {date}',
   'stats.my.coach.ui.level.none': 'Nivel 1 de 3 · fija un objetivo y el plan sube de nivel con tus vueltas',
 

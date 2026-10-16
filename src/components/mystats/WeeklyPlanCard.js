@@ -85,14 +85,18 @@ export default function WeeklyPlanCard({ week, focus, verdict, onChangeMinutes, 
         <View
           key={session.id}
           style={s.tile}
-          testID={`session-${session.kind}`}
+          testID={session.part > 1 ? `session-${session.kind}-${session.part}` : `session-${session.kind}`}
           accessible
           accessibilityLabel={renderMsg(session.title)}
         >
           <View style={s.tileIcon}><Feather name={KIND_ICON[session.kind]} size={16} color={theme.accent.primary} /></View>
           <View style={s.tileBody}>
             <View style={s.tileHead}>
-              <Text style={s.tileKind}>{t(`stats.my.coach.ui.kind.${session.kind}`)}</Text>
+              <Text style={s.tileKind}>
+                {session.parts > 1
+                  ? t('stats.my.coach.ui.kind.part', { kind: t(`stats.my.coach.ui.kind.${session.kind}`), part: session.part })
+                  : t(`stats.my.coach.ui.kind.${session.kind}`)}
+              </Text>
               <Text style={s.tileMin}>{t('stats.my.coach.ui.fix.minutes', { minutes: session.minutes })}</Text>
             </View>
             <Text style={s.why}>{renderMsg(session.why)}</Text>

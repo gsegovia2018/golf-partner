@@ -21,7 +21,7 @@
 //   mode      'focus' | 'tie' (no focus, top two leaks too close: 45/45) | 'collect' (no leak)
 //   level     1-3, from verdict.level or focusLevel(roundsSinceCommit); 1 without a focus
 //   readyToMove  true when the verdict is improving at level 3 ("end this focus")
-//   sessions  Session[] (max 4): { id: 'plan:<kind>', kind, minutes, roles, title, why, drills }
+//   sessions  Session[]: { id: 'plan:<kind>[:<part>]', kind, part, parts, minutes, roles, title, why, drills }
 //             roles = block roles in the session ('focus'|'second'|'keep'|'swing'|'collect'),
 //             drills = [{ drillId, source: 'coach'|'swing', level, passTarget, minutes, role, fault? }]
 //   split     minutes per kind { range, shortGame, putting, course }
@@ -30,12 +30,15 @@
 //   signature compact record to store and pass back as `previousPlan`
 //
 // Sizing (§12.2): blocks take 55 % focus / 25 % second / 10 % keep (45/45 on a
-// tie). Blocks are packed into sessions by kind; a non-focus session under 10
-// min folds into the focus session; whatever the drills leave of the budget is
-// topped up with more drills (focus session first), staying within budget +5.
-// At 30 min or less the week is one session plus the on-course task; the swing
-// drill (10 min) needs a budget above 30. A drill pool can run out, then the
-// plan is shorter than the budget.
+// tie). The sum of the drill minutes never exceeds the budget: a drill that
+// would overflow is skipped and a shorter one tried. Blocks are packed into
+// sessions by kind; a block under 10 min folds into the focus block; what the
+// drills leave of the budget is topped up with more drills (keep block, then
+// second leak, then focus). A session is at most 45 min: a bigger block splits
+// into several sessions of the same kind (`part` 1.., `parts`). At 30 min or
+// less the week is one session plus the on-course task; the swing drill
+// (10 min) needs a budget above 30. A drill pool can run out, then the plan is
+// shorter than the budget.
 //
 // Message keys (prefix stats.my.coach.plan.) + params:
 //   area.<offTheTee|approach|aroundGreen|putting|penalties>   (no params)
@@ -66,7 +69,7 @@ const P = 'stats.my.coach.plan.';
 export const SESSION_KINDS = ['range', 'shortGame', 'putting', 'course'];
 export const MIN_DRILL_MINUTES = 10;
 export const SWING_DRILL_MINUTES = 10;
-export const BUDGET_SLACK = 5;
+export const SESSION_MAX_MINUTES = 45;
 const SINGLE_SESSION_MAX = 30;
 const SHARE = { focus: 0.55, second: 0.25, keep: 0.1, tie: 0.45 };
 const CATEGORY_AREA = {
@@ -116,11 +119,14 @@ export function courseTaskFor({ causeId, category, bucket }) {
   return msg(`${P}course.area.${category}`, { bucket: b });
 }
 
-function pack(pool, kind, used, target, level, role) {
+// Drills of `kind` from the pool that fit in `room` minutes and in the block's
+// target; one that would overflow is skipped and a shorter one tried.
+function pack(pool, kind, used, target, level, role, room = Infinity) {
   const out = [];
   let sum = 0;
+  const cap = Math.min(target, room);
   pool.filter((d) => d.kind === kind && !used.has(d.id)).forEach((d) => {
-    if (out.length > 0 && (sum >= target || sum + d.minutes > target + BUDGET_SLACK)) return;
+    if (sum + d.minutes > cap) return;
     out.push(entry(d, role, level));
     used.add(d.id);
     sum += d.minutes;
@@ -129,6 +135,27 @@ function pack(pool, kind, used, target, level, role) {
 }
 
 const sum = (list) => list.reduce((a, d) => a + d.minutes, 0);
+
+// One kind's drills as sessions of at most SESSION_MAX_MINUTES, in order.
+// `describe(roles)` gives the session's why.
+function sessionsOf(kind, drills, describe) {
+  const chunks = [];
+  drills.forEach((d) => {
+    const last = chunks[chunks.length - 1];
+    if (last && sum(last) + d.minutes <= SESSION_MAX_MINUTES) last.push(d);
+    else chunks.push([d]);
+  });
+  return chunks.map((list, i) => {
+    const minutes = sum(list);
+    const roles = [...new Set(list.map((d) => d.role))];
+    return {
+      id: i === 0 ? `plan:${kind}` : `plan:${kind}:${i + 1}`, kind, part: i + 1, parts: chunks.length,
+      minutes, roles,
+      title: msg(`${P}session.${kind}`, { minutes, count: list.length }),
+      why: describe(roles[0]), drills: list,
+    };
+  });
+}
 
 function chainOf(leak, causePrimary) {
   return { leakId: leak.id, category: leak.category, bucket: leak.bucket ?? null, causeId: causePrimary?.id ?? null };
@@ -198,12 +225,7 @@ export function buildWeeklyPlan({
     const used = new Set();
     const pool = COLLECT_DRILLS.map((id) => DRILL_BY_ID[id]).filter(Boolean);
     const drills = pack(pool, 'putting', used, M, 1, 'collect');
-    const sessions = [{
-      id: 'plan:putting', kind: 'putting', minutes: sum(drills), roles: ['collect'],
-      title: msg(`${P}session.putting`, { minutes: sum(drills), count: drills.length }),
-      why: msg(`${P}why.collect.${collectReason}`),
-      drills,
-    }];
+    const sessions = sessionsOf('putting', drills, () => msg(`${P}why.collect.${collectReason}`));
     const signature = {
       collect: true, focusLeakId: null, focusCategory: null, causeId: null, secondCategory: null,
       keepCategory: null, level: 1, tie: false, swingDrillId: null,
@@ -261,51 +283,46 @@ export function buildWeeklyPlan({
   });
   const focusKind = focusBlock.kind;
 
+  // Swing drill joins the range session (§4.2 block 3); its minutes are
+  // reserved first, the entry is appended after the block drills.
+  const swingEntry = swingOn ? {
+    drillId: swingOn.id, source: 'swing', level: null, passTarget: null,
+    minutes: SWING_DRILL_MINUTES, role: 'swing', fault: swingLink.fault,
+  } : null;
+  let left = M - (swingEntry ? SWING_DRILL_MINUTES : 0);
+
   const byKind = {};
   kept.forEach((b) => {
-    byKind[b.kind] = byKind[b.kind] ?? { kind: b.kind, roles: [], drills: [], whyBlock: b };
-    byKind[b.kind].roles.push(b.role);
-    byKind[b.kind].drills.push(...pack(b.pool, b.kind, used, b.target, b.level, b.role));
+    byKind[b.kind] = byKind[b.kind] ?? { kind: b.kind, drills: [] };
+    const drills = pack(b.pool, b.kind, used, b.target, b.level, b.role, left);
+    byKind[b.kind].drills.push(...drills);
+    left -= sum(drills);
   });
 
-  // Swing drill joins the range session (§4.2 block 3).
+  // Top up the leftover: keep block first, then the second leak, then focus.
+  // No block grows past the focus block (it stays the biggest, §12.2).
+  const roleMinutes = (role) => Object.values(byKind).reduce((a, k) => a + sum(k.drills.filter((d) => d.role === role)), 0);
+  const topUpOrder = ['keep', 'second', 'tie', 'focus'];
+  [...kept].sort((x, y) => topUpOrder.indexOf(x.role) - topUpOrder.indexOf(y.role)).forEach((b) => {
+    const own = ['focus', 'tie'].includes(b.role);
+    const room = own ? left : Math.min(left, roleMinutes(focusBlock.role) - roleMinutes(b.role));
+    const drills = pack(b.pool, b.kind, used, room, b.level, b.role, room);
+    byKind[b.kind].drills.push(...drills);
+    left -= sum(drills);
+  });
+
   let swing = null;
-  if (swingOn) {
-    byKind.range = byKind.range ?? { kind: 'range', roles: [], drills: [], whyBlock: null };
-    byKind.range.roles.push('swing');
-    byKind.range.drills.push({
-      drillId: swingOn.id, source: 'swing', level: null, passTarget: null,
-      minutes: SWING_DRILL_MINUTES, role: 'swing', fault: swingLink.fault,
-    });
+  if (swingEntry) {
+    byKind.range = byKind.range ?? { kind: 'range', drills: [] };
+    byKind.range.drills.push(swingEntry);
     swing = { drillId: swingOn.id, fault: swingLink.fault };
   }
 
-  // Top up: more drills, focus session first, without passing budget + slack.
-  let total = Object.values(byKind).reduce((a, s) => a + sum(s.drills), 0);
-  const topUp = (session, b) => {
-    b.pool.filter((d) => d.kind === session.kind && !used.has(d.id)).forEach((d) => {
-      if (M - total > BUDGET_SLACK && total + d.minutes <= M + BUDGET_SLACK) {
-        session.drills.push(entry(d, b.role, b.level));
-        used.add(d.id);
-        total += d.minutes;
-      }
-    });
-  };
-  kept.forEach((b) => topUp(byKind[b.kind], b));
-
   const order = [focusKind, ...SESSION_KINDS.filter((k) => k !== focusKind)];
-  const sessions = order.filter((k) => byKind[k]).map((k) => {
-    const s = byKind[k];
-    const minutes = sum(s.drills);
-    const lead = s.whyBlock ?? withKind[0];
-    const role = s.roles[0];
-    return {
-      id: `plan:${k}`, kind: k, minutes, roles: s.roles,
-      title: msg(`${P}session.${k}`, { minutes, count: s.drills.length }),
-      why: msg(`${P}why.${role}`, { area: areaMsg(lead.chain.category), bucket: lead.chain.bucket ?? null }),
-      drills: s.drills,
-    };
-  });
+  const sessions = order.filter((k) => byKind[k]?.drills.length).flatMap((k) => sessionsOf(k, byKind[k].drills, (role) => {
+    const lead = withKind.find((b) => b.role === role) ?? withKind[0];
+    return msg(`${P}why.${role}`, { area: areaMsg(lead.chain.category), bucket: lead.chain.bucket ?? null });
+  }));
 
   const strength = (causes?.primary ?? null)?.strength;
   const insufficientFirst = diagnosis?.insufficient?.[0]?.category;

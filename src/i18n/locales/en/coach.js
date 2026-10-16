@@ -216,6 +216,7 @@ export default {
   'stats.my.coach.ui.kind.shortGame': 'Short game',
   'stats.my.coach.ui.kind.putting': 'Putting',
   'stats.my.coach.ui.kind.course': 'On the course',
+  'stats.my.coach.ui.kind.part': '{kind} · session {part}',
   'stats.my.coach.ui.level.line': 'Level {level} of 3 · {rounds} in · since {date}',
   'stats.my.coach.ui.level.none': 'Level 1 of 3 · pin a focus and the plan levels up with your rounds',
 
