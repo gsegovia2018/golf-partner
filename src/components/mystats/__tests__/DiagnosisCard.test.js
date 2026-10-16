@@ -2,6 +2,7 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import DiagnosisCard from '../DiagnosisCard';
+import { DRILLS } from '../../../store/coachDrills';
 import {
   onePutting, tieStats, teeLeft, fewRounds, noDetail, approachShort, week, driverSwing, focusRecord, verdictOf,
   mkLeak, mkDiagnosis, mkStats,
@@ -58,6 +59,19 @@ describe('DiagnosisCard: one clear leak', () => {
     expect(r.getByTestId('chain-tip')).toBeTruthy();
     expect(r.getByText(/^Lag first from 6\+ m/)).toBeTruthy();
     expect(r.getByText('≈ +0.7 pts / round', { exact: false })).toBeTruthy();
+  });
+
+  test('Fix shows at most 3 drills and counts the rest', () => {
+    const stats = onePutting();
+    const w = week(stats);
+    const base = w.chains[0].drills[0];
+    w.chains[0].drills = DRILLS.filter((d) => d.area === 'putting').slice(0, 5).map((d) => ({ ...base, drillId: d.id, role: 'focus' }));
+    const r = render(wrap(<DiagnosisCard week={w} diagnosis={stats.coachDiagnosis} roundCount={stats.roundCount} swingSupport={WEB} />));
+    expect(r.getAllByText(/^Pass: /)).toHaveLength(3);
+    expect(r.getByText("+2 more in this week's plan")).toBeTruthy();
+    const three = week(stats);
+    three.chains[0].drills = w.chains[0].drills.slice(0, 3);
+    expect(render(wrap(<DiagnosisCard week={three} diagnosis={stats.coachDiagnosis} roundCount={stats.roundCount} swingSupport={WEB} />)).queryByTestId('fix-more')).toBeNull();
   });
 
   test('Check names the metric, now, the benchmark where one exists, and when it re-reads', () => {

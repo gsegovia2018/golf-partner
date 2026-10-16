@@ -145,6 +145,7 @@ export default {
   'stats.my.coach.ui.fix.minutes': '{minutes} min',
   'stats.my.coach.ui.fix.course': 'Próxima vuelta',
   'stats.my.coach.ui.fix.none': 'Todavía no hay ningún ejercicio para esto.',
+  'stats.my.coach.ui.fix.more': '+{count} más en el plan de esta semana',
   'stats.my.coach.ui.check.line': '{metric}: ahora {value}.',
   'stats.my.coach.ui.check.line.bench': '{metric}: ahora {value} (un hándicap de {hcp}: {bench}).',
   'stats.my.coach.ui.check.line.base': '{metric}: ahora {value}, antes {baseline} cuando fijaste el objetivo.',

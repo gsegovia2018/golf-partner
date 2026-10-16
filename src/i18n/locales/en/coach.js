@@ -145,6 +145,7 @@ export default {
   'stats.my.coach.ui.fix.minutes': '{minutes} min',
   'stats.my.coach.ui.fix.course': 'Next round',
   'stats.my.coach.ui.fix.none': 'No drill matches this yet.',
+  'stats.my.coach.ui.fix.more': '+{count} more in this week\'s plan',
   'stats.my.coach.ui.check.line': '{metric}: now {value}.',
   'stats.my.coach.ui.check.line.bench': '{metric}: now {value} (a {hcp} handicap: {bench}).',
   'stats.my.coach.ui.check.line.base': '{metric}: now {value}, was {baseline} when you committed.',

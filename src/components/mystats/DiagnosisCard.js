@@ -12,6 +12,7 @@ import { renderMsg, renderDatedMsg, metricValueText, msgText } from './msg';
 
 const MIN_ROUNDS = 3;
 const MIN_HOLES = 10;
+const FIX_DRILLS_SHOWN = 3;
 const areaMsg = (category) => makeMsg(`stats.my.coach.plan.area.${category}`);
 
 // The Leak → Why → Fix → Check rail for the top leak (design B, spec §6/§12).
@@ -124,6 +125,9 @@ function Step({ s, label, children, last }) {
 
 function Chain({ chain, s, t, swingSupport, onRecordSwing, onOpenSwing, onInfo }) {
   const { leak, causes, swingLink, check, drills, courseTask, tip, isFocus } = chain;
+  // At most 3 drills; the swing drill keeps its seat (it is the link to the recording).
+  const swingDrills = drills.filter((d) => d.source === 'swing').slice(0, 1);
+  const shownDrills = [...drills.filter((d) => d.source !== 'swing').slice(0, FIX_DRILLS_SHOWN - swingDrills.length), ...swingDrills];
   const hcp = leak.benchmark?.targetHandicap;
   const area = renderMsg(areaMsg(leak.category));
   const vs = hcp > 0 ? t('stats.my.coach.ui.vs.target', { hcp: formatNumber(hcp) }) : t('stats.my.coach.ui.vs.scratch');
@@ -164,9 +168,12 @@ function Chain({ chain, s, t, swingSupport, onRecordSwing, onOpenSwing, onInfo }
       </Step>
 
       <Step s={s} label={t('stats.my.coach.ui.step.fix')}>
-        {drills.length ? drills.map((d) => (
+        {drills.length ? shownDrills.map((d) => (
           <View key={`${d.drillId}-${d.role}`} style={s.fixRow}><DrillLine drill={d} /></View>
         )) : <Text style={s.line2}>{t('stats.my.coach.ui.fix.none')}</Text>}
+        {drills.length > shownDrills.length ? (
+          <Text style={s.line2} testID="fix-more">{t('stats.my.coach.ui.fix.more', { count: drills.length - shownDrills.length })}</Text>
+        ) : null}
         {courseTask ? (
           <View style={s.fixRow}>
             <Text style={s.drillKey}>{t('stats.my.coach.ui.fix.course')}</Text>
