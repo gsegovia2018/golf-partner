@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import FocusCard from '../FocusCard';
 import CoachHero from '../CoachHero';
@@ -27,47 +28,102 @@ jest.mock('../../../theme/ThemeContext', () => ({
 }));
 
 const focus = {
-  insightId: 'putting:putting', area: 'putting', areaLabel: 'Putting',
-  title: '6+ m putts', metric: '-1.8 SG / round', baselineImpact: -1.8,
-  committedAt: '2026-07-15T00:00:00Z', roundCountAtCommit: 8,
+  v: 2,
+  leakId: 'leak:approach:100-150',
+  category: 'approach',
+  bucket: '100-150',
+  causeId: 'cause:approach:short',
+  metricKey: 'approach.shortRate.100-150',
+  baselineValue: 71,
+  committedAt: '2026-10-02T09:00:00Z',
+  roundCountAtCommit: 9,
 };
+const verdict = (over = {}) => ({
+  state: 'improving', early: true, roundsSince: 3, level: 2, unit: 'percent', baseline: 71, current: 48, delta: 23, ...over,
+});
 
-describe('FocusCard', () => {
-  test('renders verdict copy and matched drill', () => {
+describe('FocusCard (v2)', () => {
+  test('improving, early read: before to after in the metric unit, level line', () => {
+    const r = render(<FocusCard focus={focus} verdict={verdict()} onEndFocus={jest.fn()} />);
+    expect(r.getByText('Approach · 100-150 m')).toBeTruthy();
+    expect(r.getByText('Short misses from 100-150 m')).toBeTruthy();
+    expect(r.getByText('Improving since you committed')).toBeTruthy();
+    expect(r.getByText('Early read: 3 rounds in, the verdict settles at 4.')).toBeTruthy();
+    const ba = r.getByTestId('focus-before-after');
+    expect(ba).toBeTruthy();
+    expect(r.getByText('71%')).toBeTruthy();
+    expect(r.getByText('48%')).toBeTruthy();
+    expect(r.getByText('At commit')).toBeTruthy();
+    expect(r.getByText('Now')).toBeTruthy();
+    expect(r.getByTestId('focus-level').props.children).toBe('Level 2 of 3 · 3 rounds in · since 2 Oct');
+    expect(r.getByText('Your focus')).toBeTruthy();
+  });
+
+  test('no early read once the verdict has settled', () => {
+    const r = render(<FocusCard focus={focus} verdict={verdict({ early: false, roundsSince: 5 })} onEndFocus={jest.fn()} />);
+    expect(r.queryByTestId('focus-early')).toBeNull();
+  });
+
+  test('sg metrics read with their sign and unit', () => {
     const r = render(
       <FocusCard
-        focus={focus}
-        verdict={{ state: 'improving', roundsSince: 3, baseline: -1.8, current: -1.1, currentMetric: '-1.1 SG / round', delta: 0.7 }}
+        focus={{ ...focus, category: 'putting', bucket: null, metricKey: 'sg.putting' }}
+        verdict={verdict({ unit: 'sgPerRound', baseline: -1.4, current: -0.9 })}
         onEndFocus={jest.fn()}
       />,
     );
-    expect(r.getByText('6+ m putts')).toBeTruthy();
-    expect(r.getByText('Improving since you committed')).toBeTruthy();
-    expect(r.getByText('-1.8 SG / round → -1.1 SG / round')).toBeTruthy();
-    expect(r.getByText('Lag ladder')).toBeTruthy(); // bucket-matched drill
+    expect(r.getByText('-1.40 SG / round')).toBeTruthy();
+    expect(r.getByText('-0.90 SG / round')).toBeTruthy();
   });
+
+  test('worse reads in words and tone, flat and resolved too', () => {
+    const worse = render(<FocusCard focus={focus} verdict={verdict({ state: 'worse', current: 80 })} onEndFocus={jest.fn()} />);
+    expect(worse.getByText('Getting worse since you committed')).toBeTruthy();
+    const flat = render(<FocusCard focus={focus} verdict={verdict({ state: 'flat', current: 70 })} onEndFocus={jest.fn()} />);
+    expect(flat.getByText('Holding steady since you committed')).toBeTruthy();
+    const done = render(<FocusCard focus={focus} verdict={verdict({ state: 'resolved', current: null, early: false })} onEndFocus={jest.fn()} />);
+    expect(done.getByText('No longer flagged — nice work')).toBeTruthy();
+    expect(done.getByText('No reading yet for this metric.')).toBeTruthy();
+  });
+
+  test('improving at level 3 says it is ready to move on', () => {
+    const r = render(<FocusCard focus={focus} verdict={verdict({ level: 3, roundsSince: 5, early: false })} onEndFocus={jest.fn()} />);
+    expect(r.getByText('Ready to move on: end this focus and pick the next one.')).toBeTruthy();
+    const lower = render(<FocusCard focus={focus} verdict={verdict({ level: 2 })} onEndFocus={jest.fn()} />);
+    expect(lower.queryByText(/Ready to move on/)).toBeNull();
+  });
+
   test('shows the recalibration note when the focus was rebased', () => {
     const r = render(
       <FocusCard
         focus={{ ...focus, rebasedAt: '2026-10-16T08:00:00Z' }}
-        verdict={{ state: 'needs-more-rounds', roundsNeeded: 2 }}
+        verdict={{ state: 'needs-more-rounds', roundsNeeded: 2, roundsSince: 0, level: 1, unit: 'percent', baseline: 71, current: null, early: true }}
         onEndFocus={jest.fn()}
       />,
     );
     expect(r.getByText('Baselines recalibrated on 16 Oct — progress is measured from then.')).toBeTruthy();
   });
-  test('needs-more-rounds copy', () => {
+
+  test('needs-more-rounds copy, with no early read yet', () => {
     const r = render(
-      <FocusCard focus={focus} verdict={{ state: 'needs-more-rounds', roundsSince: 1, roundsNeeded: 1, baseline: -1.8, current: null, currentMetric: null }} onEndFocus={jest.fn()} />,
+      <FocusCard
+        focus={focus}
+        verdict={{ state: 'needs-more-rounds', roundsSince: 1, roundsNeeded: 1, level: 1, unit: 'percent', baseline: 71, current: null, early: true }}
+        onEndFocus={jest.fn()}
+      />,
     );
     expect(r.getByText('Play 1 more round for a verdict')).toBeTruthy();
+    expect(r.queryByTestId('focus-early')).toBeNull();
   });
-  test('end focus fires', () => {
+
+  test('end focus fires and is a 44 px target', () => {
     const onEnd = jest.fn();
     const r = render(<FocusCard focus={focus} verdict={null} onEndFocus={onEnd} />);
     fireEvent.press(r.getByLabelText('End focus'));
     expect(onEnd).toHaveBeenCalled();
+    expect(StyleSheet.flatten(r.getByLabelText('End focus').props.style).minHeight).toBeGreaterThanOrEqual(44);
   });
+
   test('null without focus', () => {
     expect(render(<FocusCard focus={null} verdict={null} onEndFocus={jest.fn()} />).toJSON()).toBeNull();
   });

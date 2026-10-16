@@ -1,11 +1,10 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import CoachHero from '../CoachHero';
 import CoachInsightRow from '../CoachInsightRow';
 import CoachBoard from '../CoachBoard';
-import PracticePlanCard from '../PracticePlanCard';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(() => new Promise(() => {})),
@@ -140,37 +139,25 @@ describe('Coach components', () => {
     expect(getByText('No coach insights yet. Play more rounds to build a clearer pattern.')).toBeTruthy();
   });
 
-  test('PracticePlanCard renders the three plan roles at the bottom summary level', () => {
-    const plan = [
-      {
-        id: 'a',
-        role: 'practiceFirst',
-        title: '6+ m putts',
-        instruction: 'Spend 15 minutes on distance control.',
-        reason: 'Putting is costing points.',
-      },
-      {
-        id: 'b',
-        role: 'secondaryFocus',
-        title: '100-150 m approaches',
-        instruction: 'Hit 10 focused approach shots.',
-        reason: 'Approach is below target.',
-      },
-      {
-        id: 'c',
-        role: 'onCourseCue',
-        title: 'Closing 3 holes',
-        instruction: 'Choose conservative targets late.',
-        reason: 'Closing holes are fading.',
-      },
-    ];
+  test('CoachBoard shows the weekly plan pill on rows the plan covers', () => {
+    const board = { nextGains: [{ ...insight, id: 'leak:approach', group: 'nextGain', area: 'approach', areaLabel: 'Approach', title: 'Approach' }] };
+    const { getByText } = render(wrap(
+      <CoachBoard board={board} weekPills={{ 'leak:approach': { kind: 'range', minutes: 35 } }} />,
+    ));
 
-    const { getByText } = render(wrap(<PracticePlanCard plan={plan} />));
+    expect(getByText('This week: Range · 35 min')).toBeTruthy();
+  });
 
-    expect(getByText('Practice Plan')).toBeTruthy();
-    expect(getByText('Practice first')).toBeTruthy();
-    expect(getByText('Secondary focus')).toBeTruthy();
-    expect(getByText('On-course cue')).toBeTruthy();
-    expect(getByText('Spend 15 minutes on distance control.')).toBeTruthy();
+  test('CoachBoard collapsible: folded behind More findings until pressed', () => {
+    const board = { nextGains: [{ ...insight, id: 'leak:approach', group: 'nextGain', title: 'Approach leak' }] };
+    const { getByTestId, queryByText, getByText } = render(wrap(<CoachBoard board={board} collapsible />));
+
+    expect(getByText('More findings')).toBeTruthy();
+    expect(getByText('Improve now 1')).toBeTruthy();
+    expect(getByTestId('more-findings').props.accessibilityState.expanded).toBe(false);
+    expect(queryByText('Approach leak')).toBeNull();
+    fireEvent.press(getByTestId('more-findings'));
+    expect(getByTestId('more-findings').props.accessibilityState.expanded).toBe(true);
+    expect(getByText('Approach leak')).toBeTruthy();
   });
 });

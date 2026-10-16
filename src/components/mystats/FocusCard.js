@@ -2,11 +2,14 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
-import { msgText, areaText, drillText, drillLocation } from './msg';
+import { renderMsg, metricValueText } from './msg';
 import { useT, formatDate } from '../../i18n';
+import { msg as makeMsg } from '../../store/statsMsg';
+import { metricLabel } from '../../store/coachCheck';
+import { EARLY_ROUNDS, MAX_LEVEL } from '../../store/coachFocus';
 import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
-import { drillsForInsight } from '../../store/coachDrills';
+import { GoldBadge } from './CoachBits';
 
 const VERDICT_COPY = {
   improving: { icon: 'trending-up', textKey: 'stats.my.focus.improving', tone: 'good' },
@@ -15,32 +18,47 @@ const VERDICT_COPY = {
   resolved: { icon: 'check-circle', textKey: 'stats.my.focus.resolved', tone: 'good' },
 };
 
-// The player's committed focus: what they promised to work on, whether the
-// numbers actually moved since, and the drill to keep working it.
-export default function FocusCard({ focus, verdict, onEndFocus }) {
+// The player's committed focus (v2 record): what they promised to work on and
+// whether its own metric moved since. Shown only with a focus; the diagnosis
+// card carries the chain and the plan card carries the drills.
+export default function FocusCard({ focus, verdict, onEndFocus, onInfo }) {
   const { theme } = useTheme();
   const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   if (!focus) return null;
 
-  const drill = drillsForInsight({ area: focus.area, title: focus.title })[0] ?? null;
-  const copy = verdict?.state === 'needs-more-rounds'
-    ? {
-      icon: 'clock',
-      text: t('stats.my.focus.needMore', { count: verdict.roundsNeeded }),
-      tone: 'neutral',
-    }
-    : VERDICT_COPY[verdict?.state] ?? null;
+  const state = verdict?.state;
+  const copy = state === 'needs-more-rounds'
+    ? { icon: 'clock', text: t('stats.my.focus.needMore', { count: verdict.roundsNeeded }), tone: 'neutral' }
+    : VERDICT_COPY[state] ?? null;
   const copyText = copy ? (copy.text ?? t(copy.textKey)) : null;
   const toneColor = copy?.tone === 'good' ? theme.scoreColor('good')
     : copy?.tone === 'bad' ? theme.destructive : theme.text.secondary;
 
+  const unit = verdict?.unit ?? null;
+  const before = unit && verdict?.baseline != null ? metricValueText(unit, verdict.baseline) : null;
+  const after = unit && verdict?.current != null ? metricValueText(unit, verdict.current) : null;
+  const showEarly = verdict && state !== 'needs-more-rounds' && state !== 'resolved' && verdict.early;
+  const ready = state === 'improving' && (verdict?.level ?? 1) >= MAX_LEVEL;
+  const area = renderMsg(makeMsg(`stats.my.coach.plan.area.${focus.category}`));
+  const kicker = focus.bucket
+    ? t('stats.my.coach.ui.kicker.bucket', { area, bucket: focus.bucket })
+    : t('stats.my.coach.ui.kicker', { area });
+  const title = focus.metricKey ? renderMsg(metricLabel(focus.metricKey)) : area;
+  const level = verdict?.level ?? 1;
+
   return (
-    <SectionCard title={t('stats.my.focus.title')}>
+    <SectionCard
+      title={t('stats.my.focus.title')}
+      infoKey="coachDiagnosis"
+      onInfo={onInfo}
+      right={<GoldBadge label={t('stats.my.coach.ui.badge.focus')} testID="focus-badge" />}
+      testID="focus-card"
+    >
       <View style={s.head}>
         <View style={s.copy}>
-          <Text style={s.area}>{areaText(focus)}</Text>
-          <Text style={s.title}>{msgText(focus.titleMsg, focus.title)}</Text>
+          <Text style={s.area}>{kicker}</Text>
+          <Text style={s.title}>{title}</Text>
         </View>
         <PressableScale
           onPress={onEndFocus}
@@ -58,22 +76,39 @@ export default function FocusCard({ focus, verdict, onEndFocus }) {
           <Text style={[s.verdictText, { color: toneColor }]}>{copyText}</Text>
         </View>
       ) : null}
-      {focus.rebasedAt ? (
-        <Text style={s.metricLine}>{t('stats.my.focus.rebased', { date: formatDate(focus.rebasedAt, 'day') })}</Text>
+      {showEarly ? (
+        <Text style={s.metricLine} testID="focus-early">
+          {t('stats.my.coach.ui.focus.early', {
+            rounds: t('stats.my.count.rounds', { count: verdict.roundsSince }),
+            settles: EARLY_ROUNDS,
+          })}
+        </Text>
       ) : null}
-      {verdict?.currentMetric && focus.metric ? (
-        <Text style={s.metricLine}>{`${msgText(focus.metricMsg, focus.metric)} → ${msgText(verdict.currentMetricMsg, verdict.currentMetric)}`}</Text>
-      ) : (
-        focus.metric ? <Text style={s.metricLine}>{t('stats.my.focus.committedAt', { metric: msgText(focus.metricMsg, focus.metric) })}</Text> : null
-      )}
-      {drill ? (
-        <View style={s.drillBlock}>
-          <View style={s.drillHead}>
-            <Text style={s.drillTitle}>{drillText(drill, 'title')}</Text>
-            <Text style={s.drillLocation}>{drillLocation(drill.location)}</Text>
+      {before != null ? (
+        <View style={s.ba} testID="focus-before-after">
+          <View style={s.baCell}>
+            <Text style={s.baValue}>{before}</Text>
+            <Text style={s.baLabel}>{t('stats.my.coach.ui.focus.before')}</Text>
           </View>
-          <Text style={s.drillInstruction}>{drillText(drill, 'instruction')}</Text>
-          <Text style={s.passTarget}>{t('stats.my.practice.pass', { target: drillText(drill, 'pass') })}</Text>
+          <Feather name="arrow-right" size={16} color={theme.text.muted} />
+          <View style={s.baCell}>
+            <Text style={s.baValue}>{after ?? '–'}</Text>
+            <Text style={s.baLabel}>{after != null ? t('stats.my.coach.ui.focus.now') : t('stats.my.coach.ui.focus.noData')}</Text>
+          </View>
+        </View>
+      ) : null}
+      <Text style={s.metricLine} testID="focus-level">
+        {t('stats.my.coach.ui.level.line', {
+          level,
+          rounds: t('stats.my.count.rounds', { count: verdict?.roundsSince ?? 0 }),
+          date: formatDate(focus.committedAt, 'day'),
+        })}
+      </Text>
+      {ready ? <Text style={s.ready}>{t('stats.my.coach.ui.focus.ready')}</Text> : null}
+      {focus.rebasedAt ? (
+        <View style={s.note}>
+          <Feather name="info" size={12} color={theme.text.muted} />
+          <Text style={s.noteText}>{t('stats.my.focus.rebased', { date: formatDate(focus.rebasedAt, 'day') })}</Text>
         </View>
       ) : null}
     </SectionCard>
@@ -87,29 +122,23 @@ function makeStyles(theme) {
     area: { ...theme.typography.overline, color: theme.text.muted },
     title: { ...theme.typography.heading, color: theme.text.primary },
     endBtn: {
-      paddingHorizontal: theme.spacing.sm,
-      paddingVertical: 5,
+      minHeight: 44,
+      justifyContent: 'center',
+      paddingHorizontal: theme.spacing.md,
       borderRadius: theme.radius.pill,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.border.default,
     },
     endBtnText: { ...theme.typography.caption, color: theme.text.secondary, fontWeight: '700' },
     verdictRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    verdictText: { ...theme.typography.subhead, fontWeight: '800' },
+    verdictText: { ...theme.typography.subhead, fontWeight: '800', flexShrink: 1 },
     metricLine: { ...theme.typography.caption, color: theme.text.secondary },
-    drillBlock: {
-      gap: 2,
-      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.card,
-      borderRadius: theme.radius.sm,
-      padding: theme.spacing.md,
-      borderWidth: 1,
-      borderColor: theme.border.subtle,
-      ...(theme.isDark ? {} : { shadowColor: '#00553c', shadowOpacity: 0.06, shadowOffset: { width: 0, height: 1 }, shadowRadius: 3, elevation: 1 }),
-    },
-    drillHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: theme.spacing.sm },
-    drillTitle: { ...theme.typography.body, color: theme.text.primary, fontWeight: '800' },
-    drillLocation: { ...theme.typography.tiny, color: theme.text.muted, textTransform: 'uppercase', fontWeight: '800' },
-    drillInstruction: { ...theme.typography.body, color: theme.text.primary },
-    passTarget: { ...theme.typography.caption, color: theme.info, fontWeight: '700' },
+    ba: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
+    baCell: { gap: 1 },
+    baValue: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 20, lineHeight: 24, color: theme.text.primary },
+    baLabel: { ...theme.typography.caption, color: theme.text.muted },
+    ready: { ...theme.typography.subhead, color: theme.scoreColor('good'), fontWeight: '800' },
+    note: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+    noteText: { ...theme.typography.caption, color: theme.text.secondary, flex: 1 },
   });
 }
