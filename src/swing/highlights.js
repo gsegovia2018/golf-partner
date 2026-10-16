@@ -253,10 +253,10 @@ export function highlightFor(check, ctx) {
     case 'shaft_through_steep': {
       const k = homeOf(check);
       const mine = landing(k);
-      if (!mine.length) return [];
-      const hit = mine[1].c;
       const plane = check.id === 'shaft_down_shallow' ? shaftPlane() : null;
-      return [...mine, ...text([hit[0], hit[1] - 0.03], signed(check)), ...(plane ? [plane] : []), ...ground()];
+      // without a clubhead there is no shaft line, but the references still draw
+      const value = mine.length ? text([mine[1].c[0], mine[1].c[1] - 0.03], signed(check)) : [];
+      return [...mine, ...value, ...(plane ? [plane] : []), ...ground()];
     }
     case 'top_direction': {
       const h = hands('top');
