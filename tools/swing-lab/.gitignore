@@ -3,3 +3,4 @@ out/
 .venv/
 *.task
 __pycache__/
+models/
