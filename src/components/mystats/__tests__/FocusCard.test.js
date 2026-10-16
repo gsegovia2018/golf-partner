@@ -56,7 +56,8 @@ describe('FocusCard (v2)', () => {
     expect(r.getByText('At commit')).toBeTruthy();
     expect(r.getByText('Now')).toBeTruthy();
     expect(r.getByTestId('focus-level').props.children).toBe('Level 2 of 3 · 3 rounds in · since 2 Oct');
-    expect(r.getByText('Your focus')).toBeTruthy();
+    expect(r.queryByTestId('focus-badge')).toBeNull();
+    expect(r.queryByText('Your focus')).toBeNull(); // the title is the only "Your Focus"
   });
 
   test('no early read once the verdict has settled', () => {
@@ -102,6 +103,16 @@ describe('FocusCard (v2)', () => {
       />,
     );
     expect(r.getByText('Baselines recalibrated on 16 Oct — progress is measured from then.')).toBeTruthy();
+  });
+
+  test('says so when a changed target handicap restarted the verdict', () => {
+    const verdictNow = { state: 'needs-more-rounds', roundsNeeded: 2, roundsSince: 4, level: 3, unit: 'percent', baseline: 71, current: null, early: true };
+    const rebased = { ...focus, rebasedAt: '2026-10-16T08:00:00Z' };
+    const r = render(<FocusCard focus={{ ...rebased, rebaseReason: { kind: 'target', from: 15, to: 0 } }} verdict={verdictNow} onEndFocus={jest.fn()} />);
+    expect(r.getByText("Target changed to scratch on 16 Oct: the verdict restarts from today's numbers.")).toBeTruthy();
+    expect(r.queryByText(/Baselines recalibrated/)).toBeNull();
+    const nine = render(<FocusCard focus={{ ...rebased, rebaseReason: { kind: 'target', from: 0, to: 9 } }} verdict={verdictNow} onEndFocus={jest.fn()} />);
+    expect(nine.getByText(/^Target changed to 9 on 16 Oct/)).toBeTruthy();
   });
 
   test('needs-more-rounds copy, with no early read yet', () => {

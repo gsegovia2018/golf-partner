@@ -543,7 +543,7 @@ export default function MyStatsScreen({ navigation, route }) {
   // The SG baseline tables changed since this focus was committed: re-anchor
   // its baselineImpact on today's numbers (the Focus card says so).
   useEffect(() => {
-    if (!coachFocus || !stats || !needsRebase(coachFocus)) return;
+    if (!coachFocus || !stats || !needsRebase(coachFocus, stats)) return;
     const next = rebaseFocus(coachFocus, stats, new Date().toISOString());
     setCoachFocus(next);
     saveFocus(user?.id, next).catch(() => {});

@@ -96,6 +96,7 @@ describe('makeFocusCommit', () => {
       baselineSe: leak.se,
       minChange: MIN_CHANGE.sgPerRound,
       baselineVersion: SG_BASELINE_VERSION,
+      targetHandicap: 15,
       committedAt: COMMITTED_AT,
       roundCountAtCommit: 6,
     });
@@ -288,6 +289,49 @@ describe('SG baseline recalibration (v2)', () => {
     const next = rebaseFocus(stale, makeStats({ roundCount: 12, rounds: [] }), '2026-10-16T08:00:00Z');
     expect(next.baselineValue).toBe(-1.8);
     expect(next.baselineVersion).toBe(SG_BASELINE_VERSION);
+  });
+});
+
+describe('target handicap change (v2)', () => {
+  const focus = makeFocusCommit(leak, baseStats, COMMITTED_AT);
+  const scratchStats = (over = {}) => ({ ...makeStats({ roundCount: 12, putting: -1.1, ...over }), targetHandicap: 0 });
+  const AT = '2026-10-16T08:00:00Z';
+
+  test('the commit stores the target the baseline was read against', () => {
+    expect(focus.targetHandicap).toBe(15);
+    expect(makeFocusCommit(leak, { ...baseStats, targetHandicap: undefined }, COMMITTED_AT).targetHandicap).toBeNull();
+  });
+
+  test('a different target needs a rebase; the same target, no stored target, or no current target do not', () => {
+    expect(needsRebase(focus, baseStats)).toBe(false);
+    expect(needsRebase(focus, scratchStats())).toBe(true);
+    const { targetHandicap, ...old } = focus; // eslint-disable-line no-unused-vars
+    expect(needsRebase(old, scratchStats())).toBe(false);
+    expect(needsRebase(focus, { ...baseStats, targetHandicap: null })).toBe(false);
+  });
+
+  test('never a verdict across targets: needs-more-rounds until the rebase lands', () => {
+    [-0.2, -5].forEach((putting) => {
+      expect(focusVerdict(focus, scratchStats({ putting })).state).toBe('needs-more-rounds');
+    });
+  });
+
+  test('rebase re-anchors on the new target, keeps the level and rounds in, and stamps the reason', () => {
+    const next = rebaseFocus(focus, scratchStats(), AT);
+    expect(next).toMatchObject({
+      targetHandicap: 0, baselineValue: -1.1, rebasedAt: AT, roundCountAtCommit: 6, roundCountAtBaseline: 12,
+      committedAt: COMMITTED_AT, rebaseReason: { kind: 'target', from: 15, to: 0 },
+    });
+    expect(needsRebase(next, scratchStats())).toBe(false);
+    const v = focusVerdict(next, { ...scratchStats({ roundCount: 13, putting: -0.5 }) });
+    expect(v).toMatchObject({ state: 'needs-more-rounds', roundsNeeded: 1, roundsSince: 7, level: 3 });
+    expect(focusVerdict(next, scratchStats({ roundCount: 14, putting: -0.8 }))).toMatchObject({ state: 'improving', baseline: -1.1 });
+  });
+
+  test('a baseline-version rebase later drops the target reason', () => {
+    const next = rebaseFocus(focus, scratchStats(), AT);
+    const stale = { ...next, baselineVersion: SG_BASELINE_VERSION - 1 };
+    expect(rebaseFocus(stale, scratchStats(), AT).rebaseReason).toBeUndefined();
   });
 });
 

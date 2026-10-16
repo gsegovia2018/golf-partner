@@ -8,7 +8,10 @@
 //   { v: 2, leakId, category, bucket, causeId, metricKey,
 //     baselineValue, baselineSample, baselineSe, minChange, baselineVersion,
 //     committedAt, roundCountAtCommit, swingId?,
-//     roundCountAtBaseline?, rebasedAt? }        ← only after an SG rebase
+//     targetHandicap?,                           ← the target the baseline was read against
+//     roundCountAtBaseline?, rebasedAt?,
+//     rebaseReason? }                            ← only after an SG rebase; { kind: 'target', from, to }
+//                                                  when the target handicap changed
 //
 // v1 records (the insight-based shape: insightId, area, title, metric, basis,
 // baselineImpact, baselineVersion, rebasedAt …) are not verdicted any more:
@@ -103,6 +106,7 @@ export function makeFocusCommit(chain, stats, committedAt) {
     baselineSe,
     minChange,
     baselineVersion: SG_BASELINE_VERSION,
+    targetHandicap: finite(stats?.targetHandicap),
     committedAt: committedAt ?? new Date().toISOString(),
     roundCountAtCommit: stats?.roundCount ?? 0,
     ...(wrapped && chain.swingId ? { swingId: chain.swingId } : {}),
@@ -124,22 +128,34 @@ export function isSgFocus(focus) {
   return isV2Focus(focus) && focus.metricKey.startsWith('sg.');
 }
 
-export function needsRebase(focus) {
-  return isSgFocus(focus) && (focus.baselineVersion ?? 1) !== SG_BASELINE_VERSION;
+// An SG baseline is read against the target handicap, so a changed target is
+// as stale as a changed table. Records without a stored target (written before
+// it was kept) count as matching.
+export function targetChanged(focus, stats) {
+  return isSgFocus(focus) && Number.isFinite(focus.targetHandicap)
+    && Number.isFinite(stats?.targetHandicap) && focus.targetHandicap !== stats.targetHandicap;
+}
+
+export function needsRebase(focus, stats) {
+  return isSgFocus(focus) && ((focus.baselineVersion ?? 1) !== SG_BASELINE_VERSION || targetChanged(focus, stats));
 }
 
 // Re-anchors a stale SG focus on today's reading of its metric (kept as-is
 // when the metric has no sample now). The commit — date, round count, level —
-// stays; only the verdict's window restarts at roundCountAtBaseline.
+// stays; only the verdict's window restarts at roundCountAtBaseline. A target
+// change is stamped as the reason ({ kind: 'target', from, to }).
 export function rebaseFocus(focus, stats, rebasedAt) {
   const reading = readMetric(focus.metricKey, stats);
   const fresh = reading && reading.value != null;
+  const { rebaseReason, ...rest } = focus; // eslint-disable-line no-unused-vars
+  const changed = targetChanged(focus, stats);
   return {
-    ...focus,
+    ...rest,
     baselineValue: fresh ? reading.value : focus.baselineValue,
     baselineSample: fresh ? reading.sample : focus.baselineSample,
     roundCountAtBaseline: stats?.roundCount ?? 0,
     baselineVersion: SG_BASELINE_VERSION,
+    ...(changed ? { targetHandicap: stats.targetHandicap, rebaseReason: { kind: 'target', from: focus.targetHandicap, to: stats.targetHandicap } } : {}),
     rebasedAt,
   };
 }
@@ -179,8 +195,8 @@ export function focusVerdict(focus, stats) {
   };
   const result = (state, extra) => ({ ...base, ...extra, state, level: focusLevel(roundsSince, state) });
 
-  // Never compare across SG baselines: until the rebase lands, stay neutral.
-  if (needsRebase(focus)) {
+  // Never compare across SG baselines or targets: until the rebase lands, stay neutral.
+  if (needsRebase(focus, stats)) {
     return result('needs-more-rounds', { roundsNeeded: MIN_VERDICT_ROUNDS });
   }
   if (judged < MIN_VERDICT_ROUNDS) {

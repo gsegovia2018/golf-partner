@@ -3,13 +3,12 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { renderMsg, metricValueText } from './msg';
-import { useT, formatDate } from '../../i18n';
+import { useT, formatDate, formatNumber } from '../../i18n';
 import { msg as makeMsg } from '../../store/statsMsg';
 import { metricLabel } from '../../store/coachCheck';
 import { EARLY_ROUNDS, MAX_LEVEL } from '../../store/coachFocus';
 import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
-import { GoldBadge } from './CoachBits';
 
 const VERDICT_COPY = {
   improving: { icon: 'trending-up', textKey: 'stats.my.focus.improving', tone: 'good' },
@@ -17,6 +16,8 @@ const VERDICT_COPY = {
   worse: { icon: 'trending-down', textKey: 'stats.my.focus.worse', tone: 'bad' },
   resolved: { icon: 'check-circle', textKey: 'stats.my.focus.resolved', tone: 'good' },
 };
+
+const targetText = (hcp, t) => (hcp === 0 ? t('stats.my.coach.ui.vs.scratch') : formatNumber(hcp));
 
 // The player's committed focus (v2 record): what they promised to work on and
 // whether its own metric moved since. Shown only with a focus; the diagnosis
@@ -52,7 +53,6 @@ export default function FocusCard({ focus, verdict, onEndFocus, onInfo }) {
       title={t('stats.my.focus.title')}
       infoKey="coachDiagnosis"
       onInfo={onInfo}
-      right={<GoldBadge label={t('stats.my.coach.ui.badge.focus')} testID="focus-badge" />}
       testID="focus-card"
     >
       <View style={s.head}>
@@ -108,7 +108,11 @@ export default function FocusCard({ focus, verdict, onEndFocus, onInfo }) {
       {focus.rebasedAt ? (
         <View style={s.note}>
           <Feather name="info" size={12} color={theme.text.muted} />
-          <Text style={s.noteText}>{t('stats.my.focus.rebased', { date: formatDate(focus.rebasedAt, 'day') })}</Text>
+          <Text style={s.noteText}>
+            {focus.rebaseReason?.kind === 'target'
+              ? t('stats.my.coach.ui.focus.targetChanged', { to: targetText(focus.rebaseReason.to, t), date: formatDate(focus.rebasedAt, 'day') })
+              : t('stats.my.focus.rebased', { date: formatDate(focus.rebasedAt, 'day') })}
+          </Text>
         </View>
       ) : null}
     </SectionCard>

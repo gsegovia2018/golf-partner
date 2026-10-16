@@ -237,6 +237,7 @@ export default {
   'stats.my.coach.ui.focus.before': 'Al fijarlo',
   'stats.my.coach.ui.focus.now': 'Ahora',
   'stats.my.coach.ui.focus.ready': 'Listo para avanzar: termina este objetivo y elige el siguiente.',
+  'stats.my.coach.ui.focus.targetChanged': 'Hándicap objetivo cambiado a {to} el {date}: el veredicto se reinicia con los números de hoy.',
   'stats.my.coach.ui.focus.noData': 'Todavía no hay lectura de esta métrica.',
   'stats.my.coach.ui.notice.v1Closed': 'Se cerró tu objetivo anterior; elige uno nuevo.',
   'stats.my.coach.ui.notice.dismiss': 'Descartar',
