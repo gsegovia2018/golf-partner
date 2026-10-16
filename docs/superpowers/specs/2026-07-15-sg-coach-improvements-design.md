@@ -236,3 +236,43 @@ is unchanged (expected 0). Clean holes now contribute a small positive vs
 a non-scratch target, matching every other category's semantics. The SG
 explainer's penalties sentence is updated accordingly. Reconciliation and
 coach routing consume the new values unchanged.
+
+## Amendment (2026-10-16): per-handicap baselines
+
+Plan: `docs/superpowers/plans/2026-10-16-sg-baselines-per-handicap.md`.
+
+Problem: the scratch/amateur two-table blend (`t = H/14` clamped to `[0, 2]`)
+gave identical baselines for every target at or above 28, and the tables were
+not self-consistent per handicap (miss cost barely moved with the target while
+the approach start moved a lot), so a typical golfer read as losing on approach
+and "gaining" in putting, short game and the reconciliation residual.
+
+Change:
+- `strokesGainedBaseline.js` holds per-handicap anchor tables (H = 0, 5, 10, 15,
+  20, 25, 30, 36, 54), interpolated linearly in H and extrapolated, never
+  clamped. Each value is defined by the exact formula the engine applies to the
+  logged buckets for a typical golfer of that handicap, so a typical golfer
+  scores about 0 in every category against their own target.
+- The off-the-tee benchmark is the target's typical tee shot (distance and lie
+  mix, lie `typicalDrive`), not a fairway-only drive.
+- Typical penalties per round are 0.5 / 0.9 / 1.3 / 1.7 / 2.1 / 2.6 / 3.1 / 3.7 /
+  5.5 (decision D2: scratch carries a 0.5/round allowance).
+- Reconciliation's expected score is par + the typical score of the target
+  (`typicalScoreVsPar`, decision D1 = A: scratch about +2, 15 about +18.4,
+  30 about +36.5), not par + handicap.
+- Committed SG coach focuses rebase on first load (`SG_BASELINE_VERSION`
+  2) and show a "baselines recalibrated" note (decision D3).
+- The target picker cap stays 36 (decision D4: out of scope).
+
+Generator workflow: edit `scripts/lib/sgBaselineModel.js` (sources cited there)
+-> `node scripts/sgBaselineTables.mjs` -> paste the literal into
+`strokesGainedBaseline.js` -> `scripts/__tests__/sgBaselineModel.test.js` fails
+if the committed literal drifts from the model. Bump `SG_BASELINE_VERSION` when
+numbers move.
+
+Follow-ups (not in this change): (a) infer extra shots after a missed approach
+from `strokes - putts - known shots` and charge them around the green;
+(b) a miss-severity chip in the approach finish grid; (c) a `200+` bucket that
+models going for it from 230 m once the engine sees where the miss ended;
+(d) engine-visible pricing of sand approach lies; (e) replace the
+hand-extrapolated 30/36/54 anchors with real rows once enough rounds are logged.

@@ -581,10 +581,10 @@ describe('sgAroundGreen', () => {
       [{ par: 4, strokes: 5 }],
       [{ putts: 1, sandShots: 1, firstPuttBucket: '0-1', recoveryOutcome: 'sand-save' }],
     );
-    // start: sand @18.3m=2.55, @27.4m=2.70; t=(20-18.3)/(27.4-18.3)≈0.187 → 2.578
-    // end: green @0.5m clamp → 1.05. SG = 2.578 - 1.05 - 1 ≈ 0.53
+    // start: sand @20m (scratch) = 2.65
+    // end: green @0.5m clamp → 1.05. SG = 2.65 - 1.05 - 1 = 0.60
     const r = sgAroundGreen(round, 'me');
-    expect(r.perHole[0]).toBeCloseTo(0.53, 1);
+    expect(r.perHole[0]).toBeCloseTo(0.60, 1);
   });
   test('does not infer a recovery shot when explicit approach result reached the green', () => {
     const round = makeRound(
@@ -602,14 +602,14 @@ describe('sgAroundGreen', () => {
   test('a non-sand greenside recovery starts from the greenside node', () => {
     // Chaining check: the around-green START must equal the approach-miss END,
     // so re-anchoring the missed-green node to a realistic greenside value
-    // flows through here too. greenside@20m (scratch) ≈ 2.41; end green@2.5m
-    // ≈ 1.61; one recovery shot → SG = 2.41 − 1.61 − 1 ≈ −0.20. The old
+    // flows through here too. greenside@20m (scratch) = 2.50; end green@2.5m
+    // ≈ 1.506; one recovery shot → SG = 2.50 − 1.506 − 1 ≈ −0.01. The old
     // recovery node (~2.85) made this a falsely positive ≈ +0.24.
     const round = makeRound(
       [{ par: 4, strokes: 5 }],
       [{ putts: 2, sandShots: 0, firstPuttBucket: '2-3' }],
     );
-    expect(sgAroundGreen(round, 'me').perHole[0]).toBeCloseTo(-0.20, 1);
+    expect(sgAroundGreen(round, 'me').perHole[0]).toBeCloseTo(-0.01, 1);
   });
   test('charges every recorded sand shot on missed-GIR sand recoveries', () => {
     const oneSand = makeRound(
@@ -633,7 +633,8 @@ describe('sgApproach', () => {
       [{ putts: 2, approachBucket: '100-150', firstPuttBucket: '3-6' }],
     );
     const r = sgApproach(round, 'me');
-    expect(r.perHole[0]).toBeCloseTo(0.05, 1);
+    // tee@125 (scratch) = 3.15, green@4.5m = 1.812 → 3.15 − 1.812 − 1 ≈ 0.34
+    expect(r.perHole[0]).toBeCloseTo(0.34, 1);
     expect(r.sampleHoles).toBe(1);
   });
   test('par-3 does not use stored course distance without a logged bucket', () => {
@@ -648,11 +649,10 @@ describe('sgApproach', () => {
       [{ par: 4, strokes: 4 }],
       [{ putts: 2, approachBucket: '100-150', firstPuttBucket: '3-6' }],
     );
-    // fairway@125: interp between 91.4(2.80) and 137.2(2.92): t≈0.734 → 2.888
-    // green@4.5m: interp between 3.05(1.70) and 4.57(1.83): t≈0.954 → 1.824
-    // SG = 2.888 - 1.824 - 1 ≈ 0.064
+    // fairway@125 (scratch) = 3.13; green@4.5m = 1.812
+    // SG = 3.13 - 1.812 - 1 ≈ 0.32
     const r = sgApproach(round, 'me');
-    expect(r.perHole[0]).toBeCloseTo(0.06, 1);
+    expect(r.perHole[0]).toBeCloseTo(0.32, 1);
   });
   test('explicit green result can score a non-GIR recovery-hole approach', () => {
     const round = makeRound(
@@ -665,8 +665,8 @@ describe('sgApproach', () => {
       }],
     );
     const r = sgApproach(round, 'me');
-    // fairway@75m ≈ 2.71, green@4.5m ≈ 1.82. SG = 2.71 - 1.82 - 1 ≈ -0.11
-    expect(r.perHole[0]).toBeCloseTo(-0.11, 1);
+    // fairway@75m = 2.97, green@4.5m ≈ 1.812. SG = 2.97 - 1.812 - 1 ≈ +0.16
+    expect(r.perHole[0]).toBeCloseTo(0.16, 1);
   });
   test('explicit missed result does not use first putt as the approach end state', () => {
     const round = makeRound(
@@ -683,14 +683,14 @@ describe('sgApproach', () => {
   });
   test('a missed green lands on the greenside node, not a recovery-from-trouble node', () => {
     // A routine missed green must NOT be scored as if the player is now in a
-    // recovery lie (trees). fairway@125 (scratch) ≈ 2.888; greenside@20m
-    // (scratch) ≈ 2.41; SG = 2.888 − 2.41 − 1 ≈ −0.52. The old recovery node
+    // recovery lie (trees). fairway@125 (scratch) = 3.13; greenside@20m
+    // (scratch) = 2.50; SG = 3.13 − 2.50 − 1 ≈ −0.37. The old recovery node
     // (~2.85) produced ≈ −0.96, over-penalising every miss by ~0.45 strokes.
     const round = makeRound(
       [{ par: 4, strokes: 5 }],
       [{ putts: 2, sandShots: 0, approachBucket: '100-150', approachResult: 'miss', firstPuttBucket: '2-3' }],
     );
-    expect(sgApproach(round, 'me').perHole[0]).toBeCloseTo(-0.52, 1);
+    expect(sgApproach(round, 'me').perHole[0]).toBeCloseTo(-0.37, 1);
   });
   test('a greenside-bunker miss is scored from the sand node — harsher than a grass miss', () => {
     const grass = makeRound(
@@ -912,9 +912,9 @@ describe('sgPutting', () => {
       [{ par: 4, strokes: 4 }],
       [{ putts: 2, firstPuttBucket: '2-3' }],
     );
-    // midpoint 2.5m: interp between 1.83(1.50) and 3.05(1.70): t≈0.548 → 1.61 → SG = 1.61 − 2 = −0.39
+    // midpoint 2.5m (scratch) ≈ 1.506 → SG = 1.506 − 2 = −0.494
     const r = sgPutting(round, 'me');
-    expect(r.perHole[0]).toBeCloseTo(-0.39, 1);
+    expect(r.perHole[0]).toBeCloseTo(-0.49, 1);
     expect(r.sampleHoles).toBe(1);
   });
 });
@@ -929,8 +929,9 @@ describe('sgPenalties', () => {
 
     const r = sgPenalties(round, 'me');
 
-    expect(r.perHole[0]).toBe(-3);
-    expect(r.total).toBe(-3);
+    // scratch allowance 0.5/round → 0.5/18 per hole
+    expect(r.perHole[0]).toBeCloseTo(-3 + 0.5 / 18, 3);
+    expect(r.total).toBeCloseTo(-3 + 0.5 / 18, 3);
     expect(r.sampleHoles).toBe(1);
   });
 
@@ -951,8 +952,10 @@ describe('sgPenalties', () => {
 
     const r = sgPenalties(round, 'me');
 
-    expect(r.perHole).toEqual([-1, 0, null]);
-    expect(r.total).toBe(-1);
+    expect(r.perHole[0]).toBeCloseTo(0.5 / 18 - 1, 10);
+    expect(r.perHole[1]).toBeCloseTo(0.5 / 18, 10);
+    expect(r.perHole[2]).toBeNull();
+    expect(r.total).toBeCloseTo(-0.944, 3);
     expect(r.sampleHoles).toBe(2);
   });
 });
@@ -997,7 +1000,7 @@ describe('sgTotal', () => {
     }, 'me');
     const withPenalty = sgTotal(round, 'me');
 
-    expect(withPenalty.byCategory.penalties).toBe(-1);
+    expect(withPenalty.byCategory.penalties).toBeCloseTo(0.5 / 18 - 1, 10);
     expect(withPenalty.total).toBeCloseTo(withoutPenalty.total - 1, 5);
   });
 });
@@ -1012,7 +1015,7 @@ describe('sgTotal with offTheTee', () => {
       }],
     );
     const r = sgTotal(round, 'me');
-    expect(r.byCategory.offTheTee).toBeCloseTo(-0.32, 2);
+    expect(r.byCategory.offTheTee).toBeCloseTo(-0.10, 2);
     expect(r.sampleHolesByCategory.offTheTee).toBe(1);
     const sum = r.byCategory.offTheTee + r.byCategory.approach
       + r.byCategory.aroundGreen + r.byCategory.putting + r.byCategory.penalties;
@@ -1032,11 +1035,11 @@ describe('sgSeason with offTheTee', () => {
 
   test('per-category average, roundsByCategory, and perRound.byCategory', () => {
     const season = sgSeason([round], 'me');
-    expect(season.byCategory.offTheTee).toBeCloseTo(18 * -0.0131, 1);
+    expect(season.byCategory.offTheTee).toBeCloseTo(18 * 0.095, 1);
     expect(season.roundsByCategory).toEqual({
       offTheTee: 1, approach: 1, aroundGreen: 0, putting: 1, penalties: 1,
     });
-    expect(season.perRound[0].byCategory.offTheTee).toBeCloseTo(18 * -0.0131, 1);
+    expect(season.perRound[0].byCategory.offTheTee).toBeCloseTo(18 * 0.095, 1);
     expect(season.perRound[0].byCategory.putting).toBeDefined();
   });
   test('legacy rounds without drive buckets leave offTheTee unsampled', () => {
@@ -1193,7 +1196,8 @@ describe('sgSeason', () => {
       putts: 2, firstPuttBucket: '3-6', sandShots: 0,
     }]));
     const mkTracked = (details) => ({ holes, scores, shotDetails: { me: details } });
-    // 1 penalty across 10 tracked rounds → −0.1/round, not −1.0.
+    // 1 penalty across 10 tracked rounds → −0.1/round, not −1.0; the scratch
+    // allowance (0.5/round) is added on top.
     const rounds = [
       mkTracked({ ...clean, 1: { ...clean[1], teePenalties: 1 } }),
       ...Array.from({ length: 9 }, () => mkTracked(clean)),
@@ -1201,7 +1205,7 @@ describe('sgSeason', () => {
 
     const r = sgSeason(rounds, 'me');
 
-    expect(r.byCategory.penalties).toBeCloseTo(-0.1, 5);
+    expect(r.byCategory.penalties).toBeCloseTo(0.5 - 0.1, 5);
   });
   test('aggregates across rounds when enough sample holes exist', () => {
     const mkRound = () => ({
@@ -1318,13 +1322,14 @@ describe('sgReconciliation', () => {
     putts: 2, approachBucket: '100-150', approachResult: 'green', firstPuttBucket: '3-6',
   };
 
-  test('expected = par + hcp·(holes/18); residual makes categories sum exactly', () => {
+  test('expected = par + typical score of the target·(holes/18); residual makes categories sum exactly', () => {
     const round = { ...makeRound([{ par: 4, strokes: 5 }], [{ ...detail }]), isComplete: true };
     const r = sgReconciliation([round], 'me', 0);
     expect(r.rounds).toBe(1);
-    expect(r.perRound[0].expected).toBeCloseTo(4, 10);
+    // scratch typical score = par + 2.0 over 18 holes → 1 hole of 18 = 4 + 2.0/18
+    expect(r.perRound[0].expected).toBeCloseTo(4 + 2.0 / 18, 10);
     expect(r.perRound[0].actual).toBe(5);
-    expect(r.perRound[0].gap).toBeCloseTo(-1, 10);
+    expect(r.perRound[0].gap).toBeCloseTo(4 + 2.0 / 18 - 5, 10);
     const catSum = Object.values(r.perRound[0].byCategory).reduce((a, x) => a + x, 0);
     expect(r.perRound[0].residual).toBeCloseTo(r.perRound[0].gap - catSum, 10);
     expect(r.gapAvg).toBeCloseTo(
@@ -1334,9 +1339,9 @@ describe('sgReconciliation', () => {
   test('target handicap scales with holes played', () => {
     const round = { ...makeRound([{ par: 4, strokes: 4 }], [{ ...detail }]), isComplete: true };
     const r = sgReconciliation([round], 'me', 18);
-    // 1 hole of 18 → expected = 4 + 18·(1/18) = 5
-    expect(r.perRound[0].expected).toBeCloseTo(5, 10);
-    expect(r.perRound[0].gap).toBeCloseTo(1, 10);
+    // 1 hole of 18 → expected = 4 + typicalScoreVsPar(18)·(1/18); typical(18) = 18.4 + 0.6·4.8 = 21.28
+    expect(r.perRound[0].expected).toBeCloseTo(4 + 21.28 / 18, 10);
+    expect(r.perRound[0].gap).toBeCloseTo(4 + 21.28 / 18 - 4, 10);
   });
   test('skips incomplete rounds and rounds without any SG sample', () => {
     const incomplete = { ...makeRound([{ par: 4, strokes: 5 }], [{ ...detail }]), isComplete: false };
@@ -1548,15 +1553,15 @@ describe('puttingTargetGaps', () => {
     expect(r.buckets['3-6']).toMatchObject({
       attempts: 12,
       avgPutts: 2,
-      expectedPutts: 1.95,
-      sgPerPutt: -0.05,
+      expectedPutts: 1.9,
+      sgPerPutt: -0.1,
       threePuttRate: 0,
     });
     expect(r.buckets['6+']).toMatchObject({
       attempts: 6,
       avgPutts: 3,
-      expectedPutts: 2.19,
-      sgPerPutt: -0.81,
+      expectedPutts: 2.11,
+      sgPerPutt: -0.89,
       threePuttRate: 100,
     });
   });
@@ -1582,7 +1587,7 @@ describe('approachTargetGaps', () => {
 
     expect(r.buckets['100-150']).toMatchObject({
       holes: 1,
-      avgSg: 0.05,
+      avgSg: 0.34,
       greenRate: 100,
     });
   });
@@ -1608,15 +1613,15 @@ describe('approachTargetGaps', () => {
     expect(r.hasData).toBe(true);
     expect(r.buckets['100-150']).toMatchObject({
       holes: 6,
-      avgSg: 0.31,
+      avgSg: 0.62,
       girRate: 100,
     });
     // Missing the green from 200+ but advancing to a greenside lie is a good
-    // outcome for a 14-hcp (baseline ~4.11 from 230m): 4.11 − 2.69 − 1 ≈ +0.43.
+    // roughly par for a 14-hcp (baseline ~3.72 from 230m): 3.718 − 2.734 − 1 ≈ −0.02.
     // (Was −0.09 when a miss was scored as a recovery-from-trouble node.)
     expect(r.buckets['200+']).toMatchObject({
       holes: 3,
-      avgSg: 0.43,
+      avgSg: -0.02,
       greenRate: 0,
     });
   });
@@ -1648,7 +1653,7 @@ describe('approachTargetGaps', () => {
 
     expect(r.buckets['50-100']).toMatchObject({
       holes: 1,
-      avgSg: -0.11,
+      avgSg: 0.16,
       greenRate: 100,
     });
   });
@@ -2596,55 +2601,56 @@ describe('driveLieBreakdown', () => {
 });
 
 describe('sgOffTheTee', () => {
-  // Scratch benchmark on a par 4: E(fairway, 340-230=110) = 2.84873
-  test('fairway drive slightly shorter than scratch benchmark ≈ 0', () => {
+  // Scratch benchmark on a par 4: E(typicalDrive, 340-230=110) = 3.193
+  // (the scratch tee-shot mix: fairway / rough / sand / trouble)
+  test('a 225 m fairway drive beats the typical scratch tee shot', () => {
     const round = makeRound(
       [{ par: 4, strokes: 4 }],
       [{ drive: 'fairway', driveDistBucket: '210-240' }],
     );
-    // actual: E(fairway, 340-225=115) = 2.86183 → 2.84873 - 2.86183
+    // actual: E(fairway, 340-225=115) = 3.098 → 3.193 - 3.098
     const r = sgOffTheTee(round, 'me');
-    expect(r.perHole[0]).toBeCloseTo(-0.01, 2);
+    expect(r.perHole[0]).toBeCloseTo(0.095, 2);
     expect(r.sampleHoles).toBe(1);
   });
-  test('rough drive at 180-210 costs about a third of a stroke vs scratch', () => {
+  test('rough drive at 180-210 costs a tenth of a stroke vs the typical scratch tee shot', () => {
     const round = makeRound(
       [{ par: 4, strokes: 5 }],
       [{ drive: 'left', driveLie: 'rough', driveDistBucket: '180-210' }],
     );
-    // actual: E(rough, 340-195=145) = 3.16827 → 2.84873 - 3.16827
-    expect(sgOffTheTee(round, 'me').perHole[0]).toBeCloseTo(-0.32, 2);
+    // actual: E(rough, 340-195=145) = 3.292 → 3.193 - 3.292
+    expect(sgOffTheTee(round, 'me').perHole[0]).toBeCloseTo(-0.099, 2);
   });
   test('trouble maps to the recovery table', () => {
     const round = makeRound(
       [{ par: 4, strokes: 6 }],
       [{ drive: 'right', driveLie: 'trouble', driveDistBucket: '150-180' }],
     );
-    // actual: E(recovery, 340-165=175) = 3.53085 → 2.84873 - 3.53085
-    expect(sgOffTheTee(round, 'me').perHole[0]).toBeCloseTo(-0.68, 2);
+    // actual: E(recovery, 340-165=175) = 4.179 → 3.193 - 4.179
+    expect(sgOffTheTee(round, 'me').perHole[0]).toBeCloseTo(-0.986, 2);
   });
   test('par 5 uses the 470 m anchor', () => {
     const round = makeRound(
       [{ par: 5, strokes: 5 }],
       [{ drive: 'fairway', driveDistBucket: '240+' }],
     );
-    // bench: E(fairway, 470-230=240) = 3.78481; actual: E(fairway, 470-255=215) = 3.58692
-    expect(sgOffTheTee(round, 'me').perHole[0]).toBeCloseTo(0.20, 2);
+    // bench: E(typicalDrive, 470-230=240) = 3.593; actual: E(fairway, 470-255=215) = 3.365
+    expect(sgOffTheTee(round, 'me').perHole[0]).toBeCloseTo(0.228, 2);
   });
   test('same drive is positive against a 14-handicap benchmark', () => {
     const round = makeRound(
       [{ par: 4, strokes: 4 }],
       [{ drive: 'fairway', driveDistBucket: '210-240' }],
     );
-    // bench(14): E_blend(fairway, 340-200=140) = 3.34328; actual: E_blend(fairway, 115) = 3.21336
-    expect(sgOffTheTee(round, 'me', 14).perHole[0]).toBeCloseTo(0.13, 2);
+    // bench(14): E14(typicalDrive, 340-206.6=133.4 ≈ 135) = 3.659; actual: E14(fairway, 115) = 3.480
+    expect(sgOffTheTee(round, 'me', 14).perHole[0]).toBeCloseTo(0.176, 2);
   });
   test('derived rough lie from a miss direction without explicit driveLie', () => {
     const round = makeRound(
       [{ par: 4, strokes: 5 }],
       [{ drive: 'left', driveDistBucket: '180-210' }],
     );
-    expect(sgOffTheTee(round, 'me').perHole[0]).toBeCloseTo(-0.32, 2);
+    expect(sgOffTheTee(round, 'me').perHole[0]).toBeCloseTo(-0.099, 2);
   });
   test('null on par 3s, legacy holes without a distance bucket, and untracked holes', () => {
     const round = makeRound(
@@ -2665,24 +2671,24 @@ describe('sgOffTheTee', () => {
 describe('sgApproach with approachLie', () => {
   const holes = [{ par: 4, strokes: 4 }];
   const base = { putts: 2, approachBucket: '100-150', approachResult: 'green', firstPuttBucket: '3-6' };
-  // end state for all three: E(green, 4.5) = 1.82401
+  // end state for all three: E(green, 4.5) = 1.812
 
   test('null approachLie behaves exactly like fairway (legacy)', () => {
     const nullLie = sgApproach(makeRound(holes, [{ ...base }]), 'me');
     const fairway = sgApproach(makeRound(holes, [{ ...base, approachLie: 'fairway' }]), 'me');
     expect(nullLie.perHole[0]).toBeCloseTo(fairway.perHole[0], 10);
-    // E(fairway, 125) = 2.88803 → 2.88803 - 1.82401 - 1
-    expect(nullLie.perHole[0]).toBeCloseTo(0.06, 2);
+    // E(fairway, 125) = 3.13 → 3.13 - 1.812 - 1
+    expect(nullLie.perHole[0]).toBeCloseTo(0.32, 2);
   });
   test('rough start lie raises the expected strokes, so the same shot gains more', () => {
     const r = sgApproach(makeRound(holes, [{ ...base, approachLie: 'rough' }]), 'me');
-    // E(rough, 125) = 3.06803 → 3.06803 - 1.82401 - 1
-    expect(r.perHole[0]).toBeCloseTo(0.24, 2);
+    // E(rough, 125) = 3.26 → 3.26 - 1.812 - 1
+    expect(r.perHole[0]).toBeCloseTo(0.45, 2);
   });
   test('sand start lie uses the sand table (clamped at its 91.4 m endpoint)', () => {
     const r = sgApproach(makeRound(holes, [{ ...base, approachLie: 'sand' }]), 'me');
-    // E(sand, 125) clamps to 3.25 → 3.25 - 1.82401 - 1
-    expect(r.perHole[0]).toBeCloseTo(0.43, 2);
+    // E(sand, 125) clamps to its 91.4 m row = 3.32 → 3.32 - 1.812 - 1
+    expect(r.perHole[0]).toBeCloseTo(0.51, 2);
   });
   test('par 3 ignores approachLie — start is always the tee', () => {
     const p3 = [{ par: 3, strokes: 3 }];
@@ -2697,11 +2703,11 @@ describe('sgApproach with approachLie', () => {
   });
   test('explicit approachLie beats the drive-derived default', () => {
     const r = sgApproach(makeRound(holes, [{ ...base, drive: 'left', approachLie: 'fairway' }]), 'me');
-    expect(r.perHole[0]).toBeCloseTo(0.06, 2);
+    expect(r.perHole[0]).toBeCloseTo(0.32, 2);
   });
   test('a drive in trouble leaves the approach default at fairway (punch-out first)', () => {
     const r = sgApproach(makeRound(holes, [{ ...base, drive: 'left', driveLie: 'trouble' }]), 'me');
-    expect(r.perHole[0]).toBeCloseTo(0.06, 2);
+    expect(r.perHole[0]).toBeCloseTo(0.32, 2);
   });
   test('par 5 keeps the fairway default even after a missed drive', () => {
     const p5 = [{ par: 5, strokes: 5 }];
@@ -2716,14 +2722,14 @@ describe('sgPenalties vs target handicap', () => {
     Array.from({ length: 18 }, () => ({ par: 4, strokes: 4 })),
     Array.from({ length: 18 }, () => ({ putts: 2 })),
   );
-  test('scratch target: identical to raw count (expected 0)', () => {
+  test('scratch target: the 0.5/round scratch allowance on a clean round', () => {
     const r = sgPenalties(clean18, 'me');
-    expect(r.total).toBe(0);
+    expect(r.total).toBeCloseTo(0.5, 10);
     expect(r.sampleHoles).toBe(18);
   });
   test('a clean 18-hole round gains the full target allowance', () => {
-    expect(sgPenalties(clean18, 'me', 14).total).toBeCloseTo(1.0, 10);
-    expect(sgPenalties(clean18, 'me', 25).total).toBeCloseTo(25 / 14, 10);
+    expect(sgPenalties(clean18, 'me', 14).total).toBeCloseTo(1.62, 10);
+    expect(sgPenalties(clean18, 'me', 25).total).toBeCloseTo(2.6, 10);
   });
   test('per-hole: allowance minus actual penalties', () => {
     const round = makeRound(
@@ -2731,8 +2737,8 @@ describe('sgPenalties vs target handicap', () => {
       [{ putts: 2, teePenalties: 2 }, { putts: 2 }],
     );
     const r = sgPenalties(round, 'me', 14);
-    expect(r.perHole[0]).toBeCloseTo(1 / 18 - 2, 10);
-    expect(r.perHole[1]).toBeCloseTo(1 / 18, 10);
+    expect(r.perHole[0]).toBeCloseTo(1.62 / 18 - 2, 10);
+    expect(r.perHole[1]).toBeCloseTo(1.62 / 18, 10);
   });
   test('untracked holes stay null', () => {
     const round = makeRound([{ par: 4, strokes: 4 }], []);
@@ -2741,8 +2747,8 @@ describe('sgPenalties vs target handicap', () => {
   });
   test('sgTotal threads the target into penalties', () => {
     const withPen = makeRound([{ par: 4, strokes: 6 }], [{ putts: 2, teePenalties: 1 }]);
-    expect(sgTotal(withPen, 'me', 14).byCategory.penalties).toBeCloseTo(1 / 18 - 1, 10);
-    expect(sgTotal(withPen, 'me', 0).byCategory.penalties).toBe(-1);
+    expect(sgTotal(withPen, 'me', 14).byCategory.penalties).toBeCloseTo(1.62 / 18 - 1, 10);
+    expect(sgTotal(withPen, 'me', 0).byCategory.penalties).toBeCloseTo(0.5 / 18 - 1, 10);
   });
 });
 
@@ -2754,9 +2760,9 @@ describe('approachTargetGaps you-vs-target strokes', () => {
     );
     const r = approachTargetGaps([round], 'me', 0);
     const b = r.buckets['100-150'];
-    // start = E(fairway, 125) = 2.88803; sg = +0.064 → you = 2.824
-    expect(b.targetStrokes).toBeCloseTo(2.89, 2);
-    expect(b.yourStrokes).toBeCloseTo(2.82, 2);
+    // start = E(fairway, 125) = 3.13; sg = +0.32 → you = 2.81
+    expect(b.targetStrokes).toBeCloseTo(3.13, 2);
+    expect(b.yourStrokes).toBeCloseTo(2.81, 2);
     expect(b.yourStrokes).toBeCloseTo(b.targetStrokes - b.avgSg, 1);
   });
   test('empty buckets keep null strokes fields', () => {
