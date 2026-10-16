@@ -921,6 +921,7 @@ describe('computeMyStats targetHandicap', () => {
       completed: true,
       playerId: 'me',
       player: { id: 'me', name: 'Me' },
+      isComplete: true,
       round: {
         holes: Array.from({ length: 18 }, (_, i) => ({
           number: i + 1, par: 4, strokeIndex: i + 1, distance: 400,
@@ -1176,6 +1177,7 @@ describe('computeMyStats', () => {
       tournamentName: 'T',
       tournamentDate: `2026-05-${10 + i}`,
       completed: true,
+      isComplete: true,
     };
   }
 
@@ -1776,6 +1778,62 @@ describe('computeMyStats strokesGained extensions', () => {
     const rec = stats.strokesGained.reconciliation;
     const catSum = Object.values(rec.byCategoryAvg).reduce((a, x) => a + x, 0);
     expect(rec.gapAvg).toBeCloseTo(catSum + rec.residualAvg, 10);
+  });
+});
+
+// puttingRound cut down to the first `holesPlayed` holes of a `layout`-hole
+// round, flagged the way collectMyRounds flags it (complete only when every
+// hole of the layout was scored).
+function puttingRoundCut(putts, { layout = 18, holesPlayed = 18 } = {}) {
+  const base = puttingRound(putts);
+  const holes = base.round.holes.slice(0, layout);
+  const played = new Set(holes.slice(0, holesPlayed).map((h) => h.number));
+  const keep = (obj) => Object.fromEntries(Object.entries(obj).filter(([n]) => played.has(Number(n))));
+  return {
+    ...base,
+    round: {
+      ...base.round,
+      holes,
+      scores: { p1: keep(base.round.scores.p1) },
+      shotDetails: { p1: keep(base.round.shotDetails.p1) },
+    },
+    isComplete: holesPlayed === layout,
+    holesPlayed,
+  };
+}
+
+describe('computeMyStats round-total SG excludes partial rounds', () => {
+  const complete = () => [puttingRound(2), puttingRound(2), puttingRound(2), puttingRound(1)];
+
+  test('an unfinished 18-hole round contributes nothing to per-round SG', () => {
+    const baseline = computeMyStats(complete(), { n: 1, targetHandicap: 0 }).strokesGained;
+    const withPartial = computeMyStats(
+      [...complete(), puttingRoundCut(1, { holesPlayed: 11 })],
+      { n: 1, targetHandicap: 0 },
+    ).strokesGained;
+    expect(withPartial.perRound).toHaveLength(4);
+    expect(withPartial.perRound).toEqual(baseline.perRound);
+    expect(withPartial.sampleHoles).toBe(baseline.sampleHoles);
+    expect(withPartial.total).toBeCloseTo(baseline.total, 10);
+  });
+
+  test('an unfinished 18-hole round still counts in per-shot putting analysis', () => {
+    const stats = computeMyStats(
+      [puttingRound(2), puttingRoundCut(1, { holesPlayed: 11 })],
+      { n: 1, targetHandicap: 0 },
+    );
+    // 18 holes from the complete round + 11 putted holes from the unfinished one.
+    expect(stats.puttingTarget.buckets['2-3'].attempts).toBe(29);
+  });
+
+  test('a complete nine-hole round is still blanked from per-round SG', () => {
+    const baseline = computeMyStats(complete(), { n: 1, targetHandicap: 0 }).strokesGained;
+    const withNine = computeMyStats(
+      [...complete(), puttingRoundCut(1, { layout: 9 })],
+      { n: 1, targetHandicap: 0 },
+    );
+    expect(withNine.strokesGained.perRound).toEqual(baseline.perRound);
+    expect(withNine.puttingTarget.buckets['2-3'].attempts).toBe(18 * 4 + 9);
   });
 });
 
