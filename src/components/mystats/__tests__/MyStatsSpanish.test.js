@@ -4,7 +4,9 @@ import { ThemeProvider } from '../../../theme/ThemeContext';
 import { setLanguagePref, t } from '../../../i18n';
 import CareerMilestonesCard from '../CareerMilestonesCard';
 import CoachHero from '../CoachHero';
-import PracticePlanCard from '../PracticePlanCard';
+import CoachTab from '../tabs/CoachTab';
+import DiagnosisCard from '../DiagnosisCard';
+import { onePutting, tieStats, teeLeft, week, driverSwing, focusRecord, verdictOf, approachShort } from './coachFixtures';
 import { buildChapterVM, calloutSub, fmtDelta } from '../reportCardView';
 import { renderMsg } from '../msg';
 import { buildCoachInsights } from '../../../store/coachInsights';
@@ -41,37 +43,65 @@ describe('My Stats components in Spanish', () => {
   });
 
   test('CoachHero renders store descriptors in Spanish', async () => {
-    const { hero } = buildCoachInsights({
-      actionPlan: {
-        improvements: [{
-          area: 'Putting', label: '6+ m putts', labelMsg: { key: 'stats.my.label.puttBucket', params: { bucket: '6+' } },
-          score: -0.81, sample: 18, unit: 'SG / putt', basis: 'vs target hcp',
-        }],
-      },
-    });
-    const { getByText } = render(wrap(<CoachHero insight={hero} />));
+    const perRound = [-1, -1.4, -1.2, -1.2].map((putting) => ({
+      byCategory: { putting },
+      sampleHolesByCategory: { offTheTee: 18, approach: 18, aroundGreen: 18, putting: 18, penalties: 18 },
+    }));
+    const { hero } = buildCoachInsights({ strokesGained: { perRound } });
+    const { getByText, getAllByText } = render(wrap(<CoachHero insight={hero} />));
     expect(getByText('Corrige primero')).toBeTruthy();
-    expect(getByText('Putts')).toBeTruthy();
-    expect(getByText('Putts de 6+ m')).toBeTruthy();
-    expect(getByText('Putts de 6+ m te está costando 0,81 SG / putt en 18 putts.')).toBeTruthy();
-    expect(getByText('18 muestras')).toBeTruthy();
+    expect(getAllByText('Putts').length).toBeGreaterThan(0);
+    expect(getByText('Putts te cuesta 1,2 SG / vuelta frente a tu hándicap objetivo en 72 hoyos.')).toBeTruthy();
     expect(getByText('Confianza alta')).toBeTruthy();
   });
-
-  test('PracticePlanCard translates the drill by id', () => {
-    const plan = [{
-      id: 'practice-first', role: 'practiceFirst', title: 'Practice first: Putting',
-      instruction: 'x', reason: 'y',
-      drill: {
-        id: 'putt-lag-ladder', title: 'Lag ladder', instruction: 'Take 10 putts', passTarget: '7 of 10', location: 'green',
-      },
-      payoffPointsPerRound: 1.8,
-    }];
-    const { getByText } = render(wrap(<PracticePlanCard plan={plan} />));
-    expect(getByText('Plan de práctica')).toBeTruthy();
-    expect(getByText('Escalera de lag putt')).toBeTruthy();
+  test('the diagnosis chain renders in Spanish: rail, symptom, cause, drills, task, check', () => {
+    const stats = onePutting();
+    const { getByText, getAllByText } = render(wrap(
+      <DiagnosisCard week={week(stats)} diagnosis={stats.coachDiagnosis} onCommitFocus={() => {}} />,
+    ));
+    expect(getByText('Corrige primero')).toBeTruthy();
+    ['Pérdida', 'Por qué', 'Qué hacer', 'Comprobar'].forEach((k) => expect(getByText(k)).toBeTruthy());
+    expect(getByText('Putts · 6+ m')).toBeTruthy();
+    expect(getByText('-1,4')).toBeTruthy();
+    expect(getByText('golpes por vuelta frente a un hándicap de 15')).toBeTruthy();
+    expect(getByText('Putts: pierdes unos 1,4 golpes por vuelta frente a un hándicap de 15, sobre todo desde 6+ m (12 vueltas).')).toBeTruthy();
+    expect(getByText('Confianza alta')).toBeTruthy();
+    expect(getByText(/^La mayor parte viene de putts desde 6\+ m que acaban en tres putts \(18 de 58, 31%\), con un promedio de 2,5 putts/)).toBeTruthy();
+    expect(getByText(/^Escalera de lag putt/)).toBeTruthy();
+    expect(getAllByText(/^Nivel 1$/).length).toBeGreaterThan(0);
     expect(getByText('Objetivo: 7 de 10 acaban a menos de 1 m del hoyo')).toBeTruthy();
-    expect(getByText('vale ≈ 1,8 ptos / vuelta')).toBeTruthy();
+    expect(getByText('Próxima vuelta')).toBeTruthy();
+    expect(getByText('Porcentaje de tres putts desde 6+ m: ahora 31%.')).toBeTruthy();
+    expect(getByText('Se vuelve a medir tras 2 vueltas; el veredicto se asienta a las 4.')).toBeTruthy();
+    expect(getByText('Fijar como mi objetivo')).toBeTruthy();
+  });
+
+  test('tie, swing line and web fallback in Spanish', () => {
+    const tie = tieStats();
+    const a = render(wrap(<DiagnosisCard week={week(tie)} diagnosis={tie.coachDiagnosis} onCommitFocus={() => {}} />));
+    expect(a.getByText('Dos pérdidas demasiado igualadas')).toBeTruthy();
+    expect(a.getByLabelText('Objetivo: Aproximación')).toBeTruthy();
+    const tee = teeLeft();
+    const linked = render(wrap(<DiagnosisCard week={week(tee, { swings: [driverSwing()] })} diagnosis={tee.coachDiagnosis} swingSupport={{ supported: true }} onOpenSwing={() => {}} />));
+    expect(linked.getByText(/Tu swing con el driver grabado el 4 oct muestra over the top/)).toBeTruthy();
+    expect(linked.getByLabelText('Abrir el análisis del swing')).toBeTruthy();
+    const none = render(wrap(<DiagnosisCard week={week(tee)} diagnosis={tee.coachDiagnosis} swingSupport={{ supported: false, reason: 'web' }} />));
+    expect(none.getByText(/^El análisis del swing funciona en la app del móvil/)).toBeTruthy();
+  });
+
+  test('the weekly plan and focus card render in Spanish', () => {
+    const stats = approachShort();
+    const focus = focusRecord();
+    const verdict = verdictOf();
+    const r = render(wrap(<CoachTab stats={stats} week={week(stats, { focus, verdict })} focus={focus} focusVerdict={verdict} targetHandicap={15} />));
+    expect(r.getByText('Esta semana')).toBeTruthy();
+    expect(r.getByText('min / semana')).toBeTruthy();
+    expect(r.getByLabelText('90 minutos')).toBeTruthy();
+    expect(r.getByTestId('plan-level').props.children).toBe('Nivel 2 de 3 · 3 vueltas desde el 2 oct');
+    expect(r.getByText('Primera lectura: 3 vueltas jugadas, el veredicto se asienta a las 4.')).toBeTruthy();
+    expect(r.getByText('Fallos cortos desde 100-150 m')).toBeTruthy();
+    expect(render(wrap(<CoachTab stats={onePutting()} week={week(onePutting())} targetHandicap={15} />)).getByText('Más hallazgos')).toBeTruthy();
+    expect(r.getByLabelText('Terminar objetivo')).toBeTruthy();
   });
 });
 

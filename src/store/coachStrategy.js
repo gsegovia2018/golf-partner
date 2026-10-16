@@ -16,6 +16,7 @@ function layUpRule(stats) {
   const payoff = (short.avgSg - long.avgSg) * (long.holes / rounds);
   return {
     id: 'layup-150-200',
+    causeId: 'cause:approach:distance',
     title: 'Lay up from 150-200 m',
     reason: `From 150-200 m you average ${long.avgSg} SG per shot, but from 50-100 m you average ${short.avgSg}. Laying up to wedge range turns your worst distance into one of your best.`,
     titleMsg: msg('stats.my.tip.layup.title'),
@@ -38,6 +39,7 @@ function clubDownRule(stats) {
   const payoff = Math.abs(teeSg) * 0.5;
   return {
     id: 'tee-club-down',
+    causeId: 'cause:tee:trouble:driver',
     title: 'Club down on tight tee shots',
     reason: `${Math.round(lies.troubleRate * 100)}% of your tracked drives finish in sand or trouble, and the tee game costs ${round2(teeSg)} SG per round. A 3-wood that stays dry keeps roughly half of that.`,
     titleMsg: msg('stats.my.tip.clubDown.title'),
@@ -59,6 +61,7 @@ function lagFirstRule(stats) {
   const payoff = Math.abs(lag.sgPerPutt) * (lag.attempts / rounds);
   return {
     id: 'lag-first-6plus',
+    causeId: 'cause:putting:lag',
     title: 'Lag first from 6+ m',
     reason: `You three-putt ${lag.threePuttRate}% of putts from 6+ m. From that range the only goal is a tap-in: pick a 1 m circle, not the hole.`,
     titleMsg: msg('stats.my.tip.lagFirst.title'),
@@ -87,6 +90,7 @@ function missSideRule(stats) {
   const payoff = perHoleCost * (dominant.holes / roundCount);
   return {
     id: 'tee-miss-side',
+    causeId: `cause:tee:side:${dominant.side}`,
     title: `Guard the ${dominant.side} miss`,
     reason: `${dominant.holes} of your ${missTotal} tracked misses go ${dominant.side}, costing ${round2(perHoleCost)} pts per hole versus a fairway hit. Aim at the ${dominant.side === 'left' ? 'right' : 'left'} half of the fairway and let the miss find the middle.`,
     titleMsg: msg(`stats.my.tip.missSide.title.${dominant.side}`),
@@ -110,6 +114,7 @@ function avoidSandRule(stats) {
   const payoff = (nonSand.rate - sand.rate) * visits;
   return {
     id: 'avoid-short-side-sand',
+    causeId: 'cause:short:sand',
     title: 'Take bunkers out of play',
     reason: `You convert ${Math.round(nonSand.rate * 100)}% of up-and-downs from grass but only ${Math.round(sand.rate * 100)}% from sand, and you visit ${visits} bunkers per round. Aim to the fat side of the green — long or wide beats short-sided sand.`,
     titleMsg: msg('stats.my.tip.avoidSand.title'),

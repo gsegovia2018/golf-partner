@@ -22,6 +22,8 @@ import {
 } from './statsEngine';
 import { buildCoachInsights } from './coachInsights';
 import { buildStrategyTips } from './coachStrategy';
+import { buildDiagnosis } from './coachDiagnosis';
+import { causesForLeak } from './coachCauses';
 import { shotBenchmarkForHandicap } from './shotBenchmarks';
 import { roundDifferential } from './handicapIndex';
 import { roundEndedAt, roundStartedAt } from './finishStamp';
@@ -1002,6 +1004,23 @@ export function careerMilestones(synthetic) {
 // work. The baseline fields returned here are computed identically (same
 // functions, same args) to the full path, so they are value-identical for
 // any selection.
+// The coach diagnosis with its likely causes attached: `causes` =
+// causesForLeak(leak, stats) ({ primary, alsoPossible }) on the top leak and
+// on the tie leak, and nowhere else. top / tie / leaks[i] stay the same
+// objects, so a screen can compare by identity or by id.
+function diagnoseWithCauses(stats) {
+  const diagnosis = buildDiagnosis(stats);
+  const withCauses = (leak) => ({ ...leak, causes: causesForLeak(leak, stats) });
+  const top = diagnosis.top ? withCauses(diagnosis.top) : null;
+  const tie = diagnosis.tie ? withCauses(diagnosis.tie) : null;
+  const leaks = diagnosis.leaks.map((leak) => {
+    if (leak === diagnosis.top) return top;
+    if (leak === diagnosis.tie) return tie;
+    return leak;
+  });
+  return { ...diagnosis, leaks, top, tie };
+}
+
 export function computeMyStats(selectedRounds, {
   n = 5, targetHandicap = 0, baselineOnly = false, shots = null,
 } = {}) {
@@ -1094,9 +1113,11 @@ export function computeMyStats(selectedRounds, {
     driveLies: driveLieBreakdown(synthetic.rounds, CANON_ID),
     driveDistance: driveDistanceAverage(synthetic.rounds, CANON_ID),
   };
+  const coachDiagnosis = diagnoseWithCauses(baseStats);
   return {
     ...baseStats,
-    coach: buildCoachInsights(baseStats),
+    coach: buildCoachInsights(baseStats, coachDiagnosis),
+    coachDiagnosis,
     coachStrategy: buildStrategyTips(baseStats),
   };
 }

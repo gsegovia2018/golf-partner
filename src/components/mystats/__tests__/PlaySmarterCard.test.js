@@ -46,8 +46,10 @@ describe('PlaySmarterCard', () => {
 });
 
 describe('coach explainers', () => {
-  test('coachPractice and playSmarter entries exist with copy', () => {
-    expect(resolveStatExplainer('coachPractice').title).toBe('Practice Plan');
+  test('coach diagnosis, weekly plan, swing link and playSmarter entries exist with copy', () => {
+    expect(resolveStatExplainer('coachDiagnosis').title).toBe('Diagnosis');
+    expect(resolveStatExplainer('weeklyPlan').title).toBe('Weekly plan');
+    expect(resolveStatExplainer('swingLink').title).toBe('Swing link');
     expect(resolveStatExplainer('playSmarter').title).toBe('Play Smarter');
     expect(resolveStatExplainer('playSmarter').explainer).toContain('1 stroke gained ≈ 1 Stableford point');
   });

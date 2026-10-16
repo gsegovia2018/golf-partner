@@ -33,17 +33,36 @@ jest.mock('../../store/profileStore', () => ({
   upsertProfile: jest.fn(() => Promise.resolve()),
 }));
 
+// 'putting' = a putting leak (no swing link); 'tee' = the left miss off the tee.
+let mockStatsKind = 'putting';
 jest.mock('../../store/personalStats', () => ({
-  collectMyRounds: jest.fn(() => [{ key: 'round-1', label: 'Round 1', tournamentId: 't-1', round: { id: 'r-1' } }]),
+  collectMyRounds: jest.fn(() => [{
+    key: 'round-1', label: 'Round 1', tournamentId: 't-1', round: { id: 'r-1' }, courseName: 'Alhaurín', tournamentDate: '2026-10-14T09:00:00Z',
+  }]),
   resolveSelection: jest.fn((rounds) => rounds),
-  computeMyStats: jest.fn(() => ({
-    metrics: { rounds: 1, avgPoints: 30, bestRoundPoints: 30 },
-    form: { hasHistory: false, metrics: [{ key: 'avgPoints', direction: 'flat', delta: null }] },
-    formSeries: { metrics: { avgPoints: [] } },
-    ranking: { baseline: null, strengths: [], weaknesses: [] },
-    coach: { hero: null, board: {}, practicePlan: [] },
-  })),
+  computeMyStats: jest.fn(() => {
+    const fx = jest.requireActual('../../components/mystats/__tests__/coachFixtures');
+    const coachStats = mockStatsKind === 'tee' ? fx.teeLeft() : fx.onePutting();
+    return {
+      ...coachStats,
+      metrics: { rounds: 1, avgPoints: 30, bestRoundPoints: 30 },
+      form: { hasHistory: false, metrics: [{ key: 'avgPoints', direction: 'flat', delta: null }] },
+      formSeries: { metrics: { avgPoints: [] } },
+      ranking: { baseline: null, strengths: [], weaknesses: [] },
+    };
+  }),
 }));
+
+let mockSwings = [];
+jest.mock('../../store/swingStore', () => ({
+  subscribeSwings: jest.fn(() => () => {}),
+  getSwingsVersion: jest.fn(() => 0),
+  getSwings: jest.fn(() => mockSwings),
+  getSwingProfile: jest.fn(() => ({ handedness: 'right' })),
+}));
+
+let mockSwingAvailability = { supported: false, reason: 'web' };
+jest.mock('../../swing/availability', () => ({ getSwingAvailability: () => mockSwingAvailability }));
 
 jest.mock('../../store/roundReportCard', () => ({
   buildRoundReportCard: jest.fn(() => ({ title: 'Round 1' })),
@@ -96,8 +115,11 @@ jest.mock('../../components/mystats/TargetHandicapPicker', () => ({
   },
 }));
 
-jest.mock('../../components/mystats/tabs/CoachTab', () => function MockCoachTab() {
+// The props the screen hands the Coach tab, kept for the plumbing tests.
+let mockCoachProps = null;
+jest.mock('../../components/mystats/tabs/CoachTab', () => function MockCoachTab(props) {
   const { Text } = require('react-native');
+  mockCoachProps = props;
   return <Text>Coach content</Text>;
 });
 
@@ -130,6 +152,10 @@ jest.mock('../../components/mystats/tabs/HandicapTab', () => function MockHandic
 });
 
 beforeEach(() => {
+  mockStatsKind = 'putting';
+  mockSwings = [];
+  mockSwingAvailability = { supported: false, reason: 'web' };
+  mockCoachProps = null;
   mockUser = { id: 'user-1' };
   AsyncStorage.getItem.mockResolvedValue(null);
   __resetAppSettingsForTests();
@@ -575,5 +601,106 @@ describe('MyStatsScreen in Spanish', () => {
     expect(getByText('Golpes ganados')).toBeTruthy();
     expect(getByText('Hándicap')).toBeTruthy();
     expect(getByText('1 de 1')).toBeTruthy();
+  });
+});
+
+describe('MyStatsScreen Coach v2 plumbing', () => {
+  beforeEach(() => {
+    require('../../store/personalStats').collectMyRounds.mockReturnValue([{
+      key: 'round-1', label: 'Round 1', tournamentId: 't-1', round: { id: 'r-1' }, courseName: 'Alhaurín', tournamentDate: '2026-10-14T09:00:00Z',
+    }]);
+  });
+
+  const coachProps = async () => {
+    await flush();
+    await flush();
+    return mockCoachProps;
+  };
+
+  test('hands the Coach tab a week built from the stats, the minutes setting and the swings', async () => {
+    const { findByText } = renderScreen({ params: { tab: 'coach' } });
+    await findByText('Coach content');
+    const props = await coachProps();
+    expect(props.week.kind).toBe('one');
+    expect(props.week.chains[0].leak.id).toBe('leak:putting:6+');
+    expect(props.week.plan.minutes).toBe(60);
+    expect(props.swingSupport).toEqual({ supported: false, reason: 'web' });
+  });
+
+  test('the minutes picker writes the synced setting and the plan follows', async () => {
+    const { findByText } = renderScreen({ params: { tab: 'coach' } });
+    await findByText('Coach content');
+    await act(async () => { (await coachProps()).onChangeMinutes(120); });
+    await flush();
+    expect(getAppSettings().practiceMinutesPerWeek).toBe(120);
+    expect(mockCoachProps.week.plan.minutes).toBe(120);
+  });
+
+  test('swing rows feed the swing link and the record / open callbacks navigate', async () => {
+    mockStatsKind = 'tee';
+    mockSwings = [{
+      id: 'sw-1', status: 'ready', createdAt: new Date().toISOString(), club: 'driver', mainFault: 'over_the_top', consequences: [], handedness: 'right',
+    }];
+    mockSwingAvailability = { supported: true };
+    const navigation = { goBack: jest.fn(), navigate: jest.fn() };
+    const { findByText } = renderScreen({ params: { tab: 'coach' } }, navigation);
+    await findByText('Coach content');
+    const props = await coachProps();
+    expect(props.week.swingLink.state).toBe('linked');
+    expect(props.swingSupport).toEqual({ supported: true });
+    props.onRecordSwing();
+    expect(navigation.navigate).toHaveBeenCalledWith('SwingHome');
+    props.onOpenSwing('sw-1');
+    expect(navigation.navigate).toHaveBeenCalledWith('SwingResults', { swingId: 'sw-1' });
+  });
+
+  test('remembers the plan per user and re-plans from the previous one after a new round', async () => {
+    const memory = {
+      round: 'older-round',
+      base: null,
+      last: {
+        collect: false, focusLeakId: 'leak:approach', focusCategory: 'approach', causeId: null, secondCategory: null, keepCategory: null, level: 1, tie: false, swingDrillId: null,
+      },
+    };
+    AsyncStorage.getItem.mockImplementation((key) => Promise.resolve(key === '@mystats_coach_plan:user-1' ? JSON.stringify(memory) : null));
+    const { findByText } = renderScreen({ params: { tab: 'coach' } });
+    await findByText('Coach content');
+    const props = await coachProps();
+    expect(props.week.plan.replan.note.key).toBe('stats.my.coach.plan.replanned');
+    expect(props.week.plan.replan.note.params.course).toBe('Alhaurín');
+    expect(props.week.plan.replan.note.params.date).toBe('2026-10-14');
+    const saved = AsyncStorage.setItem.mock.calls.filter(([key]) => key === '@mystats_coach_plan:user-1');
+    expect(saved.length).toBeGreaterThan(0);
+    const written = JSON.parse(saved[saved.length - 1][1]);
+    expect(written.round).toBe('round-1');
+    expect(written.base.focusCategory).toBe('approach');
+    expect(written.last.focusCategory).toBe('putting');
+  });
+
+  test('commits the chain as a v2 focus and saves it for the user', async () => {
+    const { findByText } = renderScreen({ params: { tab: 'coach' } });
+    await findByText('Coach content');
+    const props = await coachProps();
+    const top = props.week.chains[0];
+    await act(async () => {
+      props.onCommitFocus({ leak: top.leak, bucket: top.leak.bucket, cause: top.causes.primary });
+    });
+    expect(mockCoachProps.focus.v).toBe(2);
+    expect(mockCoachProps.focus.category).toBe('putting');
+    expect(mockCoachProps.focus.metricKey).toBe('putting.threePuttRate.6+');
+    const saved = AsyncStorage.setItem.mock.calls.find(([key]) => key === '@mystats_coach_focus:user-1');
+    expect(JSON.parse(saved[1]).leakId).toBe('leak:putting:6+');
+  });
+
+  test('shows the one-time old-focus notice and dismisses it', async () => {
+    AsyncStorage.getItem.mockImplementation((key) => Promise.resolve(
+      key === '@mystats_coach_focus_notice:user-1' ? JSON.stringify({ kind: 'v1-closed', closedAt: '2026-10-16T08:00:00Z' }) : null,
+    ));
+    const { findByText } = renderScreen({ params: { tab: 'coach' } });
+    await findByText('Coach content');
+    expect((await coachProps()).focusNotice.kind).toBe('v1-closed');
+    await act(async () => { mockCoachProps.onDismissNotice(); });
+    expect(mockCoachProps.focusNotice).toBeNull();
+    expect(AsyncStorage.removeItem).toHaveBeenCalledWith('@mystats_coach_focus_notice:user-1');
   });
 });

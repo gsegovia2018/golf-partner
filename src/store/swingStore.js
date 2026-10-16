@@ -24,7 +24,7 @@ const DEFAULT_PROFILE = {
   practiceOpen: false, // the Results practice card stays as the golfer left it (D24)
 };
 
-let SWINGS = []; // [{ id, createdAt, name, club, source, status, fps, mainFault, counts, thumb, bytes, marked }]
+let SWINGS = []; // [{ id, createdAt, name, club, source, status, fps, mainFault, consequences, handedness, counts, thumb, bytes, marked }]
 let PROFILE = { ...DEFAULT_PROFILE };
 let version = 0;
 const listeners = new Set();
@@ -208,6 +208,8 @@ export async function saveAnalysis(id, analysis, {
       ? { capture: analysis.fps.capture, effective: analysis.fps.effective, factor: analysis.fps.factor, approximate: !!analysis.fps.approximate }
       : null,
     mainFault: analysis.main?.fault ?? null,
+    consequences: analysis.main?.consequences ?? [], // coach v2 swing link; rows saved earlier have neither field
+    handedness: analysis.handedness ?? PROFILE.handedness,
     counts: analysis.counts ? { green: analysis.counts.green, yellow: analysis.counts.yellow, red: analysis.counts.red } : null,
     thumb: thumb ?? row.thumb,
     bytes: dirBytes(id),

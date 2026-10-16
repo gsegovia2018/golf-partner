@@ -1,4 +1,4 @@
-import { tr, t, formatNumber } from '../../i18n';
+import { tr, t, formatNumber, formatDate } from '../../i18n';
 
 const ZERO = /^0([.,]0+)?$/;
 
@@ -73,3 +73,42 @@ export const drillLocation = (location) => {
   const out = t(key);
   return out === key ? location : out;
 };
+
+// A store descriptor whose `date` params (ISO days) are formatted for the
+// active language, nested descriptors included. Dates reach a message only
+// through formatDate (docs/i18n.md).
+export function withFormattedDates(descriptor) {
+  if (!descriptor || typeof descriptor !== 'object' || !descriptor.key) return descriptor;
+  const params = {};
+  Object.entries(descriptor.params ?? {}).forEach(([name, value]) => {
+    if (name === 'date' && typeof value === 'string' && value) params[name] = formatDate(value, 'day');
+    else if (value && typeof value === 'object' && value.key) params[name] = withFormattedDates(value);
+    else params[name] = value;
+  });
+  return { ...descriptor, params };
+}
+
+// Descriptor to text with its dates formatted.
+export const renderDatedMsg = (descriptor) => renderMsg(withFormattedDates(descriptor));
+
+// The pass target of a drill at a level (1-3): the catalogue text by id, else
+// the English level text stored with the drill.
+export function drillLevelText(drill, level = 1) {
+  if (!drill) return '';
+  const lv = Math.min(3, Math.max(1, level || 1));
+  const field = lv === 1 ? 'pass' : `pass${lv}`;
+  const key = `stats.my.drill.${drill.id}.${field}`;
+  const out = t(key);
+  return out === key ? (drill.levels?.[lv - 1]?.passTarget ?? drill.passTarget ?? '') : out;
+}
+
+// A metric value in its unit ("31%", "-0.6 SG / shot"); sg and delta-like
+// units carry a sign.
+export function metricValueText(unit, value) {
+  if (value == null || !Number.isFinite(value)) return '';
+  const signed = unit === 'sgPerRound' || unit === 'sgPerShot';
+  const text = renderNumber({ n: value, decimals: unit === 'percent' || unit === 'metres' ? 0 : 1, ...(signed ? { signed: true, decimals: 2 } : {}) });
+  const key = `stats.my.coach.ui.unit.${unit}`;
+  const out = t(key, { value: text });
+  return out === key ? text : out;
+}

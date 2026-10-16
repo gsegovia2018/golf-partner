@@ -1,4 +1,20 @@
 import { buildCoachInsights } from '../coachInsights';
+import { buildDiagnosis } from '../coachDiagnosis';
+
+const CATS = ['offTheTee', 'approach', 'aroundGreen', 'putting', 'penalties'];
+
+// A strokesGained block the diagnosis accepts: one entry per round, every
+// category sampled over 18 holes unless `sampled` says otherwise.
+function sg(rounds, sampled = {}) {
+  return {
+    perRound: rounds.map((byCategory) => ({
+      byCategory: Object.fromEntries(CATS.map((c) => [c, byCategory[c] ?? 0])),
+      sampleHolesByCategory: Object.fromEntries(CATS.map((c) => [c, sampled[c] ?? 18])),
+    })),
+  };
+}
+const flat = (board) => Object.values(board).flat();
+
 
 function baseStats(overrides = {}) {
   return {
@@ -20,23 +36,12 @@ function baseStats(overrides = {}) {
         { label: 'Closing 3 holes', avgPoints: 1.1, deviation: -0.62, sample: 24, unit: 'holes' },
       ],
     },
-    actionPlan: {
-      keep: { area: 'Driving', label: 'Fairway drives', score: 0.64, sample: 22, unit: 'pts / hole', value: 2.45 },
-      improve: { area: 'Putting', label: '6+ m putts', score: -0.81, sample: 18, unit: 'SG / putt', value: -0.81 },
-      practice: { area: 'Approach', label: '100-150 m approaches', score: -0.36, sample: 14, unit: 'SG / shot', value: -0.36 },
-      strengths: [
-        { area: 'Driving', label: 'Fairway drives', score: 0.64, sample: 22, unit: 'pts / hole', value: 2.45 },
-      ],
-      improvements: [
-        { area: 'Putting', label: '6+ m putts', score: -0.81, sample: 18, unit: 'SG / putt', value: -0.81 },
-        { area: 'Approach', label: '100-150 m approaches', score: -0.36, sample: 14, unit: 'SG / shot', value: -0.36 },
-      ],
-    },
-    strokesGained: {
-      total: -1.25,
-      sampleHoles: 54,
-      byCategory: { approach: -0.35, aroundGreen: -0.1, putting: -1.2 },
-    },
+    strokesGained: sg([
+      { putting: -1.0, approach: -0.5, aroundGreen: 0.3 },
+      { putting: -1.4, approach: -0.5, aroundGreen: 0.3 },
+      { putting: -1.2, approach: -0.4, aroundGreen: 0.3 },
+      { putting: -1.2, approach: -0.6, aroundGreen: 0.3 },
+    ]),
     warmupClosing: {
       warmup: { avgPoints: 2.1, holes: 24 },
       closing: { avgPoints: 1.1, holes: 24 },
@@ -67,40 +72,130 @@ function baseStats(overrides = {}) {
   };
 }
 
-describe('buildCoachInsights', () => {
-  test('chooses a high-confidence point leak as the hero when one exists', () => {
-    const coach = buildCoachInsights(baseStats());
-    expect(coach.hero).toMatchObject({ group: 'fixFirst', area: 'putting', title: '6+ m putts', tone: 'bad', confidence: 'high' });
-    expect(coach.hero.reason).toContain('costing');
+describe('buildCoachInsights (adapter over the diagnosis)', () => {
+  test('hero is the diagnosis top leak and its id is the leak id', () => {
+    const stats = baseStats();
+    const { hero } = buildCoachInsights(stats);
+    const { top } = buildDiagnosis(stats);
+
+    expect(top.id).toBe('leak:putting');
+    expect(hero).toMatchObject({
+      id: top.id, group: 'fixFirst', area: 'putting', title: 'Putting', tone: 'bad', confidence: 'high', category: 'putting',
+    });
+    expect(hero.reason).toContain('costing 1.2 SG / round');
+    expect(hero.reasonMsg).toMatchObject({ key: 'stats.my.coach.reason.sgCosting' });
+    expect(hero.strokesPerRound).toBeCloseTo(-1.2, 2);
+    expect(hero.pointsPerRound).toBeCloseTo(-1.2, 2);
   });
 
-  test('can choose an improving trend when there is no strong leak', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },
-      strokesGained: { total: 0.2, sampleHoles: 54, byCategory: { approach: 0.1, aroundGreen: 0, putting: 0 } },
-      shotBenchmark: null,
-    }));
-    expect(coach.hero).toMatchObject({ group: 'gettingBetter', title: 'Points / round', tone: 'good' });
+  test('has no practicePlan any more', () => {
+    expect(buildCoachInsights(baseStats())).not.toHaveProperty('practicePlan');
+    expect(buildCoachInsights({})).not.toHaveProperty('practicePlan');
   });
 
-  test('builds all supported board groups from available stats', () => {
-    const coach = buildCoachInsights(baseStats());
-    expect(coach.board.fixFirst).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: '6+ m putts' }),
+  test('board groups come from the leaks: top -> fixFirst, rest -> nextGains, positives -> keepDoing', () => {
+    const { board } = buildCoachInsights(baseStats());
+
+    expect(board.fixFirst.map((i) => i.id)).toEqual(['leak:putting']);
+    expect(board.nextGains.map((i) => i.id)).toEqual(['leak:approach']);
+    expect(board.keepDoing.map((i) => i.id)).toEqual(['strength:aroundGreen']);
+    expect(board.keepDoing[0]).toMatchObject({ tone: 'good', area: 'shortGame', areaLabel: 'Short game' });
+    expect(board.gettingBetter.map((i) => i.title)).toContain('Points / round');
+    expect(board.gettingWorse.map((i) => i.title)).not.toContain('Greens in reg %');
+    expect(board.watch.map((i) => i.title)).toContain('Closing 3 holes');
+  });
+
+  test('leak insights use the leak ids, including the bucket the diagnosis names', () => {
+    const stats = baseStats({
+      puttingTarget: { buckets: { '6+': { attempts: 40, sgPerPutt: -0.1, avgPutts: 2.2, expectedPutts: 2 } } },
+    });
+    const { top } = buildDiagnosis(stats);
+    const { hero, board } = buildCoachInsights(stats);
+
+    expect(top.id).toBe('leak:putting:6+');
+    expect(hero.id).toBe('leak:putting:6+');
+    expect(hero.bucket).toBe('6+');
+    const ids = flat(board).map((i) => i.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual(expect.arrayContaining(['leak:putting:6+', 'leak:approach', 'strength:aroundGreen']));
+  });
+
+  test('a tie puts both leaks in fixFirst; the hero is still the top', () => {
+    const stats = baseStats({
+      strokesGained: sg([
+        { putting: -1.0, approach: -0.9 }, { putting: -1.2, approach: -1.1 },
+        { putting: -1.1, approach: -1.0 }, { putting: -1.1, approach: -1.0 },
+      ]),
+    });
+    const d = buildDiagnosis(stats);
+    const { hero, board } = buildCoachInsights(stats);
+
+    expect(d.tie).toBeTruthy();
+    expect(board.fixFirst.map((i) => i.id)).toEqual([d.top.id, d.tie.id]);
+    expect(hero.id).toBe(d.top.id);
+  });
+
+  test('a low-confidence leak that is not on top goes to watch, not nextGains', () => {
+    const stats = baseStats({
+      strokesGained: sg([
+        { putting: -2.5, approach: -3 }, { putting: -2.5, approach: 1.5 },
+        { putting: -2.5, approach: -2 }, { putting: -2.5, approach: 0.5 },
+      ]),
+    });
+    const approach = buildDiagnosis(stats).leaks.find((l) => l.category === 'approach');
+    const { board } = buildCoachInsights(stats);
+
+    expect(approach.confidence).toBe('low');
+    expect(board.nextGains.map((i) => i.id)).not.toContain(approach.id);
+    expect(board.watch).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: approach.id, group: 'watch', tone: 'watch', confidence: 'low' }),
     ]));
-    expect(coach.board.keepDoing).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: 'Fairway drives' }),
-    ]));
-    expect(coach.board.gettingBetter.map((i) => i.title)).toContain('Points / round');
-    expect(coach.board.gettingWorse.map((i) => i.title)).not.toContain('Greens in reg %');
-    expect(coach.board.fixFirst.map((i) => i.title)).toEqual(expect.arrayContaining(['Putting', 'Approach']));
-    expect(coach.board.nextGains.map((i) => i.title)).toContain('100-150 m approaches');
-    expect(coach.board.watch.map((i) => i.title)).toContain('Closing 3 holes');
+  });
+
+  test('an under-sampled category lands in watch with what it needs, never ranked', () => {
+    const stats = baseStats({
+      strokesGained: {
+        perRound: [
+          { byCategory: { aroundGreen: -2 }, sampleHolesByCategory: { aroundGreen: 4 } },
+          ...sg([{ putting: -1.2 }, { putting: -1.2 }, { putting: -1.2 }]).perRound,
+        ].map((r) => ({
+          ...r,
+          sampleHolesByCategory: { ...(r.sampleHolesByCategory ?? {}), ...(r.byCategory.aroundGreen === -2 ? { aroundGreen: 4 } : { aroundGreen: 0 }) },
+        })),
+      },
+    });
+    const { board } = buildCoachInsights(stats);
+    const insight = board.watch.find((i) => i.id === 'leak:aroundGreen');
+
+    expect(insight).toMatchObject({ category: 'aroundGreen', group: 'watch', needs: { holes: 6, rounds: 2 } });
+    expect(insight.reasonMsg).toMatchObject({ key: 'stats.my.coach.reason.insufficient' });
+    expect(board.fixFirst.map((i) => i.id)).not.toContain('leak:aroundGreen');
+  });
+
+  test('with no leak the candidate goes to nextGains and the hero falls back to a trend', () => {
+    const stats = baseStats({
+      strokesGained: sg([{ putting: -0.2 }, { putting: -0.2 }, { putting: -0.2 }, { putting: -0.2 }]),
+    });
+    const d = buildDiagnosis(stats);
+    const { hero, board } = buildCoachInsights(stats);
+
+    expect(d.top).toBeNull();
+    expect(board.fixFirst).toEqual([]);
+    expect(board.nextGains.map((i) => i.id)).toEqual([d.candidate.id]);
+    expect(hero).toMatchObject({ group: 'gettingBetter', title: 'Points / round' });
+  });
+
+  test('uses the diagnosis it is given instead of rebuilding one', () => {
+    const stats = baseStats();
+    const diagnosis = { ...buildDiagnosis(stats), leaks: [], top: null, tie: null, candidate: null };
+    const { hero, board } = buildCoachInsights(stats, diagnosis);
+
+    expect(board.fixFirst).toEqual([]);
+    expect(hero.group).not.toBe('fixFirst');
   });
 
   test('adds comparison basis labels to coach insights', () => {
-    const coach = buildCoachInsights(baseStats());
-    const all = Object.values(coach.board).flat();
+    const all = flat(buildCoachInsights(baseStats()).board);
 
     expect(all.length).toBeGreaterThan(0);
     all.forEach((insight) => {
@@ -108,384 +203,47 @@ describe('buildCoachInsights', () => {
     });
   });
 
-  test('adds strokes-gained category signals without raw target benchmarks', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },
-      ranking: { baseline: null, strengths: [], weaknesses: [] },
+  test('keeps form trends: only value metrics become gettingBetter / gettingWorse', () => {
+    const { board } = buildCoachInsights(baseStats({
       form: {
         hasHistory: true,
         metrics: [
-          { key: 'avgPoints', label: 'Points / round', polarity: 'higher', recent: 32, history: 29, delta: 3, direction: 'up' },
+          { key: 'avgPoints', label: 'Points / round', polarity: 'higher', recent: 27, history: 31, delta: -4, direction: 'down' },
           { key: 'fairwayPct', label: 'Fairways hit %', polarity: 'higher', recent: 42, history: 50, delta: -8, direction: 'down', shot: true },
-          { key: 'girPct', label: 'Greens in reg %', polarity: 'higher', recent: 34, history: 45, delta: -11, direction: 'down', shot: true },
           { key: 'puttsPerRound', label: 'Putts / round', polarity: 'lower', recent: 34, history: 36, delta: -2, direction: 'up', shot: true },
-          { key: 'threePuttsPerRound', label: '3-putts / round', polarity: 'lower', recent: 2.4, history: 1.6, delta: 0.8, direction: 'down', shot: true },
-        ],
-      },
-    }));
-    const all = Object.values(coach.board).flat();
-    const titles = all.map((insight) => insight.title);
-
-    expect(coach.board.fixFirst).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: 'Putting', area: 'putting', tone: 'bad' }),
-      expect.objectContaining({ title: 'Approach', area: 'approach', tone: 'bad' }),
-    ]));
-    expect(titles).not.toContain('Tee shot');
-    expect(titles).toContain('Points / round');
-    expect(titles).not.toEqual(expect.arrayContaining([
-      'Score vs par',
-      'Doubles+ / round',
-      'Fairways hit',
-      'Tee penalty rate',
-      'Greens in reg %',
-      'Putts / round',
-      '3-putts / round',
-    ]));
-    all.forEach((insight) => {
-      expect(insight.metric).toMatch(/SG|pts/);
-    });
-  });
-
-  test('maps form metric keys and action labels to coach areas', () => {
-    const coach = buildCoachInsights(baseStats({
-      form: {
-        hasHistory: true,
-        metrics: [
-          { key: 'fairwayPct', label: 'Fairways hit %', polarity: 'higher', recent: 42, history: 50, delta: -8, direction: 'down', shot: true },
-          { key: 'girPct', label: 'Greens in reg %', polarity: 'higher', recent: 34, history: 45, delta: -11, direction: 'down', shot: true },
-          { key: 'puttsPerRound', label: 'Putts / round', polarity: 'lower', recent: 34, history: 36, delta: -2, direction: 'up', shot: true },
-          { key: 'threePuttsPerRound', label: '3-putts / round', polarity: 'lower', recent: 2.4, history: 1.6, delta: 0.8, direction: 'down', shot: true },
-        ],
-      },
-      actionPlan: {
-        keep: null,
-        improve: null,
-        practice: null,
-        strengths: [
-          { area: 'Off the tee', label: 'Fairway drive points', score: 0.3, sample: 18, unit: 'pts / hole', value: 2.1 },
-          { area: 'Around the green', label: 'Up-and-down chances', score: 0.2, sample: 16, unit: 'SG / shot', value: 0.2 },
-        ],
-        improvements: [],
-      },
-    }));
-    expect(coach.board.gettingWorse.map((i) => i.title)).not.toEqual(expect.arrayContaining([
-      'Fairways hit %',
-      'Greens in reg %',
-      '3-putts / round',
-    ]));
-    expect(coach.board.gettingBetter.map((i) => i.title)).not.toContain('Putts / round');
-    expect(coach.board.keepDoing).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: 'Fairway drive points', area: 'driving', areaLabel: 'Driving' }),
-      expect.objectContaining({ title: 'Up-and-down chances', area: 'shortGame', areaLabel: 'Short game' }),
-    ]));
-  });
-
-  test('deduplicates near-identical insights by area and title', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: {
-        ...baseStats().actionPlan,
-        improvements: [
-          { area: 'Putting', label: '6+ m putts', score: -0.81, sample: 18, unit: 'SG / putt', value: -0.81 },
-          { area: 'Putting', label: '6+ m putts', score: -0.7, sample: 20, unit: 'SG / putt', value: -0.7 },
-        ],
-      },
-    }));
-    const all = Object.values(coach.board).flat();
-    expect(all.filter((i) => i.id === 'putting:6-m-putts')).toHaveLength(1);
-  });
-
-  test('sends low-sample leaks to Watch instead of Fix first', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: {
-        keep: null,
-        improve: { area: 'Putting', label: '6+ m putts', score: -0.91, sample: 2, unit: 'SG / putt', value: -0.91 },
-        practice: null,
-        strengths: [],
-        improvements: [
-          { area: 'Putting', label: '6+ m putts', score: -0.91, sample: 2, unit: 'SG / putt', value: -0.91 },
-        ],
-      },
-    }));
-    expect(coach.board.fixFirst.map((insight) => insight.title)).not.toContain('6+ m putts');
-    expect(coach.board.watch).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: '6+ m putts', confidence: 'low' }),
-    ]));
-  });
-
-  test('prioritizes higher-confidence fix-first insights before noisier gaps', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: {
-        keep: null,
-        improve: null,
-        practice: null,
-        strengths: [],
-        improvements: [
-          { area: 'Putting', label: '6+ m putts', score: -0.9, sample: 6, unit: 'SG / putt', value: -0.9 },
-          { area: 'Approach', label: '100-150 m approaches', score: -0.7, sample: 18, unit: 'SG / shot', value: -0.7 },
-        ],
-      },
-      strokesGained: null,
-      ranking: { baseline: null, strengths: [], weaknesses: [] },
-      form: { hasHistory: false, metrics: [] },
-      warmupClosing: null,
-      frontBack: null,
-    }));
-
-    expect(coach.board.fixFirst.map((i) => i.title).slice(0, 2)).toEqual([
-      '100-150 m approaches',
-      '6+ m putts',
-    ]);
-  });
-
-  test('routes standalone weak improve leaks to Next gains', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: {
-        keep: null,
-        improve: { area: 'Putting', label: 'Lag putt distance control', score: -0.3, sample: 18, unit: 'SG / putt', value: -0.3 },
-        practice: null,
-        strengths: [],
-        improvements: [],
-      },
-    }));
-    expect(coach.board.fixFirst.map((i) => i.title)).not.toContain('Lag putt distance control');
-    expect(coach.board.nextGains).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: 'Lag putt distance control', area: 'putting', confidence: 'high' }),
-    ]));
-  });
-
-  test('maps Strokes Gained action items from their label area', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: {
-        keep: null,
-        improve: null,
-        practice: null,
-        strengths: [],
-        improvements: [
-          { area: 'Strokes Gained', label: 'Putting', score: -0.7, sample: 18, unit: 'SG / round', value: -0.7 },
-        ],
-      },
-    }));
-    expect(coach.board.fixFirst).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: 'Putting', area: 'putting', areaLabel: 'Putting' }),
-    ]));
-  });
-
-  test('uses explicit sample units in Strokes Gained reasons', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: {
-        keep: null,
-        improve: null,
-        practice: null,
-        strengths: [],
-        improvements: [
-          { area: 'Strokes Gained', label: 'Approach', score: -0.7, sample: 54, sampleUnit: 'holes', unit: 'SG / round', value: -0.7 },
         ],
       },
     }));
 
-    const insight = coach.board.fixFirst.find((item) => item.title === 'Approach');
-    expect(insight.reason).toContain('across 54 holes');
-    expect(insight.reason).not.toContain('shots');
+    expect(board.gettingWorse.map((i) => i.title)).toEqual(['Points / round']);
+    expect(board.gettingBetter).toEqual([]);
   });
 
-  test('uses Strokes Gained category-specific samples in category insights', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },
-      strokesGained: {
-        total: -0.4,
-        sampleHoles: 54,
-        sampleHolesByCategory: { approach: 18, putting: 54 },
-        byCategory: { approach: -0.7, putting: 0 },
-      },
-    }));
-
-    const insight = coach.board.fixFirst.find((item) => item.title === 'Approach');
-    expect(insight.reason).toContain('across 18 holes');
+  test('every insight id is unique across the board', () => {
+    const ids = flat(buildCoachInsights(baseStats()).board).map((i) => i.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
-  test('uses neutral reason copy when action item sample is missing', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: {
-        keep: null,
-        improve: { area: 'Putting', label: 'Lag putt distance control', score: -0.8, unit: 'SG / putt', value: -0.8 },
-        practice: null,
-        strengths: [],
-        improvements: [],
-      },
-    }));
-    const insight = coach.board.fixFirst.find((item) => item.title === 'Lag putt distance control');
-    expect(insight.reason).toContain('in the tracked sample');
-    expect(insight.reason).not.toContain('0 tracked reps');
+  test('empty stats give an empty board and no hero', () => {
+    const coach = buildCoachInsights({});
+    expect(coach.hero).toBeNull();
+    expect(coach.board.fixFirst).toEqual([]);
+    expect(coach.board.nextGains).toEqual([]);
   });
 
-  test('sends low-sample practice leaks to Watch instead of Next gains', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: {
-        keep: null,
-        improve: null,
-        practice: { area: 'Approach', label: '100-150 m approaches', score: -0.5, sample: 2, unit: 'SG / shot', value: -0.5 },
-        strengths: [],
-        improvements: [],
-      },
-    }));
-    expect(coach.board.nextGains.map((i) => i.title)).not.toContain('100-150 m approaches');
-    expect(coach.board.watch).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: '100-150 m approaches', confidence: 'low' }),
-    ]));
-  });
-
-  test('creates a three-item practice plan with distinct roles', () => {
-    const coach = buildCoachInsights(baseStats());
-    expect(coach.practicePlan.map((item) => item.role)).toEqual(['practiceFirst', 'secondaryFocus', 'onCourseCue']);
-    expect(coach.practicePlan[0].title).toContain('6+ m putts');
-    expect(coach.practicePlan[1].title).toContain('100-150 m approaches');
-    expect(coach.practicePlan[2].title).toContain('Closing 3 holes');
-  });
-
-  test('uses a different-area Keep doing insight as secondary focus when available', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: {
-        keep: { area: 'Driving', label: 'Fairway drives', score: 0.64, sample: 22, unit: 'pts / hole', value: 2.45 },
-        improve: { area: 'Putting', label: '6+ m putts', score: -0.81, sample: 18, unit: 'SG / putt', value: -0.81 },
-        practice: null,
-        strengths: [
-          { area: 'Driving', label: 'Fairway drives', score: 0.64, sample: 22, unit: 'pts / hole', value: 2.45 },
-        ],
-        improvements: [
-          { area: 'Putting', label: '6+ m putts', score: -0.81, sample: 18, unit: 'SG / putt', value: -0.81 },
-        ],
-      },
-      form: { hasHistory: false, metrics: [] },
-      ranking: { baseline: null, strengths: [], weaknesses: [] },
-      warmupClosing: null,
-      frontBack: null,
-    }));
-    expect(coach.practicePlan[0]).toMatchObject({ role: 'practiceFirst', sourceInsightId: 'putting:6-m-putts' });
-    expect(coach.practicePlan[1]).toMatchObject({ role: 'secondaryFocus', sourceInsightId: 'driving:fairway-drives' });
-  });
-
-  test('labels a strong penalties strokes-gained leak as Penalties, not Scoring', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },
-      strokesGained: {
-        total: -0.9,
-        sampleHoles: 54,
-        byCategory: { approach: 0, aroundGreen: 0, putting: 0, penalties: -0.6 },
-      },
-    }));
-    const penaltyInsight = Object.values(coach.board).flat().find((i) => i.title === 'Penalties');
-    expect(penaltyInsight).toBeDefined();
-    expect(penaltyInsight.area).toBe('penalties');
-    expect(penaltyInsight.areaLabel).toBe('Penalties');
-    expect(penaltyInsight.areaLabel).not.toBe('Scoring');
-  });
-
-  test('does not let a persistent small penalties leak crowd out a bigger leak in pickHero', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },
-      ranking: { baseline: null, strengths: [], weaknesses: [] },
-      strokesGained: {
-        total: -0.9,
-        sampleHoles: 54,
-        sampleHolesByCategory: { approach: 8, penalties: 54 },
-        // Approach is the real, bigger leak but only medium-confidence
-        // (sample 8). Penalties is small (-0.15) but high-confidence
-        // (tracked almost every round, sample 54) and near-permanently
-        // non-positive - it must not win the fixFirst/hero slot over the
-        // genuinely larger approach leak.
-        byCategory: { approach: -0.7, aroundGreen: 0, putting: 0, penalties: -0.15 },
-      },
-    }));
-
-    expect(coach.hero).toMatchObject({ title: 'Approach', confidence: 'medium' });
-    expect(coach.board.fixFirst.map((i) => i.title)).not.toContain('Penalties');
-    expect(coach.board.nextGains.map((i) => i.title)).toContain('Penalties');
-    expect(coach.practicePlan[0]).toMatchObject({ sourceInsightId: 'approach:approach' });
-  });
-
-  test('falls back to form and data-collection guidance without shot data', () => {
-    const coach = buildCoachInsights(baseStats({
-      actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },
-      ranking: { baseline: null, strengths: [], weaknesses: [] },
-      strokesGained: null,
-      warmupClosing: null,
-      frontBack: null,
-      shotBenchmark: null,
-      shots: null,
-    }));
-    expect(coach.hero).toMatchObject({ group: 'gettingBetter' });
-    expect(coach.practicePlan).toEqual(expect.arrayContaining([
-      expect.objectContaining({ role: 'onCourseCue' }),
-    ]));
-  });
-});
-
-describe('offTheTee category insights', () => {
-  test('a strong offTheTee leak lands in the board with a Driving area', () => {
-    const stats = {
-      strokesGained: {
-        byCategory: { offTheTee: -1.2, approach: 0, aroundGreen: 0, putting: 0, penalties: 0 },
-        sampleHolesByCategory: { offTheTee: 30, approach: 30, aroundGreen: 30, putting: 30, penalties: 30 },
-        sampleHoles: 30,
-      },
-    };
-    const { board } = buildCoachInsights(stats);
+  test('an offTheTee leak lands in fixFirst with a Driving area', () => {
+    const { board } = buildCoachInsights({ strokesGained: sg([{ offTheTee: -1.2 }, { offTheTee: -1.3 }, { offTheTee: -1.1 }]) });
     const insight = board.fixFirst.find((i) => i.title === 'Off the tee');
-    expect(insight).toBeDefined();
-    expect(insight.area).toBe('driving');
+    expect(insight).toMatchObject({ id: 'leak:offTheTee', area: 'driving' });
   });
-});
 
-describe('pointsPerRound framing', () => {
-  test('SG-per-round category insights carry pointsPerRound ≈ impact', () => {
-    const stats = {
-      strokesGained: {
-        byCategory: { offTheTee: 0, approach: -1.4, aroundGreen: 0, putting: 0, penalties: 0 },
-        sampleHolesByCategory: { offTheTee: 30, approach: 30, aroundGreen: 30, putting: 30, penalties: 30 },
-        sampleHoles: 30,
-      },
-    };
-    const { board } = buildCoachInsights(stats);
-    const approach = [...board.fixFirst, ...board.nextGains].find((i) => i.title === 'Approach');
-    expect(approach.pointsPerRound).toBeCloseTo(-1.4, 2);
-  });
-  test('per-shot and pts-based insights never get pointsPerRound', () => {
-    const stats = {
-      actionPlan: {
-        improvements: [
-          { label: '150-200 m approaches', area: 'Approach', score: -0.31, sample: 14, unit: 'SG / shot', basis: 'vs target hcp' },
-          { label: 'Left misses', area: 'Driving', score: -0.5, sample: 12, unit: 'pts / hole', basis: 'vs your avg' },
-        ],
-      },
-    };
-    const { board } = buildCoachInsights(stats);
-    const all = [...board.fixFirst, ...board.nextGains, ...board.watch];
-    all.forEach((insight) => {
-      expect(insight.pointsPerRound).toBeUndefined();
+  test('a small persistent penalties cost is below the leak floor, so it never crowds out a real leak', () => {
+    const { hero, board } = buildCoachInsights({
+      strokesGained: sg([
+        { approach: -0.7, penalties: -0.15 }, { approach: -0.8, penalties: -0.15 }, { approach: -0.6, penalties: -0.15 },
+      ]),
     });
-  });
-});
-
-describe('practice plan drills', () => {
-  test('plan items carry a matched drill and payoff for SG leaks', () => {
-    const stats = {
-      strokesGained: {
-        byCategory: { offTheTee: 0, approach: 0, aroundGreen: 0, putting: -1.8, penalties: 0 },
-        sampleHolesByCategory: { offTheTee: 30, approach: 30, aroundGreen: 30, putting: 30, penalties: 30 },
-        sampleHoles: 30,
-      },
-    };
-    const { practicePlan } = buildCoachInsights(stats);
-    const first = practicePlan.find((p) => p.role === 'practiceFirst');
-    expect(first.drill).toBeDefined();
-    expect(first.drill.passTarget.length).toBeGreaterThan(5);
-    expect(first.payoffPointsPerRound).toBeCloseTo(1.8, 2);
-  });
-  test('empty stats plan items have no drill', () => {
-    const { practicePlan } = buildCoachInsights({});
-    practicePlan.forEach((item) => {
-      expect(item.drill).toBeUndefined();
-      expect(item.payoffPointsPerRound).toBeUndefined();
-    });
+    expect(hero).toMatchObject({ id: 'leak:approach' });
+    expect(flat(board).map((i) => i.id)).not.toContain('leak:penalties');
   });
 });

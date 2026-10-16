@@ -50,7 +50,7 @@ function formatPointsPerRound(pointsPerRound) {
   return t('stats.my.pointsPerRound', { value: `${sign}${formatNumber(pointsPerRound)}` });
 }
 
-export default function CoachInsightRow({ insight, practiceRole }) {
+export default function CoachInsightRow({ insight, weekPill }) {
   const { theme } = useTheme();
   const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -75,9 +75,9 @@ export default function CoachInsightRow({ insight, practiceRole }) {
         <View style={s.metaRow}>
           <Text style={s.area}>{areaText(insight)}</Text>
           {proofs.length ? <Text style={s.proof}>{proofs.join(' · ')}</Text> : null}
-          {practiceRole ? (
+          {weekPill ? (
             <View style={s.practicePill}>
-              <Text style={s.practiceText}>{t('stats.my.coach.planPill', { role: practiceRole })}</Text>
+              <Text style={s.practiceText}>{weekPill}</Text>
             </View>
           ) : null}
         </View>

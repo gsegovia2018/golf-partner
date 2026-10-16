@@ -12,7 +12,7 @@ export const statExplainerKeys = [
   'putts', 'threePutts', 'scoreDistribution', 'parType', 'holeDifficulty', 'roundShape',
   'recovery', 'teeShot', 'driveBuckets', 'approachDistance', 'teeShotImpact',
   'puttingDriving', 'sgScoring', 'sgDriving', 'sgApproach', 'sgPutting', 'sgVsGroup',
-  'teeClubAccuracy', 'scramblingByMiss', 'par5', 'coachPractice', 'playSmarter',
+  'teeClubAccuracy', 'scramblingByMiss', 'par5', 'coachDiagnosis', 'weeklyPlan', 'swingLink', 'playSmarter',
   'strokesGained', 'courseMastery', 'careerMilestones', 'courseRecord', 'courseScoreMix',
   'courseHighlights', 'courseShotDetail', 'courseHoleByHole', 'handicapIndex',
 ];

@@ -2158,6 +2158,9 @@ export function approachMissByDistance(tournament, playerId) {
     const known = e.dir.long + e.dir.short + e.dir.left + e.dir.right;
     out[bk] = {
       attempts: e.attempts,
+      // Denominators of the rates below (the coach's sample gates read them).
+      misses: e.misses,
+      directionKnown: known,
       greenRate: rate100(e.attempts - e.misses, e.attempts),
       missRate: rate100(e.misses, e.attempts),
       shortRate: rate100(e.dir.short, known),
@@ -2911,7 +2914,12 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
       sampleHolesByCategory[category] += categorySample;
     });
     sampleHoles += r.sampleHoles;
-    perRound.push({ index: i, total: r.total, sampleHoles: r.sampleHoles, byCategory: r.byCategory });
+    perRound.push({
+      index: i, total: r.total, sampleHoles: r.sampleHoles, byCategory: r.byCategory,
+      // Which categories this round actually sampled: an unsampled one reads
+      // 0 in byCategory, so per-round spreads must filter on this.
+      sampleHolesByCategory: r.sampleHolesByCategory,
+    });
   });
   if (sampleHoles < SG_SEASON_MIN_SAMPLE) {
     return {

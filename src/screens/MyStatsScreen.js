@@ -37,7 +37,13 @@ import BreakdownTab from '../components/mystats/tabs/BreakdownTab';
 import ShotsTab from '../components/mystats/tabs/ShotsTab';
 import HandicapTab from '../components/mystats/tabs/HandicapTab';
 import { resolveStatExplainer } from '../components/mystats/statExplainers';
-import { loadFocus, saveFocus, clearFocus, archiveFocus, makeFocusCommit, focusVerdict, needsRebase, rebaseFocus } from '../store/coachFocus';
+import {
+  loadFocus, saveFocus, clearFocus, archiveFocus, makeFocusCommit, focusVerdict, needsRebase, rebaseFocus,
+  loadFocusNotice, dismissFocusNotice,
+} from '../store/coachFocus';
+import { buildCoachWeek, previousPlanFor, advancePlanMemory, loadPlanMemory, savePlanMemory } from '../store/coachWeek';
+import { subscribeSwings, getSwingsVersion, getSwings, getSwingProfile } from '../store/swingStore';
+import { getSwingAvailability } from '../swing/availability';
 
 const SELECTION_PREFIX = '@mystats_round_selection:';
 // Legacy per-device key handicap exclusions used before they moved into the
@@ -146,10 +152,22 @@ export default function MyStatsScreen({ navigation, route }) {
     [appSettings.handicapExcludedRounds],
   );
   const [coachFocus, setCoachFocus] = useState(null);
+  const [focusNotice, setFocusNotice] = useState(null);
+  // undefined until loaded: the plan memory must not be written before it is read.
+  const [planMemory, setPlanMemory] = useState(undefined);
 
   useEffect(() => {
     let cancelled = false;
-    loadFocus(user?.id).then((focus) => { if (!cancelled) setCoachFocus(focus); }).catch(() => {});
+    // loadFocus archives an old v1 focus and leaves the one-time notice, so
+    // the notice is read after it.
+    loadFocus(user?.id)
+      .then(async (focus) => {
+        const notice = await loadFocusNotice(user?.id).catch(() => null);
+        if (!cancelled) { setCoachFocus(focus); setFocusNotice(notice); }
+      })
+      .catch(() => {});
+    setPlanMemory(undefined);
+    loadPlanMemory(user?.id).then((memory) => { if (!cancelled) setPlanMemory(memory); });
     return () => { cancelled = true; };
   }, [user?.id]);
   const isTabPresentation = route?.params?.presentation === 'tab';
@@ -481,17 +499,59 @@ export default function MyStatsScreen({ navigation, route }) {
     [coachFocus, stats],
   );
 
+  // Coach v2: the swing link and the weekly plan need what only the screen
+  // has (swings, the minutes setting, today, the latest round); the logic is
+  // in store/coachWeek.js. `today` is one ISO day per render.
+  const swingsVersion = useSyncExternalStore(subscribeSwings, getSwingsVersion, getSwingsVersion);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const latestRound = selected.length ? selected[selected.length - 1] : null;
+  const roundKey = latestRound?.key ?? null;
+  const lastRound = useMemo(() => {
+    if (!latestRound) return null;
+    const date = latestRound.endedAt ? new Date(latestRound.endedAt).toISOString() : latestRound.tournamentDate;
+    return { course: latestRound.courseName ?? null, date: date ? String(date).slice(0, 10) : null };
+  }, [latestRound]);
+  const coachWeek = useMemo(
+    () => (stats
+      ? buildCoachWeek({
+        stats,
+        focus: coachFocus,
+        verdict: coachFocusVerdict,
+        swings: getSwings(),
+        profile: getSwingProfile(),
+        minutesPerWeek: appSettings.practiceMinutesPerWeek,
+        previousPlan: previousPlanFor(planMemory, roundKey),
+        lastRound,
+        today: todayKey,
+      })
+      : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stats, coachFocus, coachFocusVerdict, swingsVersion, appSettings.practiceMinutesPerWeek, planMemory, roundKey, lastRound, todayKey],
+  );
+  const swingSupport = useMemo(() => getSwingAvailability(), []);
+
+  // Remember the plan so the next round's re-plan note has something to compare.
+  useEffect(() => {
+    if (planMemory === undefined || !coachWeek?.plan?.signature) return;
+    const next = advancePlanMemory(planMemory, roundKey, coachWeek.plan.signature);
+    if (next !== planMemory) {
+      setPlanMemory(next);
+      savePlanMemory(user?.id, next).catch(() => {});
+    }
+  }, [coachWeek, planMemory, roundKey, user?.id]);
+
   // The SG baseline tables changed since this focus was committed: re-anchor
   // its baselineImpact on today's numbers (the Focus card says so).
   useEffect(() => {
-    if (!coachFocus || !stats || !needsRebase(coachFocus)) return;
+    if (!coachFocus || !stats || !needsRebase(coachFocus, stats)) return;
     const next = rebaseFocus(coachFocus, stats, new Date().toISOString());
     setCoachFocus(next);
     saveFocus(user?.id, next).catch(() => {});
   }, [coachFocus, stats, user?.id]);
 
-  const onCommitFocus = useCallback((insight) => {
-    const focus = makeFocusCommit(insight, stats);
+  // `chain` is { leak, bucket?, cause?, swingId? } from the diagnosis card.
+  const onCommitFocus = useCallback((chain) => {
+    const focus = makeFocusCommit(chain, stats);
     if (!focus) return;
     setCoachFocus(focus);
     saveFocus(user?.id, focus).catch(() => {});
@@ -504,6 +564,16 @@ export default function MyStatsScreen({ navigation, route }) {
     setCoachFocus(null);
     archiveFocus(user?.id, ended, verdict).catch(() => clearFocus(user?.id).catch(() => {}));
   }, [coachFocus, coachFocusVerdict, user?.id]);
+
+  const onChangeMinutes = useCallback((minutes) => {
+    updateAppSettings({ practiceMinutesPerWeek: minutes }).catch(() => {});
+  }, []);
+  const onRecordSwing = useCallback(() => navigation.navigate('SwingHome'), [navigation]);
+  const onOpenSwing = useCallback((swingId) => navigation.navigate('SwingResults', { swingId }), [navigation]);
+  const onDismissNotice = useCallback(() => {
+    setFocusNotice(null);
+    dismissFocusNotice(user?.id).catch(() => {});
+  }, [user?.id]);
 
   const reportCard = useMemo(
     () => (myRounds && reportRoundKey
@@ -705,6 +775,13 @@ export default function MyStatsScreen({ navigation, route }) {
           focusVerdict={coachFocusVerdict}
           onCommitFocus={onCommitFocus}
           onEndFocus={onEndFocus}
+          week={coachWeek}
+          onChangeMinutes={onChangeMinutes}
+          swingSupport={swingSupport}
+          onRecordSwing={onRecordSwing}
+          onOpenSwing={onOpenSwing}
+          focusNotice={focusNotice}
+          onDismissNotice={onDismissNotice}
         />
       );
     } else if (key === 'form') {

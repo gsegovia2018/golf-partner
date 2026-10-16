@@ -2,6 +2,9 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import CoachTab from '../tabs/CoachTab';
+import {
+  onePutting, tieStats, fewRounds, approachShort, week, focusRecord, verdictOf,
+} from './coachFixtures';
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => {
@@ -26,56 +29,125 @@ jest.mock('../../../theme/ThemeContext', () => ({
   },
 }));
 
-const heroInsight = {
-  id: 'putting:putting', group: 'fixFirst', area: 'putting', areaLabel: 'Putting',
-  title: 'Putting', reason: 'Putting is costing 1.8 SG / round.', metric: '-1.8 SG / round',
-  impact: -1.8, tone: 'bad', confidence: 'high',
+const tabProps = (stats, opts = {}, props = {}) => ({
+  stats,
+  targetHandicap: 15,
+  week: week(stats, opts),
+  focus: opts.focus ?? null,
+  focusVerdict: opts.verdict ?? null,
+  onCommitFocus: jest.fn(),
+  onEndFocus: jest.fn(),
+  onChangeMinutes: jest.fn(),
+  onDismissNotice: jest.fn(),
+  swingSupport: { supported: false, reason: 'web' },
+  ...props,
+});
+const renderTab = (stats, opts, props) => render(<CoachTab {...tabProps(stats, opts, props)} />);
+const order = (r, ids) => {
+  const json = JSON.stringify(r.toJSON());
+  return ids.map((id) => json.indexOf(`"${id}"`));
 };
 
-const stats = {
-  metrics: { avgPoints: 30, avgDifferential: 16.4 },
-  form: { metrics: [], hasHistory: false },
-  formSeries: { metrics: { avgPoints: [], avgDifferential: [] } },
-  coach: {
-    hero: heroInsight,
-    board: { fixFirst: [heroInsight], keepDoing: [], gettingBetter: [], gettingWorse: [], nextGains: [], watch: [] },
-    practicePlan: [],
-  },
-  coachStrategy: [
-    { id: 'lag-first-6plus', title: 'Lag first from 6+ m', reason: 'Three putts.', payoffPointsPerRound: 0.6, sample: 12, basis: 'your long putts' },
-  ],
-};
+// The stats the form tests below need, on the plain shape.
+const stats = onePutting();
 
-const focus = {
-  insightId: 'putting:putting', area: 'putting', areaLabel: 'Putting', title: 'Putting',
-  metric: '-1.8 SG / round', baselineImpact: -1.8, committedAt: '2026-07-15T00:00:00Z', roundCountAtCommit: 8,
-};
-
-describe('CoachTab focus + strategy wiring', () => {
-  test('no focus: hero shows the commit button, no FocusCard', () => {
-    const onCommit = jest.fn();
-    const r = render(<CoachTab stats={stats} focus={null} focusVerdict={null} onCommitFocus={onCommit} onEndFocus={jest.fn()} />);
-    fireEvent.press(r.getByLabelText('Make this my focus'));
-    expect(onCommit).toHaveBeenCalledWith(heroInsight);
-    expect(r.queryByText('Your Focus')).toBeNull();
+describe('CoachTab composition (design B)', () => {
+  test('card order: target, diagnosis, plan, form, board; no focus card without a focus', () => {
+    const r = renderTab(onePutting());
+    const at = order(r, ['diagnosis-card', 'weekly-plan-card', 'current-form-card', 'coach-board']);
+    expect(at.every((i) => i > 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(r.queryByTestId('focus-card')).toBeNull();
+    expect(r.getByText(/vs 15-handicap target/)).toBeTruthy();
   });
-  test('active focus: FocusCard renders, commit button hidden', () => {
-    const r = render(
-      <CoachTab
-        stats={stats}
-        focus={focus}
-        focusVerdict={{ state: 'needs-more-rounds', roundsSince: 0, roundsNeeded: 2, baseline: -1.8, current: null, currentMetric: null }}
-        onCommitFocus={jest.fn()}
-        onEndFocus={jest.fn()}
-      />,
-    );
-    expect(r.getByText('Your Focus')).toBeTruthy();
+
+  test('with a focus the focus card comes first, after the target row, and the buttons are gone', () => {
+    const stats2 = approachShort();
+    const r = renderTab(stats2, { focus: focusRecord(), verdict: verdictOf() });
+    const at = order(r, ['focus-card', 'diagnosis-card', 'weekly-plan-card']);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(at[0]).toBeGreaterThan(0);
     expect(r.queryByLabelText('Make this my focus')).toBeNull();
+    expect(r.getByText('Your Focus')).toBeTruthy();
   });
-  test('strategy tips render', () => {
-    const r = render(<CoachTab stats={stats} focus={null} focusVerdict={null} onCommitFocus={jest.fn()} onEndFocus={jest.fn()} />);
+
+  test('no focus: the diagnosis card commits the chain', () => {
+    const onCommit = jest.fn();
+    const r = renderTab(onePutting(), {}, { onCommitFocus: onCommit });
+    fireEvent.press(r.getByLabelText('Make this my focus'));
+    expect(onCommit.mock.calls[0][0].leak.id).toBe('leak:putting:6+');
+  });
+
+  test('the picker writes the minutes upstream', () => {
+    const onChangeMinutes = jest.fn();
+    const r = renderTab(onePutting(), {}, { onChangeMinutes });
+    fireEvent.press(r.getByLabelText('90 minutes'));
+    expect(onChangeMinutes).toHaveBeenCalledWith(90);
+  });
+
+  test('the board is folded as More findings with counts, and expands', () => {
+    const r = renderTab(onePutting());
+    const row = r.getByTestId('more-findings');
+    expect(row.props.accessibilityState.expanded).toBe(false);
+    expect(r.getByText('Improve now 1 · Protect 1')).toBeTruthy();
+    expect(r.queryByText('Off the tee')).toBeNull();
+    fireEvent.press(row);
+    expect(r.getByTestId('more-findings').props.accessibilityState.expanded).toBe(true);
+    expect(r.getByText('Off the tee')).toBeTruthy();
+  });
+
+  test('the board pill comes from the plan; the top leak is not a board row', () => {
+    const r = renderTab(onePutting(), { minutesPerWeek: 120 });
+    fireEvent.press(r.getByTestId('more-findings'));
+    // the second leak (approach) is a next gain with its range session in the plan
+    expect(r.getAllByText(/^This week: Range · \d+ min$/).length).toBeGreaterThan(0);
+    expect(r.getAllByText('Fix first')).toHaveLength(1); // the diagnosis badge, not a board group
+  });
+
+  test('Play smarter keeps the tips the chain does not show', () => {
+    const s = onePutting();
+    s.coachStrategy.push({
+      id: 'tee-club-down', causeId: 'cause:tee:trouble:driver', titleMsg: { key: 'stats.my.tip.clubDown.title' },
+      reasonMsg: { key: 'stats.my.tip.clubDown.reason', params: { pct: 28, sg: 0.8 } }, payoffPointsPerRound: 0.5, sample: 32,
+      basisMsg: { key: 'stats.my.tip.clubDown.basis' },
+    });
+    const r = renderTab(s);
     expect(r.getByText('Play smarter')).toBeTruthy();
-    expect(r.getByText('Lag first from 6+ m')).toBeTruthy();
+    expect(r.getAllByText(/^Lag first from 6\+ m/)).toHaveLength(1); // inside the chain only
+    expect(r.getByText('Club down on tight tee shots')).toBeTruthy();
+  });
+
+  test('Play smarter disappears when the chain shows every tip', () => {
+    const r = renderTab(onePutting());
+    expect(r.queryByText('Play smarter')).toBeNull();
+  });
+
+  test('the old-focus notice shows once and can be dismissed', () => {
+    const onDismiss = jest.fn();
+    const r = renderTab(onePutting(), {}, { focusNotice: { kind: 'v1-closed', closedAt: '2026-10-16T08:00:00Z' }, onDismissNotice: onDismiss });
+    expect(r.getByText('Your old focus was closed; pick a new one.')).toBeTruthy();
+    fireEvent.press(r.getByLabelText('Dismiss'));
+    expect(onDismiss).toHaveBeenCalled();
+    expect(renderTab(onePutting()).queryByTestId('focus-notice')).toBeNull();
+  });
+
+  test('few rounds: no focus button, no board crash, plan still shown', () => {
+    const r = renderTab(fewRounds());
+    expect(r.queryByLabelText('Make this my focus')).toBeNull();
+    expect(r.getByText('Not enough rounds to rank your leaks yet')).toBeTruthy();
+    expect(r.getByTestId('weekly-plan-card')).toBeTruthy();
+  });
+
+  test('tie: both focus buttons, both chains', () => {
+    const r = renderTab(tieStats());
+    expect(r.getByLabelText('Focus: Approach')).toBeTruthy();
+    expect(r.getByLabelText('Focus: Off the tee')).toBeTruthy();
+  });
+
+  test('without a week (stats before the diagnosis) the tab still renders its form and board', () => {
+    const r = render(<CoachTab stats={{ ...stats, coachDiagnosis: undefined }} focus={null} focusVerdict={null} />);
+    expect(r.getByText('Current form')).toBeTruthy();
+    expect(r.queryByTestId('diagnosis-card')).toBeNull();
   });
 });
 

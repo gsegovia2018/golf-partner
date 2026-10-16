@@ -1137,7 +1137,7 @@ describe('computeMyStats', () => {
     expect(stats).toHaveProperty('bounceBack');
   });
 
-  test('includes a coach block with hero, board groups, and practice plan', () => {
+  function coachRound(i) {
     const holes = holes18();
     const scores = {};
     const shotDetails = { p1: {} };
@@ -1162,8 +1162,8 @@ describe('computeMyStats', () => {
         };
       }
     });
-    const myRound = {
-      key: 'coach:0',
+    return {
+      key: `coach:${i}`,
       round: mkRound({
         holes,
         scores: { p1: scores },
@@ -1174,17 +1174,48 @@ describe('computeMyStats', () => {
       player: { id: 'p1', name: 'Me', handicap: 0 },
       courseName: 'Coach',
       tournamentName: 'T',
-      tournamentDate: '2026-05-29',
+      tournamentDate: `2026-05-${10 + i}`,
       completed: true,
     };
+  }
 
-    const stats = computeMyStats([myRound], { targetHandicap: 14 });
+  test('includes a coach block with hero and board groups, no practice plan', () => {
+    const stats = computeMyStats([0, 1, 2, 3].map(coachRound), { targetHandicap: 14 });
 
     expect(stats.coach.hero).toBeTruthy();
     expect(stats.coach.board).toHaveProperty('fixFirst');
     expect(stats.coach.board).toHaveProperty('keepDoing');
     expect(stats.coach.board).toHaveProperty('nextGains');
-    expect(stats.coach.practicePlan).toHaveLength(3);
+    expect(stats.coach).not.toHaveProperty('practicePlan');
+  });
+
+  test('returns coachDiagnosis; the board and hero come from the same diagnosis', () => {
+    const stats = computeMyStats([0, 1, 2, 3].map(coachRound), { targetHandicap: 14 });
+    const d = stats.coachDiagnosis;
+
+    expect(d).toEqual(expect.objectContaining({ leaks: expect.any(Array), categories: expect.any(Array), targetHandicap: 14 }));
+    expect(d.categories).toHaveLength(5);
+    expect(d.top).toBeTruthy();
+    expect(stats.coach.hero.id).toBe(d.top.id);
+    expect(stats.coach.board.fixFirst.map((i) => i.id)).toContain(d.top.id);
+  });
+
+  test('causes ride only on the top and tie leaks (top === leaks[0])', () => {
+    const d = computeMyStats([0, 1, 2, 3].map(coachRound), { targetHandicap: 14 }).coachDiagnosis;
+
+    expect(d.top.causes).toEqual({ primary: expect.anything(), alsoPossible: expect.any(Array) });
+    expect(d.leaks[0]).toBe(d.top);
+    if (d.tie) expect(d.leaks[1]).toBe(d.tie);
+    d.leaks.forEach((leak) => {
+      if (leak !== d.top && leak !== d.tie) expect(leak.causes).toBeUndefined();
+    });
+  });
+
+  test('a single round is under the diagnosis gates: no top, insufficient categories', () => {
+    const d = computeMyStats([coachRound(0)], { targetHandicap: 14 }).coachDiagnosis;
+
+    expect(d.top).toBeNull();
+    expect(d.leaks).toEqual([]);
   });
 
   test('distributionGross is gross vs par while distribution stays net', () => {
@@ -1267,7 +1298,7 @@ describe('computeMyStats baselineOnly', () => {
     const rounds = twoRoundsWithShots();
     const baseline = computeMyStats(rounds, { baselineOnly: true });
     [
-      'coach', 'actionPlan', 'formSeries', 'strokesGained', 'ranking', 'metrics', 'form',
+      'coach', 'coachDiagnosis', 'actionPlan', 'formSeries', 'strokesGained', 'ranking', 'metrics', 'form',
       'driveImpact', 'approachImpact', 'puttDive', 'puttingTarget', 'approachTarget',
       'teeShot', 'distributionGross', 'bounceBack', 'scrambling', 'courseMastery',
       'careerMilestones', 'lagPutting', 'sandSaves', 'upAndDown', 'bunkerVisits',
