@@ -189,6 +189,11 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
   const s = useMemo(() => makeStyles(theme), [theme]);
   const strokesGained = stats?.strokesGained;
   const hasStrokesGained = strokesGained?.total != null;
+  // The headline is the real score gap (categories + the untracked residual);
+  // the categories sum alone leaves out duffs, second chips and far misses.
+  const recon = strokesGained?.reconciliation;
+  const hasGap = recon?.rounds > 0 && recon.gapAvg != null && recon.residualAvg != null;
+  const hasHero = hasGap || hasStrokesGained;
   // The signal titles are built in the active language, so rebuild on a switch.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const signals = useMemo(() => buildShotSignals(stats), [stats, t]);
@@ -218,10 +223,24 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
     >
       <View style={s.hero} testID="sg-hero-surface">
         <Text style={s.heroKicker}>{t('stats.my.snapshot.targetGap')}</Text>
-        <Text style={[s.heroValue, hasStrokesGained && { color: theme.isDark ? semantic.winner.dark : semantic.winner.light }]}>
-          {hasStrokesGained ? t('stats.my.shots.perRound', { value: formatSignedFixed(strokesGained.total) }) : '-'}
+        <Text style={[s.heroValue, hasHero && { color: theme.isDark ? semantic.winner.dark : semantic.winner.light }]}>
+          {hasGap
+            ? t('stats.my.shots.gapValue', { value: signedGap(recon.gapAvg) })
+            : hasStrokesGained ? t('stats.my.shots.perRound', { value: formatSignedFixed(strokesGained.total) }) : '-'}
         </Text>
-        <Text style={s.heroMeta}>{hasStrokesGained ? targetCopy : t('stats.my.shots.logPutts')}</Text>
+        <Text style={s.heroMeta}>
+          {hasGap ? gapTargetCopy(targetHandicap) : hasStrokesGained ? targetCopy : t('stats.my.shots.logPutts')}
+        </Text>
+        {hasGap ? (
+          <Text style={s.heroMeta} testID="sg-hero-split">
+            {t('stats.my.shots.gapSplit', {
+              tracked: signedGap(recon.gapAvg - recon.residualAvg),
+              untracked: signedGap(recon.residualAvg),
+            })}
+          </Text>
+        ) : hasStrokesGained ? (
+          <Text style={s.heroMeta} testID="sg-hero-tracked-only">{t('stats.my.shots.trackedOnly')}</Text>
+        ) : null}
         <View style={s.heroGrid}>
           <StatTile value={sample ?? t('stats.my.shots.tracked')} caption={t('stats.my.shots.evidence')} />
         </View>
@@ -264,6 +283,13 @@ function targetTitle(targetHandicap) {
   return tNow('stats.my.shots.targetHcp', { target: formatNumber(targetHandicap) });
 }
 
+
+const signedGap = (value) => `${value > 0 ? '+' : ''}${formatNumber(value, { decimals: 1 })}`;
+
+function gapTargetCopy(targetHandicap) {
+  if (targetHandicap == null || targetHandicap === 0) return tNow('stats.my.shots.gapVsScratch');
+  return tNow('stats.my.shots.gapVsHcp', { target: formatNumber(targetHandicap) });
+}
 
 function trackedSample(stats) {
   if (stats?.shots?.putts?.holes != null) return sampleText(stats.shots.putts.holes, 'holes');

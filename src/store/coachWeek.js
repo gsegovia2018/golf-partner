@@ -10,6 +10,8 @@
 //   chains   [Chain] (two on a tie): { leak, causes, swingLink, check, drills, courseTask,
 //            tip, isFocus }; drills are the plan's drills for that chain's blocks
 //   plan     buildWeeklyPlan(...) result
+//   untracked  { residual, gap } when the strokes no category explains outweigh the
+//            first chain's leak (see coachDiagnosis untrackedDominant), else null
 //   swingLink  the first chain's link (or the swing-only link when there is no chain)
 //   shownTipIds  strategy tips already inside a chain
 //   pills    { [insightId]: { kind, minutes } } for the board's "this week" pill
@@ -20,6 +22,7 @@ import { buildWeeklyPlan, courseTaskFor } from './coachWeeklyPlan';
 import { causesForLeak } from './coachCauses';
 import { buildCheck } from './coachCheck';
 import { isV2Focus } from './coachFocus';
+import { untrackedDominant } from './coachDiagnosis';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PLAN_PREFIX = '@mystats_coach_plan:';
@@ -89,6 +92,7 @@ export function buildCoachWeek({
     kind,
     chains,
     plan,
+    untracked: untrackedDominant(stats, primary),
     swingLink,
     shownTipIds: dedupe(chains.map((c) => c.tip?.id).filter(Boolean)),
     pills: weekPills(plan, stats?.coach?.board),

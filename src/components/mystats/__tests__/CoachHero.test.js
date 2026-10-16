@@ -78,11 +78,11 @@ describe('CoachHero surface color', () => {
   test('focus button is accent-filled on the white card, cream-on-red on the alarm card', () => {
     const onCommitFocus = jest.fn();
     const fixFirst = render(wrap(<CoachHero insight={insight} onCommitFocus={onCommitFocus} />));
-    expect(StyleSheet.flatten(fixFirst.getByText('Make this my focus').props.style).color).toBe(WHITE);
+    expect(StyleSheet.flatten(fixFirst.getByText('Work on this').props.style).color).toBe(WHITE);
 
     const worse = render(
       wrap(<CoachHero insight={{ ...insight, group: 'gettingWorse' }} onCommitFocus={onCommitFocus} />)
     );
-    expect(StyleSheet.flatten(worse.getByText('Make this my focus').props.style).color).toBe(RED);
+    expect(StyleSheet.flatten(worse.getByText('Work on this').props.style).color).toBe(RED);
   });
 });

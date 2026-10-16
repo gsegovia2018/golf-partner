@@ -67,14 +67,14 @@ describe('CoachTab composition (design B)', () => {
     const at = order(r, ['focus-card', 'diagnosis-card', 'weekly-plan-card']);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(at[0]).toBeGreaterThan(0);
-    expect(r.queryByLabelText('Make this my focus')).toBeNull();
+    expect(r.queryByLabelText('Work on this')).toBeNull();
     expect(r.getByText('Your Focus')).toBeTruthy();
   });
 
   test('no focus: the diagnosis card commits the chain', () => {
     const onCommit = jest.fn();
     const r = renderTab(onePutting(), {}, { onCommitFocus: onCommit });
-    fireEvent.press(r.getByLabelText('Make this my focus'));
+    fireEvent.press(r.getByLabelText('Work on this'));
     expect(onCommit.mock.calls[0][0].leak.id).toBe('leak:putting:6+');
   });
 
@@ -133,15 +133,15 @@ describe('CoachTab composition (design B)', () => {
 
   test('few rounds: no focus button, no board crash, plan still shown', () => {
     const r = renderTab(fewRounds());
-    expect(r.queryByLabelText('Make this my focus')).toBeNull();
+    expect(r.queryByLabelText('Work on this')).toBeNull();
     expect(r.getByText('Not enough rounds to rank your leaks yet')).toBeTruthy();
     expect(r.getByTestId('weekly-plan-card')).toBeTruthy();
   });
 
   test('tie: both focus buttons, both chains', () => {
     const r = renderTab(tieStats());
-    expect(r.getByLabelText('Focus: Approach')).toBeTruthy();
-    expect(r.getByLabelText('Focus: Off the tee')).toBeTruthy();
+    expect(r.getByLabelText('Work on Approach')).toBeTruthy();
+    expect(r.getByLabelText('Work on Off the tee')).toBeTruthy();
   });
 
   test('without a week (stats before the diagnosis) the tab still renders its form and board', () => {

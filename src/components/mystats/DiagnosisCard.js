@@ -8,6 +8,7 @@ import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import { GoldBadge, EvidenceChip, DrillLine } from './CoachBits';
 import { formatConfidence } from './CoachInsightRow';
+import { MIN_VERDICT_ROUNDS } from '../../store/coachFocus';
 import { renderMsg, renderDatedMsg, metricValueText, msgText } from './msg';
 
 const MIN_ROUNDS = 3;
@@ -26,7 +27,7 @@ export default function DiagnosisCard({
   const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   if (!week) return null;
-  const { kind, chains } = week;
+  const { kind, chains, untracked } = week;
   const hasChain = chains.length > 0;
   const tie = kind === 'tie';
   const cardTitle = t('stats.my.coach.ui.diag.title');
@@ -56,6 +57,20 @@ export default function DiagnosisCard({
     );
   };
 
+  // One line under the focus button(s): what the coach does once it is pressed.
+  // A single chain names its metric; a tie (two metrics) says it generically.
+  const focusExplain = (chain) => {
+    const label = !tie && chain.check?.label ? renderMsg(chain.check.label) : null;
+    const rounds = MIN_VERDICT_ROUNDS;
+    return (
+      <Text style={s.line2} testID="focus-explain">
+        {label
+          ? t('stats.my.coach.ui.focus.explain', { metric: label.charAt(0).toLocaleLowerCase() + label.slice(1), rounds })
+          : t('stats.my.coach.ui.focus.explain.generic', { rounds })}
+      </Text>
+    );
+  };
+
   if (hasChain) {
     const badge = kind === 'focus' ? t('stats.my.coach.ui.badge.focus') : t('stats.my.coach.group.fixFirst');
     return (
@@ -78,16 +93,26 @@ export default function DiagnosisCard({
             {chains.map((chain, i) => (
               <View key={chain.leak.id} style={s.tieBlock} testID={`diagnosis-chain-${i + 1}`}>
                 <Text style={s.kicker}>{t('stats.my.coach.ui.tie.leak', { n: i + 1, area: renderMsg(areaMsg(chain.leak.category)) })}</Text>
-                <Chain chain={chain} {...chainProps} />
+                <Chain chain={chain} untracked={i === 0 ? untracked : null} {...chainProps} />
               </View>
             ))}
-            {!focusActive && onCommitFocus ? <View style={s.btnRow}>{chains.map((c) => focusButton(c, true))}</View> : null}
+            {!focusActive && onCommitFocus ? (
+              <>
+                <View style={s.btnRow}>{chains.map((c) => focusButton(c, true))}</View>
+                {focusExplain(chains[0])}
+              </>
+            ) : null}
           </>
         ) : (
           <>
             <Text style={s.kicker}>{kickerText(t, chains[0].leak)}</Text>
-            <Chain chain={chains[0]} {...chainProps} />
-            {!focusActive && onCommitFocus ? <View style={s.btnRow}>{focusButton(chains[0], false)}</View> : null}
+            <Chain chain={chains[0]} untracked={untracked} {...chainProps} />
+            {!focusActive && onCommitFocus ? (
+              <>
+                <View style={s.btnRow}>{focusButton(chains[0], false)}</View>
+                {focusExplain(chains[0])}
+              </>
+            ) : null}
           </>
         )}
       </SectionCard>
@@ -123,7 +148,7 @@ function Step({ s, label, children, last }) {
   );
 }
 
-function Chain({ chain, s, t, swingSupport, onRecordSwing, onOpenSwing, onInfo }) {
+function Chain({ chain, untracked, s, t, swingSupport, onRecordSwing, onOpenSwing, onInfo }) {
   const { leak, causes, swingLink, check, drills, courseTask, tip, isFocus } = chain;
   // At most 3 drills; the swing drill keeps its seat (it is the link to the recording).
   const swingDrills = drills.filter((d) => d.source === 'swing').slice(0, 1);
@@ -150,6 +175,12 @@ function Chain({ chain, s, t, swingSupport, onRecordSwing, onOpenSwing, onInfo }
   return (
     <View style={s.chain}>
       <Step s={s} label={t('stats.my.coach.ui.step.leak')}>
+        {untracked ? (
+          <Text style={s.line2} testID="untracked-note">{t('stats.my.coach.ui.leak.untracked', {
+            untracked: formatNumber(untracked.residual, { decimals: 1 }),
+            gap: formatNumber(untracked.gap, { decimals: 1 }),
+          })}</Text>
+        ) : null}
         <View style={s.bigRow}>
           <Text style={s.big}>{formatNumber(leak.strokesPerRound, { decimals: 1 })}</Text>
           <Text style={s.bigUnit}>{t('stats.my.coach.ui.leak.perRound', { vs })}</Text>

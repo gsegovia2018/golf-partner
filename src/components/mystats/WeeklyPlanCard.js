@@ -87,8 +87,6 @@ export default function WeeklyPlanCard({ week, focus, verdict, onChangeMinutes, 
           key={session.id}
           style={s.tile}
           testID={session.part > 1 ? `session-${session.kind}-${session.part}` : `session-${session.kind}`}
-          accessible
-          accessibilityLabel={renderMsg(session.title)}
         >
           <View style={s.tileIcon}><Feather name={KIND_ICON[session.kind]} size={16} color={theme.accent.primary} /></View>
           <View style={s.tileBody}>
