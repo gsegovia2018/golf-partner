@@ -195,9 +195,9 @@ export default {
   'stats.my.coach.ui.unit.percent': '{value}%',
   'stats.my.coach.ui.unit.perRound': '{value} a round',
   'stats.my.coach.ui.unit.metres': '{value} m',
-  'stats.my.coach.ui.metric.sgCategory': '{area}, strokes gained a round',
-  'stats.my.coach.ui.metric.sgPutt': 'Strokes gained a putt from {bucket} m',
-  'stats.my.coach.ui.metric.sgApproach': 'Strokes gained a shot from {bucket} m',
+  'stats.my.coach.ui.metric.sgCategory': '{area}, strokes gained per round',
+  'stats.my.coach.ui.metric.sgPutt': 'Strokes gained per putt from {bucket} m',
+  'stats.my.coach.ui.metric.sgApproach': 'Strokes gained per shot from {bucket} m',
   'stats.my.coach.ui.metric.threePuttRate': 'Three-putt rate from {bucket} m',
   'stats.my.coach.ui.metric.puttsPer18': 'Putts per 18 holes',
   'stats.my.coach.ui.metric.threePuttsPer18': 'Three-putts per 18 holes',
@@ -211,8 +211,8 @@ export default {
   'stats.my.coach.ui.metric.upDown': 'Up-and-down rate',
   'stats.my.coach.ui.metric.upDownSand': 'Up-and-down rate from sand',
   'stats.my.coach.ui.metric.upDownGrass': 'Up-and-down rate from grass',
-  'stats.my.coach.ui.metric.penaltiesTee': 'Penalties off the tee a round',
-  'stats.my.coach.ui.metric.penaltiesOther': 'Other penalties a round',
+  'stats.my.coach.ui.metric.penaltiesTee': 'Penalties off the tee per round',
+  'stats.my.coach.ui.metric.penaltiesOther': 'Other penalties per round',
 
   // ── Coach tab UI: weekly plan card ─────────────────────────────────────
   'stats.my.coach.ui.week.title': 'This week',

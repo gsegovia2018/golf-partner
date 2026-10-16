@@ -105,6 +105,11 @@ describe('FocusCard (v2)', () => {
     expect(r.getByText('Baselines recalibrated on 16 Oct — progress is measured from then.')).toBeTruthy();
   });
 
+  test('the title reads "strokes gained per putt", not "a putt"', () => {
+    const r = render(<FocusCard focus={{ ...focus, metricKey: 'sg.putting.bucket.1-2' }} verdict={null} onEndFocus={jest.fn()} />);
+    expect(r.getByText('Strokes gained per putt from 1-2 m')).toBeTruthy();
+  });
+
   test('says so when a changed target handicap restarted the verdict', () => {
     const verdictNow = { state: 'needs-more-rounds', roundsNeeded: 2, roundsSince: 4, level: 3, unit: 'percent', baseline: 71, current: null, early: true };
     const rebased = { ...focus, rebasedAt: '2026-10-16T08:00:00Z' };

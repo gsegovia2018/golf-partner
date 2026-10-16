@@ -147,7 +147,7 @@ export function needsRebase(focus, stats) {
 export function rebaseFocus(focus, stats, rebasedAt) {
   const reading = readMetric(focus.metricKey, stats);
   const fresh = reading && reading.value != null;
-  const { rebaseReason, ...rest } = focus; // eslint-disable-line no-unused-vars
+  const { rebaseReason, ...rest } = focus;
   const changed = targetChanged(focus, stats);
   return {
     ...rest,

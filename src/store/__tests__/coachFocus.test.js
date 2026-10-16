@@ -305,7 +305,7 @@ describe('target handicap change (v2)', () => {
   test('a different target needs a rebase; the same target, no stored target, or no current target do not', () => {
     expect(needsRebase(focus, baseStats)).toBe(false);
     expect(needsRebase(focus, scratchStats())).toBe(true);
-    const { targetHandicap, ...old } = focus; // eslint-disable-line no-unused-vars
+    const { targetHandicap, ...old } = focus;
     expect(needsRebase(old, scratchStats())).toBe(false);
     expect(needsRebase(focus, { ...baseStats, targetHandicap: null })).toBe(false);
   });

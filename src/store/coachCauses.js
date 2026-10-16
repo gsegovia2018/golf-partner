@@ -78,7 +78,7 @@ const dec1 = (v) => n(round1(v), { decimals: 1 });
 // instead, through the key's `.scratch` sibling (no `hcp` param).
 function benchMsg(ctx, key, params) {
   if (ctx.target !== 0) return msg(key, params);
-  const { hcp, ...rest } = params; // eslint-disable-line no-unused-vars
+  const { hcp, ...rest } = params;
   return msg(`${key}.scratch`, rest);
 }
 const rankOf = (strength) => STRENGTHS.indexOf(strength);

@@ -197,7 +197,7 @@ export default {
   'stats.my.coach.ui.unit.metres': '{value} m',
   'stats.my.coach.ui.metric.sgCategory': '{area}, golpes ganados por vuelta',
   'stats.my.coach.ui.metric.sgPutt': 'Golpes ganados por putt desde {bucket} m',
-  'stats.my.coach.ui.metric.sgApproach': 'Golpes ganados por golpe desde {bucket} m',
+  'stats.my.coach.ui.metric.sgApproach': 'Golpes ganados por aproximación desde {bucket} m',
   'stats.my.coach.ui.metric.threePuttRate': 'Porcentaje de tres putts desde {bucket} m',
   'stats.my.coach.ui.metric.puttsPer18': 'Putts cada 18 hoyos',
   'stats.my.coach.ui.metric.threePuttsPer18': 'Tres putts cada 18 hoyos',

@@ -98,7 +98,7 @@ describe('DiagnosisCard: one clear leak', () => {
     const top = mkLeak('putting', null, -1.1);
     const s2 = mkStats(mkDiagnosis({ leaks: [top] }), { strokesGained: { byCategory: { putting: -1.1 }, roundsByCategory: { putting: 12 }, sampleHolesByCategory: { putting: 216 } } });
     const r2 = renderCard(s2);
-    expect(r2.getByText('Putting, strokes gained a round: now -1.10 SG / round (a 15 handicap: 0.00 SG / round).')).toBeTruthy();
+    expect(r2.getByText('Putting, strokes gained per round: now -1.10 SG / round (a 15 handicap: 0.00 SG / round).')).toBeTruthy();
   });
 
   test('the focus button commits { leak, bucket, cause }', () => {
