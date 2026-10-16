@@ -41,20 +41,15 @@ describe('My Stats components in Spanish', () => {
   });
 
   test('CoachHero renders store descriptors in Spanish', async () => {
-    const { hero } = buildCoachInsights({
-      actionPlan: {
-        improvements: [{
-          area: 'Putting', label: '6+ m putts', labelMsg: { key: 'stats.my.label.puttBucket', params: { bucket: '6+' } },
-          score: -0.81, sample: 18, unit: 'SG / putt', basis: 'vs target hcp',
-        }],
-      },
-    });
-    const { getByText } = render(wrap(<CoachHero insight={hero} />));
+    const perRound = [-1, -1.4, -1.2, -1.2].map((putting) => ({
+      byCategory: { putting },
+      sampleHolesByCategory: { offTheTee: 18, approach: 18, aroundGreen: 18, putting: 18, penalties: 18 },
+    }));
+    const { hero } = buildCoachInsights({ strokesGained: { perRound } });
+    const { getByText, getAllByText } = render(wrap(<CoachHero insight={hero} />));
     expect(getByText('Corrige primero')).toBeTruthy();
-    expect(getByText('Putts')).toBeTruthy();
-    expect(getByText('Putts de 6+ m')).toBeTruthy();
-    expect(getByText('Putts de 6+ m te está costando 0,81 SG / putt en 18 putts.')).toBeTruthy();
-    expect(getByText('18 muestras')).toBeTruthy();
+    expect(getAllByText('Putts').length).toBeGreaterThan(0);
+    expect(getByText('Putts te cuesta 1,2 SG / vuelta frente a tu hándicap objetivo en 72 hoyos.')).toBeTruthy();
     expect(getByText('Confianza alta')).toBeTruthy();
   });
 

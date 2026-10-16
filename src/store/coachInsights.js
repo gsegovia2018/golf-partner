@@ -1,5 +1,5 @@
-import { drillsForInsight } from './coachDrills';
-import { msg, n, lower, raw } from './statsMsg';
+import { buildDiagnosis } from './coachDiagnosis';
+import { msg, n, raw } from './statsMsg';
 
 const EMPTY_BOARD = {
   fixFirst: [],
@@ -43,9 +43,9 @@ const AREA_ALIASES = {
   penalties: 'penalties',
 };
 
+const STRENGTH_MIN = 0.1; // strokes/round gained before a category counts as a strength
 const LOW_SAMPLE_MAX = 5;
 const HIGH_CONFIDENCE_SAMPLE = 12;
-const STRONG_LEAK_SCORE = -0.5;
 const CONFIDENCE_ORDER = {
   high: 0,
   medium: 1,
@@ -106,30 +106,12 @@ const signedN = (value, opts = {}) => (
 );
 const metricMsg = (value, unit, opts) => msg('stats.my.coach.metric', { value: signedN(value, opts), unit: unitMsg(unit) });
 const plainMetricMsg = (value, unit) => msg('stats.my.coach.metric', { value: n(round2(value)), unit: unitMsg(unit) });
-const areaMsg = (area) => msg(`stats.my.area.${area}`);
 
 function normalizeArea(area) {
   const key = String(area || '')
     .replace(/[^a-zA-Z]/g, '')
     .toLowerCase();
   return AREA_ALIASES[key] || 'scoring';
-}
-
-function actionItemArea(item) {
-  const area = String(item?.area || '');
-  if (area.replace(/[^a-zA-Z]/g, '').toLowerCase() === 'strokesgained') {
-    const labelArea = normalizeArea(item?.label);
-    if (labelArea !== 'scoring') return item.label;
-  }
-  return item?.area;
-}
-
-function actionItemBasis(item) {
-  if (item?.basis) return item.basis;
-  const unit = String(item?.unit || '').toLowerCase();
-  if (unit.includes('sg')) return 'vs target hcp';
-  if (unit.includes('pts')) return 'vs your avg';
-  return 'tracked sample';
 }
 
 function slug(value) {
@@ -190,6 +172,7 @@ function valueFormUnit(metric) {
 }
 
 function makeInsight({
+  id,
   group,
   area,
   title,
@@ -209,7 +192,7 @@ function makeInsight({
 }) {
   const normalizedArea = normalizeArea(area);
   return {
-    id: `${normalizedArea}:${slug(title)}`,
+    id: id ?? `${normalizedArea}:${slug(title)}`,
     group,
     area: normalizedArea,
     areaLabel: AREA_LABELS[normalizedArea],
@@ -227,57 +210,6 @@ function makeInsight({
     tone,
     priority,
   };
-}
-
-function actionItemInsight(item, group, tone) {
-  if (!item?.label) return null;
-  const sample = Number(item.sample);
-  const confidence = confidenceForSample(sample);
-  const metric = `${formatSigned(item.score)} ${item.unit || 'pts'}`;
-  const reason = tone === 'good'
-    ? `${item.label} is gaining ${metric} ${samplePhrase(sample, item.unit, item.sampleUnit)}.`
-    : `${item.label} is costing ${metric.replace('-', '')} ${samplePhrase(sample, item.unit, item.sampleUnit)}.`;
-  const itemUnit = item.unit || 'pts';
-  const labelMsg = item.labelMsg ?? raw(item.label);
-  const phrase = samplePhraseMsg(sample, item.unit, item.sampleUnit);
-  const reasonMsg = tone === 'good'
-    ? msg('stats.my.coach.reason.gaining', { label: labelMsg, metric: metricMsg(item.score, itemUnit), phrase })
-    : msg('stats.my.coach.reason.costing', {
-      label: labelMsg, metric: metricMsg(item.score, itemUnit, { noMinus: true }), phrase,
-    });
-  const isSgPerRound = String(item.unit || '') === 'SG / round';
-  return makeInsight({
-    group,
-    area: actionItemArea(item),
-    title: item.label,
-    reason,
-    metric,
-    titleMsg: labelMsg,
-    reasonMsg,
-    metricMsg: metricMsg(item.score, itemUnit),
-    impact: item.score,
-    sample,
-    basis: actionItemBasis(item),
-    confidence,
-    tone,
-    ...(isSgPerRound ? { pointsPerRound: item.score } : {}),
-  });
-}
-
-function routeLeakInsight(insight, score) {
-  if (!insight) return null;
-  if (insight.confidence === 'low') {
-    return { ...insight, group: 'watch', tone: 'watch' };
-  }
-  if (Number.isFinite(score) && score > STRONG_LEAK_SCORE) {
-    return { ...insight, group: 'nextGain', tone: 'neutral' };
-  }
-  return { ...insight, group: 'fixFirst', tone: 'bad' };
-}
-
-function addLeakInsight(board, item, seen) {
-  const insight = actionItemInsight(item, 'fixFirst', 'bad');
-  addUnique(board, routeLeakInsight(insight, item?.score), seen);
 }
 
 function formInsight(metric) {
@@ -331,56 +263,6 @@ function rankingWeaknessInsight(item) {
     tone: 'watch',
     priority: 3,
   });
-}
-
-function strokesGainedCategoryInsights(stats) {
-  const strokesGained = stats?.strokesGained;
-  const categories = strokesGained?.byCategory ?? {};
-  return Object.entries(categories).map(([category, value]) => {
-    if (!Number.isFinite(value) || Math.abs(value) < 0.05) return null;
-    const sample = Number(strokesGained?.sampleHolesByCategory?.[category]
-      ?? strokesGained?.sampleHoles);
-    const tone = value > 0 ? 'good' : 'bad';
-    const title = SG_CATEGORY_TITLES[category] || AREA_LABELS[normalizeArea(category)];
-    const sampleCopy = samplePhrase(sample, 'SG / round', 'holes');
-    const titleMsg = SG_CATEGORY_KEYS[category]
-      ? msg(SG_CATEGORY_KEYS[category])
-      : areaMsg(normalizeArea(category));
-    const phrase = samplePhraseMsg(sample, 'SG / round', 'holes');
-    const insight = makeInsight({
-      group: value > 0 ? 'keepDoing' : 'fixFirst',
-      area: category,
-      title,
-      reason: value > 0
-        ? `${title} is gaining ${formatSigned(value)} SG / round versus your target handicap ${sampleCopy}.`
-        : `${title} is costing ${formatSigned(value).replace('-', '')} SG / round versus your target handicap ${sampleCopy}.`,
-      metric: `${formatSigned(value)} SG / round`,
-      titleMsg,
-      reasonMsg: value > 0
-        ? msg('stats.my.coach.reason.sgGaining', { title: titleMsg, value: signedN(value), phrase })
-        : msg('stats.my.coach.reason.sgCosting', { title: titleMsg, value: signedN(value, { noMinus: true }), phrase }),
-      metricMsg: metricMsg(value, 'SG / round'),
-      impact: value,
-      sample,
-      basis: 'vs target hcp',
-      confidence: confidenceForSample(sample),
-      tone,
-      priority: 1,
-      pointsPerRound: value,
-    });
-    // Penalties are almost always non-positive and tracked on nearly every
-    // round, so they are almost always "high confidence". Left unguarded,
-    // that lets a small-but-persistent penalties cost outrank a genuinely
-    // bigger leak elsewhere (which may only have medium/low confidence) for
-    // the fixFirst/hero slot. Route penalties leaks through the same
-    // confidence + strength gate used for actionPlan leaks so only a
-    // *strong*, well-sampled penalties leak stays in fixFirst; a weak one
-    // moves to nextGains/watch instead of crowding out other insights.
-    if (category === 'penalties' && tone === 'bad') {
-      return routeLeakInsight(insight, value);
-    }
-    return insight;
-  }).filter(Boolean);
 }
 
 function roundShapeInsights(stats) {
@@ -456,7 +338,104 @@ function sortByImpact(insights, direction = 'asc') {
   });
 }
 
-function buildBoard(stats) {
+
+// Leak insights: id = leak id (`leak:<category>` or `leak:<category>:<bucket>`).
+// Carries the diagnosis numbers beside the fields the board rows render today.
+function leakInsight(leak, group, tone) {
+  const category = leak.category;
+  const title = SG_CATEGORY_TITLES[category];
+  const titleMsg = msg(SG_CATEGORY_KEYS[category]);
+  const value = leak.strokesPerRound;
+  const sample = leak.sample?.holes;
+  const cost = Number.isFinite(value) ? Math.abs(round2(value)) : 0;
+  return {
+    ...makeInsight({
+      id: leak.id,
+      group,
+      area: category,
+      title,
+      reason: `${title} is costing ${cost} SG / round versus your target handicap ${samplePhrase(sample, 'SG / round', 'holes')}.`,
+      metric: `${formatSigned(value)} SG / round`,
+      titleMsg,
+      reasonMsg: msg('stats.my.coach.reason.sgCosting', {
+        title: titleMsg,
+        value: signedN(value, { noMinus: true }),
+        phrase: samplePhraseMsg(sample, 'SG / round', 'holes'),
+      }),
+      metricMsg: metricMsg(value, 'SG / round'),
+      impact: value,
+      sample,
+      basis: 'vs target hcp',
+      confidence: leak.confidence,
+      tone,
+      pointsPerRound: value,
+    }),
+    category,
+    bucket: leak.bucket ?? null,
+    strokesPerRound: value,
+    se: leak.se ?? null,
+  };
+}
+
+// Positive categories (sufficient sample, at least STRENGTH_MIN strokes/round
+// gained, not a low-confidence reading) → Keep doing. Id `strength:<category>`.
+function strengthInsight(category) {
+  const title = SG_CATEGORY_TITLES[category.category];
+  const titleMsg = msg(SG_CATEGORY_KEYS[category.category]);
+  const value = category.strokesPerRound;
+  const sample = category.sample?.holes;
+  return makeInsight({
+    id: `strength:${category.category}`,
+    group: 'keepDoing',
+    area: category.category,
+    title,
+    reason: `${title} is gaining ${formatSigned(value)} SG / round versus your target handicap ${samplePhrase(sample, 'SG / round', 'holes')}.`,
+    metric: `${formatSigned(value)} SG / round`,
+    titleMsg,
+    reasonMsg: msg('stats.my.coach.reason.sgGaining', {
+      title: titleMsg, value: signedN(value), phrase: samplePhraseMsg(sample, 'SG / round', 'holes'),
+    }),
+    metricMsg: metricMsg(value, 'SG / round'),
+    impact: value,
+    sample,
+    basis: 'vs target hcp',
+    confidence: category.confidence,
+    tone: 'good',
+    pointsPerRound: value,
+  });
+}
+
+// A category under the sample gates: never ranked, shown in Monitor with what
+// it still needs (`needs` is kept on the insight for the screen).
+function insufficientInsight(category) {
+  const title = SG_CATEGORY_TITLES[category.category];
+  const titleMsg = msg(SG_CATEGORY_KEYS[category.category]);
+  return {
+    ...makeInsight({
+      id: category.id,
+      group: 'watch',
+      area: category.category,
+      title,
+      reason: `${title} needs more tracked data before it can be ranked.`,
+      metric: '',
+      titleMsg,
+      reasonMsg: msg('stats.my.coach.reason.insufficient', { title: titleMsg }),
+      sample: category.sample?.holes,
+      basis: 'tracked sample',
+      confidence: 'low',
+      tone: 'watch',
+      priority: 2,
+    }),
+    category: category.category,
+    needs: category.needs ?? null,
+  };
+}
+
+// Board from the diagnosis (coach v2 spec §6): top leak (and its tie) →
+// fixFirst, remaining medium/high leaks → nextGains, low-confidence leaks and
+// under-sampled categories → watch, positive categories → keepDoing. Form
+// trends, ranking weaknesses and round shape are unchanged.
+function buildBoard(stats, diagnosis) {
   const board = {
     fixFirst: [],
     keepDoing: [],
@@ -466,40 +445,37 @@ function buildBoard(stats) {
     watch: [],
   };
   const seen = new Set();
-  const actionPlan = stats.actionPlan || {};
+  const leaks = diagnosis?.leaks ?? [];
+  const fixFirstIds = new Set([diagnosis?.top?.id, diagnosis?.tie?.id].filter(Boolean));
 
-  (actionPlan.improvements || []).forEach((item) => addLeakInsight(board, item, seen));
-
-  if (actionPlan.improve && !(actionPlan.improvements || []).some((item) => item.label === actionPlan.improve.label)) {
-    addLeakInsight(board, actionPlan.improve, seen);
-  }
-
-  if (actionPlan.practice) {
-    addLeakInsight(board, actionPlan.practice, seen);
-  }
-
-  (actionPlan.strengths || []).forEach((item) => {
-    addUnique(board, actionItemInsight(item, 'keepDoing', 'good'), seen);
+  leaks.forEach((leak) => {
+    if (fixFirstIds.has(leak.id)) {
+      addUnique(board, leakInsight(leak, 'fixFirst', 'bad'), seen);
+    } else if (leak.confidence === 'low') {
+      addUnique(board, leakInsight(leak, 'watch', 'watch'), seen);
+    } else {
+      addUnique(board, leakInsight(leak, 'nextGain', 'neutral'), seen);
+    }
   });
-
-  if (actionPlan.keep && !(actionPlan.strengths || []).some((item) => item.label === actionPlan.keep.label)) {
-    addUnique(board, actionItemInsight(actionPlan.keep, 'keepDoing', 'good'), seen);
+  if (diagnosis?.candidate) {
+    addUnique(board, leakInsight(diagnosis.candidate, 'nextGain', 'neutral'), seen);
   }
+
+  (diagnosis?.categories ?? [])
+    .filter((c) => c.confidence !== 'insufficient' && c.confidence !== 'low' && c.strokesPerRound >= STRENGTH_MIN)
+    .forEach((c) => addUnique(board, strengthInsight(c), seen));
+  (diagnosis?.insufficient ?? []).forEach((c) => addUnique(board, insufficientInsight(c), seen));
 
   (stats.form?.metrics || []).forEach((metric) => {
     addUnique(board, formInsight(metric), seen);
   });
-
   (stats.ranking?.weaknesses || []).forEach((item) => {
     addUnique(board, rankingWeaknessInsight(item), seen);
   });
-
-  strokesGainedCategoryInsights(stats).forEach((insight) => addUnique(board, insight, seen));
-
   roundShapeInsights(stats).forEach((insight) => addUnique(board, insight, seen));
 
-  board.fixFirst = sortByImpact(board.fixFirst, 'asc');
-  board.nextGains = sortByImpact(board.nextGains, 'asc');
+  // fixFirst / nextGains keep the diagnosis order (strokes/round, confidence,
+  // trainability); the rest sort by impact as before.
   board.keepDoing = sortByImpact(board.keepDoing, 'desc');
   board.gettingBetter = sortByImpact(board.gettingBetter, 'desc');
   board.gettingWorse = sortByImpact(board.gettingWorse, 'asc');
@@ -507,128 +483,21 @@ function buildBoard(stats) {
   return board;
 }
 
-function pickHero(board) {
-  const strongLeak = board.fixFirst.find((insight) => insight.confidence === 'high')
-    || board.fixFirst[0];
-  if (strongLeak) return strongLeak;
+function pickHero(board, diagnosis) {
+  const top = diagnosis?.top && board.fixFirst.find((insight) => insight.id === diagnosis.top.id);
+  if (top) return top;
   return board.gettingBetter[0] || board.keepDoing[0] || board.nextGains[0] || board.watch[0] || null;
 }
 
-function practiceTitle(prefix, insight) {
-  return insight ? `${prefix}: ${insight.title}` : prefix;
-}
-
-const insightTitleMsg = (insight) => insight.titleMsg ?? raw(insight.title);
-
-function practiceTitleMsg(roleKey, insight) {
-  return insight
-    ? msg('stats.my.practice.titleWith', { prefix: msg(roleKey), title: insightTitleMsg(insight) })
-    : msg(roleKey);
-}
-
-function practiceReasonMsg(insight, fallbackKey) {
-  return insight?.reason ? (insight.reasonMsg ?? raw(insight.reason)) : msg(fallbackKey);
-}
-
-function practiceReason(insight, fallback) {
-  return insight?.reason || fallback;
-}
-
-// The drill and points payoff attached to a practice item, when its source
-// insight exists. Payoff is absolute: "worth ≈ X pts / round" copy is
-// direction-free.
-function practiceExtras(insight) {
-  if (!insight) return {};
-  const drill = drillsForInsight(insight)[0];
+// `diagnosis` defaults to buildDiagnosis(stats); computeMyStats passes the one
+// it already built so the board and `coachDiagnosis` agree.
+export function buildCoachInsights(stats = {}, diagnosis = buildDiagnosis(stats || {})) {
+  const board = buildBoard(stats || {}, diagnosis);
   return {
-    ...(drill ? { drill } : {}),
-    ...(Number.isFinite(insight.pointsPerRound)
-      ? { payoffPointsPerRound: Math.abs(round2(insight.pointsPerRound)) }
-      : {}),
-  };
-}
-
-function buildPracticePlan(board) {
-  const first = board.fixFirst[0] || board.nextGains[0] || board.gettingWorse[0] || null;
-  const primaryFixes = board.fixFirst.filter((insight) => (insight.priority ?? 0) === 0);
-  const benchmarkFixes = board.fixFirst.filter((insight) => (insight.priority ?? 0) > 0);
-  const secondary = [
-    ...board.nextGains,
-    ...board.gettingWorse,
-    ...primaryFixes,
-    ...board.keepDoing,
-    ...benchmarkFixes,
-    ...board.watch,
-    ...board.gettingBetter,
-  ].find((insight) => insight && insight.id !== first?.id && insight.area !== first?.area)
-    || board.nextGains.find((insight) => insight.id !== first?.id)
-    || null;
-  const cue = board.watch.find((insight) => insight.title === 'Closing 3 holes')
-    || board.watch.find((insight) => insight.area === 'roundShape')
-    || board.watch.find((insight) => insight.id !== first?.id && insight.id !== secondary?.id)
-    || board.gettingBetter[0]
-    || null;
-
-  return [
-    {
-      id: 'practice-first',
-      role: 'practiceFirst',
-      title: practiceTitle('Practice first', first),
-      titleMsg: practiceTitleMsg('stats.my.practice.role.practiceFirst', first),
-      instruction: first
-        ? `Spend the first block on ${first.title.toLowerCase()} with a simple make-or-miss target.`
-        : 'Log one complete round with scores and shot details.',
-      instructionMsg: first
-        ? msg('stats.my.practice.first.instruction', { title: lower(insightTitleMsg(first)) })
-        : msg('stats.my.practice.first.instructionNone'),
-      reason: practiceReason(first, 'More complete scoring data will make the next coach view sharper.'),
-      reasonMsg: practiceReasonMsg(first, 'stats.my.practice.first.reasonNone'),
-      ...(first ? { sourceInsightId: first.id } : {}),
-      ...practiceExtras(first),
-    },
-    {
-      id: 'secondary-focus',
-      role: 'secondaryFocus',
-      title: practiceTitle('Secondary focus', secondary),
-      titleMsg: practiceTitleMsg('stats.my.practice.role.secondaryFocus', secondary),
-      instruction: secondary
-        ? `Use a shorter second block for ${secondary.title.toLowerCase()} so one area does not dominate practice.`
-        : 'Review the strongest recent form trend and keep the same pre-shot routine.',
-      instructionMsg: secondary
-        ? msg('stats.my.practice.second.instruction', { title: lower(insightTitleMsg(secondary)) })
-        : msg('stats.my.practice.second.instructionNone'),
-      reason: practiceReason(secondary, 'Balancing practice keeps the plan from overfitting one category.'),
-      reasonMsg: practiceReasonMsg(secondary, 'stats.my.practice.second.reasonNone'),
-      ...(secondary ? { sourceInsightId: secondary.id } : {}),
-      ...practiceExtras(secondary),
-    },
-    {
-      id: 'on-course-cue',
-      role: 'onCourseCue',
-      title: practiceTitle('On-course cue', cue),
-      titleMsg: practiceTitleMsg('stats.my.practice.role.onCourseCue', cue),
-      instruction: cue
-        ? `Before those shots, choose the conservative target and commit to the same tempo.`
-        : 'Capture fairways, greens, putts, and basic shot outcomes during the next round.',
-      instructionMsg: cue
-        ? msg('stats.my.practice.cue.instruction')
-        : msg('stats.my.practice.cue.instructionNone'),
-      reason: practiceReason(cue, 'The selector needs shot data to separate real leaks from noise.'),
-      reasonMsg: practiceReasonMsg(cue, 'stats.my.practice.cue.reasonNone'),
-      ...(cue ? { sourceInsightId: cue.id } : {}),
-      ...practiceExtras(cue),
-    },
-  ];
-}
-
-export function buildCoachInsights(stats = {}) {
-  const board = buildBoard(stats || {});
-  return {
-    hero: pickHero(board),
+    hero: pickHero(board, diagnosis),
     board: {
       ...EMPTY_BOARD,
       ...board,
     },
-    practicePlan: buildPracticePlan(board),
   };
 }

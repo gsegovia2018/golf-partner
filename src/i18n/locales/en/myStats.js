@@ -113,6 +113,7 @@ export default {
   "stats.my.coach.reason.belowBaseline": "{label} is below your scoring baseline by {value} points.",
   "stats.my.coach.reason.sgGaining": "{title} is gaining {value} SG / round versus your target handicap {phrase}.",
   "stats.my.coach.reason.sgCosting": "{title} is costing {value} SG / round versus your target handicap {phrase}.",
+  "stats.my.coach.reason.insufficient": "{title} needs more tracked data before it can be ranked.",
   "stats.my.coach.reason.closing": "The closing stretch is {value} points per hole versus your warmup holes.",
   "stats.my.coach.reason.backNine": "The back nine is {value} points compared with the front nine.",
   "stats.my.coach.closing.title": "Closing 3 holes",

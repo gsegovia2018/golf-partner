@@ -113,6 +113,7 @@ export default {
   "stats.my.coach.reason.belowBaseline": "{label} está por debajo de tu nivel base de puntuación en {value} puntos.",
   "stats.my.coach.reason.sgGaining": "{title} te suma {value} SG / vuelta frente a tu hándicap objetivo {phrase}.",
   "stats.my.coach.reason.sgCosting": "{title} te cuesta {value} SG / vuelta frente a tu hándicap objetivo {phrase}.",
+  "stats.my.coach.reason.insufficient": "{title} necesita más datos registrados antes de poder clasificarse.",
   "stats.my.coach.reason.closing": "El tramo final va {value} puntos por hoyo respecto a tus primeros hoyos.",
   "stats.my.coach.reason.backNine": "Los últimos 9 hoyos van {value} puntos respecto a los primeros 9.",
   "stats.my.coach.closing.title": "Últimos 3 hoyos",
