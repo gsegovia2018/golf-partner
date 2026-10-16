@@ -1,7 +1,7 @@
 # Coach v2 — Diagnosis chain, weekly plan, swing link
 
 **Date:** 2026-10-16
-**Status:** Approved 2026-10-16 — decisions in §12 (design B, all §11 defaults, practice picker on the plan card)
+**Status:** Implemented on feat/coach-v2 (2026-10-16)
 **Scope:** My Stats → Coach tab. Stores under `src/store/coach*.js`, UI under `src/components/mystats/`, swing data read from `src/store/swingStore.js`. No LLM, no network, deterministic, on-device.
 **Prerequisite:** the strokes-gained baseline recalibration PR (per-handicap baselines so a typical H golfer scores ≈ 0 SG per category vs target H; targets no longer clamped at 28) lands first. Nothing here duplicates it; §3.2 lists what the coach *additionally* needs so priorities come out right.
 

@@ -211,6 +211,13 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   player is a ledger. Used by the finished game / tournament round cards on
   the game screen, the stats Scorecard / Rounds tab and Players' hole by hole.
   The live, editable scorecard stays `GridView`'s `ScorecardTable`.
+- Coach tab (My Stats → Coach; spec `docs/superpowers/specs/2026-10-16-coach-v2-design.md`):
+  `store/coachDiagnosis.js` ranks leaks by strokes/round against the target handicap, with
+  se-based confidence and a sample floor; `coachCauses.js` names the likely cause of each leak;
+  `coachSwingLink.js` links the swing analyzer's main fault (from `swingStore`) to a leak;
+  `coachWeeklyPlan.js` + `coachWeek.js` build the weekly plan from the practice-minutes setting;
+  `coachFocus.js` v2 verdicts re-read the leak's metric from the `coachMetrics.js` registry.
+  UI: `components/mystats/DiagnosisCard`, `WeeklyPlanCard`, `FocusCard`. Copy in `i18n/locales/*/coach.js`.
 - Plans and design specs are tracked under `docs/superpowers/`.
 - i18n (Spanish/English): pure-JS layer in `src/i18n/`, never a native module
   (OTA). User-facing strings go through `useT()`/`t()` and the catalogues in
