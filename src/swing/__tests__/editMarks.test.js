@@ -2,6 +2,7 @@
 import { analyze } from '../analyze';
 import {
   buildDraft, analyzeMarks, recompute, draftToMarks, isDirty, patchCheckpoint, hitTest, clampPt,
+  chooseFrame, markStatus, hasMarks, applyProposal, proposalAt, placeMark, setHidden, confirmMark,
 } from '../editMarks';
 import { marksForAnalyze } from '../labels';
 import { cueFor, CHECKPOINT_DEFS } from '../checkpoints';
@@ -177,5 +178,132 @@ describe('checkpoints.js (the lab editor cues)', () => {
   test('internal frames have a cue of their own', () => {
     expect(cueFor('preImpact').name).toBe('Pre-impact');
     expect(cueFor('nope')).toBeNull();
+  });
+});
+
+describe('club on demand: a model proposal on the frame the golfer chose', () => {
+  const KEY = 'top';
+  const prop = (head = [0.31, 0.42]) => ({
+    head, hidden: false, conf: 0.6, source: 'model',
+  });
+  const frameOther = (c) => c.base.cps[KEY].frame + 3;
+  const arrive = (c, proposal = prop()) => {
+    const f = frameOther(c);
+    const { draft } = chooseFrame(c.draft, c.base, KEY, f);
+    return { f, draft, ...applyProposal(draft, c.base, KEY, f, proposal) };
+  };
+
+  test('the answer lands as a proposed head, not confirmed, and is remembered in base', () => {
+    const c = ctx(first);
+    const a = arrive(c);
+    expect(a.draft.cps[KEY].head).toEqual([0.31, 0.42]);
+    expect(a.draft.cps[KEY].confirmed.head).toBe(false);
+    expect(markStatus(a.draft, a.base, KEY, 'head')).toBe('proposed');
+    expect(proposalAt(a.base, KEY, a.f)).toEqual(prop());
+    expect(c.base.cps[KEY].atFrame).toEqual({}); // base is not mutated
+  });
+
+  test('before the answer the head is Missing; dragging it after is moved', () => {
+    const c = ctx(first);
+    const { f } = arrive(c);
+    const { draft } = chooseFrame(c.draft, c.base, KEY, f);
+    expect(markStatus(draft, c.base, KEY, 'head')).toBe('missing');
+    const a = arrive(c);
+    expect(markStatus(placeMark(a.draft, KEY, 'head', [0.5, 0.5]), a.base, KEY, 'head')).toBe('moved');
+  });
+
+  test('choosing a frame that already has an answer starts on the proposed head', () => {
+    const c = ctx(first);
+    const a = arrive(c);
+    const back = chooseFrame(a.draft, a.base, KEY, c.base.cps[KEY].frame).draft;
+    const again = chooseFrame(back, a.base, KEY, a.f);
+    expect(again.draft.cps[KEY].head).toEqual([0.31, 0.42]);
+    expect(again.draft.cps[KEY].confirmed.head).toBe(false);
+    expect(markStatus(again.draft, a.base, KEY, 'head')).toBe('proposed');
+  });
+
+  test('a stale answer (another frame is chosen now) is recorded but not applied', () => {
+    const c = ctx(first);
+    const f = frameOther(c);
+    const away = chooseFrame(chooseFrame(c.draft, c.base, KEY, f).draft, c.base, KEY, f + 1).draft;
+    const r = applyProposal(away, c.base, KEY, f, prop());
+    expect(r.draft).toBe(away);
+    expect(r.draft.cps[KEY].head).toBeNull();
+    expect(proposalAt(r.base, KEY, f)).toEqual(prop());
+  });
+
+  test('never overwrites a head the golfer placed, hid or confirmed meanwhile', () => {
+    const c = ctx(first);
+    const f = frameOther(c);
+    const on = chooseFrame(c.draft, c.base, KEY, f).draft;
+    const placed = placeMark(on, KEY, 'head', [0.9, 0.9]);
+    expect(applyProposal(placed, c.base, KEY, f, prop()).draft.cps[KEY].head).toEqual([0.9, 0.9]);
+    const hid = setHidden(on, KEY, true);
+    const rh = applyProposal(hid, c.base, KEY, f, prop()).draft;
+    expect(rh.cps[KEY].head).toBeNull();
+    expect(rh.cps[KEY].hidden).toBe(true);
+    const ok = confirmMark(placed, c.base, KEY, 'head');
+    expect(applyProposal(ok, c.base, KEY, f, prop()).draft.cps[KEY].confirmed.head).toBe(true);
+    expect(applyProposal(ok, c.base, KEY, f, prop()).draft.cps[KEY].head).toEqual([0.9, 0.9]);
+  });
+
+  test('an empty answer changes nothing', () => {
+    const c = ctx(first);
+    expect(applyProposal(c.draft, c.base, KEY, 5, null)).toEqual({ draft: c.draft, base: c.base });
+  });
+
+  test('hasMarks counts the other frame itself, and an untouched proposal adds nothing beyond it', () => {
+    const c = ctx(first);
+    const a = arrive(c);
+    const on = chooseFrame(c.draft, c.base, KEY, a.f).draft;
+    expect(hasMarks(on, c.base, KEY)).toBe(true); // the frame differs from the proposal's
+    expect(hasMarks(c.draft, c.base, KEY)).toBe(false);
+  });
+
+  test('analyzeMarks sends the on-demand head as the golfer\'s mark of that frame', () => {
+    const c = ctx(first);
+    const a = arrive(c);
+    expect(analyzeMarks(a.draft, a.base)[KEY]).toEqual({ frame: a.f, head: [0.31, 0.42] });
+  });
+
+  test('draftToMarks records the model source and the frame the proposal belongs to; buildDraft reads it back', () => {
+    const c = ctx(first);
+    const a = arrive(c);
+    const confirmed = confirmMark(a.draft, a.base, KEY, 'head');
+    const live = recompute({ ...c, draft: confirmed, base: a.base });
+    const m = draftToMarks({
+      draft: confirmed, base: a.base, live, swingId: 's1', editedAt: 't',
+    });
+    const l = m.frames.find((x) => x.checkpoint === KEY);
+    expect(l.head).toMatchObject({
+      proposed: [0.31, 0.42], proposedSource: 'model', proposedConf: 0.6, proposedAt: a.f, final: [0.31, 0.42], confirmed: true,
+    });
+    expect(l.iProposed).toBe(c.base.cps[KEY].frame);
+    const back = buildDraft(live, pose, m);
+    expect(back.base.cps[KEY].frame).toBe(c.base.cps[KEY].frame);
+    expect(back.base.cps[KEY].atFrame[a.f]).toMatchObject({ head: [0.31, 0.42], source: 'model', hidden: false });
+    expect(markStatus(back.draft, back.base, KEY, 'head')).toBe('confirmed');
+    expect(back.draft.cps[KEY].head).toEqual([0.31, 0.42]);
+  });
+
+  test('a head dragged after the proposal keeps the model proposal next to the final one', () => {
+    const c = ctx(first);
+    const a = arrive(c);
+    const moved = confirmMark(placeMark(a.draft, KEY, 'head', [0.5, 0.5]), a.base, KEY, 'head');
+    const live = recompute({ ...c, draft: moved, base: a.base });
+    const l = draftToMarks({
+      draft: moved, base: a.base, live, swingId: 's1', editedAt: 't',
+    }).frames.find((x) => x.checkpoint === KEY);
+    expect(l.head).toMatchObject({ proposed: [0.31, 0.42], proposedSource: 'model', final: [0.5, 0.5] });
+    expect(l.corrected).toBe(true);
+  });
+
+  test('on the proposed frame (a swing with no model head there) the answer is the proposal itself', () => {
+    const c = ctx(first);
+    const f = c.base.cps[KEY].frame;
+    const draft = patchCheckpoint(c.draft, KEY, { head: null, hidden: false });
+    const r = applyProposal(draft, { ...c.base, cps: { ...c.base.cps, [KEY]: { ...c.base.cps[KEY], head: null } } }, KEY, f, prop());
+    expect(r.draft.cps[KEY].head).toEqual([0.31, 0.42]);
+    expect(markStatus(r.draft, r.base, KEY, 'head')).toBe('proposed');
   });
 });

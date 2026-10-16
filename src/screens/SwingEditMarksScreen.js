@@ -27,8 +27,9 @@ import { cueFor } from '../swing/checkpoints';
 import {
   buildDraft, recompute, draftToMarks, isDirty, hitTest, clampPt, hasMarks,
   markStatus, placeMark, setHidden, confirmMark, chooseFrame, confirmPosition, confirmMoves, restorePosition, skipPosition,
-  pendingMoves, primaryAction,
+  pendingMoves, primaryAction, applyProposal, proposalAt,
 } from '../swing/editMarks';
+import { proposeClub, warmClub, releaseClubDetector } from '../swing/clubOnDemand';
 import {
   MARKED_KEYS, MARK_TOTAL, isMarkedKey, nextTodo, resumeKey, passCounts, positionStatus, markedFromMarks,
 } from '../swing/markPass';
@@ -214,9 +215,9 @@ export function SwingMarkCanvas({
 
   const init = useRef(null);
   if (!init.current) init.current = buildDraft(analysis, pose, marks);
-  const { base } = init.current;
   const startDraft = init.current.draft;
   const [draft, commit] = useState(startDraft);
+  const [base, setBase] = useState(init.current.base); // grows with the clubhead proposals asked for on chosen frames
 
   // A position opens at step 1 in the pass (the frame first), at step 2 once it is confirmed and
   // always in edit mode (Results' "Edit marks" opens the saved frame, "‹ Frame" is one tap away).
@@ -312,7 +313,7 @@ export function SwingMarkCanvas({
   // --- editing (step 2) -------------------------------------------------------------------------------
   const latest = useRef({});
   latest.current = {
-    cp, view, active, draft, handsNow, headNow, ballNow, loading,
+    cp, view, active, draft, base, handsNow, headNow, ballNow, loading,
   };
   const place = useCallback((m, pt) => {
     const L = latest.current;
@@ -329,8 +330,14 @@ export function SwingMarkCanvas({
       w: rect.w, h: rect.h, loading, active, ballOk: cp === 'address', reduced, hands: handsNow, head: headNow, ball: ballNow ? [ballNow[0], ballNow[1]] : null,
     };
   });
+  // club on demand (below): an answer waits in `held` while `holding`, from the grab until the render after the drop
+  const holding = useRef(false);
+  const held = useRef([]);
+  const alive = useRef(true);
+  const warmed = useRef(false);
   const grabbed = useRef(null); // the position and frame a drag started on
   const onGrab = useStable((k, hit) => {
+    holding.current = true;
     grabbed.current = { cp: latest.current.cp, view: latest.current.view };
     setToast('');
     if (hit) setActive(KIND_NAMES[k]);
@@ -350,6 +357,28 @@ export function SwingMarkCanvas({
   });
   const [drops, setDrops] = useState(0);
   useEffect(() => { if (!dragging) lv.kind.value = 0; }, [dragging, drops, lv]);
+
+  // --- the model's clubhead on a chosen frame (club on demand) ----------------------------------------
+  // The answer lands through `latest` (never a closure), is held while a mark is being dragged (nothing
+  // re-renders the canvas mid-drag, D28) and applied after the drop; applyProposal drops it when the
+  // position has moved to another frame or the golfer already decided the head.
+  const deliver = useStable((key, frame, proposal) => {
+    if (!alive.current || !proposal) return;
+    if (holding.current) { held.current.push([key, frame, proposal]); return; }
+    const L = latest.current;
+    const r = applyProposal(L.draft, L.base, key, frame, proposal);
+    latest.current = { ...L, draft: r.draft, base: r.base };
+    setBase(r.base);
+    if (r.draft !== L.draft) commit(r.draft);
+  });
+  useEffect(() => {
+    if (dragging) return;
+    holding.current = false; // the dropped mark is in the draft `latest` now sees
+    const answers = held.current;
+    held.current = [];
+    answers.forEach((a) => deliver(...a));
+  }, [dragging, drops, deliver]);
+  useEffect(() => () => { alive.current = false; releaseClubDetector(); }, []);
   const markPan = useMarkPan({
     ctx, lv, onGrab, onRefuse, onDrop,
   });
@@ -381,6 +410,9 @@ export function SwingMarkCanvas({
 
   // --- step 1 → step 2 and back ---------------------------------------------------------------------
   const pick = useCallback((f) => {
+    // the first scrub away from the proposal opens the detector, so the tap on "Use frame N" finds it warm
+    const L = latest.current;
+    if (!warmed.current && Math.round(f) !== L.base.cps[L.cp].frame) { warmed.current = true; warmClub(); }
     setView(Math.min(maxFrame, Math.max(0, Math.round(f))));
     setCueOpen(false);
   }, [maxFrame]);
@@ -393,6 +425,23 @@ export function SwingMarkCanvas({
     setActive('hands');
     setCueOpen(false);
     setStep(2);
+    askClub(next, cp, view);
+  };
+  /** A chosen frame with no clubhead (and nothing decided): ask the model for one. */
+  const askClub = (next, key, frame) => {
+    const c = next.cps[key];
+    if (c.head || c.hidden || proposalAt(base, key, frame)) return;
+    // pass 2 already ran the model on its own frame, unless the swing was analysed without it
+    if (frame === base.cps[key].frame && pose.pass2?.club) return;
+    const a = recompute({ pose, probe, analysis: scored, draft: next, base });
+    proposeClub({
+      swingId: analysis.swingId,
+      frame,
+      grip: a.error ? null : a.clubMarks[key]?.hands ?? null,
+      video: pose.video,
+      pxPerCm: analysis.scale?.pxPerCm ?? null,
+      scenery: pose.pass2?.club?.scenery ?? null,
+    }).then((proposal) => deliver(key, frame, proposal));
   };
   /** "‹ Frame": back to step 1 at this frame. Nothing is lost until another frame is chosen. */
   const changeFrame = () => {

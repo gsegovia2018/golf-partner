@@ -12,7 +12,10 @@
 // plus the ball ([x, y, r], one for the swing, markable at address) with `ballConfirmed`, and
 // `status` { [key]: 'confirmed' | 'skipped' } for the positions of the marking pass (markPass.js).
 // `base` keeps what analyze() proposed, so every label stores proposed and final side by side
-// (the v2 training data) and a status word can say whether a mark moved.
+// (the v2 training data) and a status word can say whether a mark moved. Besides the proposal on its
+// own frame, `base.cps[k].atFrame` holds the clubhead proposals the model made on other frames the golfer
+// chose (club on demand, plan 2026-10-16): the status of a head is judged against the proposal at
+// the draft's own frame.
 
 import { analyze } from './analyze';
 import { CHECKPOINT_KEYS } from './phases';
@@ -27,6 +30,44 @@ export const HIT_RADIUS_PX = 28; // 56 px across: comfortably over the 44 px min
 
 const sameXY = (a, b) => (a == null && b == null) || (a != null && b != null && a[0] === b[0] && a[1] === b[1]);
 const sameBall = (a, b) => (a == null && b == null) || (a != null && b != null && a.length === b.length && a.every((v, i) => v === b[i]));
+
+const NO_PROPOSAL = { head: null, hidden: false };
+
+/**
+ * The clubhead proposal that belongs to `frame` for a position: the pass-2 one on the proposed frame,
+ * a model one asked for on this frame (atFrame), or null.
+ */
+export function proposalAt(base, key, frame) {
+  const p = base.cps[key];
+  return p.atFrame?.[frame] ?? (frame === p.frame ? p : null);
+}
+
+/** The proposal as the head model reads it (the label's proposed fields, or nothing). */
+const headProposal = (label) => ({
+  head: label.head.proposed, hidden: !!label.head.proposedHidden, conf: label.head.proposedConf, source: label.head.proposedSource,
+});
+
+/**
+ * The base of a position from its saved label. A label whose head proposal belongs to a frame other than
+ * the proposed one (proposedAt, a model proposal asked for on that frame) keeps that proposal under atFrame
+ * and takes the proposed frame's own from pass 2's candidate, so reopening shows the same status.
+ */
+function labelProposal(label, pose) {
+  const frame = label.iProposed ?? label.i;
+  const own = { frame, hands: label.hands.proposed, atFrame: {} };
+  if (label.head.proposedAt == null || label.head.proposedAt === frame) return { ...own, ...headProposal(label) };
+  const c = pose?.pass2?.shaft?.[frame];
+  const v = pose?.video;
+  const head = c?.head && v ? [c.head[0] / v.width, c.head[1] / v.height] : null;
+  return {
+    ...own,
+    head,
+    hidden: !!c?.hidden,
+    conf: c?.conf ?? null,
+    source: c?.source ?? null,
+    atFrame: { [label.head.proposedAt]: headProposal(label) },
+  };
+}
 
 /**
  * @param {object} analysis  the stored analysis (marks already applied)
@@ -48,15 +89,10 @@ export function buildDraft(analysis, pose, marks) {
       frame, hands: placed, head: cm.head ?? null, hidden: !!cm.hidden, confirmed: { hands: ok('hands'), head: ok('head') }, frameOk: !!label?.confirmedFrame,
     };
     proposed[k] = label
-      ? {
-        frame: label.iProposed ?? label.i,
-        hands: label.hands.proposed,
-        head: label.head.proposed,
-        hidden: !!label.head.proposedHidden,
-        conf: label.head.proposedConf,
-        source: label.head.proposedSource,
-      }
-      : { frame, hands: cm.hands, head: cm.head ?? null, hidden: !!cm.hidden, conf: cm.conf, source: cm.source };
+      ? labelProposal(label, pose)
+      : {
+        frame, hands: cm.hands, head: cm.head ?? null, hidden: !!cm.hidden, conf: cm.conf, source: cm.source, atFrame: {},
+      };
   });
   const nativeBall = pose?.ball ? [pose.ball.x, pose.ball.y, pose.ball.r] : null;
   const ballProposed = marks?.ball?.proposed ?? nativeBall ?? (analysis.reference?.ball ? [...analysis.reference.ball, 0.012] : null);
@@ -70,8 +106,8 @@ export function buildDraft(analysis, pose, marks) {
   };
 }
 
-const headChanged = (d, p) => !sameXY(d.head, p.head) || d.hidden !== p.hidden;
-const touched = (d, p) => d.frame !== p.frame || !!d.hands || headChanged(d, p);
+const headChanged = (d, q) => !sameXY(d.head, q.head) || d.hidden !== q.hidden;
+const touched = (d, p, q) => d.frame !== p.frame || !!d.hands || headChanged(d, q);
 
 /** What analyze() takes as opts.marks: only what differs from the proposal. */
 export function analyzeMarks(draft, base) {
@@ -80,11 +116,12 @@ export function analyzeMarks(draft, base) {
     const d = draft.cps[k];
     const p = base.cps[k];
     const m = {};
+    const q = proposalAt(base, k, d.frame) ?? NO_PROPOSAL;
     if (d.frame !== p.frame) m.frame = d.frame;
     if (d.hands) m.hands = d.hands;
     // On a moved frame the clubhead is what the golfer saw there, never the old frame's proposal
     // read again by analyze() (marks.json stores it as head.final the same way).
-    if (headChanged(d, p) || d.frame !== p.frame) {
+    if (headChanged(d, q) || d.frame !== p.frame) {
       if (d.hidden) m.hidden = true;
       else if (d.head) m.head = d.head;
     }
@@ -123,8 +160,9 @@ export function draftToMarks({
     const p = base.cps[k];
     const ok = d.confirmed ?? {};
     const confirmed = status[k] === 'confirmed';
+    const q = proposalAt(base, k, d.frame);
     // Only frames the user touched or confirmed: preImpact / postImpact follow impact by themselves.
-    if (!touched(d, p) && !confirmed && !ok.hands && !ok.head) return;
+    if (!touched(d, p, q ?? NO_PROPOSAL) && !confirmed && !ok.hands && !ok.head) return;
     const label = frameLabel({
       i: d.frame,
       checkpoint: k,
@@ -133,10 +171,13 @@ export function draftToMarks({
         proposed: p.hands, final: d.hands ?? live.clubMarks[k].hands, placed: !!d.hands, confirmed: !!ok.hands,
       },
       head: {
-        proposed: p.head,
-        proposedHidden: p.hidden,
-        proposedConf: p.conf ?? null,
-        proposedSource: p.source ?? null,
+        // the proposal that belongs to this frame; proposedAt says which frame that is (the proposed frame
+        // unless the model was asked on this one)
+        proposed: (q ?? p).head,
+        proposedHidden: (q ?? p).hidden,
+        proposedConf: (q ?? p).conf ?? null,
+        proposedSource: (q ?? p).source ?? null,
+        proposedAt: q && q !== p ? d.frame : p.frame,
         final: d.hidden ? null : d.head,
         finalHidden: d.hidden,
         confirmed: !!ok.head,
@@ -178,7 +219,8 @@ export function markStatus(draft, base, key, mark) {
     if (d.hidden) return 'hidden';
     if (!d.head) return 'missing';
     if (ok.head) return 'confirmed';
-    return sameXY(d.head, base.cps[key].head) && !base.cps[key].hidden ? 'proposed' : 'moved';
+    const q = proposalAt(base, key, d.frame) ?? NO_PROPOSAL;
+    return sameXY(d.head, q.head) && !q.hidden ? 'proposed' : 'moved';
   }
   if (ok.hands) return 'confirmed';
   return d.hands ? 'moved' : 'proposed';
@@ -187,24 +229,23 @@ export function markStatus(draft, base, key, mark) {
 /**
  * Step 1's "Use frame N" / "Proposed frame looks right" (D28): the position takes `frame`. On a
  * different frame its marks start again, because a hand placed on frame 495 is wrong on 497: the
- * hands follow the tracked grip at the new frame, the clubhead goes back to the proposal on the
- * proposed frame and to Missing anywhere else, nothing is confirmed. The ball (one per swing) stays.
+ * hands follow the tracked grip at the new frame, the clubhead goes back to the proposal for that frame
+ * (the proposed frame's, or one the model made there on demand) and to Missing without one, nothing is confirmed. The ball (one per swing) stays.
  * @returns {{ draft: object, reset: boolean }}  reset = the frame changed, so the marks did
  */
 export function chooseFrame(draft, base, key, frame) {
   const d = draft.cps[key];
   if (d.frame === frame) return { draft: d.frameOk ? draft : patchCheckpoint(draft, key, { frameOk: true }), reset: false };
-  const p = base.cps[key];
-  const atProposal = frame === p.frame;
+  const q = proposalAt(base, key, frame);
   // a position confirmed on the old frame is no longer confirmed: it goes back to "to do"
   const { [key]: _was, ...status } = draft.status ?? {};
   return {
     draft: patchCheckpoint({ ...draft, status }, key, {
       frame,
       hands: null,
-      head: atProposal ? p.head : null,
-      hidden: atProposal ? p.hidden : false,
-      confirmed: { hands: false, head: atProposal && p.hidden },
+      head: q?.head ?? null,
+      hidden: !!q?.hidden,
+      confirmed: { hands: false, head: !!q?.hidden },
       frameOk: true,
     }),
     reset: true,
@@ -220,7 +261,24 @@ export function hasMarks(draft, base, key) {
   const d = draft.cps[key];
   const p = base.cps[key];
   const ok = okOf(d);
-  return !!d.hands || ok.hands || ok.head || d.frame !== p.frame || headChanged(d, p) || draft.status?.[key] === 'confirmed';
+  return !!d.hands || ok.hands || ok.head || d.frame !== p.frame || headChanged(d, proposalAt(base, key, d.frame) ?? NO_PROPOSAL) || draft.status?.[key] === 'confirmed';
+}
+
+/**
+ * A clubhead the model proposed on `frame` (club on demand). It is always remembered in `base`, so choosing
+ * that frame again shows it; it reaches the draft only while the position is still on that frame with no
+ * clubhead decision (placed, hidden or confirmed): a late answer never overwrites the golfer, and the head
+ * stays proposed, never confirmed.
+ * @param {{ head: [number, number], hidden: false, conf: number | null, source: string } | null} proposal
+ * @returns {{ draft: object, base: object }}
+ */
+export function applyProposal(draft, base, key, frame, proposal) {
+  if (!proposal?.head) return { draft, base };
+  const p = base.cps[key];
+  const nextBase = { ...base, cps: { ...base.cps, [key]: { ...p, atFrame: { ...p.atFrame, [frame]: proposal } } } };
+  const d = draft.cps[key];
+  if (d.frame !== frame || d.head || d.hidden || okOf(d).head) return { draft, base: nextBase };
+  return { draft: patchCheckpoint(draft, key, { head: proposal.head }), base: nextBase };
 }
 
 /** Put a mark at a normalised point; a moved mark needs confirming again. */

@@ -1,5 +1,6 @@
 package expo.modules.golfswing
 
+import android.util.Log
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
@@ -9,6 +10,8 @@ import expo.modules.kotlin.records.Record
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -16,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * refuses to call a binary whose apiVersion is older than the one it was written for, so an
  * OTA bundle never calls a method the installed APK lacks.
  */
-const val API_VERSION = 4 // 2: N2 pass 2 and GolfSwingCamera (capture, N3), one APK; 3: pass-2 scrub proxies (D28); 4: learned club detector in pass 2 (plan 2026-10-16)
+const val API_VERSION = 5 // 2: N2 pass 2 and GolfSwingCamera (capture, N3), one APK; 3: pass-2 scrub proxies (D28); 4: learned club detector in pass 2 (plan 2026-10-16); 5: detectClub / releaseClub, pass2.club.scenery (plan 2026-10-16 on demand)
 
 private const val MIN_HEIGHT_CM = 120.0
 private const val MAX_HEIGHT_CM = 230.0
@@ -87,6 +90,36 @@ class ExtractFramesOptions : Record {
   @Field val outDir: String = ""
 }
 
+/** One frame of detectClub: `still` = file:// URI of `<swing>/frames/N.jpg`; `grip` normalised [x, y] or null. */
+class ClubFrameOption : Record {
+  @Field val frame: Int = 0
+  @Field val still: String = ""
+  @Field val grip: List<Double>? = null
+}
+
+/** The video's display size: detectClub answers in this px space, like pass 2. */
+class VideoSizeOption : Record {
+  @Field val width: Double = 0.0
+  @Field val height: Double = 0.0
+}
+
+/** One `pass2.club.scenery` box, display px. */
+class SceneryOption : Record {
+  @Field val cls: String = ""
+  @Field val box: List<Double> = emptyList()
+  @Field val score: Double? = null
+}
+
+/** apiVersion 5 (plan 2026-10-16 on demand §3.1). `frames: []` only warms the detector. */
+class DetectClubOptions : Record {
+  @Field val frames: List<ClubFrameOption> = emptyList()
+  @Field val video: VideoSizeOption = VideoSizeOption()
+  /** analysis.scale.pxPerCm, display px (the 150 cm rule); null = no distance rule. */
+  @Field val pxPerCm: Double? = null
+  /** pose.pass2.club.scenery; [] / null = none (swings analysed before apiVersion 5 run unfiltered). */
+  @Field val scenery: List<SceneryOption>? = null
+}
+
 class GolfSwingModule : Module() {
   // Long-running work gets its own thread: Expo's shared async queue would stall every
   // other module's async calls for the seconds an analysis takes.
@@ -122,6 +155,37 @@ class GolfSwingModule : Module() {
   }
 
   private val context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
+
+  // detectClub (plan 2026-10-16 on demand §3.1): its own thread, so a stills prefetch on [executor]
+  // never delays a proposal, and cancelAnalysis never reaches it (no cancellation: a call is ≤ 1 s
+  // and the JS drops stale answers). The warm detector lives on this thread only: every use, the
+  // idle close and releaseClub run here, which also keeps the GPU delegate on its creating thread.
+  private val clubExecutor = ScheduledThreadPoolExecutor(1) { Thread(it, "golf-swing-club").apply { isDaemon = true } }.apply {
+    removeOnCancelPolicy = true
+    executeExistingDelayedTasksAfterShutdownPolicy = false
+  }
+  private val clubWarm = ClubWarm(
+    open = { ClubDetector.open(context) },
+    scheduler = IdleScheduler { delayMs, task ->
+      val f = clubExecutor.schedule(task, delayMs, TimeUnit.MILLISECONDS)
+      ({ f.cancel(false) })
+    },
+  )
+
+  private fun clubJob(promise: Promise, work: () -> Any?) {
+    try {
+      clubExecutor.execute {
+        try {
+          promise.resolve(work())
+        } catch (e: Throwable) {
+          // also LinkageError: a binary without the runtime's native library
+          promise.reject("ERR_CLUB", e.message ?: e.toString(), e)
+        }
+      }
+    } catch (e: RejectedExecutionException) {
+      promise.reject("ERR_CLUB", "the module is shutting down", e)
+    }
+  }
 
   override fun definition() = ModuleDefinition {
     Name("GolfSwing")
@@ -201,9 +265,48 @@ class GolfSwingModule : Module() {
       })
     }
 
+    /**
+     * The club detector on the still JPEGs of chosen frames (apiVersion 5), warm across calls:
+     * { frames: { [frame]: { head, hidden, conf, source, boxes, error? } }, timings }. A frame that
+     * fails carries `error`; ERR_CLUB only when the detector cannot open (no runtime / model).
+     */
+    AsyncFunction("detectClub") { options: DetectClubOptions, promise: Promise ->
+      fun finite(v: Double?) = v?.takeIf { it.isFinite() && it > 0 }
+      val req = ClubDemand(
+        frames = options.frames.map { f ->
+          ClubFrameSpec(f.frame, f.still, f.grip?.takeIf { it.size >= 2 && it[0].isFinite() && it[1].isFinite() }?.let { Pt(it[0].toFloat(), it[1].toFloat()) })
+        },
+        width = finite(options.video.width) ?: 0.0,
+        height = finite(options.video.height) ?: 0.0,
+        pxPerCm = finite(options.pxPerCm),
+        scenery = options.scenery.orEmpty().mapNotNull { ClubOnDemand.sceneryBox(it.cls, it.box, it.score) },
+      )
+      clubJob(promise) {
+        ClubOnDemand.run(req, clubWarm).also { out ->
+          @Suppress("UNCHECKED_CAST")
+          val frames = out["frames"] as Map<String, Map<String, Any?>>
+          Log.i(PoseAnalyzer.TAG, "detectClub ${frames.mapValues { it.value["error"] ?: it.value["source"] }} scenery=${req.scenery.size} timings=${out["timings"]}")
+        }
+      }
+    }
+
+    /** Closes the warm club detector now (the marking canvas unmounts); the next detectClub reopens it. */
+    AsyncFunction("releaseClub") { promise: Promise ->
+      clubJob(promise) {
+        clubWarm.release()
+        null
+      }
+    }
+
     OnDestroy {
       jobs.forEach { it.set(true) }
       executor.shutdownNow()
+      // queued detectClub calls finish first, then the warm detector closes on its own thread
+      try {
+        clubExecutor.execute { clubWarm.release() }
+      } catch (_: RejectedExecutionException) {
+      }
+      clubExecutor.shutdown()
     }
   }
 }

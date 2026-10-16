@@ -15,21 +15,31 @@ import java.nio.channels.FileChannel
 import kotlin.math.abs
 import kotlin.math.max
 
+/** What detectClub needs of a detector ([ClubDetector]; a fake in the JVM tests). */
+internal interface ClubModel : AutoCloseable {
+  /** 'gpu' or 'cpu'. */
+  val delegate: String
+
+  /** Boxes of one SIZE × SIZE RGB frame in 640-px model units. */
+  fun detect(rgb: ByteArray): List<ClubBox>
+}
+
 /**
  * The learned club detector (plan 2026-10-16 §3–4): YOLOX-tiny fine-tuned on the Golf Club
  * Tracking dataset, `club_yolox_tiny_v1.tflite` (fp32: LiteRT 1.4's XNNPACK splits an fp16-weight
  * graph into ~116 partitions, 2× slower on a Pixel 8 Pro) on the LiteRT interpreter: the GPU
  * delegate where LiteRT's compatibility list allows it, else CPU (XNNPACK) with [THREADS] threads.
- * One instance per pass 2, used from one thread; [close] frees the interpreter and the delegate.
+ * One instance per pass 2 (and one warm one for detectClub, [ClubWarm]), each used from one thread;
+ * [close] frees the interpreter and the delegate.
  * Pre- and post-processing are [ClubDecode] / [ClubRules].
  */
 internal class ClubDetector private constructor(
   private val interpreter: Interpreter,
   private val nchw: Boolean,
   private val gpu: GpuDelegate?,
-) : AutoCloseable {
+) : ClubModel {
   /** 'gpu' or 'cpu': what this instance runs on (timings.clubDelegate). */
-  val delegate: String get() = if (gpu != null) "gpu" else "cpu"
+  override val delegate: String get() = if (gpu != null) "gpu" else "cpu"
 
   companion object {
     const val MODEL = "club_yolox_tiny_v1"
@@ -157,7 +167,7 @@ internal class ClubDetector private constructor(
   }
 
   /** Boxes of one frame in 640-px model units, after decode + NMS. */
-  fun detect(rgb: ByteArray): List<ClubBox> = ClubDecode.boxes(infer(rgb))
+  override fun detect(rgb: ByteArray): List<ClubBox> = ClubDecode.boxes(infer(rgb))
 
   override fun close() {
     interpreter.close()

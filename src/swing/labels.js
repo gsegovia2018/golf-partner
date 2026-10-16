@@ -4,7 +4,8 @@
 //
 // The mark-first flow (D26) extends the schema compatibly, so the name stays /1: optional
 // `confirmed` per frame and per mark (hands, head, ball) and an optional top-level `pass`
-// ({ state, skipped }, see markPass.js). Files without them parse as before.
+// ({ state, skipped }, see markPass.js) and, per head, `proposedAt` (club on demand). Files without them
+// parse as before.
 
 export const LABELS_SCHEMA = 'swing-club-labels/1';
 
@@ -50,6 +51,9 @@ export function frameLabel({
       proposedHidden: !!head.proposedHidden,
       proposedConf: head.proposedConf ?? null,
       proposedSource: head.proposedSource ?? null,
+      // the frame the proposal belongs to; absent = the proposed frame (iProposed). A model proposal asked
+      // for on the frame the golfer chose (club on demand) names that frame.
+      ...(head.proposedAt != null ? { proposedAt: head.proposedAt } : {}),
       final: head.final ?? null,
       finalHidden: !!head.finalHidden,
       confirmed: !!head.confirmed,

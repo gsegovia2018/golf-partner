@@ -181,3 +181,34 @@ describe('learned club detector: apiVersion 4, gated on its own', () => {
     expect(load({ mod: null }).native.clubModelSupport()).toBe(false);
   });
 });
+
+describe('club detector on demand: apiVersion 5, gated on its own', () => {
+  const q = { frames: [{ frame: 9, still: 'file:///f/9.jpg', grip: [0.5, 0.5] }], video: { width: 100, height: 200 }, pxPerCm: 2, scenery: [] };
+
+  it('apiVersion 5: detectClub and releaseClub are forwarded', async () => {
+    const mod = { ...fakeModule(5), detectClub: jest.fn(async () => ({ frames: {} })), releaseClub: jest.fn(async () => {}) };
+    const { native } = load({ mod });
+    expect(native.CLUB_ONDEMAND_API_VERSION).toBe(5);
+    expect(native.clubOnDemandSupport()).toBe(true);
+    await expect(native.detectClub(q)).resolves.toEqual({ frames: {} });
+    expect(mod.detectClub).toHaveBeenCalledWith(q);
+    await native.releaseClub();
+    expect(mod.releaseClub).toHaveBeenCalledTimes(1);
+  });
+
+  it('apiVersion 4: no on-demand proposals, detectClub is refused and nothing reaches native', async () => {
+    const mod = { ...fakeModule(4), detectClub: jest.fn(), releaseClub: jest.fn() };
+    const { native } = load({ mod });
+    expect(native.clubModelSupport()).toBe(true);
+    expect(native.clubOnDemandSupport()).toBe(false);
+    await expect(native.detectClub(q)).rejects.toMatchObject({ code: 'ERR_UPDATE_APP' });
+    await native.releaseClub();
+    expect(mod.detectClub).not.toHaveBeenCalled();
+    expect(mod.releaseClub).not.toHaveBeenCalled();
+  });
+
+  it('no module (web, or an APK without it): no on-demand proposals', () => {
+    expect(load({ os: 'web' }).native.clubOnDemandSupport()).toBe(false);
+    expect(load({ mod: null }).native.clubOnDemandSupport()).toBe(false);
+  });
+});

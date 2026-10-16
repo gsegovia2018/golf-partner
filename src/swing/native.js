@@ -29,6 +29,12 @@ export const PROXY_API_VERSION = 3;
 // today's address / impact proposals, and ignores the flag.
 export const CLUB_MODEL_API_VERSION = 4;
 
+// The club detector on demand (plan 2026-10-16-swing-club-on-demand) arrived in apiVersion 5:
+// detectClub / releaseClub propose the clubhead on a frame the golfer chose, and pass 2 stores
+// `club.scenery`. Gated on its own: an apiVersion 2-4 binary keeps everything it has, and the
+// canvas never calls detectClub there (the head goes Missing on a frame other than the proposal's).
+export const CLUB_ONDEMAND_API_VERSION = 5;
+
 // Finished text in the active language: call at the moment it is shown (docs/i18n.md).
 export const updateAppMessage = () => t('misc.swing.updateApp');
 
@@ -108,6 +114,21 @@ export function proxySupport() {
 export function clubModelSupport() {
   const s = swingSupport();
   return s.supported && s.apiVersion >= CLUB_MODEL_API_VERSION;
+}
+
+/** Can this binary propose a clubhead on a chosen frame (apiVersion >= CLUB_ONDEMAND_API_VERSION)? */
+export function clubOnDemandSupport() {
+  const s = swingSupport();
+  return s.supported && s.apiVersion >= CLUB_ONDEMAND_API_VERSION;
+}
+
+function requireClubOnDemand() {
+  if (!clubOnDemandSupport()) {
+    const err = new Error(updateAppMessage());
+    err.code = 'ERR_UPDATE_APP';
+    throw err;
+  }
+  return nativeModule();
 }
 
 function requireCapture() {
@@ -203,7 +224,9 @@ export async function analyzePose(path, opts = {}) {
  *   shaft: { [frame]: { head: [x, y] | null, hidden, conf, source: 'model'|'model-shaft'|'edge'|'prior',
  *     boxes?: Array<{ cls: 'shaft'|'head'|'hands', score, box: [x1, y1, x2, y2] }>, angleDeg?, lengthPx? } },
  *   addressFrame: number | null, proxies: { every, count } | null, timings: object,
- *   club?: { model, input, conf, nms } | null }>}
+ *   club?: { model, input, conf, nms, scenery?: Array<{ cls, score, box }> } | null }>}
+ *   club.scenery (apiVersion 5): the boxes the static-scenery vote removed, display px, clustered;
+ *   detectClub drops its own boxes that match them. Absent on swings analysed before.
  */
 export async function extractCheckpoints(path, opts) {
   return requireSupported().extractCheckpoints(path, opts);
@@ -217,6 +240,31 @@ export async function extractCheckpoints(path, opts) {
  */
 export async function extractFrames(path, opts) {
   return requireSupported().extractFrames(path, opts);
+}
+
+/**
+ * The learned club detector on the still JPEGs of chosen frames (apiVersion 5; plan 2026-10-16). A
+ * warm detector on its own thread, so a stills prefetch never delays it. `frames: []` only warms it.
+ * - frames: `still` is the file:// URI of `<swing>/frames/N.jpg`; `grip` the smoothed grip at that
+ *   frame, normalised, or null.
+ * - video: display size; boxes and heads come back in this px space, like pass 2.
+ * - pxPerCm: analysis.scale.pxPerCm (150 cm rule), or null.
+ * - scenery: pose.pass2.club.scenery ([] = none, the swing was analysed before apiVersion 5).
+ * @param {{ frames: Array<{ frame: number, still: string, grip: [number, number] | null }>,
+ *   video: { width: number, height: number }, pxPerCm: number | null,
+ *   scenery: Array<{ cls: string, box: [number, number, number, number] }> }} opts
+ * @returns {Promise<{ frames: { [frame]: { head: [x, y] | null, hidden: false, conf, source: 'model'|'model-shaft'|null,
+ *     boxes: Array<{ cls, score, box }>, error?: string } },
+ *   timings: { openMs, inferMs, delegate: 'gpu'|'cpu', warm: boolean } }>}
+ *   Rejects with ERR_UPDATE_APP below the gate, ERR_CLUB when the runtime or model is unavailable.
+ */
+export async function detectClub(opts) {
+  return requireClubOnDemand().detectClub(opts);
+}
+
+/** Closes the warm club detector now (the canvas unmounts). A no-op below the gate. */
+export async function releaseClub() {
+  if (clubOnDemandSupport()) await nativeModule().releaseClub();
 }
 
 /**
