@@ -294,6 +294,7 @@ export default {
     other: "Play {count} more rounds for a verdict",
   },
   "stats.my.focus.committedAt": "Committed at {metric}",
+  "stats.my.focus.rebased": "Baselines recalibrated on {date} — progress is measured from then.",
   "stats.my.report.perHole": "{value} / hole",
   "stats.my.report.thisRound": "{value} this round",
   "stats.my.report.preview": "Best: {best} {bestDelta} · Worst: {worst} {worstDelta}",

@@ -2,6 +2,7 @@
 // verdicted deterministically against the same stats pipeline that
 // produced the insight. Pure logic first; AsyncStorage adapters below.
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SG_BASELINE_VERSION } from './strokesGainedBaseline';
 
 const FOCUS_PREFIX = '@mystats_coach_focus:';
 const HISTORY_PREFIX = '@mystats_coach_focus_history:';
@@ -19,8 +20,10 @@ export function makeFocusCommit(insight, stats, committedAt) {
     // now, not the one it was committed in (docs/i18n.md).
     ...(insight.titleMsg ? { titleMsg: insight.titleMsg } : {}),
     metric: insight.metric ?? null,
+    basis: insight.basis ?? null,
     ...(insight.metricMsg ? { metricMsg: insight.metricMsg } : {}),
     baselineImpact: Number.isFinite(insight.impact) ? insight.impact : null,
+    baselineVersion: SG_BASELINE_VERSION,
     committedAt: committedAt ?? new Date().toISOString(),
     roundCountAtCommit: stats?.roundCount ?? 0,
   };
@@ -38,6 +41,31 @@ function findInsightById(coach, id) {
   return null;
 }
 
+// A focus whose baselineImpact is a strokes-gained number goes stale when the
+// SG baseline tables change (SG_BASELINE_VERSION). `basis` is only stored on
+// newer commits, so older ones are recognised by their "… SG / round" metric.
+export function isSgFocus(focus) {
+  return focus?.basis === 'vs target hcp' || /\bSG\b/.test(focus?.metric ?? '');
+}
+
+export function needsRebase(focus) {
+  return isSgFocus(focus) && (focus.baselineVersion ?? 1) !== SG_BASELINE_VERSION;
+}
+
+// Re-anchors a stale SG focus on today's numbers: the live insight's impact
+// (kept as-is if the insight left the board), the current round count, the
+// current baseline version, and when it happened (for the Focus card note).
+export function rebaseFocus(focus, stats, rebasedAt) {
+  const current = findInsightById(stats?.coach, focus.insightId);
+  return {
+    ...focus,
+    baselineImpact: Number.isFinite(current?.impact) ? current.impact : focus.baselineImpact,
+    roundCountAtCommit: stats?.roundCount ?? 0,
+    baselineVersion: SG_BASELINE_VERSION,
+    rebasedAt,
+  };
+}
+
 // Verdicts are relative to the committed baseline. Insight impacts are
 // universally higher-is-better (leaks negative), so a positive delta is
 // improvement regardless of the insight's unit.
@@ -52,6 +80,10 @@ export function focusVerdict(focus, stats) {
     currentMetric: current?.metric ?? null,
     currentMetricMsg: current?.metricMsg ?? null,
   };
+  // Never compare across baselines: until the rebase lands, stay neutral.
+  if (needsRebase(focus)) {
+    return { ...base, state: 'needs-more-rounds', roundsNeeded: MIN_VERDICT_ROUNDS };
+  }
   if (roundsSince < MIN_VERDICT_ROUNDS) {
     return { ...base, state: 'needs-more-rounds', roundsNeeded: MIN_VERDICT_ROUNDS - roundsSince };
   }

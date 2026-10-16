@@ -294,6 +294,7 @@ export default {
     other: "Juega {count} vueltas más para tener un veredicto",
   },
   "stats.my.focus.committedAt": "Punto de partida: {metric}",
+  "stats.my.focus.rebased": "Referencias recalibradas el {date}: el progreso se mide desde entonces.",
   "stats.my.report.perHole": "{value} / hoyo",
   "stats.my.report.thisRound": "{value} esta vuelta",
   "stats.my.report.preview": "Mejor: {best} {bestDelta} · Peor: {worst} {worstDelta}",

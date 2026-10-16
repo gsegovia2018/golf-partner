@@ -46,6 +46,16 @@ describe('FocusCard', () => {
     expect(r.getByText('-1.8 SG / round → -1.1 SG / round')).toBeTruthy();
     expect(r.getByText('Lag ladder')).toBeTruthy(); // bucket-matched drill
   });
+  test('shows the recalibration note when the focus was rebased', () => {
+    const r = render(
+      <FocusCard
+        focus={{ ...focus, rebasedAt: '2026-10-16T08:00:00Z' }}
+        verdict={{ state: 'needs-more-rounds', roundsNeeded: 2 }}
+        onEndFocus={jest.fn()}
+      />,
+    );
+    expect(r.getByText('Baselines recalibrated on 16 Oct — progress is measured from then.')).toBeTruthy();
+  });
   test('needs-more-rounds copy', () => {
     const r = render(
       <FocusCard focus={focus} verdict={{ state: 'needs-more-rounds', roundsSince: 1, roundsNeeded: 1, baseline: -1.8, current: null, currentMetric: null }} onEndFocus={jest.fn()} />,
