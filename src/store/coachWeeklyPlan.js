@@ -144,7 +144,7 @@ function strongestKeep(diagnosis, skip) {
 const toIsoDay = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : d ?? null);
 
 function andChain(list) {
-  return list.reduce((acc, cur) => (acc ? msg(`${P}changed.and`, { a: acc, b: cur }) : cur), null);
+  return list.reduce((acc, cur) => (acc ? msg(`${P}changed.and`, { a: acc, b: lower(cur) }) : cur), null);
 }
 
 function detectReplan(prev, sig, lastRound) {

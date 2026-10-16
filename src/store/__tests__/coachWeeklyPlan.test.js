@@ -229,6 +229,7 @@ describe('re-plan', () => {
     expect(keys).toEqual(expect.arrayContaining([
       'stats.my.coach.plan.changed.level', 'stats.my.coach.plan.changed.swingAdded',
     ]));
+    expect(next.replan.note.params.what.params.b.lower).toBe(true);
     expect(next.replan.note.params.what.key).toBe('stats.my.coach.plan.changed.and');
     const tie = buildWeeklyPlan(base({ diagnosis: diag({ tie: approach }), previousPlan: first, lastRound }));
     expect(tie.replan.changes.map((c) => c.key)).toContain('stats.my.coach.plan.changed.tieStarted');

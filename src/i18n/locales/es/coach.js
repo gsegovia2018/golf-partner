@@ -52,7 +52,7 @@ export default {
 
   // ── Weekly plan: areas and sessions ────────────────────────────────────
   'stats.my.coach.plan.area.offTheTee': 'Salidas',
-  'stats.my.coach.plan.area.approach': 'Approach',
+  'stats.my.coach.plan.area.approach': 'Aproximación',
   'stats.my.coach.plan.area.aroundGreen': 'Juego corto',
   'stats.my.coach.plan.area.putting': 'Putts',
   'stats.my.coach.plan.area.penalties': 'Penalizaciones',
@@ -74,13 +74,13 @@ export default {
   },
 
   // ── Weekly plan: why a session is there ────────────────────────────────
-  'stats.my.coach.plan.why.focus': '{area} es tu foco, la mayor fuga ahora mismo.',
-  'stats.my.coach.plan.why.tie': '{area} está igualada con la segunda fuga, así que recibe el mismo tiempo.',
-  'stats.my.coach.plan.why.second': '{area} es la segunda mayor fuga.',
+  'stats.my.coach.plan.why.focus': '{area} es tu foco, la mayor pérdida ahora mismo.',
+  'stats.my.coach.plan.why.tie': '{area} está igualada con la segunda pérdida, así que recibe el mismo tiempo.',
+  'stats.my.coach.plan.why.second': '{area} es la segunda mayor pérdida.',
   'stats.my.coach.plan.why.keep': '{area} ya te ayuda, así que recibe menos tiempo.',
   'stats.my.coach.plan.why.swing': 'Trabajo de swing junto a {area}, por el fallo que muestra tu swing.',
   'stats.my.coach.plan.why.collect.insufficient': 'Aún no hay datos suficientes para elegir un foco.',
-  'stats.my.coach.plan.why.collect.noLeak': 'Aún no hay una fuga clara, así que esta semana toca reunir datos.',
+  'stats.my.coach.plan.why.collect.noLeak': 'Aún no hay una pérdida clara, así que esta semana toca reunir datos.',
 
   // ── Weekly plan: the on-course task for the next round ─────────────────
   'stats.my.coach.plan.course.putting.lag': 'En el campo, anota cada putt desde {bucket} m y cuenta los tres putts.',
@@ -111,17 +111,17 @@ export default {
 
   // ── Weekly plan: what changed on re-plan ───────────────────────────────
   'stats.my.coach.plan.replanned': 'Plan actualizado tras tu vuelta del {date}. {what}.',
-  'stats.my.coach.plan.changed.topLeak': 'Nueva mayor fuga: {area}',
+  'stats.my.coach.plan.changed.topLeak': 'Nueva mayor pérdida: {area}',
   'stats.my.coach.plan.changed.cause': 'Nueva causa en {area}',
-  'stats.my.coach.plan.changed.second': 'Nueva segunda fuga: {area}',
+  'stats.my.coach.plan.changed.second': 'Nueva segunda pérdida: {area}',
   'stats.my.coach.plan.changed.keep': 'Nueva zona para mantener: {area}',
   'stats.my.coach.plan.changed.level': 'Nivel de foco {level} de 3',
-  'stats.my.coach.plan.changed.tieStarted': 'Dos fugas están igualadas, así que ambas tienen tiempo',
-  'stats.my.coach.plan.changed.tieEnded': 'Una fuga vuelve a ir claramente por delante',
+  'stats.my.coach.plan.changed.tieStarted': 'Dos pérdidas están igualadas, así que ambas tienen tiempo',
+  'stats.my.coach.plan.changed.tieEnded': 'Una pérdida vuelve a ir claramente por delante',
   'stats.my.coach.plan.changed.swingAdded': 'Ejercicio de swing añadido',
   'stats.my.coach.plan.changed.swingRemoved': 'Ejercicio de swing quitado',
   'stats.my.coach.plan.changed.collect': 'Aún no hay datos para elegir un foco',
-  'stats.my.coach.plan.changed.leakFound': 'Ya hay una fuga clara para entrenar',
+  'stats.my.coach.plan.changed.leakFound': 'Ya hay una pérdida clara para entrenar',
   'stats.my.coach.plan.changed.and': '{a}; {b}',
 
   // ── Interfaz de la pestaña del entrenador: cadena de diagnóstico ───────
