@@ -2158,6 +2158,9 @@ export function approachMissByDistance(tournament, playerId) {
     const known = e.dir.long + e.dir.short + e.dir.left + e.dir.right;
     out[bk] = {
       attempts: e.attempts,
+      // Denominators of the rates below (the coach's sample gates read them).
+      misses: e.misses,
+      directionKnown: known,
       greenRate: rate100(e.attempts - e.misses, e.attempts),
       missRate: rate100(e.misses, e.attempts),
       shortRate: rate100(e.dir.short, known),

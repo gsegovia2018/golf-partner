@@ -829,6 +829,8 @@ describe('approachMissByDistance', () => {
     expect(r.buckets['150-200'].attempts).toBe(2);
     expect(r.buckets['150-200'].missRate).toBe(50);
     expect(r.buckets['150-200'].shortRate).toBe(100);
+    expect(r.buckets['150-200'].misses).toBe(1);
+    expect(r.buckets['150-200'].directionKnown).toBe(1);
     expect(r.buckets['0-50'].attempts).toBe(1);
   });
 });
