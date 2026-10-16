@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  makeFocusCommit, focusVerdict, isSgFocus, needsRebase, rebaseFocus,
-  loadFocus, saveFocus, clearFocus, loadFocusHistory, archiveFocus,
+  makeFocusCommit, focusVerdict, focusLevel, isV1Focus, isV2Focus, isSgFocus, needsRebase, rebaseFocus,
+  loadFocus, saveFocus, clearFocus, loadFocusHistory, archiveFocus, loadFocusNotice, dismissFocusNotice,
+  FOCUS_VERSION, MIN_VERDICT_ROUNDS, EARLY_ROUNDS, MIN_CHANGE,
 } from '../coachFocus';
-
+import { buildDiagnosis } from '../coachDiagnosis';
+import { SG_CATEGORIES } from '../coachMetrics';
 import { SG_BASELINE_VERSION } from '../strokesGainedBaseline';
 
 jest.mock('@react-native-async-storage/async-storage', () => {
@@ -16,132 +18,393 @@ jest.mock('@react-native-async-storage/async-storage', () => {
   };
 });
 
-const insight = {
-  id: 'putting:putting', area: 'putting', areaLabel: 'Putting',
-  title: 'Putting', metric: '-1.8 SG / round', impact: -1.8,
-};
-
-function statsWith(roundCount, currentImpact) {
+// Stats slice read by both the diagnosis and the metric registry: putting
+// per round (`rounds`, 18 holes each), the season putting SG (`putting`),
+// the 6 m+ bucket (per-putt SG list + three-putt rate) and the drive lies.
+function makeStats({
+  roundCount = 6, rounds = [-1.6, -2.0, -1.4, -2.2, -1.8, -1.8], putting,
+  sixPlus = Array.from({ length: 18 }, (_, i) => (i % 2 ? -0.4 : -0.2)), sixPlusSgPerPutt, threePuttRate = 30,
+  troubleRate = 0.25, drives = 30,
+} = {}) {
+  const perRound = rounds.map((v, i) => {
+    const byCategory = Object.fromEntries(SG_CATEGORIES.map((c) => [c, 0]));
+    const sampleHolesByCategory = Object.fromEntries(SG_CATEGORIES.map((c) => [c, 0]));
+    byCategory.putting = v;
+    sampleHolesByCategory.putting = 18;
+    return { index: i, byCategory, sampleHolesByCategory };
+  });
+  const season = putting ?? (rounds.length ? rounds.reduce((a, x) => a + x, 0) / rounds.length : 0);
+  const mean = sixPlus.length ? sixPlus.reduce((a, x) => a + x, 0) / sixPlus.length : 0;
   return {
     roundCount,
-    coach: {
-      hero: null,
-      board: {
-        fixFirst: currentImpact == null ? [] : [{ ...insight, impact: currentImpact, metric: `${currentImpact} SG / round` }],
-        keepDoing: [], gettingBetter: [], gettingWorse: [], nextGains: [], watch: [],
+    targetHandicap: 15,
+    strokesGained: {
+      perRound,
+      byCategory: { offTheTee: 0, approach: 0, aroundGreen: 0, putting: season, penalties: 0 },
+      roundsByCategory: { offTheTee: 0, approach: 0, aroundGreen: 0, putting: rounds.length, penalties: 0 },
+      sampleHolesByCategory: { putting: rounds.length * 18 },
+    },
+    puttingTarget: {
+      buckets: {
+        '6+': {
+          attempts: sixPlus.length,
+          sgPerPutt: sixPlusSgPerPutt ?? mean,
+          threePuttRate,
+          breakdown: sixPlus.map((sg) => ({ sg })),
+        },
       },
     },
+    approachTarget: { buckets: {} },
+    driveLies: { drives, troubleRate },
   };
 }
 
+const COMMITTED_AT = '2026-10-01T09:00:00.000Z';
+const baseStats = makeStats();
+const leak = buildDiagnosis(baseStats).top;
+
+// The insight-based record stored before coach v2, incl. the SG rebase
+// fields from the per-handicap baseline PR (#215).
+const v1Focus = {
+  insightId: 'putting:putting', area: 'putting', areaLabel: 'Putting', title: 'Putting',
+  metric: '-1.8 SG / round', basis: 'vs target hcp', baselineImpact: -1.8,
+  baselineVersion: 1, rebasedAt: '2026-10-16T08:00:00Z',
+  committedAt: '2026-07-15T00:00:00Z', roundCountAtCommit: 8,
+};
+
+describe('fixture', () => {
+  test('the diagnosis ranks putting with its 6 m+ child', () => {
+    expect(leak.id).toBe('leak:putting:6+');
+    expect(leak.metricKey).toBe('sg.putting');
+    expect(leak.sample.rounds).toBe(6);
+    expect(leak.se).toBeGreaterThan(0);
+  });
+});
+
 describe('makeFocusCommit', () => {
-  test('captures baseline and round count', () => {
-    const focus = makeFocusCommit(insight, { roundCount: 8 }, '2026-07-15T00:00:00Z');
+  test('a leak: v2 shape, baseline read through the registry, the leak\'s se', () => {
+    const focus = makeFocusCommit(leak, baseStats, COMMITTED_AT);
     expect(focus).toEqual({
-      insightId: 'putting:putting', area: 'putting', areaLabel: 'Putting',
-      title: 'Putting', metric: '-1.8 SG / round', basis: null, baselineImpact: -1.8,
+      v: 2,
+      leakId: 'leak:putting:6+',
+      category: 'putting',
+      bucket: '6+',
+      causeId: null,
+      metricKey: 'sg.putting',
+      baselineValue: -1.8,
+      baselineSample: { rounds: 6, holes: 108 },
+      baselineSe: leak.se,
+      minChange: MIN_CHANGE.sgPerRound,
       baselineVersion: SG_BASELINE_VERSION,
-      committedAt: '2026-07-15T00:00:00Z', roundCountAtCommit: 8,
+      committedAt: COMMITTED_AT,
+      roundCountAtCommit: 6,
     });
-    expect(makeFocusCommit({ ...insight, basis: 'vs target hcp' }, { roundCount: 8 }).basis).toBe('vs target hcp');
-    expect(makeFocusCommit(null, { roundCount: 8 })).toBeNull();
+    expect(FOCUS_VERSION).toBe(2);
+    expect(isV2Focus(focus)).toBe(true);
+    expect(isV1Focus(focus)).toBe(false);
+  });
+
+  test('{ leak } and a bare leak commit the same focus', () => {
+    expect(makeFocusCommit({ leak }, baseStats, COMMITTED_AT)).toEqual(makeFocusCommit(leak, baseStats, COMMITTED_AT));
+  });
+
+  test('a child bucket: its sg metric, se and minimum change per shot', () => {
+    const focus = makeFocusCommit({ leak, bucket: '6+' }, baseStats, COMMITTED_AT);
+    const child = leak.children.find((c) => c.bucket === '6+');
+    const shotsPerRound = 18 / 6;
+    expect(focus.leakId).toBe('leak:putting:6+');
+    expect(focus.metricKey).toBe('sg.putting.bucket.6+');
+    expect(focus.baselineValue).toBeCloseTo(-0.3, 10);
+    expect(focus.baselineSample).toEqual({ shots: 18 });
+    expect(focus.baselineSe).toBeCloseTo(child.se / shotsPerRound, 10);
+    expect(focus.minChange).toBeCloseTo(0.25 / shotsPerRound, 10);
+  });
+
+  test('a cause that names a metric is verified by it; swingId is kept', () => {
+    const focus = makeFocusCommit({
+      leak, cause: { id: 'cause:putting:lag', metricKey: 'putting.threePuttRate.6+' }, swingId: 's1',
+    }, baseStats, COMMITTED_AT);
+    expect(focus).toMatchObject({
+      leakId: 'leak:putting:6+',
+      causeId: 'cause:putting:lag',
+      metricKey: 'putting.threePuttRate.6+',
+      baselineValue: 30,
+      baselineSe: null,
+      minChange: 10,
+      swingId: 's1',
+    });
+  });
+
+  test('a cause without a metric keeps the leak\'s', () => {
+    const focus = makeFocusCommit({ leak, cause: { id: 'cause:putting:general' } }, baseStats, COMMITTED_AT);
+    expect(focus.metricKey).toBe('sg.putting');
+    expect(focus.causeId).toBe('cause:putting:general');
+  });
+
+  test('nothing to verify against → null', () => {
+    expect(makeFocusCommit(null, baseStats)).toBeNull();
+    // a v1 insight is not a leak
+    expect(makeFocusCommit({ id: 'putting:putting', area: 'putting', impact: -1.8 }, baseStats)).toBeNull();
+    expect(makeFocusCommit({ leak, bucket: '0-1' }, baseStats)).toBeNull();
+    expect(makeFocusCommit({ leak, cause: { id: 'x', metricKey: 'no.such.metric' } }, baseStats)).toBeNull();
+    // the metric has no sample right now
+    expect(makeFocusCommit({ leak, cause: { id: 'x', metricKey: 'tee.distance' } }, baseStats)).toBeNull();
+  });
+
+  test('committedAt defaults to now', () => {
+    expect(typeof makeFocusCommit(leak, baseStats).committedAt).toBe('string');
+  });
+});
+
+describe('focusLevel', () => {
+  test('1 + one level per two rounds, capped at 3', () => {
+    expect([0, 1, 2, 3, 4, 5, 9].map((r) => focusLevel(r, 'flat'))).toEqual([1, 1, 2, 2, 3, 3, 3]);
+  });
+  test('worse withholds the latest step and never drops below 1', () => {
+    expect([0, 1, 2, 4, 9].map((r) => focusLevel(r, 'worse'))).toEqual([1, 1, 1, 2, 2]);
   });
 });
 
 describe('focusVerdict', () => {
-  const focus = makeFocusCommit(insight, { roundCount: 8 }, '2026-07-15T00:00:00Z');
+  const sgFocus = makeFocusCommit(leak, baseStats, COMMITTED_AT);
+  // se from the fixture: ±0.2 / ±0.4 around −1.8 → about 0.13; the 0.25
+  // stroke floor rules.
+  const afterRounds = (n, overrides = {}) => makeStats({ roundCount: 6 + n, ...overrides });
 
-  test('needs-more-rounds under 2 post-commit rounds', () => {
-    const v = focusVerdict(focus, statsWith(9, -1.8));
-    expect(v.state).toBe('needs-more-rounds');
-    expect(v.roundsSince).toBe(1);
-    expect(v.roundsNeeded).toBe(1);
+  test('null without a v2 focus', () => {
+    expect(focusVerdict(null, baseStats)).toBeNull();
+    expect(focusVerdict(v1Focus, baseStats)).toBeNull();
   });
-  test('improving when impact recovers past the threshold', () => {
-    const v = focusVerdict(focus, statsWith(10, -1.3));
-    expect(v.state).toBe('improving');
-    expect(v.delta).toBeCloseTo(0.5, 10);
+
+  test('needs-more-rounds under 2 rounds since the commit', () => {
+    const v = focusVerdict(sgFocus, afterRounds(1, { putting: -0.5 }));
+    expect(v).toMatchObject({ state: 'needs-more-rounds', roundsSince: 1, roundsNeeded: 1, early: true, level: 1, delta: null });
+    expect(MIN_VERDICT_ROUNDS).toBe(2);
   });
-  test('worse when impact deteriorates past the threshold', () => {
-    expect(focusVerdict(focus, statsWith(10, -2.4)).state).toBe('worse');
+
+  test('higher-is-better: improving / flat / worse around max(0.25, se)', () => {
+    expect(sgFocus.baselineSe).toBeLessThan(0.25);
+    const at = (putting) => focusVerdict(sgFocus, afterRounds(2, { putting }));
+    const up = at(-1.5);
+    expect(up).toMatchObject({ state: 'improving', metricKey: 'sg.putting', unit: 'sgPerRound', polarity: 'higher', baseline: -1.8, current: -1.5, threshold: 0.25 });
+    expect(up.delta).toBeCloseTo(0.3, 10);
+    expect(at(-1.6).state).toBe('flat');
+    expect(at(-2.0).state).toBe('flat');
+    expect(at(-2.1).state).toBe('worse');
   });
-  test('flat inside the threshold band', () => {
-    expect(focusVerdict(focus, statsWith(10, -1.75)).state).toBe('flat');
+
+  test('a baseline se larger than 0.25 raises the bar', () => {
+    const noisy = { ...sgFocus, baselineSe: 0.5 };
+    expect(focusVerdict(noisy, afterRounds(2, { putting: -1.5 })).state).toBe('flat');
+    expect(focusVerdict(noisy, afterRounds(2, { putting: -1.2 })).state).toBe('improving');
+    const worse = focusVerdict(noisy, afterRounds(2, { putting: -2.4 }));
+    expect(worse.state).toBe('worse');
+    expect(worse.threshold).toBe(0.5);
+    expect(worse.delta).toBeCloseTo(-0.6, 10);
   });
-  test('resolved when the insight left the board', () => {
-    expect(focusVerdict(focus, statsWith(10, null)).state).toBe('resolved');
+
+  test('lower-is-better: a falling rate is improving, 10 points on rates', () => {
+    const lag = makeFocusCommit({ leak, cause: { id: 'cause:putting:lag', metricKey: 'putting.threePuttRate.6+' } }, baseStats, COMMITTED_AT);
+    const at = (threePuttRate) => focusVerdict(lag, afterRounds(2, { threePuttRate }));
+    expect(at(18)).toMatchObject({ state: 'improving', polarity: 'lower', unit: 'percent', delta: 12, threshold: 10 });
+    expect(at(22).state).toBe('flat');
+    expect(at(40)).toMatchObject({ state: 'worse', delta: -10 });
+    const trouble = makeFocusCommit({ leak, cause: { id: 'cause:tee:trouble:driver', metricKey: 'tee.troubleRate' } }, baseStats, COMMITTED_AT);
+    expect(focusVerdict(trouble, afterRounds(2, { troubleRate: 0.1 })).state).toBe('improving');
+    expect(focusVerdict(trouble, afterRounds(2, { troubleRate: 0.4 })).state).toBe('worse');
   });
+
+  test('per-shot bucket metric: 0.25 strokes a round through shots per round', () => {
+    const child = makeFocusCommit({ leak, bucket: '6+' }, baseStats, COMMITTED_AT);
+    // 3 putts from 6 m+ a round → 0.0833 per putt
+    expect(focusVerdict(child, afterRounds(2, { sixPlusSgPerPutt: -0.2 })).state).toBe('improving');
+    expect(focusVerdict(child, afterRounds(2, { sixPlusSgPerPutt: -0.25 })).state).toBe('flat');
+    expect(focusVerdict(child, afterRounds(2, { sixPlusSgPerPutt: -0.4 })).state).toBe('worse');
+  });
+
+  test('early until 4 rounds since the commit', () => {
+    expect(EARLY_ROUNDS).toBe(4);
+    [[2, true], [3, true], [4, false], [7, false]].forEach(([n, early]) => {
+      const v = focusVerdict(sgFocus, afterRounds(n, { putting: -1.5 }));
+      expect(v.state).toBe('improving');
+      expect(v.early).toBe(early);
+    });
+  });
+
+  test('level follows rounds since the commit; worse holds it', () => {
+    expect(focusVerdict(sgFocus, afterRounds(3, { putting: -1.8 })).level).toBe(2);
+    expect(focusVerdict(sgFocus, afterRounds(5, { putting: -1.8 })).level).toBe(3);
+    expect(focusVerdict(sgFocus, afterRounds(5, { putting: -2.5 })).level).toBe(2);
+  });
+
+  test('resolved when the metric no longer has a sample', () => {
+    const gone = makeStats({ roundCount: 9, rounds: [], sixPlus: [] });
+    expect(focusVerdict(sgFocus, gone)).toMatchObject({ state: 'resolved', current: null, delta: null });
+    const child = makeFocusCommit({ leak, bucket: '6+' }, baseStats, COMMITTED_AT);
+    expect(focusVerdict(child, gone).state).toBe('resolved');
+    expect(focusVerdict({ ...sgFocus, metricKey: 'retired.metric' }, afterRounds(2)).state).toBe('resolved');
+  });
+
   test('roundsSince clamps at 0 when rounds were deselected', () => {
-    expect(focusVerdict(focus, statsWith(5, -1.8)).roundsSince).toBe(0);
-  });
-  test('null without a focus', () => {
-    expect(focusVerdict(null, statsWith(10, -1.8))).toBeNull();
+    expect(focusVerdict(sgFocus, makeStats({ roundCount: 3 })).roundsSince).toBe(0);
   });
 });
 
-describe('SG baseline recalibration', () => {
-  const stale = { ...makeFocusCommit({ ...insight, basis: 'vs target hcp' }, { roundCount: 8 }, '2026-07-15T00:00:00Z'), baselineVersion: 1 };
+describe('SG baseline recalibration (v2)', () => {
+  const focus = makeFocusCommit(leak, baseStats, COMMITTED_AT);
+  const stale = { ...focus, baselineVersion: SG_BASELINE_VERSION - 1 };
 
-  test('isSgFocus / needsRebase', () => {
+  test('only SG metrics go stale; v1 records are not rebased (they are archived)', () => {
+    expect(isSgFocus(focus)).toBe(true);
+    expect(needsRebase(focus)).toBe(false);
     expect(needsRebase(stale)).toBe(true);
-    // committed before basis / baselineVersion were stored
-    const legacy = { insightId: 'putting:putting', metric: '-1.2 SG / round', baselineImpact: -1.2 };
-    expect(isSgFocus(legacy)).toBe(true);
-    expect(needsRebase(legacy)).toBe(true);
-    const points = { insightId: 'x', basis: 'vs your avg', metric: '-2 pts', baselineImpact: -2 };
-    expect(isSgFocus(points)).toBe(false);
-    expect(needsRebase(points)).toBe(false);
-    expect(needsRebase({ ...stale, baselineVersion: SG_BASELINE_VERSION })).toBe(false);
+    const rate = { ...makeFocusCommit({ leak, cause: { id: 'c', metricKey: 'putting.threePuttRate.6+' } }, baseStats), baselineVersion: 1 };
+    expect(isSgFocus(rate)).toBe(false);
+    expect(needsRebase(rate)).toBe(false);
+    expect(needsRebase(v1Focus)).toBe(false);
   });
-  test('rebaseFocus takes the live impact and stamps version and date', () => {
-    const next = rebaseFocus(stale, statsWith(12, -0.9), '2026-10-16T08:00:00Z');
-    expect(next.baselineImpact).toBe(-0.9);
-    expect(next.roundCountAtCommit).toBe(12);
-    expect(next.baselineVersion).toBe(SG_BASELINE_VERSION);
-    expect(next.rebasedAt).toBe('2026-10-16T08:00:00Z');
-    expect(needsRebase(next)).toBe(false);
-  });
-  test('rebaseFocus keeps baselineImpact when the insight left the board', () => {
-    const next = rebaseFocus(stale, statsWith(12, null), '2026-10-16T08:00:00Z');
-    expect(next.baselineImpact).toBe(-1.8);
-    expect(next.baselineVersion).toBe(SG_BASELINE_VERSION);
-  });
-  test('a stale SG focus never reads improving/worse', () => {
-    [-0.2, -5].forEach((impact) => {
-      const v = focusVerdict(stale, statsWith(20, impact));
-      expect(v.state).toBe('needs-more-rounds');
+
+  test('a stale focus never reads improving / worse', () => {
+    [-0.2, -5].forEach((putting) => {
+      expect(focusVerdict(stale, makeStats({ roundCount: 20, putting })).state).toBe('needs-more-rounds');
     });
+  });
+
+  test('rebase re-anchors the baseline and restarts the verdict window, not the level', () => {
+    const now = makeStats({ roundCount: 12, putting: -1.1 });
+    const next = rebaseFocus(stale, now, '2026-10-16T08:00:00Z');
+    expect(next).toMatchObject({
+      baselineValue: -1.1, baselineVersion: SG_BASELINE_VERSION, rebasedAt: '2026-10-16T08:00:00Z',
+      roundCountAtCommit: 6, roundCountAtBaseline: 12, committedAt: COMMITTED_AT,
+    });
+    expect(needsRebase(next)).toBe(false);
+    const v = focusVerdict(next, makeStats({ roundCount: 13, putting: -0.5 }));
+    expect(v).toMatchObject({ state: 'needs-more-rounds', roundsNeeded: 1, roundsSince: 7, level: 3 });
+    const later = focusVerdict(next, makeStats({ roundCount: 14, putting: -0.8 }));
+    expect(later).toMatchObject({ state: 'improving', early: true, baseline: -1.1 });
+  });
+
+  test('rebase keeps the baseline when the metric has no sample now', () => {
+    const next = rebaseFocus(stale, makeStats({ roundCount: 12, rounds: [] }), '2026-10-16T08:00:00Z');
+    expect(next.baselineValue).toBe(-1.8);
+    expect(next.baselineVersion).toBe(SG_BASELINE_VERSION);
   });
 });
 
 describe('persistence', () => {
-  beforeEach(() => AsyncStorage.__store.clear());
+  beforeEach(() => {
+    AsyncStorage.__store.clear();
+    jest.clearAllMocks();
+  });
+  const focus = makeFocusCommit(leak, baseStats, COMMITTED_AT);
 
-  test('save/load/clear round-trip per user', async () => {
-    const focus = makeFocusCommit(insight, { roundCount: 8 }, '2026-07-15T00:00:00Z');
+  test('save / load / clear round-trip per user; keys unchanged', async () => {
     await saveFocus('u1', focus);
+    expect(AsyncStorage.__store.has('@mystats_coach_focus:u1')).toBe(true);
     expect(await loadFocus('u1')).toEqual(focus);
     expect(await loadFocus('u2')).toBeNull();
     await clearFocus('u1');
     expect(await loadFocus('u1')).toBeNull();
+    await saveFocus(undefined, focus);
+    expect(AsyncStorage.__store.has('@mystats_coach_focus:anon')).toBe(true);
   });
-  test('archive prepends history, caps at 10, clears active focus', async () => {
-    const focus = makeFocusCommit(insight, { roundCount: 8 }, '2026-07-15T00:00:00Z');
+
+  test('archive prepends history, caps at 10, clears the active focus', async () => {
     for (let i = 0; i < 12; i += 1) {
-      await saveFocus('u1', { ...focus, title: `Focus ${i}` });
-      await archiveFocus('u1', { ...focus, title: `Focus ${i}` }, { state: 'improving', current: -1.2 });
+      await saveFocus('u1', { ...focus, causeId: `c${i}` });
+      await archiveFocus('u1', { ...focus, causeId: `c${i}` }, { state: 'improving', current: -1.2 });
     }
     const history = await loadFocusHistory('u1');
     expect(history).toHaveLength(10);
-    expect(history[0].title).toBe('Focus 11');
-    expect(history[0].finalState).toBe('improving');
-    expect(history[0].finalImpact).toBe(-1.2);
+    expect(history[0]).toMatchObject({ v: 2, causeId: 'c11', finalState: 'improving', finalValue: -1.2 });
+    expect(history[0].finalImpact).toBeUndefined();
+    expect(typeof history[0].endedAt).toBe('string');
     expect(await loadFocus('u1')).toBeNull();
   });
-  test('corrupt storage degrades to null/empty', async () => {
+
+  test('corrupt or unknown storage degrades to null / empty and is left alone', async () => {
     await AsyncStorage.setItem('@mystats_coach_focus:u1', 'not json');
     await AsyncStorage.setItem('@mystats_coach_focus_history:u1', 'not json');
     expect(await loadFocus('u1')).toBeNull();
     expect(await loadFocusHistory('u1')).toEqual([]);
+    await AsyncStorage.setItem('@mystats_coach_focus:u1', JSON.stringify({ something: 'else' }));
+    expect(await loadFocus('u1')).toBeNull();
+    expect(AsyncStorage.__store.get('@mystats_coach_focus:u1')).toBe(JSON.stringify({ something: 'else' }));
+    expect(await loadFocusNotice('u1')).toBeNull();
+  });
+});
+
+describe('v1 → v2 migration', () => {
+  beforeEach(() => {
+    AsyncStorage.__store.clear();
+    jest.clearAllMocks();
+  });
+  const NOW = '2026-10-16T10:00:00.000Z';
+
+  test('a v1 focus is archived as resolved on load, with a one-time notice', async () => {
+    await saveFocus('u1', v1Focus);
+    expect(isV1Focus(v1Focus)).toBe(true);
+    expect(await loadFocus('u1', NOW)).toBeNull();
+    expect(AsyncStorage.__store.has('@mystats_coach_focus:u1')).toBe(false);
+    const history = await loadFocusHistory('u1');
+    expect(history).toEqual([{
+      ...v1Focus, v: 1, endedAt: NOW, endedBy: 'upgrade', finalState: 'resolved', finalImpact: null,
+    }]);
+    expect(await loadFocusNotice('u1')).toEqual({ kind: 'v1-closed', closedAt: NOW });
+    await dismissFocusNotice('u1');
+    expect(await loadFocusNotice('u1')).toBeNull();
+  });
+
+  test('archived once: repeated and concurrent loads add one entry', async () => {
+    await saveFocus('u1', v1Focus);
+    await Promise.all([loadFocus('u1', NOW), loadFocus('u1', NOW)]);
+    await loadFocus('u1', NOW);
+    expect(await loadFocusHistory('u1')).toHaveLength(1);
+    await dismissFocusNotice('u1');
+    await loadFocus('u1', NOW);
+    expect(await loadFocusNotice('u1')).toBeNull();
+  });
+
+  test('an interrupted archive (slot not cleared) is finished without a duplicate', async () => {
+    await saveFocus('u1', v1Focus);
+    await loadFocus('u1', NOW);
+    await saveFocus('u1', v1Focus); // as if removeItem never ran
+    expect(await loadFocus('u1', '2026-10-17T10:00:00.000Z')).toBeNull();
+    const history = await loadFocusHistory('u1');
+    expect(history).toHaveLength(1);
+    expect(history[0].endedAt).toBe(NOW);
+    expect(AsyncStorage.__store.has('@mystats_coach_focus:u1')).toBe(false);
+  });
+
+  test('a v2 focus loads untouched: no archive, no notice', async () => {
+    const focus = makeFocusCommit(leak, baseStats, COMMITTED_AT);
+    await saveFocus('u1', focus);
+    expect(await loadFocus('u1', NOW)).toEqual(focus);
+    expect(await loadFocusHistory('u1')).toEqual([]);
+    expect(await loadFocusNotice('u1')).toBeNull();
+  });
+
+  test('a storage failure still never returns the v1 record', async () => {
+    await saveFocus('u1', v1Focus);
+    AsyncStorage.setItem.mockImplementationOnce(() => Promise.reject(new Error('disk full')));
+    expect(await loadFocus('u1', NOW)).toBeNull();
+  });
+
+  test('history keeps both shapes, newest first; pre-v2 entries read as v: 1', async () => {
+    const legacyEntry = { ...v1Focus, endedAt: '2026-08-01T00:00:00Z', finalState: 'improving', finalImpact: -1.2 };
+    await AsyncStorage.setItem('@mystats_coach_focus_history:u1', JSON.stringify([legacyEntry]));
+    await saveFocus('u1', { ...v1Focus, insightId: 'approach:approach', committedAt: '2026-09-01T00:00:00Z' });
+    await loadFocus('u1', NOW);
+    const focus = makeFocusCommit(leak, baseStats, COMMITTED_AT);
+    await saveFocus('u1', focus);
+    await archiveFocus('u1', focus, focusVerdict(focus, makeStats({ roundCount: 8, putting: -1.4 })));
+    const history = await loadFocusHistory('u1');
+    expect(history.map((e) => e.v)).toEqual([2, 1, 1]);
+    expect(history[0]).toMatchObject({ leakId: 'leak:putting:6+', metricKey: 'sg.putting', finalState: 'improving', finalValue: -1.4 });
+    expect(history[1]).toMatchObject({ insightId: 'approach:approach', endedBy: 'upgrade', finalState: 'resolved' });
+    expect(history[2]).toEqual({ ...legacyEntry, v: 1 });
+    // the stored legacy entry itself is not rewritten
+    const raw = JSON.parse(AsyncStorage.__store.get('@mystats_coach_focus_history:u1'));
+    expect(raw[2].v).toBeUndefined();
   });
 });
