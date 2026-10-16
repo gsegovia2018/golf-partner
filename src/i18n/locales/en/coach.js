@@ -144,6 +144,7 @@ export default {
   'stats.my.coach.ui.kicker': '{area}',
   'stats.my.coach.ui.kicker.bucket': '{area} · {bucket} m',
   'stats.my.coach.ui.leak.perRound': 'strokes a round vs {vs}',
+  'stats.my.coach.ui.leak.untracked': 'Most of your gap ({untracked} of {gap}) is strokes the coach can\'t see by category: duffs, second chips, long misses. Log penalties and recoveries to sharpen this.',
   'stats.my.coach.ui.vs.target': 'a {hcp} handicap',
   'stats.my.coach.ui.vs.scratch': 'scratch',
   'stats.my.coach.ui.symptom': '{area} costs you about {strokes} strokes a round against {vs} ({rounds}).',

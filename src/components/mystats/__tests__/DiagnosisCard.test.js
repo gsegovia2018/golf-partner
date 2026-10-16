@@ -28,6 +28,18 @@ const renderCard = (stats, opts = {}, props = {}) => render(wrap(
   />,
 ));
 
+describe('DiagnosisCard: untracked-dominant gap', () => {
+  const recon = (residualAvg) => ({ strokesGained: { reconciliation: { rounds: 5, gapAvg: -4.3, residualAvg } } });
+  test('says most of the gap is untracked, at the top of the Leak step', () => {
+    const r = renderCard({ ...onePutting(), ...recon(-3.3) });
+    expect(r.getByText(/Most of your gap \(-3\.3 of -4\.3\) is strokes the coach can't see by category/)).toBeTruthy();
+  });
+  test('says nothing when the top leak is the bigger part', () => {
+    const r = renderCard({ ...onePutting(), ...recon(-0.9) });
+    expect(r.queryByTestId('untracked-note')).toBeNull();
+  });
+});
+
 describe('DiagnosisCard: one clear leak', () => {
   test('renders the Leak, Why, Fix and Check rail with the real numbers', () => {
     const stats = onePutting();

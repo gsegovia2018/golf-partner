@@ -1,5 +1,5 @@
 import {
-  buildDiagnosis, confidenceOf, compareLeaks, tieBand,
+  buildDiagnosis, untrackedDominant, confidenceOf, compareLeaks, tieBand,
   LEAK_MIN, TIE_MIN, CATEGORY_MIN_HOLES, CATEGORY_MIN_ROUNDS, BUCKET_MIN_SHOTS, TRAINABILITY,
 } from '../coachDiagnosis';
 import { SG_CATEGORIES } from '../coachMetrics';
@@ -352,5 +352,23 @@ describe('on real computeMyStats output', () => {
   test('three-putting from 6 m+ is the top leak, bucket named', () => {
     expect(d.top.id).toBe('leak:putting:6+');
     expect(d.top.children.find((c) => c.bucket === '6+').sample).toEqual({ shots: 72 });
+  });
+});
+
+describe('untrackedDominant', () => {
+  const top = { strokesPerRound: -1.0 };
+  const withRecon = (residualAvg, gapAvg = -4.3, rounds = 5) => ({ strokesGained: { reconciliation: { rounds, gapAvg, residualAvg } } });
+  test('flags a residual that is a leak and bigger than the top leak', () => {
+    expect(untrackedDominant(withRecon(-3.3), top)).toEqual({ residual: -3.3, gap: -4.3 });
+  });
+  test('quiet when the top leak is at least as large', () => {
+    expect(untrackedDominant(withRecon(-3.3), { strokesPerRound: -3.3 })).toBeNull();
+    expect(untrackedDominant(withRecon(-0.9), top)).toBeNull();
+  });
+  test('quiet under the leak floor, without a reconciliation or without a top leak', () => {
+    expect(untrackedDominant(withRecon(-(LEAK_MIN - 0.01)), { strokesPerRound: -0.1 })).toBeNull();
+    expect(untrackedDominant(withRecon(-3.3, -4.3, 0), top)).toBeNull();
+    expect(untrackedDominant({}, top)).toBeNull();
+    expect(untrackedDominant(withRecon(-3.3), null)).toBeNull();
   });
 });

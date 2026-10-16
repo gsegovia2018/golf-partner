@@ -26,7 +26,7 @@ export default function DiagnosisCard({
   const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   if (!week) return null;
-  const { kind, chains } = week;
+  const { kind, chains, untracked } = week;
   const hasChain = chains.length > 0;
   const tie = kind === 'tie';
   const cardTitle = t('stats.my.coach.ui.diag.title');
@@ -78,7 +78,7 @@ export default function DiagnosisCard({
             {chains.map((chain, i) => (
               <View key={chain.leak.id} style={s.tieBlock} testID={`diagnosis-chain-${i + 1}`}>
                 <Text style={s.kicker}>{t('stats.my.coach.ui.tie.leak', { n: i + 1, area: renderMsg(areaMsg(chain.leak.category)) })}</Text>
-                <Chain chain={chain} {...chainProps} />
+                <Chain chain={chain} untracked={i === 0 ? untracked : null} {...chainProps} />
               </View>
             ))}
             {!focusActive && onCommitFocus ? <View style={s.btnRow}>{chains.map((c) => focusButton(c, true))}</View> : null}
@@ -86,7 +86,7 @@ export default function DiagnosisCard({
         ) : (
           <>
             <Text style={s.kicker}>{kickerText(t, chains[0].leak)}</Text>
-            <Chain chain={chains[0]} {...chainProps} />
+            <Chain chain={chains[0]} untracked={untracked} {...chainProps} />
             {!focusActive && onCommitFocus ? <View style={s.btnRow}>{focusButton(chains[0], false)}</View> : null}
           </>
         )}
@@ -123,7 +123,7 @@ function Step({ s, label, children, last }) {
   );
 }
 
-function Chain({ chain, s, t, swingSupport, onRecordSwing, onOpenSwing, onInfo }) {
+function Chain({ chain, untracked, s, t, swingSupport, onRecordSwing, onOpenSwing, onInfo }) {
   const { leak, causes, swingLink, check, drills, courseTask, tip, isFocus } = chain;
   // At most 3 drills; the swing drill keeps its seat (it is the link to the recording).
   const swingDrills = drills.filter((d) => d.source === 'swing').slice(0, 1);
@@ -150,6 +150,12 @@ function Chain({ chain, s, t, swingSupport, onRecordSwing, onOpenSwing, onInfo }
   return (
     <View style={s.chain}>
       <Step s={s} label={t('stats.my.coach.ui.step.leak')}>
+        {untracked ? (
+          <Text style={s.line2} testID="untracked-note">{t('stats.my.coach.ui.leak.untracked', {
+            untracked: formatNumber(untracked.residual, { decimals: 1 }),
+            gap: formatNumber(untracked.gap, { decimals: 1 }),
+          })}</Text>
+        ) : null}
         <View style={s.bigRow}>
           <Text style={s.big}>{formatNumber(leak.strokesPerRound, { decimals: 1 })}</Text>
           <Text style={s.bigUnit}>{t('stats.my.coach.ui.leak.perRound', { vs })}</Text>

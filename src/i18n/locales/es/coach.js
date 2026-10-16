@@ -144,6 +144,7 @@ export default {
   'stats.my.coach.ui.kicker': '{area}',
   'stats.my.coach.ui.kicker.bucket': '{area} · {bucket} m',
   'stats.my.coach.ui.leak.perRound': 'golpes por vuelta frente a {vs}',
+  'stats.my.coach.ui.leak.untracked': 'La mayor parte de tu diferencia ({untracked} de {gap}) son golpes que el entrenador no puede ver por categoría: golpes fallidos, segundos chips, fallos largos. Anota penalizaciones y recuperaciones para afinar esto.',
   'stats.my.coach.ui.vs.target': 'un hándicap de {hcp}',
   'stats.my.coach.ui.vs.scratch': 'scratch',
   'stats.my.coach.ui.symptom': '{area}: pierdes unos {strokes} golpes por vuelta frente a {vs} ({rounds}).',
