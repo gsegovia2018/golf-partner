@@ -42,6 +42,9 @@ describe('statExplainers', () => {
     expect(sg.subtitle).toBe('How you compare to a handicap-12 golfer');
     expect(sg.explainer).toContain('compares to a handicap-12 golfer');
     expect(sg.explainer).toContain('better than your target');
+    // typicalScoreVsPar(12) = 13 + (18.4 − 13)·(2/5) = 15.16 → "15.2"
+    expect(sg.explainer).toContain('averages (about 15.2 over par), not par plus handicap');
+    expect(resolveStatExplainer('strokesGained').explainer).toContain('averages (about 2 over par), not par.');
   });
 
   it('compat object resolves lazily and strokesGained stays a function', () => {

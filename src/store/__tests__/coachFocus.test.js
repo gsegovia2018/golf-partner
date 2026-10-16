@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  makeFocusCommit, focusVerdict,
+  makeFocusCommit, focusVerdict, isSgFocus, needsRebase, rebaseFocus,
   loadFocus, saveFocus, clearFocus, loadFocusHistory, archiveFocus,
 } from '../coachFocus';
+
+import { SG_BASELINE_VERSION } from '../strokesGainedBaseline';
 
 jest.mock('@react-native-async-storage/async-storage', () => {
   const store = new Map();
@@ -37,9 +39,11 @@ describe('makeFocusCommit', () => {
     const focus = makeFocusCommit(insight, { roundCount: 8 }, '2026-07-15T00:00:00Z');
     expect(focus).toEqual({
       insightId: 'putting:putting', area: 'putting', areaLabel: 'Putting',
-      title: 'Putting', metric: '-1.8 SG / round', baselineImpact: -1.8,
+      title: 'Putting', metric: '-1.8 SG / round', basis: null, baselineImpact: -1.8,
+      baselineVersion: SG_BASELINE_VERSION,
       committedAt: '2026-07-15T00:00:00Z', roundCountAtCommit: 8,
     });
+    expect(makeFocusCommit({ ...insight, basis: 'vs target hcp' }, { roundCount: 8 }).basis).toBe('vs target hcp');
     expect(makeFocusCommit(null, { roundCount: 8 })).toBeNull();
   });
 });
@@ -72,6 +76,41 @@ describe('focusVerdict', () => {
   });
   test('null without a focus', () => {
     expect(focusVerdict(null, statsWith(10, -1.8))).toBeNull();
+  });
+});
+
+describe('SG baseline recalibration', () => {
+  const stale = { ...makeFocusCommit({ ...insight, basis: 'vs target hcp' }, { roundCount: 8 }, '2026-07-15T00:00:00Z'), baselineVersion: 1 };
+
+  test('isSgFocus / needsRebase', () => {
+    expect(needsRebase(stale)).toBe(true);
+    // committed before basis / baselineVersion were stored
+    const legacy = { insightId: 'putting:putting', metric: '-1.2 SG / round', baselineImpact: -1.2 };
+    expect(isSgFocus(legacy)).toBe(true);
+    expect(needsRebase(legacy)).toBe(true);
+    const points = { insightId: 'x', basis: 'vs your avg', metric: '-2 pts', baselineImpact: -2 };
+    expect(isSgFocus(points)).toBe(false);
+    expect(needsRebase(points)).toBe(false);
+    expect(needsRebase({ ...stale, baselineVersion: SG_BASELINE_VERSION })).toBe(false);
+  });
+  test('rebaseFocus takes the live impact and stamps version and date', () => {
+    const next = rebaseFocus(stale, statsWith(12, -0.9), '2026-10-16T08:00:00Z');
+    expect(next.baselineImpact).toBe(-0.9);
+    expect(next.roundCountAtCommit).toBe(12);
+    expect(next.baselineVersion).toBe(SG_BASELINE_VERSION);
+    expect(next.rebasedAt).toBe('2026-10-16T08:00:00Z');
+    expect(needsRebase(next)).toBe(false);
+  });
+  test('rebaseFocus keeps baselineImpact when the insight left the board', () => {
+    const next = rebaseFocus(stale, statsWith(12, null), '2026-10-16T08:00:00Z');
+    expect(next.baselineImpact).toBe(-1.8);
+    expect(next.baselineVersion).toBe(SG_BASELINE_VERSION);
+  });
+  test('a stale SG focus never reads improving/worse', () => {
+    [-0.2, -5].forEach((impact) => {
+      const v = focusVerdict(stale, statsWith(20, impact));
+      expect(v.state).toBe('needs-more-rounds');
+    });
   });
 });
 

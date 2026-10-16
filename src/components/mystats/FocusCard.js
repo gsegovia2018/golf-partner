@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { msgText, areaText, drillText, drillLocation } from './msg';
-import { useT } from '../../i18n';
+import { useT, formatDate } from '../../i18n';
 import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import { drillsForInsight } from '../../store/coachDrills';
@@ -57,6 +57,9 @@ export default function FocusCard({ focus, verdict, onEndFocus }) {
           <Feather name={copy.icon} size={15} color={toneColor} />
           <Text style={[s.verdictText, { color: toneColor }]}>{copyText}</Text>
         </View>
+      ) : null}
+      {focus.rebasedAt ? (
+        <Text style={s.metricLine}>{t('stats.my.focus.rebased', { date: formatDate(focus.rebasedAt, 'day') })}</Text>
       ) : null}
       {verdict?.currentMetric && focus.metric ? (
         <Text style={s.metricLine}>{`${msgText(focus.metricMsg, focus.metric)} → ${msgText(verdict.currentMetricMsg, verdict.currentMetric)}`}</Text>

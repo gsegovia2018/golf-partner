@@ -37,7 +37,7 @@ import BreakdownTab from '../components/mystats/tabs/BreakdownTab';
 import ShotsTab from '../components/mystats/tabs/ShotsTab';
 import HandicapTab from '../components/mystats/tabs/HandicapTab';
 import { resolveStatExplainer } from '../components/mystats/statExplainers';
-import { loadFocus, saveFocus, clearFocus, archiveFocus, makeFocusCommit, focusVerdict } from '../store/coachFocus';
+import { loadFocus, saveFocus, clearFocus, archiveFocus, makeFocusCommit, focusVerdict, needsRebase, rebaseFocus } from '../store/coachFocus';
 
 const SELECTION_PREFIX = '@mystats_round_selection:';
 // Legacy per-device key handicap exclusions used before they moved into the
@@ -480,6 +480,15 @@ export default function MyStatsScreen({ navigation, route }) {
     () => (coachFocus && stats ? focusVerdict(coachFocus, stats) : null),
     [coachFocus, stats],
   );
+
+  // The SG baseline tables changed since this focus was committed: re-anchor
+  // its baselineImpact on today's numbers (the Focus card says so).
+  useEffect(() => {
+    if (!coachFocus || !stats || !needsRebase(coachFocus)) return;
+    const next = rebaseFocus(coachFocus, stats, new Date().toISOString());
+    setCoachFocus(next);
+    saveFocus(user?.id, next).catch(() => {});
+  }, [coachFocus, stats, user?.id]);
 
   const onCommitFocus = useCallback((insight) => {
     const focus = makeFocusCommit(insight, stats);

@@ -151,6 +151,11 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   scorecard's single source of truth. Agreements are anchored to card
   versions, so an edit re-opens exactly the disputes it should. The plan is
   `docs/superpowers/plans/2026-09-04-scorecard-cards-engine.md`.
+- SG baselines (`store/strokesGainedBaseline.js`) are per-handicap,
+  engine-consistent tables **generated** from the typical-golfer model in
+  `scripts/lib/sgBaselineModel.js` (`node scripts/sgBaselineTables.mjs`); edit
+  the model, regenerate, never hand-edit `BASELINES`; bump `SG_BASELINE_VERSION`
+  when numbers move.
 - GPS course maps (`golf_*` tables) load in two tiers: the `golf_course`
   index at launch, a course's holes/hazards/greens on demand
   (`ensureCourseGeometry` / `hooks/useCourseGeometry.js`), cached per
