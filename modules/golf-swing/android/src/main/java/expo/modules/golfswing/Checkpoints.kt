@@ -209,6 +209,7 @@ internal class Checkpoints(
     var addressShaft: ShaftFound? = null
     var clubMs = 0L
     var clubDets: Map<Int, List<ClubBox>>? = null
+    var clubScenery: List<ClubBox> = emptyList()
     var clubDelegate = "cpu"
     try {
       val wanted = stills + onsetFrames + listOfNotNull(addr?.frame, imp?.frame) + proxyFrames + clubFrames
@@ -251,7 +252,10 @@ internal class Checkpoints(
       }
       if (req.clubModel) {
         t = SystemClock.elapsedRealtime()
-        clubDets = club(cps, onset, clubInputs, clubFailures) { clubDelegate = it }
+        club(cps, onset, clubInputs, clubFailures) { clubDelegate = it }?.let { (kept, scenery) ->
+          clubDets = kept
+          clubScenery = scenery
+        }
         clubInputs.clear()
         clubMs = SystemClock.elapsedRealtime() - t
       }
@@ -324,21 +328,26 @@ internal class Checkpoints(
       Log.i(PoseAnalyzer.TAG, "pass2 club frames=${clubDets?.size ?: 0} ms=$clubMs failures=${clubFailures.get()} sources=${shaft.values.groupingBy { it["source"] }.eachCount()}")
     }
     val out = mapOf("stills" to stillsOut, "shaft" to shaft, "addressFrame" to addressFrame, "proxies" to proxies, "timings" to timings)
-    // what ran (stored as pose.pass2.club); null when the detector could not run at all
+    // what ran (stored as pose.pass2.club); null when the detector could not run at all. scenery
+    // (apiVersion 5): what the static vote removed, clustered, for detectClub on frames that cannot vote
     return if (!req.clubModel) out else out + ("club" to clubDets?.let {
-      mapOf("model" to ClubDetector.MODEL, "input" to ClubDecode.SIZE, "conf" to ClubDecode.CONF, "nms" to ClubDecode.NMS_IOU)
+      mapOf(
+        "model" to ClubDetector.MODEL, "input" to ClubDecode.SIZE, "conf" to ClubDecode.CONF, "nms" to ClubDecode.NMS_IOU,
+        "scenery" to ClubRules.boxJson(clubScenery),
+      )
     })
   }
 
   /**
    * The detector on the final checkpoint frames (the moved address included), sequentially on
-   * this thread: frame → display-px boxes after the static drop, or null when it could not run
-   * (no model, no runtime, an interpreter error at load). A frame that fails is left out. Both
-   * are counted in [failures] and never fail pass 2: those frames keep today's entries.
+   * this thread: (frame → display-px boxes after the static drop, the scenery it dropped
+   * clustered by [ClubRules.scenery]), or null when it could not run (no model, no runtime, an
+   * interpreter error at load). A frame that fails is left out. Both are counted in [failures]
+   * and never fail pass 2: those frames keep today's entries.
    */
   private fun club(
     cps: List<CheckpointSpec>, onset: Int?, inputs: Map<Int, ByteArray>, failures: AtomicInteger, onDelegate: (String) -> Unit,
-  ): Map<Int, List<ClubBox>>? {
+  ): Pair<Map<Int, List<ClubBox>>, List<ClubBox>>? {
     val places = LinkedHashMap<Int, String>()
     for (c in cps) places.putIfAbsent(if (c.key == "address" && onset != null) onset else c.frame, ClubRules.place(c.key))
     val sx = track.dispW / ClubDecode.SIZE.toDouble()
@@ -366,7 +375,8 @@ internal class Checkpoints(
       Log.w(PoseAnalyzer.TAG, "club detector unavailable, keeping today's proposals", e)
       return null
     }
-    return ClubRules.dropStatic(dets, places)
+    val (kept, dropped) = ClubRules.splitStatic(dets, places)
+    return Pair(kept, ClubRules.scenery(dropped.values.flatten()))
   }
 
   /**

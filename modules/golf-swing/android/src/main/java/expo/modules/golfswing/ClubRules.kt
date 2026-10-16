@@ -22,6 +22,8 @@ internal object ClubRules {
   const val MAX_HEAD_CM = 150.0
   /** Boxes per frame in the pass-2 output (most confident first). */
   const val MAX_BOXES = 10
+  /** Scenery representatives stored per swing (`pass2.club.scenery`). */
+  const val MAX_SCENERY = 20
 
   /** The place a checkpoint votes for: the head sits still around impact, so preImpact / impact / postImpact are one. */
   fun place(key: String) = if (key == "preImpact" || key == "postImpact") "impact" else key
@@ -36,14 +38,45 @@ internal object ClubRules {
     places: Map<Int, String>,
     frac: Double = STATIC_FRAC,
     minIou: Double = STATIC_IOU,
-  ): Map<Int, List<ClubBox>> {
+  ): Map<Int, List<ClubBox>> = splitStatic(dets, places, frac, minIou).first
+
+  /**
+   * [dropStatic] that also returns what it removed: (kept, dropped), both frame → boxes, every
+   * frame of [dets] in each (plan on demand §3.2: the dropped ones become `club.scenery`).
+   */
+  fun splitStatic(
+    dets: Map<Int, List<ClubBox>>,
+    places: Map<Int, String>,
+    frac: Double = STATIC_FRAC,
+    minIou: Double = STATIC_IOU,
+  ): Pair<Map<Int, List<ClubBox>>, Map<Int, List<ClubBox>>> {
     val ref = places.filterKeys { it in dets }
     val n = ref.values.toSet().size
-    if (n == 0) return dets
+    if (n == 0) return Pair(dets, dets.mapValues { emptyList() })
     val all = ref.flatMap { (f, p) -> dets.getValue(f).map { p to it } }
     fun static(r: ClubBox) = all.filter { (_, o) -> o.cls == r.cls && ClubDecode.iou(o, r) >= minIou }.map { it.first }.toSet().size >= frac * n
-    return dets.mapValues { (_, rows) -> rows.filter { it.cls == ClubDecode.HANDS || !static(it) } }
+    val split = dets.mapValues { (_, rows) -> rows.partition { it.cls == ClubDecode.HANDS || !static(it) } }
+    return Pair(split.mapValues { it.value.first }, split.mapValues { it.value.second })
   }
+
+  /**
+   * The scenery one swing's static vote found, for frames that cannot vote (on demand §3.2): the
+   * [dropped] boxes clustered (same class, IoU ≥ [minIou] with a kept representative → the same
+   * thing; the highest score represents it), `hands` ignored, at most [max], most confident first.
+   */
+  fun scenery(dropped: Collection<ClubBox>, minIou: Double = STATIC_IOU, max: Int = MAX_SCENERY): List<ClubBox> {
+    val reps = ArrayList<ClubBox>()
+    for (b in dropped.filter { it.cls != ClubDecode.HANDS }.sortedByDescending { it.score }) {
+      if (reps.size >= max) break
+      if (reps.none { it.cls == b.cls && ClubDecode.iou(it, b) >= minIou }) reps += b
+    }
+    return reps
+  }
+
+  /** One frame's boxes without those matching a [scenery] box (same class, IoU ≥ [minIou]); `hands` always kept. */
+  fun dropScenery(boxes: List<ClubBox>, scenery: List<ClubBox>, minIou: Double = STATIC_IOU): List<ClubBox> =
+    if (scenery.isEmpty()) boxes
+    else boxes.filter { b -> b.cls == ClubDecode.HANDS || scenery.none { it.cls == b.cls && ClubDecode.iou(it, b) >= minIou } }
 
   /**
    * The clubhead from one frame's (static-dropped) boxes. Anchor = the pose [grip], else the most
@@ -85,18 +118,28 @@ internal object ClubRules {
     val out = LinkedHashMap(base)
     for ((f, boxes) in dets) {
       val k = f.toString()
-      val shown = boxes.take(MAX_BOXES).map {
-        mapOf("cls" to ClubDecode.NAMES[it.cls], "score" to round3(it.score), "box" to listOf(it.x1, it.y1, it.x2, it.y2))
-      }
-      val h = head(boxes, grips[f], pxPerCm)
-      out[k] = if (h != null) {
-        mapOf("head" to listOf(h.x, h.y), "hidden" to false, "conf" to round3(h.score), "source" to h.source, "boxes" to shown)
-      } else {
-        (out[k] ?: continue) + ("boxes" to shown)
-      }
+      val e = frameEntry(boxes, grips[f], pxPerCm)
+      out[k] = if (e["source"] != null) e else (out[k] ?: continue) + ("boxes" to e["boxes"])
     }
     return out
   }
+
+  /**
+   * One frame's entry from its display-px boxes (pass 2's [merge] and on demand):
+   * `{ head: [x, y] | null, hidden: false, conf, source: 'model' | 'model-shaft' | null, boxes }`;
+   * conf and source are null when [head] finds nothing. [boxes] ≤ [MAX_BOXES], as given.
+   */
+  fun frameEntry(boxes: List<ClubBox>, grip: Pt?, pxPerCm: Double?): Map<String, Any?> {
+    val h = head(boxes, grip, pxPerCm)
+    return mapOf(
+      "head" to h?.let { listOf(it.x, it.y) }, "hidden" to false, "conf" to h?.let { round3(it.score) }, "source" to h?.source,
+      "boxes" to boxJson(boxes.take(MAX_BOXES)),
+    )
+  }
+
+  /** `[{ cls: 'shaft' | 'head' | 'hands', score, box: [x1, y1, x2, y2] }]`: pass 2's `boxes` and `club.scenery`. */
+  fun boxJson(boxes: List<ClubBox>): List<Map<String, Any?>> =
+    boxes.map { mapOf("cls" to ClubDecode.NAMES[it.cls], "score" to round3(it.score), "box" to listOf(it.x1, it.y1, it.x2, it.y2)) }
 
   private fun round3(v: Double) = Math.round(v * 1000) / 1000.0
 
