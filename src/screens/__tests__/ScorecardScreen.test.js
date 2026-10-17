@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
+import { clearedReasonPatch } from '../../store/missReasons';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import { ShotDetailPanel } from '../../components/scorecard/ShotDetailPanel';
 
@@ -177,7 +178,9 @@ describe('ShotDetailPanel — approach capture', () => {
     await flush();
 
     fireEvent.press(getByLabelText('Approach finish On green'));
-    expect(onChange).toHaveBeenCalledWith({ approachResult: 'green', approachMiss: null, approachBunker: false });
+    expect(onChange).toHaveBeenCalledWith({
+      approachResult: 'green', approachMiss: null, approachBunker: false, ...clearedReasonPatch('approach'),
+    });
 
     fireEvent.press(getByLabelText('Approach finish Right'));
     expect(onChange).toHaveBeenCalledWith({ approachMiss: 'right', approachResult: 'miss' });
@@ -198,6 +201,7 @@ describe('ShotDetailPanel — approach capture', () => {
     fireEvent.press(getByLabelText('Approach 100-150'));
     expect(onChange).toHaveBeenCalledWith({
       approachBucket: null, approachResult: null, approachMiss: null, approachBunker: false, approachLie: null,
+      ...clearedReasonPatch('approach'),
     });
   });
 });

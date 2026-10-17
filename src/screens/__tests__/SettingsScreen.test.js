@@ -49,6 +49,15 @@ test('units segment switches to yards', async () => {
   await waitFor(() => expect(getAppSettings().units).toBe('yards'));
 });
 
+test('miss reasons segment writes the chosen mode', async () => {
+  renderScreen();
+  expect(await screen.findByTestId('setting-missReasons')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('setting-missReasons-manual'));
+  await waitFor(() => expect(getAppSettings().missReasons).toBe('manual'));
+  fireEvent.press(screen.getByTestId('setting-missReasons-off'));
+  await waitFor(() => expect(getAppSettings().missReasons).toBe('off'));
+});
+
 test('no-spoilers mode disables the running-score switch and forces it off', async () => {
   await updateAppSettings({ noSpoilers: true });
   renderScreen();

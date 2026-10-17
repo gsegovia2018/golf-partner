@@ -2,6 +2,7 @@ import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { ShotDetailPanel } from '../ShotDetailPanel';
 import { ShotDetailSection } from '../ShotDetailSection';
+import { clearedReasonPatch } from '../../../store/missReasons';
 import { updateAppSettings, __resetAppSettingsForTests } from '../../../store/settingsStore';
 
 // ShotDetailExplainer reads its dismissed state from AsyncStorage in a
@@ -68,7 +69,7 @@ describe('ShotDetailPanel drive + approach lie inputs', () => {
     fireEvent.press(miss.getByLabelText('Drive lie Sand'));
     expect(onChange).toHaveBeenCalledWith({ driveLie: 'sand' });
     fireEvent.press(miss.getByLabelText('Driver Fairway'));
-    expect(onChange).toHaveBeenCalledWith({ drive: 'fairway', driveLie: null });
+    expect(onChange).toHaveBeenCalledWith({ drive: 'fairway', driveLie: null, ...clearedReasonPatch('drive') });
   });
   test('a missed drive can still be marked as finishing on a fairway', async () => {
     const onChange = jest.fn();
@@ -160,6 +161,7 @@ describe('ShotDetailPanel drive + approach lie inputs', () => {
     fireEvent.press(r.getByLabelText('Approach 100-150'));
     expect(onChange).toHaveBeenCalledWith({
       approachBucket: null, approachResult: null, approachMiss: null, approachBunker: false, approachLie: null,
+      ...clearedReasonPatch('approach'),
     });
   });
 });
@@ -176,7 +178,7 @@ describe('ShotDetailPanel approach finish grid', () => {
     await flush();
     fireEvent.press(r.getByLabelText('Approach finish On green'));
     expect(onChange).toHaveBeenCalledWith({
-      approachResult: 'green', approachMiss: null, approachBunker: false,
+      approachResult: 'green', approachMiss: null, approachBunker: false, ...clearedReasonPatch('approach'),
     });
   });
 

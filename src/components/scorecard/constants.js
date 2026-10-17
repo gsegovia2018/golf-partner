@@ -12,25 +12,35 @@ export const DEFAULT_SHOT = {
 
   driveLie: null,               // 'fairway' | 'rough' | 'sand' | 'trouble' | null (derived from drive when null)
   driveDistBucket: null,        // '0-150' | '150-180' | '180-210' | '210-240' | '240+' | null (metres)
+  // miss reasons (why a miss happened), null = not answered
+  driveStart: null,             // 'left' | 'center' | 'right' | null
+  driveContact: null,           // 'top' | 'sky' | 'toe' | 'heel' | null
+  driveSituation: null,         // array of 'wind' | 'decision' | null
   teePenalties: 0,
   otherPenalties: 0,
   sandShots: 0,
   recoveryOutcome: null,        // 'up-and-down' | 'sand-save' | 'none' | null
+  shortResult: null,            // 'short' | 'long' | null
+  shortContact: null,           // 'fat' | 'thin' | null
+  shortSituation: null,         // array of 'bad-lie' | 'short-sided' | 'wrong-shot' | null
   firstPuttBucket: null,        // '0-1' | '1-2' | '2-3' | '3-6' | '6+' | null
   approachBucket: null,         // '0-50' | '50-100' | '100-150' | '150-200' | '200+' | null
   approachResult: null,         // 'green' | 'miss' | null (derived from the finish grid: green center = 'green', any dir/bunker = 'miss')
   approachMiss: null,           // 'long' | 'short' | 'left' | 'right' | null — direction a missed green finished (single-select)
   approachBunker: false,        // true when the miss finished in a greenside bunker (combines with a direction, or stands alone)
   approachLie: null,            // 'fairway' | 'rough' | 'sand' | null (null = drive's lie on par 4s, else fairway)
+  approachStart: null,          // 'left' | 'center' | 'right' | null
+  approachContact: null,        // 'fat' | 'thin' | 'toe' | 'shank' | null
+  approachSituation: null,      // array of 'above-feet' | 'below-feet' | 'uphill' | 'downhill' | 'blocked' | 'bad-lie' | 'wind' | 'decision' | null
 };
 
 // Which DEFAULT_SHOT fields belong to each configurable tracking group
 // (Settings → Stats tracking). Hiding a group hides exactly these inputs.
 export const STAT_GROUP_FIELDS = {
   putting: ['putts', 'firstPuttBucket'],
-  teeShot: ['teeClub', 'drive', 'driveLie', 'driveDistBucket'],
-  approach: ['approachBucket', 'approachResult', 'approachMiss', 'approachBunker', 'approachLie'],
-  shortGame: ['sandShots', 'recoveryOutcome'],
+  teeShot: ['teeClub', 'drive', 'driveLie', 'driveDistBucket', 'driveStart', 'driveContact', 'driveSituation'],
+  approach: ['approachBucket', 'approachResult', 'approachMiss', 'approachBunker', 'approachLie', 'approachStart', 'approachContact', 'approachSituation'],
+  shortGame: ['sandShots', 'recoveryOutcome', 'shortResult', 'shortContact', 'shortSituation'],
   penalties: ['teePenalties', 'otherPenalties'],
 };
 

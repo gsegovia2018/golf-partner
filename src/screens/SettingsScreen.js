@@ -8,7 +8,7 @@ import PressableScale from '../components/ui/PressableScale';
 import Reveal from '../components/ui/Reveal';
 import { useTheme } from '../theme/ThemeContext';
 import { useAppSettings } from '../hooks/useAppSettings';
-import { updateAppSettings } from '../store/settingsStore';
+import { updateAppSettings, MISS_REASONS_MODES } from '../store/settingsStore';
 import { resetTour } from '../store/tourStore';
 import { haptic } from '../lib/haptics';
 import { useT, useLanguagePref, setLanguagePref, formatNumber } from '../i18n';
@@ -144,6 +144,22 @@ export default function SettingsScreen({ navigation }) {
               value={appSettings.statGroups[key]}
               onChange={(v) => setKey({ statGroups: { [key]: v } })} theme={theme} s={s} />
           ))}
+          <View testID="setting-missReasons">
+            <Text style={s.sectionLabel}>{t('settings.missReasons.label')}</Text>
+            <View style={s.segmentRow}>
+              {MISS_REASONS_MODES.map((value) => (
+                <PressableScale key={value} testID={`setting-missReasons-${value}`}
+                  style={[s.segment, appSettings.missReasons === value && s.segmentActive]}
+                  onPress={() => setKey({ missReasons: value })}
+                  accessibilityRole="button" accessibilityState={{ selected: appSettings.missReasons === value }}>
+                  <Text style={[s.segmentText, appSettings.missReasons === value && s.segmentTextActive]}>
+                    {t(`settings.missReasons.${value}`)}
+                  </Text>
+                </PressableScale>
+              ))}
+            </View>
+            <Text style={s.unitsHint}>{t('settings.missReasons.hint')}</Text>
+          </View>
         </Section>
 
         <Reveal delay={REVEAL_STEP * 3}>
