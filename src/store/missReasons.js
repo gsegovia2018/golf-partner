@@ -19,9 +19,26 @@
 //   shot name (or start alone), contact, [short: shortResult first], situations.
 //   Keys: shots.why.{name,start,contact,shortResult,situation}.<value>
 //
-// Not here yet (PR2): classifyMiss, isBlockedApproach, missReasonStats.
+// isBlockedApproach(detail)         → true when approachSituation includes 'blocked'
+// classifyMiss(shotType, detail)    → { family, sub, side } | null (untagged). Flat shape:
+//   family 'forced'|'lie'|'decision'|'swing'; sub / side null unless family is 'swing'.
+//   First match wins: forced (blocked, approach only) > lie (above-feet, below-feet,
+//   uphill, downhill, bad-lie, wind; short game bad-lie, short-sided) > decision
+//   (decision; short game wrong-shot) > swing. Swing sub: 'lowPoint' (contact
+//   fat/thin/top/sky — beats flight, decision 14), else 'start'|'curve' from
+//   flightOf (side = finish side), else 'strike' (toe/heel/shank; side = finish
+//   side when left/right, else null). Short game swing is lowPoint (fat/thin)
+//   only; shortResult alone is not a family → null.
+// missReasonStats(rounds, playerId) → { approach: { byBucket: {[bucket]: Row}, all: Row },
+//   tee: Row, short: Row }; rounds are raw rounds (round.shotDetails[playerId]).
+//   Row = { misses, tagged, untagged, blocked, families: {forced,lie,decision,swing},
+//   subs: { start:{left,right}, curve:{left,right}, strike:{left,right}, lowPoint } }.
+//   Approach = par !== 3, approachBucket set, approachResult 'miss'; tee = par >= 4
+//   and drive left|right|short; short = green missed, not saved, strokes > par.
 
 import { msg } from './statsMsg';
+import { isGIR, recoveryOutcomeFromState } from './scoring';
+import { APPROACH_BUCKETS } from '../components/scorecard/constants';
 
 export const MISS_REASON_KEYS = {
   drive: ['driveStart', 'driveContact', 'driveSituation'],
@@ -103,4 +120,94 @@ export function summaryOf(shotType, detail, handedness = 'right') {
   if (detail[f.contact]) out.push(msg(`shots.why.contact.${detail[f.contact]}`));
   for (const s of situations(detail, f.situation)) out.push(msg(`shots.why.situation.${s}`));
   return out;
+}
+
+export function isBlockedApproach(detail) {
+  return situations(detail, 'approachSituation').includes('blocked');
+}
+
+const LIE = {
+  drive: ['wind'],
+  approach: ['above-feet', 'below-feet', 'uphill', 'downhill', 'bad-lie', 'wind'],
+  short: ['bad-lie', 'short-sided'],
+};
+const DECISION = { drive: 'decision', approach: 'decision', short: 'wrong-shot' };
+const LOW_POINT = { drive: ['top', 'sky'], approach: ['fat', 'thin'], short: ['fat', 'thin'] };
+const STRIKE = ['toe', 'heel', 'shank'];
+
+export function classifyMiss(shotType, detail) {
+  const f = FIELDS[shotType];
+  if (!f || !detail) return null;
+  const sits = situations(detail, f.situation);
+  const make = (family, sub = null, side = null) => ({ family, sub, side });
+  if (shotType === 'approach' && sits.includes('blocked')) return make('forced');
+  if (sits.some((s) => LIE[shotType].includes(s))) return make('lie');
+  if (sits.includes(DECISION[shotType])) return make('decision');
+  const contact = detail[f.contact];
+  if (LOW_POINT[shotType].includes(contact)) return make('swing', 'lowPoint');
+  if (shotType === 'short') return null;
+  const finish = detail[f.finish];
+  const flight = flightOf({ start: detail[f.start], finish });
+  if (flight && flight.family) return make('swing', flight.family, finish);
+  if (STRIKE.includes(contact)) return make('swing', 'strike', isSide(finish) ? finish : null);
+  return null;
+}
+
+const emptyRow = () => ({
+  misses: 0,
+  tagged: 0,
+  untagged: 0,
+  blocked: 0,
+  families: { forced: 0, lie: 0, decision: 0, swing: 0 },
+  subs: {
+    start: { left: 0, right: 0 },
+    curve: { left: 0, right: 0 },
+    strike: { left: 0, right: 0 },
+    lowPoint: 0,
+  },
+});
+
+function addMiss(row, shotType, detail) {
+  row.misses += 1;
+  if (shotType === 'approach' && isBlockedApproach(detail)) row.blocked += 1;
+  const c = classifyMiss(shotType, detail);
+  if (!c) { row.untagged += 1; return; }
+  row.tagged += 1;
+  row.families[c.family] += 1;
+  if (c.family !== 'swing') return;
+  if (c.sub === 'lowPoint') row.subs.lowPoint += 1;
+  else if (c.side) row.subs[c.sub][c.side] += 1;
+}
+
+export function missReasonStats(rounds, playerId) {
+  const byBucket = {};
+  APPROACH_BUCKETS.forEach((b) => { byBucket[b] = emptyRow(); });
+  const all = emptyRow();
+  const tee = emptyRow();
+  const short = emptyRow();
+  (rounds || []).forEach((round) => {
+    const byHole = round?.shotDetails?.[playerId];
+    if (!byHole) return;
+    (round.holes || []).forEach((hole) => {
+      const d = byHole[hole.number];
+      if (!d) return;
+      if (hole.par !== 3 && d.approachBucket && d.approachResult === 'miss') {
+        if (byBucket[d.approachBucket]) addMiss(byBucket[d.approachBucket], 'approach', d);
+        addMiss(all, 'approach', d);
+      }
+      if (hole.par >= 4 && (d.drive === 'left' || d.drive === 'right' || d.drive === 'short')) {
+        addMiss(tee, 'drive', d);
+      }
+      const strokes = round.scores?.[playerId]?.[hole.number];
+      const greenMissed = d.approachResult === 'miss'
+        || isGIR({ strokes, putts: d.putts, par: hole.par }) === false;
+      if (!greenMissed || !(strokes > hole.par)) return;
+      const outcome = d.recoveryOutcome ?? recoveryOutcomeFromState({
+        strokes, putts: d.putts, sandShots: d.sandShots ?? 0, par: hole.par,
+      });
+      if (outcome === 'up-and-down' || outcome === 'sand-save') return;
+      addMiss(short, 'short', d);
+    });
+  });
+  return { approach: { byBucket, all }, tee, short };
 }

@@ -1191,6 +1191,14 @@ describe('computeMyStats', () => {
     expect(stats.coach).not.toHaveProperty('practicePlan');
   });
 
+  test('exposes missReasons pooled and per bucket', () => {
+    const stats = computeMyStats([0, 1, 2, 3].map(coachRound), { targetHandicap: 14 });
+    expect(stats.missReasons.approach.all).toEqual(expect.objectContaining({ misses: expect.any(Number), tagged: expect.any(Number) }));
+    expect(stats.missReasons.approach.byBucket['100-150']).toBeDefined();
+    expect(stats.missReasons.tee).toBeDefined();
+    expect(stats.missReasons.short).toBeDefined();
+  });
+
   test('returns coachDiagnosis; the board and hero come from the same diagnosis', () => {
     const stats = computeMyStats([0, 1, 2, 3].map(coachRound), { targetHandicap: 14 });
     const d = stats.coachDiagnosis;
