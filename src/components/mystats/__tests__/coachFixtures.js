@@ -46,6 +46,9 @@ export const lagCause = {
   strength: 'likely',
   lead: lead('likely'),
   metricKey: 'putting.threePuttRate.6+',
+  evidence: {
+    bucket: '6+', attempts: 58, threePuttRate: 31, threePutts: 18, avgPutts: 2.5, sgPerPutt: -0.3,
+  },
   benchmark: { source: 'target', targetHandicap: 15, expectedPutts: 2.2 },
   sample: 58,
   msg: msg('stats.my.coach.cause.putting.lag.bench', {
@@ -58,6 +61,9 @@ export const shortPuttCause = {
   strength: 'possible',
   lead: lead('possible'),
   metricKey: 'sg.putting.bucket.1-2',
+  evidence: {
+    bucket: '1-2', attempts: 24, sgPerPutt: -0.1, avgPutts: 1.3,
+  },
   benchmark: null,
   sample: 24,
   msg: msg('stats.my.coach.cause.putting.short', { bucket: '1-2', avgPutts: n(1.3), total: 24 }),
@@ -68,6 +74,9 @@ export const approachShortCause = {
   strength: 'likely',
   lead: lead('likely'),
   metricKey: 'approach.shortRate.100-150',
+  evidence: {
+    bucket: '100-150', misses: 31, directionKnown: 31, shortRate: 71, shortCount: 22, missRate: 64,
+  },
   benchmark: null,
   sample: 22,
   msg: msg('stats.my.coach.cause.approach.short', { bucket: '100-150', missPct: 64, pct: 71, count: 22, total: 31 }),
@@ -78,6 +87,9 @@ export const teeLeftCause = {
   strength: 'likely',
   lead: lead('likely'),
   metricKey: 'tee.missSideShare.left',
+  evidence: {
+    side: 'left', count: 11, other: 3, misses: 15, drives: 32, sidePct: 34, share: 73, costPts: null,
+  },
   benchmark: { source: 'target', targetHandicap: 15, sidePct: 23 },
   sample: 15,
   msg: msg('stats.my.coach.cause.tee.side.bench', {
@@ -90,6 +102,9 @@ export const approachDistanceCause = {
   strength: 'likely',
   lead: lead('likely'),
   metricKey: 'sg.approach.bucket.150-200',
+  evidence: {
+    bucket: '150-200', perShot: -0.6, shots: 31, bestBucket: null, bestPerShot: null,
+  },
   benchmark: null,
   sample: 31,
   msg: msg('stats.my.coach.cause.approach.distance', { bucket: '150-200', cost: n(0.6), shots: 31 }),

@@ -11,7 +11,7 @@ describe('buildCoachWeek: which state the tab is in', () => {
     expect(buildCoachWeek({})).toBeNull();
   });
 
-  it('one clear leak: one chain with drills, task, tip and a check', () => {
+  it('one clear leak: one chain with drills, task and a check', () => {
     const w = week(onePutting());
     expect(w.kind).toBe('one');
     expect(w.chains).toHaveLength(1);
@@ -24,12 +24,10 @@ describe('buildCoachWeek: which state the tab is in', () => {
     expect(w.plan.mode).toBe('focus');
   });
 
-  it('the strategy tip that matches the cause moves into the chain and out of Play smarter', () => {
-    const stats = onePutting();
-    stats.coachStrategy.push({ id: 'tee-club-down', causeId: 'cause:tee:trouble:driver' });
-    const w = week(stats);
-    expect(w.chains[0].tip.id).toBe('lag-first-6plus');
-    expect(w.shownTipIds).toEqual(['lag-first-6plus']);
+  it('strategy tips stay in Play smarter: the chain carries none', () => {
+    const w = week(onePutting());
+    expect(w.chains[0].tip).toBeUndefined();
+    expect(w.shownTipIds).toBeUndefined();
   });
 
   it('a tie gives two chains, each with its own blocks, and a 45/45 plan', () => {
