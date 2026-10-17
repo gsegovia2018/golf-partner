@@ -20,6 +20,7 @@ import { useT, formatNumber } from '../../i18n';
 import { cellLevel, ledgerBestRun } from '../../store/gameStatsView';
 import { initialExpanded, toggleExpanded } from '../../store/scorecardView';
 import { heatColors, signed } from '../gamestats/ui';
+import { renderMsg } from '../mystats/msg';
 
 const LABEL_W = 42;
 const TOTAL_W = 30;
@@ -56,6 +57,12 @@ function shotRows({ row, nine, s, theme, t, sub, idp }) {
     return sub ? <Text style={[s.label, s.subLabel]} numberOfLines={1}>{text.toLocaleLowerCase()}</Text> : text;
   };
   const who = (text) => (sub ? t('stats.game.ledger.a11y.who', { name: row.player.name ?? row.label, text }) : text);
+  const whyColor = theme.isDark ? theme.semantic.winner.dark : theme.semantic.winner.light;
+  const girLabel = (c) => {
+    const base = t(c.gir ? 'stats.game.ledger.a11y.gir' : 'stats.game.ledger.a11y.girMissed', { hole: c.number });
+    if (!c.why?.length) return base;
+    return `${base}, ${t('stats.game.ledger.a11y.why', { summary: c.why.map(renderMsg).join(' · ') })}`;
+  };
   return [
     <Row
       key="pu"
@@ -106,12 +113,17 @@ function shotRows({ row, nine, s, theme, t, sub, idp }) {
       label={label('green')}
       cells={nine.cells.map((c) => ({
         key: c.number,
-        a11y: c.gir == null ? undefined : who(t(c.gir ? 'stats.game.ledger.a11y.gir' : 'stats.game.ledger.a11y.girMissed', { hole: c.number })),
+        a11y: c.gir == null ? undefined : who(girLabel(c)),
         child: c.gir == null ? null : (
-          <View
-            testID={`${idp}-gir-${c.number}`}
-            style={[s.gir, c.gir ? { backgroundColor: theme.accent.primary } : { borderWidth: 1.5, borderColor: theme.text.muted }]}
-          />
+          <>
+            <View
+              testID={`${idp}-gir-${c.number}`}
+              style={[s.gir, c.gir ? { backgroundColor: theme.accent.primary } : { borderWidth: 1.5, borderColor: theme.text.muted }]}
+            />
+            {c.why?.length > 0 && (
+              <View style={[s.why, { backgroundColor: whyColor }]} testID={`${idp}-why-${c.number}`} pointerEvents="none" />
+            )}
+          </>
         ),
       }))}
       total={nine.gir.of > 0 ? nine.gir.hit : null}
@@ -294,6 +306,8 @@ function makeStyles(theme) {
     dot: { width: 3, height: 3, borderRadius: 1.5 },
     // Tee penalty: a solid red dot pinned to the cell's top-right corner.
     penalty: { position: 'absolute', top: 2, right: 2, width: 6, height: 6, borderRadius: 3 },
+    // Miss reason tagged: a gold dot in the cell's top-right corner, like the penalty one.
+    why: { position: 'absolute', top: 2, right: 2, width: 6, height: 6, borderRadius: 3 },
     gir: { width: 10, height: 10, borderRadius: 5 },
     totalLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginTop: 2 },
     totalLabel: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: theme.text.secondary },

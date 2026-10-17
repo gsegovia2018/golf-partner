@@ -51,7 +51,7 @@ export const PlayerCard = React.memo(function PlayerCard({
   shotDetail, onSetShot, shotCollapsed, onToggleShotDetail, showShotDetail,
   officialState, canResolveHere, onOpenDiscrepancy,
   conflict, onOpenConflict,
-  ghost,
+  ghost, roundId,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
@@ -314,6 +314,8 @@ export const PlayerCard = React.memo(function PlayerCard({
           strokes={strokes}
           collapsed={shotCollapsed}
           onToggle={onToggleShotDetail}
+          roundId={roundId}
+          readOnly={!canEdit}
         />
       )}
     </HeroCard>

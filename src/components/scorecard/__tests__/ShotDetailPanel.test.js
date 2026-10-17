@@ -3,12 +3,25 @@ import { render, fireEvent, act } from '@testing-library/react-native';
 import { ShotDetailPanel } from '../ShotDetailPanel';
 import { ShotDetailSection } from '../ShotDetailSection';
 import { clearedReasonPatch } from '../../../store/missReasons';
+import { isRoundMuted, muteRound } from '../../../store/missReasonsMute';
 import { updateAppSettings, __resetAppSettingsForTests } from '../../../store/settingsStore';
 
 // ShotDetailExplainer reads its dismissed state from AsyncStorage in a
 // useEffect; flush that pending promise (inside act) after every render so
 // its follow-up setState doesn't land outside act().
 const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
+
+jest.mock('../../../store/missReasonsMute', () => ({
+  isRoundMuted: jest.fn(() => Promise.resolve(false)),
+  muteRound: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('../../../store/swingStore', () => ({
+  hydrateSwingProfile: jest.fn(() => Promise.resolve()),
+  getSwingProfile: jest.fn(() => ({ handedness: 'right' })),
+  subscribeSwings: jest.fn(() => () => {}),
+  getSwingsVersion: jest.fn(() => 0),
+}));
 
 jest.mock('../../../store/profileStore', () => ({
   loadProfile: jest.fn(),
@@ -299,5 +312,155 @@ describe('ShotDetailSection stat group gating', () => {
         strokes={4} collapsed={false} onToggle={jest.fn()} />,
     );
     expect(toJSON()).toBeNull();
+  });
+});
+
+describe('ShotDetailPanel miss reasons', () => {
+  const withBucket = (extra = {}) => ({ approachBucket: '100-150', ...extra });
+  const DRIVE_TITLE = 'Why did the drive go left?';
+  const renderPanel = async (props = {}) => {
+    const onChange = jest.fn();
+    const r = render(
+      <ShotDetailPanel hole={par4} detail={{}} onChange={onChange} strokes={null} roundId="r1" {...props} />,
+    );
+    await flush();
+    return { ...r, onChange };
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    isRoundMuted.mockImplementation(() => Promise.resolve(false));
+    __resetAppSettingsForTests();
+    await updateAppSettings({ missReasons: 'ask' });
+  });
+
+  test('opens on a tapped drive miss', async () => {
+    const r = await renderPanel();
+    fireEvent.press(r.getByLabelText('Driver Left'));
+    expect(r.getByText(DRIVE_TITLE)).toBeTruthy();
+  });
+
+  test('opens on a tapped approach miss', async () => {
+    const r = await renderPanel({ detail: withBucket() });
+    fireEvent.press(r.getByLabelText('Approach finish Left'));
+    // onChange is a mock, so the detail (and the title) stays unchanged: the
+    // footer proves the sheet is open.
+    expect(r.getByText('Not this round')).toBeTruthy();
+  });
+
+  test('opens on a tapped bunker', async () => {
+    const r = await renderPanel({ detail: withBucket() });
+    fireEvent.press(r.getByLabelText('Approach finish Bunker'));
+    expect(r.getByText('Not this round')).toBeTruthy();
+  });
+
+  test('does not open on fairway, super or on green', async () => {
+    const r = await renderPanel({ detail: withBucket() });
+    fireEvent.press(r.getByLabelText('Driver Fairway'));
+    fireEvent.press(r.getByLabelText('Driver Super'));
+    fireEvent.press(r.getByLabelText('Approach finish On green'));
+    expect(r.queryByText('Not this round')).toBeNull();
+  });
+
+  test('does not open when a miss is toggled off', async () => {
+    const r = await renderPanel({ detail: { drive: 'left' } });
+    fireEvent.press(r.getByLabelText('Driver Left'));
+    expect(r.queryByText(DRIVE_TITLE)).toBeNull();
+  });
+
+  test('never opens when a miss arrives through the detail prop', async () => {
+    const r = await renderPanel({ detail: withBucket() });
+    r.rerender(
+      <ShotDetailPanel hole={par4} onChange={jest.fn()} strokes={null} roundId="r1"
+        detail={withBucket({ drive: 'left', approachMiss: 'left', approachResult: 'miss' })} />,
+    );
+    await flush();
+    expect(r.queryByText(/^Why did/)).toBeNull();
+    expect(r.getAllByText('Why?')).toHaveLength(2);
+  });
+
+  test('short game: chip only, tap opens short mode', async () => {
+    const r = await renderPanel({ detail: { putts: 2 }, strokes: 6 });
+    expect(r.queryByText('Why no up & down?')).toBeNull();
+    fireEvent.press(r.getByText('Why?'));
+    expect(r.getByText('Why no up & down?')).toBeTruthy();
+  });
+
+  test('short chip is hidden for a save or a par', async () => {
+    const save = await renderPanel({ detail: { putts: 1, recoveryOutcome: 'up-and-down' }, strokes: 4 });
+    expect(save.queryByText('Why?')).toBeNull();
+    const par = await renderPanel({ detail: { putts: 2 }, strokes: 4 });
+    expect(par.queryByText('Why?')).toBeNull();
+  });
+
+  test.each(['manual', 'off'])('setting %s suppresses auto-open', async (mode) => {
+    await updateAppSettings({ missReasons: mode });
+    const r = await renderPanel();
+    fireEvent.press(r.getByLabelText('Driver Left'));
+    expect(r.queryByText(DRIVE_TITLE)).toBeNull();
+  });
+
+  test('manual still opens from a chip', async () => {
+    await updateAppSettings({ missReasons: 'manual' });
+    const r = await renderPanel({ detail: { drive: 'left' } });
+    fireEvent.press(r.getByText('Why?'));
+    expect(r.getByText(DRIVE_TITLE)).toBeTruthy();
+  });
+
+  test('a muted round suppresses auto-open', async () => {
+    isRoundMuted.mockImplementation(() => Promise.resolve(true));
+    const r = await renderPanel();
+    fireEvent.press(r.getByLabelText('Driver Left'));
+    expect(r.queryByText(DRIVE_TITLE)).toBeNull();
+  });
+
+  test('read-only suppresses auto-open and hides the unanswered chip', async () => {
+    const r = await renderPanel({ readOnly: true, detail: { drive: 'left' } });
+    fireEvent.press(r.getByLabelText('Driver Right'));
+    expect(r.queryByText(/^Why /)).toBeNull();
+    expect(r.queryByText('Why?')).toBeNull();
+  });
+
+  test('read-only shows an answered summary that does not open anything', async () => {
+    const r = await renderPanel({
+      readOnly: true, detail: { drive: 'right', driveStart: 'right', driveContact: 'fat' },
+    });
+    fireEvent.press(r.getByText('Push · Heavy'));
+    expect(r.queryByText(/^Why /)).toBeNull();
+  });
+
+  test('answered chip shows the summary', async () => {
+    const r = await renderPanel({
+      detail: withBucket({
+        approachMiss: 'right', approachResult: 'miss', approachStart: 'right', approachContact: 'fat',
+      }),
+    });
+    expect(r.getByText('Push · Heavy')).toBeTruthy();
+    expect(r.queryByText('Why?')).toBeNull();
+  });
+
+  test('chips hidden when the group is off or the setting is off', async () => {
+    const detail = withBucket({ drive: 'left', approachMiss: 'left', approachResult: 'miss' });
+    const off = await renderPanel({ detail, statGroups: { teeShot: false, approach: false } });
+    expect(off.queryByText('Why?')).toBeNull();
+    await updateAppSettings({ missReasons: 'off' });
+    const none = await renderPanel({ detail });
+    expect(none.queryByText('Why?')).toBeNull();
+  });
+
+  test('no drive chip on a par 3', async () => {
+    const r = await renderPanel({ hole: par3, detail: { drive: 'left' } });
+    expect(r.queryByText('Why?')).toBeNull();
+  });
+
+  test('"Not this round" mutes the round and stops auto-open', async () => {
+    const r = await renderPanel();
+    fireEvent.press(r.getByLabelText('Driver Left'));
+    fireEvent.press(r.getByText('Not this round'));
+    await flush();
+    expect(muteRound).toHaveBeenCalledWith('r1');
+    expect(r.queryByText(DRIVE_TITLE)).toBeNull();
+    fireEvent.press(r.getByLabelText('Driver Right'));
+    expect(r.queryByText('Why did the drive go right?')).toBeNull();
   });
 });

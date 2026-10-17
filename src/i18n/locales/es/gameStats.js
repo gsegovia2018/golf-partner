@@ -257,6 +257,7 @@ export default {
   "stats.game.ledger.a11y.hcpStrokes": { one: "{count} golpe de hándicap", other: "{count} golpes de hándicap" },
   "stats.game.ledger.a11y.gir": "Hoyo {hole}: green en regulación",
   "stats.game.ledger.a11y.girMissed": "Hoyo {hole}: sin green en regulación",
+  "stats.game.ledger.a11y.why": "Por qué: {summary}",
   "stats.game.ledger.result.eagle": "eagle o mejor",
   "stats.game.ledger.result.birdie": "birdie",
   "stats.game.ledger.result.par": "par",

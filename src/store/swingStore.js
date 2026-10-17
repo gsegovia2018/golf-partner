@@ -26,6 +26,7 @@ const DEFAULT_PROFILE = {
 
 let SWINGS = []; // [{ id, createdAt, name, club, source, status, fps, mainFault, consequences, handedness, counts, thumb, bytes, marked }]
 let PROFILE = { ...DEFAULT_PROFILE };
+let PROFILE_LOADED = false; // true once the stored profile has been read (hydrateSwings or hydrateSwingProfile)
 let version = 0;
 const listeners = new Set();
 
@@ -52,10 +53,7 @@ export async function hydrateSwings() {
     const raw = await AsyncStorage.getItem(INDEX_KEY);
     if (raw) { const rows = JSON.parse(raw); if (Array.isArray(rows)) SWINGS = sortNewest(rows.map((r) => ({ ...r, club: normClub(r.club) }))); } // rows saved before D19 have no club: they read as iron
   } catch { /* corrupt index: start empty */ }
-  try {
-    const raw = await AsyncStorage.getItem(PROFILE_KEY);
-    if (raw) PROFILE = { ...DEFAULT_PROFILE, ...JSON.parse(raw) };
-  } catch { /* ignore */ }
+  await loadStoredProfile();
   emit();
   // Rows analysed before the mark-first flow (D26) have no `marked`: read it from their marks.json.
   const old = SWINGS.filter((r) => r.status === 'ready' && !r.marked);
@@ -67,6 +65,26 @@ export async function hydrateSwings() {
 }
 
 // --- Profile (D5, D6): height and handedness, local only ---------------------
+
+// Reads only the stored profile into PROFILE. Never throws; corrupt JSON keeps the defaults.
+async function loadStoredProfile() {
+  try {
+    const raw = await AsyncStorage.getItem(PROFILE_KEY);
+    if (raw) PROFILE = { ...DEFAULT_PROFILE, ...JSON.parse(raw) };
+  } catch { /* ignore: keep defaults */ }
+  PROFILE_LOADED = true;
+}
+
+/**
+ * Loads only the stored profile (handedness, height), not the swing index or any files.
+ * The scorecard's miss-reasons sheet uses it to name shots by handedness.
+ * Safe to call repeatedly; a profile already loaded by hydrateSwings is not overwritten.
+ */
+export async function hydrateSwingProfile() {
+  if (PROFILE_LOADED) return;
+  await loadStoredProfile();
+  emit();
+}
 
 export async function setSwingProfile({ heightCm, handedness }) {
   PROFILE = {
@@ -348,6 +366,7 @@ export async function exportSwing(id) {
 export function _resetForTests() {
   SWINGS = [];
   PROFILE = { ...DEFAULT_PROFILE };
+  PROFILE_LOADED = false;
   version = 0;
   listeners.clear();
 }
