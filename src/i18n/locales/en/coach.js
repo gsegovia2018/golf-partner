@@ -266,11 +266,10 @@ export default {
 
   // ── Coach tab UI: weekly plan card ─────────────────────────────────────
   'stats.my.coach.ui.week.title': 'This week',
-  'stats.my.coach.ui.week.picker': 'Practice minutes per week',
-  'stats.my.coach.ui.week.minutesCaption': 'min / week',
-  'stats.my.coach.ui.week.option': '{minutes} minutes',
-  'stats.my.coach.ui.week.splitItem': '{kind} {minutes}',
-  'stats.my.coach.ui.week.total': '{minutes} min',
+  'stats.my.coach.ui.week.minutesAWeek': '{minutes} min a week',
+  'stats.my.coach.ui.week.change': 'Change',
+  'stats.my.coach.ui.minutes.title': 'Practice time',
+  'stats.my.coach.ui.minutes.note': 'The plan is sized to this time and re-packs when you change it.',
   'stats.my.coach.ui.week.onCourse': 'on course',
   'stats.my.coach.ui.week.empty': 'Play and score a round to get a weekly plan.',
   'stats.my.coach.ui.week.pill': 'This week: {kind} · {minutes} min',
@@ -280,7 +279,7 @@ export default {
   'stats.my.coach.ui.kind.course': 'On the course',
   'stats.my.coach.ui.kind.part': '{kind} · session {part}',
   'stats.my.coach.ui.level.line': 'Level {level} of 3 · {rounds} in · since {date}',
-  'stats.my.coach.ui.level.none': 'Level 1 of 3 · pin a focus and the plan levels up with your rounds',
+  'stats.my.coach.ui.level.none': 'Level 1 of 3',
 
   // ── Coach tab UI: focus card ───────────────────────────────────────────
   'stats.my.coach.ui.focus.early': 'Early read: {rounds} in, the verdict settles at {settles}.',

@@ -17,47 +17,41 @@ const renderPlan = (stats, opts = {}, props = {}) => render(wrap(
   <WeeklyPlanCard week={week(stats, opts)} focus={opts.focus ?? null} verdict={opts.verdict ?? null} onChangeMinutes={jest.fn()} {...props} />,
 ));
 
-describe('WeeklyPlanCard: minutes picker', () => {
-  test('is a radio group of 30 / 60 / 90 / 120 with the plan minutes checked', () => {
+describe('WeeklyPlanCard: minutes footer', () => {
+  test('the header has no minutes picker and no split bar: the tile minutes are the split', () => {
+    const r = renderPlan(onePutting(), { minutesPerWeek: 120 });
+    expect(r.queryByLabelText('Practice minutes per week')).toBeNull();
+    expect(r.queryByText('min / week')).toBeNull();
+    expect(r.queryByTestId('plan-split-text')).toBeNull();
+    [30, 60, 90, 120].forEach((m) => expect(r.queryByTestId(`minutes-${m}`)).toBeNull());
+    const tiles = r.getAllByText(/^\d+ min$/);
+    expect(tiles.length).toBeGreaterThan(1);
+  });
+
+  test('the footer reads level, minutes a week and Change', () => {
     const r = renderPlan(onePutting(), { minutesPerWeek: 90 });
-    expect(r.getByLabelText('Practice minutes per week')).toBeTruthy();
-    [30, 60, 90, 120].forEach((m) => {
-      const radio = r.getByLabelText(`${m} minutes`);
-      expect(radio.props.accessibilityRole).toBe('radio');
-      expect(radio.props.accessibilityState.checked).toBe(m === 90);
-      // react-native-web only reads aria-checked, so the option must pass it too
-      expect(r.UNSAFE_getAllByProps({ testID: `minutes-${m}` })[0].props['aria-checked']).toBe(m === 90);
-    });
-    expect(r.getByText('min / week')).toBeTruthy();
+    expect(r.getByTestId('plan-level').props.children).toBe('Level 1 of 3');
+    expect(r.getByTestId('plan-minutes').props.children).toBe('90 min a week');
+    const change = r.getByTestId('plan-change-minutes');
+    expect(change.props.accessibilityRole).toBe('button');
+    const style = StyleSheet.flatten(change.props.style);
+    expect(style.minHeight).toBeGreaterThanOrEqual(44);
+    expect(style.minWidth).toBeGreaterThanOrEqual(44);
+    expect(r.getByText('Change')).toBeTruthy();
   });
 
-  test('every option is at least 44 px', () => {
-    const r = renderPlan(onePutting());
-    [30, 60, 90, 120].forEach((m) => {
-      const style = StyleSheet.flatten(r.getByTestId(`minutes-${m}`).props.style);
-      expect(style.minWidth).toBeGreaterThanOrEqual(44);
-      expect(style.minHeight).toBeGreaterThanOrEqual(44);
-    });
-  });
-
-  test('pressing an option reports the minutes', () => {
+  test('Change opens the minutes sheet; picking a row reports the minutes and closes it', () => {
     const onChangeMinutes = jest.fn();
     const r = renderPlan(onePutting(), {}, { onChangeMinutes });
-    fireEvent.press(r.getByLabelText('120 minutes'));
+    expect(r.queryByText('Practice time')).toBeNull();
+    fireEvent.press(r.getByTestId('plan-change-minutes'));
+    expect(r.getByText('Practice time')).toBeTruthy();
+    fireEvent.press(r.getByLabelText('120 min a week'));
     expect(onChangeMinutes).toHaveBeenCalledWith(120);
   });
 });
 
 describe('WeeklyPlanCard: split, sessions and the course task', () => {
-  test('the split is also in text, with the total', () => {
-    const r = renderPlan(onePutting(), { minutesPerWeek: 120 });
-    const text = r.getByTestId('plan-split-text').props.children;
-    expect(String(text)).toMatch(/Putting \d+/);
-    expect(String(text)).toMatch(/Range \d+/);
-    const parts = String(text).match(/\d+/g).map(Number);
-    expect(r.getByText(`${parts.reduce((a, b) => a + b, 0)} min`, { exact: true })).toBeTruthy();
-  });
-
   test('one tile per session with its why and its drills at their level', () => {
     const r = renderPlan(onePutting(), { minutesPerWeek: 120 });
     expect(r.getByTestId('session-putting')).toBeTruthy();
@@ -126,9 +120,9 @@ describe('WeeklyPlanCard: level and re-plan note', () => {
     expect(r.getByTestId('plan-level').props.children).toBe('Level 2 of 3 · 4 rounds in · since 2 Oct');
   });
 
-  test('without a focus the level line says how to start', () => {
+  test('without a focus the level line is just the level', () => {
     const r = renderPlan(onePutting());
-    expect(r.getByTestId('plan-level').props.children).toBe('Level 1 of 3 · pin a focus and the plan levels up with your rounds');
+    expect(r.getByTestId('plan-level').props.children).toBe('Level 1 of 3');
   });
 
   test('the re-planned note names what changed and the round date', () => {

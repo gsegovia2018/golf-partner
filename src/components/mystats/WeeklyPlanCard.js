@@ -1,31 +1,30 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useT, formatDate } from '../../i18n';
-import { PRACTICE_MINUTES_OPTIONS } from '../../store/settingsStore';
 import { progression } from '../../swing/drills';
 import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
+import MinutesSheet from './MinutesSheet';
 import { DrillLine } from './CoachBits';
 import { renderMsg, renderDatedMsg } from './msg';
 
 const KIND_ICON = { range: 'wind', shortGame: 'flag', putting: 'circle', course: 'map' };
-const KINDS = ['range', 'shortGame', 'putting', 'course'];
 
-// The week's practice (design B): minutes picker in the header, a split bar
-// with the minutes also in text, one tile per session, the on-course task,
-// the level line and the re-planned note. `week` is store/coachWeek.js
-// buildCoachWeek's result; the picker writes practiceMinutesPerWeek upstream.
+// The week's practice (design B): one tile per session (its minutes are the
+// split), the on-course task, the re-planned note and a footer with the level
+// and "60 min a week · Change", which opens the minutes sheet. `week` is
+// store/coachWeek.js buildCoachWeek's result; the sheet's choice is written to
+// practiceMinutesPerWeek upstream (onChangeMinutes).
 export default function WeeklyPlanCard({ week, focus, verdict, onChangeMinutes, onInfo }) {
   const { theme } = useTheme();
   const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
+  const [minutesOpen, setMinutesOpen] = useState(false);
   const plan = week?.plan;
   if (!plan) return null;
 
-  const splitParts = KINDS.filter((k) => plan.split[k] > 0);
-  const total = splitParts.reduce((a, k) => a + plan.split[k], 0);
   const levelLine = focus
     ? t('stats.my.coach.ui.level.line', {
       level: plan.level,
@@ -34,8 +33,6 @@ export default function WeeklyPlanCard({ week, focus, verdict, onChangeMinutes, 
     })
     : t('stats.my.coach.ui.level.none');
   const note = plan.replan?.note ? renderDatedMsg(plan.replan.note) : null;
-  const tileColor = (kind) => (kind === 'range' ? theme.accent.primary : kind === 'shortGame' ? theme.info
-    : kind === 'putting' ? theme.text.muted : theme.border.default);
 
   return (
     <SectionCard
@@ -43,45 +40,7 @@ export default function WeeklyPlanCard({ week, focus, verdict, onChangeMinutes, 
       infoKey="weeklyPlan"
       onInfo={onInfo}
       testID="weekly-plan-card"
-      right={(
-        <View style={s.pickerWrap}>
-          <View style={s.picker} accessibilityRole="radiogroup" accessibilityLabel={t('stats.my.coach.ui.week.picker')}>
-            {PRACTICE_MINUTES_OPTIONS.map((m) => {
-              const on = m === plan.minutes;
-              return (
-                <PressableScale
-                  key={m}
-                  onPress={() => onChangeMinutes?.(m)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: on }}
-                  aria-checked={on}
-                  accessibilityLabel={t('stats.my.coach.ui.week.option', { minutes: m })}
-                  style={[s.opt, on && s.optOn]}
-                  testID={`minutes-${m}`}
-                >
-                  <Text style={[s.optText, on && s.optTextOn]}>{m}</Text>
-                </PressableScale>
-              );
-            })}
-          </View>
-          <Text style={s.caption}>{t('stats.my.coach.ui.week.minutesCaption')}</Text>
-        </View>
-      )}
     >
-      {total > 0 ? (
-        <View style={s.splitWrap}>
-          <View style={s.split} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            {splitParts.map((k) => <View key={k} style={[s.seg, { flex: plan.split[k], backgroundColor: tileColor(k) }]} />)}
-          </View>
-          <View style={s.splitCap}>
-            <Text style={s.splitText} testID="plan-split-text">
-              {splitParts.map((k) => t('stats.my.coach.ui.week.splitItem', { kind: t(`stats.my.coach.ui.kind.${k}`), minutes: plan.split[k] })).join(' · ')}
-            </Text>
-            <Text style={s.splitText}>{t('stats.my.coach.ui.week.total', { minutes: total })}</Text>
-          </View>
-        </View>
-      ) : null}
-
       {plan.sessions.map((session) => (
         <View
           key={session.id}
@@ -119,38 +78,41 @@ export default function WeeklyPlanCard({ week, focus, verdict, onChangeMinutes, 
         </View>
       </View>
 
-      <Text style={s.level} testID="plan-level">{levelLine}</Text>
       {note ? (
         <View style={s.note} testID="plan-replanned">
           <Feather name="refresh-cw" size={12} color={theme.text.muted} />
           <Text style={s.noteText}>{note}</Text>
         </View>
       ) : null}
+
+      <View style={s.foot}>
+        <Text style={s.level} testID="plan-level">{levelLine}</Text>
+        <View style={s.footRight}>
+          <Text style={s.minutes} testID="plan-minutes">{t('stats.my.coach.ui.week.minutesAWeek', { minutes: plan.minutes })}</Text>
+          <Text style={s.minutes}>·</Text>
+          <PressableScale
+            onPress={() => setMinutesOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('stats.my.coach.ui.week.change')}
+            style={s.change}
+            testID="plan-change-minutes"
+          >
+            <Text style={s.changeText}>{t('stats.my.coach.ui.week.change')}</Text>
+          </PressableScale>
+        </View>
+      </View>
+      <MinutesSheet
+        visible={minutesOpen}
+        onClose={() => setMinutesOpen(false)}
+        minutes={plan.minutes}
+        onSelect={(m) => onChangeMinutes?.(m)}
+      />
     </SectionCard>
   );
 }
 
 function makeStyles(theme) {
   return StyleSheet.create({
-    pickerWrap: { alignItems: 'flex-end', gap: 2 },
-    picker: {
-      flexDirection: 'row',
-      borderRadius: 999,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.border.default,
-      backgroundColor: theme.bg.secondary,
-      padding: 2,
-    },
-    opt: { minWidth: 44, minHeight: 44, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
-    optOn: { backgroundColor: theme.accent.primary },
-    optText: { ...theme.typography.subhead, color: theme.text.secondary, fontWeight: '800' },
-    optTextOn: { color: theme.text.inverse },
-    caption: { ...theme.typography.tiny, color: theme.text.muted },
-    splitWrap: { gap: 6 },
-    split: { flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', gap: 2 },
-    seg: { height: 8 },
-    splitCap: { flexDirection: 'row', justifyContent: 'space-between', gap: theme.spacing.sm },
-    splitText: { ...theme.typography.caption, color: theme.text.secondary, flexShrink: 1 },
     tile: {
       flexDirection: 'row',
       gap: theme.spacing.md,
@@ -171,7 +133,15 @@ function makeStyles(theme) {
     why: { ...theme.typography.caption, color: theme.text.secondary },
     body: { ...theme.typography.body, color: theme.text.primary },
     drillRow: { paddingTop: 2 },
-    level: { ...theme.typography.caption, color: theme.text.secondary, fontWeight: '700' },
+    foot: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.sm, minHeight: 44,
+      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border.subtle,
+    },
+    level: { ...theme.typography.caption, flex: 1, color: theme.text.secondary, fontWeight: '700' },
+    footRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    minutes: { ...theme.typography.caption, color: theme.text.secondary, fontWeight: '600' },
+    change: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' },
+    changeText: { ...theme.typography.caption, color: theme.info, fontWeight: '800' },
     note: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
     noteText: { ...theme.typography.caption, color: theme.text.secondary, flex: 1 },
   });

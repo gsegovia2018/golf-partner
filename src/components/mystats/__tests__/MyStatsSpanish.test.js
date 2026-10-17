@@ -115,8 +115,12 @@ describe('My Stats components in Spanish', () => {
     const verdict = verdictOf();
     const r = render(wrap(<CoachTab stats={stats} week={week(stats, { focus, verdict })} focus={focus} focusVerdict={verdict} targetHandicap={15} />));
     expect(r.getByText('Esta semana')).toBeTruthy();
-    expect(r.getByText('min / semana')).toBeTruthy();
-    expect(r.getByLabelText('90 minutos')).toBeTruthy();
+    expect(r.getByTestId('plan-minutes').props.children).toBe('60 min a la semana');
+    expect(r.getByText('Cambiar')).toBeTruthy();
+    fireEvent.press(r.getByTestId('plan-change-minutes'));
+    expect(r.getByText('Tiempo de práctica')).toBeTruthy();
+    expect(r.getByLabelText('90 min a la semana')).toBeTruthy();
+    expect(r.getByText('El plan se ajusta a este tiempo y se reparte de nuevo cuando lo cambias.')).toBeTruthy();
     expect(r.getByTestId('plan-level').props.children).toBe('Nivel 2 de 3 · 3 vueltas desde el 2 oct');
     expect(r.getByText('Primera lectura: 3 vueltas jugadas, el veredicto se asienta a las 4.')).toBeTruthy();
     expect(r.getAllByText('Fallos cortos desde 100-150 m').length).toBeGreaterThan(0); // focus card and the pair caption

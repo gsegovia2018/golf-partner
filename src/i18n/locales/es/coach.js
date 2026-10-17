@@ -266,11 +266,10 @@ export default {
 
   // ── Interfaz: tarjeta del plan semanal ─────────────────────────────────
   'stats.my.coach.ui.week.title': 'Esta semana',
-  'stats.my.coach.ui.week.picker': 'Minutos de práctica por semana',
-  'stats.my.coach.ui.week.minutesCaption': 'min / semana',
-  'stats.my.coach.ui.week.option': '{minutes} minutos',
-  'stats.my.coach.ui.week.splitItem': '{kind} {minutes}',
-  'stats.my.coach.ui.week.total': '{minutes} min',
+  'stats.my.coach.ui.week.minutesAWeek': '{minutes} min a la semana',
+  'stats.my.coach.ui.week.change': 'Cambiar',
+  'stats.my.coach.ui.minutes.title': 'Tiempo de práctica',
+  'stats.my.coach.ui.minutes.note': 'El plan se ajusta a este tiempo y se reparte de nuevo cuando lo cambias.',
   'stats.my.coach.ui.week.onCourse': 'en el campo',
   'stats.my.coach.ui.week.empty': 'Juega y puntúa una vuelta para recibir un plan semanal.',
   'stats.my.coach.ui.week.pill': 'Esta semana: {kind} · {minutes} min',
@@ -280,7 +279,7 @@ export default {
   'stats.my.coach.ui.kind.course': 'En el campo',
   'stats.my.coach.ui.kind.part': '{kind} · sesión {part}',
   'stats.my.coach.ui.level.line': 'Nivel {level} de 3 · {rounds} desde el {date}',
-  'stats.my.coach.ui.level.none': 'Nivel 1 de 3 · elige un foco y el plan sube de nivel con tus vueltas',
+  'stats.my.coach.ui.level.none': 'Nivel 1 de 3',
 
   // ── Interfaz: tarjeta del foco ─────────────────────────────────────
   'stats.my.coach.ui.focus.early': 'Primera lectura: {rounds} jugadas, el veredicto se asienta a las {settles}.',

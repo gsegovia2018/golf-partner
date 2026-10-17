@@ -78,10 +78,11 @@ describe('CoachTab composition (design B)', () => {
     expect(onCommit.mock.calls[0][0].leak.id).toBe('leak:putting:6+');
   });
 
-  test('the picker writes the minutes upstream', () => {
+  test('the minutes sheet writes the minutes upstream', () => {
     const onChangeMinutes = jest.fn();
     const r = renderTab(onePutting(), {}, { onChangeMinutes });
-    fireEvent.press(r.getByLabelText('90 minutes'));
+    fireEvent.press(r.getByTestId('plan-change-minutes'));
+    fireEvent.press(r.getByLabelText('90 min a week'));
     expect(onChangeMinutes).toHaveBeenCalledWith(90);
   });
 
