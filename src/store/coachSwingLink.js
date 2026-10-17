@@ -49,13 +49,37 @@ const P = 'stats.my.coach.swing.';
 //   iron|driver  that club only
 //   driverFirst  driver fits, iron is allowed but only 'possible'
 export const SWING_FAULT_LINKS = {
-  over_the_top: { clubs: 'matched', causes: ['tee:side:right', 'tee:side:left', 'tee:trouble:driver', 'approach:side:left', 'approach:side:right'] },
+  over_the_top: {
+    clubs: 'matched',
+    causes: [
+      'tee:side:right', 'tee:side:left', 'tee:trouble:driver', 'approach:side:left', 'approach:side:right',
+      'approach:why:swing:curve:right', 'tee:why:swing:curve:right', 'approach:why:swing:start:left',
+    ],
+  },
   steep_backswing: { clubs: 'both', causes: ['tee:side:right', 'approach:side:right', 'approach:short'] },
   top_position: { clubs: 'both', causes: ['tee:side:right', 'approach:side:right', 'approach:short'] },
-  flat_backswing: { clubs: 'both', causes: ['tee:side:left', 'approach:side:left'] },
-  early_extension: { clubs: 'both', causes: ['approach:short', 'approach:distance', 'short:chip', 'tee:side:right'] },
-  flip: { clubs: 'iron', causes: ['approach:short', 'approach:distance', 'short:chip'] },
-  head_sway: { clubs: 'both', causes: ['approach:short', 'approach:distance', 'tee:side:left', 'tee:side:right'] },
+  flat_backswing: {
+    clubs: 'both',
+    causes: [
+      'tee:side:left', 'approach:side:left',
+      'approach:why:swing:curve:left', 'tee:why:swing:curve:left', 'approach:why:swing:start:right',
+    ],
+  },
+  early_extension: {
+    clubs: 'both',
+    causes: [
+      'approach:short', 'approach:distance', 'short:chip', 'tee:side:right',
+      'approach:why:swing:strike:right', 'approach:why:swing:lowPoint', 'short:why:swing:lowPoint',
+    ],
+  },
+  flip: {
+    clubs: 'iron',
+    causes: ['approach:short', 'approach:distance', 'short:chip', 'approach:why:swing:lowPoint', 'short:why:swing:lowPoint'],
+  },
+  head_sway: {
+    clubs: 'both',
+    causes: ['approach:short', 'approach:distance', 'tee:side:left', 'tee:side:right', 'approach:why:swing:lowPoint'],
+  },
   posture: { clubs: 'both', causes: ['approach:short', 'tee:distance', 'approach:distance'] },
   tempo_fast: { clubs: 'driverFirst', causes: ['tee:trouble:driver', 'tee:side:left', 'tee:side:right', 'penalty:tee'] },
   tempo_slow: { clubs: 'driver', causes: ['tee:distance'] },
@@ -74,7 +98,7 @@ export function mirrorCauseId(id, handedness) {
 export function clubOfCause(causeId) {
   const id = stripPrefix(causeId);
   if (id.startsWith('tee:') || id.startsWith('penalty:tee')) return 'driver';
-  if (id.startsWith('approach:') || id === 'short:chip') return 'iron';
+  if (id.startsWith('approach:') || id === 'short:chip' || id.startsWith('short:why:')) return 'iron';
   return null;
 }
 

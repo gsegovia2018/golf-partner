@@ -113,6 +113,12 @@ export function courseTaskFor({ causeId, category, bucket }) {
       const base = rest.startsWith('tee') ? 'tee.side' : 'approach.side';
       return msg(`${P}course.${base}`, { bucket: b, side: lower(msg(`stats.my.fan.${side[1]}`)) });
     }
+    const why = /^(approach|tee|short):why:(.+?)(?::(left|right))?$/.exec(rest);
+    if (why) {
+      const params = { bucket: b };
+      if (why[3]) params.side = lower(msg(`stats.my.fan.${why[3]}`));
+      return msg(`${P}course.${why[1]}.why.${why[2].replace(/:/g, '.')}`, params);
+    }
     const key = rest.startsWith('tee:trouble') ? 'tee.trouble' : rest.replace(/:/g, '.');
     return msg(`${P}course.${key}`, { bucket: b });
   }

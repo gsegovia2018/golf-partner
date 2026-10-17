@@ -19,13 +19,16 @@
 //              own benchmark is the Check step's business.
 //   metricKey  coachMetrics key the verdict re-reads
 //   sample     size of the evidence behind it (tie-break between equal strengths)
+//   priority   0 for a why rule, 1 for the rest: compared before sample
 //   msg        the evidence sentence. With a benchmark its key ends in
 //              `.bench`; without one the sibling key carries no comparison.
 //
 // Pure: no language, no clock, no I/O.
 
 import { msg, n, lower } from './statsMsg';
-import { readMetric } from './coachMetrics';
+import {
+  readMetric, whyRow, WHY_KINDS, SHORT_WHY_KINDS,
+} from './coachMetrics';
 import { SHOT_HANDICAP_BENCHMARKS, shotBenchmarkForHandicap } from './shotBenchmarks';
 import {
   benchmarkDriveDistance, expectedPenaltiesPerRound, expectedStrokes,
@@ -67,6 +70,9 @@ export const CAUSE_MIN = {
   penaltiesTotal: 4,
   penaltyTeeRatio: 2,
   penaltyTeeLikelyRatio: 3,
+  whyTagged: 6,
+  whyFamilyPct: 50,
+  whyLikelyPct: 70,
 };
 
 const finite = (v) => Number.isFinite(v);
@@ -114,6 +120,8 @@ function makeCause(leak, id, strength, fields) {
     metricKey: fields.metricKey,
     sample: fields.sample,
     msg: fields.msg,
+    // Ties between equal strengths: a why rule (0) beats an outcome rule (1) before sample size.
+    priority: fields.priority ?? 1,
   };
 }
 
@@ -485,6 +493,68 @@ function penaltyRule(leak, stats, ctx) {
   });
 }
 
+// ── Why rules (miss reasons, spec §5.3) ──────────────────────────────────
+
+// The reason covering the most tagged misses, when it covers >= whyFamilyPct.
+// Forced shots count in the denominator and are never a reason themselves.
+function dominantReason(row, kinds) {
+  const tagged = row?.tagged ?? 0;
+  let best = null;
+  kinds.forEach((k) => {
+    const count = k.count(row);
+    if (count > 0 && (!best || count > best.count)) best = { kind: k, count };
+  });
+  if (!best || best.count * 100 < CAUSE_MIN.whyFamilyPct * tagged) return null;
+  return { ...best, tagged };
+}
+
+// area 'approach' | 'tee' | 'short'; scope 'bucket' | 'all' | the area itself.
+function whyCause(leak, area, row, kinds, scope, bucket) {
+  const hit = dominantReason(row, kinds);
+  if (!hit) return null;
+  const { kind, count, tagged } = hit;
+  const strength = count * 100 >= CAUSE_MIN.whyLikelyPct * tagged ? 'likely' : 'consistent';
+  const key = `${KEY}${area}.why.${kind.family === 'swing' ? `swing.${kind.sub}` : kind.family}`;
+  const params = { count, total: tagged };
+  if (area === 'approach') {
+    params.scope = scope === 'bucket'
+      ? msg(`${KEY}approach.why.scope.bucket`, { bucket })
+      : msg(`${KEY}approach.why.scope.all`);
+  }
+  if (kind.side) params.side = lowerSide(kind.side);
+  const metricScope = area === 'approach' ? `.${scope === 'bucket' ? bucket : 'all'}` : '';
+  return makeCause(leak, `cause:${area}:why:${kind.base.replace(/\./g, ':')}`, strength, {
+    evidence: {
+      scope, bucket: scope === 'bucket' ? bucket : null, family: kind.family, sub: kind.sub, side: kind.side, count, tagged,
+    },
+    metricKey: `${area}.why.${kind.base}Rate${metricScope}`,
+    sample: tagged,
+    msg: msg(key, params),
+    priority: 0,
+  });
+}
+
+// The leak's own bucket when it has enough tagged misses, else all approaches pooled.
+function approachWhyRule(leak, stats) {
+  const own = leak.bucket ? whyRow(stats, 'approach', leak.bucket) : null;
+  if ((own?.tagged ?? 0) >= CAUSE_MIN.whyTagged) {
+    return whyCause(leak, 'approach', own, WHY_KINDS, 'bucket', leak.bucket);
+  }
+  const all = whyRow(stats, 'approach', 'all');
+  if ((all?.tagged ?? 0) >= CAUSE_MIN.whyTagged) return whyCause(leak, 'approach', all, WHY_KINDS, 'all', null);
+  return null;
+}
+
+function teeWhyRule(leak, stats) {
+  const row = whyRow(stats, 'tee');
+  return (row?.tagged ?? 0) >= CAUSE_MIN.whyTagged ? whyCause(leak, 'tee', row, WHY_KINDS, 'tee', null) : null;
+}
+
+function shortWhyRule(leak, stats) {
+  const row = whyRow(stats, 'short');
+  return (row?.tagged ?? 0) >= CAUSE_MIN.whyTagged ? whyCause(leak, 'short', row, SHORT_WHY_KINDS, 'short', null) : null;
+}
+
 // ── Table ────────────────────────────────────────────────────────────────
 
 // Rules per leak category, in tie-break order. A `fallback` rule runs only
@@ -492,16 +562,18 @@ function penaltyRule(leak, stats, ctx) {
 const RULES = {
   putting: [{ run: lagRule }, { run: shortPuttRule }, { run: generalPuttingRule }],
   approach: [
-    { run: approachShortRule }, { run: approachSideRule }, { run: approachBunkerRule },
+    { run: approachWhyRule }, { run: approachShortRule }, { run: approachSideRule }, { run: approachBunkerRule },
     { run: approachDistanceRule, fallback: true },
   ],
-  offTheTee: [{ run: teeTroubleRule }, { run: teeSideRule }, { run: teeDistanceRule }],
-  aroundGreen: [{ run: sandRule }, { run: chipRule }],
+  offTheTee: [{ run: teeWhyRule }, { run: teeTroubleRule }, { run: teeSideRule }, { run: teeDistanceRule }],
+  aroundGreen: [{ run: shortWhyRule }, { run: sandRule }, { run: chipRule }],
   penalties: [{ run: penaltyRule }],
 };
 
+// Strength, then priority (a why rule's tagged sample is always smaller than an
+// outcome rule's, so it must win a tie before sample is compared), then sample.
 function byStrength(a, b) {
-  return rankOf(a.strength) - rankOf(b.strength) || b.sample - a.sample;
+  return rankOf(a.strength) - rankOf(b.strength) || a.priority - b.priority || b.sample - a.sample;
 }
 
 export function causesForLeak(leak, stats) {

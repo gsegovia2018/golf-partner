@@ -118,7 +118,8 @@ const EXPECTED = {
 
 describe('METRICS registry', () => {
   test('the expected table covers exactly the registry keys', () => {
-    expect(Object.keys(METRICS).sort()).toEqual(Object.keys(EXPECTED).sort());
+    // the why metrics have their own describe below
+    expect(Object.keys(METRICS).filter((k) => !k.includes('.why.')).sort()).toEqual(Object.keys(EXPECTED).sort());
   });
 
   test.each(Object.keys(EXPECTED))('%s reads the fixture value and sample', (key) => {
@@ -223,5 +224,59 @@ describe('readMetric on real computeMyStats output', () => {
     expect(readMetric('tee.missSideShare.left', stats).value).toBe(100);
     expect(readMetric('tee.distance', stats).value).toBe(225);
     expect(readMetric('sg.putting', stats).value).toBeCloseTo(stats.strokesGained.byCategory.putting, 10);
+  });
+});
+
+describe('why metrics (stats.missReasons)', () => {
+  const row = (o = {}) => ({
+    misses: 14, tagged: 10, untagged: 4, blocked: 1,
+    families: { forced: 1, lie: 2, decision: 1, swing: 6 },
+    subs: {
+      start: { left: 0, right: 3 }, curve: { left: 1, right: 0 }, strike: { left: 0, right: 0 }, lowPoint: 2,
+    },
+    ...o,
+  });
+  const stats = {
+    missReasons: {
+      approach: { byBucket: { '100-150': row(), '0-50': row({ tagged: 0 }) }, all: row({ tagged: 20, families: { forced: 0, lie: 10, decision: 2, swing: 8 } }) },
+      tee: row(),
+      short: row({ tagged: 5, families: { forced: 0, lie: 0, decision: 5, swing: 0 } }),
+    },
+  };
+
+  test.each([
+    ['approach.why.swing.start.rightRate.100-150', 30, 10],
+    ['approach.why.swing.curve.leftRate.100-150', 10, 10],
+    ['approach.why.swing.lowPointRate.100-150', 20, 10],
+    ['approach.why.lieRate.100-150', 20, 10],
+    ['approach.why.decisionRate.100-150', 10, 10],
+    ['approach.why.lieRate.all', 50, 20],
+    ['approach.why.decisionRate.all', 10, 20],
+    ['tee.why.swing.start.rightRate', 30, 10],
+    ['tee.why.swing.strike.leftRate', 0, 10],
+    ['tee.why.swing.lowPointRate', 20, 10],
+    ['tee.why.lieRate', 20, 10],
+    ['tee.why.decisionRate', 10, 10],
+    ['short.why.decisionRate', 100, 5],
+    ['short.why.swing.lowPointRate', 40, 5],
+    ['short.why.lieRate', 0, 5],
+  ])('%s is a percent of tagged misses', (key, value, tagged) => {
+    expect(readMetric(key, stats)).toEqual({ value, sample: { shots: tagged } });
+    expect(METRICS[key]).toMatchObject({ polarity: 'lower', unit: 'percent' });
+  });
+
+  test('every bucket and the pooled scope has the approach keys; short has no start/curve/strike', () => {
+    [...APPROACH_BUCKETS, 'all'].forEach((b) => {
+      ['swing.start.left', 'swing.start.right', 'swing.curve.left', 'swing.curve.right', 'swing.strike.left',
+        'swing.strike.right', 'swing.lowPoint', 'lie', 'decision'].forEach((k) => {
+        expect(METRICS).toHaveProperty([`approach.why.${k}Rate.${b}`]);
+      });
+    });
+    expect(METRICS).not.toHaveProperty(['short.why.swing.start.leftRate']);
+  });
+
+  test('no tagged misses reads null with a zero sample; no stats at all too', () => {
+    expect(readMetric('approach.why.lieRate.0-50', stats)).toEqual({ value: null, sample: { shots: 0 } });
+    expect(readMetric('tee.why.lieRate', {})).toEqual({ value: null, sample: { shots: 0 } });
   });
 });

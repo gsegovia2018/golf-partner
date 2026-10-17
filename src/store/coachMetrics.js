@@ -133,6 +133,42 @@ function penaltiesPerRound(side) {
   };
 }
 
+// ── Why metrics (miss reasons, spec §5.3 / plan decision 15) ─────────────
+// Share of TAGGED misses that carry one reason, read from stats.missReasons
+// (missReasons.js rows). sample.shots is the tagged count: the cause gate reads it.
+// Scope: approach rows come per bucket and pooled ('all'); tee and short are one row.
+
+const SUB_SIDES = ['left', 'right'];
+export const WHY_KINDS = [
+  ...['start', 'curve', 'strike'].flatMap((sub) => SUB_SIDES.map((side) => ({
+    base: `swing.${sub}.${side}`, family: 'swing', sub, side, count: (row) => row?.subs?.[sub]?.[side] ?? 0,
+  }))),
+  { base: 'swing.lowPoint', family: 'swing', sub: 'lowPoint', side: null, count: (row) => row?.subs?.lowPoint ?? 0 },
+  { base: 'lie', family: 'lie', sub: null, side: null, count: (row) => row?.families?.lie ?? 0 },
+  { base: 'decision', family: 'decision', sub: null, side: null, count: (row) => row?.families?.decision ?? 0 },
+];
+// The short game's swing reason is the low point only.
+export const SHORT_WHY_KINDS = WHY_KINDS.filter((k) => !['start', 'curve', 'strike'].includes(k.sub));
+
+// The row a why metric reads: area 'approach' with a bucket or 'all', 'tee', 'short'.
+export function whyRow(stats, area, bucket = 'all') {
+  const mr = stats?.missReasons;
+  if (area === 'approach') return bucket === 'all' ? mr?.approach?.all : mr?.approach?.byBucket?.[bucket];
+  return mr?.[area];
+}
+
+function whyMetric(area, bucket, kind) {
+  return {
+    polarity: 'lower',
+    unit: 'percent',
+    read(stats) {
+      const row = whyRow(stats, area, bucket);
+      const tagged = row?.tagged ?? 0;
+      return { value: tagged > 0 ? Math.round((kind.count(row) / tagged) * 100) : null, sample: { shots: tagged } };
+    },
+  };
+}
+
 export const METRICS = {};
 
 SG_CATEGORIES.forEach((c) => { METRICS[`sg.${c}`] = sgCategory(c); });
@@ -172,6 +208,11 @@ METRICS['tee.distance'] = {
 METRICS['short.upDownRate'] = upDownRate(null);
 METRICS['short.upDownRate.sand'] = upDownRate('sand');
 METRICS['short.upDownRate.nonSand'] = upDownRate('nonSand');
+[...APPROACH_BUCKETS, 'all'].forEach((b) => {
+  WHY_KINDS.forEach((k) => { METRICS[`approach.why.${k.base}Rate.${b}`] = whyMetric('approach', b, k); });
+});
+WHY_KINDS.forEach((k) => { METRICS[`tee.why.${k.base}Rate`] = whyMetric('tee', null, k); });
+SHORT_WHY_KINDS.forEach((k) => { METRICS[`short.why.${k.base}Rate`] = whyMetric('short', null, k); });
 METRICS['putting.per18'] = puttsPer18('per18');
 METRICS['putting.threePuttsPer18'] = puttsPer18('threePuttPer18');
 METRICS['penalties.perRound.tee'] = penaltiesPerRound('tee');

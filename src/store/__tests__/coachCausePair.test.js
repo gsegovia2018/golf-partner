@@ -19,6 +19,11 @@ describe('issue names', () => {
     ['approach', 'tee'].forEach((area) => ['left', 'right'].forEach((s) => emitted.add(`cause:${area}:side:${s}`)));
     emitted.add('cause:penalty:tee');
     emitted.add('cause:penalty:other');
+    // the why rules build theirs from the reason: swing subs x sides, lie, decision (R5)
+    const swing = ['start', 'curve', 'strike'].flatMap((sub) => ['left', 'right'].map((side) => `swing:${sub}:${side}`));
+    ['approach', 'tee'].forEach((area) => [...swing, 'swing:lowPoint', 'lie', 'decision']
+      .forEach((r) => emitted.add(`cause:${area}:why:${r}`)));
+    ['swing:lowPoint', 'lie', 'decision'].forEach((r) => emitted.add(`cause:short:why:${r}`));
     expect([...emitted].filter((id) => !/:side$/.test(id)).sort()).toEqual([...CAUSE_IDS].sort());
   });
 
@@ -30,6 +35,13 @@ describe('issue names', () => {
     });
     expect(/\{bucket\}/.test(en[key])).toBe(/\{bucket\}/.test(es[key]));
     expect(issueMsg({ category: 'putting', bucket: '2-3' }, { id })).toEqual({ key, params: { bucket: '2-3' } });
+  });
+
+  test('why ids: 9 approach, 9 tee, 3 short', () => {
+    const why = CAUSE_IDS.filter((id) => id.includes(':why:'));
+    expect(why.filter((id) => id.startsWith('cause:approach')).length).toBe(9);
+    expect(why.filter((id) => id.startsWith('cause:tee')).length).toBe(9);
+    expect(why.filter((id) => id.startsWith('cause:short')).length).toBe(3);
   });
 
   test('English names are short noun phrases', () => {
@@ -151,5 +163,16 @@ describe('causePair: the focus variant', () => {
   test('signed metrics draw their size', () => {
     const p = causePair({ check: { ...check, unit: 'sgPerShot', value: -0.2, baseline: -0.4 }, isFocus: true });
     expect(p.rows.map((r) => r.fraction)).toEqual([0.5, 1]);
+  });
+});
+
+describe('causePair: why causes are a single bar of tagged misses', () => {
+  test.each([
+    ['cause:approach:why:swing:start:right'], ['cause:tee:why:swing:lowPoint'], ['cause:short:why:lie'], ['cause:approach:why:decision'],
+  ])('%s', (id) => {
+    const p = causePair({ cause: cause(id, { count: 7, tagged: 10 }) });
+    expect(p).toEqual({
+      kind: 'single', text: { key: 'stats.my.coach.ui.pair.single.why', params: { count: 7, total: 10 } }, fraction: 0.7,
+    });
   });
 });
