@@ -52,7 +52,8 @@ New optional keys on `DEFAULT_SHOT` (`src/components/scorecard/constants.js`). A
 
 Rules:
 
-- **Directions are absolute** (left/right of the target from the golfer's view), never "slice"/"hook". Names are derived at display time with the swing profile's `handedness` (default right).
+- **Directions are absolute** (left/right of the target from the golfer's view), never "slice"/"hook". Names are derived at display time with the swing profile's `handedness` (default right), read through a new cheap `hydrateSwingProfile()` (profile key only, never the swing index) since the profile is otherwise hydrated only by the Swing screens.
+- `DEFAULT_SHOT` defaults for all nine keys are `null` (arrays included): `setShot` spreads `DEFAULT_SHOT` into every detail, so an `[]` default would share one array instance across holes.
 - **Curve is derived, not stored**: finish = start + curve, and the finish is already recorded (`drive` / `approachMiss`). `flightOf({ start, finish })` in `missReasons.js`:
 
   | start | finish | curve | family | name (right-hander) |
@@ -76,14 +77,14 @@ Rules:
 ### 4.1 When it opens
 
 - **Auto-opens only on a miss the golfer taps** in `ShotDetailPanel`: drive `left`/`right`/`short`; approach finish `left`/`right`/`long`/`short`/`bunker`. Picking fairway, on-green or `super` never opens it.
-- **Short game never auto-opens.** `recoveryOutcome` is usually derived (`recoveryOutcomeFromState`), so there is no tap to react to. When the effective outcome is `none`, the short-game row shows a **"Why?" chip**; tapping it opens the sheet in short-game mode.
+- **Short game never auto-opens.** `recoveryOutcome` is usually derived (`recoveryOutcomeFromState`), so there is no tap to react to. When the green was missed, the hole is over par and the effective outcome is not a save (`recoveryOutcomeFromState` returns `null` here, not `'none'`), the short-game row shows a **"Why?" chip**; tapping it opens the sheet in short-game mode.
 - **After answering**, the miss row shows a summary chip (*"Push · heavy"*, built from the stored keys); tapping it reopens the sheet. An unanswered miss shows a muted "Why?" chip instead.
 - **Watch-entered misses** never open the sheet; they get the "Why?" chip on the phone.
 - Opening is suppressed when: setting `missReasons` is `'manual'` or `'off'`, the round has "Not this round" set, or the panel is read-only.
 
 ### 4.2 Layout (design 1 — everything on one sheet)
 
-Uses the existing `BottomSheet`. Top to bottom:
+Component `src/components/scorecard/MissWhySheet.js` (not `WhySheet`: `components/mystats/WhySheet.js` already exists), on the existing `BottomSheet`. Top to bottom:
 
 1. **Title** — "Why did it miss right?" (side/long/short from the finish) and a subline "Hole 7 · approach 100–150 m · all optional".
 2. **Tracer** (approach and drive only) — a sky/ground illustration: target line, the green (approach) or fairway (drive), the finish marker pre-placed from the panel tap, and a wide **start band** split *Left · On line · Right*. Tapping the band draws the flight (`flightOf`) and shows its name in a pill ("Push · right"). Tapping the selected segment again clears it. The finish marker is tappable to change the finish (writes the same patch as the panel row). For a `short` drive the band is hidden (start is meaningless for a top).
@@ -92,7 +93,7 @@ Uses the existing `BottomSheet`. Top to bottom:
 5. **Short-game mode** replaces 2 with a two-chip row "Came up short · Ran long" (`shortResult`).
 6. **Footer** — "Not this round" (left, text link) and **Done** (primary). Swipe-down / scrim tap = Done.
 
-Every tap writes immediately through the panel's existing `onChange(patch)` path, so closing early loses nothing and the setup sync queue carries it like any other detail edit.
+Every tap writes immediately through the panel's existing `onChange(patch)` path, so closing early loses nothing. Shot details ride the cards engine (`setShot` → `setDraftShot` → `publishHole` → `scorer_cards` → SQL `projected_round_shots` → `game_shot_details.detail`), which copies the detail object whole: no whitelist anywhere, so the new keys need no plumbing. The watch path (`normalizeWatchShotPatch`) never touches the sheet.
 
 Light and dark via `useTheme()` tokens; tap targets ≥ 44 pt; chips use the existing outcome-chip styling in `ShotDetailPanel`.
 
@@ -104,7 +105,7 @@ Light and dark via `useTheme()` tokens; tap targets ≥ 44 pt; chips use the exi
 
 ### 4.4 Read-only surfaces
 
-The played-round scorecard (`ShotScorecard` / `scorecardView.scorecardModel`) shows a small marker on a hole whose miss has a reason; tapping the hole's existing detail shows the summary text. No editing there.
+The played-round scorecard (`ShotScorecard` / `scorecardView.scorecardModel`) shows a small marker on a hole whose miss has a reason, with the summary in the cell's accessibility label. Its cells have no per-hole tap today, so A ships the marker only; no editing there.
 
 ### 4.5 i18n
 
@@ -127,15 +128,15 @@ All strings via `useT()` / the `scorecard` and `settings` catalogues. Glossary a
 
 A hole whose approach carries `blocked`:
 
-- is **excluded** from approach miss rates (`approach.leftRate.*` etc.), `approachMissTendency`, `approachMissCost` and approach strokes gained;
-- scores its approach against the existing **`recovery`** baseline (`expectedStrokes('recovery', midpoint)`) instead of fairway, so the stroke cost of being blocked lands on the tee shot;
-- counts its drive as **trouble** for `teeTroubleRule` when `driveLie` is not already `trouble`.
+- is **excluded** from the approach miss aggregates (`approachMissTendency`, `approachMissCost`, `approachMissByDistance`, so `approach.<side>Rate.*`), each of which reports a `blocked` count;
+- **stays in approach strokes gained** (`sgApproach`, `approachTargetGaps`) but starts from the existing **`recovery`** baseline (`expectedStrokes('recovery', midpoint)`) instead of fairway, so the approach is judged only for what it did from trouble;
+- on **par 4** reads its drive as **trouble** in `driveLieFromDetail(detail, par)` when the lie is not already `trouble` or `sand`, so `tee.troubleRate` and `sgOffTheTee` (recovery table) carry the cost. Par 5 is excluded: the blocked shot may be the third.
 
 No baseline tables change.
 
 ### 5.3 Cause rules (`coachCauses.js`)
 
-New rules sit beside the outcome rules and **outrank** them when they fire (same leak, higher strength wins; on a tie the why rule wins):
+New rules sit beside the outcome rules and **outrank** them when they fire (same leak, higher strength wins; on a tie the why rule wins through an explicit `priority` on the cause, compared before sample, since a why rule's tagged sample is always smaller):
 
 | Id | Fires when | Strength |
 |---|---|---|
@@ -170,14 +171,14 @@ Rule ids without a side suffix (`lowPoint`) are side-free and skip `mirrorCause`
 ### 5.6 Drills, strategy, metrics
 
 - **Drills** (`coachDrills.js`): `start` → existing `appr-start-line-gate` / `tee-shape-window`; `curve` → new `appr-path-gate` (headcover outside the ball); `lowPoint` → new `appr-low-point-line` (strike a chalk line, divot in front); `strike` → new `appr-strike-tape` (face tape, centre 7/10); short `lowPoint` → existing `sg-landing-towel`.
-- **Strategy** (`coachStrategy.js`): `lie` and `decision` families produce strategy cards, not practice minutes (e.g. "Below-feet lies: aim at the left edge, one club more"). The weekly plan (`coachWeeklyPlan.js`) gives these causes no practice minutes.
+- **Strategy** (`coachStrategy.js`): `lie` and `decision` families produce strategy cards, not practice minutes (e.g. "Below-feet lies: aim at the left edge, one club more"). The weekly plan (`coachWeeklyPlan.js`) gives these causes no practice minutes: a `STRATEGY_ONLY_CAUSES` set stops `poolFor` falling back to the area's drills, and the block's minutes move to the next focus.
 - **Metrics** (`coachMetrics.js`): one key per cause rule (`approach.why.<sub>.<side>Rate.<bucket>`, `approach.why.lieRate.<bucket>`, …) so focus verdicts re-read the same number the cause cited.
 
 ## 6. Shipping and PRs
 
 JS + jsonb keys only → OTA (`GOLF_ANDROID_BUILD_ARCHS=arm64-v8a npx eas-cli update --branch preview`). One concern per PR, ~< 400 lines:
 
-1. **Vocabulary + sheet** — `DEFAULT_SHOT` keys, patches clearing reasons, `missReasons.flightOf` / `shotName`, the `missReasons` setting, `WhySheet` component, panel chips, i18n. Data starts collecting immediately.
+1. **Vocabulary + sheet** — `DEFAULT_SHOT` keys, patches clearing reasons, `missReasons.flightOf` / `shotName`, the `missReasons` setting, `MissWhySheet` component, panel chips, i18n. Data starts collecting immediately.
 2. **Families + blame** — `classifyMiss`, `missReasonStats`, blocked → recovery re-attribution in approach rates, cost, SG and tee trouble.
 3. **Coach** — cause rules, metric keys, swing-link rows, new drills, strategy cards, coverage hint, copy.
 
