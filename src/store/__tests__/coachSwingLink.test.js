@@ -130,6 +130,14 @@ describe('left-hander mirror', () => {
     expect(link('approach:side:right', [lefty], { profile: { handedness: 'left' } }).state).toBe('linked');
   });
 
+  it('one-sided strike row mirrors for a left-hander only', () => {
+    const lefty = swing({ mainFault: 'early_extension', handedness: 'left' });
+    expect(link('approach:why:swing:strike:left', [lefty], { profile: { handedness: 'left' } }).state).toBe('linked');
+    const righty = swing({ mainFault: 'early_extension' });
+    expect(link('approach:why:swing:strike:right', [righty]).state).toBe('linked');
+    expect(link('approach:why:swing:strike:left', [righty]).state).toBe('swingOnly');
+  });
+
   it('a row without handedness falls back to the profile', () => {
     const s = swing({ mainFault: 'steep_backswing' });
     expect(buildSwingLink({ causes: cause('tee:side:left'), swings: [s], profile: { handedness: 'left' }, today: TODAY }).state).toBe('linked');

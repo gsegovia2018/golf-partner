@@ -107,7 +107,10 @@ const listsCause = (fault, causeId, handedness) => {
   return !!row && row.causes.some((c) => mirrorCauseId(c, handedness) === causeId);
 };
 
-const inTable = (causeId) => Object.keys(SWING_FAULT_LINKS).some((f) => listsCause(f, causeId, 'right'));
+// Gate on the hands actually in play (profile + analysed swings): a one-sided
+// row (strike:right) mirrors for a left-hander, and a right-hander's opposite
+// side must not slip through.
+const inTable = (causeId, hand) => Object.keys(SWING_FAULT_LINKS).some((f) => listsCause(f, causeId, hand));
 
 // 'fit' | 'allowed' | 'no'
 function clubFit(rule, causeId, club) {
@@ -181,7 +184,8 @@ export function buildSwingLink({ causes, swings = [], profile = null, today = nu
     };
   };
 
-  if (!causeId || !inTable(causeId)) return swingOnly() ?? base;
+  const hands = new Set([profileHand, ...(swings ?? []).map((r) => r?.handedness).filter(Boolean)]);
+  if (!causeId || ![...hands].some((h) => inTable(causeId, h))) return swingOnly() ?? base;
 
   const clubNeeded = clubOfCause(causeId) ?? 'driver';
   const related = ready
