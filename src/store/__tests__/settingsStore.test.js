@@ -338,3 +338,18 @@ test('practiceMinutesPerWeek ignores values outside 30/60/90/120', () => {
   const at30 = { ...DEFAULT_APP_SETTINGS, practiceMinutesPerWeek: 30 };
   expect(mergeAppSettings(at30, { practiceMinutesPerWeek: 45 }).practiceMinutesPerWeek).toBe(30);
 });
+
+test('missReasons defaults to ask', () => {
+  expect(DEFAULT_APP_SETTINGS.missReasons).toBe('ask');
+});
+
+test('missReasons keeps each valid value and ignores anything else', () => {
+  ['ask', 'manual', 'off'].forEach((v) => {
+    expect(mergeAppSettings(DEFAULT_APP_SETTINGS, { missReasons: v }).missReasons).toBe(v);
+  });
+  [true, 'always', '', null, 1, {}].forEach((bad) => {
+    expect(mergeAppSettings(DEFAULT_APP_SETTINGS, { missReasons: bad }).missReasons).toBe('ask');
+  });
+  const manual = { ...DEFAULT_APP_SETTINGS, missReasons: 'manual' };
+  expect(mergeAppSettings(manual, { missReasons: 'nope' }).missReasons).toBe('manual');
+});

@@ -1,0 +1,146 @@
+<style>
+  .phone{width:300px;margin:0 auto;border-radius:28px;background:#f6f3ee;border:8px solid #1a1a1a;overflow:hidden;position:relative;height:600px;font-family:"Plus Jakarta Sans",system-ui,sans-serif;color:#1a1a1a}
+  .behind{padding:14px;opacity:.45}
+  .behind .row{height:34px;background:#fff;border-radius:10px;margin-bottom:8px}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -4px 18px rgba(0,0,0,.14);padding:10px 14px 14px}
+  .grab{width:38px;height:4px;border-radius:2px;background:#d6d1c8;margin:0 auto 10px}
+  .h{font-weight:700;font-size:16px;line-height:22px;margin:0}
+  .sub{font-size:12px;color:#6b7280;margin:2px 0 10px}
+  .lbl{font-size:12px;font-weight:600;color:#6b7280;margin:10px 0 6px;text-transform:none}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:13px;font-weight:600;padding:8px 12px;border-radius:9999px;background:#e6f0eb;color:#1a1a1a;border:1px solid transparent}
+  .chip.on{background:#006747;color:#fff}
+  .foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px}
+  .link{color:#6b7280;font-weight:600}
+  .btn{background:#006747;color:#fff;font-weight:700;padding:10px 18px;border-radius:14px}
+  .pill{display:inline-block;background:#00553c;color:#ffd700;font-weight:700;font-size:13px;padding:4px 12px;border-radius:9999px}
+  .tile{background:#e6f0eb;border-radius:14px;padding:10px 6px;text-align:center;font-size:12px;font-weight:600}
+  .tile.on{background:#006747;color:#fff}
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .dots{display:flex;gap:5px;justify-content:center;margin:8px 0 2px}
+  .dots i{width:6px;height:6px;border-radius:3px;background:#d6d1c8;display:block}
+  .dots i.on{background:#006747;width:16px}
+  .slot{display:inline-block;border-bottom:2px solid #006747;color:#006747;font-weight:700;padding:0 2px}
+  .slot.empty{color:#8a8a7a;border-bottom-style:dashed;border-color:#8a8a7a}
+</style>
+
+<h2>The "Why?" sheet: three designs</h2>
+<p class="subtitle">Same content in each: the start band and tracer, contact, situation, Skip, and "Not this round". Example: approach missed right, you tapped <em>started right</em> and <em>heavy</em>. Light mode, app tokens (Clubhouse Green, Fairway Mint, Plus Jakarta Sans).</p>
+
+<div class="cards">
+
+<!-- ───────── Design 1: Tracer hero, one scroll ───────── -->
+<div class="card" data-choice="hero" onclick="toggleSelect(this)">
+  <div class="card-image" style="padding:12px 0;background:#ece8e1">
+    <div class="phone">
+      <div class="behind"><div class="row"></div><div class="row"></div><div class="row"></div></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <p class="h">Why did it miss right?</p>
+        <p class="sub">Hole 7 · approach 100–150 m · all optional</p>
+        <svg viewBox="0 0 270 150" width="100%" style="border-radius:14px;display:block">
+          <defs><linearGradient id="sk1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe3d5"/><stop offset="1" stop-color="#e6f0eb"/></linearGradient></defs>
+          <rect width="270" height="105" fill="url(#sk1)"/>
+          <rect y="105" width="270" height="45" fill="#2a7d56"/>
+          <rect x="16" y="40" width="238" height="34" rx="17" fill="#ffffff" fill-opacity=".85"/>
+          <rect x="176" y="40" width="78" height="34" rx="17" fill="#006747"/>
+          <text x="55" y="61" font-size="12" font-weight="600" fill="#6b7280" text-anchor="middle">Left</text>
+          <text x="135" y="61" font-size="12" font-weight="600" fill="#6b7280" text-anchor="middle">On line</text>
+          <text x="215" y="61" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">Right</text>
+          <ellipse cx="135" cy="110" rx="34" ry="6" fill="#4fae8a"/>
+          <line x1="135" y1="110" x2="135" y2="96" stroke="#fff" stroke-width="1.5"/>
+          <circle cx="190" cy="110" r="6" fill="#ffd700" stroke="#00553c" stroke-width="2"/>
+          <path d="M135 146 Q172 82 215 57 Q206 88 190 110" fill="none" stroke="#ffd700" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="135" cy="146" r="4" fill="#fff"/>
+          <rect x="85" y="8" width="100" height="24" rx="12" fill="#00553c"/>
+          <text x="135" y="24" font-size="12" font-weight="700" fill="#ffd700" text-anchor="middle">Push · right</text>
+        </svg>
+        <p class="lbl">How did it feel?</p>
+        <div class="chips"><span class="chip on">Heavy</span><span class="chip">Thin</span><span class="chip">Toe</span><span class="chip">Hosel</span></div>
+        <p class="lbl">Anything unusual?</p>
+        <div class="chips"><span class="chip">Below feet</span><span class="chip">Above feet</span><span class="chip">Uphill</span><span class="chip">Downhill</span><span class="chip">Blocked</span><span class="chip">Bad lie</span><span class="chip">Wind</span><span class="chip">Decision</span></div>
+        <div class="foot"><span class="link">Not this round</span><span class="btn">Done</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="card-body">
+    <h3>1 · Everything on one sheet</h3>
+    <p>The tracer is the hero: tap the band and the flight draws itself with its name. Contact and situation chips sit below. One glance, any order, Done when you're done.</p>
+    <p style="opacity:.75">The most "see it all" option. Tallest sheet, at about two-thirds of the screen, and 12 chips is a lot to scan on a sunny tee.</p>
+  </div>
+</div>
+
+<!-- ───────── Design 2: Three quick steps ───────── -->
+<div class="card" data-choice="steps" onclick="toggleSelect(this)">
+  <div class="card-image" style="padding:12px 0;background:#ece8e1">
+    <div class="phone">
+      <div class="behind"><div class="row"></div><div class="row"></div><div class="row"></div><div class="row"></div><div class="row"></div><div class="row"></div></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="dots"><i></i><i class="on"></i><i></i></div>
+        <p class="h" style="text-align:center;margin-top:6px">How did it feel?</p>
+        <p class="sub" style="text-align:center">Started right · <strong style="color:#006747">Push</strong></p>
+        <div class="tiles">
+          <div class="tile">
+            <svg viewBox="0 0 40 30" width="38"><path d="M4 22 H36" stroke="#2a7d56" stroke-width="2"/><circle cx="20" cy="18" r="4" fill="#1a1a1a"/></svg><br>Flushed</div>
+          <div class="tile on">
+            <svg viewBox="0 0 40 30" width="38"><path d="M4 22 H36" stroke="#fff" stroke-width="2"/><path d="M8 22 Q14 28 20 22" fill="#fff" fill-opacity=".5"/><circle cx="24" cy="18" r="4" fill="#fff"/></svg><br>Heavy</div>
+          <div class="tile">
+            <svg viewBox="0 0 40 30" width="38"><path d="M4 22 H36" stroke="#2a7d56" stroke-width="2"/><circle cx="20" cy="18" r="4" fill="#1a1a1a"/><path d="M8 14 L20 14" stroke="#1a1a1a" stroke-width="2"/></svg><br>Thin</div>
+          <div class="tile">
+            <svg viewBox="0 0 40 30" width="38"><rect x="10" y="8" width="20" height="10" rx="3" fill="none" stroke="#1a1a1a" stroke-width="2"/><circle cx="27" cy="13" r="3" fill="#c77a0a"/></svg><br>Toe</div>
+          <div class="tile">
+            <svg viewBox="0 0 40 30" width="38"><rect x="10" y="8" width="20" height="10" rx="3" fill="none" stroke="#1a1a1a" stroke-width="2"/><circle cx="11" cy="13" r="3" fill="#c77a0a"/></svg><br>Hosel</div>
+          <div class="tile" style="background:#fff;border:1px dashed #d6d1c8;color:#6b7280">
+            <svg viewBox="0 0 40 30" width="38"><text x="20" y="22" font-size="18" text-anchor="middle" fill="#8a8a7a">?</text></svg><br>Not sure</div>
+        </div>
+        <div class="foot"><span class="link">← Back</span><span class="link">Skip</span></div>
+        <p style="font-size:11px;color:#8a8a7a;text-align:center;margin:10px 0 0">Next: anything unusual? · then done</p>
+      </div>
+    </div>
+  </div>
+  <div class="card-body">
+    <h3>2 · Three quick steps</h3>
+    <p>One question per screen: <em>Where did it start?</em> (the tracer) → <em>How did it feel?</em> → <em>Anything unusual?</em>. Big icon tiles, auto-advance on tap, any step skippable. Shown here: step 2.</p>
+    <p style="opacity:.75">Best with gloves and in sun, with fewer things on screen at once. A full answer is 3 taps with motion between them, and you can't see the whole story at once.</p>
+  </div>
+</div>
+
+<!-- ───────── Design 3: The sentence ───────── -->
+<div class="card" data-choice="sentence" onclick="toggleSelect(this)">
+  <div class="card-image" style="padding:12px 0;background:#ece8e1">
+    <div class="phone">
+      <div class="behind"><div class="row"></div><div class="row"></div><div class="row"></div><div class="row"></div><div class="row"></div><div class="row"></div><div class="row"></div></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <svg viewBox="0 0 60 80" width="54" style="flex:none;background:#e6f0eb;border-radius:10px">
+            <ellipse cx="30" cy="66" rx="14" ry="3" fill="#4fae8a"/>
+            <line x1="30" y1="78" x2="30" y2="8" stroke="#8a8a7a" stroke-dasharray="2 3"/>
+            <path d="M30 78 L48 14" stroke="#006747" stroke-width="3" fill="none" stroke-linecap="round"/>
+          </svg>
+          <p style="font-size:17px;line-height:30px;font-weight:600;margin:0">
+            It started <span class="slot">right</span>,<br>
+            felt <span class="slot">heavy</span>,<br>
+            from <span class="slot empty">a normal lie</span>.
+          </p>
+        </div>
+        <p class="lbl" style="margin-top:12px">Lie</p>
+        <div class="chips"><span class="chip">Below feet</span><span class="chip">Above feet</span><span class="chip">Uphill</span><span class="chip">Downhill</span><span class="chip">Blocked</span><span class="chip">Bad lie</span><span class="chip">Wind</span><span class="chip">My decision</span></div>
+        <div class="foot"><span class="link">Not this round</span><span class="btn">That's it</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="card-body">
+    <h3>3 · Tell it as a sentence</h3>
+    <p>The sheet reads like you'd tell your partner: <em>"It started right, felt heavy, from a normal lie."</em> Tap a highlighted word and its options open below. A small tracer thumbnail sits beside it.</p>
+    <p style="opacity:.75">The shortest sheet and the most human. Translates naturally ("Salió a la derecha, pesada, desde un lie normal"). Each slot is two taps (open it, pick), and the tracer is small.</p>
+  </div>
+</div>
+
+</div>
+
+<div class="section" style="margin-top:18px">
+  <p class="label">My lean</p>
+  <p><strong>1</strong> for the first version: the tracer is the payoff you picked two-taps for, and seeing everything at once makes a review easy. If chip overload is a worry, the fix is to show only the 4 most-used situation chips plus "More", rather than splitting it into steps.</p>
+</div>

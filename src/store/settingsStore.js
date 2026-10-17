@@ -53,7 +53,12 @@ export const DEFAULT_APP_SETTINGS = {
   // Weekly practice time the Coach plan is sized to (coach v2 spec §4/§12).
   // One of PRACTICE_MINUTES_OPTIONS; anything else reads the default.
   practiceMinutesPerWeek: 60,
+  // Miss reasons (spec §4.3): 'ask' = the Why? sheet opens on a tapped miss;
+  // 'manual' = only from the Why? chip; 'off' = no chips or sheet.
+  missReasons: 'ask',
 };
+
+export const MISS_REASONS_MODES = ['ask', 'manual', 'off'];
 
 export const PRACTICE_MINUTES_OPTIONS = [30, 60, 90, 120];
 
@@ -71,6 +76,10 @@ export function mergeAppSettings(base, patch) {
     }
     if (k === 'practiceMinutesPerWeek') {
       out[k] = PRACTICE_MINUTES_OPTIONS.includes(v) ? v : base[k];
+      continue;
+    }
+    if (k === 'missReasons') {
+      out[k] = MISS_REASONS_MODES.includes(v) ? v : base[k];
       continue;
     }
     out[k] = v && typeof v === 'object' && !Array.isArray(v) ? { ...base[k], ...v } : v;
