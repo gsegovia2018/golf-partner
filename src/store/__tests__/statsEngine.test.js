@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, collectiveExtremes, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, hotStretch, nemesisEncore, courseDNA, warmupVsClosing, driveLieFromDetail, driveLieBreakdown, driveDistanceAverage, approachMissTendency, approachMissCost, scramblingByMissType, teeClubAccuracy, approachMissByDistance, par5Performance, sgVsGroup, realClubDistances } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, collectiveExtremes, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, hotStretch, nemesisEncore, courseDNA, warmupVsClosing, driveLieFromDetail, driveLieBreakdown, defaultApproachLie, driveDistanceAverage, approachMissTendency, approachMissCost, scramblingByMissType, teeClubAccuracy, approachMissByDistance, par5Performance, sgVsGroup, realClubDistances } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -2793,5 +2793,168 @@ describe('driveDistanceAverage', () => {
   });
   test('null average with no logged distances', () => {
     expect(driveDistanceAverage([], 'me')).toEqual({ drives: 0, avgDistance: null });
+  });
+});
+
+// Spec 2026-10-17-miss-reasons-design.md §5.2 (plan decisions 10–11): an approach
+// tagged `blocked` was forced by the tee shot. It leaves the miss aggregates, keeps
+// its approach SG but starts from the recovery baseline, and on a par 4 the drive
+// carries the cost as trouble.
+describe('blocked approach', () => {
+  const BLOCKED = { approachSituation: ['blocked'] };
+  const green = { putts: 2, approachBucket: '100-150', approachResult: 'green', firstPuttBucket: '3-6' };
+  const missRight = { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'right' };
+
+  // Hole 1 green, hole 2 left miss, hole 3 a blocked right miss.
+  const missTournament = () => ({
+    players: [{ id: 'me', handicap: 0 }],
+    rounds: [makeRound(
+      [{ par: 4, strokes: 4 }, { par: 4, strokes: 5 }, { par: 4, strokes: 6 }],
+      [
+        { approachBucket: '100-150', approachResult: 'green' },
+        { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'left' },
+        { ...missRight, ...BLOCKED },
+      ],
+    )],
+  });
+
+  test('approachMissTendency ignores the hole and reports it as blocked', () => {
+    const r = approachMissTendency(missTournament(), 'me');
+    expect(r.attempts).toBe(2);
+    expect(r.misses).toBe(1);
+    expect(r.byDirection).toEqual({ long: 0, short: 0, left: 1, right: 0 });
+    expect(r.leftRate).toBe(100);
+    expect(r.rightRate).toBe(0);
+    expect(r.blocked).toBe(1);
+  });
+
+  test('approachMissCost ignores the hole and reports it as blocked', () => {
+    const r = approachMissCost(missTournament(), 'me');
+    expect(r.byFinish.right.holes).toBe(0);
+    expect(r.byFinish.left.holes).toBe(1);
+    expect(r.byFinish.green.holes).toBe(1);
+    expect(r.blocked).toBe(1);
+  });
+
+  test('approachMissByDistance ignores the hole and reports blocked per bucket and in total', () => {
+    const r = approachMissByDistance(missTournament(), 'me');
+    const b = r.buckets['100-150'];
+    expect(b.attempts).toBe(2);
+    expect(b.misses).toBe(1);
+    expect(b.rightRate).toBe(0);
+    expect(b.leftRate).toBe(100);
+    expect(b.blocked).toBe(1);
+    expect(r.buckets['0-50'].blocked).toBe(0);
+    expect(r.blocked).toBe(1);
+  });
+
+  test('a round of only blocked approaches has no miss data', () => {
+    const t = { players: [{ id: 'me', handicap: 0 }], rounds: [makeRound([{ par: 4, strokes: 6 }], [{ ...missRight, ...BLOCKED }])] };
+    expect(approachMissTendency(t, 'me')).toMatchObject({ hasData: false, blocked: 1 });
+    expect(approachMissCost(t, 'me')).toMatchObject({ hasData: false, blocked: 1 });
+    expect(approachMissByDistance(t, 'me')).toMatchObject({ hasData: false, blocked: 1 });
+  });
+
+  test('unblocked holes report blocked 0 and keep their numbers', () => {
+    const t = missTournament();
+    t.rounds[0].shotDetails.me[3] = { ...missRight, approachSituation: ['wind'] };
+    expect(approachMissTendency(t, 'me')).toMatchObject({ attempts: 3, misses: 2, rightRate: 50, blocked: 0 });
+    expect(approachMissCost(t, 'me').byFinish.right.holes).toBe(1);
+    expect(approachMissCost(t, 'me').blocked).toBe(0);
+    expect(approachMissByDistance(t, 'me').buckets['100-150']).toMatchObject({ attempts: 3, misses: 2, blocked: 0 });
+  });
+
+  test('sgApproach keeps a blocked approach but starts it from the recovery baseline', () => {
+    const r = sgApproach(makeRound([{ par: 4, strokes: 4 }], [{ ...green, ...BLOCKED }]), 'me');
+    // E(recovery, 125) = 4.032; end E(green, 4.5) = 1.812 → 4.032 - 1.812 - 1
+    expect(r.sampleHoles).toBe(1);
+    expect(r.perHole[0]).toBeCloseTo(1.22, 2);
+  });
+
+  test('blocked beats an explicit approachLie and the drive-derived default', () => {
+    const plain = sgApproach(makeRound([{ par: 4, strokes: 4 }], [{ ...green, ...BLOCKED }]), 'me');
+    const lie = sgApproach(makeRound([{ par: 4, strokes: 4 }], [{ ...green, ...BLOCKED, approachLie: 'rough', drive: 'left' }]), 'me');
+    expect(lie.perHole[0]).toBeCloseTo(plain.perHole[0], 10);
+  });
+
+  test('par 5 blocked approach also starts from recovery; par 3 stays on the tee', () => {
+    const p5 = sgApproach(makeRound([{ par: 5, strokes: 5 }], [{ ...green, ...BLOCKED }]), 'me');
+    expect(p5.perHole[0]).toBeCloseTo(1.22, 2);
+    const p3 = sgApproach(makeRound([{ par: 3, strokes: 3 }], [{ ...green, ...BLOCKED }]), 'me');
+    const p3Plain = sgApproach(makeRound([{ par: 3, strokes: 3 }], [{ ...green }]), 'me');
+    expect(p3.perHole[0]).toBeCloseTo(p3Plain.perHole[0], 10);
+  });
+
+  test('approachTargetGaps starts a blocked approach from the recovery expectation', () => {
+    const round = makeRound([{ par: 4, strokes: 4 }], [{ ...green, ...BLOCKED }]);
+    const b = approachTargetGaps([round], 'me', 0).buckets['100-150'];
+    expect(b.holes).toBe(1);
+    expect(b.targetStrokes).toBeCloseTo(4.03, 2);
+    expect(b.avgSg).toBeCloseTo(1.22, 2);
+  });
+
+  test('0-50 m blocked approach: recovery at the 25 m midpoint holds the first-row value (R3)', () => {
+    // The recovery table starts at 45.7 m; lookupRow clamps below it, so 25 m reads
+    // the 45.7 m row (scratch 3.80, 10 hcp 4.02) — above fairway (2.69) and rough
+    // (2.96) at 25 m, never an extrapolation.
+    const d = { putts: 2, approachBucket: '0-50', approachResult: 'green', firstPuttBucket: '3-6', ...BLOCKED };
+    const round = makeRound([{ par: 4, strokes: 4 }], [d]);
+    expect(approachTargetGaps([round], 'me', 0).buckets['0-50'].targetStrokes).toBeCloseTo(3.80, 2);
+    expect(approachTargetGaps([round], 'me', 10).buckets['0-50'].targetStrokes).toBeCloseTo(4.02, 2);
+    // 3.80 - 1.812 - 1
+    expect(sgApproach(round, 'me').perHole[0]).toBeCloseTo(0.99, 2);
+  });
+
+  test('driveLieFromDetail reads a par-4 drive as trouble when the approach was blocked', () => {
+    expect(driveLieFromDetail({ drive: 'left', ...BLOCKED }, 4)).toBe('trouble');
+    expect(driveLieFromDetail({ drive: 'fairway', ...BLOCKED }, 4)).toBe('trouble');
+    expect(driveLieFromDetail({ drive: 'fairway', driveLie: 'fairway', ...BLOCKED }, 4)).toBe('trouble');
+    expect(driveLieFromDetail({ drive: 'left', driveLie: 'rough', ...BLOCKED }, 4)).toBe('trouble');
+  });
+
+  test('driveLieFromDetail keeps sand / trouble, par 5, par 3 and missing drives as they are', () => {
+    expect(driveLieFromDetail({ drive: 'right', driveLie: 'sand', ...BLOCKED }, 4)).toBe('sand');
+    expect(driveLieFromDetail({ drive: 'right', driveLie: 'trouble', ...BLOCKED }, 4)).toBe('trouble');
+    expect(driveLieFromDetail({ drive: 'left', ...BLOCKED }, 5)).toBe('rough');
+    expect(driveLieFromDetail({ drive: 'fairway', ...BLOCKED }, 3)).toBe('fairway');
+    expect(driveLieFromDetail({ drive: 'left', ...BLOCKED })).toBe('rough'); // no par → as logged
+    expect(driveLieFromDetail({ ...BLOCKED }, 4)).toBeNull(); // no drive logged → no drive invented
+    expect(driveLieFromDetail({ drive: 'left', approachSituation: ['wind'] }, 4)).toBe('rough');
+  });
+
+  test('driveLieBreakdown counts the drive as trouble on par 4 only', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 6 }, { par: 5, strokes: 7 }, { par: 4, strokes: 4 }],
+      [
+        { drive: 'fairway', ...missRight, ...BLOCKED }, // par 4 → trouble
+        { drive: 'left', ...missRight, ...BLOCKED },    // par 5 → rough, unchanged
+        { drive: 'fairway' },                           // unblocked → fairway
+      ],
+    );
+    const r = driveLieBreakdown([round], 'me');
+    expect(r.drives).toBe(3);
+    expect(r.byLie).toEqual({ fairway: 1, rough: 1, sand: 0, trouble: 1 });
+    expect(r.troubleRate).toBeCloseTo(1 / 3, 10);
+  });
+
+  test('sgOffTheTee scores a par-4 blocked hole off the recovery table', () => {
+    const blocked = makeRound(
+      [{ par: 4, strokes: 6 }],
+      [{ drive: 'fairway', driveLie: 'fairway', driveDistBucket: '150-180', ...missRight, ...BLOCKED }],
+    );
+    // actual: E(recovery, 340-165=175) = 4.179 → 3.193 - 4.179 (same as an explicit trouble drive)
+    expect(sgOffTheTee(blocked, 'me').perHole[0]).toBeCloseTo(-0.986, 2);
+    const p5 = makeRound(
+      [{ par: 5, strokes: 5 }],
+      [{ drive: 'fairway', driveDistBucket: '240+', ...missRight, ...BLOCKED }],
+    );
+    // par 5 unchanged: 3.593 - E(fairway, 215) = 3.365
+    expect(sgOffTheTee(p5, 'me').perHole[0]).toBeCloseTo(0.228, 2);
+  });
+
+  test('defaultApproachLie follows the trouble drive on a blocked par 4 (punch-out → fairway)', () => {
+    expect(defaultApproachLie({ drive: 'left', ...BLOCKED }, 4)).toBe('fairway');
+    expect(defaultApproachLie({ drive: 'left' }, 4)).toBe('rough');
+    expect(defaultApproachLie({ drive: 'left', ...BLOCKED }, 5)).toBe('fairway');
   });
 });

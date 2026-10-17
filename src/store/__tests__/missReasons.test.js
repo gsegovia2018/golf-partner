@@ -7,6 +7,9 @@ import {
   flightOf,
   shotName,
   summaryOf,
+  isBlockedApproach,
+  classifyMiss,
+  missReasonStats,
 } from '../missReasons';
 
 describe('flightOf (spec §3 table)', () => {
@@ -166,5 +169,138 @@ describe('summaryOf', () => {
     expect(summaryOf('drive', { drive: 'left', driveSituation: [] })).toEqual([]);
     expect(summaryOf('short', {})).toEqual([]);
     expect(summaryOf('short', null)).toEqual([]);
+  });
+});
+
+describe('isBlockedApproach', () => {
+  test('reads approachSituation', () => {
+    expect(isBlockedApproach({ approachSituation: ['wind', 'blocked'] })).toBe(true);
+    expect(isBlockedApproach({ approachSituation: ['wind'] })).toBe(false);
+    expect(isBlockedApproach({})).toBe(false);
+    expect(isBlockedApproach(null)).toBe(false);
+  });
+});
+
+describe('classifyMiss (spec §5.1 precedence)', () => {
+  const approach = (d) => classifyMiss('approach', { approachMiss: 'right', ...d });
+  const swing = (sub, side = null) => ({ family: 'swing', sub, side });
+
+  test('below-feet + curve-right -> lie', () => {
+    expect(approach({ approachSituation: ['below-feet'], approachStart: 'center' }))
+      .toEqual({ family: 'lie', sub: null, side: null });
+  });
+  test('blocked + fat -> forced', () => {
+    expect(approach({ approachSituation: ['blocked'], approachContact: 'fat' }).family).toBe('forced');
+  });
+  test('blocked beats lie and decision', () => {
+    expect(approach({ approachSituation: ['wind', 'decision', 'blocked'] }).family).toBe('forced');
+  });
+  test('lie beats decision; decision beats swing', () => {
+    expect(approach({ approachSituation: ['decision', 'uphill'] }).family).toBe('lie');
+    expect(approach({ approachSituation: ['decision'], approachContact: 'fat' }).family).toBe('decision');
+  });
+  test('fat + start-right -> lowPoint', () => {
+    expect(approach({ approachContact: 'fat', approachStart: 'right' })).toEqual(swing('lowPoint'));
+  });
+  test('toe + start-right -> start/right (flight beats strike)', () => {
+    expect(approach({ approachContact: 'toe', approachStart: 'right' })).toEqual(swing('start', 'right'));
+  });
+  test('curve takes the finish side', () => {
+    expect(approach({ approachStart: 'center' })).toEqual(swing('curve', 'right'));
+    expect(approach({ approachStart: 'left', approachMiss: 'right' })).toEqual(swing('curve', 'right'));
+  });
+  test('shank with no start -> strike with finish side', () => {
+    expect(approach({ approachContact: 'shank' })).toEqual(swing('strike', 'right'));
+    expect(approach({ approachContact: 'shank', approachMiss: 'long' })).toEqual(swing('strike', null));
+  });
+  test('untagged -> null', () => {
+    expect(approach({})).toBeNull();
+    expect(approach({ approachStart: 'center', approachMiss: 'long' })).toBeNull();
+    expect(classifyMiss('approach', null)).toBeNull();
+    expect(classifyMiss('nope', {})).toBeNull();
+  });
+  test('blocked is approach only', () => {
+    expect(classifyMiss('drive', { drive: 'left', driveSituation: ['wind'] }).family).toBe('lie');
+  });
+  test('drive: top/sky are lowPoint, toe is strike, start/curve from finish', () => {
+    expect(classifyMiss('drive', { drive: 'short', driveContact: 'top' })).toEqual(swing('lowPoint'));
+    expect(classifyMiss('drive', { drive: 'left', driveContact: 'sky', driveStart: 'left' })).toEqual(swing('lowPoint'));
+    expect(classifyMiss('drive', { drive: 'left', driveContact: 'heel' })).toEqual(swing('strike', 'left'));
+    expect(classifyMiss('drive', { drive: 'left', driveStart: 'left' })).toEqual(swing('start', 'left'));
+    expect(classifyMiss('drive', { drive: 'right', driveStart: 'center' })).toEqual(swing('curve', 'right'));
+  });
+  test('short game', () => {
+    expect(classifyMiss('short', { shortSituation: ['wrong-shot'] }).family).toBe('decision');
+    expect(classifyMiss('short', { shortSituation: ['short-sided'] }).family).toBe('lie');
+    expect(classifyMiss('short', { shortSituation: ['bad-lie'] }).family).toBe('lie');
+    expect(classifyMiss('short', { shortContact: 'thin' })).toEqual(swing('lowPoint'));
+    expect(classifyMiss('short', { shortResult: 'short' })).toBeNull();
+  });
+});
+
+describe('missReasonStats', () => {
+  const holes = [1, 2, 3, 4, 5].map((n) => ({ number: n, par: n === 5 ? 3 : 4 }));
+  const round = (details, scores) => ({
+    holes,
+    scores: { me: scores },
+    shotDetails: { me: details },
+  });
+
+  test('approach per bucket and pooled, tagged/untagged/blocked, sides', () => {
+    const r = round({
+      1: { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'right', approachStart: 'right' },
+      2: { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'left', approachSituation: ['blocked'] },
+      3: { approachBucket: '150-200', approachResult: 'miss', approachMiss: 'long' },
+      4: { approachBucket: '150-200', approachResult: 'green', putts: 2 },
+      5: { approachBucket: '100-150', approachResult: 'miss', approachContact: 'fat' },
+    }, { 1: 5, 2: 5, 3: 5, 4: 4, 5: 3 });
+    const { approach } = missReasonStats([r], 'me');
+    const b = approach.byBucket['100-150'];
+    expect(b).toMatchObject({ misses: 2, tagged: 2, untagged: 0, blocked: 1 });
+    expect(b.families).toEqual({ forced: 1, lie: 0, decision: 0, swing: 1 });
+    expect(b.subs.start).toEqual({ left: 0, right: 1 });
+    expect(approach.byBucket['150-200']).toMatchObject({ misses: 1, tagged: 0, untagged: 1 });
+    expect(approach.byBucket['0-50'].misses).toBe(0);
+    expect(approach.all).toMatchObject({ misses: 3, tagged: 2, untagged: 1, blocked: 1 });
+  });
+
+  test('lowPoint and strike side counts', () => {
+    const r = round({
+      1: { approachBucket: '50-100', approachResult: 'miss', approachMiss: 'long', approachContact: 'thin' },
+      2: { approachBucket: '50-100', approachResult: 'miss', approachMiss: 'left', approachContact: 'shank' },
+    }, { 1: 5, 2: 5 });
+    const row = missReasonStats([r], 'me').approach.byBucket['50-100'];
+    expect(row.subs.lowPoint).toBe(1);
+    expect(row.subs.strike).toEqual({ left: 1, right: 0 });
+  });
+
+  test('tee counts par 4+ left/right/short drives only', () => {
+    const r = round({
+      1: { drive: 'left', driveStart: 'left' },
+      2: { drive: 'short', driveContact: 'top' },
+      3: { drive: 'fairway' },
+      5: { drive: 'right' },
+    }, { 1: 5, 2: 5, 3: 4, 5: 3 });
+    const { tee } = missReasonStats([r], 'me');
+    expect(tee).toMatchObject({ misses: 2, tagged: 2 });
+    expect(tee.subs.start.left).toBe(1);
+    expect(tee.subs.lowPoint).toBe(1);
+  });
+
+  test('short counts missed greens not saved with strokes over par', () => {
+    const r = round({
+      1: { approachResult: 'miss', putts: 2, shortContact: 'fat' },
+      2: { approachResult: 'miss', putts: 1, recoveryOutcome: 'up-and-down' },
+      3: { approachResult: 'miss', putts: 2 },
+    }, { 1: 5, 2: 4, 3: 4 });
+    const { short } = missReasonStats([r], 'me');
+    expect(short).toMatchObject({ misses: 1, tagged: 1 });
+    expect(short.subs.lowPoint).toBe(1);
+  });
+
+  test('other players / empty input', () => {
+    expect(missReasonStats([], 'me').approach.all.misses).toBe(0);
+    expect(missReasonStats(null, 'me').tee.misses).toBe(0);
+    expect(missReasonStats([round({}, {})], 'other').short.misses).toBe(0);
   });
 });

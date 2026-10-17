@@ -28,6 +28,7 @@ import { shotBenchmarkForHandicap } from './shotBenchmarks';
 import { roundDifferential } from './handicapIndex';
 import { roundEndedAt, roundStartedAt } from './finishStamp';
 import { msg, raw } from './statsMsg';
+import { missReasonStats } from './missReasons';
 import { formatDate, t as translate } from '../i18n';
 
 // Canonical player id used inside the synthetic tournament.
@@ -1088,6 +1089,7 @@ export function computeMyStats(selectedRounds, {
     driveImpact,
     approachImpact,
     approachTendency: approachMissTendency(synthetic, CANON_ID),
+    missReasons: missReasonStats(synthetic.rounds, CANON_ID),
     approachMissCost: approachMissCost(synthetic, CANON_ID),
     approachMissByDistance: approachMissByDistance(synthetic, CANON_ID),
     scramblingByMiss: scramblingByMissType(synthetic.rounds, CANON_ID),
