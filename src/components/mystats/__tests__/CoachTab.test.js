@@ -78,10 +78,11 @@ describe('CoachTab composition (design B)', () => {
     expect(onCommit.mock.calls[0][0].leak.id).toBe('leak:putting:6+');
   });
 
-  test('the picker writes the minutes upstream', () => {
+  test('the minutes sheet writes the minutes upstream', () => {
     const onChangeMinutes = jest.fn();
     const r = renderTab(onePutting(), {}, { onChangeMinutes });
-    fireEvent.press(r.getByLabelText('90 minutes'));
+    fireEvent.press(r.getByTestId('plan-change-minutes'));
+    fireEvent.press(r.getByLabelText('90 min a week'));
     expect(onChangeMinutes).toHaveBeenCalledWith(90);
   });
 
@@ -113,13 +114,14 @@ describe('CoachTab composition (design B)', () => {
     });
     const r = renderTab(s);
     expect(r.getByText('Play smarter')).toBeTruthy();
-    expect(r.getAllByText(/^Lag first from 6\+ m/)).toHaveLength(1); // inside the chain only
+    expect(r.getAllByText(/^Lag first from 6\+ m/)).toHaveLength(1); // in Play smarter only
     expect(r.getByText('Club down on tight tee shots')).toBeTruthy();
   });
 
-  test('Play smarter disappears when the chain shows every tip', () => {
+  test('Play smarter shows the tip that used to sit in the diagnosis chain', () => {
     const r = renderTab(onePutting());
-    expect(r.queryByText('Play smarter')).toBeNull();
+    expect(r.getByText('Play smarter')).toBeTruthy();
+    expect(r.getAllByText(/^Lag first from 6\+ m/)).toHaveLength(1);
   });
 
   test('the old-focus notice shows once and can be dismissed', () => {

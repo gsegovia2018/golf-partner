@@ -8,12 +8,11 @@
 //   kind     'one' | 'tie' | 'focus' (a committed focus's chain) | 'few'
 //            (leaks under the sample gates) | 'candidate' | 'noLeak' | 'noDetail'
 //   chains   [Chain] (two on a tie): { leak, causes, swingLink, check, drills, courseTask,
-//            tip, isFocus }; drills are the plan's drills for that chain's blocks
+//            isFocus }; drills are the plan's drills for that chain's blocks
 //   plan     buildWeeklyPlan(...) result
 //   untracked  { residual, gap } when the strokes no category explains outweigh the
 //            first chain's leak (see coachDiagnosis untrackedDominant), else null
 //   swingLink  the first chain's link (or the swing-only link when there is no chain)
-//   shownTipIds  strategy tips already inside a chain
 //   pills    { [insightId]: { kind, minutes } } for the board's "this week" pill
 // }
 
@@ -28,10 +27,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const PLAN_PREFIX = '@mystats_coach_plan:';
 
 const causesOf = (leak, stats) => leak?.causes ?? (leak ? causesForLeak(leak, stats) : null);
-
-function dedupe(list) {
-  return [...new Set(list)];
-}
 
 export function buildCoachWeek({
   stats, focus, verdict, swings, profile, minutesPerWeek, previousPlan, lastRound, today,
@@ -58,7 +53,6 @@ export function buildCoachWeek({
     roundsSinceCommit: verdict?.roundsSince, previousPlan, lastRound, today,
   });
 
-  const tips = stats?.coachStrategy ?? [];
   const drillsFor = (roles) => plan.sessions.flatMap((s) => s.drills
     .filter((d) => roles.includes(d.role))
     .map((d) => ({ ...d, kind: s.kind })));
@@ -70,7 +64,6 @@ export function buildCoachWeek({
     check: buildCheck({ leak, cause: cs?.primary, focus: isFocus ? committed : null, stats }),
     drills: drillsFor(roles),
     courseTask,
-    tip: tips.find((tip) => tip.causeId && tip.causeId === cs?.primary?.id) ?? null,
   });
 
   const chains = [];
@@ -94,7 +87,6 @@ export function buildCoachWeek({
     plan,
     untracked: untrackedDominant(stats, primary),
     swingLink,
-    shownTipIds: dedupe(chains.map((c) => c.tip?.id).filter(Boolean)),
     pills: weekPills(plan, stats?.coach?.board),
   };
 }
