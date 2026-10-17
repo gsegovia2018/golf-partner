@@ -5,6 +5,7 @@ import {
   PAR_ANCHOR_DISTANCE, benchmarkTeeShotDistance, expectedPenaltiesPerRound, typicalScoreVsPar,
 } from './strokesGainedBaseline';
 import { clubDistances } from '../lib/shotStats';
+import { isBlockedApproach } from './missReasons';
 
 // Scramble rounds store ONE team ball under the team's captain (pair[0]),
 // scored off a team handicap — there are no real personal scores, shot
@@ -1952,11 +1953,14 @@ export function approachScoreImpact(tournament, playerId) {
 // the green-hit rate, and among misses the short/long/left/right split plus
 // the greenside-bunker rate. Powers the miss-tendency readout — a coaching
 // cue for aim and club selection, independent of strokes gained.
+// A `blocked` approach (forced by the tee shot, spec miss-reasons §5.2) is left
+// out and counted in `blocked`.
 export function approachMissTendency(tournament, playerId) {
   let attempts = 0;
   let greens = 0;
   let misses = 0;
   let bunker = 0;
+  let blocked = 0;
   const dir = { long: 0, short: 0, left: 0, right: 0 };
   (tournament.rounds || []).forEach((round) => {
     const byHole = round.shotDetails?.[playerId];
@@ -1966,6 +1970,7 @@ export function approachMissTendency(tournament, playerId) {
       const d = byHole[hole.number];
       if (!d || !d.approachBucket) return;
       if (d.approachResult !== 'green' && d.approachResult !== 'miss') return;
+      if (isBlockedApproach(d)) { blocked += 1; return; }
       attempts += 1;
       if (d.approachResult === 'green') { greens += 1; return; }
       misses += 1;
@@ -1990,6 +1995,7 @@ export function approachMissTendency(tournament, playerId) {
     longRate: pct(dir.long, directionKnown),
     leftRate: pct(dir.left, directionKnown),
     rightRate: pct(dir.right, directionKnown),
+    blocked,
   };
 }
 
@@ -2003,11 +2009,13 @@ const rate100 = (num, den) => (den > 0 ? Math.round((num / den) * 100) : null);
 // approach finished on the green vs each miss direction vs a greenside bunker.
 // A bunker miss counts in both its direction bucket and the bunker bucket, so
 // the buckets are per-finish views, not a partition. Turns tendency into the
-// consequence that guides aim/club choice.
+// consequence that guides aim/club choice. A `blocked` approach is left out and
+// counted in `blocked` (spec miss-reasons §5.2).
 export function approachMissCost(tournament, playerId) {
   const player = (tournament.players || []).find((p) => p.id === playerId);
   const KEYS = ['green', 'short', 'long', 'left', 'right', 'bunker'];
   const bucket = {};
+  let blocked = 0;
   KEYS.forEach((k) => { bucket[k] = { vsPar: [], points: [] }; });
   (tournament.rounds || []).forEach((round) => {
     if (!round.scores?.[playerId] || !player) return;
@@ -2020,6 +2028,7 @@ export function approachMissCost(tournament, playerId) {
       if (d.approachResult !== 'green' && d.approachResult !== 'miss') return;
       const sc = round.scores[playerId]?.[hole.number];
       if (sc == null) return;
+      if (isBlockedApproach(d)) { blocked += 1; return; }
       const vsPar = sc - hole.par;
       const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
       const add = (k) => { bucket[k].vsPar.push(vsPar); bucket[k].points.push(points); };
@@ -2039,7 +2048,7 @@ export function approachMissCost(tournament, playerId) {
       avgPoints: round2(meanOf(bucket[k].points)),
     };
   });
-  return { hasData: total > 0, byFinish };
+  return { hasData: total > 0, byFinish, blocked };
 }
 
 // ── Scrambling by miss type ──
@@ -2128,10 +2137,12 @@ export function teeClubAccuracy(tournament, playerId) {
 // The same green/miss + direction + bunker split as approachMissTendency, but
 // broken out per approach-distance bucket, so you can see whether long
 // approaches leak short (the classic under-club) or a wedge misses direction.
+// A `blocked` approach is left out and counted in `blocked`, per bucket and in
+// total (spec miss-reasons §5.2).
 export function approachMissByDistance(tournament, playerId) {
   const buckets = {};
   APPROACH_BUCKETS.forEach((bk) => {
-    buckets[bk] = { attempts: 0, misses: 0, dir: { long: 0, short: 0, left: 0, right: 0 }, bunker: 0 };
+    buckets[bk] = { attempts: 0, misses: 0, dir: { long: 0, short: 0, left: 0, right: 0 }, bunker: 0, blocked: 0 };
   });
   (tournament.rounds || []).forEach((round) => {
     const byHole = round.shotDetails?.[playerId];
@@ -2142,6 +2153,7 @@ export function approachMissByDistance(tournament, playerId) {
       if (!d || !buckets[d.approachBucket]) return;
       if (d.approachResult !== 'green' && d.approachResult !== 'miss') return;
       const e = buckets[d.approachBucket];
+      if (isBlockedApproach(d)) { e.blocked += 1; return; }
       e.attempts += 1;
       if (d.approachResult === 'miss') {
         e.misses += 1;
@@ -2152,9 +2164,11 @@ export function approachMissByDistance(tournament, playerId) {
   });
   const out = {};
   let total = 0;
+  let blocked = 0;
   APPROACH_BUCKETS.forEach((bk) => {
     const e = buckets[bk];
     total += e.attempts;
+    blocked += e.blocked;
     const known = e.dir.long + e.dir.short + e.dir.left + e.dir.right;
     out[bk] = {
       attempts: e.attempts,
@@ -2168,9 +2182,10 @@ export function approachMissByDistance(tournament, playerId) {
       leftRate: rate100(e.dir.left, known),
       rightRate: rate100(e.dir.right, known),
       bunkerRate: rate100(e.bunker, e.misses),
+      blocked: e.blocked,
     };
   });
-  return { hasData: total > 0, buckets: out };
+  return { hasData: total > 0, buckets: out, blocked };
 }
 
 // ── Par-5 performance ──
@@ -2650,7 +2665,17 @@ const DRIVE_LIE_TABLE = { fairway: 'fairway', rough: 'rough', sand: 'sand', trou
 // A drive's lie: the explicit driveLie field when logged, otherwise derived
 // from the direction chip — fairway/super hit the fairway; any miss
 // direction defaults to rough (the most common miss).
-export function driveLieFromDetail(detail) {
+// On a par 4 whose approach is tagged `blocked`, the drive is what forced it, so
+// it reads as trouble unless already trouble or sand (spec miss-reasons §5.2) —
+// this is how tee.troubleRate and sgOffTheTee carry the cost. Par 5 is left
+// alone (the blocked shot may be the third); without `par` the lie is as logged.
+export function driveLieFromDetail(detail, par) {
+  const lie = loggedDriveLie(detail);
+  if (lie == null || par !== 4 || lie === 'trouble' || lie === 'sand') return lie;
+  return isBlockedApproach(detail) ? 'trouble' : lie;
+}
+
+function loggedDriveLie(detail) {
   if (!detail) return null;
   if (detail.driveLie && DRIVE_LIE_TABLE[detail.driveLie]) return detail.driveLie;
   if (detail.drive === 'fairway' || detail.drive === 'super') return 'fairway';
@@ -2668,7 +2693,7 @@ export function driveLieBreakdown(rounds, playerId) {
     if (!byHole) return;
     (round.holes ?? []).forEach((hole) => {
       if (hole.par < 4) return;
-      const lie = driveLieFromDetail(byHole[hole.number]);
+      const lie = driveLieFromDetail(byHole[hole.number], hole.par);
       if (lie == null) return;
       byLie[lie] += 1;
       drives += 1;
@@ -2713,14 +2738,19 @@ const APPROACH_LIES = new Set(['fairway', 'rough', 'sand']);
 // fairway — as do par 5s and holes without drive info (the legacy assumption).
 export function defaultApproachLie(d, par) {
   if (par !== 4) return 'fairway';
-  const driveLie = driveLieFromDetail(d);
+  const driveLie = driveLieFromDetail(d, par);
   return APPROACH_LIES.has(driveLie) ? driveLie : 'fairway';
 }
 
-// The approach's own start lie — an explicit approachLie always wins (a
-// recovery shot may have moved the ball off the drive's terrain).
+// The approach's own start lie — an explicit approachLie wins over the default
+// (a recovery shot may have moved the ball off the drive's terrain). A `blocked`
+// approach wins over both: it starts from the recovery baseline, so it is judged
+// only for what it did from trouble (spec miss-reasons §5.2). The recovery table
+// starts at 45.7 m; lookupRow holds that first row below it, so the 0-50 bucket
+// (25 m) reads the 45.7 m value rather than an extrapolation.
 function approachStartLie(d, par) {
   if (par === 3) return 'tee';
+  if (isBlockedApproach(d)) return 'recovery';
   return APPROACH_LIES.has(d?.approachLie) ? d.approachLie : defaultApproachLie(d, par);
 }
 
@@ -2739,7 +2769,7 @@ export function sgOffTheTee(round, playerId, targetHandicap = 0) {
       : hole.par >= 5 ? PAR_ANCHOR_DISTANCE[5] : null;
     if (anchor == null) return null;
     const d = byHole?.[hole.number];
-    const lie = driveLieFromDetail(d);
+    const lie = driveLieFromDetail(d, hole.par);
     const dist = BUCKETS.driveDist[d?.driveDistBucket];
     if (lie == null || dist == null) return null;
     // Benchmark against the same tee club: a deliberate club-down is judged
