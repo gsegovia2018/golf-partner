@@ -125,6 +125,8 @@ describe('causePair: a single bar with its count', () => {
     expect(causePair({})).toBeNull();
     expect(causePair({ cause: cause('cause:putting:general', { per18: 36 }) })).toBeNull();
     expect(causePair({ cause: cause('cause:made:up', {}) })).toBeNull();
+    // a rule that did not report its counts draws nothing rather than "{count} of {total}"
+    expect(causePair({ cause: cause('cause:approach:short', {}) })).toBeNull();
   });
 });
 

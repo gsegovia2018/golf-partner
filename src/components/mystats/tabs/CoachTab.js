@@ -16,7 +16,7 @@ import TrendLineChart from '../TrendLineChart';
 // this every tab commit re-renders all of them and blocks the swipe.
 // Composition only (spec §12): target row, one-time notice, focus (only with a
 // focus), diagnosis, weekly plan, current form, the board folded as "More
-// findings", then the Play smarter tips the chain does not already show.
+// findings", then the Play smarter tips.
 // `week` comes from store/coachWeek.js buildCoachWeek.
 function CoachTab({
   stats, onInfo, targetHandicap, onChangeTarget, focus, focusVerdict, onCommitFocus, onEndFocus,
@@ -27,8 +27,6 @@ function CoachTab({
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { metrics = {}, form = {}, formSeries = {}, coach = {} } = stats ?? {};
   const fixFirstIds = (coach.board?.fixFirst ?? []).map((insight) => insight.id).filter(Boolean);
-  const shown = new Set(week?.shownTipIds ?? []);
-  const tips = (stats?.coachStrategy ?? []).filter((tip) => !shown.has(tip.id));
 
   return (
     <View style={s.wrap}>
@@ -69,7 +67,7 @@ function CoachTab({
         excludeInsightIds={fixFirstIds}
         collapsible
       />
-      <PlaySmarterCard tips={tips} onInfo={onInfo} />
+      <PlaySmarterCard tips={stats?.coachStrategy ?? []} onInfo={onInfo} />
     </View>
   );
 }

@@ -75,6 +75,8 @@ function pair(caption, you, ref, unit, refKind) {
 }
 
 function single(key, params, fraction) {
+  // a count the rule did not report would render as "{count}"
+  if (Object.values(params).some((v) => v == null || (typeof v === 'number' && !Number.isFinite(v)))) return null;
   return { kind: 'single', text: msg(`${PAIR}single.${key}`, params), fraction };
 }
 

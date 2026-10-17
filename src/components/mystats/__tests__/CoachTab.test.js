@@ -113,13 +113,14 @@ describe('CoachTab composition (design B)', () => {
     });
     const r = renderTab(s);
     expect(r.getByText('Play smarter')).toBeTruthy();
-    expect(r.getAllByText(/^Lag first from 6\+ m/)).toHaveLength(1); // inside the chain only
+    expect(r.getAllByText(/^Lag first from 6\+ m/)).toHaveLength(1); // in Play smarter only
     expect(r.getByText('Club down on tight tee shots')).toBeTruthy();
   });
 
-  test('Play smarter disappears when the chain shows every tip', () => {
+  test('Play smarter shows the tip that used to sit in the diagnosis chain', () => {
     const r = renderTab(onePutting());
-    expect(r.queryByText('Play smarter')).toBeNull();
+    expect(r.getByText('Play smarter')).toBeTruthy();
+    expect(r.getAllByText(/^Lag first from 6\+ m/)).toHaveLength(1);
   });
 
   test('the old-focus notice shows once and can be dismissed', () => {
