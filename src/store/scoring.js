@@ -12,6 +12,8 @@
 // randomPairs, which is deliberately non-deterministic.
 // ============================================================================
 
+import { clearedReasonPatch } from './missReasons';
+
 export const STANDARD_SLOPE = 113;
 
 // Scramble modes share one engine: the team plays a single ball, scored
@@ -1234,8 +1236,13 @@ export function reconcileShotDetail(detail, strokes) {
 
 // Tee-direction chip: a tap on the active one clears it; either way the
 // explicit driveLie resets so the lie derives from the direction again.
+// A drive that is no longer a miss (cleared, fairway, super) drops its miss
+// reasons; left / right / short switches keep them.
+const driveIsMiss = (drive) => drive === 'left' || drive === 'right' || drive === 'short';
+
 export function driveDirectionPatch(current, key) {
-  return { drive: current === key ? null : key, driveLie: null };
+  const drive = current === key ? null : key;
+  return { drive, driveLie: null, ...(driveIsMiss(drive) ? {} : clearedReasonPatch('drive')) };
 }
 
 // Driver is the unstored default.
@@ -1247,6 +1254,7 @@ export function approachBucketPatch(key) {
     approachBucket: key,
     ...(key == null ? {
       approachResult: null, approachMiss: null, approachBunker: false, approachLie: null,
+      ...clearedReasonPatch('approach'),
     } : {}),
   };
 }
@@ -1256,8 +1264,14 @@ const approachMissResult = (dir, bunker) => (dir || bunker ? 'miss' : null);
 
 // Approach-finish grid tap: `green` is exclusive (clears direction + bunker);
 // the four directions are single-select and clear an on-green selection;
-// `bunker` toggles on top of a direction or stands alone.
+// `bunker` toggles on top of a direction or stands alone. When the finish stops
+// being a miss (on green, or the last miss signal goes) the approach reasons clear.
 export function approachFinishPatch(detail, key) {
+  const patch = approachFinishBase(detail, key);
+  return patch.approachResult === 'miss' ? patch : { ...patch, ...clearedReasonPatch('approach') };
+}
+
+function approachFinishBase(detail, key) {
   const dir = detail?.approachMiss ?? null;
   const bunker = !!detail?.approachBunker;
   const onGreen = detail?.approachResult === 'green';
@@ -1275,8 +1289,12 @@ export function approachFinishPatch(detail, key) {
 }
 
 // Up & Down / Sand Save chip: tapping the effective outcome turns it off.
+// A save means the short game did not miss, so its reasons clear.
+const isSave = (outcome) => outcome === 'up-and-down' || outcome === 'sand-save';
+
 export function recoveryOutcomePatch(effectiveOutcome, key) {
-  return { recoveryOutcome: effectiveOutcome === key ? 'none' : key };
+  const recoveryOutcome = effectiveOutcome === key ? 'none' : key;
+  return { recoveryOutcome, ...(isSave(recoveryOutcome) ? clearedReasonPatch('short') : {}) };
 }
 
 // Turns a watch `shot` patch (absolute values) into the field changes the
@@ -1293,6 +1311,9 @@ export function normalizeWatchShotPatch(detail, patch, par) {
     'recoveryOutcome', 'firstPuttBucket']) {
     if (has(k)) out[k] = patch[k];
   }
+  if (has('recoveryOutcome') && isSave(patch.recoveryOutcome)) {
+    Object.assign(out, clearedReasonPatch('short'));
+  }
   if (!isPar3) {
     if (has('teeClub')) Object.assign(out, teeClubPatch(patch.teeClub));
     if (has('driveDistBucket')) out.driveDistBucket = patch.driveDistBucket;
@@ -1305,7 +1326,7 @@ export function normalizeWatchShotPatch(detail, patch, par) {
     // sent with a direction it just refines that direction's lie.
     if (has('driveLie')) {
       out.driveLie = patch.driveLie;
-      if (!has('drive')) out.drive = null;
+      if (!has('drive')) Object.assign(out, { drive: null }, clearedReasonPatch('drive'));
     }
   }
   if (has('approachBucket')) Object.assign(out, approachBucketPatch(patch.approachBucket));
@@ -1317,13 +1338,17 @@ export function normalizeWatchShotPatch(detail, patch, par) {
         Object.assign(out, approachFinishPatch({}, 'green'));
       } else if (has('approachResult') && patch.approachResult === null
         && !has('approachMiss') && !has('approachBunker')) {
-        Object.assign(out, { approachResult: null, approachMiss: null, approachBunker: false });
+        Object.assign(out, {
+          approachResult: null, approachMiss: null, approachBunker: false,
+          ...clearedReasonPatch('approach'),
+        });
       } else {
         const wasGreen = d.approachResult === 'green';
         const dir = has('approachMiss') ? patch.approachMiss : (wasGreen ? null : d.approachMiss ?? null);
         const bunker = has('approachBunker') ? !!patch.approachBunker : (wasGreen ? false : !!d.approachBunker);
         Object.assign(out, {
           approachMiss: dir, approachBunker: bunker, approachResult: approachMissResult(dir, bunker),
+          ...(dir || bunker ? {} : clearedReasonPatch('approach')),
         });
       }
     }
