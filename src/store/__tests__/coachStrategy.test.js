@@ -130,3 +130,82 @@ describe('buildStrategyTips causeId', () => {
     expect(buildStrategyTips(stats).find((t) => t.id === 'tee-miss-side').causeId).toBe('cause:tee:side:right');
   });
 });
+
+describe('why strategy cards: lie and decision families', () => {
+  const row = (over = {}) => ({
+    misses: 14, tagged: 10, untagged: 4, blocked: 0,
+    families: { forced: 0, lie: 0, decision: 0, swing: 10 },
+    subs: { start: { left: 0, right: 0 }, curve: { left: 0, right: 0 }, strike: { left: 0, right: 0 }, lowPoint: 0 },
+    lies: {},
+    ...over,
+  });
+  const withRows = (rows, sg = {}) => ({
+    missReasons: { approach: { all: row(), byBucket: {} }, tee: row(), short: row(), ...rows },
+    strokesGained: { byCategory: { approach: -1, offTheTee: -0.8, aroundGreen: -0.6, ...sg }, roundsByCategory: {} },
+  });
+  const lieRow = (lies, over = {}) => row({
+    families: { forced: 0, lie: 6, decision: 0, swing: 4 }, lies, ...over,
+  });
+  const tipOf = (stats, id) => buildStrategyTips(stats).find((t) => t.id === id);
+
+  test('below feet: aim left and grip down for a right-hander, mirrored for a left-hander', () => {
+    const stats = withRows({ approach: { all: lieRow({ 'below-feet': 4, uphill: 2 }), byBucket: {} } });
+    const tip = tipOf(stats, 'why-lie-below-feet');
+    expect(tip).toBeDefined();
+    expect(tip.causeId).toBe('cause:approach:why:lie');
+    expect(tip.titleMsg.key).toBe('stats.my.tip.lie.approach.below-feet.title');
+    expect(tip.reasonMsg.params.aim).toMatchObject({ key: 'stats.my.fan.left' });
+    expect(tip.reasonMsg.params).toMatchObject({ count: 6, total: 10 });
+    const lefty = buildStrategyTips(stats, { handedness: 'left' }).find((t) => t.id === 'why-lie-below-feet');
+    expect(lefty.reasonMsg.params.aim).toMatchObject({ key: 'stats.my.fan.right' });
+  });
+  test('above feet aims right; the other lies carry no direction', () => {
+    const above = tipOf(withRows({ approach: { all: lieRow({ 'above-feet': 5 }), byBucket: {} } }), 'why-lie-above-feet');
+    expect(above.reasonMsg.params.aim).toMatchObject({ key: 'stats.my.fan.right' });
+    ['uphill', 'downhill', 'wind', 'bad-lie'].forEach((lie) => {
+      const tip = tipOf(withRows({ approach: { all: lieRow({ [lie]: 5 }), byBucket: {} } }), `why-lie-${lie}`);
+      expect(tip.titleMsg.key).toBe(`stats.my.tip.lie.approach.${lie}.title`);
+      expect(tip.reasonMsg.params.aim).toBeUndefined();
+    });
+  });
+  test('only the dominant lie gets a card', () => {
+    const tips = buildStrategyTips(withRows({ approach: { all: lieRow({ 'below-feet': 2, downhill: 4 }), byBucket: {} } }));
+    expect(tips.filter((t) => t.id.startsWith('why-lie')).map((t) => t.id)).toEqual(['why-lie-downhill']);
+  });
+  test('tee wind and short-game lies have their own cards', () => {
+    const stats = withRows({
+      tee: lieRow({ wind: 6 }),
+      short: lieRow({ 'short-sided': 5, 'bad-lie': 1 }),
+    });
+    expect(tipOf(stats, 'why-lie-tee-wind').causeId).toBe('cause:tee:why:lie');
+    expect(tipOf(stats, 'why-lie-short-short-sided').causeId).toBe('cause:short:why:lie');
+  });
+  test('decision family: one card per area, middle of the green', () => {
+    const dec = (n) => row({ families: { forced: 0, lie: 0, decision: n, swing: 10 - n } });
+    const stats = withRows({ approach: { all: dec(6), byBucket: {} }, tee: dec(5) });
+    const tip = tipOf(stats, 'why-decision-approach');
+    expect(tip.causeId).toBe('cause:approach:why:decision');
+    expect(tip.titleMsg.key).toBe('stats.my.tip.decision.approach.title');
+    expect(tipOf(stats, 'why-decision-tee').causeId).toBe('cause:tee:why:decision');
+    expect(tipOf(stats, 'why-decision-short')).toBeUndefined();
+  });
+  test('thresholds: 6 tagged, family at 50 %, and a strokes-gained leak', () => {
+    const lies = { 'below-feet': 5 };
+    const small = withRows({ approach: { all: lieRow(lies, { tagged: 5, families: { forced: 0, lie: 5, decision: 0, swing: 0 } }), byBucket: {} } });
+    expect(tipOf(small, 'why-lie-below-feet')).toBeUndefined();
+    const under = withRows({ approach: { all: lieRow(lies, { families: { forced: 0, lie: 4, decision: 0, swing: 6 } }), byBucket: {} } });
+    expect(tipOf(under, 'why-lie-below-feet')).toBeUndefined();
+    const noLeak = withRows({ approach: { all: lieRow(lies), byBucket: {} } }, { approach: 0.2 });
+    expect(tipOf(noLeak, 'why-lie-below-feet')).toBeUndefined();
+    expect(tipOf(withRows({ approach: { all: lieRow(lies), byBucket: {} } }), 'why-lie-below-feet')).toBeDefined();
+  });
+  test('payoff is half the category leak times the family share', () => {
+    const stats = withRows({ approach: { all: lieRow({ 'below-feet': 6 }), byBucket: {} } });
+    const tip = tipOf(stats, 'why-lie-below-feet');
+    expect(tip.payoffPointsPerRound).toBeCloseTo(0.3, 2); // 1 * 0.6 * 0.5
+    expect(tip.sample).toBe(10);
+  });
+  test('stats without miss reasons add nothing', () => {
+    expect(buildStrategyTips({ strokesGained: { byCategory: { approach: -1 } } })).toEqual([]);
+  });
+});

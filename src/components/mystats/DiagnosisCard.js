@@ -10,6 +10,7 @@ import SectionCard from './SectionCard';
 import { GoldBadge, DoRow, CausePair } from './CoachBits';
 import WhySheet from './WhySheet';
 import { renderMsg } from './msg';
+import { useAppSettings } from '../../hooks/useAppSettings';
 
 const areaMsg = (category) => makeMsg(`stats.my.coach.plan.area.${category}`);
 
@@ -26,6 +27,7 @@ export default function DiagnosisCard({
   const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [whyOpen, setWhyOpen] = useState(false);
+  const { missReasons } = useAppSettings();
   if (!week) return null;
   const { kind, chains, untracked } = week;
   const hasChain = chains.length > 0;
@@ -77,6 +79,13 @@ export default function DiagnosisCard({
       <Text style={s.statUnit}>{t('stats.my.coach.ui.stat.perRound')}</Text>
     </View>
   );
+  // Nudge to tag misses while the diagnosis still reads the outcomes only; moot
+  // once the golfer has switched miss reasons off.
+  const coverage = (chain) => (chain.coverage && missReasons !== 'off' ? (
+    <Text style={s.coverage} testID="coverage-hint">
+      {t('stats.my.coach.ui.coverage', { tagged: chain.coverage.tagged, needed: chain.coverage.needed })}
+    </Text>
+  ) : null);
   const doRow = (chain) => {
     const drill = chain.drills.find((d) => d.source !== 'swing') ?? chain.drills[0];
     return drill ? <DoRow drill={drill} /> : null;
@@ -100,6 +109,7 @@ export default function DiagnosisCard({
               <View key={c.leak.id} style={s.tieBlock} testID={`diagnosis-chain-${i + 1}`}>
                 <Text style={s.issue}>{renderMsg(issueMsg(c.leak, c.causes?.primary))}</Text>
                 {stat(c.leak)}
+                {coverage(c)}
                 {doRow(c)}
               </View>
             ))}
@@ -111,6 +121,7 @@ export default function DiagnosisCard({
             <Text style={s.headline}>{renderMsg(issueMsg(chain.leak, chain.causes?.primary))}</Text>
             {stat(chain.leak)}
             <CausePair pair={causePair({ cause: chain.causes?.primary, check: chain.check, isFocus: chain.isFocus })} />
+            {coverage(chain)}
             <SwingRow link={chain.swingLink} s={s} t={t} theme={theme} onOpenSwing={onOpenSwing} />
             <View style={s.rule} />
             {doRow(chain)}
@@ -236,6 +247,7 @@ function makeStyles(theme) {
       borderTopColor: theme.border.default,
     },
     rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.border.default },
+    coverage: { ...theme.typography.caption, color: theme.text.muted },
     swingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 },
     swingText: { ...theme.typography.subhead, flex: 1, minWidth: 0, color: theme.text.secondary },
     swingOpen: { minHeight: 44, justifyContent: 'center' },

@@ -176,6 +176,7 @@ export default {
   'stats.my.coach.ui.do.label': 'Do this',
   'stats.my.coach.ui.sheet.evidence': 'Evidence',
   'stats.my.coach.ui.badge.focus': 'Your focus',
+  'stats.my.coach.ui.coverage': 'Tag why on misses for a sharper diagnosis — {tagged}/{needed}',
   'stats.my.coach.ui.step.why': 'Why',
   'stats.my.coach.ui.step.check': 'Check',
   'stats.my.coach.ui.kicker': '{area}',

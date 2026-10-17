@@ -1,8 +1,10 @@
-// On-course strategy tips (spec §2.3): exactly five deterministic rules,
+// On-course strategy tips (spec §2.3): five deterministic rules, plus the lie and
+// decision cards for the miss reasons (below),
 // each firing only when its data threshold is met, each quantified from the
 // player's own numbers in ≈ Stableford points per round (1 SG ≈ 1 pt).
 
-import { msg, n } from './statsMsg';
+import { msg, n, lower } from './statsMsg';
+import { CAUSE_MIN } from './coachCauses';
 
 const round2 = (x) => Math.round(x * 100) / 100;
 
@@ -128,12 +130,97 @@ function avoidSandRule(stats) {
   };
 }
 
-const RULES = [layUpRule, clubDownRule, lagFirstRule, missSideRule, avoidSandRule];
+// ── Why rules (miss reasons, spec §5.6): lie and decision families ─────────
+// These causes have no practice minutes; the fix is a different play. Each
+// fires on the same gate as its cause (coachCauses whyRule): enough tagged
+// misses and the family covering >= whyFamilyPct of them. Payoff follows the
+// club-down convention: half the category's leak, scaled by the family share.
 
-export function buildStrategyTips(stats) {
+const WHY_AREAS = {
+  approach: { row: (mr) => mr?.approach?.all, category: 'approach', lies: ['above-feet', 'below-feet', 'uphill', 'downhill', 'bad-lie', 'wind'] },
+  tee: { row: (mr) => mr?.tee, category: 'offTheTee', lies: ['wind'] },
+  short: { row: (mr) => mr?.short, category: 'aroundGreen', lies: ['bad-lie', 'short-sided'] },
+};
+// Ball above the feet pulls the shot left for a right-hander, below pushes it right.
+const AIM = { 'above-feet': 'right', 'below-feet': 'left' };
+const OPPOSITE = { left: 'right', right: 'left' };
+
+function whyFamilyRule(stats, area, family) {
+  const spec = WHY_AREAS[area];
+  const row = spec.row(stats.missReasons);
+  const sg = stats.strokesGained?.byCategory?.[spec.category];
+  const tagged = row?.tagged ?? 0;
+  const count = row?.families?.[family] ?? 0;
+  if (tagged < CAUSE_MIN.whyTagged || count * 100 < CAUSE_MIN.whyFamilyPct * tagged) return null;
+  if (!(Number.isFinite(sg) && sg < 0)) return null;
+  return { spec, row, count, tagged, payoff: Math.abs(sg) * (count / tagged) * 0.5 };
+}
+
+function lieRule(area) {
+  return (stats, handedness) => {
+    const hit = whyFamilyRule(stats, area, 'lie');
+    if (!hit) return null;
+    let lie = null;
+    hit.spec.lies.forEach((l) => {
+      if ((hit.row.lies?.[l] ?? 0) > (lie ? hit.row.lies[lie] : 0)) lie = l;
+    });
+    if (!lie) return null;
+    const params = { count: hit.count, total: hit.tagged };
+    if (AIM[lie]) {
+      const side = handedness === 'left' ? OPPOSITE[AIM[lie]] : AIM[lie];
+      params.aim = lower(msg(`stats.my.fan.${side}`));
+    }
+    const key = `stats.my.tip.lie.${area}.${lie}`;
+    return {
+      id: area === 'approach' ? `why-lie-${lie}` : `why-lie-${area}-${lie}`,
+      causeId: `cause:${area}:why:lie`,
+      title: 'Play the lie',
+      reason: `${hit.count} of your ${hit.tagged} tagged misses came with a lie that changes the shot.`,
+      titleMsg: msg(`${key}.title`, params),
+      reasonMsg: msg(`${key}.reason`, params),
+      payoffPointsPerRound: round2(hit.payoff),
+      sample: hit.tagged,
+      basis: 'your tagged misses',
+      basisMsg: msg('stats.my.tip.why.basis'),
+    };
+  };
+}
+
+function decisionRule(area) {
+  return (stats, handedness) => {
+    const hit = whyFamilyRule(stats, area, 'decision');
+    if (!hit) return null;
+    const params = { count: hit.count, total: hit.tagged };
+    return {
+      id: `why-decision-${area}`,
+      causeId: `cause:${area}:why:decision`,
+      title: 'Pick the shot you hit',
+      reason: `${hit.count} of your ${hit.tagged} tagged misses came from the shot you chose.`,
+      titleMsg: msg(`stats.my.tip.decision.${area}.title`),
+      reasonMsg: msg(`stats.my.tip.decision.${area}.reason`, params),
+      payoffPointsPerRound: round2(hit.payoff),
+      sample: hit.tagged,
+      basis: 'your tagged misses',
+      basisMsg: msg('stats.my.tip.why.basis'),
+    };
+  };
+}
+
+const RULES = [
+  layUpRule, clubDownRule, lagFirstRule, missSideRule, avoidSandRule,
+  ...['approach', 'tee', 'short'].flatMap((area) => [lieRule(area), decisionRule(area)]),
+];
+
+// The Play smarter card shows at most this many tips, biggest payoff first
+// (five before the miss-reason lie/decision rules joined the table).
+export const MAX_STRATEGY_TIPS = 5;
+
+// opts.handedness ('right' default) mirrors the aim of the above/below-feet lies.
+export function buildStrategyTips(stats, { handedness = 'right' } = {}) {
   if (!stats) return [];
   return RULES
-    .map((rule) => rule(stats))
+    .map((rule) => rule(stats, handedness))
     .filter(Boolean)
-    .sort((a, b) => b.payoffPointsPerRound - a.payoffPointsPerRound);
+    .sort((a, b) => b.payoffPointsPerRound - a.payoffPointsPerRound)
+    .slice(0, MAX_STRATEGY_TIPS);
 }
