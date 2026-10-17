@@ -190,7 +190,7 @@ Verify each through the web UI (`/verify`) as well as Jest.
 - Patch tests: clearing a miss clears its reasons; switching finish side keeps start/contact/situation.
 - `coachCauses.test.js`: why rules outrank side rules; sample floors; fallback to today's cause under `whyTagged`; coverage hint.
 - Strokes gained / stats tests: a `blocked` approach leaves approach rates and SG, scores off `recovery`, and adds tee trouble.
-- `ShotDetailPanel` / `WhySheet` tests: auto-open only on a tapped miss; never on derived short-game outcome; suppressed by `'manual'`, `'off'`, "Not this round", watch-entered misses; summary chip text; group hidden → no chips.
+- `ShotDetailPanel` / `MissWhySheet` tests: auto-open only on a tapped miss; never on derived short-game outcome; suppressed by `'manual'`, `'off'`, "Not this round", watch-entered misses; summary chip text; group hidden → no chips.
 - UI verification on web QA: tag several misses across a round, confirm the summary chips, the scorecard markers and the coach card change.
 
 ## 8. Out of scope / left room for
