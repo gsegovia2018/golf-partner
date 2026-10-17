@@ -97,14 +97,17 @@ export function avgDifferentialOf(synthetic) {
 }
 
 // Strokes-gained is reported PER ROUND (SG/round, expected vs actual strokes
-// per round), so it is a round-total aggregate too and a nine's half-size SG
-// must not be averaged in as a whole round. sgSeason/sgReconciliation both
-// already skip any round with no SG sample, so a nine is blanked rather than
-// dropped: filtering the array outright would renumber every later round and
-// the SG trend chart labels its points by array index (SGTrendCard's
-// `R{index + 1}`), which must keep matching the user's round selection.
-function withoutNineHoleSgSample(rounds) {
-  return (rounds || []).map((r) => (isFullLengthRound(r) ? r : { ...r, shotDetails: {} }));
+// per round), so it is a round-total aggregate too. A nine's half-size SG and
+// an unfinished 18 (its ~N holes of SG against a whole round's expectation)
+// must not be averaged in as whole rounds. Both are blanked by
+// countsForRoundTotals' rule (18 holes AND isComplete). sgSeason/
+// sgReconciliation both already skip any round with no SG sample, so a round
+// is blanked rather than dropped: filtering the array outright would renumber
+// every later round and the SG trend chart labels its points by array index
+// (SGTrendCard's `R{index + 1}`), which must keep matching the user's round
+// selection. Per-hole and per-shot analysis does not go through this.
+function withRoundTotalSgSample(rounds) {
+  return (rounds || []).map((r) => (countsForRoundTotals(r) ? r : { ...r, shotDetails: {} }));
 }
 
 // ── buildSyntheticTournament ──
@@ -681,7 +684,7 @@ export function computeSgFormDelta(myRounds, { n = 5, targetHandicap = 0 } = {})
   const recentRounds = all.slice(-n);
   const historyRounds = all.slice(0, Math.max(0, all.length - n));
   if (historyRounds.length < MIN_FORM_HISTORY_ROUNDS) return null;
-  const sgSlice = (mrs) => withoutNineHoleSgSample(buildSyntheticTournament(mrs).rounds);
+  const sgSlice = (mrs) => withRoundTotalSgSample(buildSyntheticTournament(mrs).rounds);
   const recent = sgSeason(sgSlice(recentRounds), CANON_ID, targetHandicap);
   const previous = sgSeason(sgSlice(historyRounds), CANON_ID, targetHandicap);
   return Object.fromEntries(SG_DELTA_CATEGORIES.map((category) => {
@@ -1060,12 +1063,12 @@ export function computeMyStats(selectedRounds, {
   const puttingTarget = puttingTargetGaps(synthetic.rounds, CANON_ID, targetHandicap);
   const approachTarget = approachTargetGaps(synthetic.rounds, CANON_ID, targetHandicap);
   // Both sgSeason and sgReconciliation report per-ROUND averages (SG/round,
-  // expected vs actual strokes per round), so they take the full-length
-  // slice — a nine's half-size SG and half-size expected/actual totals would
-  // otherwise be averaged in as if they were whole rounds. Per-hole and
-  // per-shot analysis (puttDive, drive/approach impact, target gaps) runs on
-  // every selected round, nines included.
-  const sgRounds = withoutNineHoleSgSample(synthetic.rounds);
+  // expected vs actual strokes per round), so they take the round-total
+  // slice: nine-hole rounds and unfinished 18-hole rounds are blanked, so a
+  // partial round's SG is not averaged in as if it were a whole round. Per-hole
+  // and per-shot analysis (puttDive, drive/approach impact, target gaps) runs
+  // on every selected round, nines and unfinished rounds included.
+  const sgRounds = withRoundTotalSgSample(synthetic.rounds);
   const strokesGained = {
     ...sgSeason(sgRounds, CANON_ID, targetHandicap),
     personalDelta: computeSgFormDelta(rounds, { n, targetHandicap }),
