@@ -113,13 +113,18 @@ function shotRows({ row, nine, s, theme, t, sub, idp }) {
       label={label('green')}
       cells={nine.cells.map((c) => ({
         key: c.number,
-        a11y: c.gir == null ? undefined : who(girLabel(c)),
-        child: c.gir == null ? null : (
+        a11y: c.gir == null
+          ? (c.why?.length ? who(t('stats.game.ledger.a11y.why', { summary: c.why.map(renderMsg).join(' · ') })) : undefined)
+          : who(girLabel(c)),
+        // A reason can be logged without putts (no green mark): the dot then stands alone.
+        child: c.gir == null && !c.why?.length ? null : (
           <>
-            <View
-              testID={`${idp}-gir-${c.number}`}
-              style={[s.gir, c.gir ? { backgroundColor: theme.accent.primary } : { borderWidth: 1.5, borderColor: theme.text.muted }]}
-            />
+            {c.gir != null && (
+              <View
+                testID={`${idp}-gir-${c.number}`}
+                style={[s.gir, c.gir ? { backgroundColor: theme.accent.primary } : { borderWidth: 1.5, borderColor: theme.text.muted }]}
+              />
+            )}
             {c.why?.length > 0 && (
               <View style={[s.why, { backgroundColor: whyColor }]} testID={`${idp}-why-${c.number}`} pointerEvents="none" />
             )}
