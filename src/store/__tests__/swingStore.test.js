@@ -258,6 +258,40 @@ describe('profile (D5, D6)', () => {
   });
 });
 
+describe('hydrateSwingProfile (miss-reasons naming)', () => {
+  afterEach(() => { jest.restoreAllMocks(); });
+
+  it('reads a stored handedness into getSwingProfile()', async () => {
+    await AsyncStorage.setItem('golf_swing_profile.v1', JSON.stringify({ heightCm: 170, handedness: 'left', asked: true }));
+    await store.hydrateSwingProfile();
+    expect(store.getSwingProfile()).toMatchObject({ handedness: 'left', heightCm: 170 });
+  });
+
+  it('does not read the swing index key', async () => {
+    await AsyncStorage.setItem('golf_swings.v1', JSON.stringify([{ id: '1', createdAt: '2026-10-01', status: 'ready' }]));
+    const spy = jest.spyOn(AsyncStorage, 'getItem');
+    spy.mockClear();
+    await store.hydrateSwingProfile();
+    const keys = spy.mock.calls.map(([k]) => k);
+    expect(keys).toEqual(['golf_swing_profile.v1']);
+    expect(store.getSwings()).toHaveLength(0);
+  });
+
+  it('repeated calls are harmless', async () => {
+    await AsyncStorage.setItem('golf_swing_profile.v1', JSON.stringify({ handedness: 'left' }));
+    await store.hydrateSwingProfile();
+    await expect(store.hydrateSwingProfile()).resolves.toBeUndefined();
+    await store.hydrateSwingProfile();
+    expect(store.getSwingProfile()).toMatchObject({ handedness: 'left', asked: false, lastClub: 'iron' });
+  });
+
+  it('corrupt stored JSON keeps the default right-handed profile', async () => {
+    await AsyncStorage.setItem('golf_swing_profile.v1', '{not json');
+    await expect(store.hydrateSwingProfile()).resolves.toBeUndefined();
+    expect(store.getSwingProfile().handedness).toBe('right');
+  });
+});
+
 describe('club (D19)', () => {
   it('a new swing is an iron swing unless told otherwise; junk reads as iron', async () => {
     expect((await store.createSwing({ videoUri: 'file:///picked/clip.mp4' })).club).toBe('iron');

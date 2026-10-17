@@ -385,6 +385,7 @@ export const HolePage = React.memo(function HolePage({
                 team={teams[player.id] ?? null}
                 isMe={isMe}
                 canEdit={canEdit}
+                roundId={round.id}
                 showRunning={showRunning}
                 totals={totalsMap.get(player.id)}
                 getScoreAnim={getScoreAnim}

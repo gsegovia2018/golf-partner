@@ -75,6 +75,34 @@ describe('scorecardModel', () => {
   });
 });
 
+describe('why (miss reasons)', () => {
+  const withDetails = (patch) => {
+    const round = round0();
+    Object.entries(patch).forEach(([hole, d]) => { Object.assign(round.shotDetails['fx-me'][hole], d); });
+    return scorecardModel({ round, players: roster(), meId: 'fx-me' }).rows[0].nines.flatMap((n) => n.cells);
+  };
+
+  test('a tagged missed approach gives the approach summary', () => {
+    const cells = withDetails({ 1: { approachResult: 'miss', approachMiss: 'right', approachStart: 'right', approachContact: 'fat' } });
+    expect(cells[0].why).toEqual([
+      { key: 'shots.why.name.push', params: undefined },
+      { key: 'shots.why.contact.fat', params: undefined },
+    ]);
+  });
+
+  test('falls back to the drive when the approach has no tag', () => {
+    const cells = withDetails({ 2: { approachResult: 'miss', approachMiss: 'left', driveStart: 'left', driveContact: 'toe' } });
+    expect(cells[1].why.map((m) => m.key)).toEqual(['shots.why.name.pull', 'shots.why.contact.toe']);
+  });
+
+  test('null when untagged, and when the drive was found', () => {
+    const cells = withDetails({ 4: { approachResult: 'miss', approachMiss: 'long' } });
+    expect(cells[0].why).toBeNull();
+    expect(cells[3].why).toBeNull();
+    expect(withDetails({ 5: { driveContact: 'top' } })[4].why).toBeNull();
+  });
+});
+
 describe('expansion', () => {
   test('mine starts open when I logged shots; toggling ignores rows without shots', () => {
     const card = scorecardModel({ round: round0(), players: roster(), meId: 'fx-me' });

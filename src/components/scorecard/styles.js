@@ -863,6 +863,20 @@ export function makeScorecardStyles(theme) {
       borderBottomColor: theme.border.subtle ?? theme.border.default,
     },
     shotRowLast: { borderBottomWidth: 0 },
+    shotRowNoRule: { borderBottomWidth: 0 },
+    // "Why?" chip directly under the row that recorded the miss.
+    whyRow: { paddingBottom: 7, flexDirection: 'row' },
+    whyRowRight: { justifyContent: 'flex-end' },
+    whyRowLeft: { justifyContent: 'flex-start' },
+    whyRowRuled: { borderBottomWidth: 1, borderBottomColor: theme.border.subtle ?? theme.border.default },
+    whyChip: {
+      flexDirection: 'row', alignItems: 'center', gap: 4,
+      minHeight: 32, maxWidth: '100%', paddingHorizontal: 12, borderRadius: 16,
+    },
+    whyChipAnswered: { backgroundColor: theme.accent.light },
+    whyChipEmpty: { backgroundColor: 'transparent', borderWidth: 1, borderStyle: 'dashed', borderColor: theme.border.default },
+    whyChipText: { fontSize: 13, fontWeight: '600', flexShrink: 1 },
+    whyChipTextAnswered: { fontWeight: '700' },
     shotRowLabel: {
       fontFamily: 'PlusJakartaSans-Bold',
       color: theme.text.primary,

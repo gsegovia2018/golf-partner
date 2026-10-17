@@ -62,3 +62,26 @@ test('one player: score and shot rows always shown, a totals line, no name butto
   expect(queryAllByTestId(/^card-name-/)).toHaveLength(0);
   expect(getByTestId('ledger-total').props.children).toBe('102 strokes · +30 · 36 putts');
 });
+
+test('a tagged green miss draws a why dot and puts the summary in the label', async () => {
+  const round = round0();
+  Object.assign(round.shotDetails['fx-me'][1], {
+    approachResult: 'miss', approachMiss: 'right', approachStart: 'right', approachContact: 'fat',
+  });
+  const card = scorecardModel({ round, players: roster().slice(0, 1), meId: 'fx-me' });
+  const { getByTestId, queryByTestId, getByLabelText } = await show(card);
+  expect(getByTestId('ledger-why-1')).toBeTruthy();
+  expect(queryByTestId('ledger-why-2')).toBeNull();
+  expect(getByLabelText(/Hole 1: green missed, Why: .+ · .+/)).toBeTruthy();
+});
+
+test('a tagged miss with no putts logged still draws the why dot', async () => {
+  const round = round0();
+  Object.assign(round.shotDetails['fx-me'][1], {
+    putts: null, approachResult: 'miss', approachMiss: 'right', approachStart: 'right',
+  });
+  const card = scorecardModel({ round, players: roster().slice(0, 1), meId: 'fx-me' });
+  const { getByTestId, queryByTestId } = await show(card);
+  expect(getByTestId('ledger-why-1')).toBeTruthy();
+  expect(queryByTestId('ledger-gir-1')).toBeNull();
+});
