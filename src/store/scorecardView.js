@@ -7,11 +7,24 @@ import { getPlayingHandicap, calcExtraShots, matchPlayEffectiveHandicaps } from 
 import { holeCountOf } from './scoring';
 import { holePoints } from '../components/scorecard/scoreModel';
 import { playersMeFirst } from '../lib/playerOrder';
+import { hasReason, summaryOf } from './missReasons';
 
 const FAIRWAY_DRIVES = new Set(['fairway', 'super']);
 // Modes whose per-hole points are hole results, not Stableford points: the
 // heat scale doesn't read them, so they show untinted.
 const RESULT_POINT_MODES = new Set(['matchplay', 'pairsmatchplay', 'sindicato']);
+
+// Why a green was missed: the approach's summary when it missed and is tagged,
+// else the drive's when it missed and is tagged, else null (a hit green never
+// carries a reason).
+function whyOf(d, par) {
+  if (!d) return null;
+  const approachMissed = d.approachResult === 'miss' || d.approachMiss != null || d.approachBunker === true;
+  if (approachMissed && hasReason('approach', d)) return summaryOf('approach', d);
+  const driveMissed = par !== 3 && d.drive != null && !FAIRWAY_DRIVES.has(d.drive);
+  if (driveMissed && hasReason('drive', d)) return summaryOf('drive', d);
+  return null;
+}
 
 // Gross result of one hole against par, the scorecard's classes.
 export function grossResult(par, strokes) {
@@ -90,6 +103,7 @@ export function scorecardModel({ round, players, meId = null, mode = 'stableford
         drive: hole.par !== 3 ? (d?.drive ?? null) : null,
         penalties: d?.teePenalties ?? 0,
         gir: strokes != null && putts != null ? strokes - putts <= hole.par - 2 : null,
+        why: whyOf(d, hole.par),
       };
     });
     const nines = cells.length > 9

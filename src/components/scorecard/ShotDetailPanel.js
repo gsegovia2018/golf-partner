@@ -1,9 +1,16 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { ShotDetailExplainer } from '../ShotDetailExplainer';
+import MissWhySheet from './MissWhySheet';
+import { renderMsg } from '../mystats/msg';
+import { summaryOf } from '../../store/missReasons';
+import { isRoundMuted, muteRound } from '../../store/missReasonsMute';
+import {
+  hydrateSwingProfile, getSwingProfile, subscribeSwings, getSwingsVersion,
+} from '../../store/swingStore';
 import {
   isGIR, recoveryOutcomeFromState, shotDetailStrokeCount,
   driveDirectionPatch, teeClubPatch, approachBucketPatch, approachFinishPatch, recoveryOutcomePatch,
@@ -149,7 +156,7 @@ function LieChipRow({ label, a11yPrefix, options, labels, effectiveValue, onSele
 // directions are single-select among themselves; `bunker` toggles on top of a
 // direction or stands alone. `approachResult` is kept in sync ('green' vs
 // 'miss' vs null) so the stats engine and downstream rows read it unchanged.
-function ApproachFinishRow({ detail, onChange, theme, s, isLast = false }) {
+function ApproachFinishRow({ detail, onSelect, theme, s, isLast = false, noRule = false }) {
   const tl = useT();
   const dir = detail.approachMiss ?? null;
   const bunker = !!detail.approachBunker;
@@ -161,10 +168,10 @@ function ApproachFinishRow({ detail, onChange, theme, s, isLast = false }) {
       ? bunker
       : dir === key && !onGreen);
 
-  const select = (key) => onChange(approachFinishPatch(detail, key));
+  const select = (key) => onSelect(key);
 
   return (
-    <View style={[s.shotRow, s.shotRowStacked, isLast && s.shotRowLast]}>
+    <View style={[s.shotRow, s.shotRowStacked, (isLast || noRule) && s.shotRowNoRule, isLast && s.shotRowLast]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Text style={s.shotRowLabel}>{tl('shots.detail.finished')}</Text>
         <ShotDetailExplainer
@@ -202,10 +209,42 @@ function ApproachFinishRow({ detail, onChange, theme, s, isLast = false }) {
   );
 }
 
+const DRIVE_MISSES = ['left', 'right', 'short'];
+const noop = () => {};
+
+// "Why?" chip under the row that recorded a miss. Answered: the summary
+// ("Push · Heavy") in the accent; unanswered: a dashed "Why?". Read-only shows
+// the answered summary without a tap and hides the unanswered chip.
+function ReasonChip({ summary, onPress, readOnly, align, ruled = false, theme, s }) {
+  const tl = useT();
+  const answered = summary.length > 0;
+  if (readOnly && !answered) return null;
+  const text = answered ? summary.map(renderMsg).join(' · ') : tl('shots.why.chip');
+  const color = answered ? theme.accent.primary : theme.text.secondary;
+  return (
+    <View style={[s.whyRow, align === 'left' ? s.whyRowLeft : s.whyRowRight, ruled && s.whyRowRuled]}>
+      <TouchableOpacity
+        style={[s.whyChip, answered ? s.whyChipAnswered : s.whyChipEmpty]}
+        onPress={readOnly ? undefined : onPress}
+        disabled={readOnly}
+        activeOpacity={0.7}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+        accessibilityRole="button"
+        accessibilityLabel={text}
+      >
+        <Text numberOfLines={1} style={[s.whyChipText, { color }, answered && s.whyChipTextAnswered]}>{text}</Text>
+        {!readOnly && <Feather name="chevron-right" size={14} color={color} />}
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // Per-hole shot detail for the "me" player, laid out after the Hole19
 // scorecard: stat rows with a stepper, plus a row of round direction
 // buttons for the drive. The drive row is hidden on par 3s.
-export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, theme: themeProp, s: sProp }) {
+export function ShotDetailPanel({
+  hole, detail, onChange, strokes, statGroups, roundId, readOnly = false, theme: themeProp, s: sProp,
+}) {
   const tl = useT();
   const teeClubLabels = localizeMap(TEE_CLUB_LABELS, 'teeClub', tl);
   const lieLabels = localizeMap(DRIVE_MISS_LIE_LABELS, 'lie', tl);
@@ -213,7 +252,18 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
   const driveMeta = Object.fromEntries(Object.entries(DRIVE_META).map(([k, v]) => [k, { ...v, label: tl(`shots.drive.${k}`) }]));
   const { theme: themeCtx } = useTheme();
   const theme = themeProp ?? themeCtx;
-  const { units } = useAppSettings();
+  const { units, missReasons: missSetting } = useAppSettings();
+  const [sheet, setSheet] = useState(null);
+  const [muted, setMuted] = useState(false);
+  useEffect(() => {
+    let live = true;
+    setMuted(false);
+    isRoundMuted(roundId).then((m) => { if (live) setMuted(!!m); }).catch(noop);
+    return () => { live = false; };
+  }, [roundId]);
+  useEffect(() => { hydrateSwingProfile()?.catch?.(noop); }, []);
+  useSyncExternalStore(subscribeSwings, getSwingsVersion, getSwingsVersion);
+  const handedness = getSwingProfile()?.handedness ?? 'right';
   const sOwn = useMemo(() => makeScorecardStyles(theme), [theme]);
   const s = sProp ?? sOwn;
   const d = { ...DEFAULT_SHOT, ...(detail ?? {}) };
@@ -222,6 +272,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
     ...(statGroups ?? {}),
   };
   const isPar3 = hole.par === 3;
+  const showApproachExtrasFlag = g.approach && !isPar3 && d.approachBucket;
   const driveMissed = d.drive === 'left' || d.drive === 'right' || d.drive === 'short';
   const teeClub = d.teeClub ?? 'driver';
   const approachDistanceLabel = isPar3 ? tl('shots.detail.holeDistance') : tl('shots.detail.approach');
@@ -238,6 +289,27 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
     par: hole.par,
   });
   const effectiveOutcome = d.recoveryOutcome ?? autoOutcome;
+
+  // Miss reasons. The sheet opens only from the taps below, never from a
+  // `detail` change (watch writes, peers and rehydrates arrive that way).
+  const canAutoOpen = missSetting === 'ask' && !muted && !readOnly;
+  const chipsOn = missSetting !== 'off';
+  const driveChip = chipsOn && g.teeShot && !isPar3 && driveMissed;
+  const approachChip = chipsOn && showApproachExtrasFlag && d.approachResult === 'miss';
+  const shortChip = chipsOn && g.shortGame && missedGIR && strokes != null && strokes > hole.par
+    && effectiveOutcome !== 'up-and-down' && effectiveOutcome !== 'sand-save';
+  const onDriveTap = (key) => {
+    const patch = driveDirectionPatch(d.drive, key);
+    onChange(patch);
+    if (canAutoOpen && DRIVE_MISSES.includes(patch.drive)) setSheet('drive');
+  };
+  const onFinishTap = (key) => {
+    const patch = approachFinishPatch(d, key);
+    onChange(patch);
+    const turnedOn = key === 'bunker' ? patch.approachBunker === true
+      : key !== 'green' && patch.approachMiss === key;
+    if (canAutoOpen && turnedOn) setSheet('approach');
+  };
 
   // Stroke budget: every counter is one of the hole's strokes, so the four
   // counters together can never exceed `strokes`. No cap until strokes is set.
@@ -260,7 +332,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
   // par-3 / data-driven guards can hide any row, so the "last visible row"
   // (whose bottom border must be dropped) shifts around — compute it here
   // instead of hardcoding which row is normally last.
-  const showApproachExtras = g.approach && !isPar3 && d.approachBucket;
+  const showApproachExtras = showApproachExtrasFlag;
   const rowVisibility = [
     ['putts', g.putting],
     ['teePenalties', g.penalties],
@@ -355,7 +427,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
         />
       )}
       {g.teeShot && !isPar3 && (
-        <View style={s.shotRow}>
+        <View style={[s.shotRow, driveChip && s.shotRowNoRule]}>
           <Text style={s.shotRowLabel}>{teeClubLabels[teeClub]}</Text>
           <View style={s.driveBtns}>
             {DRIVE_ORDER.map((key) => {
@@ -365,7 +437,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
                 <TouchableOpacity
                   key={key}
                   style={[s.driveCircle, active && s.driveCircleActive]}
-                  onPress={() => onChange(driveDirectionPatch(d.drive, key))}
+                  onPress={() => onDriveTap(key)}
                   activeOpacity={0.7}
                   hitSlop={5}
                   accessibilityRole="button"
@@ -382,6 +454,17 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
             })}
           </View>
         </View>
+      )}
+      {driveChip && (
+        <ReasonChip
+          summary={summaryOf('drive', d, handedness)}
+          onPress={() => setSheet('drive')}
+          readOnly={readOnly}
+          align="right"
+          ruled
+          theme={theme}
+          s={s}
+        />
       )}
       {g.teeShot && !isPar3 && driveMissed && (
         <LieChipRow
@@ -448,7 +531,19 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
       {showApproachExtras && (
         <ApproachFinishRow
           detail={d}
-          onChange={onChange}
+          onSelect={onFinishTap}
+          theme={theme}
+          s={s}
+          noRule={approachChip}
+        />
+      )}
+      {showApproachExtras && approachChip && (
+        <ReasonChip
+          summary={summaryOf('approach', d, handedness)}
+          onPress={() => setSheet('approach')}
+          readOnly={readOnly}
+          align="left"
+          ruled
           theme={theme}
           s={s}
         />
@@ -533,6 +628,33 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
             </TouchableOpacity>
           </View>
         </View>
+      )}
+      {shortChip && (
+        <ReasonChip
+          summary={summaryOf('short', d, handedness)}
+          onPress={() => setSheet('short')}
+          readOnly={readOnly}
+          align="right"
+          theme={theme}
+          s={s}
+        />
+      )}
+      {!readOnly && (
+        <MissWhySheet
+          visible={sheet != null}
+          mode={sheet}
+          hole={hole}
+          detail={d}
+          onChange={onChange}
+          onClose={() => setSheet(null)}
+          onMuteRound={() => {
+            muteRound(roundId);
+            setMuted(true);
+            setSheet(null);
+          }}
+          units={units}
+          handedness={handedness}
+        />
       )}
     </View>
   );

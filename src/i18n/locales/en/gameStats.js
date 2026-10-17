@@ -258,6 +258,7 @@ export default {
   "stats.game.ledger.a11y.hcpStrokes": { one: "{count} handicap stroke", other: "{count} handicap strokes" },
   "stats.game.ledger.a11y.gir": "Hole {hole}: green in regulation",
   "stats.game.ledger.a11y.girMissed": "Hole {hole}: green missed",
+  "stats.game.ledger.a11y.why": "Why: {summary}",
   "stats.game.ledger.result.eagle": "eagle or better",
   "stats.game.ledger.result.birdie": "birdie",
   "stats.game.ledger.result.par": "par",

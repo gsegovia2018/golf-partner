@@ -12,7 +12,7 @@ const ALL_ON = { putting: true, teeShot: true, approach: true, shortGame: true, 
 // Collapsible "Shot detail" section for the "me" card. `collapsed` and
 // `onToggle` are controlled by the parent so the choice persists across holes.
 // Renders nothing when every stat-tracking group is switched off in Settings.
-export function ShotDetailSection({ hole, detail, onChange, strokes, collapsed, onToggle }) {
+export function ShotDetailSection({ hole, detail, onChange, strokes, collapsed, onToggle, roundId, readOnly }) {
   const tl = useT();
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
@@ -33,7 +33,8 @@ export function ShotDetailSection({ hole, detail, onChange, strokes, collapsed, 
         <Feather name={collapsed ? 'chevron-right' : 'chevron-down'} size={16} color={theme.text.muted} />
       </TouchableOpacity>
       {!collapsed && (
-        <ShotDetailPanel hole={hole} detail={detail} onChange={onChange} strokes={strokes} statGroups={statGroups} />
+        <ShotDetailPanel hole={hole} detail={detail} onChange={onChange} strokes={strokes} statGroups={statGroups}
+          roundId={roundId} readOnly={readOnly} />
       )}
     </View>
   );
