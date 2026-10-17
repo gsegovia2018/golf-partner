@@ -158,7 +158,7 @@ export default function SettingsScreen({ navigation }) {
                 </PressableScale>
               ))}
             </View>
-            <Text style={s.unitsHint}>{t('settings.missReasons.hint')}</Text>
+            <Text style={s.unitsHint}>{t(`settings.missReasons.hint.${appSettings.missReasons}`)}</Text>
           </View>
         </Section>
 

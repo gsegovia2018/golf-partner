@@ -56,6 +56,7 @@ test('miss reasons segment writes the chosen mode', async () => {
   await waitFor(() => expect(getAppSettings().missReasons).toBe('manual'));
   fireEvent.press(screen.getByTestId('setting-missReasons-off'));
   await waitFor(() => expect(getAppSettings().missReasons).toBe('off'));
+  expect(await screen.findByText("Don't record why shots miss.")).toBeTruthy();
 });
 
 test('no-spoilers mode disables the running-score switch and forces it off', async () => {
