@@ -23,16 +23,18 @@ Lumped together they become "you miss right, practise approaches".
 
 Constraint from the user: **no 100 metrics per hole.** A normal hole costs zero extra taps; a miss costs about two; everything is skippable.
 
-## 2. The program (four sub-projects) — this spec is A
+## 2. The program — this spec is A
 
 | # | Sub-project | Depends on |
 |---|---|---|
 | **A** | **Vocabulary + "Why?" sheet (two-tap tracer) + coach rules reading it** | — |
-| B | Trouble button: one tap on the live hole header *before* a forced shot | A's vocabulary |
-| C | Coach asks: one adaptive question card leaving a hole, likely answers first, per-round question budget | A, B |
-| D | GPS inference: stops in the background-GPS trail → ball positions → trees/bunker proposal. Starts with a spike (persist trails for a few real rounds, measure stop-detection accuracy, OSM tree coverage, battery) | C |
+| B | **Round focus loop:** after a diagnosis the coach sets one focus for the next round (an aim rule or a pre-round drill); the same tags measure whether it worked, and the verdict feeds the next focus | A |
+| C | **Aim points from your own misses:** per-distance miss pattern (side and spread, from the finish data already logged) turned into where to aim on a hole | A (uses B's focus slot to deliver it) |
+| D | GPS inference: stops in the background-GPS trail → ball positions → trees/bunker proposal. Only if typing the data turns out to be the bottleneck; starts with a spike (persist trails for a few real rounds, measure stop-detection accuracy, OSM tree coverage, battery) | B |
 
-Each gets its own spec → plan → PRs. B, C and D are out of scope here except where A must leave room for them (§8).
+Each gets its own spec → plan → PRs. B, C and D are out of scope here except where A must leave room for them (§8). The separate "trouble button" from the first draft is dropped: the **Blocked** chip covers a punch. The earlier "coach asks" card (an adaptive question budget) is folded into B: the focus decides which misses are worth asking about.
+
+**Why this is worth building (checked 2026-10-18).** A limited survey of Arccos, Shot Scope, Garmin Golf, 18Birdies, Golf Pad, Clippd, Upgame and DECADE found none that records *why* a shot missed on the course and feeds it to a coaching plan: they stop at where it finished, lie, distance and strokes gained (Trackman/Toptracer measure start line and curve on the range only). Start line is the most readable part of a ball flight and contact is reliably felt, so the sheet asks for those and derives curve. The app's own data (12 player-rounds with ≥ 9 detailed holes) averages 7 missed greens per round, 5.8 with a direction, so a golfer answering about two thirds of sheets tags ~4 approach misses a round: the coach must speak after about two rounds, not five (§5.3).
 
 ## 3. Vocabulary (the data model)
 
@@ -122,7 +124,7 @@ All strings via `useT()` / the `scorecard` and `settings` catalogues. Glossary a
   2. **lie** — `above-feet`, `below-feet`, `uphill`, `downhill`, `bad-lie`, `wind` (short game: `bad-lie`, `short-sided`)
   3. **decision** — `decision` (short game: `wrong-shot`)
   4. **swing** — sub: `start` (start line), `curve` (face-to-path), `lowPoint` (`fat`/`thin`/`top`/`sky`), `strike` (`toe`/`heel`/`shank`). When both flight and contact are present, contact wins for `fat`/`thin`/`top` (they explain direction and distance), flight wins otherwise.
-- `missReasonStats(rounds, playerId)` → per shot type and approach bucket: tagged / untagged miss counts, family and sub counts, and by-side breakdowns. Shaped for `coachMetrics`.
+- `missReasonStats(rounds, playerId)` → per shot type, per approach bucket and pooled over all approaches (`approach.all`): tagged / untagged miss counts, family and sub counts, and by-side breakdowns. Shaped for `coachMetrics`.
 
 ### 5.2 Moving the blame for forced shots
 
@@ -140,7 +142,7 @@ New rules sit beside the outcome rules and **outrank** them when they fire (same
 
 | Id | Fires when | Strength |
 |---|---|---|
-| `cause:approach:why:swing:<sub>[:<side>]` (side only for `start`, `curve`, `strike`) | ≥ `whyTagged` tagged misses in the leak's bucket and one swing sub covers ≥ `whyFamilyPct` of them | `likely` at ≥ `whyLikelyPct`, else `consistent` |
+| `cause:approach:why:swing:<sub>[:<side>]` (side only for `start`, `curve`, `strike`) | ≥ `whyTagged` tagged misses in scope (below) and one swing sub covers ≥ `whyFamilyPct` of them | `likely` at ≥ `whyLikelyPct`, else `consistent` |
 | `cause:approach:why:lie` | lie family ≥ `whyFamilyPct` | same |
 | `cause:approach:why:decision` | decision family ≥ `whyFamilyPct` | same |
 | `cause:tee:why:swing:<sub>[:<side>]` / `:decision` | same on drives (`whyTagged` tee misses) | same |
@@ -148,7 +150,9 @@ New rules sit beside the outcome rules and **outrank** them when they fire (same
 
 Starting thresholds in `CAUSE_MIN`: `whyTagged: 6`, `whyFamilyPct: 50`, `whyLikelyPct: 70`. Messages cite counts ("7 of your 10 tagged right misses started right on flat lies"), with keys in `i18n/locales/*/coach.js`.
 
-**Coverage hint:** when an approach or tee leak is top-ranked and its tagged share is below `whyTagged`, the diagnosis card shows "Tag why on misses for a sharper diagnosis — 3/6".
+**Scope — pooled first, then by distance.** For an approach leak the rule reads the leak's own bucket when that bucket alone has ≥ `whyTagged` tagged misses (evidence `scope: 'bucket'`, message "from 100–150 m"). Otherwise it reads **all approaches pooled** (`scope: 'all'`, message "across your approaches"), so the first diagnosis arrives after about two rounds instead of five. The cause id is the same in both scopes; the evidence and the `metricKey` carry the scope (`…Rate.<bucket>` vs `…Rate.all`), so a later focus verdict re-reads the number that was cited.
+
+**Coverage hint:** when an approach or tee leak is top-ranked and fewer than `whyTagged` misses are tagged even pooled, the diagnosis card shows "Tag why on misses for a sharper diagnosis — 3/6".
 
 ### 5.4 Ball-flight wording (correctness)
 
@@ -172,7 +176,7 @@ Rule ids without a side suffix (`lowPoint`) are side-free and skip `mirrorCause`
 
 - **Drills** (`coachDrills.js`): `start` → existing `appr-start-line-gate` / `tee-shape-window`; `curve` → new `appr-path-gate` (headcover outside the ball); `lowPoint` → new `appr-low-point-line` (strike a chalk line, divot in front); `strike` → new `appr-strike-tape` (face tape, centre 7/10); short `lowPoint` → existing `sg-landing-towel`.
 - **Strategy** (`coachStrategy.js`): `lie` and `decision` families produce strategy cards, not practice minutes (e.g. "Below-feet lies: aim at the left edge, one club more"). The weekly plan (`coachWeeklyPlan.js`) gives these causes no practice minutes: a `STRATEGY_ONLY_CAUSES` set stops `poolFor` falling back to the area's drills, and the block's minutes move to the next focus.
-- **Metrics** (`coachMetrics.js`): one key per cause rule (`approach.why.<sub>.<side>Rate.<bucket>`, `approach.why.lieRate.<bucket>`, …) so focus verdicts re-read the same number the cause cited.
+- **Metrics** (`coachMetrics.js`): one key per cause rule (`approach.why.<sub>.<side>Rate.<bucket|all>`, `approach.why.lieRate.<bucket|all>`, …) so focus verdicts re-read the same number the cause cited.
 
 ## 6. Shipping and PRs
 
@@ -195,7 +199,7 @@ Verify each through the web UI (`/verify`) as well as Jest.
 
 ## 8. Out of scope / left room for
 
-- **B (trouble button)** will write `approachSituation: ['blocked']` *before* the shot; the sheet must show it pre-selected. No other coupling.
-- **C (coach asks)** will take over *when* the sheet opens (budget, ordering of likely answers). `missReasons` setting values stay; C adds a mode.
+- **B (round focus loop)** reads the why causes and their `metricKey` to set and judge one focus per round; it may also decide *when* the sheet opens (e.g. only for misses in the focus situation). `missReasons` setting values stay; B may add a mode.
+- **C (aim points)** reads the finish data already logged (`approachMiss`, `drive`) plus the lie/decision families; no new capture.
 - **D (GPS inference)** proposes situation chips as pre-selections the golfer confirms; inferred values must never be stored without a tap.
 - Not in A: watch capture, voice, partner tagging, putting reasons, separating push from push-slice, intent ("I meant to fade it").
