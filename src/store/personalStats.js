@@ -1026,7 +1026,7 @@ function diagnoseWithCauses(stats) {
 }
 
 export function computeMyStats(selectedRounds, {
-  n = 5, targetHandicap = 0, baselineOnly = false, shots = null,
+  n = 5, targetHandicap = 0, baselineOnly = false, shots = null, handedness = 'right',
 } = {}) {
   const rounds = selectedRounds || [];
   const synthetic = buildSyntheticTournament(rounds);
@@ -1123,6 +1123,6 @@ export function computeMyStats(selectedRounds, {
     ...baseStats,
     coach: buildCoachInsights(baseStats, coachDiagnosis),
     coachDiagnosis,
-    coachStrategy: buildStrategyTips(baseStats),
+    coachStrategy: buildStrategyTips(baseStats, { handedness }),
   };
 }

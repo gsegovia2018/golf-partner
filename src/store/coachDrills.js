@@ -165,11 +165,47 @@ export const DRILLS = [
     id: 'appr-start-line-gate', area: 'approach', bucket: null, title: 'Start-line gate',
     instruction: 'Set two markers 1 m apart on the target line, 10 m in front of you. 9 balls through the gate with your normal shape. Note any ball that starts outside it.',
     passTarget: '7 of 9 start inside the gate', location: 'range',
-    causes: ['cause:approach:side:left', 'cause:approach:side:right'], kind: 'range', minutes: 15,
+    causes: [
+      'cause:approach:side:left', 'cause:approach:side:right',
+      'cause:approach:why:swing:start:left', 'cause:approach:why:swing:start:right',
+    ], kind: 'range', minutes: 15,
     levels: [
       { passTarget: '7 of 9 start inside the gate' },
       { passTarget: '8 of 9 start inside the gate' },
       { passTarget: '9 of 9 start inside the gate' },
+    ],
+  },
+  {
+    id: 'appr-path-gate', area: 'approach', bucket: null, title: 'Path gate',
+    instruction: 'Set a headcover just outside the ball, on the far side from you. 10 balls with a mid-iron: swing through without touching the headcover.',
+    passTarget: '8 of 10 swings miss the headcover', location: 'range',
+    causes: ['cause:approach:why:swing:curve:left', 'cause:approach:why:swing:curve:right'], kind: 'range', minutes: 15,
+    levels: [
+      { passTarget: '8 of 10 swings miss the headcover' },
+      { passTarget: '9 of 10 swings miss the headcover' },
+      { passTarget: '10 of 10 swings miss the headcover' },
+    ],
+  },
+  {
+    id: 'appr-low-point-line', area: 'approach', bucket: null, title: 'Low-point line',
+    instruction: 'Draw a chalk line (or lay a tee line) on the ground and put the ball just behind it. 10 shots: strike the ball first, then the ground in front of the line.',
+    passTarget: '7 of 10 take the ground in front of the line', location: 'range',
+    causes: ['cause:approach:why:swing:lowPoint'], kind: 'range', minutes: 15,
+    levels: [
+      { passTarget: '7 of 10 take the ground in front of the line' },
+      { passTarget: '8 of 10 take the ground in front of the line' },
+      { passTarget: '9 of 10 take the ground in front of the line' },
+    ],
+  },
+  {
+    id: 'appr-strike-tape', area: 'approach', bucket: null, title: 'Strike tape',
+    instruction: 'Put face tape or impact spray on a mid-iron. Hit 10 balls and check the mark after each one. Count the strikes in the centre of the face.',
+    passTarget: '7 of 10 strikes in the centre of the face', location: 'range',
+    causes: ['cause:approach:why:swing:strike:left', 'cause:approach:why:swing:strike:right'], kind: 'range', minutes: 15,
+    levels: [
+      { passTarget: '7 of 10 strikes in the centre of the face' },
+      { passTarget: '8 of 10 strikes in the centre of the face' },
+      { passTarget: '9 of 10 strikes in the centre of the face' },
     ],
   },
   // ── Off the tee ──
@@ -211,7 +247,10 @@ export const DRILLS = [
     id: 'tee-shape-window', area: 'offTheTee', bucket: null, title: 'Start-line shape',
     instruction: '10 drives aimed at the outside edge of the window, letting the shot curve back in. Count the ones that finish inside.',
     passTarget: '6 of 10 finish inside the window', location: 'range',
-    causes: ['cause:tee:side:left', 'cause:tee:side:right'], kind: 'range', minutes: 15,
+    causes: [
+      'cause:tee:side:left', 'cause:tee:side:right',
+      'cause:tee:why:swing:start:left', 'cause:tee:why:swing:start:right',
+    ], kind: 'range', minutes: 15,
     levels: [
       { passTarget: '6 of 10 finish inside the window' },
       { passTarget: '7 of 10 finish inside the window' },
@@ -234,7 +273,7 @@ export const DRILLS = [
     id: 'sg-landing-towel', area: 'shortGame', bucket: null, title: 'Landing-spot chips',
     instruction: 'Lay a towel where your chips should land (not finish). 10 chips aiming to carry onto the towel.',
     passTarget: '6 of 10 land on or within a club-length of the towel', location: 'green',
-    causes: ['cause:short:chip'], kind: 'shortGame', minutes: 15,
+    causes: ['cause:short:chip', 'cause:short:why:swing:lowPoint'], kind: 'shortGame', minutes: 15,
     levels: [
       { passTarget: '6 of 10 land on or within a club-length of the towel' },
       { passTarget: '7 of 10 land on or within a club-length of the towel' },
@@ -364,8 +403,11 @@ export function drillsForInsight(insight) {
 }
 
 // Drills that serve a coach cause: cause-matched first (catalogue order), then
-// the rest of the cause's area. Unknown or non-cause ids return [].
+// the rest of the cause's area. Unknown or non-cause ids, and the strategy-only
+// why causes (lie, decision), return [].
 export function drillsForCause(causeId) {
+  // Lie and decision misses are fixed on the course, not on the range: no drills.
+  if (/^cause:(approach|tee|short):why:(lie|decision)$/.test(String(causeId ?? ''))) return [];
   const [prefix, segment] = String(causeId ?? '').split(':');
   const area = prefix === 'cause' ? CAUSE_TO_DRILL_AREA[segment] : undefined;
   if (!area) return [];

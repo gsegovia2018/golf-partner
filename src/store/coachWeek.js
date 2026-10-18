@@ -8,7 +8,8 @@
 //   kind     'one' | 'tie' | 'focus' (a committed focus's chain) | 'few'
 //            (leaks under the sample gates) | 'candidate' | 'noLeak' | 'noDetail'
 //   chains   [Chain] (two on a tie): { leak, causes, swingLink, check, drills, courseTask,
-//            isFocus }; drills are the plan's drills for that chain's blocks
+//            isFocus, coverage }; coverage is { tagged, needed } while an approach / off-the-tee
+//            leak has fewer pooled tagged miss reasons than the why causes need, else null; drills are the plan's drills for that chain's blocks
 //   plan     buildWeeklyPlan(...) result
 //   untracked  { residual, gap } when the strokes no category explains outweigh the
 //            first chain's leak (see coachDiagnosis untrackedDominant), else null
@@ -18,13 +19,23 @@
 
 import { buildSwingLink } from './coachSwingLink';
 import { buildWeeklyPlan, courseTaskFor } from './coachWeeklyPlan';
-import { causesForLeak } from './coachCauses';
+import { causesForLeak, CAUSE_MIN } from './coachCauses';
 import { buildCheck } from './coachCheck';
 import { isV2Focus } from './coachFocus';
 import { untrackedDominant } from './coachDiagnosis';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PLAN_PREFIX = '@mystats_coach_plan:';
+
+// Miss reasons tagged so far (all approaches pooled, or the drives) against the
+// floor the why causes need; null once met, for other areas, or without the stats.
+function coverageFor(leak, stats) {
+  const mr = stats?.missReasons;
+  const row = leak?.category === 'approach' ? mr?.approach?.all : leak?.category === 'offTheTee' ? mr?.tee : null;
+  if (!row) return null;
+  const tagged = row.tagged ?? 0;
+  return tagged < CAUSE_MIN.whyTagged ? { tagged, needed: CAUSE_MIN.whyTagged } : null;
+}
 
 const causesOf = (leak, stats) => leak?.causes ?? (leak ? causesForLeak(leak, stats) : null);
 
@@ -64,6 +75,7 @@ export function buildCoachWeek({
     check: buildCheck({ leak, cause: cs?.primary, focus: isFocus ? committed : null, stats }),
     drills: drillsFor(roles),
     courseTask,
+    coverage: coverageFor(leak, stats),
   });
 
   const chains = [];

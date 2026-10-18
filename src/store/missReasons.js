@@ -32,7 +32,9 @@
 // missReasonStats(rounds, playerId) → { approach: { byBucket: {[bucket]: Row}, all: Row },
 //   tee: Row, short: Row }; rounds are raw rounds (round.shotDetails[playerId]).
 //   Row = { misses, tagged, untagged, blocked, families: {forced,lie,decision,swing},
-//   subs: { start:{left,right}, curve:{left,right}, strike:{left,right}, lowPoint } }.
+//   subs: { start:{left,right}, curve:{left,right}, strike:{left,right}, lowPoint },
+//   lies: { [situation]: count } } (every lie situation on a lie-family miss, so a
+//   shot below the feet in the wind counts in both; the strategy cards read the dominant one).
 //   Approach = par !== 3, approachBucket set, approachResult 'miss'; tee = par >= 4
 //   and drive left|right|short; short = green missed, not saved, strokes > par.
 
@@ -165,6 +167,7 @@ const emptyRow = () => ({
     strike: { left: 0, right: 0 },
     lowPoint: 0,
   },
+  lies: {},
 });
 
 function addMiss(row, shotType, detail) {
@@ -174,6 +177,10 @@ function addMiss(row, shotType, detail) {
   if (!c) { row.untagged += 1; return; }
   row.tagged += 1;
   row.families[c.family] += 1;
+  if (c.family === 'lie') {
+    situations(detail, FIELDS[shotType].situation).filter((x) => LIE[shotType].includes(x))
+      .forEach((x) => { row.lies[x] = (row.lies[x] ?? 0) + 1; });
+  }
   if (c.family !== 'swing') return;
   if (c.sub === 'lowPoint') row.subs.lowPoint += 1;
   else if (c.side) row.subs[c.sub][c.side] += 1;

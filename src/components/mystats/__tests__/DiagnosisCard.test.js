@@ -5,6 +5,7 @@ import { ThemeProvider } from '../../../theme/ThemeContext';
 import DiagnosisCard from '../DiagnosisCard';
 import { DRILLS } from '../../../store/coachDrills';
 import { drillText } from '../msg';
+import { updateAppSettings, __resetAppSettingsForTests } from '../../../store/settingsStore';
 import {
   onePutting, tieStats, teeLeft, fewRounds, noDetail, approachShort, week, driverSwing, focusRecord, verdictOf,
   mkLeak, mkDiagnosis, mkStats,
@@ -406,5 +407,27 @@ describe('DiagnosisCard: drill detail sheet', () => {
 describe('DiagnosisCard: renders nothing without a week', () => {
   test('null week', () => {
     expect(render(wrap(<DiagnosisCard week={null} />)).toJSON()).toBeNull();
+  });
+});
+
+describe('DiagnosisCard: coverage hint', () => {
+  const tagged = (n) => ({
+    ...approachShort(),
+    missReasons: { approach: { all: { tagged: n }, byBucket: {} }, tee: { tagged: 0 }, short: { tagged: 0 } },
+  });
+  beforeEach(() => { __resetAppSettingsForTests(); });
+
+  test('shows how many misses are tagged against the floor', () => {
+    const r = renderCard(tagged(3));
+    expect(r.getByTestId('coverage-hint')).toHaveTextContent('Tag why on misses for a sharper diagnosis — 3/6');
+  });
+  test('hidden once six are tagged', () => {
+    expect(renderCard(tagged(6)).queryByTestId('coverage-hint')).toBeNull();
+  });
+  test('hidden when miss reasons are off, back when switched on', async () => {
+    await updateAppSettings({ missReasons: 'off' });
+    expect(renderCard(tagged(3)).queryByTestId('coverage-hint')).toBeNull();
+    await updateAppSettings({ missReasons: 'manual' });
+    expect(renderCard(tagged(3)).getByTestId('coverage-hint')).toBeTruthy();
   });
 });
