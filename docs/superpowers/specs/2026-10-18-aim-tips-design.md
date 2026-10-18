@@ -44,17 +44,17 @@ Rules:
   - Water outranks bunker; if both sides have water, `middle`.
 - **No bias → `null`** (no tip). Unmapped course → same tip without the hazard clause.
 
-### 2.2 Distance bucket
+### 2.2 Expected approach distance
 
-Approach bucket from, in order: the live GPS distance to the green centre (`gps.distances.center`, same feed the hole header shows), the hole's own `approachBucket` if the golfer already set it (par 3 "Hole distance"), else `null` → pooled.
+The golfer enters the hole's data **after** the hole (walking to the next tee), so live GPS can't pick the bucket and "tee tip until the drive is recorded" never helps (owner, 2026-10-18). The approach line uses the **expected** approach distance: the hole's length minus the golfer's average drive (par 4/5), the hole's length on a par 3, mapped to the approach buckets; no hole length → pooled.
 
-### 2.3 Where it shows
+### 2.3 Where it shows — the hole briefing (owner-approved 2026-10-18)
 
-An **aim tip card under the hole header**, above the player cards, only when the signed-in owner plays this round and is on the live (editable) scorecard:
-- Par 4/5: the **tee tip until the owner's drive is recorded**, then the **approach tip**. Par 3: the approach tip.
-- Copy: headline ("Aim at the left half of the green" / "Take one more club" / "Aim at the left edge of the fairway") + detail ("Your 100–150 m misses go right (7 of 10) · water right of this green").
-- Same visual family as the focus strip (accent-light card, icon), so the two read as one coaching system; the aim tip uses a crosshair icon.
-- Hidden when Settings → Stats tracking → **Aim tips** is off (new boolean setting, default on), in scramble formats (one ball per team), and in read-only views.
+A **briefing card under the hole header, shown when you arrive at the hole** (the page you land on after "Hole N ›"), above the player cards, owner only:
+- **Off the tee** line (par 4/5) and **Approach** line (with "~130 m" from §2.2), each only when its miss pattern clears the bar; no line qualifies → no card.
+- Each line: label, headline ("Aim at the left edge" / "Aim at the left half" / "Take one more club"), evidence ("Your drives miss right (12 of 17)"), hazard clause on mapped courses ("· bunker right at 210 m", "· water right of the green").
+- **Collapses to a one-line summary once the owner's score for that hole is entered**, so a finished hole reads as history.
+- Same visual family as the focus strip (accent-light, crosshair icon). Hidden when Settings → Stats tracking → **Aim tips** is off, in scramble formats and read-only views.
 
 ### 2.4 Hazard side helper
 
@@ -69,7 +69,7 @@ A suggested aim ring on the map, lateral spread in metres (needs the aim point s
 | PR | Content |
 |---|---|
 | **C1** | `aimTip.js` + `hazardSide` + `aimTips` setting + copy; tests |
-| **C2** | Aim tip card in the hole view (bucket from GPS / hole entry, tee→approach switch, owner-only, setting) |
+| **C2** | Hole briefing in the hole view (expected approach distance, tee + approach lines, collapse after the score, owner-only, setting) |
 
 UI (C2) follows the approved canvas; nothing merges before the owner approves it.
 
@@ -77,5 +77,5 @@ UI (C2) follows the approved canvas; nothing merges before the owner approves it
 
 - `aimTip.test.js`: side bias per bucket vs pooled fallback, thresholds (8 / 10 / 2×), length bias club up/down, side vs length tie-break, tee bias, hazard on miss side named, hazard on aim side → middle, both sides water → middle, no bias → null, unmapped → no clause.
 - `geo.test.js`: `hazardSide` left/right/centre band.
-- Hole view tests: card for the owner only, tee→approach switch after the drive, par 3, setting off, scramble, read-only.
+- Hole view tests: briefing for the owner only, both lines / one line / none, expected approach bucket (hole length − average drive, par 3, no length → pooled), collapsed after the score, setting off, scramble, read-only.
 - Web walkthrough: mapped course with water (an OSM course), unmapped course, light/dark, ES.
