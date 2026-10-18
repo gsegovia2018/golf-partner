@@ -213,13 +213,14 @@ export const SWING_STRINGS = build({
       address: L, takeaway: L, leadArm: L, top: L, shaftDown: L, impact: L, trailArm: L,
     },
     status: {
-      proposed: L, confirmed: L, hidden: L, missing: L, moved: L,
+      proposed: L, confirmed: L, hidden: L, missing: L, moved: L, unsure: L,
     },
     addressOnly: L,
     dock: L,
     dockLabel: (name, status) => t('swing.mark.dockLabel', { name, status }),
     line: {
       proposed: L,
+      unsure: L,
       confirmed: L,
       moved: L,
       hidden: L,
@@ -314,15 +315,47 @@ export const SWING_STRINGS = build({
     loadFailed: L,
   },
 
-  // Swing results (S6, design B).
+  // The short names of the seven positions and the extras step (Results' summary dots, the canvas chips).
+  position: {
+    short: {
+      address: L, takeaway: L, leadArm: L, top: L, shaftDown: L, impact: L, trailArm: L, extras: L,
+    },
+  },
+
+  // Swing results (S6, design B; checks v2 design D: summary + stepper).
   results: {
+    workFirst: L,
+    startsAt: (name) => t('swing.results.startsAt', { name }),
+    mainSoFar: L,
+    placeToFinish: (name) => t('swing.results.placeToFinish', { name: getLanguage() === 'es' ? name.toLowerCase() : name }),
+    place: L,
+    frameShort: (frame) => t('swing.results.frameShort', { frame }),
+    tagFirst: L,
+    tagStarts: L,
+    markFirst: L,
+    markStarts: L,
+    extras: L,
+    extrasHint: L,
+    readWithout: (name) => t('swing.results.readWithout', { name }),
+    stateNoHead: L,
+    stepA11y: (name, state) => t('swing.results.stepA11y', { name, state }),
+    posOf: (name, n, total) => t('swing.results.posOf', { name, n, total }),
+    prevPos: L,
+    nextPos: L,
+    tapWhere: L,
+    tapWhereA11y: (name, frame) => t('swing.results.tapWhereA11y', { name, frame }),
+    confirmDot: L,
+    swipeHint: L,
+    openEdit: L,
+    placed: (name) => t('swing.results.placed', { name }),
+    mainChanged: (fault) => t('swing.results.mainChanged', { fault }),
+    undo: L,
+    placeFailed: L,
+    noFaultAll: L,
     mainTitle: L,
     noFaultTitle: L,
     noFaultWhy: L,
     // The shaft line at the ball, back (P3) and through (P9).
-    patternTitle: L,
-    patternLegs: { butt_extension: L, shaft_through_ball: L },
-    patternLeg: (leg, word) => t('swing.results.patternLeg', { leg, word }),
     // D21: the main fault is the earliest one; later significant faults are likely its knock-on effects.
     alsoCausing: (labels) => {
       const l = labels.map((x) => x.toLowerCase());
@@ -342,15 +375,11 @@ export const SWING_STRINGS = build({
     noStill: L,
     estimated: L,
     clubHidden: L,
-    atCheckpoint: (name) => t('swing.results.atCheckpoint', { name: name.toLowerCase() }),
-    tapToDraw: L,
-    noChecksAt: L,
     frameLine: (frame, secs, off) => (off
       ? t('swing.results.frameLineOff', { frame, secs, off: `${off > 0 ? '+' : ''}${off}` })
       : t('swing.results.frameLine', { frame, secs })),
     prevFrame: L,
     nextFrame: L,
-    stepLabel: (name, worst) => `${name}${worst && worst !== 'none' ? `, ${SWING_STRINGS.statusWord[worst] ?? ''}` : ''}`,
     drillsTitle: (fault) => t('swing.results.drillsTitle', { fault: fault.toLowerCase() }),
     moreDrills: (n) => t('swing.results.moreDrills', { count: n }),
     lessDrills: L,
@@ -372,12 +401,6 @@ export const SWING_STRINGS = build({
     allChecks: L,
     // Design B: one thing to work on, then the rest by priority.
     practiseTitle: L,
-    priorityTitle: L,
-    goodFold: (n) => t('swing.results.goodFold', { count: n }),
-    unknownFold: (n) => t('swing.results.unknownFold', { count: n }),
-    show: L,
-    hide: L,
-    detailTitle: L,
     // Plain-language coaching: the fixes card, the open row under a selected check and the fix sheet.
     fixes: {
       legendYou: L,

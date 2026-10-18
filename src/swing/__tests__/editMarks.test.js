@@ -113,7 +113,15 @@ describe('a confirmed clubhead below the gate (spec §5) is the golfer\'s mark',
     const row = byId(weak, 'clubhead_plane_down');
     expect(row).toMatchObject({ status: 'unknown', reason: 'unplaced' });
     expect(unplacedCheckpoint(row, weak.clubMarks)).toBe('shaftDown');
-    expect(markStatus(c.draft, c.base, 'shaftDown', 'head')).toBe('proposed');
+    expect(markStatus(c.draft, c.base, 'shaftDown', 'head')).toBe('unsure'); // drawn and proposed, but it says so
+  });
+
+  test('a proposal above the gate stays "proposed"; a placed head is "moved", never "unsure"', () => {
+    const sure = { ...pose, pass2: { ...pose.pass2, shaft: { [f]: { head: [230, 470], hidden: false, conf: 0.9, source: 'model' } } } };
+    const a = analyze(sure, { ...base0, pass2: sure.pass2 });
+    const s = buildDraft(a, sure, null);
+    expect(markStatus(s.draft, s.base, 'shaftDown', 'head')).toBe('proposed');
+    expect(markStatus(placeMark(c.draft, 'shaftDown', 'head', [0.3, 0.3]), c.base, 'shaftDown', 'head')).toBe('moved');
   });
 
   test('confirmed in the canvas, the live recompute measures it and stops asking', () => {
