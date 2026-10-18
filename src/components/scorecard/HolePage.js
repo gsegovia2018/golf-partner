@@ -14,6 +14,7 @@ import { scoreCellState } from '../../store/officialScoring';
 import { isScrambleMode } from '../scoringModes';
 import { HoleDistanceBlock } from './HoleDistanceBlock';
 import { PlayerCard } from './PlayerCard';
+import HoleBriefingCard from './HoleBriefingCard';
 import { holePoints, holeEdgeShots } from './scoreModel';
 import { teamsByPlayer } from './teamModel';
 import { useTourTarget } from '../tour/tourTargets';
@@ -106,6 +107,8 @@ export function holePagePropsEqual(prev, next) {
     || prev.shotCollapsed !== next.shotCollapsed
     || prev.onToggleShotDetail !== next.onToggleShotDetail
     || prev.focusTarget !== next.focusTarget
+    || prev.aimStats !== next.aimStats
+    || prev.handedness !== next.handedness
     || prev.conflictCells !== next.conflictCells
     || prev.onOpenFlyover !== next.onOpenFlyover
     || prev.ghostEnabled !== next.ghostEnabled
@@ -147,6 +150,9 @@ export const HolePage = React.memo(function HolePage({
   official, officialDiscrepancy, onOpenDiscrepancy,
   onOpenConflict,
   shotCollapsed, onToggleShotDetail, focusTarget = null,
+  // The owner's slice of personal stats for the aim-tip briefing, or null
+  // (setting off, not loaded, no rounds). See hooks/useAimStats.
+  aimStats = null, handedness = 'right',
   totalsMap,
   conflictCells = new Set(),
   // Comma-joined ids of the players whose card counts for a league in this
@@ -294,6 +300,19 @@ export const HolePage = React.memo(function HolePage({
             />
           </View>
         </View>
+
+        {/* Hole briefing: owner only, on the editable casual scorecard, never
+            for scramble (one ball per team has no personal miss pattern). */}
+        {aimStats && meId && !official && !isScramble && (editable ? editable(meId) : true) ? (
+          <HoleBriefingCard
+            par={pageHole.par}
+            holeNumber={pageHole.number}
+            courseName={courseName}
+            stats={aimStats}
+            handedness={handedness}
+            scored={scores[meId]?.[pageHole.number] != null}
+          />
+        ) : null}
 
         {/* Player score cards. */}
         <View style={s.playerCardsContent}>

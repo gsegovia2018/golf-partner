@@ -33,6 +33,16 @@ jest.mock('../../../theme/ThemeContext', () => ({
   },
 }));
 
+// The briefing card has its own tests; here only whether HolePage mounts it
+// (and with what) matters.
+jest.mock('../HoleBriefingCard', () => {
+  const { Text } = jest.requireActual('react-native');
+  return {
+    __esModule: true,
+    default: ({ scored, par }) => <Text testID="briefing">{`briefing par ${par} scored ${scored}`}</Text>,
+  };
+});
+
 // Minimal HolePage prop set. baseProps() returns a fresh object each call;
 // tests build `next` by spreading `prev` so every unchanged prop keeps its
 // reference — exactly what the real pager does on a score edit.
@@ -598,5 +608,46 @@ describe('HolePage collapsing slim header', () => {
     getByText('326'); // full-block hero number (unit rendered separately)
     fireEvent.press(getByLabelText('Open hole map'));
     expect(props.onOpenFlyover).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('HolePage hole briefing wiring', () => {
+  const stats = { approachTendency: {} };
+
+  test('mounts for the owner on an editable casual hole, with scored from my card', async () => {
+    const { getByTestId } = renderMatchPlayHole({ aimStats: stats });
+    await flush();
+    expect(getByTestId('briefing').props.children).toBe('briefing par 4 scored false');
+  });
+
+  test('scored is true once my score for the hole exists', async () => {
+    const { getByTestId } = renderMatchPlayHole({ aimStats: stats, scores: { a: { 1: 5 }, b: {} } });
+    await flush();
+    expect(getByTestId('briefing').props.children).toBe('briefing par 4 scored true');
+  });
+
+  test.each([
+    ['no stats (setting off / not loaded)', { aimStats: null }],
+    ['no meId', { aimStats: stats, meId: null }],
+    ['read-only card', { aimStats: stats, editable: () => false }],
+    ['official round', { aimStats: stats, official: true }],
+  ])('absent: %s', async (_name, overrides) => {
+    const { queryByTestId } = renderMatchPlayHole(overrides);
+    await flush();
+    expect(queryByTestId('briefing')).toBeNull();
+  });
+
+  test('absent in scramble formats', async () => {
+    const { queryByTestId } = renderScrambleHole({ aimStats: stats });
+    expect(queryByTestId('briefing')).toBeNull();
+  });
+});
+
+describe('holePagePropsEqual aim briefing props', () => {
+  test('re-renders when aimStats arrives or handedness changes', () => {
+    const prev = baseProps();
+    expect(holePagePropsEqual(prev, { ...prev, aimStats: {} })).toBe(false);
+    expect(holePagePropsEqual(prev, { ...prev, handedness: 'left' })).toBe(false);
+    expect(holePagePropsEqual(prev, { ...prev })).toBe(true);
   });
 });
