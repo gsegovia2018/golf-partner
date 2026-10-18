@@ -79,24 +79,65 @@ describe('groupByMonth / formatBytes', () => {
 });
 
 describe('SwingHomeScreen', () => {
-  test('empty state teaches the set-up and shows the privacy line', () => {
+  test('empty state teaches the set-up; the header says where swings are stored', () => {
     const { getByText, queryByText } = setup();
     expect(getByText(SWING_STRINGS.home.emptyTitle)).toBeTruthy();
     expect(getByText(/phone on your toe line, at hand height, aimed at your hands/)).toBeTruthy();
-    expect(getByText('Your video and analysis stay on this phone. Nothing is uploaded.')).toBeTruthy();
+    expect(getByText('Stored on this phone')).toBeTruthy();
+    expect(queryByText('Your video and analysis stay on this phone. Nothing is uploaded.')).toBeNull();
     expect(queryByText(/long-press it for more/)).toBeNull();
   });
 
-  test('lists swings led by the main fault, with counts, fps tag and footer', () => {
-    const { getByText, getAllByText } = setup({ swings: [A, B] });
+  test('lists swings in two lines: main fault, then "date · club"; counts and a short footer', () => {
+    const { getByText, getAllByText, queryByText, getByLabelText } = setup({ swings: [A, B] });
     expect(getByText('Early extension')).toBeTruthy();
     expect(getByText('Over the top')).toBeTruthy();
-    expect(getByText('240 FPS')).toBeTruthy();
-    expect(getByText('120 FPS · APPROX')).toBeTruthy();
+    expect(getByText(/^Sun 11 Oct · \d\d:\d\d · Iron$/)).toBeTruthy(); // date and time: several swings a day
     expect(getAllByText('6').length).toBeGreaterThan(0);
-    expect(getByText('2 swings · 184 MB on this phone · swipe a row or long-press it for more')).toBeTruthy();
-    expect(getByText(/MediaPipe/)).toBeTruthy();
-    expect(getByText(/YOLOX .*CC BY 4\.0/)).toBeTruthy();
+    expect(getByText('2 swings · 184 MB')).toBeTruthy();
+    expect(queryByText(/MediaPipe/)).toBeNull();
+    expect(getByLabelText(/^Early extension, Sun 11 Oct · \d\d:\d\d · Iron, 6 good, 3 to watch, 2 to fix$/)).toBeTruthy();
+  });
+
+  test('a custom name replaces the date on the second line', () => {
+    const named = sw('c', '2026-10-11T16:42:00.000Z', { name: 'Range, new grip', club: 'driver' });
+    const { getByText, queryByText } = setup({ swings: [named] });
+    expect(getByText('Range, new grip · Driver')).toBeTruthy();
+    expect(queryByText(/Sun 11 Oct/)).toBeNull();
+  });
+
+  test('the frame rate shows only when it is a problem: nothing at 240, an amber "120 fps" below', () => {
+    const { queryByTestId, getByTestId, queryByText, getByText, getByLabelText } = setup({ swings: [A, B] });
+    expect(queryByTestId('fps-warn-a')).toBeNull();
+    expect(queryByText(/240 fps/i)).toBeNull();
+    expect(getByTestId('fps-warn-b')).toBeTruthy();
+    expect(getByText('120 fps')).toBeTruthy();
+    expect(getByLabelText(/^Over the top, .*, low frame rate, 120 fps$/)).toBeTruthy();
+  });
+
+  test('a 240 fps capture marked approximate still warns', () => {
+    const approx = sw('x', '2026-10-11T16:42:00.000Z', { fps: { capture: 240, effective: 240, factor: 8, approximate: true } });
+    const { getByText } = setup({ swings: [approx] });
+    expect(getByText('240 fps')).toBeTruthy();
+  });
+
+  test('the more button opens About: privacy, storage, gestures and the licence lines', () => {
+    const { getByLabelText, getByText, queryByText } = setup({ swings: [A, B] });
+    expect(queryByText(/YOLOX/)).toBeNull();
+    fireEvent.press(getByLabelText('More'));
+    expect(getByText(SWING_STRINGS.home.about)).toBeTruthy();
+    expect(getByText('Your video and analysis stay on this phone. Nothing is uploaded.')).toBeTruthy();
+    expect(getByText('2 swings · 184 MB on this phone')).toBeTruthy();
+    expect(getByText('Swipe a row to delete, long-press it for more')).toBeTruthy();
+    expect(getByText(/MediaPipe \(Apache 2\.0\)/)).toBeTruthy();
+    expect(getByText(/YOLOX \(Apache 2\.0\).*CC BY 4\.0/)).toBeTruthy();
+  });
+
+  test('the About sheet is reachable with no swings too', () => {
+    const { getByLabelText, getByText } = setup();
+    fireEvent.press(getByLabelText('More'));
+    expect(getByText('0 swings · 184 MB on this phone')).toBeTruthy();
+    expect(getByText(/CC BY 4\.0/)).toBeTruthy();
   });
 
   test('a swing still being analysed or failed says so instead of a fault', () => {
@@ -141,19 +182,21 @@ describe('SwingHomeScreen', () => {
       expect(store.createSwing.mock.calls[0][0].club).toBeUndefined();
     });
 
-    test('each row shows its stored club as a chip (a swing from before the picker reads Iron)', () => {
+    test('each row shows its stored club on its second line (a swing from before the picker reads Iron)', () => {
       const { getByTestId } = setup({ swings: [A, sw('d', '2026-10-01T10:00:00.000Z', { club: 'driver' })] });
       expect(getByTestId('club-chip-a').props.children).toBe('Iron');
       expect(getByTestId('club-chip-d').props.children).toBe('Driver');
     });
 
-    test('an unfinished marking pass says "n of 7 confirmed · Continue" and resumes the canvas, not Results', () => {
+    test('an unfinished marking pass says "Finish marking" with progress and Continue, and resumes the canvas, not Results', () => {
       const partial = sw('m', '2026-10-12T10:00:00.000Z', { marked: { state: 'partial', count: 2 } });
       const fresh = sw('n', '2026-10-12T09:00:00.000Z', { marked: { state: 'none', count: 0 } });
-      const { getByText, getByLabelText, navigation } = setup({ swings: [partial, fresh] });
-      expect(getByText(SWING_STRINGS.home.continueMarking(2, 7))).toBeTruthy();
-      expect(getByText(SWING_STRINGS.home.continueMarking(0, 7))).toBeTruthy();
-      fireEvent.press(getByLabelText(/^2 of 7 confirmed/));
+      const { getAllByText, getByLabelText, getByTestId, queryByText, navigation } = setup({ swings: [partial, fresh] });
+      expect(getAllByText('Finish marking')).toHaveLength(2);
+      expect(getAllByText('Continue')).toHaveLength(2);
+      expect(getByTestId('mark-progress-m')).toBeTruthy();
+      expect(queryByText('Early extension')).toBeNull(); // no fault (nor counts) before the pass is done
+      fireEvent.press(getByLabelText(/^Finish marking, 2 of 7 confirmed, /));
       expect(navigation.navigate).toHaveBeenCalledWith('SwingEditMarks', { swingId: 'm', mode: 'pass' });
     });
 

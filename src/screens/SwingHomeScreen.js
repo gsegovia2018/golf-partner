@@ -9,7 +9,7 @@ import PressableScale from '../components/ui/PressableScale';
 import SwipeToDelete from '../components/ui/SwipeToDelete';
 import BottomSheet from '../components/BottomSheet';
 import { PrimaryButton, SecondaryButton } from '../components/ui/Buttons';
-import { Overline } from '../components/swing/swingStyles';
+import { Overline, swingType } from '../components/swing/swingStyles';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { haptic } from '../lib/haptics';
@@ -51,8 +51,8 @@ export function formatBytes(n) {
   return `${Math.max(1, Math.round(n / 1024 / 1024))} MB`;
 }
 
-// fps tag state: 240+ good, 120+ watch, below that approximate (design B).
-const fpsState = (fps) => (fps.approximate || fps.effective < 120 ? 'red' : fps.effective >= 240 ? 'green' : 'yellow');
+// The frame rate is only worth a word when it is a problem: approximate, or under 240 fps.
+const fpsLow = (fps) => fps.approximate || fps.effective < 240;
 
 export default function SwingHomeScreen({ navigation }) {
   useT(); // the swing copy reads the language as it renders: re-render when it changes
@@ -77,6 +77,7 @@ export default function SwingHomeScreen({ navigation }) {
   const [picked, setPicked] = useState([]);
   const [sheet, setSheet] = useState(false);
   const [actionRow, setActionRow] = useState(null);
+  const [about, setAbout] = useState(false);
   const [heightText, setHeightText] = useState('');
   const [handed, setHanded] = useState('right');
   const [busy, setBusy] = useState(false);
@@ -158,14 +159,22 @@ export default function SwingHomeScreen({ navigation }) {
   const renderRow = (sw) => {
     const sel = selecting ? picked.includes(sw.id) : null;
     const marking = unmarked(sw);
-    const worst = sw.counts && !marking ? (sw.counts.red ? 'red' : sw.counts.yellow ? 'yellow' : 'green') : 'none';
     const headline = sw.status === 'pending' ? T.analysing
       : sw.status === 'error' ? T.failed
-        : marking ? T.continueMarking(sw.marked.count, MARK_TOTAL)
+        : marking ? T.finishMarking
           : sw.mainFault ? SWING_STRINGS.fault[sw.mainFault] ?? sw.mainFault : T.noFault;
     const customName = sw.name !== defaultSwingName(sw.createdAt, 'en') && sw.name !== defaultSwingName(sw.createdAt, 'es');
+    const lead = customName ? sw.name : defaultSwingName(sw.createdAt); // date and time: several swings a day are common
     const c = marking ? null : sw.counts;
     const clubName = SWING_STRINGS.club[normClub(sw.club)];
+    const fps = sw.fps && fpsLow(sw.fps) ? Math.round(sw.fps.effective) : null;
+    const a11y = [
+      headline,
+      marking ? T.markProgress(sw.marked.count, MARK_TOTAL) : null,
+      `${lead} · ${clubName}`,
+      c ? T.countLabel(c.green, c.yellow, c.red) : null,
+      fps != null ? T.fpsWarnA11y(fps) : null,
+    ].filter(Boolean).join(', ');
     return (
       <SwipeToDelete key={sw.id} enabled={!selecting} onDelete={() => confirmDelete(sw)} borderRadius={0} accessibilityLabel={T.deleteA11y(sw.name)}>
         <PressableScale
@@ -173,7 +182,7 @@ export default function SwingHomeScreen({ navigation }) {
           onPress={() => onRowPress(sw)}
           onLongPress={() => onRowLongPress(sw)}
           accessibilityRole="button"
-          accessibilityLabel={`${headline}, ${sw.name}, ${clubName}${c ? `, ${T.countLabel(c.green, c.yellow, c.red)}` : ''}`}
+          accessibilityLabel={a11y}
           accessibilityState={sel == null ? undefined : { selected: sel }}
         >
           {sel != null ? (
@@ -185,14 +194,20 @@ export default function SwingHomeScreen({ navigation }) {
             {sw.thumb ? <Image source={{ uri: sw.thumb }} style={s.thumbImg} resizeMode="cover" /> : <Feather name="activity" size={22} color={theme.text.muted} />}
           </View>
           <View style={s.rowText}>
-            <View style={s.faultLine}>
-              <View style={[s.dot, { backgroundColor: tone[worst] }]} />
-              <Text style={s.fault} numberOfLines={1}>{headline}</Text>
-            </View>
-            <Text style={s.rowName} numberOfLines={1}>{customName ? sw.name : defaultSwingName(sw.createdAt)}</Text>
-            {customName ? <Text style={s.rowSub}>{defaultSwingName(sw.createdAt)}</Text> : null}
-            <View style={s.metaLine}>
-              <Text style={s.clubChip} testID={`club-chip-${sw.id}`}>{clubName}</Text>
+            <Text style={s.fault} numberOfLines={1}>{headline}</Text>
+            {/* the club keeps its own Text (and testID) inside the line: "<date or name> · <club>" */}
+            <Text style={s.rowSub} numberOfLines={1}>
+              {`${lead} · `}
+              <Text testID={`club-chip-${sw.id}`}>{clubName}</Text>
+            </Text>
+            {marking ? (
+              <View style={s.prog} testID={`mark-progress-${sw.id}`}>
+                <View style={[s.progFill, { width: `${Math.min(100, (sw.marked.count / MARK_TOTAL) * 100)}%` }]} />
+              </View>
+            ) : null}
+          </View>
+          {c || fps != null ? (
+            <View style={s.rowRight}>
               {c ? (
                 <View style={s.counts}>
                   {['green', 'yellow', 'red'].map((k) => (
@@ -203,14 +218,17 @@ export default function SwingHomeScreen({ navigation }) {
                   ))}
                 </View>
               ) : null}
-              {sw.fps ? (
-                <Text style={[s.fpsTag, { color: tone[fpsState(sw.fps)] }]}>
-                  {T.fpsTag(Math.round(sw.fps.effective), sw.fps.approximate)}
-                </Text>
+              {fps != null ? (
+                <View style={s.fpsWarn} testID={`fps-warn-${sw.id}`}>
+                  <Feather name="alert-triangle" size={12} color={tone.yellow} />
+                  <Text style={[s.fpsWarnText, { color: tone.yellow }]}>{T.fpsWarn(fps)}</Text>
+                </View>
               ) : null}
             </View>
-          </View>
-          {!selecting ? <Feather name="chevron-right" size={18} color={theme.text.muted} /> : null}
+          ) : null}
+          {selecting ? null : marking ? (
+            <View style={s.contPill}><Text style={s.contText}>{T.continue}</Text></View>
+          ) : <Feather name="chevron-right" size={18} color={theme.text.muted} />}
         </PressableScale>
       </SwipeToDelete>
     );
@@ -220,8 +238,14 @@ export default function SwingHomeScreen({ navigation }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" accessibilityLabel={T.back} onPress={() => navigation.goBack()} />
-        <Text style={s.headerTitle}>{T.title}</Text>
-        <View style={s.headerSpacer} />
+        <View style={s.headerMid}>
+          <Text style={s.headerTitle}>{T.title}</Text>
+          <View style={s.headerSub}>
+            <Feather name="lock" size={11} color={theme.text.secondary} />
+            <Text style={s.headerSubText}>{T.storedHere}</Text>
+          </View>
+        </View>
+        <IconButton icon="more-horizontal" accessibilityLabel={T.more} onPress={() => setAbout(true)} testID="home-more" />
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content}>
@@ -268,21 +292,13 @@ export default function SwingHomeScreen({ navigation }) {
               </View>
             ))}
             {!selecting ? (
-              <>
-                <Text style={s.footer}>{T.footer(swings.length, formatBytes(storageBytes()))}</Text>
-                <Text style={s.footerSub}>{T.attribution}</Text>
-                <Text style={s.footerSub}>{T.attributionClub}</Text>
-              </>
+              <Text style={s.footer}>{T.footer(swings.length, formatBytes(storageBytes()))}</Text>
             ) : null}
           </>
         )}
       </ScrollView>
 
       <View style={s.bottomBar}>
-        <View style={s.privacy}>
-          <Feather name="shield" size={14} color={theme.accent.primary} style={s.privacyIcon} />
-          <Text style={s.privacyText}>{SWING_STRINGS.privacy}</Text>
-        </View>
         {selecting ? (
           <View style={s.btnRow}>
             <PrimaryButton
@@ -297,26 +313,24 @@ export default function SwingHomeScreen({ navigation }) {
             <SecondaryButton style={s.btn} label={T.cancel} onPress={endSelect} accessibilityLabel={T.cancel} />
           </View>
         ) : (
-          <>
-            <View style={s.btnRow}>
-              <PrimaryButton
-                style={[s.btn, s.btnRecord]}
-                icon="camera"
-                label={T.record}
-                disabled={!canAnalyse}
-                onPress={() => gate(doRecord)}
-                accessibilityLabel={T.record}
-              />
-              <SecondaryButton
-                style={[s.btn, s.btnFlex]}
-                icon="download"
-                label={T.import}
-                disabled={!canAnalyse || busy}
-                onPress={() => gate(doImport)}
-                accessibilityLabel={T.import}
-              />
-            </View>
-          </>
+          <View style={s.btnRow}>
+            <PrimaryButton
+              style={[s.btn, s.btnRecord]}
+              icon="camera"
+              label={T.record}
+              disabled={!canAnalyse}
+              onPress={() => gate(doRecord)}
+              accessibilityLabel={T.record}
+            />
+            <SecondaryButton
+              style={[s.btn, s.btnFlex]}
+              icon="download"
+              label={T.import}
+              disabled={!canAnalyse || busy}
+              onPress={() => gate(doImport)}
+              accessibilityLabel={T.import}
+            />
+          </View>
         )}
       </View>
 
@@ -338,6 +352,24 @@ export default function SwingHomeScreen({ navigation }) {
           <Feather name="trash-2" size={18} color={tone.red} />
           <Text style={[s.menuText, { color: tone.red }]}>{T.deleteSwing}</Text>
         </PressableScale>
+      </BottomSheet>
+
+      <BottomSheet visible={about} onClose={() => setAbout(false)} sheetStyle={s.sheet}>
+        <Text style={s.sheetTitle}>{T.about}</Text>
+        <View style={s.aboutLine}>
+          <Feather name="shield" size={16} color={theme.accent.primary} style={s.aboutIcon} />
+          <Text style={s.aboutText}>{SWING_STRINGS.privacy}</Text>
+        </View>
+        <View style={s.aboutLine}>
+          <Feather name="hard-drive" size={16} color={theme.text.secondary} style={s.aboutIcon} />
+          <Text style={s.aboutText}>{T.storage(swings.length, formatBytes(storageBytes()))}</Text>
+        </View>
+        <View style={s.aboutLine}>
+          <Feather name="move" size={16} color={theme.text.secondary} style={s.aboutIcon} />
+          <Text style={s.aboutText}>{T.gestureHint}</Text>
+        </View>
+        <Text style={[s.footer, s.aboutCredits]}>{T.attribution}</Text>
+        <Text style={s.footer}>{T.attributionClub}</Text>
       </BottomSheet>
 
       <BottomSheet visible={sheet} onClose={() => setSheet(false)} sheetStyle={s.sheet}>
@@ -387,14 +419,18 @@ export default function SwingHomeScreen({ navigation }) {
   );
 }
 
-const makeStyles = (theme) => StyleSheet.create({
+const makeStyles = (theme) => {
+  const ty = swingType(theme);
+  return StyleSheet.create({
   screen: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
   },
-  headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
-  headerSpacer: { width: 40, height: 40 },
+  headerMid: { flex: 1, alignItems: 'center' },
+  headerTitle: { ...ty.heading },
+  headerSub: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
+  headerSubText: { ...ty.label, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary },
   scroll: { flex: 1 },
   content: { paddingHorizontal: 20, paddingBottom: 24, flexGrow: 1 },
 
@@ -422,30 +458,30 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.bg.secondary, alignItems: 'center', justifyContent: 'center',
   },
   thumbImg: { width: '100%', height: '100%' },
-  rowText: { flex: 1, gap: 2 },
-  faultLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  fault: { flex: 1, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15, color: theme.text.primary },
-  rowName: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: theme.text.secondary },
-  rowSub: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, color: theme.text.muted },
-  metaLine: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
+  rowText: { flex: 1, minWidth: 0, gap: 2 },
+  fault: { ...ty.heading, fontFamily: 'PlusJakartaSans-ExtraBold' },
+  rowSub: { ...ty.body, fontFamily: 'PlusJakartaSans-Medium' },
+  prog: {
+    width: 120, maxWidth: '100%', height: 4, borderRadius: 2, marginTop: 6, overflow: 'hidden',
+    backgroundColor: theme.bg.secondary,
+  },
+  progFill: { height: '100%', backgroundColor: theme.accent.primary },
+  rowRight: { alignItems: 'flex-end', gap: 6 },
   counts: { flexDirection: 'row', gap: 8 },
   count: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  countNum: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.text.primary, fontVariant: ['tabular-nums'] },
-  dot: { width: 9, height: 9, borderRadius: 5 },
+  countNum: { ...ty.label, fontVariant: ['tabular-nums'] },
   dotSm: { width: 7, height: 7, borderRadius: 4 },
-  fpsTag: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 0.6 },
-  clubChip: {
-    fontFamily: 'PlusJakartaSans-Bold', fontSize: 10.5, color: theme.text.secondary, backgroundColor: theme.bg.secondary,
-    borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden',
-  },
+  fpsWarn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  fpsWarnText: { ...ty.label },
+  contPill: { backgroundColor: theme.accent.primary, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  contText: { ...ty.label, color: theme.text.inverse },
   selCircle: {
     width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: theme.border.default,
     alignItems: 'center', justifyContent: 'center',
   },
   selCircleOn: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
 
-  footer: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, color: theme.text.muted, marginTop: 14, lineHeight: 16 },
-  footerSub: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, color: theme.text.muted, marginTop: 2 },
+  footer: { ...ty.label, fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, marginTop: 14 },
 
   emptyCard: {
     backgroundColor: theme.bg.card, borderRadius: theme.radius.lg, padding: 16, gap: 12,
@@ -468,9 +504,6 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.bg.primary,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border.default,
   },
-  privacy: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginBottom: 10 },
-  privacyIcon: { marginTop: 1 },
-  privacyText: { flex: 1, fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme.text.secondary, lineHeight: 16 },
   btnRow: { flexDirection: 'row', gap: 10 },
   btn: { paddingHorizontal: 16 },
   btnFlex: { flex: 1 },
@@ -501,4 +534,9 @@ const makeStyles = (theme) => StyleSheet.create({
   sheetSkip: { marginTop: 10 },
   menuRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 4 },
   menuText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: theme.text.primary },
-});
+  aboutLine: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', marginTop: 14 },
+  aboutIcon: { marginTop: 2 },
+  aboutText: { ...ty.bodyInk, flex: 1 },
+  aboutCredits: { marginTop: 20 },
+  });
+};
