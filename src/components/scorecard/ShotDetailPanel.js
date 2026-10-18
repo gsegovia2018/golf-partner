@@ -583,14 +583,14 @@ export function ShotDetailPanel({
             onPress={toggleFocusLie}
             activeOpacity={0.7}
             hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-            accessibilityRole="button"
+            accessibilityRole="checkbox"
             accessibilityLabel={tl(`shots.focus.ask.${focusLie}`)}
-            accessibilityState={{ selected: situationList.includes(focusLie) }}
+            accessibilityState={{ checked: situationList.includes(focusLie) }}
           >
             <Feather
               name="check"
               size={14}
-              color={situationList.includes(focusLie) ? theme.text.inverse : theme.text.secondary}
+              color={situationList.includes(focusLie) ? theme.text.inverse : theme.text.primary}
             />
             <Text style={[s.focusAskChipText, situationList.includes(focusLie) && { color: theme.text.inverse }]}>
               {tl(`shots.focus.ask.${focusLie}`)}

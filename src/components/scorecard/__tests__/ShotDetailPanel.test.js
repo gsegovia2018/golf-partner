@@ -566,7 +566,7 @@ describe('ShotDetailPanel focus', () => {
       });
       expect(r.getByText('This shot')).toBeTruthy();
       expect(r.getByText('Ball below your feet')).toBeTruthy();
-      expect(r.getByTestId('focus-lie-chip').props.accessibilityState.selected).toBe(true);
+      expect(r.getByTestId('focus-lie-chip').props.accessibilityState.checked).toBe(true);
     });
 
     test('absent for a swing target', async () => {

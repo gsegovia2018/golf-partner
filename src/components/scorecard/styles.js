@@ -893,11 +893,11 @@ export function makeScorecardStyles(theme) {
     focusAskLabel: { fontSize: 13, fontWeight: '600', color: theme.text.secondary },
     focusAskChip: {
       flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1,
-      minHeight: 32, paddingHorizontal: 12, borderRadius: 16,
-      borderWidth: 1, borderColor: theme.border.default, backgroundColor: 'transparent',
+      minHeight: 36, paddingHorizontal: 14, borderRadius: 18,
+      borderWidth: 1, borderColor: theme.border.default, backgroundColor: theme.bg.card,
     },
     focusAskChipOn: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
-    focusAskChipText: { fontSize: 13, fontWeight: '600', color: theme.text.secondary, flexShrink: 1 },
+    focusAskChipText: { fontSize: 13, fontWeight: '700', color: theme.text.primary, flexShrink: 1 },
     shotRowLabel: {
       fontFamily: 'PlusJakartaSans-Bold',
       color: theme.text.primary,
