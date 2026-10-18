@@ -1,7 +1,9 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import RoundSummaryScreen from '../RoundSummaryScreen';
+import { saveFocus } from '../../store/coachFocus';
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (cb) => {
@@ -101,6 +103,7 @@ jest.mock('../../store/tournamentStore', () => {
     // roundLeaderboard is left unmocked (actual implementation) — it now
     // drives the round-summary board via the mock tournament's real scores,
     // same as HomeScreen's Round|Global toggle (Task 4).
+    loadAllTournamentsWithFallback: jest.fn((...args) => actual.loadAllTournamentsWithFallback(...args)),
     calcExtraShots: jest.fn(() => 0),
     scrambleUnits: jest.fn((round, players) => players),
   };
@@ -308,6 +311,132 @@ describe('RoundSummaryScreen', () => {
 
       fireEvent.press(await findByLabelText('Photos'));
       expect(queryByLabelText('Add photo')).toBeNull();
+    });
+  });
+
+  // Round focus loop §2.4: the Focus card for a committed coach focus.
+  describe('Focus card', () => {
+    const missRight = {
+      approachBucket: '100-150', approachResult: 'miss', approachMiss: 'right', approachStart: 'right',
+    };
+    const missLeft = { ...missRight, approachMiss: 'left', approachStart: 'center' };
+    const FOCUS = {
+      v: 2,
+      leakId: 'leak:approach:100-150',
+      category: 'approach',
+      bucket: '100-150',
+      causeId: 'cause:approach:why:swing:start:right',
+      metricKey: 'approach.why.swing.start.rightRate.100-150',
+      baselineValue: 70,
+      baselineSample: { shots: 10 },
+      committedAt: '2026-10-01T00:00:00.000Z',
+      roundCountAtCommit: 0,
+      measuredSince: 'commit',
+    };
+    const details = { 1: missRight, 2: missRight, 3: missLeft, 4: missLeft };
+    const round0 = mockTournament.rounds[0];
+    const withShots = (shotDetails) => { round0.shotDetails = shotDetails; };
+    const actualList = (jest.requireActual('../../store/tournamentStore')).loadAllTournamentsWithFallback;
+    const store = require('../../store/tournamentStore');
+
+    beforeEach(async () => {
+      await AsyncStorage.clear();
+      delete round0.shotDetails;
+    });
+    afterEach(() => {
+      delete round0.shotDetails;
+      store.loadAllTournamentsWithFallback.mockImplementation((...a) => actualList(...a));
+    });
+
+    test('shows this round, the baseline and the verdict for a round that touched the focus', async () => {
+      await saveFocus('u1', FOCUS);
+      withShots({ p1: details });
+      const { findByTestId, getByText } = render(wrap(
+        <RoundSummaryScreen navigation={navigation} route={route} />,
+      ));
+      expect(await findByTestId('round-focus-card')).toBeTruthy();
+      expect(getByText('2 of 4 tagged misses')).toBeTruthy();
+      expect(getByText('7 of 10')).toBeTruthy();
+      expect(await findByTestId('round-focus-verdict')).toBeTruthy();
+      expect(getByText('Play 2 more rounds for a verdict')).toBeTruthy();
+    });
+
+    test('the verdict line reads the rounds since the commit', async () => {
+      await saveFocus('u1', FOCUS);
+      withShots({ p1: details });
+      const finished = (id) => ({
+        ...mockTournament,
+        id,
+        finishedAt: '2026-10-10T12:00:00.000Z',
+        rounds: [{ ...round0, id: `${id}-r`, shotDetails: { p1: { 1: missRight, 2: missLeft, 3: missLeft, 4: missLeft } } }],
+      });
+      store.loadAllTournamentsWithFallback.mockImplementation(() => Promise.resolve({
+        list: [finished('t2'), finished('t3')], stale: false, openableIds: null,
+      }));
+      const { findByText } = render(wrap(
+        <RoundSummaryScreen navigation={navigation} route={route} />,
+      ));
+      expect(await findByText(/^Improving since you committed · Level \d of 3$/)).toBeTruthy();
+    });
+
+    test('hidden without a focus', async () => {
+      withShots({ p1: details });
+      const { findByText, queryByTestId } = render(wrap(
+        <RoundSummaryScreen navigation={navigation} route={route} />,
+      ));
+      await findByText('Winner: Marcos');
+      expect(queryByTestId('round-focus-card')).toBeNull();
+    });
+
+    test('hidden for a round that did not touch the focus', async () => {
+      await saveFocus('u1', FOCUS);
+      withShots({ p1: { 1: { drive: 'left' } } });
+      const { findByText, queryByTestId } = render(wrap(
+        <RoundSummaryScreen navigation={navigation} route={route} />,
+      ));
+      await findByText('Winner: Marcos');
+      expect(queryByTestId('round-focus-card')).toBeNull();
+    });
+
+    test('hidden when the viewer did not play the round', async () => {
+      const { supabase } = require('../../lib/supabase');
+      supabase.auth.getUser.mockResolvedValueOnce({ data: { user: { id: 'u3' } } });
+      await saveFocus('u3', FOCUS);
+      withShots({ p1: details });
+      const { findByText, queryByTestId } = render(wrap(
+        <RoundSummaryScreen navigation={navigation} route={route} />,
+      ));
+      await findByText('Winner: Marcos');
+      expect(queryByTestId('round-focus-card')).toBeNull();
+    });
+
+    test('hidden while the round is live', async () => {
+      await saveFocus('u1', FOCUS);
+      withShots({ p1: details });
+      const fullScores = round0.scores;
+      const half = (m) => Object.fromEntries(Object.entries(m).filter(([h]) => Number(h) <= 9));
+      round0.scores = { p1: half(fullScores.p1), p2: half(fullScores.p2) };
+      store.isTournamentFinished.mockReturnValue(false);
+      try {
+        const { findByText, queryByTestId } = render(wrap(
+          <RoundSummaryScreen navigation={navigation} route={route} />,
+        ));
+        await findByText('LIVE');
+        expect(queryByTestId('round-focus-card')).toBeNull();
+      } finally {
+        round0.scores = fullScores;
+        store.isTournamentFinished.mockReturnValue(true);
+      }
+    });
+
+    test('Open Coach navigates to My Stats on the coach tab', async () => {
+      await saveFocus('u1', FOCUS);
+      withShots({ p1: details });
+      const { findByText } = render(wrap(
+        <RoundSummaryScreen navigation={navigation} route={route} />,
+      ));
+      fireEvent.press(await findByText('Open Coach ›'));
+      expect(navigation.navigate).toHaveBeenCalledWith('MyStats', { tab: 'coach' });
     });
   });
 });

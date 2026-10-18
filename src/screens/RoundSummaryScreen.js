@@ -24,6 +24,7 @@ import useMediaAttachFlow from '../hooks/useMediaAttachFlow';
 import RoundRecapPanel from '../components/roundSummary/RoundRecapPanel';
 import AchievementStrip from '../components/roundSummary/AchievementStrip';
 import RoundSummaryTabs from '../components/roundSummary/RoundSummaryTabs';
+import RoundFocusCard from '../components/roundSummary/RoundFocusCard';
 import PullToRefresh from '../components/PullToRefresh';
 import RoundLeaderboard from '../components/roundSummary/RoundLeaderboard';
 import CommentThread from '../components/CommentThread';
@@ -36,7 +37,10 @@ import { roundEndedAt, roundStartedAt } from '../store/finishStamp';
 import { formatRoundDuration, roundDurationMs } from '../store/roundDuration';
 import { normalizeRoundNotes } from '../store/roundNotes';
 import { buildRoundAchievements } from '../store/roundAchievements';
-import { collectMyRounds } from '../store/personalStats';
+import { collectMyRounds, computeMyStats, resolveSelection } from '../store/personalStats';
+import { loadFocus, roundsSinceCommit, focusVerdict } from '../store/coachFocus';
+import { focusTarget } from '../store/focusTarget';
+import { roundFocusSummary } from '../store/roundFocus';
 import { loadProfile } from '../store/profileStore';
 import { useT } from '../i18n';
 import { ShareableRoundCard, shareRoundSummary } from '../components/ShareableCard';
@@ -85,6 +89,10 @@ export default function RoundSummaryScreen({ navigation, route }) {
   // The viewer's career rounds, loaded lazily for the personal-record half of
   // the highlights strip. null until (and unless) that load runs.
   const [myRounds, setMyRounds] = useState(null);
+  // The committed coach focus and the profile (target handicap, display name)
+  // behind the round's Focus card; both load with the records.
+  const [focus, setFocus] = useState(null);
+  const [profile, setProfile] = useState(null);
   const roundCardRef = useRef();
 
   const load = useCallback(async () => {
@@ -201,6 +209,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
           loadProfile().catch(() => null),
         ]);
         if (cancelled) return;
+        setProfile(profile);
         setMyRounds(collectMyRounds(list, me, profile?.displayName));
       } catch {
         // Best-effort: the round-local half of the strip stands on its own.
@@ -208,6 +217,36 @@ export default function RoundSummaryScreen({ navigation, route }) {
     })();
     return () => { cancelled = true; };
   }, [wantsRecords, myRounds, me]);
+
+  useEffect(() => {
+    if (!wantsRecords || !me) return undefined;
+    let cancelled = false;
+    loadFocus(me).then((f) => { if (!cancelled) setFocus(f); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [wantsRecords, me]);
+
+  const targetHandicap = profile?.targetHandicap ?? 0;
+  const focusCard = useMemo(() => {
+    const target = wantsRecords ? focusTarget(focus) : null;
+    if (!target || !round) return null;
+    let roundStats = null;
+    if (target.kind === 'outcome') {
+      const mine = collectMyRounds([tournament], me, profile?.displayName)
+        .find((r) => r.round?.id === round.id);
+      roundStats = mine ? computeMyStats([mine], { targetHandicap }) : null;
+    }
+    const summary = roundFocusSummary({ focus, target, round, playerId: myPlayerId, roundStats });
+    if (!summary?.touched) return null;
+    let verdict = null;
+    if (myRounds) {
+      const since = roundsSinceCommit(resolveSelection(myRounds), focus);
+      const statsSince = since.judged.length ? computeMyStats(since.judged, { targetHandicap }) : null;
+      verdict = focusVerdict(focus, { targetHandicap }, {
+        stats: statsSince, rounds: since.committed.length, judged: since.judged.length,
+      });
+    }
+    return { target, summary, verdict };
+  }, [wantsRecords, focus, round, tournament, me, profile, myPlayerId, myRounds, targetHandicap]);
 
   const achievements = useMemo(() => {
     if (!tournament || roundIndex < 0 || live) return [];
@@ -298,6 +337,12 @@ export default function RoundSummaryScreen({ navigation, route }) {
                 durationLabel={durationLabel}
               />
               <AchievementStrip items={achievements} />
+              {focusCard ? (
+                <RoundFocusCard
+                  {...focusCard}
+                  onOpenCoach={() => navigation.navigate('MyStats', { tab: 'coach' })}
+                />
+              ) : null}
               <RoundLeaderboard entries={ranked} unit={unit} round={round} live={live} />
               <ScorecardTable
                 round={round}
