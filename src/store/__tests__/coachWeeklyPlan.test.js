@@ -1,4 +1,4 @@
-import { buildWeeklyPlan } from '../coachWeeklyPlan';
+import { buildWeeklyPlan, courseTaskFor } from '../coachWeeklyPlan';
 import { DRILLS } from '../coachDrills';
 
 const TODAY = '2026-10-16';
@@ -141,6 +141,31 @@ describe('allocation', () => {
     }));
     expect(p.courseTask.key).toBe('stats.my.coach.plan.course.tee.side');
     expect(p.courseTask.params.side.lower).toBe(true);
+  });
+
+  const WHY_COURSE = [
+    ['cause:approach:why:swing:start:right', 'approach.why.swing.start', 'right'],
+    ['cause:approach:why:swing:curve:left', 'approach.why.swing.curve', 'left'],
+    ['cause:approach:why:swing:strike:right', 'approach.why.swing.strike', 'right'],
+    ['cause:approach:why:swing:lowPoint', 'approach.why.swing.lowPoint', null],
+    ['cause:approach:why:lie', 'approach.why.lie', null],
+    ['cause:approach:why:decision', 'approach.why.decision', null],
+    ['cause:tee:why:swing:start:left', 'tee.why.swing.start', 'left'],
+    ['cause:tee:why:swing:curve:right', 'tee.why.swing.curve', 'right'],
+    ['cause:tee:why:swing:strike:left', 'tee.why.swing.strike', 'left'],
+    ['cause:tee:why:swing:lowPoint', 'tee.why.swing.lowPoint', null],
+    ['cause:tee:why:lie', 'tee.why.lie', null],
+    ['cause:tee:why:decision', 'tee.why.decision', null],
+    ['cause:short:why:swing:lowPoint', 'short.why.swing.lowPoint', null],
+    ['cause:short:why:lie', 'short.why.lie', null],
+    ['cause:short:why:decision', 'short.why.decision', null],
+  ];
+
+  it.each(WHY_COURSE)('why cause %s has its own course task', (causeId, key, side) => {
+    const t = courseTaskFor({ causeId, category: 'approach', bucket: '100-150' });
+    expect(t.key).toBe(`stats.my.coach.plan.course.${key}`);
+    if (side) expect(t.params.side).toMatchObject({ key: `stats.my.fan.${side}`, lower: true });
+    else expect(t.params).not.toHaveProperty('side');
   });
 
   it('asks for more data when the cause is only possible, or a category is insufficient', () => {

@@ -130,6 +130,14 @@ describe('left-hander mirror', () => {
     expect(link('approach:side:right', [lefty], { profile: { handedness: 'left' } }).state).toBe('linked');
   });
 
+  it('one-sided strike row mirrors for a left-hander only', () => {
+    const lefty = swing({ mainFault: 'early_extension', handedness: 'left' });
+    expect(link('approach:why:swing:strike:left', [lefty], { profile: { handedness: 'left' } }).state).toBe('linked');
+    const righty = swing({ mainFault: 'early_extension' });
+    expect(link('approach:why:swing:strike:right', [righty]).state).toBe('linked');
+    expect(link('approach:why:swing:strike:left', [righty]).state).toBe('swingOnly');
+  });
+
   it('a row without handedness falls back to the profile', () => {
     const s = swing({ mainFault: 'steep_backswing' });
     expect(buildSwingLink({ causes: cause('tee:side:left'), swings: [s], profile: { handedness: 'left' }, today: TODAY }).state).toBe('linked');
@@ -199,5 +207,62 @@ describe('old rows', () => {
     const old = { id: 'o', status: 'ready', club: 'driver', createdAt: daysAgo(3), mainFault: 'over_the_top' };
     expect(link('tee:side:left', [old])).toMatchObject({ state: 'linked', strength: 'consistent', secondSignal: false });
     expect(link('approach:short', [{ ...old, mainFault: 'early_extension', club: undefined }]).state).toBe('linked');
+  });
+});
+
+describe('why causes (miss reasons, spec §5.5)', () => {
+  const ironSwing = (o = {}) => swing({ club: 'iron', ...o });
+
+  it('over the top links the curve-right and start-left why causes (iron on approach, driver off the tee)', () => {
+    expect(link('approach:why:swing:curve:right', [ironSwing()])).toMatchObject({ state: 'linked', fault: 'over_the_top', strength: 'consistent' });
+    expect(link('approach:why:swing:start:left', [ironSwing()]).state).toBe('linked');
+    expect(link('tee:why:swing:curve:right', [swing()]).state).toBe('linked');
+    expect(link('tee:why:swing:curve:right', [ironSwing()]).state).toBe('wrongClub');
+  });
+
+  it('flat backswing links the mirror image', () => {
+    const flat = (o) => ironSwing({ mainFault: 'flat_backswing', ...o });
+    expect(link('approach:why:swing:curve:left', [flat()]).state).toBe('linked');
+    expect(link('approach:why:swing:start:right', [flat()]).state).toBe('linked');
+    expect(link('tee:why:swing:curve:left', [flat({ club: 'driver' })]).state).toBe('linked');
+  });
+
+  it('a left-hander mirrors start:left to start:right', () => {
+    const lefty = ironSwing({ handedness: 'left' });
+    expect(link('approach:why:swing:start:right', [lefty], { profile: { handedness: 'left' } }).state).toBe('linked');
+    expect(link('approach:why:swing:start:left', [lefty], { profile: { handedness: 'left' } }).state).toBe('swingOnly');
+  });
+
+  it('early extension, flip and head sway link the low point causes', () => {
+    expect(link('approach:why:swing:strike:right', [ironSwing({ mainFault: 'early_extension' })]).fault).toBe('early_extension');
+    expect(link('approach:why:swing:lowPoint', [ironSwing({ mainFault: 'early_extension' })]).state).toBe('linked');
+    expect(link('short:why:swing:lowPoint', [ironSwing({ mainFault: 'early_extension' })]).state).toBe('linked');
+    expect(link('approach:why:swing:lowPoint', [ironSwing({ mainFault: 'flip' })]).state).toBe('linked');
+    expect(link('short:why:swing:lowPoint', [ironSwing({ mainFault: 'flip' })]).state).toBe('linked');
+    expect(link('approach:why:swing:lowPoint', [ironSwing({ mainFault: 'head_sway' })]).state).toBe('linked');
+    expect(link('short:why:swing:lowPoint', [ironSwing({ mainFault: 'head_sway' })]).state).toBe('swingOnly');
+  });
+
+  it('sideless ids pass mirrorCauseId unchanged; sided ones mirror', () => {
+    ['approach:why:swing:lowPoint', 'short:why:swing:lowPoint', 'approach:why:lie', 'tee:why:decision']
+      .forEach((id) => expect(mirrorCauseId(id, 'left')).toBe(id));
+    expect(mirrorCauseId('approach:why:swing:start:left', 'left')).toBe('approach:why:swing:start:right');
+  });
+
+  it('a short-game why cause asks for an iron, not a driver', () => {
+    expect(clubOfCause('cause:short:why:swing:lowPoint')).toBe('iron');
+    expect(clubOfCause('approach:why:lie')).toBe('iron');
+    expect(clubOfCause('tee:why:swing:curve:right')).toBe('driver');
+  });
+
+  it('every row of §5.5 is in the table', () => {
+    expect(SWING_FAULT_LINKS.over_the_top.causes).toEqual(expect.arrayContaining([
+      'approach:why:swing:curve:right', 'tee:why:swing:curve:right', 'approach:why:swing:start:left']));
+    expect(SWING_FAULT_LINKS.flat_backswing.causes).toEqual(expect.arrayContaining([
+      'approach:why:swing:curve:left', 'tee:why:swing:curve:left', 'approach:why:swing:start:right']));
+    expect(SWING_FAULT_LINKS.early_extension.causes).toEqual(expect.arrayContaining([
+      'approach:why:swing:strike:right', 'approach:why:swing:lowPoint', 'short:why:swing:lowPoint']));
+    expect(SWING_FAULT_LINKS.flip.causes).toEqual(expect.arrayContaining(['approach:why:swing:lowPoint', 'short:why:swing:lowPoint']));
+    expect(SWING_FAULT_LINKS.head_sway.causes).toContain('approach:why:swing:lowPoint');
   });
 });

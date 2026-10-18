@@ -22,6 +22,10 @@ const ISSUE = 'stats.my.coach.ui.issue.';
 const PAIR = 'stats.my.coach.ui.pair.';
 
 // Every id coachCauses can emit (side causes come in both directions).
+// Why causes (miss reasons): swing subs with their sides, lie, decision.
+const WHY_SWING = ['start', 'curve', 'strike'].flatMap((sub) => ['left', 'right'].map((side) => `swing:${sub}:${side}`));
+const WHY_IDS = (area, reasons) => reasons.map((r) => `cause:${area}:why:${r}`);
+
 export const CAUSE_IDS = [
   'cause:putting:lag',
   'cause:putting:short',
@@ -39,6 +43,9 @@ export const CAUSE_IDS = [
   'cause:short:chip',
   'cause:penalty:tee',
   'cause:penalty:other',
+  ...WHY_IDS('approach', [...WHY_SWING, 'swing:lowPoint', 'lie', 'decision']),
+  ...WHY_IDS('tee', [...WHY_SWING, 'swing:lowPoint', 'lie', 'decision']),
+  ...WHY_IDS('short', ['swing:lowPoint', 'lie', 'decision']),
 ];
 
 export const issueKey = (causeId) => `${ISSUE}${String(causeId).replace(/^cause:/, '').replace(/:/g, '.')}`;
@@ -124,6 +131,9 @@ function fromCause(cause) {
         || single(tee ? 'penaltyTee' : 'penaltyOther', { count: tee ? e.tee : e.other, total: e.total }, fractionOf(tee ? e.tee : e.other, e.total));
     }
     default:
+      if (/^cause:(approach|tee|short):why:/.test(cause.id)) {
+        return single('why', { count: e.count, total: e.tagged }, fractionOf(e.count, e.tagged));
+      }
       return null;
   }
 }
