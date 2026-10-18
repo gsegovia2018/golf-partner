@@ -1304,6 +1304,8 @@ describe('shot-detail edit helpers (ShotDetailPanel handlers, shared with the wa
   const { clearedReasonPatch } = require('../missReasons');
   const noDrive = clearedReasonPatch('drive');
   const noApproach = clearedReasonPatch('approach');
+  // a finish that stops being a miss clears the reasons but keeps the lie (situation)
+  const finishClear = clearedReasonPatch('approach', { keepSituation: true });
   const noShort = clearedReasonPatch('short');
 
   test('drive direction toggles and resets the lie', () => {
@@ -1327,12 +1329,12 @@ describe('shot-detail edit helpers (ShotDetailPanel handlers, shared with the wa
 
   test('approach finish grid rules', () => {
     expect(approachFinishPatch({}, 'green'))
-      .toEqual({ approachResult: 'green', approachMiss: null, approachBunker: false, ...noApproach });
+      .toEqual({ approachResult: 'green', approachMiss: null, approachBunker: false, ...finishClear });
     expect(approachFinishPatch({ approachResult: 'green' }, 'green'))
-      .toEqual({ approachResult: null, approachMiss: null, approachBunker: false, ...noApproach });
+      .toEqual({ approachResult: null, approachMiss: null, approachBunker: false, ...finishClear });
     expect(approachFinishPatch({ approachResult: 'green' }, 'left')).toEqual({ approachMiss: 'left', approachResult: 'miss' });
     expect(approachFinishPatch({ approachMiss: 'left', approachResult: 'miss' }, 'left'))
-      .toEqual({ approachMiss: null, approachResult: null, ...noApproach });
+      .toEqual({ approachMiss: null, approachResult: null, ...finishClear });
     expect(approachFinishPatch({ approachMiss: 'left', approachResult: 'miss' }, 'bunker'))
       .toEqual({ approachBunker: true, approachResult: 'miss' });
   });
@@ -1360,14 +1362,27 @@ describe('shot-detail edit helpers (ShotDetailPanel handlers, shared with the wa
     });
 
     test('approach finish: green and last-signal-gone clear; side and bunker changes keep', () => {
-      expect(approachFinishPatch(miss, 'green')).toMatchObject(noApproach);
-      expect(approachFinishPatch({ approachResult: 'green' }, 'green')).toMatchObject(noApproach);
-      expect(approachFinishPatch(miss, 'left')).toMatchObject(noApproach);
-      expect(approachFinishPatch({ approachBunker: true, approachResult: 'miss' }, 'bunker')).toMatchObject(noApproach);
+      expect(approachFinishPatch(miss, 'green')).toMatchObject(finishClear);
+      expect(approachFinishPatch({ approachResult: 'green' }, 'green')).toMatchObject(finishClear);
+      expect(approachFinishPatch(miss, 'left')).toMatchObject(finishClear);
+      expect(approachFinishPatch({ approachBunker: true, approachResult: 'miss' }, 'bunker')).toMatchObject(finishClear);
       expect(approach(approachFinishPatch(miss, 'right'))).toEqual([]);
       expect(approach(approachFinishPatch(miss, 'bunker'))).toEqual([]);
       expect(approach(approachFinishPatch({ ...miss, approachBunker: true }, 'bunker'))).toEqual([]);
       expect(approach(approachFinishPatch({ approachBunker: true, approachResult: 'miss' }, 'left'))).toEqual([]);
+    });
+
+    test('the lie survives every finish change; only the distance clear drops it', () => {
+      const lie = { ...miss, approachSituation: ['uphill'], approachContact: 'fat' };
+      const green = { approachBucket: '100-150', approachResult: 'green', approachSituation: ['uphill'] };
+      expect(approachFinishPatch(lie, 'green')).not.toHaveProperty('approachSituation');
+      expect(approachFinishPatch(lie, 'green')).toMatchObject({ approachStart: null, approachContact: null });
+      expect(approachFinishPatch(lie, 'left')).not.toHaveProperty('approachSituation');
+      expect(normalizeWatchShotPatch(lie, { approachResult: 'green' }, 4)).not.toHaveProperty('approachSituation');
+      expect(normalizeWatchShotPatch(lie, { approachResult: null }, 4)).not.toHaveProperty('approachSituation');
+      expect(normalizeWatchShotPatch(green, { approachBunker: false }, 4)).not.toHaveProperty('approachSituation');
+      expect(approachBucketPatch(null)).toHaveProperty('approachSituation', null);
+      expect(normalizeWatchShotPatch(lie, { approachBucket: null }, 4)).toHaveProperty('approachSituation', null);
     });
 
     test('approach distance cleared clears the reasons; changed distance keeps them', () => {
@@ -1395,10 +1410,10 @@ describe('shot-detail edit helpers (ShotDetailPanel handlers, shared with the wa
 
     test('watch approach: green, clear-finish, last miss gone and distance cleared clear; side change keeps', () => {
       const green = { approachBucket: '100-150', approachResult: 'green' };
-      expect(normalizeWatchShotPatch(miss, { approachResult: 'green' }, 4)).toMatchObject(noApproach);
-      expect(normalizeWatchShotPatch(miss, { approachResult: null }, 4)).toMatchObject(noApproach);
-      expect(normalizeWatchShotPatch(miss, { approachMiss: null }, 4)).toMatchObject(noApproach);
-      expect(normalizeWatchShotPatch(green, { approachBunker: false }, 4)).toMatchObject(noApproach);
+      expect(normalizeWatchShotPatch(miss, { approachResult: 'green' }, 4)).toMatchObject(finishClear);
+      expect(normalizeWatchShotPatch(miss, { approachResult: null }, 4)).toMatchObject(finishClear);
+      expect(normalizeWatchShotPatch(miss, { approachMiss: null }, 4)).toMatchObject(finishClear);
+      expect(normalizeWatchShotPatch(green, { approachBunker: false }, 4)).toMatchObject(finishClear);
       expect(normalizeWatchShotPatch(miss, { approachBucket: null }, 4)).toMatchObject(noApproach);
       expect(approach(normalizeWatchShotPatch(miss, { approachMiss: 'right' }, 4))).toEqual([]);
       expect(approach(normalizeWatchShotPatch(miss, { approachBunker: true }, 4))).toEqual([]);
@@ -1444,7 +1459,7 @@ describe('shot-detail edit helpers (ShotDetailPanel handlers, shared with the wa
     test('approach: green, miss directions, bunker and clears', () => {
       const withBucket = { approachBucket: '100-150' };
       expect(normalizeWatchShotPatch(withBucket, { approachResult: 'green' }, 4))
-        .toEqual({ approachResult: 'green', approachMiss: null, approachBunker: false, ...noApproach });
+        .toEqual({ approachResult: 'green', approachMiss: null, approachBunker: false, ...finishClear });
       expect(normalizeWatchShotPatch(withBucket, { approachResult: 'miss', approachMiss: 'left' }, 4))
         .toEqual({ approachMiss: 'left', approachBunker: false, approachResult: 'miss' });
       // a miss direction over an on-green finish replaces it (panel: direction clears green)
@@ -1456,12 +1471,12 @@ describe('shot-detail edit helpers (ShotDetailPanel handlers, shared with the wa
       expect(normalizeWatchShotPatch(green, { approachBunker: true }, 4))
         .toEqual({ approachMiss: null, approachBunker: true, approachResult: 'miss' });
       expect(normalizeWatchShotPatch(green, { approachResult: null }, 4))
-        .toEqual({ approachResult: null, approachMiss: null, approachBunker: false, ...noApproach });
+        .toEqual({ approachResult: null, approachMiss: null, approachBunker: false, ...finishClear });
       const miss = { approachBucket: '100-150', approachMiss: 'long', approachResult: 'miss' };
       expect(normalizeWatchShotPatch(miss, { approachBunker: true }, 4))
         .toEqual({ approachMiss: 'long', approachBunker: true, approachResult: 'miss' });
       expect(normalizeWatchShotPatch(miss, { approachMiss: null }, 4))
-        .toEqual({ approachMiss: null, approachBunker: false, approachResult: null, ...noApproach });
+        .toEqual({ approachMiss: null, approachBunker: false, approachResult: null, ...finishClear });
     });
 
     test('approach distance cleared wipes the finish; finish without a distance is ignored; par 3 has no finish row', () => {
