@@ -43,10 +43,10 @@ export function placeHead({
   if (mine) frames.push(mine);
   const order = (f) => (stored.findIndex((x) => x.checkpoint === f.checkpoint) + 1 || 1e9);
   frames.sort((a, b) => order(a) - order(b));
-  return {
-    analysis: live,
-    marks: {
-      ...built, frames, ball: marks?.ball ?? built.ball, pass: marks?.pass ?? built.pass,
-    },
-  };
+  const out = { ...built, frames, ball: marks?.ball ?? built.ball };
+  // marks.json from before the pass has no `pass`: its confirmed positions are the corrected frames. Stamping a
+  // pass on it would flip every stored label to "not confirmed" (phone test: 1 unconfirmed became 2).
+  if (marks && !marks.pass) delete out.pass;
+  else out.pass = marks?.pass ?? built.pass;
+  return { analysis: live, marks: out };
 }

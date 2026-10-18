@@ -21,7 +21,7 @@ const TARGET_R = 20;
  * It draws on a photograph, so the palette is the fixed HUD one.
  */
 export default function StepStill({
-  overlay, placing = false, proposal = null, stepLabel, frame, onSwipe, onPlacePoint, onConfirmProposal, onOpenEdit,
+  overlay, placing = false, proposal = null, toast = null, stepLabel, frame, onSwipe, onPlacePoint, onConfirmProposal, onOpenEdit,
 }) {
   const { width, height, video } = overlay;
   const rect = useMemo(() => fitRect(width, height, video?.width, video?.height), [width, height, video]);
@@ -61,6 +61,7 @@ export default function StepStill({
           </Svg>
         ) : null}
       </SwingOverlay>
+      {toast ? <View style={s.toast} pointerEvents="box-none" testID="step-toast">{toast}</View> : null}
       {placing ? (
         <View style={s.place} pointerEvents="box-none" testID="place-box">
           <View style={s.box}>
@@ -72,7 +73,7 @@ export default function StepStill({
             ) : null}
           </View>
           <View style={[s.box, s.boxGhost]}>
-            <Text style={s.hint} numberOfLines={1}>{R.swipeHint}</Text>
+            <Text style={s.hint}>{R.swipeHint}</Text>
             <PressableScale style={s.link} onPress={onOpenEdit} accessibilityRole="button" accessibilityLabel={R.openEdit} testID="place-open-edit">
               <Text style={s.linkText}>{`${R.openEdit} ›`}</Text>
             </PressableScale>
@@ -85,6 +86,7 @@ export default function StepStill({
 
 const s = StyleSheet.create({
   wrap: { borderRadius: 14, overflow: 'hidden', alignItems: 'center', backgroundColor: '#0a0d10' },
+  toast: { position: 'absolute', left: 8, right: 8, top: 8 },
   place: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 10, gap: 6 },
   box: {
     flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: hud.scrimStrong, borderWidth: 1, borderColor: hud.line, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, minHeight: 44,
@@ -94,6 +96,6 @@ const s = StyleSheet.create({
   hb: { minHeight: 36, borderRadius: 18, paddingHorizontal: 12, justifyContent: 'center', backgroundColor: hud.accent },
   hbText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11.5, color: hud.onAccent },
   hint: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: hud.textSoft },
-  link: { minHeight: 44, justifyContent: 'center' },
+  link: { minHeight: 44, justifyContent: 'center', flexShrink: 0 },
   linkText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11.5, color: hud.accent },
 });

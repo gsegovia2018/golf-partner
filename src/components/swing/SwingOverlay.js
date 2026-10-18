@@ -56,7 +56,7 @@ function PlaneLabel({ p, X, Y, w, text, color }) {
 
 export default function SwingOverlay({
   width, height, video, uri = null, pose = null, club = null, ball = null, reference = null,
-  highlight = [], keyLines = null, keyTone = HIGHLIGHT, showPlanes = true, edit = false, focus = false, tone = DEFAULT_TONE, label, style, children, resizeMethod,
+  highlight = [], keyLines = null, keyTone = HIGHLIGHT, showPlanes = true, edit = false, focus = false, legend = true, tone = DEFAULT_TONE, label, style, children, resizeMethod,
 }) {
   const r = fitRect(width, height, video?.width, video?.height);
   const X = (x) => x * r.w;
@@ -188,7 +188,7 @@ export default function SwingOverlay({
           {!focus && prior ? <Circle cx={prior[0]} cy={prior[1]} r={headR} fill="none" stroke={WHITE} strokeWidth={2} strokeDasharray="3 2" /> : null}
           {!focus && club?.hidden && hands ? <Label x={hands[0] + 22} y={hands[1] + 18} text={SWING_STRINGS.results.clubHidden} /> : null}
         </Svg>
-        {focus ? (
+        {focus && legend ? (
           <View style={styles.legend} pointerEvents="none" testID="overlay-legend">
             <View style={[styles.swatch, { backgroundColor: tone }]} />
             <Text style={styles.legendText}>{SWING_STRINGS.results.fixes.legendYou}</Text>

@@ -18,6 +18,7 @@ import { emptyMarks, frameLabel, withFrame } from '../../swing/labels';
 import { fixesFor, fixCopy } from '../../swing/fixes';
 import { drillsForMain } from '../../swing/drills';
 import { STEPS } from '../../swing/resultsSteps';
+import { markedFromMarks } from '../../swing/markPass';
 import {
   fixtureNative, TRUTH, W, H,
 } from '../../swing/__tests__/helpers';
@@ -465,6 +466,122 @@ describe('SwingResultsScreen: placing the clubhead on the still (design D)', () 
     expect(u.getAllByText('Hidden').length).toBeGreaterThan(0);
     expect(u.queryByLabelText(/^Place clubhead: Vs your takeaway/)).toBeNull();
     expect(u.queryByTestId('place-box')).toBeNull();
+  });
+});
+
+describe('SwingResultsScreen: phone findings (2026-10)', () => {
+  const NOBALL = analyze(fixtureNative({ ballGoneFrame: lab.expected.ballGoneFrame }), base); // no ball: no address plane
+  const doneMarks = { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } };
+
+  test('"starts" is a one-line badge centred on its chip, and Spanish says ORIGEN, not Inicio', async () => {
+    const u = setup();
+    await ready(u);
+    const badge = u.getAllByText(T.markStarts)[0];
+    expect(badge.props.numberOfLines).toBe(1);
+    expect(T.markStarts).toBe('starts');
+    u.unmount();
+    await act(async () => { await setLanguagePref('es'); });
+    try {
+      const es = setup();
+      await ready(es);
+      expect(es.getAllByText('origen')[0].props.numberOfLines).toBe(1);
+      expect(es.queryByText('inicio')).toBeNull();
+      expect(within(es.getByTestId('summary-step-takeaway')).getByText('Inicio')).toBeTruthy(); // the chip name keeps it
+    } finally {
+      await act(async () => { await setLanguagePref('en'); });
+    }
+  });
+
+  test('place mode hides the still\'s legend; outside it the legend is there for a red or yellow row', async () => {
+    const u = setup();
+    await ready(u);
+    expect(u.getByTestId('overlay-legend')).toBeTruthy();
+    u.unmount();
+    const p = setup({ analysis: UNMARKED });
+    await ready(p);
+    expect(p.getByTestId('place-box')).toBeTruthy();
+    expect(p.queryByTestId('overlay-legend')).toBeNull();
+  });
+
+  test('the swipe hint is short and wraps instead of being cut; both languages', async () => {
+    const u = setup({ analysis: UNMARKED });
+    await ready(u);
+    const hint = u.getByText(T.swipeHint);
+    expect(hint.props.numberOfLines).toBeUndefined();
+    expect(T.swipeHint.length).toBeLessThanOrEqual(26);
+    await act(async () => { await setLanguagePref('es'); });
+    try {
+      expect(SWING_STRINGS.results.swipeHint.length).toBeLessThanOrEqual(26);
+    } finally {
+      await act(async () => { await setLanguagePref('en'); });
+    }
+  });
+
+  test('the placed banner is an overlay on the still, not a row far down the page', async () => {
+    const u = setup({ analysis: UNMARKED, marks: doneMarks });
+    await ready(u);
+    await tapStill();
+    const toast = await u.findByTestId('step-toast');
+    expect(within(toast).getByText(T.placed(cpName('shaftDown')))).toBeTruthy();
+    expect(within(toast).getByTestId('results-undo')).toBeTruthy();
+  });
+
+  test('an older swing (marks.json without a pass): placing and Undo keep the unconfirmed count, and Undo restores the marks object', async () => {
+    let legacy = emptyMarks({ swingId: 's1' });
+    ['address', 'leadArm', 'top', 'impact'].forEach((k) => {
+      const c = TRUTH.checkpoints[k];
+      legacy = withFrame(legacy, frameLabel({
+        i: c.frame + 1, iProposed: c.frame, checkpoint: k, hands: { proposed: norm(c.hands), final: norm(c.hands), placed: true }, head: { proposed: null, final: null, finalHidden: true },
+      }));
+    });
+    const row0 = { ...ROW, marked: { state: 'done', count: markedFromMarks(legacy).count } };
+    const u = setup({ row: row0, analysis: UNMARKED, marks: legacy });
+    // the store keeps the row's `marked` in step with marks.json, as saveMarks does
+    store.saveMarks.mockImplementation(async (_id, m) => {
+      store.readMarks.mockResolvedValue(m);
+      store.getSwing.mockReturnValue({ ...row0, marked: { state: 'done', count: markedFromMarks(m).count } });
+    });
+    await ready(u);
+    const unconfirmed = () => u.getByTestId('results-unconfirmed').props.children;
+    const initial = T.unconfirmedChip(7 - markedFromMarks(legacy).count);
+    expect(unconfirmed()).toBe(initial);
+    await tapStill();
+    await u.findByTestId('results-placed');
+    expect(store.saveMarks.mock.calls[0][1].pass).toBeUndefined(); // still an older file
+    const after = unconfirmed();
+    expect(Number(after.match(/\d+/)[0])).toBeLessThanOrEqual(Number(initial.match(/\d+/)[0]));
+    fireEvent.press(u.getByTestId('results-undo'));
+    await waitFor(() => expect(store.saveMarks).toHaveBeenCalledTimes(2));
+    expect(store.saveMarks.mock.calls[1][1]).toBe(legacy);
+    await waitFor(() => expect(unconfirmed()).toBe(initial));
+  });
+
+  test('no ball, no address plane: it opens on the Downswing without place mode and asks for the ball first', async () => {
+    const u = setup({ analysis: NOBALL, marks: doneMarks });
+    await ready(u);
+    expect(posBar(u)).toBe(T.posOf(cpName('shaftDown'), 5, 8));
+    expect(u.queryByTestId('place-box')).toBeNull();
+    expect(u.getByTestId('results-place-line')).toBeTruthy();
+    expect(u.getByLabelText(T.askBall)).toBeTruthy();
+    fireEvent.press(u.getByTestId('results-place-line'));
+    expect(u.navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'address', active: 'ball' });
+  });
+
+  test('rows say which marks they wait for, and a Place button only when one clubhead is all they lack', async () => {
+    const nb = setup({ analysis: NOBALL, marks: doneMarks });
+    await ready(nb);
+    const planeRow = () => within(nb.getByTestId('results-rows')).getByLabelText(new RegExp(`^${labelOf('clubhead_plane_down')}`));
+    expect(planeRow().props.accessibilityLabel).not.toMatch(new RegExp(T.placeClubhead));
+    expect(within(nb.getByTestId('results-rows')).getByText(T.waitingFor(`${T.needHead(cpName('shaftDown'))}, ${T.needBall}`))).toBeTruthy();
+    expect(nb.getByTestId('results-ask-ball')).toBeTruthy();
+    nb.unmount();
+    const wb = setup({ analysis: UNMARKED, marks: doneMarks });
+    await ready(wb);
+    const rows = within(wb.getByTestId('results-rows'));
+    expect(rows.getByLabelText(new RegExp(`^${T.placeClubhead}: ${labelOf('clubhead_plane_down')}`))).toBeTruthy(); // one clubhead unlocks it
+    expect(rows.queryByLabelText(new RegExp(`^${T.placeClubhead}: ${labelOf('down_vs_takeaway')}`))).toBeNull(); // it needs two
+    expect(rows.getByText(T.waitingFor(`${T.needHead(cpName('takeaway'))}, ${T.needHead(cpName('shaftDown'))}`))).toBeTruthy();
+    expect(wb.queryByTestId('results-ask-ball')).toBeNull();
   });
 });
 

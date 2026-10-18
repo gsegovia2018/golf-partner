@@ -235,7 +235,7 @@ export function SwingMarkCanvas({
   const [step, setStep] = useState(() => stepFor(firstCp, startDraft.status));
   const [view, setView] = useState(startDraft.cps[firstCp].frame); // step 1's cursor; the frozen frame in step 2
   // a deep link from Results ("Open in Edit marks" at an unplaced clubhead) opens with the Clubhead active
-  const [active, setActive] = useState(() => (!pass && initialActive === 'head' ? 'head' : 'hands'));
+  const [active, setActive] = useState(() => (!pass && (initialActive === 'head' || initialActive === 'ball') ? initialActive : 'hands'));
   const [toast, setToast] = useState('');
   const [cueOpen, setCueOpen] = useState(false);
   const [dialog, setDialog] = useState(null); // { then(draft) } while the discard sheet is up

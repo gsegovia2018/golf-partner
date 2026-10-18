@@ -408,7 +408,7 @@ export default {
   'swing.results.tapWhere': 'Tap where the clubhead is',
   'swing.results.tapWhereA11y': 'Tap where the clubhead is at {name}, frame {frame}',
   'swing.results.confirmDot': 'Confirm the dot',
-  'swing.results.swipeHint': '‹ swipe › to change position',
+  'swing.results.swipeHint': '‹ swipe › positions',
   'swing.results.openEdit': 'Open in Edit marks',
   'swing.results.placed': 'Clubhead placed · {name} re-read',
   'swing.results.mainChanged': 'Main fault changed: {fault}',
@@ -419,4 +419,9 @@ export default {
   'swing.results.noFaultSoFar': 'No fault so far',
   'swing.results.noFaultPlace': 'No fault so far — place the clubhead to finish',
   'swing.results.nothingMeasured': 'Nothing measured yet',
+  'swing.results.askBall': 'Mark the ball at Address: the plane rows are measured from it',
+  'swing.results.markBall': 'Mark ball',
+  'swing.results.needBall': 'the ball at Address',
+  'swing.results.needHead': 'the clubhead at {name}',
+  'swing.results.waitingFor': 'Waiting for {list}',
 };
