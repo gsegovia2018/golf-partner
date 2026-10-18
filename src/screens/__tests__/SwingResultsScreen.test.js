@@ -268,7 +268,7 @@ describe('SwingResultsScreen: a stored swing', () => {
     const { findByText, getByTestId } = setup();
     await findByText(VERDICT);
     expect(MARKED.main.consequences).toContain('early_extension');
-    expect(getByTestId('results-also-causing').props.children).toBe('Likely also causing: flat backswing, top position and 3 more');
+    expect(getByTestId('results-also-causing').props.children).toBe('Likely also causing: rushed tempo, over the top and 1 more');
   });
 
   test('D24: the practice card under the drills opens, remembers, and slots the main drill into Block', async () => {
@@ -278,7 +278,7 @@ describe('SwingResultsScreen: a stored swing', () => {
     fireEvent.press(getByLabelText(T.practice.show));
     expect(store.setPracticeOpen).toHaveBeenCalledWith(true);
     T.practice.blocks.forEach((b) => expect(getByText(b.name)).toBeTruthy());
-    expect(getByText(T.practice.drillIn('Let the arms hang'))).toBeTruthy();
+    expect(getByText(T.practice.drillIn('Pane of glass (Hogan\'s image)'))).toBeTruthy();
     fireEvent.press(getByLabelText(T.practice.hide));
     expect(store.setPracticeOpen).toHaveBeenLastCalledWith(false);
   });
@@ -357,7 +357,7 @@ describe('SwingResultsScreen: a stored swing', () => {
     const { findByText, getByLabelText, getByPlaceholderText, navigation } = setup();
     await findByText(VERDICT);
     fireEvent.press(getByLabelText(T.editMarks));
-    expect(navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'address' }); // the screen opens on the main fault
+    expect(navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'top' }); // the screen opens on the main fault
     fireEvent.press(getByLabelText(T.menu));
     fireEvent.press(getByLabelText(T.rename));
     fireEvent.changeText(getByPlaceholderText(T.renamePlaceholder), 'Range · 7-iron');
@@ -386,8 +386,8 @@ describe('SwingResultsScreen: a stored swing', () => {
     await waitFor(() => expect(ensureStills).toHaveBeenCalled());
     const first = MARKED.checkpoints.impact.i; // the first paint, before the screen moves to the main fault
     expect(ensureStills).toHaveBeenCalledWith('s1', [first - 2, first - 1, first, first + 1, first + 2]);
-    const frame = MARKED.checkpoints.address.i;
-    await waitFor(() => expect(getByLabelText(new RegExp(`^Address still, frame ${frame}`)).props.source).toEqual({ uri: 'file:///doc/swings/s1/frames/556.jpg' }));
+    const frame = MARKED.checkpoints.top.i;
+    await waitFor(() => expect(getByLabelText(new RegExp(`^Top still, frame ${frame}`)).props.source).toEqual({ uri: 'file:///doc/swings/s1/frames/556.jpg' }));
   });
 
   test('reloads the analysis when it comes back into focus (after Edit marks)', async () => {

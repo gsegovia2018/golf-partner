@@ -49,10 +49,10 @@ describe('analyze: the whole pipeline on the fixture', () => {
     expect(a.clubMarks.top.priorHead).toBeUndefined();
   });
 
-  test('main fault (D21): the setup is the earliest significant fault; early extension is a consequence', () => {
-    expect(a.main.fault).toBe('posture');
+  test('main fault (D21): the top is the earliest significant fault (the address is good); early extension is a consequence', () => {
+    expect(a.main.fault).toBe('top_position');
     expect(a.main.evidence.length).toBeGreaterThanOrEqual(2);
-    expect(a.main.drills[0]).toBe('su-brazos'); // D24: the drill for the first evidence check leads
+    expect(a.main.drills[0]).toBe('pl-vidrio'); // D24: the drill for the first evidence check leads
     expect(a.main.consequences).toEqual(expect.arrayContaining(['over_the_top', 'early_extension']));
   });
 });
@@ -60,10 +60,10 @@ describe('analyze: the whole pipeline on the fixture', () => {
 describe('analyze with the owner marks as user marks (golden)', () => {
   const a = analyze(native(), { pass2, marks: ownerMarks(), heightCm: 176 });
 
-  test('every club check has a verdict; setup leads and the early-extension story follows (D21)', () => {
+  test('every club check has a verdict; the top leads and the early-extension story follows (D21)', () => {
     // The owner marked the clubhead hidden at shaft down and has not placed one at shaft through (D23).
     expect(a.checks.filter((c) => c.status === 'unknown').map((c) => c.id)).toEqual(['shaft_down_shallow', 'shaft_through_steep']);
-    expect(a.main.fault).toBe('posture');
+    expect(a.main.fault).toBe('top_position');
     expect(a.main.consequences).toContain('early_extension');
     expect(a.clubMarks.impact.source).toBe('user');
     expect(byId(a, 'hands_out_impact').status).toBe('red');
