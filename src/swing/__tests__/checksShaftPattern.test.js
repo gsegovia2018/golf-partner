@@ -1,6 +1,6 @@
-// D23: steep -> shallow -> steep. The shaft line (grip -> clubhead) extended to ball height,
-// read against the ball and the toes at P6 (shaftDown) and P8 (shaftThrough). Synthetic, 1 px = 1 cm:
-// ball at x 300 (height 200), toes at x 200; the golfer stands on the -x side.
+// The shaft line at the ball (D23, checks v2): the shaft (grip -> clubhead) extended to ball
+// height, read against the ball and the toes halfway back (P3) and in the follow-through (P9).
+// Synthetic, 1 px = 1 cm: ball at x 300 (height 200), toes at x 200; the golfer stands on the -x side.
 import { runChecks } from '../checks';
 import { mainFault } from '../priority';
 import { checksAt } from '../checkpointChecks';
@@ -21,52 +21,38 @@ const run = (cps) => runChecks({
 }).checks;
 const one = (checks, id) => checks.find((c) => c.id === id);
 
-describe('shaft_down_shallow at P6', () => {
-  const read = (landX) => one(run({ shaftDown: shaft(10, landX) }), 'shaft_down_shallow');
-  test('beyond the ball = shallow (green); toes to ball = yellow; inside the toes = steep (red)', () => {
-    expect(read(320)).toMatchObject({ status: 'green', value: 20, dir: 'shallow' });
-    expect(read(250)).toMatchObject({ status: 'yellow', value: -50, dir: 'steep' });
-    expect(read(170)).toMatchObject({ status: 'red', dir: 'steep' });
-    expect(read(170).text).toMatch(/over the top/);
-    expect(read(170).phase).toBe('transition');
+describe('halfway back (P3): the shaft points at the ball', () => {
+  const lead = (landX) => one(run({ leadArm: shaft(5, landX) }), 'butt_extension');
+  test('green just inside the ball; beyond = flat, inside the toes = steep', () => {
+    expect(lead(280)).toMatchObject({ status: 'green', label: 'Shaft points at the ball', position: 'leadArm', fault: null });
+    expect(lead(280).text).toMatch(/steep enough/);
+    expect(lead(330)).toMatchObject({ status: 'red', dir: 'flat', fault: 'flat_backswing' });
+    expect(lead(330).text).toMatch(/shallow going back/);
+    expect(lead(180)).toMatchObject({ status: 'red', dir: 'steep', fault: 'steep_backswing' });
   });
-  test('a steep P6 feeds over the top', () => {
-    expect(mainFault([read(170)]).fault).toBe('over_the_top');
+  test('a red flat P3 is a flat backswing', () => {
+    expect(mainFault([lead(330)]).fault).toBe('flat_backswing');
   });
 });
 
-describe('shaft_through_steep at P8', () => {
-  const read = (landX) => one(run({ shaftThrough: shaft(20, landX) }), 'shaft_through_steep');
-  test('between the toes and the ball, or inside, = green; beyond the ball yellow up to 15 cm, then red (flip)', () => {
-    expect(read(260)).toMatchObject({ status: 'green', dir: 'steep' });
-    expect(read(190).status).toBe('green');
-    expect(read(310)).toMatchObject({ status: 'yellow', value: 10, dir: 'flat' });
-    expect(read(330)).toMatchObject({ status: 'red', dir: 'flat' });
-    expect(read(330).text).toMatch(/flip/);
-  });
-  test('a red flat P8 is the flip fault', () => {
-    expect(mainFault([read(330)]).fault).toBe('flip');
+describe('follow-through (P9): the same reading after impact', () => {
+  const through = (landX) => one(run({ trailArm: shaft(20, landX) }), 'shaft_through_ball');
+  test('a red beyond P9 is the flip; a red inside P9 is over the top', () => {
+    expect(through(330).text).toMatch(/flip/);
+    expect(mainFault([through(330)]).fault).toBe('flip');
+    expect(mainFault([through(170)]).fault).toBe('over_the_top');
   });
 });
 
 describe('both need the clubhead (D16)', () => {
-  test('unplaced -> unknown with the place-clubhead reason; hidden -> hidden', () => {
-    const checks = run({ shaftDown: shaft(10, 320, { head: null, source: 'prior' }), shaftThrough: shaft(20, 260, { head: null, hidden: true }) });
-    expect(one(checks, 'shaft_down_shallow')).toMatchObject({ status: 'unknown', reason: 'unplaced', cps: ['shaftDown'] });
-    expect(one(checks, 'shaft_through_steep')).toMatchObject({ status: 'unknown', reason: 'hidden' });
+  test('unplaced -> unknown with the tap-to-place reason; hidden -> hidden', () => {
+    const checks = run({ leadArm: shaft(5, 320, { head: null, source: 'prior' }), trailArm: shaft(20, 260, { head: null, hidden: true }) });
+    expect(one(checks, 'butt_extension')).toMatchObject({ status: 'unknown', reason: 'unplaced', cps: ['leadArm'] });
+    expect(one(checks, 'shaft_through_ball')).toMatchObject({ status: 'unknown', reason: 'hidden' });
   });
-  test('they live at their checkpoints', () => {
-    const checks = run({ shaftDown: shaft(10, 320), shaftThrough: shaft(20, 260) });
-    expect(checksAt(checks, 'shaftDown').map((c) => c.id)).toContain('shaft_down_shallow');
-    expect(checksAt(checks, 'shaftThrough').map((c) => c.id)).toEqual(['shaft_through_steep']);
-  });
-});
-
-describe('halfway back reads in the same words', () => {
-  test('green is "steep enough", beyond the ball is shallow', () => {
-    const lead = (landX) => one(run({ leadArm: shaft(5, landX) }), 'butt_extension');
-    expect(lead(280)).toMatchObject({ status: 'green', label: 'Halfway back: steep' });
-    expect(lead(280).text).toMatch(/steep enough/);
-    expect(lead(330).text).toMatch(/shallow going back/);
+  test('they live at their positions', () => {
+    const checks = run({ leadArm: shaft(5, 320), trailArm: shaft(20, 260) });
+    expect(checksAt(checks, 'leadArm').map((c) => c.id)).toContain('butt_extension');
+    expect(checksAt(checks, 'trailArm').map((c) => c.id)).toEqual(['shaft_through_ball', 'through_vs_halfway']);
   });
 });

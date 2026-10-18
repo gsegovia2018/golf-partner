@@ -1,76 +1,82 @@
-// The one main fault (plan 5.5, D21): the earliest fault in the swing, not the loudest.
+// The one main fault (swing checks v2, spec §6): importance first, then how bad.
 //
-// A fault is a cluster of checks with a swing phase and a weight. A fault is *significant*
-// when its cluster has a red check or two agreeing signals (a single yellow is a "watch",
-// never the thing to work on). The main fault is the significant fault of the EARLIEST
-// phase (setup -> backswing -> transition / downswing -> impact -> finish): a setup or
-// backswing fault usually causes what shows up later, so fixing it first is what moves the
-// swing. Within one phase the weighted score decides: weight x (red 1, yellow 0.5) summed
-// over the cluster, x (1 + 0.25 x (agreeing signals - 1)); a tie goes to the order of
-// FAULTS. The significant faults of later phases are returned as `consequences`: what the
-// main fault is likely also causing. With no significant fault there is no main fault (the
-// weighted score never promotes a lone yellow either). across_the_line / laid_off
-// (top_direction) are not clusters: never main on their own.
+// Every measured row names its fault (checks.js). A position's status is its worst measured row;
+// extras never colour a position. The main fault is the red row of the most important tier
+// (1 = address, downswing, impact; 2 = halfway back, top; 3 = takeaway, follow-through, extras),
+// the most severe within the tier (how far past its yellow limit, in yellow bands); with no red
+// row the same over the yellow rows; with neither there is no main fault. An earlier position
+// with a red row is where the fault likely starts (`startsAt`); the red positions after it are
+// what it is likely also causing (`consequences`, as fault ids). This replaces D21's earliest
+// fault first: one noisy early reading no longer decides the swing.
 
 import { drillsForMain } from './drills';
 import { SWING_STRINGS as T } from './strings';
+import { POSITIONS, TIER, EXTRA_TIER } from './checkpointChecks';
 
-const isDir = (c, ids, dir) => ids.includes(c.id) && c.dir === dir;
-
-export const PHASES = ['setup', 'backswing', 'transition', 'impact', 'finish'];
-
+/** Every fault id a row can name (each has a label, copy and drills). */
 export const FAULTS = [
-  {
-    id: 'posture', phase: 'setup', weight: 0.7,
-    pick: (c) => ['posture_address', 'hands_under_shoulders', 'waist_bend', 'back_line', 'hand_gap'].includes(c.id),
-  },
-  { id: 'steep_backswing', phase: 'backswing', weight: 0.8, pick: (c) => isDir(c, ['hands_between_planes', 'butt_extension'], 'steep') },
-  { id: 'flat_backswing', phase: 'backswing', weight: 0.8, pick: (c) => isDir(c, ['hands_between_planes', 'butt_extension'], 'flat') },
-  { id: 'top_position', phase: 'backswing', weight: 0.8, pick: (c) => c.id === 'hands_over_heels' || c.id === 'lead_arm_shoulder_plane' },
-  { id: 'tempo_fast', phase: 'transition', weight: 0.6, pick: (c) => isDir(c, ['tempo'], 'fast') },
-  { id: 'tempo_slow', phase: 'transition', weight: 0.6, pick: (c) => isDir(c, ['tempo'], 'slow') },
-  {
-    id: 'over_the_top', phase: 'transition', weight: 0.95,
-    pick: (c) => c.id === 'downswing_path' || isDir(c, ['clubhead_vs_plane', 'shaft_down_shallow'], 'steep'),
-  },
-  { id: 'early_extension', phase: 'impact', weight: 1.0, pick: (c) => c.cluster === 'early_extension' },
-  { id: 'head_sway', phase: 'impact', weight: 0.7, pick: (c) => c.id === 'head_drift' },
-  { id: 'flip', phase: 'impact', weight: 0.6, pick: (c) => isDir(c, ['shaft_through_steep'], 'flat') },
-  { id: 'balance', phase: 'finish', weight: 0.5, pick: (c) => c.id === 'finish_balance' },
+  'posture', 'posture_loss', 'steep_backswing', 'flat_backswing', 'top_position', 'over_the_top', 'stuck',
+  'early_extension', 'flip', 'head_sway', 'tempo_fast', 'tempo_slow', 'balance',
 ];
 
-const round2 = (v) => Math.round(v * 100) / 100;
+const RANK = { red: 0, yellow: 1 };
+export const tierOf = (row) => (row.extra ? EXTRA_TIER : TIER[row.position] ?? EXTRA_TIER);
+const orderOf = (row) => (row.extra ? POSITIONS.length : POSITIONS.indexOf(row.position));
 
-/** Every significant fault with its score, in FAULTS order. */
-export function significantFaults(checks) {
-  const out = [];
-  FAULTS.forEach((f) => {
-    const ev = checks.filter((c) => (c.status === 'red' || c.status === 'yellow') && f.pick(c));
-    if (!ev.length) return;
-    if (ev.length < 2 && ev[0].status !== 'red') return;
-    const sum = ev.reduce((s, c) => s + (c.status === 'red' ? 1 : 0.5), 0);
-    out.push({ fault: f, evidence: ev, score: f.weight * sum * (1 + 0.25 * (ev.length - 1)) });
-  });
-  return out;
+/**
+ * The red and yellow rows that name a fault, most important first: red before yellow, then tier,
+ * then severity (highest first), then swing order; a full tie keeps the analysis order.
+ */
+export function rankedRows(checks) {
+  return checks
+    .map((c, n) => ({ c, n }))
+    .filter(({ c }) => c.status in RANK && c.fault)
+    .sort((a, b) => RANK[a.c.status] - RANK[b.c.status]
+      || tierOf(a.c) - tierOf(b.c)
+      || (b.c.severity ?? 0) - (a.c.severity ?? 0)
+      || orderOf(a.c) - orderOf(b.c)
+      || a.n - b.n)
+    .map(({ c }) => c);
+}
+
+/** { address: 'red' | 'yellow' | 'green' | 'unknown', ... } over the seven positions (extras excluded). */
+export function positionStatuses(checks) {
+  return Object.fromEntries(POSITIONS.map((k) => {
+    const at = checks.filter((c) => !c.extra && c.position === k && c.status !== 'unknown');
+    const s = !at.length ? 'unknown'
+      : at.some((c) => c.status === 'red') ? 'red' : at.some((c) => c.status === 'yellow') ? 'yellow' : 'green';
+    return [k, s];
+  }));
 }
 
 /**
  * @param {object[]} checks  rows from runChecks
- * @returns {{fault: string, label: string, phase: string, score: number, evidence: object[],
- *   drills: string[], consequences: string[]} | null}
+ * @returns {{fault: string, label: string, position: string|null, phase: string, tier: number,
+ *   severity: number, startsAt: string|null, evidence: object[], consequences: string[], drills: string[]} | null}
+ *   `position` is null for an extra; `phase` repeats the position ('extras' for an extra) for older readers.
  */
 export function mainFault(checks) {
-  const sig = significantFaults(checks);
-  if (!sig.length) return null;
-  const rank = (x) => PHASES.indexOf(x.fault.phase);
-  const best = sig.reduce((b, x) => (rank(x) < rank(b) || (rank(x) === rank(b) && x.score > b.score + 1e-9) ? x : b));
+  const ranked = rankedRows(checks);
+  if (!ranked.length) return null;
+  const top = ranked[0];
+  const status = positionStatuses(checks);
+  const position = top.extra ? null : top.position;
+  const idx = orderOf(top);
+  const worstRed = (k) => rankedRows(checks.filter((c) => !c.extra && c.position === k && c.status === 'red'))[0];
+  const evidence = ranked.filter((c) => c.fault === top.fault);
   return {
-    fault: best.fault.id,
-    label: T.fault[best.fault.id],
-    phase: best.fault.phase,
-    score: round2(best.score),
-    evidence: best.evidence,
-    drills: drillsForMain({ fault: best.fault.id, evidence: best.evidence }).map((d) => d.id),
-    consequences: sig.filter((x) => rank(x) > rank(best)).map((x) => x.fault.id),
+    fault: top.fault,
+    label: T.fault[top.fault],
+    position,
+    phase: position ?? 'extras',
+    tier: tierOf(top),
+    severity: top.severity ?? 0,
+    startsAt: POSITIONS.slice(0, idx).find((k) => status[k] === 'red') ?? null,
+    evidence,
+    drills: drillsForMain({ fault: top.fault, evidence }).map((d) => d.id),
+    consequences: [...new Set(POSITIONS.slice(idx + 1)
+      .filter((k) => status[k] === 'red')
+      .map((k) => worstRed(k)?.fault)
+      .filter((f) => f && f !== top.fault))],
   };
 }

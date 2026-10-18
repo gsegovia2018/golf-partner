@@ -95,7 +95,6 @@ export function keyLinesAt(cp, ctx) {
   switch (cp) {
     case 'address': return { shaft: true, shoulder: true, extra: [] };
     case 'takeaway':
-    case 'transition':
     case 'impact': return { ...none, shaft: true };
     case 'leadArm': return { shaft: true, shoulder: true, extra: down('leadArm') };
     case 'top': {
@@ -105,7 +104,7 @@ export function keyLinesAt(cp, ctx) {
       return { ...none, shoulder: true, extra: sh && wr ? [{ t: 'line', a: sh, b: wr }] : [] };
     }
     case 'shaftDown': return { ...none, shaft: true, extra: down('shaftDown') };
-    case 'shaftThrough': return { ...none, extra: down('shaftThrough') };
+    case 'trailArm': return { ...none, extra: down('trailArm') };
     default: return none;
   }
 }
@@ -130,23 +129,24 @@ export function highlightFor(check, ctx) {
   const trailHip = analysis.handedness === 'left' ? LM.lHip : LM.rHip;
   const leadAnkle = analysis.handedness === 'left' ? LM.rAnk : LM.lAnk;
   const left = analysis.handedness === 'left';
-  const [leadHip, leadKnee, leadSh, leadWr, trailHeel] = left
-    ? [LM.rHip, LM.rKnee, LM.rSh, LM.rWr, LM.lHeel]
-    : [LM.lHip, LM.lKnee, LM.lSh, LM.lWr, LM.rHeel];
-  const { hands, head, shaftPlane, shoulderPlane, ground, landing } = toolkit(ctx);
+  const [leadSh, leadWr, trailHeel, trailKnee, trailAnkle] = left
+    ? [LM.rSh, LM.rWr, LM.lHeel, LM.lKnee, LM.lAnk]
+    : [LM.lSh, LM.lWr, LM.rHeel, LM.rKnee, LM.rAnk];
+  const { hands, head, shaftPlane, ground, landing } = toolkit(ctx);
   const text = (at, t) => (ok(at) && t ? [{ t: 'label', at: [at[0] + 0.03, at[1]], text: t }] : []);
   const out = [];
 
   switch (check.id) {
     case 'posture_address':
-    case 'spine_loss': {
-      const cp = check.id === 'posture_address' ? 'address' : 'impact';
+    case 'spine_loss':
+    case 'spine_hold': {
+      const cp = check.id === 'posture_address' ? 'address' : check.id === 'spine_hold' ? check.cp : 'impact';
       const hip = midLm(cp, LM.lHip, LM.rHip);
       const sh = midLm(cp, LM.lSh, LM.rSh);
       if (!hip || !sh) return [];
       out.push({ t: 'line', a: hip, b: [hip[0], Math.max(0, hip[1] - 0.3)], dash: true, role: 'target' });
       out.push({ t: 'line', a: hip, b: sh });
-      if (cp === 'impact') {
+      if (cp !== 'address') {
         const ah = midLm('address', LM.lHip, LM.rHip);
         const as = midLm('address', LM.lSh, LM.rSh);
         if (ah && as) out.push({ t: 'line', a: hip, b: [hip[0] + as[0] - ah[0], hip[1] + as[1] - ah[1]], dash: true, role: 'target' });
@@ -163,11 +163,20 @@ export function highlightFor(check, ctx) {
         ...text(g, signed(check)),
       ];
     }
-    case 'waist_bend': {
-      const sh = midLm('address', LM.lSh, LM.rSh);
+    case 'knee_flex':
+    case 'knee_hold': {
+      const cp = check.id === 'knee_flex' ? 'address' : check.cp;
+      const hip = lm(cp, trailHip);
+      const knee = lm(cp, trailKnee);
+      const ank = lm(cp, trailAnkle);
+      return hip && knee && ank ? [{ t: 'poly', pts: [hip, knee, ank] }, ...text(knee, check.id === 'knee_hold' ? signed(check) : valueText(check))] : [];
+    }
+    case 'shaft_plane': {
+      const g = hands('address');
+      const c = head('address');
       const hip = midLm('address', LM.lHip, LM.rHip);
-      const knee = midLm('address', LM.lKnee, LM.rKnee);
-      return sh && hip && knee ? [{ t: 'poly', pts: [sh, hip, knee] }, ...text(hip, valueText(check))] : [];
+      if (!g || !c) return [];
+      return [{ t: 'line', a: c, b: extendToEdge(c, g) }, ...(hip ? [{ t: 'dot', c: hip, role: 'target' }] : []), ...text(g, signed(check))];
     }
     case 'back_line': {
       const ear = midLm('address', LM.lEar, LM.rEar);
@@ -177,27 +186,19 @@ export function highlightFor(check, ctx) {
       const ext = [sh[0] + (sh[0] - hip[0]) * 0.6, sh[1] + (sh[1] - hip[1]) * 0.6];
       return [{ t: 'line', a: sh, b: ext, dash: true, role: 'target' }, { t: 'poly', pts: [hip, sh, ear] }, ...text(ear, valueText(check))];
     }
-    case 'hand_gap': {
-      const hip = lm('address', leadHip);
-      const knee = lm('address', leadKnee);
-      const g = hands('address');
-      if (!hip || !knee || !g || knee[1] === hip[1]) return [];
-      const x = hip[0] + ((knee[0] - hip[0]) * (g[1] - hip[1])) / (knee[1] - hip[1]);
-      return [{ t: 'line', a: hip, b: [x, g[1]], dash: true, role: 'target' }, { t: 'line', a: [x, g[1]], b: g }, ...text(g, valueText(check))];
-    }
     case 'hands_over_heels': {
       const heel = lm('top', trailHeel);
       const g = hands('top');
       if (!heel || !g) return [];
       return [{ t: 'line', a: heel, b: [heel[0], g[1]], dash: true, role: 'target' }, { t: 'rect', c: g, half: 0.018 }, ...text(g, signed(check))];
     }
-    case 'lead_arm_shoulder_plane': {
-      const ball = analysis.reference?.ball;
-      const ts = analysis.reference?.trailShoulder;
-      const sh = lm('top', leadSh);
+    case 'lead_arm_spine': {
+      const hip = midLm('top', LM.lHip, LM.rHip);
+      const sh = midLm('top', LM.lSh, LM.rSh);
+      const ls = lm('top', leadSh);
       const wr = lm('top', leadWr);
-      if (!ball || !ts || !sh || !wr) return [];
-      return [{ t: 'line', a: ball, b: ts, dash: true, role: 'target' }, { t: 'line', a: sh, b: wr }, ...text(wr, signed(check))];
+      if (!hip || !sh || !ls || !wr) return [];
+      return [{ t: 'line', a: hip, b: sh, dash: true, role: 'target' }, { t: 'line', a: ls, b: wr }, ...text(wr, signed(check))];
     }
     case 'hands_height_impact': {
       const a = hands('address');
@@ -243,39 +244,32 @@ export function highlightFor(check, ctx) {
         ...text([ih[0] - 0.3, ih[1] + 0.06], `${signed(check)} vs address`),
       ];
     }
-    case 'clubhead_vs_plane': {
-      const h = head(check.cp);
+    case 'clubhead_plane_takeaway':
+    case 'clubhead_plane_down': {
+      const h = head(check.position);
       const plane = shaftPlane();
       return h ? [...(plane ? [plane] : []), { t: 'circle', c: h, r: 0.03 }, ...text(h, signed(check))] : [];
     }
+    case 'down_vs_takeaway': {
+      const back = head('takeaway');
+      const h = head('shaftDown');
+      const plane = shaftPlane();
+      if (!back || !h) return plane ? [plane] : [];
+      return [...(plane ? [plane] : []), { t: 'circle', c: back, r: 0.03, dash: true, role: 'target' }, { t: 'circle', c: h, r: 0.03 }, ...text(h, signed(check))];
+    }
     case 'butt_extension':
-    case 'shaft_down_shallow':
-    case 'shaft_through_steep': {
-      const k = homeOf(check);
-      const mine = landing(k);
-      const plane = check.id === 'shaft_down_shallow' ? shaftPlane() : null;
+    case 'shaft_through_ball': {
+      const mine = landing(check.position);
       // without a clubhead there is no shaft line, but the references still draw
       const value = mine.length ? text([mine[1].c[0], mine[1].c[1] - 0.03], signed(check)) : [];
-      return [...mine, ...value, ...(plane ? [plane] : []), ...ground()];
+      return [...mine, ...value, ...ground()];
     }
-    case 'top_direction': {
-      const h = hands('top');
-      const c = head('top');
-      if (!h || !c) return [];
-      return [{ t: 'line', a: h, b: c }, { t: 'line', a: h, b: [h[0], h[1] + (c[1] < h[1] ? -1 : 1) * Math.hypot(c[0] - h[0], c[1] - h[1])], dash: true, role: 'target' }, ...text(h, check.dir === 'across' ? 'crossed' : check.dir === 'laid_off' ? 'laid off' : 'on line')];
-    }
-    case 'downswing_path': {
-      const pts = ['address', 'takeaway', 'leadArm', 'top'].map(hands).filter(Boolean);
-      const sd = hands('shaftDown');
-      return pts.length > 1 ? [{ t: 'poly', pts, dash: true, role: 'target' }, ...(sd ? [{ t: 'rect', c: sd, half: 0.018 }, ...text(sd, signed(check))] : [])] : [];
-    }
-    case 'hands_between_planes': {
-      const planes = [shaftPlane(), shoulderPlane()].filter(Boolean);
-      if (planes.length < 2) return [];
-      const k = ctx.cp === 'leadArm' || ctx.cp === 'top' ? ctx.cp : check.at ?? 'leadArm';
-      const g = hands(k);
-      // the value belongs to the position it was read at; elsewhere only the hands are marked
-      return g ? [...planes, { t: 'rect', c: g, half: 0.018 }, ...(!check.at || check.at === k ? text(g, valueText(check)) : [])] : planes;
+    case 'through_vs_halfway': {
+      const back = landing('leadArm');
+      const mine = landing('trailArm');
+      const target = back.length ? [{ t: 'dot', c: back[1].c, role: 'target' }] : [];
+      const value = mine.length ? text([mine[1].c[0], mine[1].c[1] - 0.03], signed(check)) : [];
+      return [...mine, ...target, ...value, ...ground()];
     }
     case 'finish_balance': {
       const a = lm('finish', leadAnkle);

@@ -25,20 +25,23 @@ const save = (c, draft, passState) => draftToMarks({
   draft, base: c.base, live: recompute({ ...c, draft }), swingId: 's1', editedAt: 'now', passState,
 });
 
-describe('the six marked positions (D25)', () => {
-  test('P1, P3, P4, P6, P7, P8 are marked in swing order; P2, P5, P9 and P10 stay automatic', () => {
-    expect(MARKED_KEYS).toEqual(['address', 'leadArm', 'top', 'shaftDown', 'impact', 'shaftThrough']);
-    expect(AUTO_KEYS).toEqual(['takeaway', 'transition', 'trailArm', 'finish']);
-    expect([...MARKED_KEYS, ...AUTO_KEYS].sort()).toEqual([...CHECKPOINT_KEYS].sort()); // the analysis keeps all ten
+describe('the seven marked positions (checks v2)', () => {
+  test('P1, P2, P3, P4, P6, P7, P9 are marked in swing order; P10 stays automatic; P5 and P8 are not marked', () => {
+    expect(MARKED_KEYS).toEqual(['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm']);
+    expect(AUTO_KEYS).toEqual(['finish']);
+    // the analysis keeps all ten frames; transition and shaftThrough are found, never marked
+    expect(CHECKPOINT_KEYS.filter((k) => ![...MARKED_KEYS, ...AUTO_KEYS].includes(k))).toEqual(['transition', 'shaftThrough']);
   });
 
   test('counts, the next position to do and where a resumed pass opens', () => {
     const st = { address: 'confirmed', leadArm: 'skipped', shaftDown: 'confirmed' };
-    expect(passCounts(st)).toEqual({ confirmed: 2, skipped: 1, todo: 3 });
-    expect(nextTodo(st, 'address')).toBe('top');
+    expect(passCounts(st)).toEqual({ confirmed: 2, skipped: 1, todo: 4 });
+    expect(nextTodo(st, 'address')).toBe('takeaway');
     expect(nextTodo(st, 'top')).toBe('impact');
-    expect(resumeKey(st)).toBe('top');
-    expect(nextTodo({ ...st, impact: 'skipped', shaftThrough: 'confirmed', top: 'confirmed' }, 'address')).toBeNull();
+    expect(resumeKey(st)).toBe('takeaway');
+    expect(nextTodo({
+      ...st, takeaway: 'confirmed', impact: 'skipped', trailArm: 'confirmed', top: 'confirmed',
+    }, 'address')).toBeNull();
   });
 });
 
@@ -51,19 +54,23 @@ describe('marked state from marks.json', () => {
     expect(markedFromMarks({ ...emptyMarks({ swingId: 's' }), pass: { state: 'none', skipped: [] } })).toEqual({ state: 'none', count: 0 });
     const m = withFrame(withFrame(emptyMarks({ swingId: 's' }), frame('top', { confirmed: true })), frame('finish', { confirmed: true }));
     expect(statusFromMarks({ ...m, pass: { state: 'partial', skipped: ['impact'] } })).toEqual({ top: 'confirmed', finish: 'confirmed', impact: 'skipped' });
-    expect(markedFromMarks({ ...m, pass: { state: 'partial', skipped: ['impact'] } })).toEqual({ state: 'partial', count: 1 }); // finish is not one of the six
+    expect(markedFromMarks({ ...m, pass: { state: 'partial', skipped: ['impact'] } })).toEqual({ state: 'partial', count: 1 }); // finish is not one of the seven
     expect(markedFromMarks({ ...m, pass: { state: 'done', skipped: [] } })).toEqual({ state: 'done', count: 1 });
     expect(passDone({ state: 'done', count: 1 })).toBe(true);
     expect(passDone(undefined)).toBe(false);
   });
 
-  test('existing swings (no pass block): corrected frames among the six are confirmed, partial until all six', () => {
+  test('existing swings (no pass block): corrected frames among the seven are confirmed, partial until all seven', () => {
     const legacy = withFrame(withFrame(emptyMarks({ swingId: 's' }), frame('top', { hands: { proposed: [0, 0], final: [0.1, 0] } })), frame('impact'));
     expect(statusFromMarks(legacy)).toEqual({ top: 'confirmed' });
     expect(markedFromMarks(legacy)).toEqual({ state: 'partial', count: 1 });
     expect(markedFromMarks(null)).toEqual({ state: 'partial', count: 0 });
     const all = MARKED_KEYS.reduce((m, k) => withFrame(m, frame(k, { hands: { proposed: [0, 0], final: [0.1, 0] } })), emptyMarks({ swingId: 's' }));
-    expect(markedFromMarks(all)).toEqual({ state: 'done', count: 6 });
+    expect(markedFromMarks(all)).toEqual({ state: 'done', count: 7 });
+    // a file finished under the D25 pass (with P8, without P2 / P9) stays done: its results do not disappear
+    const oldSix = ['address', 'leadArm', 'top', 'shaftDown', 'impact', 'shaftThrough']
+      .reduce((m, k) => withFrame(m, frame(k, { hands: { proposed: [0, 0], final: [0.1, 0] } })), emptyMarks({ swingId: 's' }));
+    expect(markedFromMarks(oldSix)).toEqual({ state: 'done', count: 5 });
   });
 });
 

@@ -13,7 +13,7 @@
 //   { cancelled: true }
 
 import { Paths, Directory } from 'expo-file-system';
-import { analyze } from './analyze';
+import { analyze, CLUB_KEYS } from './analyze';
 import {
   nativeApi, getStill, proxyDir, proxyWindow, PROXY_EVERY,
 } from './frames';
@@ -25,11 +25,9 @@ import {
   getSwing, getSwingProfile, swingVideoUri, saveAnalysis, markSwingFailed, readMarks,
 } from '../store/swingStore';
 
-// The thirteen frames pass 2 decodes: the ten checkpoints (D22) plus the three internal ones.
-const PASS2_KEYS = [
-  'address', 'takeaway', 'leadArm', 'top', 'transition', 'shaftDown', 'impact', 'shaftThrough', 'trailArm', 'finish',
-  'lateBackswing', 'preImpact', 'postImpact',
-];
+// The frames pass 2 decodes and asks the club detector about: the seven positions and the finish
+// (swing checks v2). Native's scenery vote (ClubRules.dropStatic) then has 8 places, not 11.
+export const PASS2_KEYS = CLUB_KEYS;
 
 // The swing profile drives the native ball search side and the expected ball size, and the
 // probe gives the sampling policy its time base. Unknown values are left out (never sent as

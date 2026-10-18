@@ -32,14 +32,21 @@ const at = (frame, hands, head = null) => ({
   frame, hands, head, hidden: false, source: 'user',
 });
 
-// D21: the setup and top-position limits, provisional and the same for both clubs.
-const SETUP_TOP = {
+// The limits both clubs share (D21, checks v2): provisional until the lab table (plan L1).
+const SHARED = {
   handsUnderShoulders: [8, 12],
-  waistBend: { green: [125, 145], yellow: [115, 155] },
   backLine: { dropped: [40, 50], up: [10, 20] },
-  handGap: { green: [10, 20], yellow: [6, 25] },
+  kneeFlex: { green: [15, 30], yellow: [10, 35] },
+  shaftPlane: [10, 18],
+  takeawayPlane: [8, 15],
+  kneeHold: [5, 10],
+  leadArmSpine: [10, 20],
   handsOverHeels: [6, 12],
-  leadArmPlane: [10, 20],
+  downPlane: { above: [4, 10], under: [12, 20] },
+  downVsTakeaway: [0, 10],
+  throughVsHalfway: [10, 20],
+  hipDrift: [3, 6],
+  handsOut: [4, 8],
 };
 
 describe('THRESHOLDS table (D19)', () => {
@@ -51,28 +58,26 @@ describe('THRESHOLDS table (D19)', () => {
     expect(normClub('driver')).toBe('driver');
   });
 
-  test('iron keeps the original values; driver is the provisional column', () => {
+  test('iron keeps the original values; driver is the provisional column; spine holds like spine loss', () => {
     expect(THRESHOLDS.iron).toEqual({
       posture: { green: [25, 40], yellow: [20, 45] },
       handsHeight: [5, 8],
       shaftAngle: [6, 10],
       spineLoss: [3, 6],
-      clubheadPlane: { green: 4, yellow: 8 },
+      spineHold: [3, 6],
       buttYellowCm: 15,
       headDrift: [5, 10],
-      shaftThroughYellowCm: 15,
-      ...SETUP_TOP,
+      ...SHARED,
     });
     expect(THRESHOLDS.driver).toEqual({
       posture: { green: [20, 35], yellow: [15, 40] },
       handsHeight: [8, 12],
       shaftAngle: [8, 12],
       spineLoss: [4, 7],
-      clubheadPlane: { green: 6, yellow: 10 },
+      spineHold: [4, 7],
       buttYellowCm: 20,
       headDrift: [6, 12],
-      shaftThroughYellowCm: 15,
-      ...SETUP_TOP,
+      ...SHARED,
     });
   });
 });
@@ -136,17 +141,14 @@ describe('each club-aware check, [measured, iron, driver]', () => {
     });
   });
 
-  test('clubhead_vs_plane, impact (steep and under)', () => {
-    [
-      [3, 'green', 'green'], [5, 'yellow', 'green'], [7, 'yellow', 'yellow'], [9, 'red', 'yellow'], [11, 'red', 'red'],
-      [-5, 'yellow', 'green'], [-7, 'yellow', 'yellow'], [-20, 'yellow', 'yellow'],
-    ].forEach(([d, iron, driver]) => {
+  test('spine_hold at the top', () => {
+    [[2, 'green', 'green'], [-5, 'yellow', 'yellow'], [6.5, 'red', 'yellow'], [8, 'red', 'red']].forEach(([loss, iron, driver]) => {
       const input = {
-        checkpoints: { address: at(1, H(0, 100)), impact: at(2, H(0, 100), H(d, 160)) },
-        pose: () => null,
+        checkpoints: { address: at(1, H(0, 0)), top: at(2, H(0, 0)) },
+        pose: (f) => pose33({ tilt: f === 1 ? 35 : 35 - loss }),
       };
-      expect([d, status('iron', 'clubhead_vs_plane', input, 'impact')]).toEqual([d, iron]);
-      expect([d, status('driver', 'clubhead_vs_plane', input, 'impact')]).toEqual([d, driver]);
+      expect([loss, status('iron', 'spine_hold', input, 'top')]).toEqual([loss, iron]);
+      expect([loss, status('driver', 'spine_hold', input, 'top')]).toEqual([loss, driver]);
     });
   });
 
@@ -175,26 +177,22 @@ describe('the golden owner swing', () => {
   const { idx, L } = fixtureSamples();
   const poseAt = (f) => (idx.includes(f) ? L[idx.indexOf(f)] : null);
   const scale = scaleFromWindow(idx, L, [328, 338], 'right', 176);
-  const marks = () => {
-    const out = Object.fromEntries(Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, {
-      frame: c.frame, hands: c.hands, head: c.hidden ? null : c.head, hidden: c.hidden, source: 'user',
-    }]));
-    out.preImpact = { frame: 550, hands: { x: 222, y: 400 }, head: { x: 240, y: 470 }, hidden: false, source: 'user' };
-    return out;
-  };
+  const marks = () => Object.fromEntries(Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, {
+    frame: c.frame, hands: c.hands, head: c.hidden ? null : c.head, hidden: c.hidden, source: 'user',
+  }]));
   const score = (club) => runChecks({
     checkpoints: marks(), ball: TRUTH.ball, pose: poseAt, handedness: 'right', pxPerCm: scale.pxPerCm, heightCm: 176, motionStart: 385, finishQuietS: 0.6, club,
   }).checks;
   const key = (c) => `${c.id}${c.cp ? `@${c.cp}` : ''}`;
   const statuses = (checks) => Object.fromEntries(checks.map((c) => [key(c), c.status]));
 
-  test('as iron it is exactly the old result, and no club, null and iron agree', () => {
+  test('no club, null and iron agree', () => {
     const iron = score('iron');
     expect(score(undefined)).toEqual(iron);
     expect(score(null)).toEqual(iron);
     expect(statuses(iron)).toMatchObject({
       posture_address: 'green', butt_extension: 'red', hands_height_impact: 'red', shaft_angle_impact: 'yellow',
-      spine_loss: 'red', head_drift: 'yellow', 'clubhead_vs_plane@impact': 'green',
+      spine_loss: 'red', head_drift: 'yellow', 'spine_hold@shaftDown': 'yellow',
     });
   });
 
@@ -203,7 +201,8 @@ describe('the golden owner swing', () => {
     const driver = statuses(score('driver'));
     expect(driver.butt_extension).toBe('yellow'); // red -> yellow: 20 cm limit
     expect(driver.hands_height_impact).toBe('yellow'); // red -> yellow: band(8, 12)
+    expect(driver['spine_hold@shaftDown']).toBe('green'); // 3 degrees: yellow -> green, band(4, 7)
     const changed = Object.keys(iron).filter((k) => iron[k] !== driver[k]).sort();
-    expect(changed).toEqual(['butt_extension', 'hands_height_impact']);
+    expect(changed).toEqual(['butt_extension', 'hands_height_impact', 'spine_hold@shaftDown']);
   });
 });

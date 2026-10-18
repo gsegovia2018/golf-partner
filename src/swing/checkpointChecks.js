@@ -1,53 +1,48 @@
-// Which checks belong to which of the ten user-facing checkpoints (D10, D22), the worst status
-// per checkpoint for the timeline dots, and where a "Place clubhead" CTA should send the
-// user (D16). Pure.
+// Which checks belong to which position (swing checks v2, spec §3), the worst status per
+// position, and where a "tap to place" should send the user (D16, spec §5). Pure.
+//
+// CHECKPOINT_KEYS (phases.js) stays the ten frames detection finds; the checks are read at the
+// seven POSITIONS below, plus the finish for the extras. Every row says its `position` (or
+// `extra: true`); an extra is listed under its home checkpoint but never colours it.
 
 import { CHECKPOINT_KEYS } from './phases';
+import { headTrusted } from './club';
 
-// Where a check is read. The impact-vs-address comparisons are read at impact (that is
-// where the golfer sees the loss), and the pre-impact clubhead row lives with impact too:
-// preImpact is an internal frame (D10).
-const HOME = {
-  posture_address: ['address'],
-  hands_under_shoulders: ['address'],
-  waist_bend: ['address'],
-  back_line: ['address'],
-  hand_gap: ['address'],
-  hands_between_planes: ['leadArm', 'top'],
-  butt_extension: ['leadArm'],
-  top_direction: ['top'],
-  hands_over_heels: ['top'],
-  lead_arm_shoulder_plane: ['top'],
-  downswing_path: ['shaftDown'],
-  shaft_down_shallow: ['shaftDown'],
-  shaft_through_steep: ['shaftThrough'],
-  clubhead_vs_plane: ['impact'],
-  hands_height_impact: ['impact'],
-  hands_out_impact: ['impact'],
-  shaft_angle_impact: ['impact'],
-  spine_loss: ['impact'],
-  hip_drift: ['impact'],
-  head_drift: ['impact'],
-  tempo: ['impact'],
-  finish_balance: ['finish'],
+/** The seven positions, in swing order: P1, P2, P3 (halfway back), P4, P6 (downswing), P7, P9 (follow-through). */
+export const POSITIONS = ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'];
+
+/** Importance tiers (spec §6): 1 = address, downswing, impact; 2 = halfway back, top; 3 = takeaway, follow-through, extras. */
+export const TIER = {
+  address: 1, shaftDown: 1, impact: 1, leadArm: 2, top: 2, takeaway: 3, trailArm: 3,
+};
+export const EXTRA_TIER = 3;
+
+// Where an extra is listed on the results screen (it does not colour that checkpoint).
+const EXTRA_HOME = {
+  tempo: 'impact',
+  head_drift: 'impact',
+  hands_height_impact: 'impact',
+  hands_out_impact: 'impact',
+  shaft_angle_impact: 'impact',
+  finish_balance: 'finish',
 };
 
 export const CHECK_KEY = (c) => (c.cp ? `${c.id}@${c.cp}` : c.id);
 
-/** The checks to list under a checkpoint, in analysis order. */
-export const checksAt = (checks, cp) => checks.filter((c) => (HOME[c.id] || []).includes(cp));
+/** The checkpoint to show for a check: its position, else (an extra) its home. */
+export const homeOf = (check) => check.position ?? EXTRA_HOME[check.id] ?? 'impact';
 
-/** 'red' | 'yellow' | 'green' | 'none' (nothing measured there, or only unknowns). */
+/** The checks to list under a checkpoint, in analysis order (extras included at their home). */
+export const checksAt = (checks, cp) => checks.filter((c) => homeOf(c) === cp);
+
+/** 'red' | 'yellow' | 'green' | 'none' (nothing measured there, or only unknowns). Extras never count. */
 export function worstAt(checks, cp) {
-  const at = checksAt(checks, cp).filter((c) => c.status !== 'unknown');
+  const at = checks.filter((c) => !c.extra && c.position === cp && c.status !== 'unknown');
   if (!at.length) return 'none';
   return at.some((c) => c.status === 'red') ? 'red' : at.some((c) => c.status === 'yellow') ? 'yellow' : 'green';
 }
 
 export const worstByCheckpoint = (checks) => Object.fromEntries(CHECKPOINT_KEYS.map((k) => [k, worstAt(checks, k)]));
-
-/** The checkpoint to show for a check: where it was read worst (`at`), else its first home. */
-export const homeOf = (check) => check.at ?? (HOME[check.id] || ['impact'])[0];
 
 /**
  * The checks grouped for the priority list: red, yellow, unknown (not measured), green. Each group
@@ -64,14 +59,16 @@ export function prioritizeChecks(checks) {
 /**
  * The checkpoint whose clubhead the user still has to place for this check (D16), or null
  * when the check is not waiting on a placement. Only an `unplaced` unknown qualifies: a
- * hidden mark is a decision, not a gap.
+ * hidden mark is a decision, not a gap. A detection below the checks' gate (spec §5) is not
+ * a placement either.
  */
 export function unplacedCheckpoint(check, clubMarks = {}) {
   if (check.status !== 'unknown' || check.reason !== 'unplaced') return null;
   const wants = check.cp ? [check.cp] : check.cps || [];
-  const hit = wants.find((k) => clubMarks[k] && !clubMarks[k].hidden && !clubMarks[k].head);
+  const open = (m) => m && !m.hidden && (!m.head || !headTrusted(m.source, m.conf));
+  const hit = wants.find((k) => open(clubMarks[k]));
   return hit ?? null;
 }
 
-/** Frame index of any of the thirteen checkpoints (ten on the timeline, three internal). */
+/** Frame index of a checkpoint (the ten on the timeline) or an internal frame. */
 export const frameOfKey = (analysis, key) => analysis.checkpoints[key]?.i ?? analysis.internal?.[key];

@@ -81,6 +81,14 @@ export const SWING_FAULT_LINKS = {
     causes: ['approach:short', 'approach:distance', 'tee:side:left', 'tee:side:right', 'approach:why:swing:lowPoint'],
   },
   posture: { clubs: 'both', causes: ['approach:short', 'tee:distance', 'approach:distance'] },
+  // Swing checks v2 (spec 2026-10-18 §6). posture_loss: the spine or trail knee not holding on the
+  // way back moves the low point, so it reads like a strike problem on course.
+  posture_loss: { clubs: 'both', causes: ['approach:short', 'approach:distance', 'approach:why:swing:lowPoint'] },
+  // stuck: the clubhead far under the plane at P6 comes from too far inside: pushes, or hooks when the face closes.
+  stuck: {
+    clubs: 'both',
+    causes: ['tee:side:right', 'approach:side:right', 'approach:why:swing:start:right', 'approach:why:swing:curve:left', 'tee:why:swing:curve:left'],
+  },
   tempo_fast: { clubs: 'driverFirst', causes: ['tee:trouble:driver', 'tee:side:left', 'tee:side:right', 'penalty:tee'] },
   tempo_slow: { clubs: 'driver', causes: ['tee:distance'] },
   balance: { clubs: 'driverFirst', causes: ['tee:side:left', 'tee:side:right', 'tee:distance'] },

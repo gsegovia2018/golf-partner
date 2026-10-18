@@ -7,7 +7,23 @@ export const CANDIDATE_MIN_CONF = 0.35; // edge (heuristic) candidates: its 0-1 
 // Model candidates (apiVersion 4): conf is the detector's score, already thresholded in native.
 export const MODEL_MIN_CONF = 0.03;
 const MODEL_SOURCES = ['model', 'model-shaft'];
+// The checks' gate (swing checks v2, spec §5): a model head is proposed to the canvas from
+// MODEL_MIN_CONF up, but a check reads it only from here up; below it the row is "Clubhead not
+// visible — tap to place". PLACEHOLDER: the lab put the gate at 0.25 from lab-model scores, but the
+// phone scores lower than the lab, so the value is pending the phone exports (plan L2).
+export const CHECK_MIN_CONF = 0.25;
 const minConf = (source) => (MODEL_SOURCES.includes(source) ? MODEL_MIN_CONF : CANDIDATE_MIN_CONF);
+/**
+ * Whether a check may read a resolved clubhead (spec §5): the golfer's own mark always, an edge
+ * candidate from CANDIDATE_MIN_CONF (resolveClub already enforces it), a model one from CHECK_MIN_CONF.
+ * A resolved club with no source (a test or an old caller) is trusted as before.
+ */
+export function headTrusted(source, conf) {
+  if (MODEL_SOURCES.includes(source)) return (conf ?? 0) >= CHECK_MIN_CONF;
+  if (source === 'edge') return (conf ?? 0) >= CANDIDATE_MIN_CONF;
+  return true;
+}
+
 // Checkpoints where native proposes a clubhead (D16).
 export const SEEDED_CHECKPOINTS = ['address', 'impact'];
 const PRIOR_CONF = 0.1;

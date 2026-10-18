@@ -210,7 +210,7 @@ export const SWING_STRINGS = build({
     auto: L,
     names: { hands: L, head: L, ball: L },
     short: {
-      address: L, leadArm: L, top: L, shaftDown: L, impact: L, shaftThrough: L,
+      address: L, takeaway: L, leadArm: L, top: L, shaftDown: L, impact: L, trailArm: L,
     },
     status: {
       proposed: L, confirmed: L, hidden: L, missing: L, moved: L,
@@ -319,9 +319,9 @@ export const SWING_STRINGS = build({
     mainTitle: L,
     noFaultTitle: L,
     noFaultWhy: L,
-    // D23: the shaft pattern, one row with the three readings.
+    // The shaft line at the ball, back (P3) and through (P9).
     patternTitle: L,
-    patternLegs: { butt_extension: L, shaft_down_shallow: L, shaft_through_steep: L },
+    patternLegs: { butt_extension: L, shaft_through_ball: L },
     patternLeg: (leg, word) => t('swing.results.patternLeg', { leg, word }),
     // D21: the main fault is the earliest one; later significant faults are likely its knock-on effects.
     alsoCausing: (labels) => {
@@ -336,7 +336,7 @@ export const SWING_STRINGS = build({
     fix: (n) => t('swing.results.fixCount', { n }),
     fpsChip: (fps) => `${formatNumber(Math.round(fps))} fps`,
     approxChip: L,
-    cpSuffix: { preImpact: L, impact: L }, // the clubhead check runs at two frames
+    cpSuffix: { takeaway: L, leadArm: L, top: L, shaftDown: L }, // spine_hold / knee_hold run at several positions
     approxBanner: L,
     approxHeightBanner: L,
     noStill: L,
@@ -471,31 +471,33 @@ export const SWING_STRINGS = build({
   checkLabel: {
     posture_address: L,
     hands_under_shoulders: L,
-    waist_bend: L,
     back_line: L,
-    hand_gap: L,
-    hands_over_heels: L,
-    lead_arm_shoulder_plane: L,
-    hands_between_planes: L,
+    knee_flex: L,
+    shaft_plane: L,
+    clubhead_plane_takeaway: L,
+    spine_hold: L,
+    knee_hold: L,
     butt_extension: L,
-    shaft_down_shallow: L,
-    shaft_through_steep: L,
-    top_direction: L,
-    downswing_path: L,
-    clubhead_vs_plane: L,
+    lead_arm_spine: L,
+    hands_over_heels: L,
+    clubhead_plane_down: L,
+    down_vs_takeaway: L,
+    hip_drift: L,
+    spine_loss: L,
+    shaft_through_ball: L,
+    through_vs_halfway: L,
+    tempo: L,
+    finish_balance: L,
+    head_drift: L,
     hands_height_impact: L,
     hands_out_impact: L,
     shaft_angle_impact: L,
-    spine_loss: L,
-    hip_drift: L,
-    head_drift: L,
-    tempo: L,
-    finish_balance: L,
   },
 
   fault: {
     early_extension: L,
     over_the_top: L,
+    stuck: L,
     steep_backswing: L,
     flat_backswing: L,
     across_the_line: L,
@@ -505,6 +507,7 @@ export const SWING_STRINGS = build({
     tempo_slow: L,
     balance: L,
     posture: L,
+    posture_loss: L,
     top_position: L,
     flip: L,
   },
@@ -514,7 +517,7 @@ export const SWING_STRINGS = build({
     nopose: (what) => t('swing.reason.nopose', { what }),
     nodata: (what) => what,
     hidden: (where) => t('swing.reason.hidden', { where }),
-    unplaced: (where) => t('swing.reason.unplaced', { where }),
+    unplaced: L, // spec §5: also a detection below the checks' gate
   },
 
   checkText: {
@@ -522,38 +525,31 @@ export const SWING_STRINGS = build({
     hands_under_shoulders_ok: L,
     hands_under_shoulders_out: (cm) => t('swing.checkText.hands_under_shoulders_out', { cm: n0(cm) }),
     hands_under_shoulders_in: (cm) => t('swing.checkText.hands_under_shoulders_in', { cm: n0(cm) }),
-    waist_bend: (deg, dir) => t(dir === 'over' ? 'swing.checkText.waist_bend_over' : dir === 'tall' ? 'swing.checkText.waist_bend_tall' : 'swing.checkText.waist_bend', { deg: n0(deg) }),
     back_line_ok: L,
     back_line: (deg, dir) => t(dir === 'dropped' ? 'swing.checkText.back_line_dropped' : 'swing.checkText.back_line_up', { deg: n0(deg) }),
-    hand_gap_ok: (cm) => t('swing.checkText.hand_gap_ok', { cm: n0(cm) }),
-    hand_gap_close: (cm) => t('swing.checkText.hand_gap_close', { cm: n0(cm) }),
-    hand_gap_far: (cm) => t('swing.checkText.hand_gap_far', { cm: n0(cm) }),
-    hands_over_heels_ok: L,
-    hands_over_heels_deep: (cm) => t('swing.checkText.hands_over_heels_deep', { cm: n0(cm) }),
-    hands_over_heels_shallow: (cm) => t('swing.checkText.hands_over_heels_shallow', { cm: n0(cm) }),
-    lead_arm_shoulder_plane_ok: L,
-    lead_arm_shoulder_plane_above: (deg) => t('swing.checkText.lead_arm_shoulder_plane_above', { deg: n0(deg) }),
-    lead_arm_shoulder_plane_below: (deg) => t('swing.checkText.lead_arm_shoulder_plane_below', { deg: n0(deg) }),
-    hands_between_planes_ok: L,
-    hands_between_planes: (cm, dir, where) => t(dir === 'steep' ? 'swing.checkText.hands_between_planes_steep' : 'swing.checkText.hands_between_planes_flat', { cm: n0(cm), where }),
+    knee_flex: (deg, dir) => t(dir === 'stiff' ? 'swing.checkText.knee_flex_stiff' : dir === 'squat' ? 'swing.checkText.knee_flex_squat' : 'swing.checkText.knee_flex', { deg: n0(deg) }),
+    shaft_plane_ok: (deg) => t('swing.checkText.shaft_plane_ok', { deg: n0(deg) }),
+    shaft_plane: (cm, dir, deg) => t(dir === 'upright' ? 'swing.checkText.shaft_plane_upright' : 'swing.checkText.shaft_plane_flat', { cm: n0(Math.abs(cm)), deg: n0(deg) }),
+    clubhead_plane_takeaway_ok: L,
+    clubhead_plane_takeaway: (cm, dir) => t(dir === 'steep' ? 'swing.checkText.clubhead_plane_takeaway_steep' : 'swing.checkText.clubhead_plane_takeaway_flat', { cm: n0(Math.abs(cm)) }),
+    spine_hold: (from, to, v) => t(v >= 0 ? 'swing.checkText.spine_hold_up' : 'swing.checkText.spine_hold_down', { from: n0(from), to: n0(to), n: n0(Math.abs(v)) }),
+    knee_hold: (from, to, v) => t(v < 0 ? 'swing.checkText.knee_hold_straighten' : 'swing.checkText.knee_hold_flex', { from: n0(from), to: n0(to), n: n0(Math.abs(v)) }),
     butt_extension_ok: L,
     butt_extension_flat: (cm) => t('swing.checkText.butt_extension_flat', { cm: n0(cm) }),
     butt_extension_steep: (cm) => t('swing.checkText.butt_extension_steep', { cm: n0(cm) }),
-    shaft_down_shallow: {
-      shallow: (cm) => t('swing.checkText.shaft_down_shallow.shallow', { cm: n0(cm) }),
-      between: () => t('swing.checkText.shaft_down_shallow.between'),
-      steep: () => t('swing.checkText.shaft_down_shallow.steep'),
-    },
-    shaft_through_steep_ok: (cm) => (cm >= 1 ? t('swing.checkText.shaft_through_steep_ok', { cm: n0(cm) }) : t('swing.checkText.shaft_through_steep_atBall')),
-    shaft_through_steep_flat: (cm) => t('swing.checkText.shaft_through_steep_flat', { cm: n0(cm) }),
-    top_direction_ok: L,
-    top_direction_across: L,
-    top_direction_laid_off: L,
-    downswing_path_ok: L,
-    downswing_path: (cm) => t('swing.checkText.downswing_path', { cm: n0(cm) }),
-    clubhead_vs_plane_ok: L,
-    clubhead_vs_plane_steep: (cm) => t('swing.checkText.clubhead_vs_plane_steep', { cm: n0(cm) }),
-    clubhead_vs_plane_under: (cm) => t('swing.checkText.clubhead_vs_plane_under', { cm: n0(cm) }),
+    lead_arm_spine_ok: L,
+    lead_arm_spine: (deg, dir) => t(dir === 'upright' ? 'swing.checkText.lead_arm_spine_upright' : 'swing.checkText.lead_arm_spine_flat', { deg: n0(Math.abs(deg)) }),
+    hands_over_heels_ok: L,
+    hands_over_heels_deep: (cm) => t('swing.checkText.hands_over_heels_deep', { cm: n0(cm) }),
+    hands_over_heels_shallow: (cm) => t('swing.checkText.hands_over_heels_shallow', { cm: n0(cm) }),
+    clubhead_plane_down_ok: L,
+    clubhead_plane_down: (cm, dir) => t(dir === 'steep' ? 'swing.checkText.clubhead_plane_down_steep' : 'swing.checkText.clubhead_plane_down_under', { cm: n0(Math.abs(cm)) }),
+    down_vs_takeaway: (cm) => t(cm > 0 ? 'swing.checkText.down_vs_takeaway_steeper' : 'swing.checkText.down_vs_takeaway_shallower', { cm: n0(Math.abs(cm)) }),
+    shaft_through_ball_ok: L,
+    shaft_through_ball_beyond: (cm) => t('swing.checkText.shaft_through_ball_beyond', { cm: n0(cm) }),
+    shaft_through_ball_inside: (cm) => t('swing.checkText.shaft_through_ball_inside', { cm: n0(cm) }),
+    through_vs_halfway_ok: L,
+    through_vs_halfway: (cm) => t(cm > 0 ? 'swing.checkText.through_vs_halfway_beyond' : 'swing.checkText.through_vs_halfway_inside', { cm: n0(Math.abs(cm)) }),
     hands_height_impact_up: (cm) => t('swing.checkText.hands_height_impact_up', { cm: n0(cm) }),
     hands_height_impact_down: (cm) => t('swing.checkText.hands_height_impact_down', { cm: n0(cm) }),
     hands_out_impact_in: (cm) => t('swing.checkText.hands_out_impact_in', { cm: n0(cm) }),
@@ -603,20 +599,6 @@ export const SWING_STRINGS = build({
         steps: [L, L, L],
       },
     },
-    waist_bend: {
-      over: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-      tall: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-    },
     back_line: {
       dropped: {
         headline: L,
@@ -631,21 +613,35 @@ export const SWING_STRINGS = build({
         steps: [L, L, L],
       },
     },
-    hand_gap: {
-      close: {
+    knee_flex: {
+      stiff: {
         headline: L,
         cost: L,
         cue: L,
         steps: [L, L, L],
       },
-      far: {
+      squat: {
         headline: L,
         cost: L,
         cue: L,
         steps: [L, L, L],
       },
     },
-    hands_between_planes: {
+    shaft_plane: {
+      upright: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+      flat: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    clubhead_plane_takeaway: {
       steep: {
         headline: L,
         cost: L,
@@ -653,6 +649,34 @@ export const SWING_STRINGS = build({
         steps: [L, L, L],
       },
       flat: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    spine_hold: {
+      up: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+      down: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    knee_hold: {
+      straighten: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+      flex: {
         headline: L,
         cost: L,
         cue: L,
@@ -673,14 +697,14 @@ export const SWING_STRINGS = build({
         steps: [L, L, L],
       },
     },
-    top_direction: {
-      across: {
+    lead_arm_spine: {
+      upright: {
         headline: L,
         cost: L,
         cue: L,
         steps: [L, L, L],
       },
-      laid_off: {
+      flat: {
         headline: L,
         cost: L,
         cue: L,
@@ -701,51 +725,7 @@ export const SWING_STRINGS = build({
         steps: [L, L, L],
       },
     },
-    lead_arm_shoulder_plane: {
-      above: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-      below: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-    },
-    downswing_path: {
-      out: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-    },
-    shaft_down_shallow: {
-      steep: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-      shallow: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-    },
-    shaft_through_steep: {
-      flat: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-    },
-    clubhead_vs_plane: {
+    clubhead_plane_down: {
       steep: {
         headline: L,
         cost: L,
@@ -753,6 +733,88 @@ export const SWING_STRINGS = build({
         steps: [L, L, L],
       },
       under: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    down_vs_takeaway: {
+      steeper: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    hip_drift: {
+      toward: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    spine_loss: {
+      lost: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    shaft_through_ball: {
+      beyond: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+      inside: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    through_vs_halfway: {
+      beyond: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+      inside: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    tempo: {
+      fast: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+      slow: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    finish_balance: {
+      off: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    head_drift: {
+      moved: {
         headline: L,
         cost: L,
         cue: L,
@@ -795,52 +857,6 @@ export const SWING_STRINGS = build({
         steps: [L, L, L],
       },
       down: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-    },
-    spine_loss: {
-      lost: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-    },
-    hip_drift: {
-      toward: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-    },
-    head_drift: {
-      moved: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-    },
-    tempo: {
-      fast: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-      slow: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-    },
-    finish_balance: {
-      off: {
         headline: L,
         cost: L,
         cue: L,

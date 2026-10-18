@@ -82,9 +82,9 @@ function Hero({
   );
 }
 
-const PATTERN = ['butt_extension', 'shaft_down_shallow', 'shaft_through_steep'];
+const PATTERN = ['butt_extension', 'shaft_through_ball'];
 
-/** D23: the three shaft readings of steep -> shallow -> steep in one row; a cell opens its check. */
+/** The shaft line at the ball halfway back and through (checks v2) in one row; a cell opens its check. */
 function SwingPattern({ s, tone, checks, onPick }) {
   const cells = PATTERN.map((id) => checks.find((c) => c.id === id)).filter(Boolean);
   if (!cells.length) return null;

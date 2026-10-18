@@ -52,6 +52,12 @@ export function angleBetween(u, v) {
   return rad2deg(Math.acos(Math.max(-1, Math.min(1, (u.x * v.x + u.y * v.y) / n))));
 }
 
+/** Knee flex, degrees: 180 minus the angle at the knee between the thigh (knee -> hip) and the shin (knee -> ankle). */
+export function kneeFlexDeg(hip, knee, ankle) {
+  const a = angleBetween({ x: hip.x - knee.x, y: hip.y - knee.y }, { x: ankle.x - knee.x, y: ankle.y - knee.y });
+  return a === null ? null : 180 - a;
+}
+
 /** Spine tilt from vertical, degrees: mid-hip -> mid-shoulder. */
 export function spineTiltDeg(hips, shoulders) {
   return rad2deg(Math.atan2(shoulders.x - hips.x, hips.y - shoulders.y));

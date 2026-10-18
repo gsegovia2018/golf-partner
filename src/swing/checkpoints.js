@@ -5,8 +5,8 @@
 // The ten definitions follow the P-system (P1-P10; P8 added by D22). `stop` is the marking
 // canvas's always-visible stop line (D26): FIRST or LAST frame, the condition in a few words,
 // what to watch, and the before / after captions of the fine strip; derived from `stopWhen`.
-// The three internal frames (lateBackswing, preImpact, postImpact) are reachable from a check's
-// "Place clubhead" button, so they get a short cue of their own (and no stop line).
+// The three internal frames (lateBackswing, preImpact, postImpact) keep a short cue of their own
+// (and no stop line) for marks saved before checks v2, which stopped reading them.
 //
 // The text lives in the catalogues (locales/*/swingCues.js, 'swing.cue.<key>.<field>'); every
 // text field here is a getter, so it follows the active language when it is read.
@@ -47,7 +47,8 @@ export const CHECKPOINT_DEFS = [
   def('finish', 'P10', 'first'),
 ];
 
-// Internal frames: not on the timeline, still markable (the clubhead-on-plane check reads preImpact).
+// Internal frames: not on the timeline and, since checks v2, read by no check; their cues stay for
+// labels saved before it.
 const INTERNAL_DEFS = [
   def('lateBackswing', ''),
   def('preImpact', ''),

@@ -6,6 +6,8 @@ import { makeZip, utf8 } from '../swing/zip';
 import { t, formatDate } from '../i18n';
 import { normClub, DEFAULT_CLUB } from '../swing/checks';
 import { newPass, markedFromMarks } from '../swing/markPass';
+import { SCHEMA } from '../swing/analyze';
+import { upgradeAnalysis } from '../swing/reanalyze';
 
 // Local swing library (plan 7). Same shape as shotStore.js (module state, a
 // version counter for useSyncExternalStore, an AsyncStorage mirror) with no
@@ -145,10 +147,41 @@ async function readJson(id, name) {
   }
 }
 
-export const readAnalysis = (id) => readJson(id, 'analysis.json');
 export const readPose = (id) => readJson(id, 'pose.json');
 export const readProbe = (id) => readJson(id, 'probe.json');
 export async function readMarks(id) { return parseMarks(await readJson(id, 'marks.json')); }
+
+// The analysis.json an upgrade replaced, kept beside it: a write cut short (a crash, a full disk)
+// leaves an analysis.json that does not parse, and the swing opens from this copy instead.
+const ANALYSIS_BACKUP = 'analysis.v1.json';
+
+/**
+ * analysis.json at the current schema (swing checks v2, spec §7): an older analysis is re-run
+ * from its stored pose / probe / marks (pure JS, milliseconds) and saved with its index row, so
+ * every screen that opens a swing gets the v2 rows. A re-run that fails keeps the old analysis;
+ * a save that fails still returns the new one (it is re-run on the next open).
+ */
+export async function readAnalysis(id) {
+  const stored = (await readJson(id, 'analysis.json')) ?? (await readJson(id, ANALYSIS_BACKUP));
+  if (!stored || stored.error || stored.schema === SCHEMA) return stored;
+  const [pose, probe, marks] = await Promise.all([readPose(id), readProbe(id), readMarks(id)]);
+  const r = upgradeAnalysis({
+    pose, probe, marks, analysis: stored,
+  });
+  if (!r.upgraded) {
+    console.warn(`swing ${id}: analysis ${stored.schema} kept, re-run failed: ${r.error}`);
+    return stored;
+  }
+  const row = getSwing(id);
+  if (!row) return r.analysis; // not in the index (yet): use it, save on a later open
+  try {
+    if (!swingFile(id, ANALYSIS_BACKUP).exists) writeJson(id, ANALYSIS_BACKUP, stored);
+    await saveAnalysis(id, r.analysis, { status: row.status === 'pending' ? 'pending' : 'ready' });
+  } catch (e) {
+    console.warn(`swing ${id}: upgraded analysis not saved: ${e?.message}`);
+  }
+  return { ...r.analysis, swingId: id, createdAt: row.createdAt };
+}
 
 export function swingVideoUri(id) { return swingFile(id, 'video.mp4').uri; }
 

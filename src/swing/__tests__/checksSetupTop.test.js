@@ -1,4 +1,4 @@
-// D21: the four setup checks at address and the two top-position checks, driven with tiny
+// D21: the setup checks at address kept by checks v2 and hands over heels at the top, driven with tiny
 // synthetic poses (1 px = 1 cm, ball on the +x side, right-handed unless said).
 import { runChecks } from '../checks';
 
@@ -30,21 +30,6 @@ describe('hands_under_shoulders (address)', () => {
   });
 });
 
-describe('waist_bend (address)', () => {
-  // hips at the origin, knees straight down, the torso `bend` degrees from the thigh line.
-  const read = (bend) => one(run({ address: at(1, [0, 0]) }, () => pose({
-    ...both(23, 24, [0, 0]), ...both(25, 26, [0, 50]), ...both(11, 12, [100 * Math.sin(rad(bend)), 100 * Math.cos(rad(bend))]),
-  })), 'waist_bend');
-  test('ideal about 135: green 125-145, yellow 115-125 / 145-155, else red', () => {
-    expect(read(135)).toMatchObject({ status: 'green', value: 135 });
-    expect(read(126).status).toBe('green');
-    expect(read(120)).toMatchObject({ status: 'yellow', dir: 'over' });
-    expect(read(150)).toMatchObject({ status: 'yellow', dir: 'tall' });
-    expect(read(110).status).toBe('red');
-    expect(read(165)).toMatchObject({ status: 'red', dir: 'tall' });
-  });
-});
-
 describe('back_line (address)', () => {
   // spine from the hips (0, 0) up and toward the ball at 45 degrees; the ear continues it,
   // bent by `kink` degrees (+ = toward the ball and down: dropped).
@@ -65,29 +50,6 @@ describe('back_line (address)', () => {
   });
 });
 
-describe('hand_gap (address)', () => {
-  // lead hip (23) at x 0, lead knee (25) straight below: the thigh line is x = 0. That line runs
-  // down the middle of the thigh to the middle of the grip; the gap is front of thigh to back of
-  // the hands, OFF cm less at 176 cm (half the thigh, 5 % of height, plus half the hands, 3 cm).
-  const OFF = 0.05 * 176 + 3;
-  const read = (gap) => one(run({ address: at(1, [gap + OFF, 60]) }, () => pose({ 23: [0, 0], 25: [0, 80] })), 'hand_gap');
-  test('green 10-20 cm, yellow 6-10 / 20-25, red closer or further', () => {
-    expect(read(15)).toMatchObject({ status: 'green', value: 15 });
-    expect(read(8)).toMatchObject({ status: 'yellow', dir: 'close' });
-    expect(read(22)).toMatchObject({ status: 'yellow', dir: 'far' });
-    expect(read(4)).toMatchObject({ status: 'red', dir: 'close' });
-    expect(read(30)).toMatchObject({ status: 'red', dir: 'far' });
-    expect(read(30).text).toMatch(/reaching/);
-  });
-  test('reads the thigh line extended to the hands, not the hip x', () => {
-    const slanted = one(run({ address: at(1, [30 + OFF, 100]) }, () => pose({ 23: [0, 0], 25: [10, 50] })), 'hand_gap');
-    expect(slanted.value).toBe(10); // the line is at x = 20 at the hands' height
-  });
-  test('the owner address (26 cm joint line to grip centre) is a 14 cm gap: green', () => {
-    expect(read(26 - OFF)).toMatchObject({ status: 'green', value: 14 });
-  });
-});
-
 describe('hands_over_heels (top)', () => {
   const read = (x) => one(run({ top: at(5, [x, 0]) }, () => pose({ 30: [100, 300] })), 'hands_over_heels');
   test('green within 6 cm of the trail heel, yellow to 12, red beyond; behind = too deep', () => {
@@ -99,22 +61,6 @@ describe('hands_over_heels (top)', () => {
   });
   test('unknown without a top mark', () => {
     expect(one(run({}, () => pose({})), 'hands_over_heels').status).toBe('unknown');
-  });
-});
-
-describe('lead_arm_shoulder_plane (top)', () => {
-  // Ball (300, 200); trail shoulder at address straight up-and-back at 45 degrees: the plane.
-  // At the top the lead shoulder (11) is at the origin and the lead wrist (15) at `deg`.
-  const read = (deg) => one(run(
-    { address: at(1, [0, 0]), top: at(5, [0, 0]) },
-    (f) => (f === 1 ? pose({ 12: [200, 100] }) : pose({ 11: [0, 0], 15: [-60 * Math.cos(rad(deg)), -60 * Math.sin(rad(deg))] })),
-  ), 'lead_arm_shoulder_plane');
-  test('green within 10 degrees, yellow to 20, red beyond; above = more upright', () => {
-    expect(read(50)).toMatchObject({ status: 'green', value: 5 });
-    expect(read(60)).toMatchObject({ status: 'yellow', dir: 'above' });
-    expect(read(30)).toMatchObject({ status: 'yellow', value: -15, dir: 'below' });
-    expect(read(75)).toMatchObject({ status: 'red', dir: 'above' });
-    expect(read(15)).toMatchObject({ status: 'red', dir: 'below' });
   });
 });
 

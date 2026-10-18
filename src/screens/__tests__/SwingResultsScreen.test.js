@@ -57,19 +57,17 @@ const base = { pass2: { addressFrame: lab.expected.addressFrame, shaft: {} }, he
 const ownerMarks = Object.fromEntries(Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, {
   hands: norm(c.hands), head: c.hidden ? null : norm(c.head), hidden: c.hidden,
 }]));
-ownerMarks.preImpact = { hands: norm({ x: 222, y: 400 }), head: norm({ x: 240, y: 470 }), hidden: false };
 const MARKED = analyze(pose, { ...base, marks: ownerMarks });
 const UNMARKED = analyze(pose, base);
 
 // marks.json as Edit marks wrote it: the owner's hands and clubheads (what a re-score reads back).
-const OWNER_MARKS = [...Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, c.frame, c.hands, c.hidden ? null : c.head, c.hidden]),
-  ['preImpact', 550, { x: 222, y: 400 }, { x: 240, y: 470 }, false]]
+const OWNER_MARKS = Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, c.frame, c.hands, c.hidden ? null : c.head, c.hidden])
   .reduce((m, [k, i, hands, head, hidden]) => withFrame(m, frameLabel({
     i, checkpoint: k, hands: { proposed: null, final: norm(hands), placed: true }, head: { proposed: null, final: norm(head), finalHidden: hidden },
   })), emptyMarks({ swingId: 's1' }));
 
 const ROW = {
-  id: 's1', name: 'Sat 11 Oct · 18:42', createdAt: '2026-10-11T16:42:00.000Z', status: 'ready', club: null, source: 'import', marked: { state: 'done', count: 6 },
+  id: 's1', name: 'Sat 11 Oct · 18:42', createdAt: '2026-10-11T16:42:00.000Z', status: 'ready', club: null, source: 'import', marked: { state: 'done', count: 7 },
 };
 
 function setup({ row = ROW, analysis = MARKED, marks = OWNER_MARKS } = {}) {
@@ -89,7 +87,7 @@ function setup({ row = ROW, analysis = MARKED, marks = OWNER_MARKS } = {}) {
 const labelOf = (id) => SWING_STRINGS.checkLabel[id];
 const FIXES = fixesFor(MARKED);
 const openDetail = (u) => fireEvent.press(u.getByTestId('results-detail-toggle')); // the position cards are folded away
-const VERDICT = `${MARKED.main.label}.`; // D21: 'Posture at address.' on the owner swing
+const VERDICT = `${MARKED.main.label}.`; // checks v2: 'Early extension.' on the owner swing
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -203,9 +201,10 @@ describe('SwingResultsScreen: a stored swing', () => {
     expect(await findByText(VERDICT)).toBeTruthy();
     expect(getAllByText(new RegExp(`^${MARKED.counts.red} fix$`)).length).toBeGreaterThan(0);
     expect(queryByLabelText(/^\d+ fps$/)).toBeNull(); // the fps and swing-name chips are gone
-    ['Address', 'Lead arm', 'Top', 'Shaft down', 'Impact', 'Shaft through', 'Finish']
+    // checks v2: the seven positions and the finish; P5 and P8 are gone
+    ['Address', 'Takeaway', 'Lead arm', 'Top', 'Shaft down', 'Impact', 'Trail arm', 'Finish']
       .forEach((n) => expect(getByLabelText(new RegExp(`^${n}(,|$)`))).toBeTruthy());
-    ['Takeaway', 'Transition', 'Trail arm'].forEach((n) => expect(queryByLabelText(new RegExp(`^${n}(,|$)`))).toBeNull());
+    ['Transition', 'Shaft through'].forEach((n) => expect(queryByLabelText(new RegExp(`^${n}(,|$)`))).toBeNull());
     expect(getByLabelText(/^Impact, Fix/)).toBeTruthy(); // worst status dot + word (D14)
     openDetail(u);
     fireEvent.press(getByLabelText(/^Impact(,|$)/));
@@ -217,8 +216,12 @@ describe('SwingResultsScreen: a stored swing', () => {
     const { findByText, getByTestId } = setup();
     await findByText(VERDICT);
     fireEvent.press(getByTestId('results-good-fold'));
-    const rows = within(getByTestId('results-priority')).getAllByLabelText(/^(Posture at address|Hands between the planes|Halfway back|Shaft direction|Downswing path|Clubhead on the plane|Hands height|Hands toward|Shaft angle|Spine angle|Hips hold|Head stays|Tempo|Finish balance)/);
-    expect(rows.length).toBeGreaterThanOrEqual(15);
+    const measured = MARKED.checks.filter((c) => c.status !== 'unknown');
+    const rows = within(getByTestId('results-priority')).getAllByLabelText(/./).filter((n) => n.props.accessibilityRole === 'button' && !n.props.testID);
+    measured.forEach((c) => {
+      const name = c.cp && T.cpSuffix[c.cp] ? `${c.label}, ${T.cpSuffix[c.cp]}` : c.label;
+      expect(rows.filter((n) => n.props.accessibilityLabel.startsWith(`${name},`))).toHaveLength(1);
+    });
   });
 
   test('tapping a timeline step shows that checkpoint and resets the nudge', async () => {
@@ -264,11 +267,11 @@ describe('SwingResultsScreen: a stored swing', () => {
     expect(getByText(T.atCheckpoint('Impact'))).toBeTruthy();
   });
 
-  test('D21: the hero names what the main fault is likely also causing, in one line', async () => {
-    const { findByText, getByTestId } = setup();
+  test('the hero names what the main fault is likely also causing, in one line', async () => {
+    const causing = { ...MARKED, main: { ...MARKED.main, consequences: ['posture_loss', 'stuck', 'flip'] } };
+    const { findByText, getByTestId } = setup({ analysis: causing });
     await findByText(VERDICT);
-    expect(MARKED.main.consequences).toContain('early_extension');
-    expect(getByTestId('results-also-causing').props.children).toBe('Likely also causing: rushed tempo, over the top and 1 more');
+    expect(getByTestId('results-also-causing').props.children).toBe('Likely also causing: losing posture, stuck and 1 more');
   });
 
   test('D24: the practice card under the drills opens, remembers, and slots the main drill into Block', async () => {
@@ -278,7 +281,7 @@ describe('SwingResultsScreen: a stored swing', () => {
     fireEvent.press(getByLabelText(T.practice.show));
     expect(store.setPracticeOpen).toHaveBeenCalledWith(true);
     T.practice.blocks.forEach((b) => expect(getByText(b.name)).toBeTruthy());
-    expect(getByText(T.practice.drillIn('Pane of glass (Hogan\'s image)'))).toBeTruthy();
+    expect(getByText(T.practice.drillIn('The chair'))).toBeTruthy(); // early extension's first drill
     fireEvent.press(getByLabelText(T.practice.hide));
     expect(store.setPracticeOpen).toHaveBeenLastCalledWith(false);
   });
@@ -290,17 +293,16 @@ describe('SwingResultsScreen: a stored swing', () => {
     expect(getByText(T.practice.blocks[3].body)).toBeTruthy();
   });
 
-  test('D23: the swing pattern row shows back, down and through; a cell opens its checkpoint', async () => {
+  test('the shaft line row shows halfway back and through; a cell opens its checkpoint', async () => {
     const { findByText, getByTestId, getByLabelText, getByText } = setup();
     await findByText(VERDICT);
     openDetail({ getByTestId });
     expect(getByTestId('results-swing-pattern')).toBeTruthy();
     expect(getByText(T.patternTitle)).toBeTruthy();
-    // owner swing: flat halfway back (Fix), the shaft-down head hidden, nothing placed at shaft through
-    expect(getByLabelText(/^Back: Fix\./)).toBeTruthy();
-    expect(getByLabelText(/^Down: —\./)).toBeTruthy();
+    // owner swing: flat halfway back (Fix), the clubhead hidden at the trail arm
+    expect(getByLabelText(/^Halfway back: Fix\./)).toBeTruthy();
     fireEvent.press(getByLabelText(/^Through: —\./));
-    expect(getByText(T.atCheckpoint('Shaft through'))).toBeTruthy();
+    expect(getByText(T.atCheckpoint('Trail arm'))).toBeTruthy();
   });
 
   test('no consequence line when nothing later is significant', async () => {
@@ -311,7 +313,7 @@ describe('SwingResultsScreen: a stored swing', () => {
   });
 
   test('shows the drills for the main fault and expands the rest', async () => {
-    const evidence = MARKED.checks.filter((c) => c.cluster === 'early_extension');
+    const evidence = MARKED.checks.filter((c) => c.fault === 'early_extension');
     const ee = { ...MARKED, main: { ...MARKED.main, fault: 'early_extension', label: 'Early extension', evidence, consequences: [] } };
     const { findByText, getByText, queryByText, getByLabelText } = setup({ analysis: ee });
     await findByText('Early extension.');
@@ -326,7 +328,7 @@ describe('SwingResultsScreen: a stored swing', () => {
     const { findByText, getAllByLabelText, getByTestId, navigation } = setup({ analysis: UNMARKED });
     await findByText(VERDICT);
     fireEvent.press(getByTestId('results-unknown-fold'));
-    const cta = getAllByLabelText(/^Place clubhead: Halfway back/);
+    const cta = getAllByLabelText(/^Place clubhead: Shaft points at the ball$/);
     fireEvent.press(cta[cta.length - 1]);
     expect(navigation.navigate).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'leadArm' });
   });
@@ -334,14 +336,14 @@ describe('SwingResultsScreen: a stored swing', () => {
   test('a hidden clubhead is a decision: the row says Hidden and offers no placement', async () => {
     const hiddenOnly = {
       ...MARKED,
-      checks: MARKED.checks.map((c) => (c.id === 'downswing_path'
+      checks: MARKED.checks.map((c) => (c.id === 'down_vs_takeaway'
         ? { ...c, status: 'unknown', reason: 'hidden', value: null, text: 'Clubhead hidden at shaft down' } : c)),
     };
     const { findByText, queryByLabelText, getAllByText, getByTestId } = setup({ analysis: hiddenOnly });
     await findByText(VERDICT);
     fireEvent.press(getByTestId('results-unknown-fold'));
     expect(getAllByText('Hidden').length).toBeGreaterThan(0);
-    expect(queryByLabelText(/^Place clubhead: Downswing path/)).toBeNull();
+    expect(queryByLabelText(/^Place clubhead: Vs your takeaway/)).toBeNull();
   });
 
   test('approximate clips say so in the hero and the banner, and flag cm values', async () => {
@@ -357,7 +359,7 @@ describe('SwingResultsScreen: a stored swing', () => {
     const { findByText, getByLabelText, getByPlaceholderText, navigation } = setup();
     await findByText(VERDICT);
     fireEvent.press(getByLabelText(T.editMarks));
-    expect(navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'top' }); // the screen opens on the main fault
+    expect(navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'impact' }); // the screen opens on the main fault
     fireEvent.press(getByLabelText(T.menu));
     fireEvent.press(getByLabelText(T.rename));
     fireEvent.changeText(getByPlaceholderText(T.renamePlaceholder), 'Range · 7-iron');
@@ -386,8 +388,8 @@ describe('SwingResultsScreen: a stored swing', () => {
     await waitFor(() => expect(ensureStills).toHaveBeenCalled());
     const first = MARKED.checkpoints.impact.i; // the first paint, before the screen moves to the main fault
     expect(ensureStills).toHaveBeenCalledWith('s1', [first - 2, first - 1, first, first + 1, first + 2]);
-    const frame = MARKED.checkpoints.top.i;
-    await waitFor(() => expect(getByLabelText(new RegExp(`^Top still, frame ${frame}`)).props.source).toEqual({ uri: 'file:///doc/swings/s1/frames/556.jpg' }));
+    const frame = MARKED.checkpoints.impact.i;
+    await waitFor(() => expect(getByLabelText(new RegExp(`^Impact still, frame ${frame}`)).props.source).toEqual({ uri: 'file:///doc/swings/s1/frames/556.jpg' }));
   });
 
   test('reloads the analysis when it comes back into focus (after Edit marks)', async () => {
@@ -417,16 +419,19 @@ describe('SwingResultsScreen: after the marking pass (D26)', () => {
     expect(store.readAnalysis).not.toHaveBeenCalled();
   });
 
-  test('a row from before the flow is judged by its marks.json: P8 was never marked, so the pass resumes', async () => {
-    const { navigation } = setup({ row: { ...ROW, marked: undefined } }); // OWNER_MARKS: five of the six corrected
+  test('a row from before the flow is judged by its marks.json: a position never marked resumes the pass', async () => {
+    const noTrailArm = { ...OWNER_MARKS, frames: OWNER_MARKS.frames.filter((f) => f.checkpoint !== 'trailArm') };
+    const { navigation } = setup({ row: { ...ROW, marked: undefined }, marks: noTrailArm }); // six of the seven corrected
     await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', mode: 'pass' }));
+    const all = setup({ row: { ...ROW, marked: undefined } }); // OWNER_MARKS: all seven corrected
+    expect(await all.findByText(VERDICT)).toBeTruthy();
   });
 
-  test('a chip says how many positions are not confirmed; none when all six are', async () => {
+  test('a chip says how many positions are not confirmed; none when all seven are', async () => {
     const { findByText, getByTestId } = setup({ row: { ...ROW, marked: { state: 'done', count: 4 } } });
     await findByText(VERDICT);
     expect(getByTestId('results-unconfirmed')).toBeTruthy();
-    expect(getByTestId('results-unconfirmed').props.children.props.children).toBe(T.unconfirmedChip(2));
+    expect(getByTestId('results-unconfirmed').props.children.props.children).toBe(T.unconfirmedChip(3));
     const all = setup();
     await all.findAllByText(VERDICT);
     expect(all.queryByTestId('results-unconfirmed')).toBeNull();
@@ -494,9 +499,9 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
     expect(getByText('240')).toBeTruthy();
     expect(getAllByText('4.1 s').length).toBeGreaterThan(0);
     expect(getByText(T.stepOf(2, 3))).toBeTruthy();
-    // up next: the six positions the marking pass asks for
-    expect(getByText(T.upNextTitle(6))).toBeTruthy();
-    ['address', 'leadArm', 'top', 'shaftDown', 'impact', 'shaftThrough'].forEach((k) => expect(getByText(SWING_STRINGS.mark.short[k])).toBeTruthy());
+    // up next: the seven positions the marking pass asks for (checks v2)
+    expect(getByText(T.upNextTitle(7))).toBeTruthy();
+    ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(getByText(SWING_STRINGS.mark.short[k])).toBeTruthy());
     expect(getByText(SWING_STRINGS.privacy)).toBeTruthy();
 
     await act(async () => { finish({ analysis: UNMARKED, pass2: 'done' }); });

@@ -32,28 +32,38 @@ export const DRILLS = [
     passTarget: L,
   },
   {
-    id: 'su-bisagra', fault: 'posture', checks: ['waist_bend'], title: L,
-    instruction: L,
-    passTarget: L,
-  },
-  {
     id: 'su-palo-espalda', fault: 'posture', checks: ['back_line'], title: L,
     instruction: L,
     passTarget: L,
   },
   {
-    id: 'su-palmo', fault: 'posture', checks: ['hand_gap'], title: L,
+    id: 'su-rodillas', fault: 'posture', checks: ['knee_flex'], title: L,
     instruction: L,
     passTarget: L,
   },
   {
-    id: 'pl-vidrio', fault: 'top_position', checks: ['lead_arm_shoulder_plane', 'hands_over_heels'], also: ['steep_backswing', 'across_the_line'],
+    id: 'pl-columna', fault: 'posture_loss', title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
+    id: 'pl-rodilla', fault: 'posture_loss', checks: ['knee_hold'], title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
+    id: 'tk-plano', fault: 'steep_backswing', checks: ['clubhead_plane_takeaway'], also: ['flat_backswing'], title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
+    id: 'pl-vidrio', fault: 'top_position', checks: ['lead_arm_spine', 'hands_over_heels'], also: ['steep_backswing', 'across_the_line'],
     title: L,
     instruction: L,
     passTarget: L,
   },
   {
-    id: 'pl-palo-atras', fault: 'over_the_top', checks: ['shaft_down_shallow', 'downswing_path'], also: ['flat_backswing', 'flip'],
+    id: 'pl-palo-atras', fault: 'over_the_top', checks: ['down_vs_takeaway'], also: ['flat_backswing', 'flip'],
     title: L,
     instruction: L,
     passTarget: L,
@@ -85,6 +95,11 @@ export const DRILLS = [
   },
   {
     id: 'ott-pausa', fault: 'over_the_top', title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
+    id: 'st-salida', fault: 'stuck', title: L,
     instruction: L,
     passTarget: L,
   },
