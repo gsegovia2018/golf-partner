@@ -877,6 +877,27 @@ export function makeScorecardStyles(theme) {
     whyChipEmpty: { backgroundColor: 'transparent', borderWidth: 1, borderStyle: 'dashed', borderColor: theme.border.default },
     whyChipText: { fontSize: 13, fontWeight: '600', flexShrink: 1 },
     whyChipTextAnswered: { fontWeight: '700' },
+    // Coach focus: strip at the top of the shot panel, and the one-tap lie ask.
+    focusStrip: {
+      flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+      marginTop: 12, marginBottom: 2, paddingVertical: 10, paddingHorizontal: 12,
+      borderRadius: 12, backgroundColor: theme.accent.light,
+    },
+    focusStripText: { flex: 1, fontSize: 13, lineHeight: 18, color: theme.text.primary },
+    focusStripTitle: { fontWeight: '700', color: theme.accent.primary },
+    focusAsk: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      gap: 10, paddingVertical: 7,
+    },
+    focusAskRuled: { borderBottomWidth: 1, borderBottomColor: theme.border.subtle ?? theme.border.default },
+    focusAskLabel: { fontSize: 13, fontWeight: '600', color: theme.text.secondary },
+    focusAskChip: {
+      flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1,
+      minHeight: 32, paddingHorizontal: 12, borderRadius: 16,
+      borderWidth: 1, borderColor: theme.border.default, backgroundColor: 'transparent',
+    },
+    focusAskChipOn: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
+    focusAskChipText: { fontSize: 13, fontWeight: '600', color: theme.text.secondary, flexShrink: 1 },
     shotRowLabel: {
       fontFamily: 'PlusJakartaSans-Bold',
       color: theme.text.primary,

@@ -444,6 +444,14 @@ describe('holePagePropsEqual', () => {
     expect(holePagePropsEqual(prev, next)).toBe(true);
   });
 
+  test('focusTarget changed → re-render, same reference → skip', () => {
+    const target = { shot: 'approach', kind: 'swing' };
+    const prev = { ...baseProps(), focusTarget: target };
+    expect(holePagePropsEqual(prev, { ...prev })).toBe(true);
+    expect(holePagePropsEqual(prev, { ...prev, focusTarget: { ...target } })).toBe(false);
+    expect(holePagePropsEqual(baseProps(), { ...baseProps(), focusTarget: target })).toBe(false);
+  });
+
   test('structural prop changed (round) → re-render', () => {
     const prev = baseProps();
     const next = { ...prev, round: { ...prev.round } };

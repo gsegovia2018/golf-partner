@@ -6,7 +6,7 @@ import { makeScorecardStyles } from './styles';
 import { ShotDetailExplainer } from '../ShotDetailExplainer';
 import MissWhySheet from './MissWhySheet';
 import { renderMsg } from '../mystats/msg';
-import { summaryOf } from '../../store/missReasons';
+import { summaryOf, situations } from '../../store/missReasons';
 import { isRoundMuted, muteRound } from '../../store/missReasonsMute';
 import {
   hydrateSwingProfile, getSwingProfile, subscribeSwings, getSwingsVersion,
@@ -243,7 +243,8 @@ function ReasonChip({ summary, onPress, readOnly, align, ruled = false, theme, s
 // scorecard: stat rows with a stepper, plus a row of round direction
 // buttons for the drive. The drive row is hidden on par 3s.
 export function ShotDetailPanel({
-  hole, detail, onChange, strokes, statGroups, roundId, readOnly = false, theme: themeProp, s: sProp,
+  hole, detail, onChange, strokes, statGroups, roundId, readOnly = false, focusTarget = null,
+  theme: themeProp, s: sProp,
 }) {
   const tl = useT();
   const teeClubLabels = localizeMap(TEE_CLUB_LABELS, 'teeClub', tl);
@@ -292,7 +293,29 @@ export function ShotDetailPanel({
 
   // Miss reasons. The sheet opens only from the taps below, never from a
   // `detail` change (watch writes, peers and rehydrates arrive that way).
-  const canAutoOpen = missSetting === 'ask' && !muted && !readOnly;
+  // Coach focus (round focus loop spec 2.2): the strip and asks apply on the
+  // holes and shots the focus is about. A swing / decision focus also opens the
+  // sheet on a missed focus shot when the setting is "On tap"; never for "Off",
+  // a muted round or read-only. Short-game never auto-opens (plan decision 12).
+  const focusGroup = { approach: g.approach, drive: g.teeShot, short: g.shortGame, putt: g.putting };
+  const focusApplies = !!focusTarget && !readOnly && !!focusGroup[focusTarget.shot]
+    && (focusTarget.shot === 'approach'
+      ? !isPar3 || !focusTarget.bucket || d.approachBucket == null || d.approachBucket === focusTarget.bucket
+      : focusTarget.shot === 'drive' ? !isPar3 : true);
+  const focusAsk = (mode) => focusApplies
+    && (focusTarget.kind === 'swing' || focusTarget.kind === 'decision')
+    && focusTarget.shot === (mode === 'drive' ? 'drive' : 'approach');
+  const canOpen = (mode) => (missSetting === 'ask' || (missSetting === 'manual' && focusAsk(mode)))
+    && !muted && !readOnly;
+  const situationList = situations(d, 'approachSituation');
+  const focusLie = focusApplies && focusTarget.kind === 'lie' ? focusTarget.lie : null;
+  const lieChipOn = !!focusLie && showApproachExtrasFlag;
+  const toggleFocusLie = () => {
+    const next = situationList.includes(focusLie)
+      ? situationList.filter((x) => x !== focusLie)
+      : [...situationList, focusLie];
+    onChange({ approachSituation: next.length ? next : null });
+  };
   const chipsOn = missSetting !== 'off';
   const driveChip = chipsOn && g.teeShot && !isPar3 && driveMissed;
   const approachChip = chipsOn && showApproachExtrasFlag && d.approachResult === 'miss';
@@ -301,14 +324,14 @@ export function ShotDetailPanel({
   const onDriveTap = (key) => {
     const patch = driveDirectionPatch(d.drive, key);
     onChange(patch);
-    if (canAutoOpen && DRIVE_MISSES.includes(patch.drive)) setSheet('drive');
+    if (canOpen('drive') && DRIVE_MISSES.includes(patch.drive)) setSheet('drive');
   };
   const onFinishTap = (key) => {
     const patch = approachFinishPatch(d, key);
     onChange(patch);
     const turnedOn = key === 'bunker' ? patch.approachBunker === true
       : key !== 'green' && patch.approachMiss === key;
-    if (canAutoOpen && turnedOn) setSheet('approach');
+    if (canOpen('approach') && turnedOn) setSheet('approach');
   };
 
   // Stroke budget: every counter is one of the hole's strokes, so the four
@@ -353,6 +376,20 @@ export function ShotDetailPanel({
 
   return (
     <View style={s.shotPanel}>
+      {focusApplies && (
+        <View
+          style={s.focusStrip}
+          testID="focus-strip"
+          accessible
+          accessibilityLabel={`${tl('shots.focus.label')}: ${renderMsg(focusTarget.title)} · ${renderMsg(focusTarget.cue)}`}
+        >
+          <Feather name="target" size={18} color={theme.accent.primary} />
+          <Text style={s.focusStripText}>
+            <Text style={s.focusStripTitle}>{renderMsg(focusTarget.title)}</Text>
+            {` · ${renderMsg(focusTarget.cue)}`}
+          </Text>
+        </View>
+      )}
       {budgetCaption && <Text style={s.shotBudgetCaption}>{budgetCaption}</Text>}
 
       {g.putting && (
@@ -534,8 +571,32 @@ export function ShotDetailPanel({
           onSelect={onFinishTap}
           theme={theme}
           s={s}
-          noRule={approachChip}
+          noRule={approachChip || lieChipOn}
         />
+      )}
+      {lieChipOn && (
+        <View style={[s.focusAsk, !approachChip && s.focusAskRuled]}>
+          <Text style={s.focusAskLabel}>{tl('shots.focus.thisShot')}</Text>
+          <TouchableOpacity
+            testID="focus-lie-chip"
+            style={[s.focusAskChip, situationList.includes(focusLie) && s.focusAskChipOn]}
+            onPress={toggleFocusLie}
+            activeOpacity={0.7}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+            accessibilityRole="button"
+            accessibilityLabel={tl(`shots.focus.ask.${focusLie}`)}
+            accessibilityState={{ selected: situationList.includes(focusLie) }}
+          >
+            <Feather
+              name="check"
+              size={14}
+              color={situationList.includes(focusLie) ? theme.text.inverse : theme.text.secondary}
+            />
+            <Text style={[s.focusAskChipText, situationList.includes(focusLie) && { color: theme.text.inverse }]}>
+              {tl(`shots.focus.ask.${focusLie}`)}
+            </Text>
+          </TouchableOpacity>
+        </View>
       )}
       {showApproachExtras && approachChip && (
         <ReasonChip

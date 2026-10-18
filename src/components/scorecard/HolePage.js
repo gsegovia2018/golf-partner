@@ -105,6 +105,7 @@ export function holePagePropsEqual(prev, next) {
     || prev.onOpenConflict !== next.onOpenConflict
     || prev.shotCollapsed !== next.shotCollapsed
     || prev.onToggleShotDetail !== next.onToggleShotDetail
+    || prev.focusTarget !== next.focusTarget
     || prev.conflictCells !== next.conflictCells
     || prev.onOpenFlyover !== next.onOpenFlyover
     || prev.ghostEnabled !== next.ghostEnabled
@@ -145,7 +146,7 @@ export const HolePage = React.memo(function HolePage({
   mode,
   official, officialDiscrepancy, onOpenDiscrepancy,
   onOpenConflict,
-  shotCollapsed, onToggleShotDetail,
+  shotCollapsed, onToggleShotDetail, focusTarget = null,
   totalsMap,
   conflictCells = new Set(),
   // Comma-joined ids of the players whose card counts for a league in this
@@ -395,6 +396,7 @@ export const HolePage = React.memo(function HolePage({
                 onSetShot={onSetShot}
                 shotCollapsed={shotCollapsed}
                 onToggleShotDetail={onToggleShotDetail}
+                focusTarget={focusTarget}
                 showShotDetail={showShotDetail}
                 officialState={officialState}
                 canResolveHere={canResolveHere}
