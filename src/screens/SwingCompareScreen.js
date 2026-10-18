@@ -7,6 +7,7 @@ import {
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import { useSwingTone } from '../components/swing/swingTone';
+import { Overline, glass } from '../components/swing/swingStyles';
 import { useTheme } from '../theme/ThemeContext';
 import {
   getSwing, hydrateSwings, readAnalysis, readProbe,
@@ -63,26 +64,27 @@ export function SwingCompareView({ left, right, onBack, onSwap }) {
               <Text style={s.verdict}>{result.verdict}</Text>
               <Text style={s.why}>{result.sentence}</Text>
               <View style={s.chips}>
-                {['better', 'same', 'worse', 'unclear'].map((k) => (
+                {['better', 'same', 'worse', 'unclear'].filter((k) => result.counts[k]).map((k) => (
                   <View key={k} style={s.chip}><Text style={s.chipText}>{T[k](result.counts[k])}</Text></View>
                 ))}
               </View>
             </View>
 
+            <Overline>{T.impactStills}</Overline>
             <View style={s.stills}>
-              {[left, right].map((side, i) => (
+              {[left, right].map((side) => (
                 <View key={side.row.id} style={{ width: colW }}>
-                  <Text style={s.colName} numberOfLines={1}>{`${side.row.name} · ${SWING_STRINGS.club[clubOf(side)]}`}</Text>
                   <View style={[s.stillBox, { width: colW, height: colW / (side.aspect || 0.75) }]} accessibilityLabel={T.stillA11y(side.row.name, T.impactStills.toLowerCase())}>
                     {side.stillUri ? (
                       <Image source={{ uri: side.stillUri }} style={s.still} resizeMode="cover" />
                     ) : <Text style={s.noStill}>{T.noStill}</Text>}
-                    <View style={s.stillTag}><Text style={s.stillTagText}>{i === 0 ? shortDate(left.row.createdAt) : shortDate(right.row.createdAt)}</Text></View>
+                    <View style={[s.stillTag, glass.pill]}>
+                      <Text style={s.stillTagText} numberOfLines={1}>{`${side.row.name} · ${SWING_STRINGS.club[clubOf(side)]}`}</Text>
+                    </View>
                   </View>
                 </View>
               ))}
             </View>
-            <Text style={s.hint}>{T.impactStills}</Text>
             {mixedClubs ? <Text style={s.clubNote} accessibilityRole="alert">{T.differentClubs}</Text> : null}
 
             <View style={s.card}>
@@ -186,20 +188,19 @@ const makeStyles = (theme) => StyleSheet.create({
   hero: { backgroundColor: theme.bg.deep, borderRadius: theme.radius.lg, padding: 16, gap: 4 },
   overline: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)' },
   verdict: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 26, lineHeight: 32, color: '#ffffff' },
-  why: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12.5, lineHeight: 18, color: 'rgba(255,255,255,0.88)' },
+  why: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, lineHeight: 19, color: 'rgba(255,255,255,0.88)' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   chip: { backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  chipText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, color: '#ffffff' },
+  chipText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: '#ffffff' },
 
   stills: { flexDirection: 'row', gap: 10 },
-  colName: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12.5, color: theme.text.primary, marginBottom: 6 },
   stillBox: { borderRadius: theme.radius.lg, overflow: 'hidden', backgroundColor: '#0a0d10', alignItems: 'center', justifyContent: 'center' },
   still: { ...StyleSheet.absoluteFillObject },
   noStill: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: 'rgba(255,255,255,0.7)' },
-  stillTag: { position: 'absolute', left: 8, bottom: 8, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  stillTag: { position: 'absolute', left: 6, right: 6, bottom: 6, alignItems: 'center', paddingHorizontal: 8, paddingVertical: 3 },
   stillTagText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: '#ffffff' },
-  clubNote: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: theme.text.primary, lineHeight: 17 },
-  hint: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11.5, color: theme.text.secondary, lineHeight: 16 },
+  clubNote: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: theme.text.primary, lineHeight: 17 },
+  hint: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, color: theme.text.secondary, lineHeight: 16 },
 
   card: {
     backgroundColor: theme.bg.card, borderRadius: theme.radius.lg, padding: 12, gap: 2,
@@ -213,8 +214,8 @@ const makeStyles = (theme) => StyleSheet.create({
   cChange: { width: 58, alignItems: 'flex-end' },
   valCell: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  label: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12.5, lineHeight: 16, color: theme.text.primary },
-  value: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12.5, color: theme.text.primary, fontVariant: ['tabular-nums'] },
-  changeWord: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
-  delta: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10.5, color: theme.text.secondary, fontVariant: ['tabular-nums'] },
+  label: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, lineHeight: 17, color: theme.text.primary },
+  value: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13, color: theme.text.primary, fontVariant: ['tabular-nums'] },
+  changeWord: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
+  delta: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, color: theme.text.secondary, fontVariant: ['tabular-nums'] },
 });

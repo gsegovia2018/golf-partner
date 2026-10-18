@@ -112,7 +112,7 @@ export default function StepStill({
 }
 
 const s = StyleSheet.create({
-  wrap: { borderRadius: 14, overflow: 'hidden', alignItems: 'center', backgroundColor: '#0a0d10' },
+  wrap: { alignSelf: 'center', borderRadius: 14, overflow: 'hidden', alignItems: 'center', backgroundColor: '#0a0d10' },
   toast: { position: 'absolute', left: 8, right: 8, top: 8 },
   badge: { position: 'absolute', left: 8, top: 8, maxWidth: '70%', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5 },
   badgeP: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: hud.textSoft },
@@ -120,7 +120,7 @@ const s = StyleSheet.create({
   badgeWord: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: hud.textSoft },
   play: { position: 'absolute', right: 8, top: 8, minHeight: 32, minWidth: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10 },
   playText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: hud.text },
-  nudge: { position: 'absolute', bottom: 8, right: 8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 2 },
+  nudge: { position: 'absolute', bottom: 10, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 2 },
   nb: { width: 40, height: 36, alignItems: 'center', justifyContent: 'center' },
   nbOff: { opacity: 0.3 },
   nudgeText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: hud.text, paddingHorizontal: 6, fontVariant: ['tabular-nums'] },

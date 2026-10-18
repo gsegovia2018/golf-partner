@@ -114,7 +114,7 @@ export default function SwingSummary({
                   <View style={[s.dot, { backgroundColor: tone[st] ?? tone.unknown }]} />
                 )}
               </View>
-              <Text style={[s.segName, on && s.segNameOn]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{SWING_STRINGS.position.short[k]}</Text>
+              <Text style={[s.segName, on && s.segNameOn]} numberOfLines={1}>{SWING_STRINGS.position.short[k]}</Text>
             </PressableScale>
           );
         })}
@@ -145,7 +145,7 @@ const makeStyles = (theme) => {
     placeBtnText: { ...t.label, fontSize: 13, color: theme.text.inverse },
 
     strip: {
-      flexDirection: 'row', gap: 2, padding: 5, backgroundColor: theme.bg.card, borderRadius: theme.radius.lg,
+      flexDirection: 'row', gap: 1, padding: 4, backgroundColor: theme.bg.card, borderRadius: theme.radius.lg,
       borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
     },
     seg: { flex: 1, minHeight: 52, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 1 },
@@ -156,7 +156,7 @@ const makeStyles = (theme) => {
     dotRing: { borderWidth: 2, backgroundColor: 'transparent' },
     dotWait: { borderWidth: 2, borderStyle: 'dashed', backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
     plus: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, lineHeight: 10, marginTop: -1 },
-    segName: { ...t.label, color: theme.text.secondary, textAlign: 'center' },
+    segName: { ...t.label, fontSize: 10, letterSpacing: -0.1, color: theme.text.secondary, textAlign: 'center' }, // one size for all eight: no shrink-to-fit
     segNameOn: { color: theme.text.primary },
   });
 };

@@ -191,7 +191,9 @@ export function SwingResultsView({
   useEffect(() => { if (ready && !uri) onNeedStills?.(frame); }, [ready, uri, frame]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const video = pose?.video ?? null;
-  const boxH = video ? Math.min(boxW * (video.height / video.width), winH * 0.55) : boxW * 1.2;
+  const boxH = video ? Math.min(boxW * (video.height / video.width), winH * 0.6) : boxW * 1.2;
+  // the dark frame hugs the picture (a portrait clip is narrower than the screen), centred, so the controls sit on its corners
+  const picW = video ? Math.min(boxW, boxH * (video.width / video.height)) : boxW;
   const club = ready && off === 0 ? analysis.clubMarks[cp] : null;
   const placing = place && ready && step !== EXTRAS && clubheadOpen(analysis.clubMarks, cp);
   const proposal = placing && club?.head && club.source !== 'prior' ? club.head : null;
@@ -320,8 +322,9 @@ export function SwingResultsView({
 
             <StepStill
               overlay={{
-                width: boxW,
+                width: picW,
                 height: boxH,
+                legendTop: 46, // under the position pill: the bottom edge carries the frame stepper
                 video,
                 uri,
                 pose: poseAtFrame(pose, frame),

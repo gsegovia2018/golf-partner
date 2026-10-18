@@ -82,7 +82,7 @@ describe('SwingHomeScreen', () => {
   test('empty state teaches the set-up; the header says where swings are stored', () => {
     const { getByText, queryByText } = setup();
     expect(getByText(SWING_STRINGS.home.emptyTitle)).toBeTruthy();
-    expect(getByText(/phone on your toe line, at hand height, aimed at your hands/)).toBeTruthy();
+    expect(getByText(/phone at hand height on your toe line/)).toBeTruthy();
     expect(getByText('Stored on this phone')).toBeTruthy();
     expect(queryByText('Your video and analysis stay on this phone. Nothing is uploaded.')).toBeNull();
     expect(queryByText(/long-press it for more/)).toBeNull();
@@ -259,8 +259,8 @@ describe('SwingHomeScreen', () => {
     store.getSwingProfile.mockReturnValue({ heightCm: null, handedness: 'right', asked: false });
     const { getByLabelText, getByText, navigation } = setup();
     fireEvent.press(getByLabelText('Record'));
-    expect(getByText(/Skip for now · use \d+ cm \(approx\.\)/)).toBeTruthy();
-    await act(async () => { fireEvent.press(getByLabelText(/^Skip for now/)); });
+    expect(getByText(/Skip · use \d+ cm/)).toBeTruthy();
+    await act(async () => { fireEvent.press(getByLabelText(/^Skip · use/)); });
     expect(store.setSwingProfile).toHaveBeenCalledWith({ heightCm: null, handedness: 'right' });
     expect(navigation.navigate).toHaveBeenCalledWith('SwingCapture');
   });

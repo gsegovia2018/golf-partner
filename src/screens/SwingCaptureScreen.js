@@ -11,6 +11,7 @@ import { useCameraPermissions } from 'expo-camera';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { File, Paths } from 'expo-file-system';
 import CaptureGuide from '../components/swing/CaptureGuide';
+import { glass } from '../components/swing/swingStyles';
 import { hud } from '../theme/tokens';
 import { haptic } from '../lib/haptics';
 import { captureSupport, getCameraView, listRecordingModes } from '../swing/native';
@@ -342,7 +343,7 @@ export default function SwingCaptureScreen({ navigation }) {
         </Pressable>
         {phase === 'live' && !showFallback ? (
           <Pressable
-            style={styles.pill}
+            style={[styles.pill, glass.pill]}
             onPress={() => (guideOpen ? dismissGuide() : setGuideOpen(true))}
             accessibilityRole="button"
             accessibilityLabel={T.guideToggle}
@@ -392,10 +393,13 @@ export default function SwingCaptureScreen({ navigation }) {
         ) : null}
 
         {live && mode && !showFallback ? (
-          <>
-            <View style={styles.pill} testID="capture-fps-pill" accessibilityLabel={T.fps(mode.fps)}>
-              <View style={[styles.dot, { backgroundColor: TIER[tier] }]} />
-              <Text style={styles.pillText}>{T.fps(mode.fps)}</Text>
+          // one row, like a camera: the frame rate | record | the clock, the button dead centre
+          <View style={styles.recRow}>
+            <View style={styles.side}>
+              <View style={[styles.pill, glass.pill]} testID="capture-fps-pill" accessibilityLabel={T.fps(mode.fps)}>
+                <View style={[styles.dot, { backgroundColor: TIER[tier] }]} />
+                <Text style={styles.pillText} numberOfLines={1}>{T.fps(mode.fps)}</Text>
+              </View>
             </View>
             <RecordButton
               recording={recording}
@@ -403,19 +407,21 @@ export default function SwingCaptureScreen({ navigation }) {
               disabled={phase === 'stopping' || phase === 'starting' || (phase === 'live' && !state.ready)}
               onPress={recording ? stop : start}
             />
-            <View style={styles.pill}>
-              <Text style={styles.elapsed}>
-                {formatElapsed(recording ? elapsed : 0)}
-                <Text style={styles.elapsedMax}>{` ${T.autoStop(formatElapsed(MAX_RECORD_MS).replace(/\.0$/, ''))}`}</Text>
-              </Text>
+            <View style={styles.side}>
+              <View style={[styles.pill, glass.pill]}>
+                <Text style={styles.elapsed} numberOfLines={1}>
+                  {formatElapsed(recording ? elapsed : 0)}
+                  <Text style={styles.elapsedMax}>{` ${T.autoStop(formatElapsed(MAX_RECORD_MS).replace(/\.0$/, ''))}`}</Text>
+                </Text>
+              </View>
             </View>
-          </>
+          </View>
         ) : null}
 
         {phase === 'loading' ? <Text style={styles.caption}>{T.loading}</Text> : null}
 
-        <View style={styles.privacy}>
-          <Feather name="shield" size={13} color={hud.accent} />
+        <View style={[styles.privacy, glass.pill]}>
+          <Feather name="lock" size={12} color={hud.textSoft} />
           <Text style={styles.privacyText}>{SWING_STRINGS.privacy}</Text>
         </View>
       </View>
@@ -442,12 +448,12 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4 },
   cardWrap: { position: 'absolute', left: 18, right: 18 },
   card: {
-    backgroundColor: hud.card, borderRadius: 16, padding: 16, gap: 8,
-    borderWidth: 1, borderColor: hud.line,
+    backgroundColor: 'rgba(10,13,16,0.82)', borderRadius: 16, padding: 16, gap: 8, // glass, a little denser: it carries reading
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', borderTopColor: 'rgba(255,255,255,0.22)',
   },
   reviewCard: { alignSelf: 'stretch' },
   cardTitle: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15, color: hud.text },
-  cardBody: { flex: 1, fontFamily: 'PlusJakartaSans-Medium', fontSize: 12.5, lineHeight: 18, color: hud.textSoft },
+  cardBody: { flex: 1, fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, lineHeight: 19, color: hud.textSoft },
   tipRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   tipDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: hud.textSoft, marginTop: 7 },
   alignStart: { alignSelf: 'flex-start' },
@@ -466,6 +472,8 @@ const styles = StyleSheet.create({
     position: 'absolute', left: 0, right: 0, bottom: 0,
     paddingHorizontal: 20, alignItems: 'center', gap: 12,
   },
+  recRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch' },
+  side: { flex: 1, alignItems: 'center' },
   rec: { width: 96, height: 96, alignItems: 'center', justifyContent: 'center' },
   recRing: {
     width: 76, height: 76, borderRadius: 38, borderWidth: 4, borderColor: hud.text,
@@ -475,7 +483,7 @@ const styles = StyleSheet.create({
   recStop: { width: 28, height: 28, borderRadius: 7, backgroundColor: REC_RED },
   elapsed: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14, color: hud.text, fontVariant: ['tabular-nums'] },
   elapsedMax: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: hud.textMuted },
-  caption: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11.5, color: hud.textMuted, textAlign: 'center' },
+  caption: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: hud.textMuted, textAlign: 'center' },
   errorRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: hud.scrim,
     borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12,

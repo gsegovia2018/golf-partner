@@ -1248,7 +1248,7 @@ describe('checks v2: seven positions, the unsure clubhead, the deep link', () =>
     await walk(u, 7);
     const sheet = await u.findByTestId('mark-finish-sheet');
     expect(within(sheet).getByText(M.finishTitle(7, 7))).toBeTruthy();
-    expect(within(sheet).getByText(/the detector was not sure there/)).toBeTruthy();
+    expect(within(sheet).getByText(/you can place it later from Results/)).toBeTruthy();
     expect(within(sheet).getByText(M.autoLine)).toBeTruthy();
     ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(within(sheet).getByTestId(`finish-row-${k}`)).toBeTruthy());
     expect(within(sheet).getByText('Halfway back')).toBeTruthy();
