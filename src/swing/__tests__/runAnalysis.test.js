@@ -50,6 +50,21 @@ beforeEach(() => {
 });
 
 describe('runAnalysis', () => {
+  test('decode events stop moving the stage once pose frames arrive (native interleaves them)', async () => {
+    const listeners = [];
+    const api = makeApi({
+      addListener: jest.fn((name, cb) => { listeners.push(cb); return { remove: jest.fn() }; }),
+      analyzePose: jest.fn(async () => {
+        [['decode', 5], ['pose', 0], ['decode', 20], ['pose', 15]].forEach(([stage, done]) => listeners.forEach((cb) => cb({ stage, done, total: 100 })));
+        return fixtureNative({ ball, ballGoneFrame: lab.expected.ballGoneFrame });
+      }),
+    });
+    frames.nativeApi.mockReturnValue(api);
+    const seen = [];
+    await runAnalysis('s1', { onProgress: (p) => { if (p.total) seen.push(`${p.stage}:${p.done}`); } });
+    expect(seen).toEqual(['reading:5', 'pose:0', 'pose:15']);
+  });
+
   test('probe -> pose -> first save -> pass 2 -> final save, reporting the stages in order', async () => {
     const api = makeApi();
     frames.nativeApi.mockReturnValue(api);

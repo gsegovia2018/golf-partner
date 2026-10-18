@@ -478,15 +478,25 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
   test('processing shows the stages, then hands over to the marking pass: no results before it', async () => {
     let onProgress; let finish;
     runAnalysis.mockImplementation((id, o) => { ({ onProgress } = o); return new Promise((r) => { finish = r; }); });
-    const { findByText, getByText, queryByText, navigation } = setup({ row: PENDING, analysis: UNMARKED });
+    const {
+      findAllByText, getByText, getAllByText, getByLabelText, queryByText, navigation,
+    } = setup({ row: PENDING, analysis: UNMARKED });
 
-    expect(await findByText(T.stages.reading)).toBeTruthy();
+    expect(await findAllByText(T.stages.reading)).toHaveLength(2); // the stage line and its step
     expect(getByText(T.stages.pose)).toBeTruthy();
     expect(getByText(T.stages.planes)).toBeTruthy();
     expect(getByText(T.processingTitle)).toBeTruthy();
     await act(async () => { onProgress({ stage: 'pose', done: 120, total: 300, probe: { height: 720, containerFps: 30, captureFps: 240, durationMs: 4100 } }); });
-    expect(getByText('120 / 300')).toBeTruthy();
-    expect(getByText(/720p · 240 fps · 4\.1 s/)).toBeTruthy();
+    // the clip strip: 120 of 300 frames is 40 % of a 4.1 s clip, so the playhead reads 1.64 s
+    expect(getByText('1.64 s')).toBeTruthy();
+    expect(getByLabelText(T.timelineA11y('1.64', '4.10', 120, 300))).toBeTruthy();
+    expect(getByText('120')).toBeTruthy();
+    expect(getByText('240')).toBeTruthy();
+    expect(getAllByText('4.1 s').length).toBeGreaterThan(0);
+    expect(getByText(T.stepOf(2, 3))).toBeTruthy();
+    // up next: the six positions the marking pass asks for
+    expect(getByText(T.upNextTitle(6))).toBeTruthy();
+    ['address', 'leadArm', 'top', 'shaftDown', 'impact', 'shaftThrough'].forEach((k) => expect(getByText(SWING_STRINGS.mark.short[k])).toBeTruthy());
     expect(getByText(SWING_STRINGS.privacy)).toBeTruthy();
 
     await act(async () => { finish({ analysis: UNMARKED, pass2: 'done' }); });
@@ -496,10 +506,15 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
 
   test('processing shows only the stages: no verdict, timeline, checks, club picker or marks', async () => {
     runAnalysis.mockReturnValue(new Promise(() => {}));
-    const { findByText, queryByText, queryByTestId, queryAllByText } = setup({ row: PENDING, analysis: MARKED });
-    await findByText(T.stages.reading);
+    const {
+      findAllByText, queryByText, queryByTestId, queryAllByText, getByTestId,
+    } = setup({ row: PENDING, analysis: MARKED });
+    await findAllByText(T.stages.reading);
     expect(queryByText(T.mainTitle)).toBeNull();
-    expect(queryAllByText(SWING_STRINGS.checkpoint.impact)).toHaveLength(0);
+    // "Impact" shows once, in the up-next list of positions to mark, never on a results timeline
+    const impact = queryAllByText(SWING_STRINGS.checkpoint.impact);
+    expect(impact).toHaveLength(1);
+    expect(within(getByTestId('processing-up-next')).getByText(SWING_STRINGS.checkpoint.impact)).toBe(impact[0]);
     expect(queryByText(T.allChecks)).toBeNull();
     expect(queryByText(T.nextMarking)).toBeNull();
     expect(queryByTestId('results-club-picker')).toBeNull();
@@ -540,8 +555,8 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
     const cancel = jest.fn();
     nativeApi.mockReturnValue({ cancelAnalysis: cancel });
     runAnalysis.mockReturnValue(new Promise(() => {}));
-    const { findByText, unmount } = setup({ row: PENDING });
-    await findByText(T.stages.reading);
+    const { findAllByText, unmount } = setup({ row: PENDING });
+    await findAllByText(T.stages.reading);
     unmount();
     expect(cancel).toHaveBeenCalled();
   });
@@ -583,9 +598,9 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
 
   test('"Analyse again" after a cancelled run starts a new run', async () => {
     runAnalysis.mockResolvedValueOnce({ cancelled: true }).mockReturnValueOnce(new Promise(() => {}));
-    const { findByLabelText, findByText } = setup({ row: PENDING });
+    const { findByLabelText, findAllByText } = setup({ row: PENDING });
     fireEvent.press(await findByLabelText(T.retry));
-    expect(await findByText(T.stages.reading)).toBeTruthy();
+    expect((await findAllByText(T.stages.reading)).length).toBeGreaterThan(0);
     expect(runAnalysis).toHaveBeenCalledTimes(2);
   });
 });

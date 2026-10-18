@@ -15,6 +15,7 @@ import SwingTimeline from '../components/swing/SwingTimeline';
 import SwingCheckRow from '../components/swing/SwingCheckRow';
 import SwingFixPeek from '../components/swing/SwingFixPeek';
 import SwingFixSheet from '../components/swing/SwingFixSheet';
+import SwingProcessing from '../components/swing/SwingProcessing';
 import { useSwingTone, focusTone } from '../components/swing/swingTone';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic, hud } from '../theme/tokens';
@@ -163,42 +164,6 @@ function DisclosureRow({
   );
 }
 
-function Processing({ s, progress, onDelete }) {
-  const stage = progress?.stage ?? 'reading';
-  const order = ['reading', 'pose', 'planes'];
-  const at = order.indexOf(stage);
-  const frac = stage === 'reading' ? 0.1
-    : stage === 'pose' ? 0.1 + 0.75 * (progress.total ? Math.min(1, progress.done / progress.total) : 0)
-      : 0.92;
-  return (
-    <View style={s.procWrap} testID="results-processing">
-      <View style={s.processing} accessibilityLiveRegion="polite">
-        <View style={s.shutter}><View style={s.shutterDot} /></View>
-        <Text style={s.procTitle} accessibilityRole="header">{T.processingTitle}</Text>
-        <View style={s.stages}>
-          {order.map((k, i) => {
-            const done = i < at;
-            const active = i === at;
-            return (
-              <View key={k} style={s.stage}>
-                <View style={[s.stageIc, done && s.stageDone, active && s.stageActive]}>
-                  {done ? <Feather name="check" size={11} color={hud.onAccent} /> : null}
-                </View>
-                <Text style={[s.stageText, !done && !active && s.stageTodo]}>{T.stages[k]}</Text>
-                {active && progress?.total ? <Text style={s.stageSub}>{`${progress.done} / ${progress.total}`}</Text> : null}
-              </View>
-            );
-          })}
-        </View>
-        <View style={s.bar}><View style={[s.barFill, { width: `${Math.round(frac * 100)}%` }]} /></View>
-        {progress?.probe ? <Text style={s.procMeta}>{T.clipLine(progress.probe)}</Text> : null}
-        <Text style={s.procMeta}>{SWING_STRINGS.privacy}</Text>
-      </View>
-      <DeleteLink s={s} onPress={onDelete} />
-    </View>
-  );
-}
-
 function DeleteLink({ s, onPress }) {
   return (
     <PressableScale style={s.deleteLink} onPress={onPress} accessibilityRole="button" accessibilityLabel={T.deleteSwing} testID="results-delete-link">
@@ -207,11 +172,12 @@ function DeleteLink({ s, onPress }) {
   );
 }
 
-function ErrorSlot({ s, error, width, onPrimary, primaryLabel, onSecondary, secondaryLabel }) {
+function ErrorSlot({ s, error, onPrimary, primaryLabel, onSecondary, secondaryLabel }) {
+  const tone = useSwingTone();
   return (
     <>
-      <View style={[s.errorSlot, { width }]} accessibilityRole="alert" accessible accessibilityLabel={SWING_STRINGS.errors[error] ?? SWING_STRINGS.errors.failed}>
-        <Feather name="alert-circle" size={28} color="#f87171" />
+      <View style={s.errorSlot} accessibilityRole="alert" accessible accessibilityLabel={SWING_STRINGS.errors[error] ?? SWING_STRINGS.errors.failed}>
+        <Feather name="alert-circle" size={26} color={tone.red} />
         <Text style={s.errorTitle}>{T.errorTitle[error] ?? T.errorTitle.failed}</Text>
         <Text style={s.errorBody}>{T.errorBody[error] ?? T.errorBody.failed}</Text>
       </View>
@@ -363,7 +329,6 @@ export function SwingResultsView({
             <ErrorSlot
               s={s}
               error={error}
-              width={boxW}
               onPrimary={error === 'cancelled' || error === 'failed' ? onRetry : error === 'update' ? null : onRecord}
               primaryLabel={error === 'cancelled' || error === 'failed' ? T.retry : T.recordAgain}
               onSecondary={onBack}
@@ -373,7 +338,12 @@ export function SwingResultsView({
           </>
         ) : null}
 
-        {phase === 'processing' ? <Processing s={s} progress={progress} onDelete={onDelete} /> : null}
+        {phase === 'processing' ? (
+          <>
+            <SwingProcessing progress={progress} />
+            <DeleteLink s={s} onPress={onDelete} />
+          </>
+        ) : null}
 
         {ready ? (
           <>
@@ -851,32 +821,12 @@ const makeStyles = (theme) => StyleSheet.create({
   btnOff: { opacity: 0.5 },
 
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  procWrap: { alignItems: 'center', gap: 8, paddingTop: 12 },
-  processing: {
-    alignSelf: 'stretch', backgroundColor: hud.card, borderRadius: theme.radius.lg, padding: 24, gap: 16,
-    alignItems: 'center', justifyContent: 'center', minHeight: 320,
-    borderWidth: 1, borderColor: hud.border,
-  },
-  procTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, color: hud.text, textAlign: 'center' },
-  shutter: { width: 52, height: 52, borderRadius: 26, borderWidth: 1.5, borderColor: hud.accent, alignItems: 'center', justifyContent: 'center' },
-  shutterDot: { width: 44, height: 44, borderRadius: 22, backgroundColor: hud.text },
-  stages: { width: '100%', maxWidth: 260, gap: 10 },
-  stage: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stageIc: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: withAlpha(hud.text, 0.35), alignItems: 'center', justifyContent: 'center' },
-  stageDone: { backgroundColor: hud.accent, borderColor: hud.accent },
-  stageActive: { borderColor: hud.text },
-  stageText: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, color: hud.text },
-  stageTodo: { color: hud.textDim },
-  stageSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11.5, color: hud.textSoft, fontVariant: ['tabular-nums'] },
-  bar: { width: '100%', maxWidth: 260, height: 6, borderRadius: 3, backgroundColor: hud.fill, overflow: 'hidden' },
-  barFill: { height: 6, borderRadius: 3, backgroundColor: hud.accent },
-  procMeta: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11.5, lineHeight: 17, color: hud.textMuted, textAlign: 'center' },
   deleteLink: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   deleteLinkText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: theme.text.secondary },
 
-  errorSlot: { alignSelf: 'center', backgroundColor: '#12171c', borderRadius: theme.radius.lg, padding: 24, gap: 8, alignItems: 'center', minHeight: 220, justifyContent: 'center' },
-  errorTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, color: '#ffffff', textAlign: 'center' },
-  errorBody: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, lineHeight: 19, color: '#cfe3d5', textAlign: 'center' },
+  errorSlot: { gap: 8, paddingTop: 12, paddingBottom: 8 },
+  errorTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 26, lineHeight: 32, color: theme.text.primary },
+  errorBody: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13.5, lineHeight: 20, color: theme.text.secondary },
 
   sheet: { backgroundColor: theme.bg.primary, padding: 20, paddingBottom: 32, borderTopLeftRadius: 24, borderTopRightRadius: 24, gap: 8 },
   sheetTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary, marginBottom: 6 },
