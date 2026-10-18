@@ -2,9 +2,9 @@ import React, { memo } from 'react';
 import { View } from 'react-native';
 import Svg, { Line, Circle, G } from 'react-native-svg';
 
-// The six reference pictograms (D26, design V3): our own line drawings of the target shape at each
+// The seven reference pictograms (D26, design V3; checks v2 adds takeaway and trail arm, retires shaft through): our own line drawings of the target shape at each
 // marked position, seen down the line. The part the rule is about is drawn in the accent colour;
-// the "parallel" rules (lead arm, shaft down, shaft through) add a dashed level line. They are
+// the "parallel" rules (takeaway shaft, lead arm, shaft down, trail arm) add a dashed level line. They are
 // schematic on purpose, and decorative: the stop line and the chapter carry the meaning, so they
 // are hidden from screen readers rather than announced twice.
 // Points are in the design's 320x340 box (viewBox "20 90 320 340"), for a right-handed golfer.
@@ -32,8 +32,11 @@ const SHAPES = {
   impact: {
     head: [182, 148], sh: [192, 176], hip: [232, 262], knee: [232, 338], ank: [240, 400], elb: [184, 228], hands: [176, 276], club: [108, 398], seg: 'club', ball: true,
   },
-  shaftThrough: {
-    head: [182, 148], sh: [192, 176], hip: [230, 262], knee: [232, 338], ank: [240, 400], elb: [160, 212], hands: [122, 236], club: [50, 238], seg: 'club', level: 'hands', ball: false,
+  takeaway: {
+    head: [176, 150], sh: [192, 184], hip: [246, 268], knee: [240, 340], ank: [240, 400], elb: [196, 240], hands: [214, 288], club: [292, 286], seg: 'club', level: 'hands', ball: false,
+  },
+  trailArm: {
+    head: [184, 146], sh: [190, 174], hip: [228, 262], knee: [230, 338], ank: [240, 400], elb: [150, 196], hands: [114, 186], club: [86, 110], seg: 'arm', level: 'sh', ball: false,
   },
 };
 
@@ -42,7 +45,7 @@ export const PICTOGRAM_KEYS = Object.keys(SHAPES);
 const flip = (p) => [MIRROR_AXIS - p[0], p[1]];
 
 /**
- * `swingKey` is one of the six marked positions. `color` draws the quiet parts, `accent` the part
+ * `swingKey` is one of the seven marked positions. `color` draws the quiet parts, `accent` the part
  * the rule is about (and the level line and ball). `mirror` flips it for a left-handed golfer.
  */
 function Pictogram({

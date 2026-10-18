@@ -1,6 +1,11 @@
+import 'react-native-gesture-handler/jestSetup';
 import React from 'react';
 import { Alert } from 'react-native';
-import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
+import {
+  act, fireEvent, render, waitFor, within,
+} from '@testing-library/react-native';
+import { State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import SwingResultsScreen from '../SwingResultsScreen';
 import * as store from '../../store/swingStore';
@@ -11,8 +16,12 @@ import { analyze } from '../../swing/analyze';
 import { SWING_STRINGS } from '../../swing/strings';
 import { emptyMarks, frameLabel, withFrame } from '../../swing/labels';
 import { fixesFor, fixCopy } from '../../swing/fixes';
-import { homeOf, prioritizeChecks } from '../../swing/checkpointChecks';
-import { fixtureNative, TRUTH, W, H } from '../../swing/__tests__/helpers';
+import { drillsForMain } from '../../swing/drills';
+import { STEPS } from '../../swing/resultsSteps';
+import {
+  fixtureNative, TRUTH, W, H,
+} from '../../swing/__tests__/helpers';
+import { setLanguagePref } from '../../i18n';
 
 const lab = require('../../swing/__tests__/fixtures/lab-d15-pass1.json');
 
@@ -21,7 +30,9 @@ jest.mock('react-native-safe-area-context', () => {
   return {
     SafeAreaProvider: ({ children }) => React.createElement(React.Fragment, null, children),
     SafeAreaView: ({ children }) => React.createElement(React.Fragment, null, children),
-    useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+    useSafeAreaInsets: () => ({
+      top: 0, right: 0, bottom: 0, left: 0,
+    }),
   };
 });
 jest.mock('../../store/swingStore', () => ({
@@ -35,6 +46,7 @@ jest.mock('../../store/swingStore', () => ({
   readProbe: jest.fn(),
   readMarks: jest.fn(),
   saveAnalysis: jest.fn(),
+  saveMarks: jest.fn(() => Promise.resolve()),
   getSwingProfile: jest.fn(() => ({ practiceOpen: false })),
   setPracticeOpen: jest.fn(() => Promise.resolve(true)),
   markSwingFailed: jest.fn(() => Promise.resolve()),
@@ -53,12 +65,29 @@ const T = SWING_STRINGS.results;
 const norm = (p) => (p ? [p.x / W, p.y / H] : null);
 const ball = { x: TRUTH.ball.x / W, y: TRUTH.ball.y / H, r: 2.1 / W };
 const pose = fixtureNative({ ball, ballGoneFrame: lab.expected.ballGoneFrame });
-const base = { pass2: { addressFrame: lab.expected.addressFrame, shaft: {} }, heightCm: 176, handedness: 'right', swingId: 's1', createdAt: '2026-10-11T16:42:00.000Z' };
+const base = {
+  pass2: { addressFrame: lab.expected.addressFrame, shaft: {} }, heightCm: 176, handedness: 'right', swingId: 's1', createdAt: '2026-10-11T16:42:00.000Z',
+};
 const ownerMarks = Object.fromEntries(Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, {
   hands: norm(c.hands), head: c.hidden ? null : norm(c.head), hidden: c.hidden,
 }]));
 const MARKED = analyze(pose, { ...base, marks: ownerMarks });
 const UNMARKED = analyze(pose, base);
+// the detector saw something at the Downswing, under the checks' gate: proposed to the golfer, not read
+const SUBGATE = analyze(pose, {
+  ...base,
+  pass2: { ...base.pass2, shaft: { [UNMARKED.checkpoints.shaftDown.i]: { head: [W * 0.6, H * 0.62], hidden: false, conf: 0.05, source: 'model' } } },
+});
+// every measured check green: nothing to fix
+const ALLGREEN = {
+  ...MARKED,
+  main: null,
+  counts: { red: 0, yellow: 0, green: MARKED.checks.length, unknown: 0 },
+  checks: MARKED.checks.map((c) => ({ ...c, status: 'green' })),
+};
+// no fault, but a position the owner hid the clubhead at is not measured
+const GREEN_SOME_UNKNOWN = { ...ALLGREEN, checks: MARKED.checks.map((c) => (c.status === 'unknown' ? c : { ...c, status: 'green' })) };
+const NOTHING = { ...MARKED, main: null, checks: MARKED.checks.map((c) => ({ ...c, status: 'unknown', reason: 'hidden' })) };
 
 // marks.json as Edit marks wrote it: the owner's hands and clubheads (what a re-score reads back).
 const OWNER_MARKS = Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, c.frame, c.hands, c.hidden ? null : c.head, c.hidden])
@@ -77,6 +106,7 @@ function setup({ row = ROW, analysis = MARKED, marks = OWNER_MARKS } = {}) {
   store.readProbe.mockResolvedValue(null);
   store.readMarks.mockResolvedValue(marks);
   store.saveAnalysis.mockImplementation(async (_id, a) => { store.readAnalysis.mockResolvedValue(a); });
+  store.saveMarks.mockImplementation(async (_id, m) => { store.readMarks.mockResolvedValue(m); });
   const navigation = {
     navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn(), addListener: jest.fn(() => () => {}),
   };
@@ -86,8 +116,30 @@ function setup({ row = ROW, analysis = MARKED, marks = OWNER_MARKS } = {}) {
 
 const labelOf = (id) => SWING_STRINGS.checkLabel[id];
 const FIXES = fixesFor(MARKED);
-const openDetail = (u) => fireEvent.press(u.getByTestId('results-detail-toggle')); // the position cards are folded away
-const VERDICT = `${MARKED.main.label}.`; // checks v2: 'Early extension.' on the owner swing
+const cpName = (k) => SWING_STRINGS.checkpoint[k];
+const faultName = (a) => SWING_STRINGS.fault[a.main.fault];
+const MAIN_AT = MARKED.main.position;
+const textOf = (n) => [n.props.children].flat(Infinity).map((c) => (c && typeof c === 'object' ? textOf(c) : c ?? '')).join('');
+const HEADLINE = `${T.workFirst}: ${cpName(MAIN_AT)} · ${faultName(MARKED)}`; // checks v2 summary, owner swing
+const ready = (u) => u.findByTestId('results-summary');
+const goStep = (u, k) => fireEvent.press(u.getByTestId(`summary-step-${k}`));
+const posBar = (u) => u.getByTestId('position-bar').props.accessibilityLabel;
+const swipe = async (dx, dy = 0) => {
+  await act(async () => {
+    fireGestureHandler(getByGestureTestId('step-swipe'), [
+      { state: State.BEGAN },
+      { state: State.ACTIVE, translationX: dx, translationY: dy },
+      { state: State.END, translationX: dx, translationY: dy },
+    ]);
+  });
+};
+const tapStill = async (x = 120, y = 140) => {
+  await act(async () => {
+    fireGestureHandler(getByGestureTestId('place-tap'), [
+      { state: State.BEGAN, x, y }, { state: State.ACTIVE, x, y }, { state: State.END, x, y },
+    ]);
+  });
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -95,68 +147,370 @@ beforeEach(() => {
   ensureStills.mockResolvedValue({});
 });
 
+describe('SwingResultsScreen: the summary and the stepper (checks v2, design D)', () => {
+  test('opens on the main fault: the headline, where it likely starts, one position below', async () => {
+    const u = setup();
+    await ready(u);
+    expect(textOf(u.getByTestId('results-headline'))).toBe(HEADLINE);
+    expect(posBar(u)).toBe(T.posOf(cpName(MAIN_AT), STEPS.indexOf(MAIN_AT) + 1, 8));
+    expect(u.getByTestId(`summary-step-${MAIN_AT}`).props.accessibilityState).toMatchObject({ selected: true });
+    expect(MARKED.main.startsAt).toBeTruthy();
+    expect(textOf(u.getByTestId('results-starts-at'))).toBe(`${T.startsAt('')}${cpName(MARKED.main.startsAt)} ›`);
+    expect(u.getByTestId('results-fix-peek')).toBeTruthy(); // the fix of the row on screen
+    expect(u.queryByTestId('place-box')).toBeNull(); // the Impact clubhead is the owner's: nothing to place
+  });
+
+  test('eight dots in swing order, each a tab with its name and status word; the main fault and its start are tagged', async () => {
+    const u = setup();
+    await ready(u);
+    STEPS.forEach((k) => expect(u.getByTestId(`summary-step-${k}`)).toBeTruthy());
+    expect(u.getByTestId(`summary-step-${MAIN_AT}`).props.accessibilityLabel).toBe(`${T.stepA11y(cpName(MAIN_AT), SWING_STRINGS.statusWord.red)}, ${T.tagFirst}`);
+    expect(u.getByTestId(`summary-step-${MARKED.main.startsAt}`).props.accessibilityLabel).toMatch(new RegExp(`${T.tagStarts}$`));
+    ['Address', 'Takeaway', 'Halfway', 'Top', 'Down', 'Impact', 'Through', 'Extras'].forEach((n) => expect(u.getAllByText(n).length).toBeGreaterThan(0));
+    expect(u.queryByLabelText(/^Transition|^Shaft through/)).toBeNull(); // P5 and P8 are gone
+  });
+
+  test('a tap on a dot jumps to that position and resets the nudge', async () => {
+    const u = setup();
+    await ready(u);
+    fireEvent.press(u.getByLabelText(T.nextFrame));
+    expect(u.getByText(/\(\+1\)/)).toBeTruthy();
+    goStep(u, 'top');
+    expect(posBar(u)).toBe(T.posOf(cpName('top'), 4, 8));
+    expect(() => u.getByText(/\(\+1\)/)).toThrow();
+    goStep(u, MARKED.main.startsAt);
+    expect(posBar(u)).toMatch(new RegExp(`^${cpName(MARKED.main.startsAt)},`));
+  });
+
+  test('the "likely starts at" line jumps to that position', async () => {
+    const u = setup();
+    await ready(u);
+    fireEvent.press(u.getByTestId('results-starts-at'));
+    expect(posBar(u)).toMatch(new RegExp(`^${cpName(MARKED.main.startsAt)},`));
+  });
+
+  test('‹ and › step to the neighbours and stop at both ends', async () => {
+    const u = setup({ analysis: ALLGREEN }); // opens on Address
+    await ready(u);
+    expect(posBar(u)).toBe(T.posOf(cpName('address'), 1, 8));
+    expect(u.getByTestId('position-prev').props.accessibilityState).toMatchObject({ disabled: true });
+    fireEvent.press(u.getByTestId('position-next'));
+    expect(posBar(u)).toBe(T.posOf(cpName('takeaway'), 2, 8));
+    fireEvent.press(u.getByTestId('position-prev'));
+    expect(posBar(u)).toBe(T.posOf(cpName('address'), 1, 8));
+    for (let i = 0; i < 7; i += 1) fireEvent.press(u.getByTestId('position-next'));
+    expect(posBar(u)).toBe(T.posOf(T.extras, 8, 8));
+    expect(u.getByTestId('position-next').props.accessibilityState).toMatchObject({ disabled: true });
+  });
+
+  test('a swipe on the still steps too: left is next, right is previous, a short one does nothing', async () => {
+    const u = setup({ analysis: ALLGREEN });
+    await ready(u);
+    await swipe(-90);
+    expect(posBar(u)).toBe(T.posOf(cpName('takeaway'), 2, 8));
+    await swipe(10);
+    expect(posBar(u)).toBe(T.posOf(cpName('takeaway'), 2, 8));
+    await swipe(90);
+    expect(posBar(u)).toBe(T.posOf(cpName('address'), 1, 8));
+    await swipe(90);
+    expect(posBar(u)).toBe(T.posOf(cpName('address'), 1, 8)); // nothing before Address
+  });
+
+  test('each position lists its own rows: Impact has its two, never the extras', async () => {
+    const u = setup();
+    await ready(u);
+    goStep(u, 'impact');
+    const rows = within(u.getByTestId('results-rows'));
+    expect(rows.getAllByLabelText(new RegExp(`^${labelOf('spine_loss')}`)).length).toBeGreaterThan(0);
+    expect(rows.getAllByLabelText(new RegExp(`^${labelOf('hip_drift')}`)).length).toBeGreaterThan(0);
+    expect(rows.queryByLabelText(new RegExp(`^${labelOf('tempo')}`))).toBeNull();
+  });
+
+  test('tapping a row selects it; the red one carries its fix', async () => {
+    const u = setup();
+    await ready(u);
+    goStep(u, 'impact');
+    const rows = within(u.getByTestId('results-rows'));
+    const row = rows.getAllByLabelText(new RegExp(`^${labelOf('spine_loss')}`))[0];
+    fireEvent.press(row);
+    expect(rows.getAllByLabelText(new RegExp(`^${labelOf('spine_loss')}`))[0].props.accessibilityState.selected).toBe(true);
+    const sel = MARKED.checks.find((c) => c.id === 'spine_loss');
+    if (fixCopy(sel)) expect(within(u.getByTestId('results-fix-peek')).getByText(fixCopy(sel).cue)).toBeTruthy();
+  });
+
+  test('the Extras step lists the four groups, the rule and the finish still; nothing coloured', async () => {
+    const u = setup();
+    await ready(u);
+    goStep(u, 'extras');
+    expect(posBar(u)).toBe(T.posOf(T.extras, 8, 8));
+    const rows = within(u.getByTestId('results-rows'));
+    ['tempo', 'finish_balance', 'head_drift', 'hands_height_impact', 'hands_out_impact', 'shaft_angle_impact'].forEach((id) => {
+      expect(rows.getAllByLabelText(new RegExp(`^${labelOf(id)}`)).length).toBeGreaterThan(0);
+    });
+    expect(rows.getByText(T.extrasHint)).toBeTruthy();
+    expect(u.getByLabelText(new RegExp(`^${cpName('finish')} still`))).toBeTruthy();
+    expect(u.queryByTestId('results-practise')).toBeNull(); // the fix and the drill belong to the main fault's position
+  });
+
+  test('every position green: the headline says so, it opens on Address and the practise card is empty', async () => {
+    const u = setup({ analysis: ALLGREEN });
+    await ready(u);
+    expect(textOf(u.getByTestId('results-headline'))).toBe(T.noFaultAll);
+    expect(posBar(u)).toBe(T.posOf(cpName('address'), 1, 8));
+    expect(u.queryByTestId('results-starts-at')).toBeNull();
+    expect(u.getByText(T.fixes.emptyTitle)).toBeTruthy();
+    expect(u.queryByTestId('results-fix-peek')).toBeNull();
+  });
+
+  test('"Every position is green" only when all seven are measured; else it says what is missing', async () => {
+    const pend = setup({ analysis: { ...UNMARKED, main: null } });
+    await ready(pend);
+    expect(textOf(pend.getByTestId('results-headline'))).toBe(T.noFaultPlace);
+    pend.unmount();
+    const part = setup({ analysis: GREEN_SOME_UNKNOWN });
+    await ready(part);
+    expect(textOf(part.getByTestId('results-headline'))).toBe(T.noFaultSoFar);
+    part.unmount();
+    const none = setup({ analysis: NOTHING });
+    await ready(none);
+    expect(textOf(none.getByTestId('results-headline'))).toBe(T.nothingMeasured);
+  });
+
+  test('the main fault is not a fix peek on a green position; it is the practise card only at its own step', async () => {
+    const u = setup();
+    await ready(u);
+    expect(u.getByTestId('results-practise')).toBeTruthy();
+    goStep(u, 'address');
+    expect(u.queryByTestId('results-practise')).toBeNull();
+    goStep(u, MAIN_AT);
+    expect(u.getByTestId('results-practise')).toBeTruthy();
+  });
+
+  test('the headline names what the main fault is likely also causing, in one line; none when nothing later', async () => {
+    const causing = { ...MARKED, main: { ...MARKED.main, consequences: ['posture_loss', 'stuck', 'flip'] } };
+    const a = setup({ analysis: causing });
+    await ready(a);
+    expect(a.getByTestId('results-also-causing').props.children).toBe('Likely also causing: losing posture, stuck and 1 more');
+    a.unmount();
+    const lone = { ...MARKED, main: { ...MARKED.main, consequences: [] } };
+    const b = setup({ analysis: lone });
+    await ready(b);
+    expect(b.queryByTestId('results-also-causing')).toBeNull();
+  });
+});
+
+describe('SwingResultsScreen: placing the clubhead on the still (design D)', () => {
+  test('a swing whose Downswing clubhead is unplaced opens there, in place mode, with "Main fault so far"', async () => {
+    const u = setup({ analysis: UNMARKED });
+    await ready(u);
+    expect(posBar(u)).toBe(T.posOf(cpName('shaftDown'), 5, 8));
+    expect(u.getByTestId('place-box')).toBeTruthy();
+    expect(u.getByText(new RegExp(`^${T.tapWhere}`))).toBeTruthy();
+    expect(textOf(u.getByTestId('results-headline'))).toMatch(new RegExp(`^${T.mainSoFar}: `));
+    expect(u.getByLabelText(T.placeToFinish(cpName('shaftDown')))).toBeTruthy(); // the summary's place line
+    expect(u.getByTestId('summary-step-shaftDown').props.accessibilityLabel).toBe(T.stepA11y(cpName('shaftDown'), T.stateNoHead));
+    expect(u.queryByTestId('results-nudge')).toBeNull(); // the mark goes on the saved frame
+  });
+
+  test('two taps from the summary: the place line opens place mode on a position that was not showing', async () => {
+    const u = setup({ analysis: UNMARKED });
+    await ready(u);
+    goStep(u, 'address');
+    expect(u.queryByTestId('place-box')).toBeNull();
+    fireEvent.press(u.getByTestId('results-place-line'));
+    expect(posBar(u)).toBe(T.posOf(cpName('shaftDown'), 5, 8));
+    expect(u.getByTestId('place-box')).toBeTruthy();
+  });
+
+  test('a row waiting for its clubhead has a Place button that opens place mode at its position', async () => {
+    const u = setup({ analysis: UNMARKED });
+    await ready(u);
+    goStep(u, 'leadArm');
+    expect(u.queryByTestId('place-box')).toBeNull();
+    fireEvent.press(u.getAllByLabelText(new RegExp(`^${T.placeClubhead}: `))[0]);
+    expect(posBar(u)).toBe(T.posOf(cpName('leadArm'), 3, 8));
+    expect(u.getByTestId('place-box')).toBeTruthy();
+  });
+
+  test('a tap on the still places the head, saves marks and analysis, re-reads the same screen and offers Undo', async () => {
+    const u = setup({ analysis: UNMARKED, marks: { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } } });
+    await ready(u);
+    await tapStill();
+    await waitFor(() => expect(store.saveMarks).toHaveBeenCalledTimes(1));
+    const [, marks] = store.saveMarks.mock.calls[0];
+    const label = marks.frames.find((f) => f.checkpoint === 'shaftDown');
+    expect(label.head.confirmed).toBe(true);
+    expect(label.head.final).toHaveLength(2);
+    expect(marks.pass.state).toBe('done');
+    expect(store.saveAnalysis).toHaveBeenCalledTimes(1);
+    expect(store.saveAnalysis.mock.calls[0][1].clubMarks.shaftDown.source).toBe('user');
+    expect(await u.findByText(T.placed(cpName('shaftDown')))).toBeTruthy();
+    expect(posBar(u)).toBe(T.posOf(cpName('shaftDown'), 5, 8)); // the same screen
+    expect(u.queryByTestId('place-box')).toBeNull();
+    expect(textOf(u.getByTestId('results-headline'))).toMatch(new RegExp(`^${T.workFirst}: `)); // no longer "so far"
+    expect(u.queryByTestId('results-place-line')).toBeNull();
+  });
+
+  test('Undo writes back the marks and the analysis from before, and the banner goes', async () => {
+    const before = { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } };
+    const u = setup({ analysis: UNMARKED, marks: before });
+    await ready(u);
+    await tapStill();
+    fireEvent.press(await u.findByTestId('results-undo'));
+    await waitFor(() => expect(store.saveMarks).toHaveBeenCalledTimes(2));
+    expect(store.saveMarks.mock.calls[1][1]).toBe(before);
+    expect(store.saveAnalysis.mock.calls[1][1]).toBe(UNMARKED);
+    expect(u.queryByTestId('results-placed')).toBeNull();
+    await waitFor(() => expect(u.getByTestId('summary-step-shaftDown').props.accessibilityLabel).toBe(T.stepA11y(cpName('shaftDown'), T.stateNoHead)));
+  });
+
+  test('a trip to Edit marks clears the banner, so Undo can never write the pre-trip marks back', async () => {
+    const u = setup({ analysis: UNMARKED, marks: { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } } });
+    await ready(u);
+    await tapStill();
+    await u.findByTestId('results-placed');
+    fireEvent.press(u.getByLabelText(T.editMarks));
+    expect(u.queryByTestId('results-placed')).toBeNull();
+    // and coming back into focus clears one that was placed since
+    const focus = u.navigation.addListener.mock.calls.filter(([n]) => n === 'focus').pop()[1];
+    await act(async () => { focus(); });
+    expect(u.queryByTestId('results-placed')).toBeNull();
+    expect(store.saveMarks).toHaveBeenCalledTimes(1); // nothing was written back
+  });
+
+  test('Undo only reverts what the placement wrote: marks edited since are kept', async () => {
+    const u = setup({ analysis: UNMARKED, marks: { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } } });
+    await ready(u);
+    await tapStill();
+    const written = store.saveMarks.mock.calls[0][1];
+    store.readMarks.mockResolvedValue({ ...written, editedElsewhere: true });
+    fireEvent.press(await u.findByTestId('results-undo'));
+    await waitFor(() => expect(u.queryByTestId('results-placed')).toBeNull());
+    expect(store.saveMarks).toHaveBeenCalledTimes(1);
+    expect(store.saveAnalysis).toHaveBeenCalledTimes(1);
+  });
+
+  test('if the analysis cannot be saved the marks are put back and the failure is shown', async () => {
+    const before = { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } };
+    const u = setup({ analysis: UNMARKED, marks: before });
+    await ready(u);
+    store.saveAnalysis.mockRejectedValueOnce(new Error('disk'));
+    await tapStill();
+    expect(await u.findByText(T.placeFailed)).toBeTruthy();
+    expect(store.saveMarks).toHaveBeenCalledTimes(2);
+    expect(store.saveMarks.mock.calls[1][1]).toBe(before);
+  });
+
+  test('a failed Undo is shown, and the placed marks are put back if the analysis could not be written', async () => {
+    const u = setup({ analysis: UNMARKED, marks: { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } } });
+    await ready(u);
+    await tapStill();
+    const written = store.saveMarks.mock.calls[0][1];
+    store.saveAnalysis.mockRejectedValueOnce(new Error('disk'));
+    fireEvent.press(await u.findByTestId('results-undo'));
+    expect(await u.findByText(T.placeFailed)).toBeTruthy();
+    expect(store.saveMarks.mock.calls[store.saveMarks.mock.calls.length - 1][1]).toBe(written);
+  });
+
+  test('the place tap rejects a fling: it has a 10 px distance limit', async () => {
+    const u = setup({ analysis: UNMARKED });
+    await ready(u);
+    expect(getByGestureTestId('place-tap').config.maxDist).toBe(10);
+  });
+
+  test('the detector\'s unsure dot is a target: "Confirm the dot" accepts it without a placement tap', async () => {
+    const u = setup({ analysis: SUBGATE, marks: { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } } });
+    await ready(u);
+    expect(SUBGATE.clubMarks.shaftDown.head).toBeTruthy();
+    fireEvent.press(u.getByTestId('place-confirm'));
+    await waitFor(() => expect(store.saveMarks).toHaveBeenCalledTimes(1));
+    const label = store.saveMarks.mock.calls[0][1].frames.find((f) => f.checkpoint === 'shaftDown');
+    expect(label.head.confirmed).toBe(true);
+    expect(store.saveAnalysis.mock.calls[0][1].clubMarks.shaftDown.source).toBe('user');
+  });
+
+  test('without a detection there is nothing to confirm, only a tap', async () => {
+    const u = setup({ analysis: UNMARKED });
+    await ready(u);
+    expect(u.queryByTestId('place-confirm')).toBeNull();
+  });
+
+  test('"Open in Edit marks" opens the canvas on this position with the clubhead active', async () => {
+    const u = setup({ analysis: UNMARKED });
+    await ready(u);
+    fireEvent.press(u.getByTestId('place-open-edit'));
+    expect(u.navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'shaftDown', active: 'head' });
+  });
+
+  test('a save that fails says so and keeps place mode', async () => {
+    store.saveMarks.mockRejectedValueOnce(new Error('disk'));
+    const u = setup({ analysis: UNMARKED, marks: { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } } });
+    await ready(u);
+    await tapStill();
+    expect(await u.findByText(T.placeFailed)).toBeTruthy();
+    expect(u.getByTestId('place-box')).toBeTruthy();
+  });
+
+  test('a hidden clubhead is a decision: the row says Hidden and offers no placement', async () => {
+    const hiddenOnly = {
+      ...MARKED,
+      checks: MARKED.checks.map((c) => (c.id === 'down_vs_takeaway'
+        ? {
+          ...c, status: 'unknown', reason: 'hidden', value: null, text: 'Clubhead hidden at shaft down',
+        } : c)),
+    };
+    const u = setup({ analysis: hiddenOnly });
+    await ready(u);
+    goStep(u, 'shaftDown');
+    expect(u.getAllByText('Hidden').length).toBeGreaterThan(0);
+    expect(u.queryByLabelText(/^Place clubhead: Vs your takeaway/)).toBeNull();
+    expect(u.queryByTestId('place-box')).toBeNull();
+  });
+});
+
+describe('SwingResultsScreen: Spanish', () => {
+  beforeEach(async () => { await act(async () => { await setLanguagePref('es'); }); });
+  afterEach(async () => { await act(async () => { await setLanguagePref('en'); }); });
+
+  test('the summary, the position and the place line speak Spanish', async () => {
+    const u = setup({ analysis: UNMARKED });
+    await ready(u);
+    expect(textOf(u.getByTestId('results-headline'))).toMatch(/^Lo principal que corregir, por ahora: /);
+    expect(posBar(u)).toBe('Bajada, posición 5 de 8');
+    expect(u.getByLabelText('Coloca la cabeza del palo en la posición de bajada para completar la lectura')).toBeTruthy();
+    expect(u.getByText('Toca donde está la cabeza del palo · fotograma', { exact: false })).toBeTruthy();
+    expect(u.getByTestId('summary-step-shaftDown').props.accessibilityLabel).toBe('Bajada, cabeza del palo sin colocar');
+    ['Prep.', 'Inicio', 'Mitad', 'Top', 'Bajada', 'Impacto', 'Seguim.', 'Extras'].forEach((n) => expect(u.getAllByText(n).length).toBeGreaterThan(0));
+  });
+
+  test('a marked swing says "Lo primero" and where it likely starts', async () => {
+    const u = setup();
+    await ready(u);
+    expect(textOf(u.getByTestId('results-headline'))).toMatch(/^Lo primero: /);
+    expect(textOf(u.getByTestId('results-starts-at'))).toMatch(/^Probablemente empieza en: /);
+  });
+});
+
 describe('SwingResultsScreen: coaching', () => {
   const F = T.fixes;
 
-  test('the priority card lists red, then yellow, then unknown, each in swing order; greens are folded', async () => {
-    const { findByText, getByTestId, queryByLabelText } = setup();
-    await findByText(VERDICT);
-    fireEvent.press(getByTestId('results-unknown-fold')); // unmeasured checks fold away like the greens
-    const card = within(getByTestId('results-priority'));
-    expect(card.getByText(T.priorityTitle)).toBeTruthy();
-    const groups = prioritizeChecks(MARKED.checks);
-    const nameOf = (c) => (c.cp && T.cpSuffix[c.cp] ? `${c.label}, ${T.cpSuffix[c.cp]}` : c.label);
-    const expected = [...groups.red, ...groups.yellow, ...groups.unknown].map(nameOf);
-    const labels = card.getAllByLabelText(/./).filter((n) => n.props.accessibilityRole === 'button' && !n.props.testID).map((n) => n.props.accessibilityLabel);
-    const rows = labels.filter((l) => expected.some((e) => l.startsWith(`${e},`)));
-    expect(rows.map((l) => expected.find((e) => l.startsWith(`${e},`)))).toEqual(expected);
-    expect(groups.green.length).toBeGreaterThan(0);
-    expect(queryByLabelText(new RegExp(`^${nameOf(groups.green[0])},`))).toBeNull();
-    expect(card.getAllByText(SWING_STRINGS.statusWord.red).length).toBeGreaterThan(0); // the group header
-  });
-
-  test('unmeasured checks stay hidden until their fold row is pressed', async () => {
-    const { findByText, getByTestId } = setup({ analysis: UNMARKED });
-    await findByText(VERDICT);
-    const unknown = prioritizeChecks(UNMARKED.checks).unknown;
-    const fold = getByTestId('results-unknown-fold');
-    expect(within(fold).getByText(T.unknownFold(unknown.length))).toBeTruthy();
-    const rows = () => within(getByTestId('results-priority')).queryAllByLabelText(/^Place clubhead:/);
-    expect(rows()).toHaveLength(0);
-    fireEvent.press(fold);
-    expect(rows().length).toBeGreaterThan(0);
-  });
-
-  test('greens stay hidden until the fold row is pressed, and it says how many', async () => {
-    const { findByText, getByTestId } = setup();
-    await findByText(VERDICT);
-    const green = prioritizeChecks(MARKED.checks).green;
-    const fold = getByTestId('results-good-fold');
-    expect(within(fold).getByText(T.goodFold(green.length))).toBeTruthy();
-    expect(fold.props.accessibilityState).toMatchObject({ expanded: false });
-    const row = () => within(getByTestId('results-priority')).queryAllByLabelText(new RegExp(`^${green[0].label}`));
-    expect(row()).toHaveLength(0);
-    fireEvent.press(fold);
-    expect(getByTestId('results-good-fold').props.accessibilityState).toMatchObject({ expanded: true });
-    expect(row().length).toBeGreaterThan(0);
-  });
-
-  test('opens on the main fault: its check is selected and its peek is under the timeline', async () => {
-    const { findByText, getByTestId, getByLabelText } = setup();
-    await findByText(VERDICT);
+  test('opens on the main fault: its check is selected and its peek is under the still', async () => {
+    const u = setup();
+    await ready(u);
     const ev = MARKED.main.evidence;
     const first = ev.find((c) => c.status === 'red') ?? ev[0];
-    expect(getByLabelText(new RegExp(`^${SWING_STRINGS.checkpoint[homeOf(first)]}(,|$)`))).toBeTruthy();
-    expect(within(getByTestId('results-fix-peek')).getByText(fixCopy(first).cue)).toBeTruthy();
+    expect(within(u.getByTestId('results-fix-peek')).getByText(fixCopy(first).cue)).toBeTruthy();
+    const row = within(u.getByTestId('results-rows')).getAllByLabelText(new RegExp(`^${labelOf(first.id)}`))[0];
+    expect(row.props.accessibilityState.selected).toBe(true);
   });
 
   test('tapping a fix opens the sheet with its steps; Next fix advances; the last says Done', async () => {
-    const { findByText, getByTestId, getByLabelText, queryByTestId, getByText } = setup();
-    await findByText(VERDICT);
+    const { findByTestId, getByTestId, getByLabelText, queryByTestId, getByText } = setup();
+    await findByTestId('results-summary');
     fireEvent.press(within(getByTestId('results-fix-peek')).getByLabelText(F.howLink));
     const sheet = within(getByTestId('fix-sheet'));
     FIXES[0].copy.steps.forEach((t) => expect(sheet.getByText(t)).toBeTruthy());
-    expect(sheet.getByText(F.sheetOverline(1, FIXES.length, SWING_STRINGS.checkpoint[homeOf(FIXES[0].check)]))).toBeTruthy();
+    expect(sheet.getByText(F.sheetOverline(1, FIXES.length, cpName(FIXES[0].check.position)))).toBeTruthy();
     if (FIXES.length > 1) {
       fireEvent.press(getByLabelText(F.next));
       expect(within(getByTestId('fix-sheet')).getByText(FIXES[1].copy.headline)).toBeTruthy();
@@ -167,199 +521,76 @@ describe('SwingResultsScreen: coaching', () => {
     await waitFor(() => expect(queryByTestId('fix-sheet')).toBeNull());
   });
 
-  test('See on swing closes the sheet and selects the check at its checkpoint', async () => {
-    const { findByText, getByTestId, getByLabelText, getByText } = setup();
-    await findByText(VERDICT);
-    fireEvent.press(within(getByTestId('results-fix-peek')).getByLabelText(F.howLink));
-    fireEvent.press(getByLabelText(F.seeOnSwing));
-    openDetail({ getByTestId });
-    expect(getByText(T.atCheckpoint(SWING_STRINGS.checkpoint[homeOf(FIXES[0].check)]))).toBeTruthy();
-  });
-
-  test('the selected red / yellow check opens its row with the cue, and its link opens the sheet', async () => {
-    const { findByText, getByTestId, getAllByLabelText, queryByTestId } = setup();
-    await findByText(VERDICT);
-    openDetail({ getByTestId });
-    const sel = MARKED.checks.find((c) => homeOf(c) === 'impact' && fixCopy(c));
-    expect(sel).toBeTruthy();
-    fireEvent.press(getAllByLabelText(new RegExp(`^${SWING_STRINGS.checkLabel[sel.id]}`))[0]); // the priority row jumps to impact
-    expect(getAllByLabelText(new RegExp(`^${SWING_STRINGS.checkLabel[sel.id]}`))).toHaveLength(2); // priority list + the "At impact" card
-    const peek = within(getByTestId('results-fix-peek'));
-    expect(peek.getByText(fixCopy(sel).cue)).toBeTruthy();
-    expect(peek.getByText(F.tryThis)).toBeTruthy();
-    expect(queryByTestId('fix-sheet')).toBeNull();
-    expect(getAllByLabelText(new RegExp(`^${SWING_STRINGS.checkLabel[sel.id]}`)).pop().props.accessibilityState).toMatchObject({ selected: true, expanded: true });
-    fireEvent.press(peek.getByLabelText(F.howLink));
-    expect(within(getByTestId('fix-sheet')).getByText(fixCopy(sel).headline)).toBeTruthy();
-  });
-});
-
-describe('SwingResultsScreen: a stored swing', () => {
-  test('shows the verdict, counts, the seven-step timeline and the checks at the opening checkpoint', async () => {
+  test('See on swing closes the sheet and moves to the position of the check', async () => {
+    expect(FIXES.length).toBeGreaterThan(1);
     const u = setup();
-    const { findByText, getByLabelText, queryByLabelText, getAllByText } = u;
-    expect(await findByText(VERDICT)).toBeTruthy();
-    expect(getAllByText(new RegExp(`^${MARKED.counts.red} fix$`)).length).toBeGreaterThan(0);
-    expect(queryByLabelText(/^\d+ fps$/)).toBeNull(); // the fps and swing-name chips are gone
-    // checks v2: the seven positions and the finish; P5 and P8 are gone
-    ['Address', 'Takeaway', 'Lead arm', 'Top', 'Shaft down', 'Impact', 'Trail arm', 'Finish']
-      .forEach((n) => expect(getByLabelText(new RegExp(`^${n}(,|$)`))).toBeTruthy());
-    ['Transition', 'Shaft through'].forEach((n) => expect(queryByLabelText(new RegExp(`^${n}(,|$)`))).toBeNull());
-    expect(getByLabelText(/^Impact, Fix/)).toBeTruthy(); // worst status dot + word (D14)
-    openDetail(u);
-    fireEvent.press(getByLabelText(/^Impact(,|$)/));
-    expect(getAllByText(T.atCheckpoint('Impact')).length).toBe(1);
-    expect(getAllByText(labelOf('spine_loss')).length).toBeGreaterThan(0);
-  });
-
-  test('the priority list and the folded greens together show every check once', async () => {
-    const { findByText, getByTestId } = setup();
-    await findByText(VERDICT);
-    fireEvent.press(getByTestId('results-good-fold'));
-    const measured = MARKED.checks.filter((c) => c.status !== 'unknown');
-    const rows = within(getByTestId('results-priority')).getAllByLabelText(/./).filter((n) => n.props.accessibilityRole === 'button' && !n.props.testID);
-    measured.forEach((c) => {
-      const name = c.cp && T.cpSuffix[c.cp] ? `${c.label}, ${T.cpSuffix[c.cp]}` : c.label;
-      expect(rows.filter((n) => n.props.accessibilityLabel.startsWith(`${name},`))).toHaveLength(1);
-    });
-  });
-
-  test('tapping a timeline step shows that checkpoint and resets the nudge', async () => {
-    const u = setup();
-    const { findByText, getByLabelText, getByText } = u;
-    await findByText(VERDICT);
-    openDetail(u);
-    fireEvent.press(getByLabelText(/^Impact(,|$)/));
-    fireEvent.press(getByLabelText(/^Address(,|$)/));
-    expect(getByText(T.atCheckpoint('Address'))).toBeTruthy();
-    fireEvent.press(getByLabelText(T.nextFrame));
-    expect(getByText(/\(\+1\)/)).toBeTruthy();
-    fireEvent.press(getByLabelText(/^Top(,|$)/));
-    expect(getByText(T.atCheckpoint('Top'))).toBeTruthy();
-    expect(() => getByText(/\(\+1\)/)).toThrow();
-  });
-
-  test('the frame nudge stops at +-2 (stills exist only there)', async () => {
-    const { findByText, getByLabelText, getByText } = setup();
-    await findByText(VERDICT);
-    for (let i = 0; i < 4; i += 1) fireEvent.press(getByLabelText(T.nextFrame));
-    expect(getByText(/\(\+2\)/)).toBeTruthy();
-    for (let i = 0; i < 6; i += 1) fireEvent.press(getByLabelText(T.prevFrame));
-    expect(getByText(/\(-2\)/)).toBeTruthy();
-  });
-
-  test('tapping a check selects it', async () => {
-    const u = setup();
-    const { findByText, getAllByLabelText } = u;
-    await findByText(VERDICT);
-    openDetail(u);
-    fireEvent.press(getAllByLabelText(/^Spine angle kept/).pop());
-    expect(getAllByLabelText(/^Spine angle kept/).pop().props.accessibilityState.selected).toBe(true);
-  });
-
-  test('a row in the priority list jumps to its checkpoint', async () => {
-    const u = setup();
-    const { findByText, getByLabelText, getAllByLabelText, getByText } = u;
-    await findByText(VERDICT);
-    openDetail(u);
-    fireEvent.press(getByLabelText(/^Address(,|$)/));
-    fireEvent.press(getAllByLabelText(/^Hands height at impact/)[0]); // the priority list
-    expect(getByText(T.atCheckpoint('Impact'))).toBeTruthy();
-  });
-
-  test('the hero names what the main fault is likely also causing, in one line', async () => {
-    const causing = { ...MARKED, main: { ...MARKED.main, consequences: ['posture_loss', 'stuck', 'flip'] } };
-    const { findByText, getByTestId } = setup({ analysis: causing });
-    await findByText(VERDICT);
-    expect(getByTestId('results-also-causing').props.children).toBe('Likely also causing: losing posture, stuck and 1 more');
+    await ready(u);
+    fireEvent.press(within(u.getByTestId('results-fix-peek')).getByLabelText(F.howLink));
+    fireEvent.press(u.getByLabelText(F.next));
+    const target = FIXES[1].check;
+    fireEvent.press(u.getByLabelText(F.seeOnSwing));
+    expect(posBar(u)).toMatch(new RegExp(`^${target.extra ? T.extras : cpName(target.position)},`));
+    await waitFor(() => expect(u.queryByTestId('fix-sheet')).toBeNull());
   });
 
   test('D24: the practice card under the drills opens, remembers, and slots the main drill into Block', async () => {
-    const { findByText, getByLabelText, queryByText, getByText } = setup();
-    await findByText(VERDICT);
+    const { findByTestId, getByLabelText, queryByText, getByText } = setup();
+    await findByTestId('results-summary');
     expect(queryByText(T.practice.blocks[1].body)).toBeNull();
     fireEvent.press(getByLabelText(T.practice.show));
     expect(store.setPracticeOpen).toHaveBeenCalledWith(true);
     T.practice.blocks.forEach((b) => expect(getByText(b.name)).toBeTruthy());
-    expect(getByText(T.practice.drillIn('The chair'))).toBeTruthy(); // early extension's first drill
+    expect(getByText(T.practice.drillIn(drillsForMain(MARKED.main)[0].title))).toBeTruthy(); // the main fault's first drill
     fireEvent.press(getByLabelText(T.practice.hide));
     expect(store.setPracticeOpen).toHaveBeenLastCalledWith(false);
   });
 
   test('D24: the practice card opens as it was left', async () => {
     store.getSwingProfile.mockReturnValueOnce({ practiceOpen: true });
-    const { findByText, getByText } = setup();
-    await findByText(VERDICT);
+    const { findByTestId, getByText } = setup();
+    await findByTestId('results-summary');
     expect(getByText(T.practice.blocks[3].body)).toBeTruthy();
-  });
-
-  test('the shaft line row shows halfway back and through; a cell opens its checkpoint', async () => {
-    const { findByText, getByTestId, getByLabelText, getByText } = setup();
-    await findByText(VERDICT);
-    openDetail({ getByTestId });
-    expect(getByTestId('results-swing-pattern')).toBeTruthy();
-    expect(getByText(T.patternTitle)).toBeTruthy();
-    // owner swing: flat halfway back (Fix), the clubhead hidden at the trail arm
-    expect(getByLabelText(/^Halfway back: Fix\./)).toBeTruthy();
-    fireEvent.press(getByLabelText(/^Through: —\./));
-    expect(getByText(T.atCheckpoint('Trail arm'))).toBeTruthy();
-  });
-
-  test('no consequence line when nothing later is significant', async () => {
-    const lone = { ...MARKED, main: { ...MARKED.main, consequences: [] } };
-    const { findByText, queryByTestId } = setup({ analysis: lone });
-    await findByText(VERDICT);
-    expect(queryByTestId('results-also-causing')).toBeNull();
   });
 
   test('shows the drills for the main fault and expands the rest', async () => {
     const evidence = MARKED.checks.filter((c) => c.fault === 'early_extension');
-    const ee = { ...MARKED, main: { ...MARKED.main, fault: 'early_extension', label: 'Early extension', evidence, consequences: [] } };
-    const { findByText, getByText, queryByText, getByLabelText } = setup({ analysis: ee });
-    await findByText('Early extension.');
+    const ee = {
+      ...MARKED, main: { ...MARKED.main, fault: 'early_extension', label: 'Early extension', evidence, consequences: [] },
+    };
+    const { findByTestId, getByText, queryByText, getByLabelText } = setup({ analysis: ee });
+    await findByTestId('results-summary');
     expect(getByText(T.practiseTitle)).toBeTruthy();
     expect(getByText('The chair')).toBeTruthy();
     expect(queryByText('Club behind the heels')).toBeNull();
     fireEvent.press(getByLabelText(T.moreDrills(2)));
     expect(getByText('Club behind the heels')).toBeTruthy();
   });
+});
 
-  test('D16: club checks with no clubhead placed offer "Place clubhead", which opens Edit marks on that checkpoint', async () => {
-    const { findByText, getAllByLabelText, getByTestId, navigation } = setup({ analysis: UNMARKED });
-    await findByText(VERDICT);
-    fireEvent.press(getByTestId('results-unknown-fold'));
-    const cta = getAllByLabelText(/^Place clubhead: Shaft points at the ball$/);
-    fireEvent.press(cta[cta.length - 1]);
-    expect(navigation.navigate).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'leadArm' });
+describe('SwingResultsScreen: a stored swing', () => {
+  test('the frame nudge stops at +-2 (stills exist only there)', async () => {
+    const { findByTestId, getByLabelText, getByText } = setup();
+    await findByTestId('results-summary');
+    for (let i = 0; i < 4; i += 1) fireEvent.press(getByLabelText(T.nextFrame));
+    expect(getByText(/\(\+2\)/)).toBeTruthy();
+    for (let i = 0; i < 6; i += 1) fireEvent.press(getByLabelText(T.prevFrame));
+    expect(getByText(/\(-2\)/)).toBeTruthy();
   });
 
-  test('a hidden clubhead is a decision: the row says Hidden and offers no placement', async () => {
-    const hiddenOnly = {
-      ...MARKED,
-      checks: MARKED.checks.map((c) => (c.id === 'down_vs_takeaway'
-        ? { ...c, status: 'unknown', reason: 'hidden', value: null, text: 'Clubhead hidden at shaft down' } : c)),
-    };
-    const { findByText, queryByLabelText, getAllByText, getByTestId } = setup({ analysis: hiddenOnly });
-    await findByText(VERDICT);
-    fireEvent.press(getByTestId('results-unknown-fold'));
-    expect(getAllByText('Hidden').length).toBeGreaterThan(0);
-    expect(queryByLabelText(/^Place clubhead: Vs your takeaway/)).toBeNull();
-  });
-
-  test('approximate clips say so in the hero and the banner, and flag cm values', async () => {
+  test('approximate clips say so in the banner, and flag cm values', async () => {
     const approx = { ...MARKED, approximate: true, checks: MARKED.checks.map((c) => (c.unit === 'cm' ? { ...c, approximate: true } : c)) };
-    const { findByText, getByText, getAllByText } = setup({ analysis: approx });
-    await findByText(VERDICT);
-    expect(getAllByText(T.approxChip).length).toBeGreaterThan(1); // the hero chip and the cm values
-    expect(getByText(T.approxBanner)).toBeTruthy();
-    expect(getAllByText(/approx\./).length).toBeGreaterThan(2);
+    const u = setup({ analysis: approx });
+    await ready(u);
+    expect(u.getByText(T.approxBanner)).toBeTruthy();
+    goStep(u, 'takeaway');
+    expect(u.getAllByText(/approx\./).length).toBeGreaterThan(0);
   });
 
-  test('Edit marks from the header menu and from the button both open on the current checkpoint; Rename saves', async () => {
-    const { findByText, getByLabelText, getByPlaceholderText, navigation } = setup();
-    await findByText(VERDICT);
+  test('Edit marks from the header menu and from the button both open on the position on screen; Rename saves', async () => {
+    const { findByTestId, getByLabelText, getByPlaceholderText, navigation } = setup();
+    await findByTestId('results-summary');
     fireEvent.press(getByLabelText(T.editMarks));
-    expect(navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: 'impact' }); // the screen opens on the main fault
+    expect(navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', { swingId: 's1', checkpoint: MAIN_AT }); // the screen opens on the main fault
     fireEvent.press(getByLabelText(T.menu));
     fireEvent.press(getByLabelText(T.rename));
     fireEvent.changeText(getByPlaceholderText(T.renamePlaceholder), 'Range · 7-iron');
@@ -369,8 +600,8 @@ describe('SwingResultsScreen: a stored swing', () => {
 
   test('Export swing in the header menu builds the zip and opens the share sheet; a failure says so', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    const { findByText, getByLabelText } = setup();
-    await findByText(VERDICT);
+    const { findByTestId, getByLabelText } = setup();
+    await findByTestId('results-summary');
     fireEvent.press(getByLabelText(T.menu));
     await act(async () => { fireEvent.press(getByLabelText(SWING_STRINGS.exportSwing.menu)); });
     expect(shareSwingExport).toHaveBeenCalledWith('s1');
@@ -381,20 +612,19 @@ describe('SwingResultsScreen: a stored swing', () => {
     expect(alert).toHaveBeenCalledWith(SWING_STRINGS.exportSwing.failed);
   });
 
-  test('asks for the stills it is missing and redraws when they arrive', async () => {
+  test('asks for the stills it is missing, for the position it opens on, and redraws when they arrive', async () => {
     ensureStills.mockImplementation(async () => { getStill.mockReturnValue('file:///doc/swings/s1/frames/556.jpg'); return { 556: 'file:///x.jpg' }; });
-    const { findByText, getByLabelText } = setup();
-    await findByText(VERDICT);
+    const { findByTestId, getByLabelText } = setup();
+    await findByTestId('results-summary');
     await waitFor(() => expect(ensureStills).toHaveBeenCalled());
-    const first = MARKED.checkpoints.impact.i; // the first paint, before the screen moves to the main fault
+    const first = MARKED.checkpoints[MAIN_AT].i; // the first paint is already on the main fault
     expect(ensureStills).toHaveBeenCalledWith('s1', [first - 2, first - 1, first, first + 1, first + 2]);
-    const frame = MARKED.checkpoints.impact.i;
-    await waitFor(() => expect(getByLabelText(new RegExp(`^Impact still, frame ${frame}`)).props.source).toEqual({ uri: 'file:///doc/swings/s1/frames/556.jpg' }));
+    await waitFor(() => expect(getByLabelText(new RegExp(`^${cpName(MAIN_AT)} still, frame ${first}`)).props.source).toEqual({ uri: 'file:///doc/swings/s1/frames/556.jpg' }));
   });
 
   test('reloads the analysis when it comes back into focus (after Edit marks)', async () => {
-    const { findByText, navigation } = setup();
-    await findByText(VERDICT);
+    const { findByTestId, navigation } = setup();
+    await findByTestId('results-summary');
     const focus = navigation.addListener.mock.calls.filter(([n]) => n === 'focus').pop()[1];
     store.readAnalysis.mockClear();
     await act(async () => { focus(); });
@@ -404,8 +634,8 @@ describe('SwingResultsScreen: a stored swing', () => {
 
 describe('SwingResultsScreen: the club chip (D19)', () => {
   test('the club picker is gone from a ready swing', async () => {
-    const { findByText, queryByTestId, queryByLabelText } = setup();
-    await findByText(VERDICT);
+    const { findByTestId, queryByTestId, queryByLabelText } = setup();
+    await findByTestId('results-summary');
     expect(queryByTestId('results-club-picker')).toBeNull();
     expect(queryByLabelText('Driver')).toBeNull();
   });
@@ -413,9 +643,9 @@ describe('SwingResultsScreen: the club chip (D19)', () => {
 
 describe('SwingResultsScreen: after the marking pass (D26)', () => {
   test('never shows results for a swing whose pass is not done: it resumes the marking canvas', async () => {
-    const { queryByText, navigation } = setup({ row: { ...ROW, marked: { state: 'partial', count: 3 } } });
+    const { queryByTestId, navigation } = setup({ row: { ...ROW, marked: { state: 'partial', count: 3 } } });
     await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', mode: 'pass' }));
-    expect(queryByText(VERDICT)).toBeNull();
+    expect(queryByTestId('results-summary')).toBeNull();
     expect(store.readAnalysis).not.toHaveBeenCalled();
   });
 
@@ -424,23 +654,21 @@ describe('SwingResultsScreen: after the marking pass (D26)', () => {
     const { navigation } = setup({ row: { ...ROW, marked: undefined }, marks: noTrailArm }); // six of the seven corrected
     await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', mode: 'pass' }));
     const all = setup({ row: { ...ROW, marked: undefined } }); // OWNER_MARKS: all seven corrected
-    expect(await all.findByText(VERDICT)).toBeTruthy();
+    expect(await all.findByTestId('results-summary')).toBeTruthy();
   });
 
   test('a chip says how many positions are not confirmed; none when all seven are', async () => {
-    const { findByText, getByTestId } = setup({ row: { ...ROW, marked: { state: 'done', count: 4 } } });
-    await findByText(VERDICT);
-    expect(getByTestId('results-unconfirmed')).toBeTruthy();
-    expect(getByTestId('results-unconfirmed').props.children.props.children).toBe(T.unconfirmedChip(3));
+    const { findByTestId, getByTestId } = setup({ row: { ...ROW, marked: { state: 'done', count: 4 } } });
+    await findByTestId('results-summary');
+    expect(getByTestId('results-unconfirmed').props.children).toBe(T.unconfirmedChip(3));
     const all = setup();
-    await all.findAllByText(VERDICT);
+    await all.findByTestId('results-summary');
     expect(all.queryByTestId('results-unconfirmed')).toBeNull();
   });
 
   test('the results have no marks card: Edit marks is the way back to the canvas', async () => {
     const u = setup();
-    await u.findByText(VERDICT);
-    openDetail(u);
+    await u.findByTestId('results-summary');
     expect(u.queryByTestId('results-marks')).toBeNull();
     fireEvent.press(u.getByLabelText(T.editMarks));
     expect(u.navigation.navigate).toHaveBeenLastCalledWith('SwingEditMarks', expect.objectContaining({ swingId: 's1' }));
@@ -484,7 +712,7 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
     let onProgress; let finish;
     runAnalysis.mockImplementation((id, o) => { ({ onProgress } = o); return new Promise((r) => { finish = r; }); });
     const {
-      findAllByText, getByText, getAllByText, getByLabelText, queryByText, navigation,
+      findAllByText, getByText, getAllByText, getByLabelText, queryByTestId, navigation,
     } = setup({ row: PENDING, analysis: UNMARKED });
 
     expect(await findAllByText(T.stages.reading)).toHaveLength(2); // the stage line and its step
@@ -506,7 +734,7 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
 
     await act(async () => { finish({ analysis: UNMARKED, pass2: 'done' }); });
     expect(navigation.replace).toHaveBeenCalledWith('SwingEditMarks', { swingId: 's1', mode: 'pass' });
-    expect(queryByText(VERDICT)).toBeNull();
+    expect(queryByTestId('results-summary')).toBeNull();
   });
 
   test('processing shows only the stages: no verdict, timeline, checks, club picker or marks', async () => {

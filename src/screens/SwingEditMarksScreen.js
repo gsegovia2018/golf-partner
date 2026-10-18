@@ -42,7 +42,7 @@ import { SWING_STRINGS } from '../swing/strings';
 import { useT, getLanguage } from '../i18n';
 
 // The marking canvas (plan §6, D26, laid out per D28 "Frame Then Marks"). Two steps per position:
-// step 1 "Find the frame" (the cue inside the video, the whole-clip track with the six position
+// step 1 "Find the frame" (the cue inside the video, the whole-clip track with the seven position
 // ticks, a zoomed row of ±4 frames, ‹ › for ±1) and step 2 "Place the marks" (the chosen frame
 // frozen, the Hands / Clubhead / Ball dock inside the video, the loupe in the corner opposite the
 // mark, per-mark Confirm, Hidden, the 1 px nudge). The video is edge to edge and the same size in
@@ -205,7 +205,7 @@ function useMarkPan({
 // --- The canvas (props in) --------------------------------------------------------------------------
 
 export function SwingMarkCanvas({
-  analysis, pose, probe, marks, mode = 'edit', initialCp = 'impact', lastClub = 'iron',
+  analysis, pose, probe, marks, mode = 'edit', initialCp = 'impact', initialActive = 'hands', lastClub = 'iron',
   stillFor, proxyFor = noProxy, needStills, onSave, onClub, closeRef, onClose, onResults, onDirtyChange,
 }) {
   const insets = useSafeAreaInsets();
@@ -234,7 +234,8 @@ export function SwingMarkCanvas({
   const [cp, setCp] = useState(firstCp);
   const [step, setStep] = useState(() => stepFor(firstCp, startDraft.status));
   const [view, setView] = useState(startDraft.cps[firstCp].frame); // step 1's cursor; the frozen frame in step 2
-  const [active, setActive] = useState('hands');
+  // a deep link from Results ("Open in Edit marks" at an unplaced clubhead) opens with the Clubhead active
+  const [active, setActive] = useState(() => (!pass && initialActive === 'head' ? 'head' : 'hands'));
   const [toast, setToast] = useState('');
   const [cueOpen, setCueOpen] = useState(false);
   const [dialog, setDialog] = useState(null); // { then(draft) } while the discard sheet is up
@@ -582,6 +583,7 @@ export function SwingMarkCanvas({
 
   // --- rendering ------------------------------------------------------------------------------------
   const counts = passCounts(draft.status);
+  const tally = T.tally(counts.confirmed, counts.skipped);
   const idx = MARKED_KEYS.indexOf(cp);
   const editLike = !pass || !!fixFrom;
   const action = useMemo(() => primaryAction(draft, base, cp), [draft, base, cp]);
@@ -593,7 +595,7 @@ export function SwingMarkCanvas({
   const countMain = !chapter ? T.auto : pass && !fixFrom ? T.position(idx + 1, MARK_TOTAL) : T.edit;
   const bg = stillFor(draft.cps.address.frame);
   const markLine = statuses[active] === 'missing' ? T.line.missing(T.names[active]) : T.line[statuses[active]];
-  const canConfirm = ['proposed', 'moved'].includes(statuses[active]);
+  const canConfirm = ['proposed', 'unsure', 'moved'].includes(statuses[active]);
   const short = T.short[cp] ?? cue?.name ?? cp;
 
   // Hooks below stay above the sheets' early returns. Handlers have a stable identity (useStable) so the
@@ -609,7 +611,8 @@ export function SwingMarkCanvas({
   const priorHead = live.clubMarks[cp].priorHead;
   const marksNow = useMemo(() => ({
     hands: { pt: handsNow, status: statuses.hands },
-    head: { pt: headNow, status: statuses.head, prior: priorHead },
+    // a missing head with the hands placed: the target ring goes just under the hands
+    head: { pt: headNow, status: statuses.head, prior: priorHead ?? (statuses.head === 'missing' && handsNow ? [handsNow[0], Math.min(0.97, handsNow[1] + 0.08)] : undefined) },
     ball: ballNow ? { pt: ballNow, status: statuses.ball } : null,
   }), [handsNow, headNow, priorHead, ballNow, statuses]);
   const tickKey = MARKED_KEYS.map((k) => `${draft.cps[k].frame}${positionStatus(draft.status, k)[0]}`).join(',');
@@ -680,10 +683,10 @@ export function SwingMarkCanvas({
               const head = markStatus(draft, base, k, 'head');
               const sub = T.rowSub[head];
               return (
-                <Pressable key={k} style={s.finRow} onPress={() => enter(k, draft)} accessibilityRole="button" accessibilityLabel={`${cueFor(k).name}, ${T.chip[st]}${sub ? `, ${sub}` : ''}`} testID={`finish-row-${k}`}>
+                <Pressable key={k} style={s.finRow} onPress={() => enter(k, draft)} accessibilityRole="button" accessibilityLabel={`${SWING_STRINGS.checkpoint[k]}, ${T.chip[st]}${sub ? `, ${sub}` : ''}`} testID={`finish-row-${k}`}>
                   <Text style={s.finP}>{cueFor(k).p}</Text>
                   <View style={s.flex}>
-                    <Text style={s.finName}>{cueFor(k).name}</Text>
+                    <Text style={s.finName}>{SWING_STRINGS.checkpoint[k]}</Text>
                     {sub ? <Text style={s.finSub}>{sub}</Text> : null}
                   </View>
                   <Text style={[s.stc, st === 'confirmed' && s.stcOk, st === 'skipped' && s.stcSkip]}>{T.chip[st]}</Text>
@@ -716,9 +719,6 @@ export function SwingMarkCanvas({
           onSelect={goto}
           onClose={onCloseTap}
           closeLabel={editLike ? T.cancel : T.close}
-          count={countMain}
-          sub={T.tally(counts.confirmed, counts.skipped)}
-          mirror={handedness === 'left'}
         />
 
         <View style={s.video} onLayout={(e) => { const { width: w, height: h } = e.nativeEvent.layout; if (w && h) setArea({ w, h }); }} testID="mark-video">
@@ -766,9 +766,16 @@ export function SwingMarkCanvas({
               <Text style={s.white}>{T.stepOf(step)}</Text>
               {` · ${step1 ? T.findFrame : T.placeMarks}`}
             </Text>
-            <View style={s.dots}>
-              <View style={[s.dot, s.dotOn]} />
-              <View style={[s.dot, !step1 && s.dotOn]} />
+            <View style={s.stephRight}>
+              <View style={s.countRow} accessible accessibilityLabel={`${countMain}, ${tally}`} testID="mark-count">
+                <Text style={s.countText}>{countMain}</Text>
+                <Text style={s.countText}>{' · '}</Text>
+                <Text style={s.countText}>{tally}</Text>
+              </View>
+              <View style={s.dots}>
+                <View style={[s.dot, s.dotOn]} />
+                <View style={[s.dot, !step1 && s.dotOn]} />
+              </View>
             </View>
           </View>
           {step1 ? (
@@ -850,7 +857,9 @@ export function SwingMarkCanvas({
 
 export default function SwingEditMarksScreen({ navigation, route }) {
   useT(); // the swing copy reads the language as it renders: re-render when it changes
-  const { swingId, checkpoint = 'impact', mode = 'edit' } = route.params ?? {};
+  const {
+    swingId, checkpoint = 'impact', mode = 'edit', active,
+  } = route.params ?? {};
   const [data, setData] = useState(null); // { analysis, pose, probe, marks } | 'missing'
   const [, setTick] = useState(0);
   const leaving = useRef(false);
@@ -916,6 +925,7 @@ export default function SwingEditMarksScreen({ navigation, route }) {
       {...data}
       mode={mode}
       initialCp={checkpoint}
+      initialActive={active}
       lastClub={getSwingProfile()?.lastClub ?? getSwing(swingId)?.club}
       stillFor={stillFor}
       proxyFor={proxyFor}
@@ -961,6 +971,9 @@ const s = StyleSheet.create({
   panel: { paddingHorizontal: 12, paddingTop: 8, gap: 5, backgroundColor: hud.bg },
   steph: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   stephText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10.5, letterSpacing: 0.8, textTransform: 'uppercase', color: hud.textMuted },
+  stephRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  countRow: { flexDirection: 'row', alignItems: 'center' },
+  countText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10.5, color: hud.textSoft, fontVariant: ['tabular-nums'] },
   dots: { flexDirection: 'row', gap: 4 },
   dot: { width: 16, height: 4, borderRadius: 2, backgroundColor: hud.line },
   dotOn: { backgroundColor: hud.accent },

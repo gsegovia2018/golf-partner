@@ -200,7 +200,7 @@ describe('shaft_through_ball and through_vs_halfway (P9)', () => {
   test('through_vs_halfway names the missing clubhead', () => {
     const row = read({ leadArm: shaft(3, 280, { head: null, hidden: true }), trailArm: shaft(7, 285) }, 'through_vs_halfway');
     expect(row).toMatchObject({ status: 'unknown', reason: 'hidden' });
-    expect(row.text).toMatch(/lead arm/i);
+    expect(row.text).toMatch(/halfway back/i);
   });
 });
 

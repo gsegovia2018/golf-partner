@@ -30,8 +30,8 @@ export default function SwingCheckRow({
   const a11y = `${name}, ${value ? `${value}, ` : ''}${cta ? T.placeClubhead : word}`;
 
   const body = (
-    <View style={[s.row, selected && s.rowOn]}>
-      <View style={[s.dot, { backgroundColor: tone[status] }]} />
+    <View style={[s.row, selected && s.rowOn, cta && s.rowPlace]}>
+      <View style={[s.dot, cta ? [s.dotWait, { borderColor: tone.unknown }] : { backgroundColor: tone[status] }]} />
       <View style={s.mid}>
         <Text style={s.label}>{name}</Text>
         {check.text ? <Text style={s.text}>{check.text}</Text> : null}
@@ -65,6 +65,8 @@ const makeStyles = (theme) => StyleSheet.create({
     borderRadius: 10, minHeight: 48,
   },
   rowOn: { backgroundColor: theme.accent.light },
+  rowPlace: { backgroundColor: theme.bg.secondary }, // a row waiting for its clubhead: a dashed dot and a button
+  dotWait: { backgroundColor: 'transparent', borderWidth: 2, borderStyle: 'dashed' },
   dot: { width: 10, height: 10, borderRadius: 5 },
   mid: { flex: 1, gap: 2 },
   label: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13.5, color: theme.text.primary },

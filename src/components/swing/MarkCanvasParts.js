@@ -11,18 +11,18 @@ import { withAlpha } from '../../theme/alpha';
 import { SWING_STRINGS } from '../../swing/strings';
 import { MARKED_KEYS, positionStatus } from '../../swing/markPass';
 import Pictogram, { PICTOGRAM_KEYS } from './Pictogram';
+import { cueFor } from '../../swing/checkpoints';
 
 // The pieces of the marking canvas (D26, laid out per D28 "Frame Then Marks"). Fixed HUD palette:
 // the canvas is a video being annotated, the same case as the capture viewfinder. The cue card and
 // the dock sit INSIDE the video, on the strong scrim, in the parts of a down-the-line frame that are
-// empty at all six positions (above the head line, left of the body above the ball).
+// empty at all seven positions (above the head line, left of the body above the ball).
 
 const T = SWING_STRINGS.mark;
 const HUD_WARN = semantic.warning.dark; // the HUD amber, as on the capture screen
 export const MARK_COLOR = { hands: hud.accent, head: hud.text, ball: semantic.info.dark };
 const INK = hud.onAccent;
 const CUE_PICT = 44; // the reference pictogram in the cue card (V3)
-const CHIP_PICT = 24; // the pictogram in a chapter chip of the top row
 const DIM = withAlpha(hud.bg, 0.78); // an inactive chip on the picture
 const OUTLINE = withAlpha(hud.text, 0.35);
 export const HANDS_FILL = withAlpha(hud.accent, 0.35);
@@ -126,13 +126,14 @@ function MarkLayerImpl({
         </G>
       );
     }
-    const dash = mk.status === 'proposed' ? '5 3' : undefined;
+    const proposedLike = mk.status === 'proposed' || mk.status === 'unsure'; // an unsure head is a proposal too, drawn dashed
+    const dash = proposedLike ? '5 3' : undefined;
     let shape;
     if (m === 'hands') {
       const hh = on ? 14 : 9;
       shape = <Rect x={x - hh} y={y - hh} width={2 * hh} height={2 * hh} fill={HANDS_FILL} stroke={C} strokeWidth={on ? 3 : 2} strokeDasharray={dash} />;
     } else if (m === 'head') {
-      const proposed = mk.status === 'proposed';
+      const proposed = proposedLike;
       shape = <Circle cx={x} cy={y} r={on ? 10 : 7} fill={proposed ? HEAD_PROPOSED_FILL : hud.text} stroke={proposed ? hud.text : INK} strokeWidth={on ? 2.5 : 1.5} strokeDasharray={dash} />;
     } else {
       shape = <Circle cx={x} cy={y} r={12} fill="none" stroke={C} strokeWidth={on ? 3 : 2} strokeDasharray={dash} />;
@@ -259,15 +260,15 @@ function CueCardImpl({
 
 export const CueCard = memo(CueCardImpl);
 
-// --- The top row: close, the six positions as pictogram chips with a status dot, the count -------
+// --- The top row: close and the seven positions as chips (P-number, status dot, short name) -------
 
 /**
- * `current` is the open position (none for an automatic frame); `count` and `sub` are the two
- * lines at the right ("3/6", "2 ✓ · 1 skip"). Confirmed is a filled dot, skipped a filled square,
- * to do a ring: shape as well as colour.
+ * `current` is the open position (none for an automatic frame). The count ("3/7", "2 ✓ · 1 skip") lives in
+ * the panel's step header, which leaves each chip 46 px at 390 px (checks v2, design). Confirmed is a filled
+ * dot, skipped a filled square, to do a ring: shape as well as colour.
  */
 function MarkChipsImpl({
-  status, current = null, onSelect, onClose, closeLabel, count, sub, mirror = false,
+  status, current = null, onSelect, onClose, closeLabel,
 }) {
   return (
     <View style={styles.chrow} testID="mark-chapters">
@@ -288,15 +289,12 @@ function MarkChipsImpl({
               accessibilityLabel={T.chapterA11y(SWING_STRINGS.checkpoint[k], st)}
               testID={`chapter-${k}`}
             >
-              <Pictogram swingKey={k} size={CHIP_PICT} color={on ? hud.text : hud.textMuted} accent={hud.accent} mirror={mirror} />
+              <Text style={[styles.chP, on && styles.chOnText]}>{cueFor(k).p}</Text>
               <View style={[styles.cd, st === 'confirmed' && styles.cdDone, st === 'skipped' && styles.cdSkip]} />
+              <Text style={[styles.chName, on && styles.chOnText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{SWING_STRINGS.position.short[k]}</Text>
             </Pressable>
           );
         })}
-      </View>
-      <View style={styles.cnt} accessible accessibilityLabel={`${count}, ${sub}`} testID="mark-count">
-        <Text style={styles.cntMain} numberOfLines={1}>{count}</Text>
-        <Text style={styles.cntSub} numberOfLines={1}>{sub}</Text>
       </View>
     </View>
   );
@@ -347,7 +345,7 @@ const styles = StyleSheet.create({
   cd: { width: 6, height: 6, borderRadius: 3, borderWidth: 1.5, borderColor: hud.textMuted },
   cdDone: { backgroundColor: hud.accent, borderColor: hud.accent },
   cdSkip: { backgroundColor: HUD_WARN, borderColor: HUD_WARN, borderRadius: 1 },
-  cnt: { width: 44, alignItems: 'center' },
-  cntMain: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, color: hud.textSoft, fontVariant: ['tabular-nums'] },
-  cntSub: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9, color: hud.textMuted, fontVariant: ['tabular-nums'] },
+  chP: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, color: hud.textSoft },
+  chName: { maxWidth: '100%', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 8, letterSpacing: 0.3, color: hud.textMuted },
+  chOnText: { color: hud.text },
 });

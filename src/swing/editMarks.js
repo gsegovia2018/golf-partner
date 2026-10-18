@@ -24,6 +24,7 @@ import {
   emptyMarks, frameLabel, withFrame, withBall, handsPlaced,
 } from './labels';
 import { frameOfKey } from './checkpointChecks';
+import { headTrusted } from './club';
 import { MARKED_KEYS, statusFromMarks, passCounts, MARK_TOTAL } from './markPass';
 
 export const EDIT_KEYS = CLUB_KEYS;
@@ -208,8 +209,9 @@ const MARKS_AT = (key) => (key === 'address' ? ['hands', 'head', 'ball'] : ['han
 const okOf = (d) => d.confirmed ?? { hands: false, head: false };
 
 /**
- * The dock's status word for one mark: 'proposed' | 'confirmed' | 'hidden' | 'missing' | 'moved'.
- * Moved = changed from the proposal and not confirmed yet.
+ * The dock's status word for one mark: 'proposed' | 'unsure' | 'confirmed' | 'hidden' | 'missing' | 'moved'.
+ * Moved = changed from the proposal and not confirmed yet. Unsure = a clubhead proposal the checks would
+ * not read (below the gate): it can be confirmed like a proposal, but says so.
  */
 export function markStatus(draft, base, key, mark) {
   if (mark === 'ball') {
@@ -224,7 +226,9 @@ export function markStatus(draft, base, key, mark) {
     if (!d.head) return 'missing';
     if (ok.head) return 'confirmed';
     const q = proposalAt(base, key, d.frame) ?? NO_PROPOSAL;
-    return sameXY(d.head, q.head) && !q.hidden ? 'proposed' : 'moved';
+    if (!sameXY(d.head, q.head) || q.hidden) return 'moved';
+    // a detection under the checks' gate (spec §5) is drawn and proposed, but flagged: look before confirming
+    return headTrusted(q.source, q.conf) ? 'proposed' : 'unsure';
   }
   if (ok.hands) return 'confirmed';
   return d.hands ? 'moved' : 'proposed';
