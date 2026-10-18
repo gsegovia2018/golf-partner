@@ -203,6 +203,10 @@ describe('shaft_through_ball and through_vs_halfway (P9)', () => {
     expect(row).toMatchObject({ status: 'unknown', reason: 'hidden' });
     expect(row.text).toMatch(/halfway back/i);
   });
+  test('without a ball the shaft line has nothing to land on: no data, not a hidden clubhead (owner report 2026-10-18)', () => {
+    const row = one(run({ address: mark(1, pt(250, 120)), trailArm: shaft(7, 280) }, toes, { ball: null }), 'shaft_through_ball');
+    expect(row).toMatchObject({ status: 'unknown', reason: 'nodata', text: 'No address plane' });
+  });
 });
 
 describe('the clubhead gate (spec §5)', () => {

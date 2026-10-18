@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Svg, {
-  Rect, Circle, Polyline, Text as SvgText, G,
+  Rect, Circle, Line, Polyline, Text as SvgText, G,
 } from 'react-native-svg';
 import { hud, semantic } from '../../theme/tokens';
 import { withAlpha } from '../../theme/alpha';
@@ -80,6 +80,8 @@ export function placeLabels(items, shapes, w, h) {
  * label filled. Decorative: the dock and the mark row carry the meaning for screen readers.
  * `marks`: { hands: { pt, status }, head: { pt, status, prior }, ball: { pt, status } | null }.
  * `hidden`: the mark under the finger, left out here (DragLoupe draws it outside React meanwhile).
+ * The shaft (hands to clubhead) is drawn under the marks whenever both sit on the still, so a
+ * mark on the wrong thing shows as a line off the club; dashed while either is still a proposal.
  */
 function MarkLayerImpl({
   rect, marks, active, hidden = null,
@@ -104,6 +106,20 @@ function MarkLayerImpl({
     if (marks[m].status !== 'hidden') shapes.push({ m, at });
   });
   const spots = placeLabels(items, shapes, rect.w, rect.h);
+
+  const onStill = (m) => marks[m]?.pt && marks[m].status !== 'hidden' && marks[m].status !== 'missing' && m !== hidden;
+  let shaft = null;
+  if (onStill('hands') && onStill('head')) {
+    const [x1, y1] = X(marks.hands.pt);
+    const [x2, y2] = X(marks.head.pt);
+    const dash = ['hands', 'head'].some((m) => marks[m].status === 'proposed' || marks[m].status === 'unsure') ? '6 4' : undefined;
+    shaft = (
+      <G key="shaft" testID="mark-shaft">
+        <Line x1={x1} y1={y1} x2={x2} y2={y2} stroke={INK} strokeWidth={4} strokeLinecap="round" opacity={0.5} />
+        <Line x1={x1} y1={y1} x2={x2} y2={y2} stroke={hud.text} strokeWidth={2} strokeLinecap="round" strokeDasharray={dash} />
+      </G>
+    );
+  }
 
   const draw = (m) => {
     const mk = marks[m];
@@ -156,6 +172,7 @@ function MarkLayerImpl({
   // drawn in order with the active mark last; chips were placed clear of the other marks
   return (
     <Svg width={rect.w} height={rect.h} style={StyleSheet.absoluteFill} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {shaft}
       {order.map(draw)}
     </Svg>
   );
