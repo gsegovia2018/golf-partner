@@ -16,10 +16,10 @@ const byId = (a, id, cp) => a.checks.find((c) => c.id === id && (!cp || c.cp ===
 describe('analyze: the whole pipeline on the fixture', () => {
   const a = analyze(native(), { pass2, handedness: 'right', heightCm: 176, club: 'iron', source: 'import', swingId: 's1', createdAt: 'x' });
 
-  test('shape of analysis.json (schema swing-analysis/2)', () => {
+  test('shape of analysis.json (schema swing-analysis/3)', () => {
     expect(a.error).toBeUndefined();
     expect(a.schema).toBe(SCHEMA);
-    expect(SCHEMA).toBe('swing-analysis/2');
+    expect(SCHEMA).toBe('swing-analysis/3');
     expect(a).toMatchObject({ swingId: 's1', club: 'iron', handedness: 'right', view: 'dtl', source: 'import' });
     expect(a.fps).toMatchObject({ factor: 8, source: 'estimate', approximate: false });
     expect(a.scale.approx).toBe(false);
@@ -50,8 +50,10 @@ describe('analyze: the whole pipeline on the fixture', () => {
     expect(a.clubMarks.top.priorHead).toBeUndefined();
   });
 
-  test('main fault (spec §6): impact is tier 1 and red, so early extension leads; the top is red before it', () => {
-    expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: 'top', consequences: [] });
+  test('main fault (spec §6): impact is tier 1 and red, so early extension leads; nothing red before it', () => {
+    // Without marks the takeaway and halfway-back clubheads are unplaced, and the top is a yellow
+    // since the lab table (hands over heels 6 / 18 cm), so there is no earlier red to start from.
+    expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: null, consequences: [] });
     expect(a.main.evidence[0].id).toBe('hip_drift');
     expect(a.main.drills[0]).toBe('ee-silla');
   });

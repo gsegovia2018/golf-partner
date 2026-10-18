@@ -48,10 +48,11 @@ describe('knee_flex (address)', () => {
 });
 
 describe('shaft_plane (address)', () => {
-  // Mid-hip at the origin: the body front is 0.05 x 176 = 8.8 cm toward the ball. The shaft runs
-  // from the head at the ball to the hands, on the line that crosses the body front `d` cm above the hips.
+  // Mid-hip at the origin: the body front is 0.05 x 176 = 8.8 cm toward the ball and the belt
+  // 0.06 x 176 = 10.56 cm above the hips. The shaft runs from the head at the ball to the hands, on
+  // the line that crosses the body front `d` cm above the belt.
   const read = (d, extra = {}) => {
-    const p = pt(8.8, -d);
+    const p = pt(8.8, -(d + 10.56));
     const head = pt(300, 200);
     const hands = pt(p.x + 0.8 * (head.x - p.x), p.y + 0.8 * (head.y - p.y));
     return one(run({ address: mark(1, hands, head, extra) }, () => pose({ 23: [0, 0], 24: [0, 0] })), 'shaft_plane');
@@ -144,11 +145,11 @@ describe('spine_hold and knee_hold', () => {
     expect(bent).toMatchObject({ status: 'red', value: -7, dir: 'down' });
     expect(bent.text).toMatch(/more bent over/);
   });
-  test('knee_hold runs at P2 and P3: flex(P) - flex(address), - = straightening; 5 / 10 degrees', () => {
+  test('knee_hold runs at P2 and P3: flex(P) - flex(address), - = straightening; 10 / 15 degrees', () => {
     const at = (d) => run(cps, (f) => body(35, f === 1 ? 25 : 25 + d));
-    expect(at(-3).filter((c) => c.id === 'knee_hold').map((c) => [c.cp, c.status])).toEqual([['takeaway', 'green'], ['leadArm', 'green']]);
-    expect(one(at(-7), 'knee_hold', 'takeaway')).toMatchObject({ status: 'yellow', value: -7, dir: 'straighten', fault: 'posture_loss' });
-    expect(one(at(12), 'knee_hold', 'leadArm')).toMatchObject({ status: 'red', value: 12, dir: 'flex' });
+    expect(at(-7).filter((c) => c.id === 'knee_hold').map((c) => [c.cp, c.status])).toEqual([['takeaway', 'green'], ['leadArm', 'green']]);
+    expect(one(at(-12), 'knee_hold', 'takeaway')).toMatchObject({ status: 'yellow', value: -12, dir: 'straighten', fault: 'posture_loss' });
+    expect(one(at(17), 'knee_hold', 'leadArm')).toMatchObject({ status: 'red', value: 17, dir: 'flex' });
   });
   test('unknown without the pose at the position', () => {
     const row = one(run(cps, (f) => (f === 4 ? null : body(35))), 'spine_hold', 'top');

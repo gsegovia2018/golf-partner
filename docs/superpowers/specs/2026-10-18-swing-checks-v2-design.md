@@ -66,7 +66,7 @@ Every limit is **provisional** until §8 calibrates it; iron and driver share th
 | Arms hang | keep `hands_under_shoulders` | grip x − shoulder-midpoint x | 8 / 12 cm | posture |
 | Upper back straight | keep `back_line` | ear→shoulder vs shoulder→hip | dropped 40 / 50°, up 10 / 20° | posture |
 | Knee flex | **new** `knee_flex` | trail knee flex | 15–30 / 10–35° | posture (`stiff` / `squat`) |
-| Swing plane | **new** `shaft_plane` | address shaft (head → hands) extended to the body front (mid-hip x + 0.05 × height toward the ball); height where it crosses vs the mid-hip y, + = above (toward the chest) | 10 / 18 cm; the shaft angle is shown, not graded | posture (`upright` / `flat`) |
+| Swing plane | **new** `shaft_plane` | address shaft (head → hands) extended to the body front (mid-hip x + 0.05 × height toward the ball); height where it crosses vs the belt (mid-hip y raised by 0.06 × height, L1), + = above (toward the chest) | 10 / 18 cm; the shaft angle is shown, not graded | posture (`upright` / `flat`) |
 
 Dropped: `waist_bend` (mixes tilt and knee flex), `hand_gap` (lead hip hidden down the line).
 
@@ -76,13 +76,13 @@ Dropped: `waist_bend` (mixes tilt and knee flex), `hand_gap` (lead hip hidden do
 |---|---|---|---|---|
 | Clubhead on plane | **new** `clubhead_plane_takeaway` | `sideOfLine(head, plane)`, + = above (outside) | 8 / 15 cm | steep_backswing (+) / flat_backswing (−) |
 | Spine holds | **new** `spine_hold` | tilt(address) − tilt(P2), + = standing up | iron 3 / 6°, driver 4 / 7° | posture_loss |
-| Trail knee holds | **new** `knee_hold` | flex(P2) − flex(address), − = straightening | 5 / 10° | posture_loss |
+| Trail knee holds | **new** `knee_hold` | flex(P2) − flex(address), − = straightening | 10 / 15° (L1) | posture_loss |
 
 ### 3 Halfway back (P3)
 
 | Row | Status | Measure | Bands | Fault (dir) |
 |---|---|---|---|---|
-| Shaft points at the ball | keep `butt_extension` (reworded) | as today | as today | steep_backswing / flat_backswing |
+| Shaft points at the ball | keep `butt_extension` (reworded) | as today; the landing is capped 50 cm outside the toes–ball zone (L1) | as today | steep_backswing / flat_backswing |
 | Spine holds | `spine_hold` at P3 | as above | as above | posture_loss |
 | Trail knee holds | `knee_hold` at P3 | as above | as above | posture_loss |
 
@@ -93,7 +93,7 @@ Dropped: `hands_between_planes`.
 | Row | Status | Measure | Bands | Fault (dir) |
 |---|---|---|---|---|
 | Lead arm vs spine | **new** `lead_arm_spine` | 90 − the 2D angle between the spine (mid-hip → mid-shoulder) and the lead arm (lead shoulder → lead wrist); + = upright (the arm points more vertically than the perpendicular to the spine, closing the angle with the spine), − = flat | 10 / 20° | top_position |
-| Hands over trail heel | keep `hands_over_heels` | as today | 6 / 12 cm | top_position |
+| Hands over trail heel | keep `hands_over_heels` | as today | 6 / 18 cm (L1) | top_position |
 | Spine holds | `spine_hold` at P4 | as above | as above | posture_loss |
 
 Dropped: `lead_arm_shoulder_plane` (address plane, not the body at the top), `top_direction`. The
@@ -181,6 +181,10 @@ not colour a position.
 - **Golden tests** move to the new rows: the owner swing's per-position statuses and main fault
   (expected: downswing, likely starts at takeaway, if the lab table agrees).
 - **Device:** analyse one new swing and reopen one old swing (re-run to schema 2) on the phone.
+
+## 8a. Calibration applied (2026-10-18)
+
+The owner judged the lab table (three fully marked swings) against the pictures and approved: the belt reference raised 0.06 × height above the hip joints (the joint-height reading said 13–20 cm "upright" on a shaft that points at the belt); `hands_over_heels` 6 / 18 cm (his ~15 cm is a watch, not a fix); `knee_hold` 10 / 15°; the shaft landing capped 50 cm outside the zone (a near-flat shaft read 122 cm); the impact limits kept (his early extension is real on all three). Still uncalibrated for lack of marked clubheads: the takeaway, downswing and follow-through clubhead rows and `CHECK_MIN_CONF`.
 
 ## 9. Screens (design step before building)
 

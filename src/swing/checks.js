@@ -54,11 +54,13 @@ const SHARED = {
   // so a dropped head gets that room (the owner's straight back reads 33-38); a lifted one does not.
   backLine: { dropped: [40, 50], up: [10, 20] },
   kneeFlex: { green: [15, 30], yellow: [10, 35] }, // degrees of trail-knee flex at address
-  shaftPlane: [10, 18], // cm, address shaft line at the body front vs the mid-hip height
+  shaftPlane: [10, 18], // cm, address shaft line at the body front vs the belt height
   takeawayPlane: [8, 15], // cm, clubhead off the address plane at P2
-  kneeHold: [5, 10], // degrees of trail-knee flex gained or lost since address
+  // 2026-10-18 lab table (owner-approved): 7-10 deg of straightening going back is common while the
+  // leg keeps its flex at the top; red only when it nears straight.
+  kneeHold: [10, 15], // degrees of trail-knee flex gained or lost since address
   leadArmSpine: [10, 20], // degrees off perpendicular to the spine at the top
-  handsOverHeels: [6, 12], // cm, |grip x - trail heel x| at the top
+  handsOverHeels: [6, 18], // cm, |grip x - trail heel x| at the top; owner's ~15 cm is a "watch", not a "fix"
   downPlane: { above: [4, 10], under: [12, 20] }, // cm, clubhead above / under the address plane at P6
   downVsTakeaway: [0, 10], // cm, P6 clubhead minus P2 clubhead vs the plane (+ = steeper coming down)
   throughVsHalfway: [10, 20], // cm, P9 shaft landing minus P3 shaft landing
@@ -93,6 +95,12 @@ export const THRESHOLDS = {
 export const normClub = (club) => (CLUBS.includes(club) ? club : DEFAULT_CLUB);
 const FINISH_BALANCE_H = 0.08; // mid-hip x within 0.08 H of the lead ankle x
 const BODY_FRONT_H = 0.05; // shaft_plane: the body front, this share of the height in front of the mid-hip
+// shaft_plane: the belt sits above the hip-joint landmarks; read from the owner's lab swings, where
+// the shaft visibly points at the belt and the joint-height reading said 13-20 cm "upright".
+const BELT_ABOVE_HIP_H = 0.06;
+// A shaft close to horizontal carried to ball height lands absurdly far (a 122 cm reading on a lab
+// swing); past this the landing only says "far", the number stops growing.
+const LANDING_CAP_CM = 50;
 
 // Checks whose value depends on the impact frame inherit `approximate` from the fps model.
 const IMPACT_DEPENDENT = new Set([
@@ -216,15 +224,18 @@ export function runChecks(input) {
     const c = C[k];
     if (!c) return { reason: 'nodata', text: why('noMark', { what: cpName(k) }) };
     if (!c.head || !ball) return { reason: c.unplaced ? 'unplaced' : 'hidden', text: headMissing(c, cpName(k)) };
-    const x = extendToY(c.head, c.hands, ball.y);
-    if (x === null) return { reason: 'nodata', text: why('shaftHorizontal') };
+    const raw = extendToY(c.head, c.hands, ball.y);
+    if (raw === null) return { reason: 'nodata', text: why('shaftHorizontal') };
     const toes = toesX();
+    // The cap bounds the distance outside the zone, so a reading never crosses into it.
+    const cap = LANDING_CAP_CM / cm; // px
+    const x = Math.max((toes !== null && toes < bx ? toes : bx) - cap, Math.min(bx + cap, raw));
     const span = toes !== null && toes < ball.x ? bx - toes : 0;
     const margin = 0.1 * span;
     const beyond = (x - bx - margin) * cm; // + = beyond the ball
     const inside = toes !== null && span ? (toes + margin - x) * cm : -Infinity; // + = inside the toes
     return {
-      x, fromBall: (x - bx) * cm, beyond, inside, miss: Math.max(0, beyond, inside),
+      x, fromBall: (x - bx) * cm, beyond, inside, miss: Math.max(0, beyond, inside), capped: x !== raw,
     };
   };
 
@@ -285,8 +296,8 @@ export function runChecks(input) {
   }
 
   // shaft_plane: the address shaft (head -> hands) carried back to the body front (mid-hip x +
-  // 0.05 H toward the ball); where it crosses, against the mid-hip height (+ = above, toward the
-  // chest: an upright shaft). The shaft angle is shown, not graded.
+  // 0.05 H toward the ball); where it crosses, against the belt (mid-hip y raised by 0.06 H; + =
+  // above, toward the chest: an upright shaft). The shaft angle is shown, not graded.
   {
     const m = M('shaft_plane', 'address', ['address'], { fault: 'posture' });
     const c = C.address;
@@ -298,7 +309,7 @@ export function runChecks(input) {
     else {
       const xf = hip.x + BODY_FRONT_H * H;
       const y = c.head.y + ((c.hands.y - c.head.y) * (xf - c.head.x)) / (c.hands.x - c.head.x);
-      const d = (hip.y - y) * cm;
+      const d = (hip.y - BELT_ABOVE_HIP_H * H - y) * cm;
       const deg = angleAboveHorizontal(c.head, c.hands);
       const j = sym(d, TH.shaftPlane);
       const dir = d > 0 ? 'upright' : 'flat';
@@ -371,7 +382,7 @@ export function runChecks(input) {
         text = T.checkText.butt_extension_steep(r.inside);
       }
       push(m, j, round(r.fromBall, 0), 'cm', text, {
-        dir, miss: round(r.miss, 0), fault: dir === 'steep' ? 'steep_backswing' : dir === 'flat' ? 'flat_backswing' : null,
+        dir, miss: round(r.miss, 0), capped: r.capped, fault: dir === 'steep' ? 'steep_backswing' : dir === 'flat' ? 'flat_backswing' : null,
       });
     }
   }
@@ -491,7 +502,7 @@ export function runChecks(input) {
       const text = dir === 'beyond' ? T.checkText.shaft_through_ball_beyond(through.beyond)
         : dir === 'inside' ? T.checkText.shaft_through_ball_inside(through.inside) : T.checkText.shaft_through_ball_ok;
       push(m, j, round(through.fromBall, 0), 'cm', text, {
-        dir, miss: round(through.miss, 0), fault: dir === 'inside' ? 'over_the_top' : dir === 'beyond' ? 'flip' : null,
+        dir, miss: round(through.miss, 0), capped: through.capped, fault: dir === 'inside' ? 'over_the_top' : dir === 'beyond' ? 'flip' : null,
       });
     }
   }

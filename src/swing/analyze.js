@@ -13,7 +13,7 @@ import { resolveClub } from './club';
 import { runChecks, normClub } from './checks';
 import { mainFault } from './priority';
 
-export const SCHEMA = 'swing-analysis/2'; // 2: the v2 checks (spec 2026-10-18); older ones re-run on open
+export const SCHEMA = 'swing-analysis/3'; // 2: the v2 checks (spec 2026-10-18); 3: their lab-calibrated limits (spec §8a). Older ones re-run on open
 export const MAX_CLIP_S = 15; // captured seconds; the importer warns above this
 const MIN_USABLE = 10;
 const MIN_COVERAGE = 0.8;
