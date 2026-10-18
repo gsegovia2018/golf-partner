@@ -580,6 +580,7 @@ export default function SwingResultsScreen({ navigation, route }) {
 
   // Coming back from Edit marks: the analysis was recomputed there.
   useEffect(() => navigation.addListener?.('focus', () => {
+    setPlaced(null); // whatever Edit marks changed, Undo must not write the pre-trip marks back
     if (phase === 'ready' && !started.current) { poseRef.current = null; load(); }
   }), [navigation, phase, load]);
 
@@ -598,11 +599,21 @@ export default function SwingResultsScreen({ navigation, route }) {
       }, cp, pt);
       if (!out) throw new Error('place');
       await saveMarks(swingId, out.marks);
-      await saveAnalysis(swingId, out.analysis);
+      try {
+        await saveAnalysis(swingId, out.analysis);
+      } catch (e) {
+        // marks.json is the source of truth: never leave it ahead of analysis.json
+        if (cur.marks) { try { await saveMarks(swingId, cur.marks); } catch { /* best effort */ } }
+        throw e;
+      }
       if (!alive.current) return true;
       setData({ analysis: out.analysis, pose: cur.pose, marks: out.marks });
       setPlaced({
-        cp, mainBefore: cur.analysis.main?.fault ?? null, mainAfter: out.analysis.main?.fault ?? null, prev: { analysis: cur.analysis, marks: cur.marks },
+        cp,
+        mainBefore: cur.analysis.main?.fault ?? null,
+        mainAfter: out.analysis.main?.fault ?? null,
+        prev: { analysis: cur.analysis, marks: cur.marks },
+        written: out.marks,
       });
       return true;
     } catch {
@@ -615,10 +626,20 @@ export default function SwingResultsScreen({ navigation, route }) {
     setPlaced(null);
     if (!prev) return;
     try {
+      // only revert what this placement wrote: marks edited since (Edit marks) are the golfer's
+      const now = await readMarks(swingId);
+      if (JSON.stringify(now) !== JSON.stringify(placed.written)) return;
       if (prev.marks) await saveMarks(swingId, prev.marks);
-      await saveAnalysis(swingId, prev.analysis);
+      try {
+        await saveAnalysis(swingId, prev.analysis);
+      } catch (e) {
+        try { await saveMarks(swingId, placed.written); } catch { /* best effort */ }
+        throw e;
+      }
       if (alive.current) setData({ analysis: prev.analysis, pose: dataRef.current.pose, marks: prev.marks });
-    } catch { /* the golfer still has the placed head */ }
+    } catch {
+      if (alive.current) setPlaced({ failed: true });
+    }
   }, [swingId, placed]);
 
   const onCancel = () => {
@@ -670,7 +691,7 @@ export default function SwingResultsScreen({ navigation, route }) {
         onDelete={onDelete}
         onRetry={onRetry}
         onRecord={() => navigation.navigate('SwingCapture')}
-        onEditMarks={(checkpoint, opts) => navigation.navigate('SwingEditMarks', { swingId, checkpoint, ...opts })}
+        onEditMarks={(checkpoint, opts) => { setPlaced(null); navigation.navigate('SwingEditMarks', { swingId, checkpoint, ...opts }); }}
         onRename={(name) => renameSwing(swingId, name)}
         onExport={onExport}
         onPlay={() => setPlaying(true)}

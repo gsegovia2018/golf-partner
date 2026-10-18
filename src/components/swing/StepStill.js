@@ -36,6 +36,7 @@ export default function StepStill({
     const tap = Gesture.Tap()
       .runOnJS(true)
       .maxDuration(700)
+      .maxDistance(10) // a fling is not a placement
       .onEnd((e, ok) => {
         if (!ok || !rect.w || !rect.h) return;
         const x = Math.min(1, Math.max(0, e.x / rect.w));

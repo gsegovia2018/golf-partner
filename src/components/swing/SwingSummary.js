@@ -23,6 +23,13 @@ export default function SwingSummary({
   const tone = useSwingTone();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const fault = main ? SWING_STRINGS.fault[main.fault] ?? main.label : null;
+  // "Every position is green" only when all seven are measured; a missing clubhead or nothing measured says so
+  const positions = STEPS.filter((k) => k !== EXTRAS);
+  const waiting = positions.some((k) => pending[k]);
+  const measured = positions.filter((k) => statuses[k] !== 'unknown');
+  const noFault = measured.length === positions.length && !waiting ? { line: R.noFaultAll, why: true }
+    : waiting ? { line: R.noFaultPlace, why: false }
+      : measured.length ? { line: R.noFaultSoFar, why: false } : { line: R.nothingMeasured, why: false };
   const mainStep = main ? main.position ?? EXTRAS : null;
   const alsoCausing = main?.consequences?.length
     ? R.alsoCausing(main.consequences.map((f) => SWING_STRINGS.fault[f] ?? f)) : null;
@@ -85,8 +92,8 @@ export default function SwingSummary({
           </>
         ) : (
           <>
-            <Text style={s.line} testID="results-headline">{R.noFaultAll}</Text>
-            <Text style={s.hint}>{R.noFaultWhy}</Text>
+            <Text style={s.line} testID="results-headline">{noFault.line}</Text>
+            {noFault.why ? <Text style={s.hint}>{R.noFaultWhy}</Text> : null}
           </>
         )}
         {soFar && pending.shaftDown ? (

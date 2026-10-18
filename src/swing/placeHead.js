@@ -25,9 +25,7 @@ export function placeHead({
   });
   if (live.error) return null;
   const v = pose.video;
-  return {
-    analysis: live,
-    marks: draftToMarks({
+  const built = draftToMarks({
       draft: next,
       base,
       live,
@@ -36,6 +34,19 @@ export function placeHead({
       handedness: analysis.handedness,
       editedAt: new Date().toISOString(),
       passState: 'done', // results only open once the marking pass is done: placing a head never reopens it
-    }),
+    });
+  // Only the placed position's label changes: every other label stays exactly as stored (draftToMarks rebuilds
+  // them from the draft, which can differ on an older swing whose detection frame is not the label's proposed one).
+  const stored = marks?.frames ?? [];
+  const mine = built.frames.find((f) => f.checkpoint === cp);
+  const frames = stored.filter((f) => f.checkpoint !== cp);
+  if (mine) frames.push(mine);
+  const order = (f) => (stored.findIndex((x) => x.checkpoint === f.checkpoint) + 1 || 1e9);
+  frames.sort((a, b) => order(a) - order(b));
+  return {
+    analysis: live,
+    marks: {
+      ...built, frames, ball: marks?.ball ?? built.ball, pass: marks?.pass ?? built.pass,
+    },
   };
 }

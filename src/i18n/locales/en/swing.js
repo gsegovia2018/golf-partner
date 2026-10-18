@@ -416,4 +416,7 @@ export default {
   'swing.results.placeFailed': 'Could not save the mark. Try again.',
   'swing.results.noFaultAll': 'Every position is green.',
   'swing.results.frameShort': 'frame {frame}',
+  'swing.results.noFaultSoFar': 'No fault so far',
+  'swing.results.noFaultPlace': 'No fault so far — place the clubhead to finish',
+  'swing.results.nothingMeasured': 'Nothing measured yet',
 };

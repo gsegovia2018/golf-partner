@@ -419,4 +419,7 @@ export default {
   'swing.results.placeFailed': 'No se pudo guardar la marca. Inténtalo de nuevo.',
   'swing.results.noFaultAll': 'Todas las posiciones están en verde.',
   'swing.results.frameShort': 'fotograma {frame}',
+  'swing.results.noFaultSoFar': 'Sin fallos por ahora',
+  'swing.results.noFaultPlace': 'Sin fallos por ahora: coloca la cabeza del palo para completar la lectura',
+  'swing.results.nothingMeasured': 'Todavía no se ha medido nada',
 };

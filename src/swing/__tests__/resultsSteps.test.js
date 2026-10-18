@@ -148,6 +148,31 @@ describe('placeHead', () => {
     expect(placeHead(stored, 'nowhere', [0.5, 0.5])).toBeNull();
   });
 
+  test('only the placed position changes: every other label stays byte for byte, even on an older swing whose frames moved', () => {
+    const fa = UNMARKED.checkpoints.address.i;
+    const ft = UNMARKED.checkpoints.takeaway.i;
+    // older labels: the golfer chose frames other than the ones pass 2 proposed (333 -> 325 style), a stale proposal beside them
+    let m = { ...done, ball: { proposed: [0.1, 0.2, 0.01], final: [0.1, 0.2, 0.01], confirmed: true } };
+    m = withFrame(m, frameLabel({
+      i: fa - 8, iProposed: fa, checkpoint: 'address', hands: { proposed: [0.3, 0.4], final: [0.31, 0.41], placed: true, confirmed: true }, head: { proposed: null, final: null, finalHidden: true }, confirmed: true, confirmedFrame: true, editedAt: 'then',
+    }));
+    m = withFrame(m, frameLabel({
+      i: ft + 4, iProposed: ft, checkpoint: 'takeaway', hands: { proposed: [0.3, 0.4], final: [0.3, 0.4], placed: false }, head: { proposed: [0.2, 0.2], final: [0.2, 0.2], proposedSource: 'model', proposedConf: 0.4 }, editedAt: 'then',
+    }));
+    const stored = JSON.parse(JSON.stringify(m));
+    const out = placeHead({
+      analysis: UNMARKED, pose, probe: null, marks: m,
+    }, 'shaftDown', [0.6, 0.62]);
+    expect(out).not.toBeNull();
+    ['address', 'takeaway'].forEach((k) => {
+      expect(JSON.stringify(out.marks.frames.find((f) => f.checkpoint === k))).toBe(JSON.stringify(stored.frames.find((f) => f.checkpoint === k)));
+    });
+    expect(out.marks.frames.map((f) => f.checkpoint).sort()).toEqual(['address', 'shaftDown', 'takeaway']);
+    expect(out.marks.ball).toEqual(stored.ball);
+    expect(out.marks.pass).toEqual(stored.pass);
+    expect(out.marks.frames.find((f) => f.checkpoint === 'shaftDown').head.confirmed).toBe(true);
+  });
+
   test('re-placing on a swing the owner marked moves the head and re-reads', () => {
     const out = placeHead({
       analysis: MARKED, pose, probe: null, marks: ownerLabels,

@@ -83,8 +83,11 @@ const ALLGREEN = {
   ...MARKED,
   main: null,
   counts: { red: 0, yellow: 0, green: MARKED.checks.length, unknown: 0 },
-  checks: MARKED.checks.map((c) => (c.status === 'unknown' ? c : { ...c, status: 'green' })),
+  checks: MARKED.checks.map((c) => ({ ...c, status: 'green' })),
 };
+// no fault, but a position the owner hid the clubhead at is not measured
+const GREEN_SOME_UNKNOWN = { ...ALLGREEN, checks: MARKED.checks.map((c) => (c.status === 'unknown' ? c : { ...c, status: 'green' })) };
+const NOTHING = { ...MARKED, main: null, checks: MARKED.checks.map((c) => ({ ...c, status: 'unknown', reason: 'hidden' })) };
 
 // marks.json as Edit marks wrote it: the owner's hands and clubheads (what a re-score reads back).
 const OWNER_MARKS = Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, c.frame, c.hands, c.hidden ? null : c.head, c.hidden])
@@ -103,6 +106,7 @@ function setup({ row = ROW, analysis = MARKED, marks = OWNER_MARKS } = {}) {
   store.readProbe.mockResolvedValue(null);
   store.readMarks.mockResolvedValue(marks);
   store.saveAnalysis.mockImplementation(async (_id, a) => { store.readAnalysis.mockResolvedValue(a); });
+  store.saveMarks.mockImplementation(async (_id, m) => { store.readMarks.mockResolvedValue(m); });
   const navigation = {
     navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn(), addListener: jest.fn(() => () => {}),
   };
@@ -258,6 +262,20 @@ describe('SwingResultsScreen: the summary and the stepper (checks v2, design D)'
     expect(u.queryByTestId('results-fix-peek')).toBeNull();
   });
 
+  test('"Every position is green" only when all seven are measured; else it says what is missing', async () => {
+    const pend = setup({ analysis: { ...UNMARKED, main: null } });
+    await ready(pend);
+    expect(textOf(pend.getByTestId('results-headline'))).toBe(T.noFaultPlace);
+    pend.unmount();
+    const part = setup({ analysis: GREEN_SOME_UNKNOWN });
+    await ready(part);
+    expect(textOf(part.getByTestId('results-headline'))).toBe(T.noFaultSoFar);
+    part.unmount();
+    const none = setup({ analysis: NOTHING });
+    await ready(none);
+    expect(textOf(none.getByTestId('results-headline'))).toBe(T.nothingMeasured);
+  });
+
   test('the main fault is not a fix peek on a green position; it is the practise card only at its own step', async () => {
     const u = setup();
     await ready(u);
@@ -344,6 +362,60 @@ describe('SwingResultsScreen: placing the clubhead on the still (design D)', () 
     expect(store.saveAnalysis.mock.calls[1][1]).toBe(UNMARKED);
     expect(u.queryByTestId('results-placed')).toBeNull();
     await waitFor(() => expect(u.getByTestId('summary-step-shaftDown').props.accessibilityLabel).toBe(T.stepA11y(cpName('shaftDown'), T.stateNoHead)));
+  });
+
+  test('a trip to Edit marks clears the banner, so Undo can never write the pre-trip marks back', async () => {
+    const u = setup({ analysis: UNMARKED, marks: { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } } });
+    await ready(u);
+    await tapStill();
+    await u.findByTestId('results-placed');
+    fireEvent.press(u.getByLabelText(T.editMarks));
+    expect(u.queryByTestId('results-placed')).toBeNull();
+    // and coming back into focus clears one that was placed since
+    const focus = u.navigation.addListener.mock.calls.filter(([n]) => n === 'focus').pop()[1];
+    await act(async () => { focus(); });
+    expect(u.queryByTestId('results-placed')).toBeNull();
+    expect(store.saveMarks).toHaveBeenCalledTimes(1); // nothing was written back
+  });
+
+  test('Undo only reverts what the placement wrote: marks edited since are kept', async () => {
+    const u = setup({ analysis: UNMARKED, marks: { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } } });
+    await ready(u);
+    await tapStill();
+    const written = store.saveMarks.mock.calls[0][1];
+    store.readMarks.mockResolvedValue({ ...written, editedElsewhere: true });
+    fireEvent.press(await u.findByTestId('results-undo'));
+    await waitFor(() => expect(u.queryByTestId('results-placed')).toBeNull());
+    expect(store.saveMarks).toHaveBeenCalledTimes(1);
+    expect(store.saveAnalysis).toHaveBeenCalledTimes(1);
+  });
+
+  test('if the analysis cannot be saved the marks are put back and the failure is shown', async () => {
+    const before = { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } };
+    const u = setup({ analysis: UNMARKED, marks: before });
+    await ready(u);
+    store.saveAnalysis.mockRejectedValueOnce(new Error('disk'));
+    await tapStill();
+    expect(await u.findByText(T.placeFailed)).toBeTruthy();
+    expect(store.saveMarks).toHaveBeenCalledTimes(2);
+    expect(store.saveMarks.mock.calls[1][1]).toBe(before);
+  });
+
+  test('a failed Undo is shown, and the placed marks are put back if the analysis could not be written', async () => {
+    const u = setup({ analysis: UNMARKED, marks: { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } } });
+    await ready(u);
+    await tapStill();
+    const written = store.saveMarks.mock.calls[0][1];
+    store.saveAnalysis.mockRejectedValueOnce(new Error('disk'));
+    fireEvent.press(await u.findByTestId('results-undo'));
+    expect(await u.findByText(T.placeFailed)).toBeTruthy();
+    expect(store.saveMarks.mock.calls[store.saveMarks.mock.calls.length - 1][1]).toBe(written);
+  });
+
+  test('the place tap rejects a fling: it has a 10 px distance limit', async () => {
+    const u = setup({ analysis: UNMARKED });
+    await ready(u);
+    expect(getByGestureTestId('place-tap').config.maxDist).toBe(10);
   });
 
   test('the detector\'s unsure dot is a target: "Confirm the dot" accepts it without a placement tap', async () => {
