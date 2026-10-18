@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  makeFocusCommit, focusVerdict, focusLevel, isV1Focus, isV2Focus, isSgFocus, needsRebase, rebaseFocus,
+  makeFocusCommit, focusVerdict, focusLevel, roundsSinceCommit, isV1Focus, isV2Focus, isSgFocus, needsRebase, rebaseFocus,
   loadFocus, saveFocus, clearFocus, loadFocusHistory, archiveFocus, loadFocusNotice, dismissFocusNotice,
   FOCUS_VERSION, MIN_VERDICT_ROUNDS, EARLY_ROUNDS, MIN_CHANGE,
 } from '../coachFocus';
@@ -493,5 +493,134 @@ describe('v1 → v2 migration', () => {
     // the stored legacy entry itself is not rewritten
     const raw = JSON.parse(AsyncStorage.__store.get('@mystats_coach_focus_history:u1'));
     expect(raw[2].v).toBeUndefined();
+  });
+});
+
+describe('since the commit', () => {
+  const sgFocus = makeFocusCommit(leak, baseStats, COMMITTED_AT);
+  const at = (iso) => Date.parse(iso);
+  const mr = (key, endedAt) => ({ key, endedAt });
+
+  describe('roundsSinceCommit', () => {
+    const rounds = [
+      mr('before', at('2026-09-20T12:00:00Z')),
+      mr('atCommit', at(COMMITTED_AT)),
+      mr('unstamped', null),
+      mr('after', at('2026-10-05T12:00:00Z')),
+      mr('afterRebase', at('2026-10-17T12:00:00Z')),
+    ];
+
+    test('rounds that ended after committedAt, in input order; at the instant or unstamped are out', () => {
+      const since = roundsSinceCommit(rounds, sgFocus);
+      expect(since.committed.map((r) => r.key)).toEqual(['after', 'afterRebase']);
+      expect(since.judged.map((r) => r.key)).toEqual(['after', 'afterRebase']);
+    });
+
+    test('rebasedAt narrows judged, never committed', () => {
+      const rebased = { ...sgFocus, rebasedAt: '2026-10-16T08:00:00Z' };
+      const since = roundsSinceCommit(rounds, rebased);
+      expect(since.committed.map((r) => r.key)).toEqual(['after', 'afterRebase']);
+      expect(since.judged.map((r) => r.key)).toEqual(['afterRebase']);
+    });
+
+    test('no focus, no rounds or an unreadable commit date select nothing', () => {
+      const none = { committed: [], judged: [] };
+      expect(roundsSinceCommit(rounds, null)).toEqual(none);
+      expect(roundsSinceCommit(null, sgFocus)).toEqual(none);
+      expect(roundsSinceCommit(rounds, { ...sgFocus, committedAt: 'not a date' })).toEqual(none);
+    });
+  });
+
+  describe('focusVerdict with since', () => {
+    // The whole selection says "worse" over 10 rounds by count; the since subset decides.
+    const whole = makeStats({ roundCount: 16, putting: -2.5 });
+
+    test('reads the metric from since.stats; roundsSince = since.rounds', () => {
+      const v = focusVerdict(sgFocus, whole, { stats: makeStats({ putting: -1.5 }), rounds: 3, judged: 2 });
+      expect(v).toMatchObject({
+        state: 'improving', roundsSince: 3, level: 2, early: true, baseline: -1.8, current: -1.5, threshold: 0.25,
+      });
+      expect(v.delta).toBeCloseTo(0.3, 10);
+      expect(v.currentSample).toEqual({ rounds: 6, holes: 108 });
+    });
+
+    test('needs-more-rounds counts since.judged; the level still counts since.rounds', () => {
+      const v = focusVerdict(sgFocus, whole, { stats: makeStats({ putting: -1.5 }), rounds: 5, judged: 1 });
+      expect(v).toMatchObject({ state: 'needs-more-rounds', roundsNeeded: 1, roundsSince: 5, level: 3, early: true, delta: null });
+    });
+
+    test('early until 4 judged rounds', () => {
+      const v = focusVerdict(sgFocus, whole, { stats: makeStats({ putting: -1.5 }), rounds: 4, judged: 4 });
+      expect(v).toMatchObject({ state: 'improving', early: false });
+    });
+
+    test('since.stats null (no judged rounds) gives no reading', () => {
+      const v = focusVerdict(sgFocus, whole, { stats: null, rounds: 0, judged: 0 });
+      expect(v).toMatchObject({
+        state: 'needs-more-rounds', roundsNeeded: 2, roundsSince: 0, level: 1, current: null, currentSample: null,
+      });
+    });
+
+    test('judged rounds without any reading ask for another round, never "resolved"', () => {
+      const v = focusVerdict(sgFocus, whole, { stats: {}, rounds: 3, judged: 3 });
+      expect(v).toMatchObject({ state: 'needs-more-rounds', roundsNeeded: 1, noData: true, current: null });
+    });
+
+    test('a stale baseline or a changed target still holds the verdict (read from stats)', () => {
+      const since = { stats: makeStats({ putting: -0.5 }), rounds: 6, judged: 6 };
+      const stale = { ...sgFocus, baselineVersion: SG_BASELINE_VERSION - 1 };
+      expect(focusVerdict(stale, whole, since)).toMatchObject({ state: 'needs-more-rounds', roundsNeeded: 2 });
+      expect(focusVerdict(sgFocus, { ...whole, targetHandicap: 0 }, since)).toMatchObject({ state: 'needs-more-rounds', roundsNeeded: 2 });
+    });
+
+    test('without since the verdict is the round-count one', () => {
+      const stats = makeStats({ roundCount: 9, putting: -1.5 });
+      expect(focusVerdict(sgFocus, stats, null)).toEqual(focusVerdict(sgFocus, stats));
+      expect(focusVerdict(sgFocus, stats, undefined)).toEqual(focusVerdict(sgFocus, stats));
+      expect(focusVerdict(sgFocus, stats).roundsSince).toBe(3);
+      expect(focusVerdict(null, stats, { stats, rounds: 3, judged: 3 })).toBeNull();
+    });
+  });
+
+  describe('loadFocus stamps an old v2 record once', () => {
+    beforeEach(() => {
+      AsyncStorage.__store.clear();
+      jest.clearAllMocks();
+    });
+    const NOW = '2026-10-18T10:00:00.000Z';
+    const { measuredSince, ...old } = sgFocus;
+
+    test('writes the since-commit notice first, then the stamped record', async () => {
+      expect(measuredSince).toBe('commit');
+      await saveFocus('u1', old);
+      jest.clearAllMocks();
+      expect(await loadFocus('u1', NOW)).toEqual({ ...old, measuredSince: 'commit' });
+      expect(AsyncStorage.setItem.mock.calls.map(([k]) => k)).toEqual([
+        '@mystats_coach_focus_notice:u1', '@mystats_coach_focus:u1',
+      ]);
+      expect(JSON.parse(AsyncStorage.__store.get('@mystats_coach_focus:u1'))).toEqual({ ...old, measuredSince: 'commit' });
+      expect(await loadFocusNotice('u1')).toEqual({ kind: 'since-commit', at: NOW });
+      expect(await loadFocusHistory('u1')).toEqual([]);
+    });
+
+    test('a stamped record loads silently: no notice, no write', async () => {
+      await saveFocus('u1', old);
+      await loadFocus('u1', NOW);
+      await dismissFocusNotice('u1');
+      jest.clearAllMocks();
+      expect(await loadFocus('u1', NOW)).toEqual(sgFocus);
+      expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+      expect(await loadFocusNotice('u1')).toBeNull();
+    });
+
+    test('a failed notice write leaves the record unstamped, so the next load tries again', async () => {
+      await saveFocus('u1', old);
+      AsyncStorage.setItem.mockImplementationOnce(() => Promise.reject(new Error('disk full')));
+      expect(await loadFocus('u1', NOW)).toEqual(old);
+      expect(JSON.parse(AsyncStorage.__store.get('@mystats_coach_focus:u1')).measuredSince).toBeUndefined();
+      expect(await loadFocusNotice('u1')).toBeNull();
+      expect(await loadFocus('u1', NOW)).toEqual(sgFocus);
+      expect(await loadFocusNotice('u1')).toEqual({ kind: 'since-commit', at: NOW });
+    });
   });
 });

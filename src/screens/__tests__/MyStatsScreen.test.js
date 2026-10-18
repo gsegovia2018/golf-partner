@@ -704,3 +704,124 @@ describe('MyStatsScreen Coach v2 plumbing', () => {
     expect(AsyncStorage.removeItem).toHaveBeenCalledWith('@mystats_coach_focus_notice:user-1');
   });
 });
+
+describe('MyStatsScreen focus since the commit', () => {
+  const ms = (iso) => Date.parse(iso);
+  const myRound = (key, endedAt) => ({
+    key, label: key, tournamentId: 't-1', round: { id: key }, courseName: 'Alhaurín', tournamentDate: '2026-10-01T09:00:00Z', endedAt,
+  });
+  const ROUNDS = [
+    myRound('before', ms('2026-10-05T12:00:00Z')),
+    myRound('unstamped', null),
+    myRound('after-1', ms('2026-10-12T12:00:00Z')),
+    myRound('after-2', ms('2026-10-14T12:00:00Z')),
+  ];
+  const storedFocus = (over = {}) => ({
+    v: 2,
+    leakId: 'leak:putting:6+',
+    category: 'putting',
+    bucket: '6+',
+    causeId: 'cause:putting:lag',
+    metricKey: 'putting.threePuttRate.6+',
+    baselineValue: 40,
+    baselineSample: { attempts: 50 },
+    baselineSe: 4,
+    minChange: 10,
+    baselineVersion: 2,
+    targetHandicap: 14,
+    committedAt: '2026-10-10T09:00:00.000Z',
+    roundCountAtCommit: 9,
+    measuredSince: 'commit',
+    ...over,
+  });
+  const withStored = (focus) => AsyncStorage.getItem.mockImplementation((key) => Promise.resolve(
+    key === '@mystats_coach_focus:user-1' && focus ? JSON.stringify(focus) : null,
+  ));
+
+  let verdictSpy;
+  beforeEach(() => {
+    require('../../store/personalStats').collectMyRounds.mockReturnValue(ROUNDS);
+    require('../../store/personalStats').computeMyStats.mockClear();
+    AsyncStorage.setItem.mockClear();
+    verdictSpy = jest.spyOn(require('../../store/coachFocus'), 'focusVerdict');
+  });
+  afterEach(() => verdictSpy.mockRestore());
+
+  const settle = async (r) => {
+    await r.findByText('Coach content');
+    await flush();
+    await flush();
+  };
+
+  test('with a focus, computeMyStats runs on the selection and then on the rounds since the commit', async () => {
+    withStored(storedFocus());
+    const r = renderScreen({ params: { tab: 'coach' } });
+    await settle(r);
+    const { computeMyStats } = require('../../store/personalStats');
+    const calls = computeMyStats.mock.calls;
+    const keys = (rounds) => rounds.map((x) => x.key);
+    const last = calls.length - 1;
+    expect(keys(calls[last - 1][0])).toEqual(['before', 'unstamped', 'after-1', 'after-2']);
+    expect(keys(calls[last][0])).toEqual(['after-1', 'after-2']);
+    expect(calls[last][1]).toEqual(calls[last - 1][1]);
+    expect(calls[last][1]).toMatchObject({ targetHandicap: 14 });
+
+    const selectionStats = computeMyStats.mock.results[last - 1].value;
+    const sinceStats = computeMyStats.mock.results[last].value;
+    expect(verdictSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ leakId: 'leak:putting:6+' }),
+      selectionStats,
+      { stats: sinceStats, rounds: 2, judged: 2 },
+    );
+    expect(mockCoachProps.focusVerdict.roundsSince).toBe(2); // 12 − 9 = 3 by count
+  });
+
+  test('a rebase narrows the judged rounds but not the rounds in', async () => {
+    withStored(storedFocus({ rebasedAt: '2026-10-13T09:00:00.000Z' }));
+    const r = renderScreen({ params: { tab: 'coach' } });
+    await settle(r);
+    const { computeMyStats } = require('../../store/personalStats');
+    const calls = computeMyStats.mock.calls;
+    expect(calls[calls.length - 1][0].map((x) => x.key)).toEqual(['after-2']);
+    expect(verdictSpy).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ rounds: 2, judged: 1 }));
+    expect(mockCoachProps.focusVerdict).toMatchObject({ state: 'needs-more-rounds', roundsNeeded: 1, roundsSince: 2 });
+  });
+
+  test('no rounds since the commit: never computeMyStats([]), the verdict gets no since stats', async () => {
+    withStored(storedFocus({ committedAt: '2026-10-16T09:00:00.000Z' }));
+    const r = renderScreen({ params: { tab: 'coach' } });
+    await settle(r);
+    const { computeMyStats } = require('../../store/personalStats');
+    expect(computeMyStats.mock.calls.every(([rounds]) => rounds.length === 4)).toBe(true);
+    expect(verdictSpy).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), { stats: null, rounds: 0, judged: 0 });
+    expect(mockCoachProps.focusVerdict).toMatchObject({ state: 'needs-more-rounds', roundsNeeded: 2, roundsSince: 0 });
+  });
+
+  test('without a focus there is no second stats pass', async () => {
+    withStored(null);
+    const r = renderScreen({ params: { tab: 'coach' } });
+    await settle(r);
+    const { computeMyStats } = require('../../store/personalStats');
+    expect(computeMyStats.mock.calls.every(([rounds]) => rounds.length === 4)).toBe(true);
+    expect(mockCoachProps.focusVerdict).toBeNull();
+  });
+
+  test('an unstamped focus is stamped and the Coach tab gets the since-commit notice', async () => {
+    const { measuredSince, ...old } = storedFocus();
+    expect(measuredSince).toBe('commit');
+    AsyncStorage.getItem.mockImplementation((key) => Promise.resolve(
+      key === '@mystats_coach_focus:user-1' ? JSON.stringify(old)
+        : key === '@mystats_coach_focus_notice:user-1' && AsyncStorage.setItem.mock.calls.some(([k]) => k === key)
+          ? JSON.stringify({ kind: 'since-commit', at: '2026-10-18T08:00:00Z' }) : null,
+    ));
+    const r = renderScreen({ params: { tab: 'coach' } });
+    await settle(r);
+    const writes = AsyncStorage.setItem.mock.calls.map(([k]) => k);
+    const noticeAt = writes.indexOf('@mystats_coach_focus_notice:user-1');
+    const focusAt = writes.indexOf('@mystats_coach_focus:user-1');
+    expect(noticeAt).toBeGreaterThanOrEqual(0);
+    expect(focusAt).toBeGreaterThan(noticeAt);
+    expect(JSON.parse(AsyncStorage.setItem.mock.calls[focusAt][1]).measuredSince).toBe('commit');
+    expect(mockCoachProps.focusNotice.kind).toBe('since-commit');
+  });
+});

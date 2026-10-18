@@ -197,3 +197,32 @@ describe('buildCoachWeek: coverage hint (pooled tagged misses under the why floo
     expect(w.chains.map((c) => c.coverage)).toEqual([{ tagged: 1, needed: 6 }, { tagged: 4, needed: 6 }]);
   });
 });
+
+describe('buildCoachWeek: statsSince (the focus is judged on rounds since the commit)', () => {
+  const teeFocus = focusRecord({ leakId: 'leak:offTheTee', category: 'offTheTee', bucket: null, causeId: 'cause:tee:side:left', metricKey: 'tee.missSideShare.left' });
+  const verdict = verdictOf({ metricKey: 'tee.missSideShare.left' });
+  // 1 left of 4 misses since the commit, against 11 of 15 over the whole selection.
+  const since = (stats) => ({ ...stats, driveImpact: { buckets: { left: { holes: 1 }, right: { holes: 3 } } } });
+
+  it('the focus chain\'s Check reads statsSince; the baseline stays the committed one', () => {
+    const stats = tieStats();
+    const w = week(stats, { focus: teeFocus, verdict, statsSince: since(stats) });
+    expect(w.chains[0].isFocus).toBe(true);
+    expect(w.chains[0].check).toMatchObject({ metricKey: 'tee.missSideShare.left', value: 25, sample: { shots: 4 }, baseline: 71 });
+    expect(week(stats, { focus: teeFocus, verdict }).chains[0].check.value).toBe(73);
+  });
+
+  it('chains that are not the focus read the selection stats', () => {
+    const stats = tieStats();
+    const plain = week(stats);
+    const w = week(stats, { statsSince: since(stats) });
+    expect(w.kind).toBe('tie');
+    expect(w.chains.map((c) => c.check)).toEqual(plain.chains.map((c) => c.check));
+  });
+
+  it('no statsSince: the focus chain reads the selection stats (unchanged)', () => {
+    const stats = tieStats();
+    expect(week(stats, { focus: teeFocus, verdict, statsSince: null }).chains[0].check)
+      .toEqual(week(stats, { focus: teeFocus, verdict }).chains[0].check);
+  });
+});

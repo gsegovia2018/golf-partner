@@ -364,6 +364,7 @@ export default {
   'stats.my.coach.ui.focus.targetChanged': 'Target changed to {to} on {date}: the verdict restarts from today\'s numbers.',
   'stats.my.coach.ui.focus.noData': 'No reading yet for this metric.',
   'stats.my.coach.ui.notice.v1Closed': 'Your old focus was closed; pick a new one.',
+  'stats.my.coach.ui.notice.sinceCommit': 'Your focus is now judged only on rounds since you started it.',
   'stats.my.coach.ui.notice.dismiss': 'Dismiss',
 
   // ── Coach tab UI: board ────────────────────────────────────────────────

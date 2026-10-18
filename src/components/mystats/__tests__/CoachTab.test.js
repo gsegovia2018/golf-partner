@@ -133,6 +133,20 @@ describe('CoachTab composition (design B)', () => {
     expect(renderTab(onePutting()).queryByTestId('focus-notice')).toBeNull();
   });
 
+  test('the since-commit notice says the focus is now judged since it started, and dismisses', () => {
+    const onDismiss = jest.fn();
+    const r = renderTab(onePutting(), {}, { focusNotice: { kind: 'since-commit', at: '2026-10-18T08:00:00Z' }, onDismissNotice: onDismiss });
+    expect(r.getByText('Your focus is now judged only on rounds since you started it.')).toBeTruthy();
+    expect(r.queryByText('Your old focus was closed; pick a new one.')).toBeNull();
+    fireEvent.press(r.getByLabelText('Dismiss'));
+    expect(onDismiss).toHaveBeenCalled();
+  });
+
+  test('a notice of an unknown kind shows nothing', () => {
+    const r = renderTab(onePutting(), {}, { focusNotice: { kind: 'something-new' }, onDismissNotice: jest.fn() });
+    expect(r.queryByTestId('focus-notice')).toBeNull();
+  });
+
   test('few rounds: no focus button, no board crash, plan still shown', () => {
     const r = renderTab(fewRounds());
     expect(r.queryByLabelText('Work on this')).toBeNull();
