@@ -465,3 +465,180 @@ describe('ShotDetailPanel miss reasons', () => {
     expect(r.queryByText('Why did the drive go right?')).toBeNull();
   });
 });
+
+describe('ShotDetailPanel focus', () => {
+  const T = (over = {}) => ({
+    shot: 'approach', bucket: null, kind: 'swing', lie: null,
+    title: { key: 'shots.why.chip' }, cue: { key: 'shots.why.done' }, ...over,
+  });
+  const withBucket = (extra = {}) => ({ approachBucket: '100-150', ...extra });
+  const DRIVE_TITLE = 'Why did the drive go left?';
+  const renderPanel = async (props = {}) => {
+    const onChange = jest.fn();
+    const r = render(
+      <ShotDetailPanel hole={par4} detail={{}} onChange={onChange} strokes={null} roundId="r1"
+        focusTarget={T()} {...props} />,
+    );
+    await flush();
+    return { ...r, onChange };
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    isRoundMuted.mockImplementation(() => Promise.resolve(false));
+    __resetAppSettingsForTests();
+    await updateAppSettings({ missReasons: 'manual' });
+  });
+
+  describe('strip', () => {
+    test('shows the title and the cue on a par 4 for an approach target', async () => {
+      const r = await renderPanel();
+      expect(r.getByTestId('focus-strip')).toBeTruthy();
+      expect(r.getAllByText('Why?').length).toBeGreaterThan(0);
+      expect(r.getByLabelText('Focus: Why? · Done')).toBeTruthy();
+    });
+
+    test('par 3: hidden when the hole bucket differs, shown with none / same / no focus bucket', async () => {
+      const a = await renderPanel({ hole: par3, focusTarget: T({ bucket: '150-200' }), detail: withBucket() });
+      expect(a.queryByTestId('focus-strip')).toBeNull();
+      a.unmount();
+      const b = await renderPanel({ hole: par3, focusTarget: T({ bucket: '150-200' }), detail: {} });
+      expect(b.getByTestId('focus-strip')).toBeTruthy();
+      b.unmount();
+      const c = await renderPanel({ hole: par3, focusTarget: T({ bucket: '100-150' }), detail: withBucket() });
+      expect(c.getByTestId('focus-strip')).toBeTruthy();
+      c.unmount();
+      const d = await renderPanel({ hole: par3, focusTarget: T(), detail: withBucket() });
+      expect(d.getByTestId('focus-strip')).toBeTruthy();
+    });
+
+    test('drive target is hidden on a par 3, shown on a par 4', async () => {
+      const a = await renderPanel({ hole: par3, focusTarget: T({ shot: 'drive' }) });
+      expect(a.queryByTestId('focus-strip')).toBeNull();
+      a.unmount();
+      const b = await renderPanel({ focusTarget: T({ shot: 'drive' }) });
+      expect(b.getByTestId('focus-strip')).toBeTruthy();
+    });
+
+    test.each(['short', 'putt'])('%s target shows on every hole', async (shot) => {
+      const a = await renderPanel({ hole: par3, focusTarget: T({ shot, kind: 'outcome' }) });
+      expect(a.getByTestId('focus-strip')).toBeTruthy();
+      a.unmount();
+      const b = await renderPanel({ focusTarget: T({ shot, kind: 'outcome' }) });
+      expect(b.getByTestId('focus-strip')).toBeTruthy();
+    });
+
+    test('hidden when read-only, without a target, or when the group is off', async () => {
+      expect((await renderPanel({ readOnly: true })).queryByTestId('focus-strip')).toBeNull();
+      expect((await renderPanel({ focusTarget: null })).queryByTestId('focus-strip')).toBeNull();
+      const off = await renderPanel({ statGroups: { approach: false } });
+      expect(off.queryByTestId('focus-strip')).toBeNull();
+    });
+  });
+
+  describe('lie chip', () => {
+    const lieTarget = T({ kind: 'lie', lie: 'below-feet' });
+
+    test('toggles approachSituation on a green hit', async () => {
+      const r = await renderPanel({ focusTarget: lieTarget, detail: withBucket({ approachResult: 'green' }) });
+      fireEvent.press(r.getByTestId('focus-lie-chip'));
+      expect(r.onChange).toHaveBeenCalledWith({ approachSituation: ['below-feet'] });
+    });
+
+    test('toggles on a miss, keeps other tags, and clears to null', async () => {
+      const miss = { approachResult: 'miss', approachMiss: 'left' };
+      const a = await renderPanel({
+        focusTarget: lieTarget, detail: withBucket({ ...miss, approachSituation: ['wind'] }),
+      });
+      fireEvent.press(a.getByTestId('focus-lie-chip'));
+      expect(a.onChange).toHaveBeenCalledWith({ approachSituation: ['wind', 'below-feet'] });
+      a.unmount();
+      const b = await renderPanel({
+        focusTarget: lieTarget, detail: withBucket({ ...miss, approachSituation: ['below-feet'] }),
+      });
+      fireEvent.press(b.getByTestId('focus-lie-chip'));
+      expect(b.onChange).toHaveBeenCalledWith({ approachSituation: null });
+    });
+
+    test('shows the selected state and the label', async () => {
+      const r = await renderPanel({
+        focusTarget: lieTarget, detail: withBucket({ approachSituation: ['below-feet'] }),
+      });
+      expect(r.getByText('This shot')).toBeTruthy();
+      expect(r.getByText('Ball below your feet')).toBeTruthy();
+      expect(r.getByTestId('focus-lie-chip').props.accessibilityState.checked).toBe(true);
+    });
+
+    test('absent for a swing target', async () => {
+      const r = await renderPanel({ detail: withBucket() });
+      expect(r.queryByTestId('focus-lie-chip')).toBeNull();
+    });
+
+    test('absent when read-only', async () => {
+      const r = await renderPanel({ focusTarget: lieTarget, detail: withBucket(), readOnly: true });
+      expect(r.queryByTestId('focus-lie-chip')).toBeNull();
+    });
+
+    test('stays on a muted round', async () => {
+      isRoundMuted.mockImplementation(() => Promise.resolve(true));
+      const r = await renderPanel({ focusTarget: lieTarget, detail: withBucket() });
+      expect(r.getByTestId('focus-lie-chip')).toBeTruthy();
+    });
+  });
+
+  describe('focused auto-open', () => {
+    test.each(['swing', 'decision'])('%s target opens the sheet on an approach miss in manual', async (kind) => {
+      const r = await renderPanel({ focusTarget: T({ kind }), detail: withBucket() });
+      fireEvent.press(r.getByLabelText('Approach finish Right'));
+      expect(r.getByText('Not this round')).toBeTruthy();
+    });
+
+    test('a drive miss does not open it when the target is approach', async () => {
+      const r = await renderPanel();
+      fireEvent.press(r.getByLabelText('Driver Left'));
+      expect(r.queryByText(DRIVE_TITLE)).toBeNull();
+    });
+
+    test('a drive target opens on a drive miss', async () => {
+      const r = await renderPanel({ focusTarget: T({ shot: 'drive' }) });
+      fireEvent.press(r.getByLabelText('Driver Left'));
+      expect(r.getByText(DRIVE_TITLE)).toBeTruthy();
+    });
+
+    test('a hit does not open it', async () => {
+      const r = await renderPanel({ detail: withBucket() });
+      fireEvent.press(r.getByLabelText('Approach finish On green'));
+      expect(r.queryByText('Not this round')).toBeNull();
+    });
+
+    test('never in off', async () => {
+      await updateAppSettings({ missReasons: 'off' });
+      const r = await renderPanel({ detail: withBucket() });
+      fireEvent.press(r.getByLabelText('Approach finish Right'));
+      expect(r.queryByText('Not this round')).toBeNull();
+    });
+
+    test('never on a muted round', async () => {
+      isRoundMuted.mockImplementation(() => Promise.resolve(true));
+      const r = await renderPanel({ detail: withBucket() });
+      fireEvent.press(r.getByLabelText('Approach finish Right'));
+      expect(r.queryByText('Not this round')).toBeNull();
+    });
+
+    test('never when read-only', async () => {
+      const r = await renderPanel({ detail: withBucket(), readOnly: true });
+      fireEvent.press(r.getByLabelText('Approach finish Right'));
+      expect(r.queryByText('Not this round')).toBeNull();
+    });
+
+    test('a lie or outcome target does not open it in manual', async () => {
+      const a = await renderPanel({ focusTarget: T({ kind: 'lie', lie: 'uphill' }), detail: withBucket() });
+      fireEvent.press(a.getByLabelText('Approach finish Right'));
+      expect(a.queryByText('Not this round')).toBeNull();
+      a.unmount();
+      const b = await renderPanel({ focusTarget: T({ kind: 'outcome' }), detail: withBucket() });
+      fireEvent.press(b.getByLabelText('Approach finish Right'));
+      expect(b.queryByText('Not this round')).toBeNull();
+    });
+  });
+});

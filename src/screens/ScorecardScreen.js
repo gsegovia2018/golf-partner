@@ -86,6 +86,7 @@ import { SCORECARD_TOUR_STEPS } from '../components/tour/tourSteps';
 import { subscribeCourseGeometry, getCourseGeometryVersion, hasCourseDetails } from '../lib/geo';
 import { useCourseGeometry } from '../hooks/useCourseGeometry';
 import { compassLikelyAvailable } from '../hooks/useCompassHeading';
+import { useFocusTarget } from '../hooks/useFocusTarget';
 
 // Stable empty roster so the useRoundRoster memo below does not see a new
 // array identity on every render while the tournament is still loading.
@@ -255,6 +256,7 @@ export default function ScorecardScreen({ navigation, route }) {
     roundId: official ? officialRoundId : null,
   });
   const { user } = useAuth();
+  const focusTargetValue = useFocusTarget(user?.id);
   const [tournament, setTournament] = useState(() => initialTournament);
   // Notes object: { round: string, hole: { [holeNumber]: string } }.
   const [notes, setNotes] = useState(() => {
@@ -2194,6 +2196,7 @@ export default function ScorecardScreen({ navigation, route }) {
           conflictCells={conflictCells}
           conflictRows={conflictRows}
           localAuthorIds={localAuthorIds}
+          focusTarget={focusTargetValue}
         />
       ) : (
         <GridView

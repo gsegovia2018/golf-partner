@@ -32,6 +32,7 @@ import { teeDisplayName } from '../../lib/teeName';
 //     signed-in member's personal id — the write path has no honest place
 //     to store shot detail, so the caller passes false there even when
 //     `isMe` is true.
+//   focusTarget — the committed coach focus (store/focusTarget) or null; me-only.
 //   officialState, canResolveHere, onOpenDiscrepancy — official mode
 //   conflict, onOpenConflict — casual-mode score conflict (amber flag + resolve sheet)
 //   ghost — { value, authorName } | null. Casual, unverified holes only:
@@ -51,7 +52,7 @@ export const PlayerCard = React.memo(function PlayerCard({
   shotDetail, onSetShot, shotCollapsed, onToggleShotDetail, showShotDetail,
   officialState, canResolveHere, onOpenDiscrepancy,
   conflict, onOpenConflict,
-  ghost, roundId,
+  ghost, roundId, focusTarget = null,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
@@ -316,6 +317,7 @@ export const PlayerCard = React.memo(function PlayerCard({
           onToggle={onToggleShotDetail}
           roundId={roundId}
           readOnly={!canEdit}
+          focusTarget={focusTarget}
         />
       )}
     </HeroCard>
