@@ -93,7 +93,11 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
     onProgress({ stage: 'reading', probe });
 
     onProgress({ stage: 'pose', done: 0, total: 0, probe });
+    let posing = false;
     const sub = api.addListener?.('progress', (e) => {
+      // Native interleaves decode and pose events; once pose frames arrive, stay on pose.
+      if (e?.stage !== 'decode') posing = true;
+      else if (posing) return;
       onProgress({ stage: e?.stage === 'decode' ? 'reading' : 'pose', done: e?.done ?? 0, total: e?.total ?? 0, probe });
     });
     let pose;
