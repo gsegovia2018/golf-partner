@@ -193,6 +193,13 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   never set for `eas build`/`eas update` (see "Shipping to Android").
 - Swing videos and analysis never leave the phone; the only planned exit is
   the explicit training-data export (plan §7.3).
+- Swing checks v2 screens (spec/plan `2026-10-18-swing-checks-v2`): Results is "summary + stepper"
+  (`SwingSummary`: seven position dots + Extras, "Work on first" / "Likely starts at"; one position
+  at a time under it: `PositionBar`, `StepStill` with swipe and place-on-the-still). Which step opens,
+  statuses and rows are pure in `src/swing/resultsSteps.js`; `placeHead.js` saves a placed clubhead with
+  the canvas's own model (marks + analysis, Undo writes them back). The marking canvas has seven
+  position chips (P-number, dot, short name), the count in the panel header, an "Unsure" status for a
+  detection under `CHECK_MIN_CONF`, and `route.params.active: 'head'` for the tap-to-place deep link.
 - Some screens are large monoliths (`ScorecardScreen`) — prefer extracting
   components/hooks over growing them further.
 - Game Stats (`StatsScreen`) is a thin shell: tabs Summary · Rounds · Players ·
