@@ -179,7 +179,8 @@ describe('ShotDetailPanel — approach capture', () => {
 
     fireEvent.press(getByLabelText('Approach finish On green'));
     expect(onChange).toHaveBeenCalledWith({
-      approachResult: 'green', approachMiss: null, approachBunker: false, ...clearedReasonPatch('approach'),
+      approachResult: 'green', approachMiss: null, approachBunker: false,
+      ...clearedReasonPatch('approach', { keepSituation: true }),
     });
 
     fireEvent.press(getByLabelText('Approach finish Right'));

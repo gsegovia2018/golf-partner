@@ -1265,10 +1265,11 @@ const approachMissResult = (dir, bunker) => (dir || bunker ? 'miss' : null);
 // Approach-finish grid tap: `green` is exclusive (clears direction + bunker);
 // the four directions are single-select and clear an on-green selection;
 // `bunker` toggles on top of a direction or stands alone. When the finish stops
-// being a miss (on green, or the last miss signal goes) the approach reasons clear.
+// being a miss (on green, or the last miss signal goes) the approach reasons clear,
+// except the situation: a lie is a fact about the shot, only the bucket clear drops it.
 export function approachFinishPatch(detail, key) {
   const patch = approachFinishBase(detail, key);
-  return patch.approachResult === 'miss' ? patch : { ...patch, ...clearedReasonPatch('approach') };
+  return patch.approachResult === 'miss' ? patch : { ...patch, ...clearedReasonPatch('approach', { keepSituation: true }) };
 }
 
 function approachFinishBase(detail, key) {
@@ -1340,7 +1341,7 @@ export function normalizeWatchShotPatch(detail, patch, par) {
         && !has('approachMiss') && !has('approachBunker')) {
         Object.assign(out, {
           approachResult: null, approachMiss: null, approachBunker: false,
-          ...clearedReasonPatch('approach'),
+          ...clearedReasonPatch('approach', { keepSituation: true }),
         });
       } else {
         const wasGreen = d.approachResult === 'green';
@@ -1348,7 +1349,7 @@ export function normalizeWatchShotPatch(detail, patch, par) {
         const bunker = has('approachBunker') ? !!patch.approachBunker : (wasGreen ? false : !!d.approachBunker);
         Object.assign(out, {
           approachMiss: dir, approachBunker: bunker, approachResult: approachMissResult(dir, bunker),
-          ...(dir || bunker ? {} : clearedReasonPatch('approach')),
+          ...(dir || bunker ? {} : clearedReasonPatch('approach', { keepSituation: true })),
         });
       }
     }

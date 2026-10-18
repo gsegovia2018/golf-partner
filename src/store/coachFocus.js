@@ -9,6 +9,8 @@
 //     baselineValue, baselineSample, baselineSe, minChange, baselineVersion,
 //     committedAt, roundCountAtCommit, swingId?,
 //     targetHandicap?,                           ← the target the baseline was read against
+//     focusLie?,                                 ← approach lie cause only: the dominant lie at commit
+//     measuredSince: 'commit',                   ← stamped on every new record
 //     roundCountAtBaseline?, rebasedAt?,
 //     rebaseReason? }                            ← only after an SG rebase; { kind: 'target', from, to }
 //                                                  when the target handicap changed
@@ -19,7 +21,8 @@
 // one-time notice for the Coach tab (decision §12 / §11.4).
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SG_BASELINE_VERSION } from './strokesGainedBaseline';
-import { METRICS, readMetric } from './coachMetrics';
+import { METRICS, readMetric, whyRow } from './coachMetrics';
+import { OPTIONS } from './missReasons';
 
 const FOCUS_PREFIX = '@mystats_coach_focus:';
 const HISTORY_PREFIX = '@mystats_coach_focus_history:';
@@ -51,6 +54,18 @@ export function isV2Focus(focus) {
 // The insight-based shape this module stored before coach v2.
 export function isV1Focus(focus) {
   return !!focus && typeof focus === 'object' && !focus.leakId && typeof focus.insightId === 'string';
+}
+
+// The lie behind most tagged misses in `row` (row.lies counts); ties go to the
+// OPTIONS.approachSituation order. null without any lie counts.
+function dominantLie(row) {
+  let best = null;
+  let bestCount = 0;
+  for (const lie of OPTIONS.approachSituation) {
+    const count = row?.lies?.[lie] ?? 0;
+    if (count > bestCount) { best = lie; bestCount = count; }
+  }
+  return best;
 }
 
 const finite = (x) => (Number.isFinite(x) ? x : null);
@@ -94,6 +109,11 @@ export function makeFocusCommit(chain, stats, committedAt) {
     }
   }
 
+  // A lie cause remembers which lie: the scope its metric names (a bucket or 'all').
+  const focusLie = cause?.id === 'cause:approach:why:lie'
+    ? dominantLie(whyRow(stats, 'approach', /^approach\.why\.lieRate\.(.+)$/.exec(metricKey)?.[1] ?? 'all'))
+    : null;
+
   return {
     v: FOCUS_VERSION,
     leakId: child ? `leak:${leak.category}:${child.bucket}` : leak.id,
@@ -109,6 +129,8 @@ export function makeFocusCommit(chain, stats, committedAt) {
     targetHandicap: finite(stats?.targetHandicap),
     committedAt: committedAt ?? new Date().toISOString(),
     roundCountAtCommit: stats?.roundCount ?? 0,
+    measuredSince: 'commit',
+    ...(focusLie ? { focusLie } : {}),
     ...(wrapped && chain.swingId ? { swingId: chain.swingId } : {}),
   };
 }
