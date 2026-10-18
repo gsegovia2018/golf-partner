@@ -85,7 +85,7 @@ const SEEDED_POSE = { ...pose, pass2: { ...pose.pass2, shaft: seeds(FIRST) } };
 const SEEDED = analyze(SEEDED_POSE, { ...base, pass2: SEEDED_POSE.pass2 });
 
 function setup({
-  analysis = FIRST, marks = null, checkpoint = 'leadArm', mode, missing = false, seeded = false, poseOverride = null,
+  analysis = FIRST, marks = null, checkpoint = 'leadArm', mode, active, missing = false, seeded = false, poseOverride = null,
 } = {}) {
   store.readAnalysis.mockResolvedValue(missing ? null : seeded ? SEEDED : analysis);
   store.readPose.mockResolvedValue(poseOverride ?? (seeded ? SEEDED_POSE : pose));
@@ -99,7 +99,7 @@ function setup({
   const commits = { n: 0 }; // every React commit under the screen
   const utils = render(
     <Profiler id="screen" onRender={() => { commits.n += 1; }}>
-      <ThemeProvider><SwingEditMarksScreen navigation={navigation} route={{ params: { swingId: 's1', checkpoint, mode } }} /></ThemeProvider>
+      <ThemeProvider><SwingEditMarksScreen navigation={navigation} route={{ params: { swingId: 's1', checkpoint, mode, active } }} /></ThemeProvider>
     </Profiler>,
   );
   return { ...utils, navigation, listeners, commits };
@@ -165,13 +165,15 @@ beforeEach(() => {
 });
 
 describe('the layout (D28: frame first, then marks)', () => {
-  test('one slim top row: close, the seven pictogram chips with status dots, the count; the old strip and tiles are gone', async () => {
+  test('one slim top row: close and the seven chips (P-number, status dot, short name); the old strip and tiles are gone', async () => {
     const u = await open({ mode: 'pass', marks: PARTIAL });
     ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(u.getByTestId(`chapter-${k}`)).toBeTruthy());
     ['transition', 'shaftThrough', 'finish'].forEach((k) => expect(u.queryByTestId(`chapter-${k}`)).toBeNull());
     expect(u.getByTestId('chapter-address').props.accessibilityState.selected).toBe(true);
     expect(within(u.getByTestId('mark-count')).getByText('1/7')).toBeTruthy();
     expect(within(u.getByTestId('mark-count')).getByText(M.tally(0, 0))).toBeTruthy();
+    expect(within(u.getByTestId('mark-step-1')).getByTestId('mark-count')).toBeTruthy(); // the count is in the panel's step header now
+    expect(within(u.getByTestId('mark-chapters')).queryByTestId('mark-count')).toBeNull();
     expect(u.queryByTestId('mark-fine-strip')).toBeNull();
     expect(u.queryByTestId('mark-undo')).toBeNull();
     const overlay = u.UNSAFE_getAllByType(SwingOverlay)[0];
@@ -317,7 +319,7 @@ describe('step 1 → step 2 → next (the pass)', () => {
     const sheet = await u.findByTestId('mark-finish-sheet');
     expect(within(sheet).getByText(M.finishTitle(6, 7))).toBeTruthy();
     expect(within(sheet).getByText(M.skippedLine(['Top']))).toBeTruthy();
-    expect(within(sheet).getByText(/No clubhead at .*Lead arm/)).toBeTruthy();
+    expect(within(sheet).getByText(/No clubhead at .*Halfway back/)).toBeTruthy();
     expect(within(u.getByTestId('finish-row-top')).getByText(M.chip.skipped)).toBeTruthy();
     expect(u.navigation.replace).not.toHaveBeenCalled(); // never Results before the pass is finished
     await press(u.getByTestId('mark-see-results'));
@@ -1065,5 +1067,110 @@ describe('club on demand: the model proposes a clubhead on the frame the golfer 
     expect(detectClub.mock.calls[0][0].frames).toEqual([]);
     u.unmount();
     expect(releaseClub).toHaveBeenCalled();
+  });
+});
+
+describe('checks v2: seven positions, the unsure clubhead, the deep link', () => {
+  const SHORT = SWING_STRINGS.position.short;
+  const walk = async (u, n) => {
+    for (let k = 0; k < n; k += 1) {
+      await press(u.getByTestId('mark-use-frame'));
+      await press(u.getByTestId('mark-primary'));
+    }
+  };
+  // the detector saw something at Halfway back under the checks' gate, and something sure at the top
+  const proposed = (conf) => {
+    const p = { ...pose, pass2: { ...pose.pass2, shaft: { [FIRST.checkpoints.leadArm.i]: { head: [W * 0.24, H * 0.32], hidden: false, conf, source: 'model' } } } };
+    return { p, a: analyze(p, { ...base, pass2: p.pass2 }) };
+  };
+
+  test('the chips read P-number, dot, short name: seven of them, 46 px wide, no pictograms', async () => {
+    const u = await open({ mode: 'pass', marks: PARTIAL });
+    const keys = ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'];
+    keys.forEach((k, i) => {
+      const chip = within(u.getByTestId(`chapter-${k}`));
+      expect(chip.getByText(`P${[1, 2, 3, 4, 6, 7, 9][i]}`)).toBeTruthy();
+      expect(chip.getByText(SHORT[k])).toBeTruthy();
+      expect(chip.queryByTestId(`pictogram-${k}`)).toBeNull();
+    });
+    expect(u.getByTestId('chapter-leadArm').props.accessibilityLabel).toBe(M.chapterA11y('Halfway back', 'todo'));
+  });
+
+  test('step 1 at Takeaway and at Follow-through draws their own pictogram', async () => {
+    const skipped = (keys) => ({ ...PARTIAL, pass: { state: 'partial', skipped: keys } });
+    const a = await open({ mode: 'pass', marks: skipped(['address']) });
+    expect(a.getByTestId('chapter-takeaway').props.accessibilityState.selected).toBe(true);
+    expect(within(a.getByTestId('mark-stop-line')).getByTestId('mark-pictogram', { includeHiddenElements: true })).toBeTruthy();
+    a.unmount();
+    const b = await open({ mode: 'pass', marks: skipped(['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact']) });
+    expect(b.getByTestId('chapter-trailArm').props.accessibilityState.selected).toBe(true);
+    expect(within(b.getByTestId('mark-stop-line')).getByTestId('mark-pictogram', { includeHiddenElements: true })).toBeTruthy();
+  });
+
+  test('a detection under the gate is proposed but says Unsure; Confirm makes it the golfers and the checks read it', async () => {
+    const { p, a } = proposed(0.05);
+    expect(a.clubMarks.leadArm.head).toBeTruthy();
+    const u = await open({ analysis: a, poseOverride: p, checkpoint: 'leadArm' });
+    await press(dock(u, 'head'));
+    expect(dockLabel(u, 'head')).toBe(M.dockLabel('Clubhead', 'Unsure'));
+    expect(u.getByText(`Clubhead · ${M.line.unsure}`)).toBeTruthy();
+    await press(u.getByTestId('mark-confirm'));
+    expect(dockLabel(u, 'head')).toBe(M.dockLabel('Clubhead', 'Confirmed'));
+    await press(u.getByLabelText(M.primary.editSave));
+    const lead = savedMarks().frames.find((f) => f.checkpoint === 'leadArm');
+    expect(lead.head).toMatchObject({ confirmed: true, proposedSource: 'model' });
+    expect(savedAnalysis().clubMarks.leadArm.source).toBe('user');
+    expect(rowStatus(savedAnalysis(), 'butt_extension')).not.toBe('unknown');
+  });
+
+  test('a detection the checks would read stays Proposed', async () => {
+    const { p, a } = proposed(0.9);
+    const u = await open({ analysis: a, poseOverride: p, checkpoint: 'leadArm' });
+    await press(dock(u, 'head'));
+    expect(dockLabel(u, 'head')).toBe(M.dockLabel('Clubhead', 'Proposed'));
+  });
+
+  test('the deep link from Results opens the position at step 2 with the Clubhead active', async () => {
+    const u = await open({ checkpoint: 'shaftDown', active: 'head' });
+    expect(step(u)).toBe(2);
+    expect(u.getByTestId('chapter-shaftDown').props.accessibilityState.selected).toBe(true);
+    expect(dock(u, 'head').props.accessibilityState.selected).toBe(true);
+    expect(dock(u, 'hands').props.accessibilityState.selected).toBe(false);
+    expect(u.getByText(`Clubhead · ${M.line.missing('Clubhead')}`)).toBeTruthy();
+    expect(u.getByTestId('mark-pospill').props.accessibilityLabel).toBe(M.posPill('P6', 'Downswing', FIRST.checkpoints.shaftDown.i, false));
+  });
+
+  test('without the link, Edit marks still opens on the hands', async () => {
+    const u = await open({ checkpoint: 'shaftDown' });
+    expect(dock(u, 'hands').props.accessibilityState.selected).toBe(true);
+  });
+
+  test('walking all seven positions ends on the finish sheet: "7 of 7", the gate explained, the finish read automatically', async () => {
+    const u = await open({ mode: 'pass', marks: PARTIAL });
+    await walk(u, 7);
+    const sheet = await u.findByTestId('mark-finish-sheet');
+    expect(within(sheet).getByText(M.finishTitle(7, 7))).toBeTruthy();
+    expect(within(sheet).getByText(/the detector was not sure there/)).toBeTruthy();
+    expect(within(sheet).getByText(M.autoLine)).toBeTruthy();
+    ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(within(sheet).getByTestId(`finish-row-${k}`)).toBeTruthy());
+    expect(within(sheet).getByText('Halfway back')).toBeTruthy();
+    expect(within(sheet).getByText('Follow-through')).toBeTruthy();
+    expect(within(sheet).queryByText(/Transition|Shaft through/)).toBeNull();
+  });
+
+  test('Spanish: the chips and the unsure line speak Spanish', async () => {
+    const { setLanguagePref } = require('../../i18n');
+    await act(async () => { await setLanguagePref('es'); });
+    try {
+      const { p, a } = proposed(0.05);
+      const u = await open({ analysis: a, poseOverride: p, checkpoint: 'leadArm' });
+      await press(dock(u, 'head'));
+      expect(dockLabel(u, 'head')).toBe(SWING_STRINGS.mark.dockLabel('Cabeza del palo', 'Dudosa'));
+      expect(u.getByText(/Dudosa · confírmala o toca donde está/)).toBeTruthy();
+      expect(within(u.getByTestId('chapter-shaftDown')).getByText('Bajada')).toBeTruthy();
+      expect(within(u.getByTestId('chapter-trailArm')).getByText('Seguim.')).toBeTruthy();
+    } finally {
+      await act(async () => { await setLanguagePref('en'); });
+    }
   });
 });
