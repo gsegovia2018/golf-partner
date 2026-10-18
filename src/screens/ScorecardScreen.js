@@ -87,6 +87,8 @@ import { subscribeCourseGeometry, getCourseGeometryVersion, hasCourseDetails } f
 import { useCourseGeometry } from '../hooks/useCourseGeometry';
 import { compassLikelyAvailable } from '../hooks/useCompassHeading';
 import { useFocusTarget } from '../hooks/useFocusTarget';
+import { useAimStats } from '../hooks/useAimStats';
+import { getSwingProfile } from '../store/swingStore';
 
 // Stable empty roster so the useRoundRoster memo below does not see a new
 // array identity on every render while the tournament is still loading.
@@ -848,6 +850,13 @@ export default function ScorecardScreen({ navigation, route }) {
   // the GPS setting off.
   const appSettings = useAppSettings();
   const trackingGps = useGpsDistances(round?.courseName, currentHole);
+  // Aim-tip briefing: the owner's miss pattern, loaded once, and only where
+  // the card could show (casual, editable, not scramble, setting on).
+  const aimStats = useAimStats({
+    userId: user?.id,
+    enabled: !!round && !!meId && !official && !viewOnly && appSettings.aimTips
+      && !isScrambleMode(roundScoringMode(tournament, round)),
+  });
   useRoundTracking({
     active: !viewOnly && !tournament?.finishedAt && trackingGps.hasMap
       && trackingGps.permissionGranted && trackingGps.fixState !== 'disabled',
@@ -2197,6 +2206,8 @@ export default function ScorecardScreen({ navigation, route }) {
           conflictRows={conflictRows}
           localAuthorIds={localAuthorIds}
           focusTarget={focusTargetValue}
+          aimStats={aimStats}
+          handedness={getSwingProfile().handedness}
         />
       ) : (
         <GridView
