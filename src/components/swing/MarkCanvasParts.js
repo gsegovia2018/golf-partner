@@ -11,7 +11,7 @@ import { withAlpha } from '../../theme/alpha';
 import { SWING_STRINGS } from '../../swing/strings';
 import { MARKED_KEYS, positionStatus } from '../../swing/markPass';
 import Pictogram, { PICTOGRAM_KEYS } from './Pictogram';
-import { cueFor } from '../../swing/checkpoints';
+import { glass } from './swingStyles';
 
 // The pieces of the marking canvas (D26, laid out per D28 "Frame Then Marks"). Fixed HUD palette:
 // the canvas is a video being annotated, the same case as the capture viewfinder. The cue card and
@@ -22,12 +22,13 @@ const T = SWING_STRINGS.mark;
 const HUD_WARN = semantic.warning.dark; // the HUD amber, as on the capture screen
 export const MARK_COLOR = { hands: hud.accent, head: hud.text, ball: semantic.info.dark };
 const INK = hud.onAccent;
-const CUE_PICT = 44; // the reference pictogram in the cue card (V3)
+const CUE_PICT = 96; // the reference pictogram, in the expanded cue (behind "?")
 const DIM = withAlpha(hud.bg, 0.78); // an inactive chip on the picture
 const OUTLINE = withAlpha(hud.text, 0.35);
 export const HANDS_FILL = withAlpha(hud.accent, 0.35);
 const HEAD_PROPOSED_FILL = withAlpha(hud.text, 0.3);
 const SWATCH_ON_FILL = withAlpha(INK, 0.2);
+const RAIL_ON = withAlpha(hud.accent, 0.22); // the side of the change to stop on
 
 // --- The marks on the picture ------------------------------------------------------------------
 
@@ -164,6 +165,20 @@ export const MarkLayer = memo(MarkLayerImpl);
 
 // --- The dock: what you are moving (selector and legend in one), inside the video on the left ---
 
+/** The tile's corner badge: ✓ confirmed, ? needs a look (proposed, unsure, moved), eye-off hidden, none when missing. */
+function DockBadge({ mark, status }) {
+  if (status === 'confirmed') {
+    return <View style={[styles.badge, styles.badgeOk]} testID={`dock-badge-${mark}`}><Feather name="check" size={9} color={INK} /></View>;
+  }
+  if (status === 'proposed' || status === 'unsure' || status === 'moved') {
+    return <View style={[styles.badge, styles.badgeLook]} testID={`dock-badge-${mark}`}><Text style={styles.badgeText}>?</Text></View>;
+  }
+  if (status === 'hidden') {
+    return <View style={[styles.badge, styles.badgeHidden]} testID={`dock-badge-${mark}`}><Feather name="eye-off" size={9} color={hud.text} /></View>;
+  }
+  return null;
+}
+
 function MarkDockImpl({
   active, statuses, ballOff, onSelect, style,
 }) {
@@ -176,16 +191,16 @@ function MarkDockImpl({
         return (
           <Pressable
             key={m}
-            style={[styles.dk, on && styles.dkOn, on && { backgroundColor: MARK_COLOR[m], borderColor: MARK_COLOR[m] }, off && styles.dkOff]}
+            style={[styles.dk, !on && glass.panel, on && styles.dkOn, on && { backgroundColor: MARK_COLOR[m], borderColor: MARK_COLOR[m] }, off && styles.dkOff]}
             onPress={() => onSelect(m)}
             accessibilityRole="radio"
             accessibilityState={{ selected: on, disabled: off }}
             accessibilityLabel={T.dockLabel(T.names[m], word)}
             testID={`dock-${m}`}
           >
+            {off ? null : <DockBadge mark={m} status={statuses[m]} />}
             <Swatch mark={m} on={on} size={14} />
-            <Text style={[styles.dkName, on && styles.dkInk]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{T.names[m]}</Text>
-            <Text style={[styles.dkWord, on && styles.dkInk]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{word}</Text>
+            <Text style={[styles.dkName, on && styles.dkInk]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{T.names[m]}</Text>
           </Pressable>
         );
       })}
@@ -202,70 +217,105 @@ export function Swatch({ mark, on = false, size = 16 }) {
   return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2.5, borderColor: ink ?? MARK_COLOR.ball }} />;
 }
 
-// --- The cue, inside the video (step 1): pictogram, FIRST / LAST FRAME, stop phrase, "watch …" ----
+// --- The cue, inside the video (step 1): "P1 Address" + the moment, the before | after rail, "?" ------
 
 /**
- * The compact card at the top-left of the video; a tap (or "More") expands the full cue over the
- * top of the video, and a tap on that closes it. Positions without a stop line (the internal
- * frames) show their `stopWhen` sentence.
+ * Which side of the change to stop on: the before | after words, the accent on the side the frame is
+ * on, a white tick between them and "this frame" under its end of the tick. For a LAST cue the frame is
+ * the end of "before"; for a FIRST cue the start of "after".
+ */
+export function CueRail({ stop }) {
+  const last = stop.kind === 'last';
+  return (
+    <View testID="mark-cue-rail">
+      <View style={styles.rail}>
+        <View style={[styles.seg, styles.segL, last && styles.segOn]} testID={last ? 'mark-rail-on' : undefined}>
+          <Text style={[styles.segText, styles.segTextL, last && styles.segTextOn]} numberOfLines={1}>{stop.before}</Text>
+        </View>
+        <View style={styles.tick} />
+        <View style={[styles.seg, styles.segR, !last && styles.segOn]} testID={last ? undefined : 'mark-rail-on'}>
+          <Text style={[styles.segText, !last && styles.segTextOn]} numberOfLines={1}>{stop.after}</Text>
+        </View>
+      </View>
+      <View style={styles.railLabels}>
+        <View style={[styles.railLabel, styles.railLabelL]} testID="mark-rail-under-before">{last ? <Text style={styles.thisFrame}>{T.thisFrame}</Text> : null}</View>
+        <View style={styles.tickGap} />
+        <View style={styles.railLabel} testID="mark-rail-under-after">{last ? null : <Text style={styles.thisFrame}>{T.thisFrame}</Text>}</View>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * The panel at the top of the video: `title` ("P1 Address") in bold and the moment in one plain
+ * sentence, the before | after rail under it, and "?" which opens the full cue (what / stop when / mark
+ * tips) with the pictogram drawn large; a tap on that closes it. Positions without a stop line (the
+ * internal frames) show their `stopWhen` sentence and no rail.
  */
 function CueCardImpl({
-  cue, open, onToggle, mirror = false,
+  cue, title, open, onToggle, mirror = false,
 }) {
   if (!cue) return null;
   const stop = cue.stop;
   if (open) {
     return (
-      <Pressable style={styles.cueFull} onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded: true }} accessibilityLabel={T.less} testID="mark-cue">
-        <Text style={styles.cueText}>
-          <Text style={styles.cueBold}>{`${cue.name}${cue.p ? ` · ${cue.p}` : ''}`}</Text>
-          {` — ${cue.what}`}
-        </Text>
+      <Pressable style={[styles.cueFull, glass.panel]} onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded: true }} accessibilityLabel={T.less} testID="mark-cue">
+        <View style={styles.cueHead}>
+          {PICTOGRAM_KEYS.includes(cue.key) ? (
+            <View style={styles.pict}>
+              <Pictogram swingKey={cue.key} size={CUE_PICT} color={hud.textSoft} accent={hud.accent} mirror={mirror} testID="mark-pictogram" />
+            </View>
+          ) : null}
+          <Text style={[styles.cueText, styles.flex]}>
+            <Text style={styles.cueBold}>{title}</Text>
+            {` — ${cue.what}`}
+          </Text>
+        </View>
         <Text style={styles.cueText}><Text style={styles.cueBold}>{T.cueStop}</Text>{cue.stopWhen}</Text>
         <Text style={styles.cueText}><Text style={styles.cueBold}>{T.cueMark}</Text>{cue.markTips}</Text>
         <Text style={styles.moreText}>{T.less}</Text>
       </Pressable>
     );
   }
+  const line = stop ? stop.line : cue.stopWhen;
   return (
-    <Pressable
-      style={styles.cue}
-      onPress={onToggle}
-      accessibilityRole="button"
-      accessibilityState={{ expanded: false }}
-      accessibilityLabel={`${cue.name}. ${stop ? T.stopA11y(stop.kind, stop.short, stop.watch) : cue.stopWhen} ${T.more}`}
-      accessibilityLiveRegion="polite"
-      testID="mark-stop-line"
-    >
-      {PICTOGRAM_KEYS.includes(cue.key) ? (
-        <View style={styles.pict}>
-          <Pictogram swingKey={cue.key} size={CUE_PICT} color={hud.textSoft} accent={hud.accent} mirror={mirror} testID="mark-pictogram" />
-        </View>
-      ) : null}
-      <View style={styles.cueTx}>
-        <View style={styles.cueLine}>
-          {stop ? (
-            <View style={[styles.kind, stop.kind === 'last' && styles.kindLast]}>
-              <Text style={styles.kindText}>{T.stopKind[stop.kind]}</Text>
-            </View>
-          ) : null}
-          <Text style={styles.cueMain} numberOfLines={2}>{stop ? stop.short : cue.stopWhen}</Text>
-        </View>
-        {stop ? <Text style={styles.cueWatch} numberOfLines={1}>{T.watch(stop.watch)}</Text> : null}
+    <View style={[styles.cue, glass.panel]}>
+      <View
+        style={styles.flex}
+        accessible
+        accessibilityLabel={stop ? T.cueA11y(stop.kind, title, stop.line, stop.before, stop.after) : `${title}. ${cue.stopWhen}`}
+        accessibilityLiveRegion="polite"
+        testID="mark-stop-line"
+      >
+        <Text style={styles.cueLine} numberOfLines={2}>
+          <Text style={styles.cueTitle}>{title}</Text>
+          {`  ${line}`}
+        </Text>
+        {stop ? <CueRail stop={stop} /> : null}
       </View>
-      <Text style={styles.moreText}>{T.more}</Text>
-    </Pressable>
+      <Pressable
+        style={styles.help}
+        onPress={onToggle}
+        hitSlop={11}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: false }}
+        accessibilityLabel={T.cueHelp}
+        testID="mark-cue-help"
+      >
+        <Text style={styles.helpText}>?</Text>
+      </Pressable>
+    </View>
   );
 }
 
 export const CueCard = memo(CueCardImpl);
 
-// --- The top row: close and the seven positions as chips (P-number, status dot, short name) -------
+// --- The top row: close and the seven positions as chips (status dot, short name) ---------------------
 
 /**
- * `current` is the open position (none for an automatic frame). The count ("3/7", "2 ✓ · 1 skip") lives in
- * the panel's step header, which leaves each chip 46 px at 390 px (checks v2, design). Confirmed is a filled
- * dot, skipped a filled square, to do a ring: shape as well as colour.
+ * `current` is the open position (none for an automatic frame). The dots are the progress: there is no
+ * count anywhere else. Confirmed is a filled dot, skipped a filled square, to do a ring: shape as well as
+ * colour. The P-number is on the video's position pill and the cue, not here.
  */
 function MarkChipsImpl({
   status, current = null, onSelect, onClose, closeLabel,
@@ -289,7 +339,6 @@ function MarkChipsImpl({
               accessibilityLabel={T.chapterA11y(SWING_STRINGS.checkpoint[k], st)}
               testID={`chapter-${k}`}
             >
-              <Text style={[styles.chP, on && styles.chOnText]}>{cueFor(k).p}</Text>
               <View style={[styles.cd, st === 'confirmed' && styles.cdDone, st === 'skipped' && styles.cdSkip]} />
               <Text style={[styles.chName, on && styles.chOnText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{SWING_STRINGS.position.short[k]}</Text>
             </Pressable>
@@ -303,34 +352,54 @@ function MarkChipsImpl({
 export const MarkChips = memo(MarkChipsImpl);
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   dock: { gap: 6 },
   dk: {
-    width: 56, minHeight: 54, borderRadius: 12, backgroundColor: hud.scrimStrong, borderWidth: 1.5, borderColor: hud.line,
-    alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 5, paddingHorizontal: 2,
+    width: 56, minHeight: 46, borderRadius: 12, backgroundColor: hud.scrimStrong, borderWidth: 1.5, borderColor: hud.line,
+    alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 2,
   },
   dkOn: { backgroundColor: hud.text, borderColor: hud.text },
   dkOff: { opacity: 0.4 },
-  dkName: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase', color: hud.textSoft },
-  dkWord: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: hud.textSoft, opacity: 0.85 },
+  dkName: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, color: hud.textSoft },
   dkInk: { color: INK },
+  badge: {
+    position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center',
+  },
+  badgeOk: { backgroundColor: hud.accent },
+  badgeLook: { backgroundColor: HUD_WARN },
+  badgeHidden: { backgroundColor: hud.inset, borderWidth: 1, borderColor: hud.line },
+  badgeText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, lineHeight: 12, color: INK },
 
   cue: {
-    position: 'absolute', left: 8, top: 8, right: 60, maxHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: hud.scrimStrong, borderWidth: 1, borderColor: hud.line, borderRadius: 14, paddingVertical: 7, paddingLeft: 7, paddingRight: 10,
+    position: 'absolute', left: 8, top: 8, right: 8, flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    paddingTop: 9, paddingBottom: 6, paddingLeft: 11, paddingRight: 9,
   },
-  pict: { width: 48, height: 48, borderRadius: 10, backgroundColor: hud.fill, alignItems: 'center', justifyContent: 'center' },
-  cueTx: { flex: 1 },
-  cueLine: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
-  kind: { backgroundColor: hud.accent, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2, marginTop: 1 },
-  kindLast: { backgroundColor: HUD_WARN },
-  kindText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, letterSpacing: 0.8, color: hud.onAccent },
-  cueMain: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, lineHeight: 16, color: hud.text },
-  cueWatch: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10.5, color: hud.textSoft, marginTop: 2 },
+  cueLine: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, lineHeight: 18, color: hud.text },
+  cueTitle: { fontFamily: 'PlusJakartaSans-ExtraBold' },
+  help: {
+    width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: hud.line, alignItems: 'center', justifyContent: 'center',
+  },
+  helpText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: hud.textSoft },
+  rail: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+  seg: { flex: 1, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: hud.fill },
+  segL: { borderTopLeftRadius: 99, borderBottomLeftRadius: 99 },
+  segR: { borderTopRightRadius: 99, borderBottomRightRadius: 99 },
+  segOn: { backgroundColor: RAIL_ON },
+  segText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: hud.textMuted },
+  segTextL: { textAlign: 'right' },
+  segTextOn: { color: hud.accent },
+  tick: { width: 3, height: 26, borderRadius: 2, backgroundColor: hud.text },
+  tickGap: { width: 3 },
+  railLabels: { flexDirection: 'row', marginTop: 1 },
+  railLabel: { flex: 1, paddingHorizontal: 2 },
+  railLabelL: { alignItems: 'flex-end' },
+  thisFrame: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: hud.text },
   moreText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: hud.accent },
   cueFull: {
-    position: 'absolute', left: 0, right: 0, top: 0, gap: 6, paddingTop: 10, paddingHorizontal: 12, paddingBottom: 14,
-    backgroundColor: hud.scrimStrong,
+    position: 'absolute', left: 8, right: 8, top: 8, gap: 6, paddingTop: 10, paddingHorizontal: 12, paddingBottom: 12,
   },
+  cueHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pict: { width: CUE_PICT + 8, height: CUE_PICT + 8, borderRadius: 12, backgroundColor: hud.fill, alignItems: 'center', justifyContent: 'center' },
   cueText: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, lineHeight: 18, color: hud.textSoft },
   cueBold: { fontFamily: 'PlusJakartaSans-Bold', color: hud.text },
 
@@ -339,13 +408,12 @@ const styles = StyleSheet.create({
   chips: { flex: 1, flexDirection: 'row', gap: 3 },
   ch: {
     flex: 1, height: 44, borderRadius: 10, backgroundColor: hud.fill, borderWidth: 1.5, borderColor: 'transparent',
-    alignItems: 'center', justifyContent: 'center', gap: 1,
+    alignItems: 'center', justifyContent: 'center', gap: 3,
   },
   chOn: { borderColor: hud.text, backgroundColor: withAlpha(hud.text, 0.14) },
   cd: { width: 6, height: 6, borderRadius: 3, borderWidth: 1.5, borderColor: hud.textMuted },
   cdDone: { backgroundColor: hud.accent, borderColor: hud.accent },
   cdSkip: { backgroundColor: HUD_WARN, borderColor: HUD_WARN, borderRadius: 1 },
-  chP: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, color: hud.textSoft },
-  chName: { maxWidth: '100%', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, letterSpacing: 0.3, color: hud.textMuted },
+  chName: { maxWidth: '100%', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10.5, color: hud.textMuted },
   chOnText: { color: hud.text },
 });

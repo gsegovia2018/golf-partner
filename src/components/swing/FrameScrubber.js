@@ -2,8 +2,9 @@ import React, {
   memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore,
 } from 'react';
 import {
-  View, Text, Image, Pressable, StyleSheet,
+  View, Text, Pressable, StyleSheet,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import Animated, { useSharedValue, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -126,21 +127,27 @@ function FrameScrubberImpl({
           <Feather name="chevron-left" size={18} color={hud.text} />
         </Pressable>
         {zoomFrames(cursor, maxFrame).map((f, k) => {
-          if (f == null) return <View key={`e${k}`} style={styles.z} />;
+          if (f == null) return <View key={`e${k}`} style={styles.zSlot}><View style={styles.z} /></View>;
           const uri = thumbFor(f);
           return (
-            <Pressable
-              key={f}
-              style={[styles.z, f === proposed && styles.zProp, f === cursor && styles.zOn]}
-              onPress={() => onPick(f)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: f === cursor }}
-              accessibilityLabel={T.thumbLabel(f, f - proposed)}
-              testID={`zoom-${f}`}
-            >
-              {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
-              {f === proposed ? <View style={styles.zFlag} /> : null}
-            </Pressable>
+            <View key={f} style={[styles.zSlot, f === proposed && styles.zSlotTop]}>
+              <Pressable
+                style={[styles.z, f === proposed && styles.zProp, f === cursor && styles.zOn]}
+                onPress={() => onPick(f)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: f === cursor }}
+                accessibilityLabel={T.thumbLabel(f, f - proposed)}
+                testID={`zoom-${f}`}
+              >
+                {/* expo-image: decoded thumbs stay in memory, so a drag tick does not reload all nine */}
+                {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={null} /> : null}
+              </Pressable>
+              {f === proposed ? (
+                <View style={styles.sg} pointerEvents="none" testID="mark-suggested">
+                  <Text style={styles.sgText} numberOfLines={1}>{T.onProposal}</Text>
+                </View>
+              ) : null}
+            </View>
           );
         })}
         <Pressable style={styles.arr} onPress={() => step(1)} disabled={view >= maxFrame} accessibilityRole="button" accessibilityLabel={T.nextFrame} testID="mark-next">
@@ -172,7 +179,7 @@ function FrameScrubberImpl({
 
       <View style={styles.frl}>
         <Text style={styles.frlText} testID="mark-frame-line">{T.frameLine(cursor, (cursor / fps).toFixed(3))}</Text>
-        <Text style={[styles.frlText, off ? styles.warn : styles.ok]}>{off ? T.offProposal(off) : T.onProposal}</Text>
+        <Text style={[styles.frlText, off ? styles.warn : styles.ok]} testID="mark-frame-offset">{off ? T.offProposal(off) : T.onProposal}</Text>
       </View>
     </View>
   );
@@ -183,19 +190,27 @@ export default memo(FrameScrubberImpl);
 
 const styles = StyleSheet.create({
   wrap: { gap: 4 },
-  zoom: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  zoom: {
+    flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4,
+  },
   arr: {
     width: 36, height: 44, borderRadius: 10, backgroundColor: hud.fill, borderWidth: 1, borderColor: hud.line,
     alignItems: 'center', justifyContent: 'center',
   },
+  zSlot: { flex: 1, alignItems: 'center' },
+  zSlotTop: { zIndex: 1 },
   z: {
-    flex: 1, height: 44, borderRadius: 4, overflow: 'hidden', backgroundColor: hud.inset, borderWidth: 1.5, borderColor: 'transparent', opacity: 0.7,
+    alignSelf: 'stretch', height: 44, borderRadius: 4, overflow: 'hidden', backgroundColor: hud.inset, borderWidth: 1.5, borderColor: 'transparent', opacity: 0.7,
   },
   zProp: { borderColor: hud.accent, opacity: 1 },
   zOn: { borderColor: hud.text, opacity: 1 },
-  zFlag: {
-    position: 'absolute', top: 0, alignSelf: 'center', width: 0, height: 0,
-    borderLeftWidth: 4, borderRightWidth: 4, borderTopWidth: 5, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: hud.accent,
+  // "Suggested" over the proposed thumb, half above it (it may be wider than the thumb)
+  sg: {
+    position: 'absolute', top: -8, minWidth: 64, alignItems: 'center',
+  },
+  sgText: {
+    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, lineHeight: 13, color: hud.onAccent, backgroundColor: hud.accent,
+    paddingHorizontal: 5, borderRadius: 99, overflow: 'hidden',
   },
   track: { height: 32, marginHorizontal: 2, justifyContent: 'flex-start' },
   bar: { position: 'absolute', left: 0, right: 0, top: 13, height: 3, borderRadius: 2, backgroundColor: hud.line },

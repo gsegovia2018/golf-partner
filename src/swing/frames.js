@@ -62,22 +62,61 @@ const framesDir = (swingId) => new Directory(Paths.document, 'swings', swingId, 
 export const proxyDir = (swingId) => new Directory(Paths.document, 'swings', swingId, 'proxy');
 const stillFile = (swingId, frame) => new File(Paths.document, 'swings', swingId, 'frames', `${Math.round(frame)}.jpg`);
 
-/** URI of the saved still for a frame, or null when it was never extracted. Synchronous. */
-export function getStill(swingId, frame) {
-  try {
-    const f = stillFile(swingId, frame);
-    return f.exists ? f.uri : null;
-  } catch {
-    return null;
-  }
+// Which stills are known to be on disk, per swing (frame -> uri). The scrubber asks getStill() for
+// nine thumbnails and the picture on every drag tick, so a still seen once (on disk, or written by
+// ensureStills) is not looked up again. Stills are never deleted while their swing exists, so a hit
+// stays true. A miss is never cached for good: it is looked at again after MISS_RECHECK_MS.
+const MISS_RECHECK_MS = 500;
+const present = new Map(); // swingId -> Map(frame -> uri)
+const missedAt = new Map(); // 'swingId/frame' -> ms of the last miss
+
+function remember(swingId, frame, uri) {
+  if (!uri) return;
+  let m = present.get(swingId);
+  if (!m) { m = new Map(); present.set(swingId, m); }
+  m.set(frame, uri);
+  missedAt.delete(`${swingId}/${frame}`);
 }
 
-const fromDisk = (swingId, wanted) => Object.fromEntries(wanted.map((f) => [f, getStill(swingId, f)]));
+/** The disk itself, recorded either way. */
+function checkDisk(swingId, f) {
+  try {
+    const file = stillFile(swingId, f);
+    if (file.exists) { remember(swingId, f, file.uri); return file.uri; }
+  } catch { /* treated as missing */ }
+  missedAt.set(`${swingId}/${f}`, Date.now());
+  return null;
+}
+
+const knownStill = (swingId, f) => present.get(swingId)?.get(f) ?? null;
+
+/** URI of the saved still for a frame, or null when it was never extracted. Synchronous. */
+export function getStill(swingId, frame) {
+  const f = Math.round(frame);
+  const hit = knownStill(swingId, f);
+  if (hit) return hit;
+  const at = missedAt.get(`${swingId}/${f}`);
+  if (at != null && Date.now() - at < MISS_RECHECK_MS) return null;
+  return checkDisk(swingId, f);
+}
+
+/** What is on disk now (no miss throttling): ensureStills' answers. */
+const onDisk = (swingId, f) => knownStill(swingId, f) ?? checkDisk(swingId, f);
+const fromDisk = (swingId, wanted) => Object.fromEntries(wanted.map((f) => [f, onDisk(swingId, f)]));
+
+// The last native extractions (frames asked, ms), newest last, for tuning the scrubber on a device.
+const TIMINGS_KEPT = 20;
+const timings = [];
+
+/** The last TIMINGS_KEPT native extractFrames calls: [{ frames, ms, lane, ok }], oldest first. */
+export function stillTimings() { return timings.slice(); }
 
 // One native extraction at a time (the module has a single worker thread, so a second call only
 // waits behind the first). Lanes decide who goes first and who is dropped:
 //   'target'     the frame the user released on: runs next, replaces any waiting target/neighbour
-//                job, and cancels a running target/neighbour job that is now stale
+//                job, and cancels a running target/neighbour job that is now stale. A job that is
+//                already extracting the frame (running, or waiting) is kept and waited for instead:
+//                cancelling it would throw away a decode that was about to produce it
 //   'neighbours' prefetch around it: waits behind targets, replaced by a newer prefetch, dropped
 //                (cancelled if running) as soon as a target arrives
 //   undefined    everything else (Results, Compare): plain FIFO, never dropped, never cancelled
@@ -97,13 +136,31 @@ function dropRunning(lanes) {
   try { nativeApi()?.cancelAnalysis?.(); } catch { /* the job just runs to its end */ }
 }
 
+function logTiming(entry) {
+  timings.push(entry);
+  if (timings.length > TIMINGS_KEPT) timings.shift();
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.log(`[stills] extractFrames ${entry.frames} frame(s) in ${entry.ms} ms (${entry.lane ?? 'fifo'}${entry.ok ? '' : ', failed'})`);
+  }
+}
+
 async function runJob(job) {
+  const t0 = Date.now();
+  let ok = false;
   try {
     const dir = framesDir(job.swingId);
     if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
     const got = await nativeApi().extractFrames(swingVideoUri(job.swingId), { frames: job.missing, outDir: dir.uri });
-    job.missing.forEach((f) => { job.out[f] = got?.[f] ?? getStill(job.swingId, f); });
+    ok = true;
+    job.missing.forEach((f) => {
+      const uri = got?.[f] ?? onDisk(job.swingId, f);
+      remember(job.swingId, f, uri);
+      job.out[f] = uri;
+    });
   } catch { /* leave them null */ }
+  logTiming({
+    frames: job.missing.length, ms: Date.now() - t0, lane: job.lane, ok,
+  });
   job.resolve(job.out);
 }
 
@@ -125,7 +182,7 @@ export function ensureStills(swingId, frames, lane) {
   const out = {};
   const missing = [];
   wanted.forEach((f) => {
-    const uri = getStill(swingId, f);
+    const uri = onDisk(swingId, f);
     out[f] = uri;
     if (!uri) missing.push(f);
   });
@@ -138,6 +195,36 @@ export function ensureStills(swingId, frames, lane) {
     const same = [queue.running, ...queue.pending].find((j) => j && !j.dropped && j.lane === lane && j.swingId === swingId && sameFrames(j.missing, missing));
     if (same) return same.promise;
   }
+
+  // Frames a target / neighbour job is already extracting (the wide prefetch when a position opens,
+  // then a stop or the zoomed row inside it): wait for that job instead of starting another.
+  // A target keeps it (the job becomes the target, so a later prefetch cannot drop it) and still
+  // supersedes the other waiting work; a running job is never cancelled here (it is the one that
+  // covers, or a waiting one does and the running one is stale). A prefetch just waits.
+  const covers = (j) => j && !j.dropped && j.swingId === swingId && (j.lane === 'target' || j.lane === 'neighbours')
+    && missing.every((f) => j.missing.includes(f));
+  const host = lane === 'target' || lane === 'neighbours' ? (covers(queue.running) ? queue.running : queue.pending.find(covers)) : null;
+  const waitFor = (h) => h.promise.then((got) => {
+    const res = { ...out };
+    missing.forEach((f) => { res[f] = got?.[f] ?? onDisk(swingId, f); });
+    return res;
+  });
+  if (host && lane === 'neighbours') return waitFor(host);
+  if (host) {
+    host.lane = 'target';
+    queue.pending = queue.pending.filter((j) => {
+      if (j === host || (j.lane !== 'target' && j.lane !== 'neighbours')) return true;
+      drop(j);
+      return false;
+    });
+    if (host !== queue.running) {
+      dropRunning(['target', 'neighbours']);
+      queue.pending = [host, ...queue.pending.filter((j) => j !== host)];
+    }
+    pump();
+    return waitFor(host);
+  }
+
   const job = { swingId, wanted, missing, out, lane, dropped: false, resolve: null };
   job.promise = new Promise((resolve) => { job.resolve = resolve; });
 
@@ -165,8 +252,11 @@ export function ensureStills(swingId, frames, lane) {
   return job.promise;
 }
 
-/** Tests only: forget the queue. */
-export function resetStillQueue() { queue.pending = []; queue.running = null; }
+/** Tests only: forget the queue, the known stills and the timings. */
+export function resetStillQueue() {
+  queue.pending = []; queue.running = null;
+  present.clear(); missedAt.clear(); timings.length = 0;
+}
 
 /**
  * The swing window pass 2 writes proxies for (D28): about one second before the motion starts to

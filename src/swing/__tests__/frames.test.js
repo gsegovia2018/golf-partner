@@ -27,6 +27,44 @@ describe('getStill', () => {
   });
 });
 
+describe('getStill keeps the stills it has seen (a scrub asks for ten per tick)', () => {
+  const realNow = Date.now;
+  afterEach(() => { Date.now = realNow; });
+
+  test('a still found once is not looked up on disk again; a miss is looked at again after 500 ms', () => {
+    let now = 1000;
+    Date.now = () => now;
+    const fs = require('expo-file-system');
+    const exists = jest.spyOn(fs.File.prototype, 'exists', 'get');
+    const { getStill } = require('../frames');
+    mockExists.add('swings/s1/frames/10.jpg');
+    expect(getStill('s1', 10)).toBe('file:///doc/swings/s1/frames/10.jpg');
+    expect(getStill('s1', 10.2)).toBe('file:///doc/swings/s1/frames/10.jpg');
+    expect(exists).toHaveBeenCalledTimes(1);
+
+    expect(getStill('s1', 11)).toBeNull();
+    mockExists.add('swings/s1/frames/11.jpg');
+    now += 200;
+    expect(getStill('s1', 11)).toBeNull(); // not re-checked yet
+    expect(exists).toHaveBeenCalledTimes(2);
+    now += 400;
+    expect(getStill('s1', 11)).toBe('file:///doc/swings/s1/frames/11.jpg');
+    expect(exists).toHaveBeenCalledTimes(3);
+    exists.mockRestore();
+  });
+
+  test('stills written by ensureStills are known at once, even right after a miss', async () => {
+    const extractFrames = jest.fn(async () => { mockExists.add('swings/s1/frames/20.jpg'); return { 20: 'file:///doc/swings/s1/frames/20.jpg' }; });
+    jest.doMock('../native', () => ({ REQUIRED_API_VERSION: 1, apiVersion: 1, analyzePose: jest.fn(), extractFrames }), { virtual: true });
+    const { getStill, ensureStills, stillTimings } = require('../frames');
+    expect(getStill('s1', 20)).toBeNull();
+    await ensureStills('s1', [20], 'target');
+    expect(getStill('s1', 20)).toBe('file:///doc/swings/s1/frames/20.jpg');
+    // each native call is timed: frames asked and how long it took
+    expect(stillTimings()).toEqual([expect.objectContaining({ frames: 1, lane: 'target', ok: true, ms: expect.any(Number) })]);
+  });
+});
+
 describe('ensureStills', () => {
   test('asks native only for the frames that are missing', async () => {
     mockExists.add('swings/s1/frames/556.jpg');
@@ -151,6 +189,50 @@ describe('ensureStills lanes (target first, neighbours after, superseded work dr
     expect(extractFrames).toHaveBeenCalledTimes(1);
     expect(cancelAnalysis).not.toHaveBeenCalled();
     expect(a).toBe(b);
+  });
+
+  test('a target already inside the running prefetch waits for it instead of cancelling it', async () => {
+    const { calls, cancelAnalysis, ensureStills } = setup();
+    const near = ensureStills('s1', [88, 89, 90, 91, 92], 'neighbours');
+    await tick();
+    const target = ensureStills('s1', [90], 'target');
+    const later = ensureStills('s1', [70, 71], 'neighbours'); // the job now serves a target: a prefetch does not drop it
+    expect(cancelAnalysis).not.toHaveBeenCalled();
+    calls[0].finish();
+    expect(await target).toEqual({ 90: 'file:///doc/swings/s1/frames/90.jpg' });
+    expect(Object.values(await near).every(Boolean)).toBe(true);
+    await tick();
+    expect(calls.map((c) => c.frames)).toEqual([[88, 89, 90, 91, 92], [70, 71]]); // one decode for 90, no second one
+    calls[1].finish();
+    await later;
+  });
+
+  test('a waiting job that covers the target is kept and moved first; the stale running one is cancelled', async () => {
+    const { calls, cancelAnalysis, ensureStills } = setup();
+    const a = ensureStills('s1', [10], 'target');
+    const n = ensureStills('s1', [9, 11, 12], 'neighbours');
+    await tick();
+    const t = ensureStills('s1', [12], 'target'); // 10 is stale; the waiting prefetch has 12
+    expect(cancelAnalysis).toHaveBeenCalledTimes(1);
+    expect(await a).toEqual({ 10: null });
+    await tick();
+    expect(calls.map((c) => c.frames)).toEqual([[10], [9, 11, 12]]);
+    calls[1].finish();
+    expect(await t).toEqual({ 12: 'file:///doc/swings/s1/frames/12.jpg' });
+    expect((await n)[9]).toBeTruthy();
+  });
+
+  test('a prefetch inside the running wide prefetch waits for it instead of replacing it', async () => {
+    const { calls, cancelAnalysis, ensureStills } = setup();
+    const wide = ensureStills('s1', [40, 41, 42, 43, 44, 45, 46], 'neighbours');
+    await tick();
+    const zoom = ensureStills('s1', [42, 43, 44], 'neighbours');
+    expect(cancelAnalysis).not.toHaveBeenCalled();
+    calls[0].finish();
+    expect(await zoom).toEqual({ 42: expect.any(String), 43: expect.any(String), 44: expect.any(String) });
+    expect(Object.values(await wide).every(Boolean)).toBe(true);
+    await tick();
+    expect(calls).toHaveLength(1);
   });
 
   test('lane-less callers stay FIFO and are never cancelled or dropped', async () => {

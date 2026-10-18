@@ -16,6 +16,7 @@ import FrameScrubber from '../components/swing/FrameScrubber';
 import {
   MarkLayer, MarkDock, MarkChips, CueCard, Swatch, MARK_COLOR,
 } from '../components/swing/MarkCanvasParts';
+import { glass } from '../components/swing/swingStyles';
 import { hud, semantic } from '../theme/tokens';
 import { withAlpha } from '../theme/alpha';
 import {
@@ -26,7 +27,7 @@ import { getStill, ensureStills, getProxy } from '../swing/frames';
 import { cueFor } from '../swing/checkpoints';
 import {
   buildDraft, recompute, draftToMarks, isDirty, hitTest, clampPt, hasMarks,
-  markStatus, placeMark, setHidden, confirmMark, chooseFrame, confirmPosition, confirmMoves, restorePosition, skipPosition,
+  markStatus, placeMark, setHidden, chooseFrame, confirmPosition, confirmMoves, restorePosition, skipPosition,
   pendingMoves, primaryAction, applyProposal, proposalAt,
 } from '../swing/editMarks';
 import { proposeClub, warmClub, releaseClubDetector } from '../swing/clubOnDemand';
@@ -45,8 +46,9 @@ import { useT, getLanguage } from '../i18n';
 // step 1 "Find the frame" (the cue inside the video, the whole-clip track with the seven position
 // ticks, a zoomed row of ±4 frames, ‹ › for ±1) and step 2 "Place the marks" (the chosen frame
 // frozen, the Hands / Clubhead / Ball dock inside the video, the loupe in the corner opposite the
-// mark, per-mark Confirm, Hidden, the 1 px nudge). The video is edge to edge and the same size in
-// both steps: a 52 px top row (close, the six chapters, the count) and one fixed panel below.
+// mark, Hidden, the 1 px nudge, and one confirm: the primary button confirms every mark on screen and
+// moves on). The video is edge to edge and the same size in both steps: a 52 px top row (close, the
+// seven chips, whose dots are the progress) and one fixed panel below.
 //
 // Two modes. `pass`: the mark-first pass after the analysis (club sheet → six positions →
 // finish sheet → Results), saved on every position and resumable; a position opens at step 1
@@ -63,7 +65,8 @@ import { useT, getLanguage } from '../i18n';
 const T = SWING_STRINGS.mark;
 const HUD_WARN = semantic.warning.dark; // the HUD amber, as on the capture screen
 const TOP_H = 52;
-export const PANEL_H = 188; // the bottom panel, the same in both steps so the video never jumps
+export const PANEL_H = 192; // the bottom panel, the same in both steps so the video never jumps
+export const WIDE_REACH = 12; // a position opening at step 1 prefetches its proposal ±12 in one decode
 const noProxy = () => null;
 
 const HudButton = memo(function HudButton({
@@ -97,7 +100,9 @@ function useStable(fn) {
 /**
  * Step 1's picture: the frame under the finger while the track is dragged (its still if on disk,
  * else the nearest proxy, else the last still), the committed frame otherwise. It reads the scrub
- * store itself, so a drag re-renders this and the scrubber, never the canvas.
+ * store itself, so a drag re-renders this and the scrubber, never the canvas. Drawn with expo-image
+ * (`cached`): the previous picture stays until the next one is decoded. The frame number is on the
+ * frame line under the strip; the picture only says so while it is not the exact frame yet.
  */
 const ScrubPicture = memo(function ScrubPicture({
   scrub, view, shown, stillFor, proxyFor, box, video, name,
@@ -107,14 +112,16 @@ const ScrubPicture = memo(function ScrubPicture({
   const src = scrubSource({
     frame, dragging: drag != null, still: stillFor(frame), proxy: proxyFor(frame), last: shown,
   });
-  // not the exact frame yet: SCRUBBING under the finger, LOADING after the release until the still lands
+  // not the exact frame yet: Scrubbing under the finger, Loading after the release until the still lands
   const note = src.exact ? '' : drag != null ? T.scrubbing : T.loadingTag;
   return (
     <>
-      <SwingOverlay width={box.w} height={box.h} video={video} uri={src.uri} showPlanes={false} resizeMethod="scale" label={T.stillA11y(name, frame)} />
-      <View style={s.tag} pointerEvents="none">
-        <Text style={s.tagText} testID="mark-frame-tag">{`${T.frameTag(frame)}${note ? ` · ${note}` : ''}`}</Text>
-      </View>
+      <SwingOverlay width={box.w} height={box.h} video={video} uri={src.uri} showPlanes={false} cached label={T.stillA11y(name, frame)} />
+      {note ? (
+        <View style={[s.note, glass.pill]} pointerEvents="none">
+          <Text style={s.noteText} testID="mark-scrub-note">{note}</Text>
+        </View>
+      ) : null}
     </>
   );
 });
@@ -298,16 +305,29 @@ export function SwingMarkCanvas({
     return () => { alive = false; clearTimeout(t); };
   }, [view, stillFor, needStills]);
   // Once the cursor's still is on screen, its ±4 for the zoomed row (one sequential decode, after a
-  // pause so a run of ‹ › taps asks once). Step 2 fetches nothing: nothing changes under a drag.
+  // pause so a run of ‹ › taps asks once). The first time a position opens at step 1 the same call
+  // also takes its proposal ±12 (most picks land near it, so most stops then find their still on disk;
+  // a stop inside that decode waits for it, frames.js). Step 2 fetches nothing: nothing changes under a drag.
   const arrived = shown.frame === view;
+  const wideFor = useRef(null); // the position (and proposal) whose ±12 was asked for
+  const proposalFrame = base.cps[cp].frame;
   useEffect(() => {
     if (phase !== 'canvas' || step !== 1 || !arrived) return undefined;
-    const want = [];
-    for (let f = view - ZOOM_REACH; f <= view + ZOOM_REACH; f += 1) if (f >= 0 && f <= maxFrame && !stillFor(f)) want.push(f);
-    if (!want.length) return undefined;
-    const t = setTimeout(() => { needStills(want, 'neighbours'); }, 200);
+    const key = `${cp}:${proposalFrame}`;
+    const wide = wideFor.current !== key;
+    const want = new Set();
+    const add = (lo, hi) => {
+      for (let f = Math.max(0, lo); f <= Math.min(maxFrame, hi); f += 1) if (!stillFor(f)) want.add(f);
+    };
+    if (wide) add(proposalFrame - WIDE_REACH, proposalFrame + WIDE_REACH);
+    add(view - ZOOM_REACH, view + ZOOM_REACH);
+    if (!want.size) { wideFor.current = key; return undefined; }
+    const t = setTimeout(() => {
+      wideFor.current = key;
+      needStills([...want].sort((a, b) => a - b), 'neighbours');
+    }, 200);
     return () => clearTimeout(t);
-  }, [phase, step, arrived, view, maxFrame, stillFor, needStills]);
+  }, [phase, step, arrived, view, maxFrame, stillFor, needStills, cp, proposalFrame]);
   // The picture is still the previous frame until the new still arrives: nothing is placed on it meanwhile.
   const loading = !arrived;
 
@@ -399,10 +419,6 @@ export function SwingMarkCanvas({
     setActive(m);
     setToast('');
   });
-  const confirmActive = () => {
-    commit(confirmMark(draft, base, cp, active));
-    setToast(T.confirmed(T.names[active], d.frame));
-  };
   const toggleHidden = () => {
     const on = !d.hidden;
     commit(setHidden(draft, cp, on));
@@ -583,20 +599,22 @@ export function SwingMarkCanvas({
 
   // --- rendering ------------------------------------------------------------------------------------
   const counts = passCounts(draft.status);
-  const tally = T.tally(counts.confirmed, counts.skipped);
-  const idx = MARKED_KEYS.indexOf(cp);
   const editLike = !pass || !!fixFrom;
   const action = useMemo(() => primaryAction(draft, base, cp), [draft, base, cp]);
   const willChange = useMemo(() => isDirty(confirmPosition(draft, base, cp), startDraft), [draft, base, cp, startDraft]);
-  const primaryLabel = editLike ? (willChange || fixFrom ? T.primary.editSave : T.primary.editDone) : T.primary[action];
-  const proposed = base.cps[cp].frame;
+  // the one confirm: it confirms every mark on screen and moves on (or saves, in edit)
+  const primaryLabel = editLike ? (willChange || fixFrom ? T.primary.editSave : T.primary.editDone) : action === 'noHead' ? T.primary.noHead : T.primary.confirmNext;
+  const proposed = proposalFrame;
   const resets = view !== d.frame && hasMarks(draft, base, cp);
   const frameLabel = resets ? T.primary.useReset(view) : view === proposed ? T.primary.proposedOk : T.primary.useFrame(view);
-  const countMain = !chapter ? T.auto : pass && !fixFrom ? T.position(idx + 1, MARK_TOTAL) : T.edit;
   const bg = stillFor(draft.cps.address.frame);
-  const markLine = statuses[active] === 'missing' ? T.line.missing(T.names[active]) : T.line[statuses[active]];
-  const canConfirm = ['proposed', 'unsure', 'moved'].includes(statuses[active]);
+  // one hint for the active mark (its status is the dock tile's badge); missing, hidden and an unsure
+  // detection still say what they mean
+  const markName = T.names[active];
+  const markLine = statuses[active] === 'missing' ? `${markName} · ${T.line.missing(markName)}`
+    : ['hidden', 'unsure'].includes(statuses[active]) ? `${markName} · ${T.line[statuses[active]]}` : T.placeHint(markName);
   const short = SWING_STRINGS.checkpoint[cp] ?? cue?.name ?? cp;
+  const cueTitle = `${cue?.p ? `${cue.p} ` : ''}${short}`;
 
   // Hooks below stay above the sheets' early returns. Handlers have a stable identity (useStable) so the
   // memoised chrome (chips, dock, scrubber, buttons) does not re-render with every canvas render.
@@ -725,7 +743,7 @@ export function SwingMarkCanvas({
           {step1 ? (
             <>
               <ScrubPicture scrub={scrub.current} view={view} shown={shown} stillFor={stillFor} proxyFor={proxyFor} box={box} video={video} name={cue?.name ?? cp} />
-              <CueCard cue={cue} open={cueOpen} onToggle={toggleCue} mirror={handedness === 'left'} />
+              <CueCard cue={cue} title={cueTitle} open={cueOpen} onToggle={toggleCue} mirror={handedness === 'left'} />
               {toast ? (
                 <View style={s.loadingPill} pointerEvents="none" accessibilityLiveRegion="polite" testID="mark-toast">
                   <Text style={[s.loadingText, s.toast]}>{toast}</Text>
@@ -737,20 +755,17 @@ export function SwingMarkCanvas({
               <SwingOverlay width={box.w} height={box.h} video={video} uri={shown.uri} showPlanes={false} resizeMethod="scale" label={T.stillA11y(cue?.name ?? cp, shown.frame ?? view)}>
                 <MarkLayer rect={rect} active={active} marks={marksNow} hidden={dragging} />
                 <GestureDetector gesture={markPan}>
-                  <View style={StyleSheet.absoluteFill} testID="edit-touch-layer" accessible accessibilityLabel={`${T.names[active]} · ${markLine}`} accessibilityHint={T.touchHint} />
+                  <View style={StyleSheet.absoluteFill} testID="edit-touch-layer" accessible accessibilityLabel={markLine} accessibilityHint={T.touchHint} />
                 </GestureDetector>
                 <DragLoupe ref={loupe} values={lv} placement="corner" rect={rect} uri={shown.uri} label={T.placing(T.names[active])} color={MARK_COLOR[active]} />
               </SwingOverlay>
-              <View style={s.pospill} accessible accessibilityLabel={T.posPill(cue?.p, short, d.frame, d.frame !== proposed)} testID="mark-pospill">
+              <View style={[s.pospill, glass.pill]} accessible accessibilityLabel={T.posPill(cue?.p, short, d.frame)} testID="mark-pospill">
                 <Text style={s.pospillText} numberOfLines={1}>
-                  {`${cue?.p ? `${cue.p} · ` : ''}${short}`}
-                  <Text style={s.pospillSmall}>{T.posTail(d.frame, d.frame !== proposed)}</Text>
+                  {cueTitle}
+                  <Text style={s.pospillSmall}>{T.posTail(d.frame)}</Text>
                 </Text>
               </View>
               <MarkDock style={s.dock} active={active} statuses={statuses} ballOff={cp !== 'address'} onSelect={selectMark} />
-              <View style={s.tag} pointerEvents="none">
-                <Text style={s.tagText} testID="mark-frame-tag">{T.frameTag(d.frame)}</Text>
-              </View>
               {loading ? (
                 <View style={s.loadingPill} pointerEvents="none" accessibilityLiveRegion="polite" testID="mark-loading">
                   <Text style={s.loadingText}>{T.loadingFrame(view)}</Text>
@@ -762,20 +777,10 @@ export function SwingMarkCanvas({
 
         <View style={[s.panel, { height: PANEL_H + insets.bottom, paddingBottom: 12 + insets.bottom }]} testID={`mark-step-${step}`}>
           <View style={s.steph}>
-            <Text style={s.stephText}>
-              <Text style={s.white}>{T.stepOf(step)}</Text>
-              {` · ${step1 ? T.findFrame : T.placeMarks}`}
-            </Text>
-            <View style={s.stephRight}>
-              <View style={s.countRow} accessible accessibilityLabel={`${countMain}, ${tally}`} testID="mark-count">
-                <Text style={s.countText}>{countMain}</Text>
-                <Text style={s.countText}>{' · '}</Text>
-                <Text style={s.countText}>{tally}</Text>
-              </View>
-              <View style={s.dots}>
-                <View style={[s.dot, s.dotOn]} />
-                <View style={[s.dot, !step1 && s.dotOn]} />
-              </View>
+            <Text style={s.stephText} accessibilityRole="header">{step1 ? T.findFrame : T.placeMarks}</Text>
+            <View style={s.dots}>
+              <View style={[s.dot, s.dotOn]} />
+              <View style={[s.dot, !step1 && s.dotOn]} />
             </View>
           </View>
           {step1 ? (
@@ -805,22 +810,16 @@ export function SwingMarkCanvas({
             <>
               <View style={s.markRow} testID="mark-row">
                 <Swatch mark={active} size={14} />
-                <Text style={s.markText} numberOfLines={1}>{`${T.names[active]} · ${markLine}`}</Text>
+                <Text style={s.markText} numberOfLines={1}>{markLine}</Text>
                 {active === 'head' && statuses.head !== 'confirmed' ? (
                   <Pressable style={[s.mini, s.miniGhost, loading && s.dim]} disabled={loading} onPress={toggleHidden} accessibilityRole="button" accessibilityLabel={d.hidden ? T.unhide : T.hide} testID="mark-hidden">
                     <Feather name="eye-off" size={13} color={hud.text} />
                     <Text style={[s.miniText, s.white]}>{d.hidden ? T.unhide : T.hide}</Text>
                   </Pressable>
                 ) : null}
-                {canConfirm ? (
-                  <Pressable style={[s.mini, loading && s.dim]} disabled={loading} onPress={confirmActive} accessibilityRole="button" accessibilityLabel={`${T.confirm} ${T.names[active]}`} testID="mark-confirm">
-                    <Feather name="check" size={13} color={hud.onAccent} />
-                    <Text style={s.miniText}>{T.confirm}</Text>
-                  </Pressable>
-                ) : null}
               </View>
               <View style={s.tools}>
-                <Text style={[s.hint, toast && s.toast]} accessibilityLiveRegion="polite" numberOfLines={2}>{toast || T.nudgeHint}</Text>
+                <Text style={[s.hint, s.toast]} accessibilityLiveRegion="polite" numberOfLines={2}>{toast}</Text>
                 {[['left', 'arrow-left', -1, 0], ['up', 'arrow-up', 0, -1], ['down', 'arrow-down', 0, 1], ['right', 'arrow-right', 1, 0]].map(([k, icon, dx, dy]) => (
                   <Pressable key={k} style={s.nudge} onPress={() => nudge(dx, dy)} disabled={loading} accessibilityRole="button" accessibilityLabel={T.nudge[k]}>
                     <Feather name={icon} size={16} color={hud.textSoft} />
@@ -954,14 +953,14 @@ const s = StyleSheet.create({
   video: { flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   dock: { position: 'absolute', left: 8, top: 64 },
   pospill: {
-    position: 'absolute', left: 8, top: 8, maxWidth: '80%', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: hud.scrimStrong,
+    position: 'absolute', left: 8, top: 8, maxWidth: '80%', paddingHorizontal: 10, paddingVertical: 6,
   },
-  pospillText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: hud.text, fontVariant: ['tabular-nums'] },
-  pospillSmall: { fontFamily: 'PlusJakartaSans-SemiBold', color: hud.textMuted },
-  tag: {
-    position: 'absolute', right: 10, bottom: 10, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: hud.scrimStrong,
+  pospillText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: hud.text, fontVariant: ['tabular-nums'] },
+  pospillSmall: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: hud.textSoft },
+  note: {
+    position: 'absolute', right: 10, bottom: 10, paddingHorizontal: 10, paddingVertical: 4,
   },
-  tagText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, letterSpacing: 0.8, color: hud.textSoft, fontVariant: ['tabular-nums'] },
+  noteText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: hud.textSoft },
   loadingPill: {
     position: 'absolute', bottom: 10, left: 10, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: hud.scrimStrong,
   },
@@ -970,10 +969,7 @@ const s = StyleSheet.create({
   // the panel: one fixed band in both steps
   panel: { paddingHorizontal: 12, paddingTop: 8, gap: 5, backgroundColor: hud.bg },
   steph: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  stephText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10.5, letterSpacing: 0.8, textTransform: 'uppercase', color: hud.textMuted },
-  stephRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  countRow: { flexDirection: 'row', alignItems: 'center' },
-  countText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10.5, color: hud.textSoft, fontVariant: ['tabular-nums'] },
+  stephText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, lineHeight: 15, color: hud.text },
   dots: { flexDirection: 'row', gap: 4 },
   dot: { width: 16, height: 4, borderRadius: 2, backgroundColor: hud.line },
   dotOn: { backgroundColor: hud.accent },

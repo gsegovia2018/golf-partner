@@ -5,7 +5,7 @@
 //
 // The picture, in order of preference:
 //   the full-resolution still of the frame, when it is already on disk (sharp, and cached);
-//   while dragging, the nearest scrub proxy (blurry by design, the tag says "scrubbing");
+//   while dragging, the nearest scrub proxy (blurry by design, a pill on it says "Scrubbing");
 //   otherwise the last still shown: an apiVersion 2 binary, or a swing analysed before D28,
 //   has no proxies, so the picture waits for the release, where ensureStills() fills it in.
 
