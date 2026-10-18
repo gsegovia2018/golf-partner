@@ -12,6 +12,12 @@ import PlaySmarterCard from '../PlaySmarterCard';
 import SectionCard from '../SectionCard';
 import TrendLineChart from '../TrendLineChart';
 
+// The one-time notice's text by its kind (store/coachFocus.js loadFocusNotice).
+const NOTICE_KEY = {
+  'v1-closed': 'stats.my.coach.ui.notice.v1Closed',
+  'since-commit': 'stats.my.coach.ui.notice.sinceCommit',
+};
+
 // Memoised: the six stats tabs all stay mounted behind the pager, so without
 // this every tab commit re-renders all of them and blocks the swipe.
 // Composition only (spec §12): target row, one-time notice, focus (only with a
@@ -27,14 +33,15 @@ function CoachTab({
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { metrics = {}, form = {}, formSeries = {}, coach = {} } = stats ?? {};
   const fixFirstIds = (coach.board?.fixFirst ?? []).map((insight) => insight.id).filter(Boolean);
+  const noticeKey = NOTICE_KEY[focusNotice?.kind] ?? null;
 
   return (
     <View style={s.wrap}>
       <TargetBenchmarkRow targetHandicap={targetHandicap} onChangeTarget={onChangeTarget} />
-      {focusNotice ? (
+      {noticeKey ? (
         <View style={s.notice} testID="focus-notice">
           <Feather name="info" size={14} color={theme.info} />
-          <Text style={s.noticeText}>{t('stats.my.coach.ui.notice.v1Closed')}</Text>
+          <Text style={s.noticeText}>{t(noticeKey)}</Text>
           {onDismissNotice ? (
             <PressableScale
               onPress={onDismissNotice}
