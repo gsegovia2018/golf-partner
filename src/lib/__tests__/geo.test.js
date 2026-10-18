@@ -1,5 +1,5 @@
 import {
-  bearingDeg, normalizeDeltaDeg, holeTargetPoint, setCourseGeometry,
+  bearingDeg, hazardSide, normalizeDeltaDeg, holeTargetPoint, setCourseGeometry,
   mergeCourseGeometry, getCourseGeometry, getCourseGeometryVersion, findCourseGeometry,
 } from '../geo';
 
@@ -167,5 +167,35 @@ describe('mergeCourseGeometry', () => {
     mergeCourseGeometry([INDEX_A]);
     mergeCourseGeometry([]);
     expect(getCourseGeometryVersion()).toBe(v);
+  });
+});
+
+describe('hazardSide', () => {
+  // Walking due north from `from` to `to`: east is right, west is left.
+  const from = GREEN;
+  const to = at(300);
+  const eastM = (m) => m / (111320 * Math.cos(GREEN[0] * Math.PI / 180));
+  const hz = (northM, eastMeters) => ({
+    kind: 'water',
+    poly: [[GREEN[0] + northM / 111320, GREEN[1] + eastM(eastMeters)]],
+  });
+
+  it('is right for a hazard east of a northbound line', () => {
+    expect(hazardSide(hz(250, 20), from, to)).toBe('right');
+  });
+  it('is left for a hazard west of a northbound line', () => {
+    expect(hazardSide(hz(250, -20), from, to)).toBe('left');
+  });
+  it('is centre inside the 5 m band and flips outside it', () => {
+    expect(hazardSide(hz(250, 4), from, to)).toBe('centre');
+    expect(hazardSide(hz(250, -4), from, to)).toBe('centre');
+    expect(hazardSide(hz(250, 6), from, to)).toBe('right');
+  });
+  it('flips when the line runs the other way', () => {
+    expect(hazardSide(hz(250, 20), to, from)).toBe('left');
+  });
+  it('is centre without a polygon or a line', () => {
+    expect(hazardSide({ kind: 'water', poly: [] }, from, to)).toBe('centre');
+    expect(hazardSide(hz(10, 20), from, from)).toBe('centre');
   });
 });

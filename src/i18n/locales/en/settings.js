@@ -43,6 +43,8 @@ export default {
   "settings.missReasons.hint.ask": "When you record a missed drive or approach, ask why it missed. Feeds the coach.",
   "settings.missReasons.hint.manual": "Only when you tap Why? on a miss. Feeds the coach.",
   "settings.missReasons.hint.off": "Don't record why shots miss.",
+  "settings.aimTips.label": "Aim tips",
+  "settings.aimTips.hint": "A one-line tip on the hole when your misses lean one way.",
   "settings.statGroups.penalties.label": "Penalties",
   "settings.statGroups.penalties.loss": "Off: no penalty stats, no SG penalties",
   "settings.theme.light": "Light",

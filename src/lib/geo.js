@@ -213,6 +213,27 @@ export function holeHazardDistances(pos, geometryCourse, holeNumber) {
   return out;
 }
 
+// Which side of the line `from` → `to` a hazard sits on, as seen walking from
+// `from` towards `to`: 'left' | 'right' | 'centre'. Sign of the cross product
+// of (to − from) × (hazard centroid − from) on a local metre grid (x east,
+// y north); within ±5 m of the line it is 'centre'. `hazard` is a geometry
+// hazard ({ kind, poly }); all points are [lat, lng].
+export const HAZARD_CENTRE_BAND_M = 5;
+export function hazardSide(hazard, from, to) {
+  if (!hazard?.poly?.length || !from || !to) return 'centre';
+  const c = polygonCentroid(hazard.poly);
+  const kx = Math.cos(from[0] * RAD);
+  const ax = (to[1] - from[1]) * RAD * kx * EARTH_RADIUS_M;
+  const ay = (to[0] - from[0]) * RAD * EARTH_RADIUS_M;
+  const bx = (c[1] - from[1]) * RAD * kx * EARTH_RADIUS_M;
+  const by = (c[0] - from[0]) * RAD * EARTH_RADIUS_M;
+  const len = Math.hypot(ax, ay);
+  if (len === 0) return 'centre';
+  const offset = (ax * by - ay * bx) / len; // metres; positive = left of the line
+  if (Math.abs(offset) <= HAZARD_CENTRE_BAND_M) return 'centre';
+  return offset > 0 ? 'left' : 'right';
+}
+
 // Distances to the nearest green of a 'greens'-mode course (courses whose
 // per-hole numbering is not mapped). Returns { front, center, back, pin: null,
 // kind: 'nearest' } or null.
