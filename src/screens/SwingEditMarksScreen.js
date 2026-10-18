@@ -22,7 +22,7 @@ import {
   readAnalysis, readPose, readProbe, readMarks, saveAnalysis, saveMarks, getSwing, getSwingProfile,
   setSwingClub, setLastSwingClub,
 } from '../store/swingStore';
-import { getStill, ensureStills, getProxy } from '../swing/frames';
+import { getStill, ensureStills, getProxy, releaseFrameDecoder } from '../swing/frames';
 import { cueFor } from '../swing/checkpoints';
 import {
   buildDraft, recompute, draftToMarks, isDirty, hitTest, clampPt, hasMarks,
@@ -379,7 +379,7 @@ export function SwingMarkCanvas({
     held.current = [];
     answers.forEach((a) => deliver(...a));
   }, [dragging, drops, deliver]);
-  useEffect(() => () => { alive.current = false; releaseClubDetector(); }, []);
+  useEffect(() => () => { alive.current = false; releaseClubDetector(); releaseFrameDecoder(); }, []);
   const markPan = useMarkPan({
     ctx, lv, onGrab, onRefuse, onDrop,
   });

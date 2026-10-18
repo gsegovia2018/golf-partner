@@ -106,7 +106,7 @@ internal object Media {
     if (path.startsWith("content://")) setDataSource(context, Uri.parse(path)) else setDataSource(localPath(path))
   }
 
-  private fun retrieverRotation(context: Context, path: String): Int {
+  fun retrieverRotation(context: Context, path: String): Int {
     val r = retriever(context, path)
     try {
       return r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0

@@ -15,7 +15,7 @@
 import { Paths, Directory } from 'expo-file-system';
 import { analyze, CLUB_KEYS } from './analyze';
 import {
-  nativeApi, getStill, proxyDir, proxyWindow, PROXY_EVERY,
+  nativeApi, getStill, proxyDir, proxyWindow, proxyEveryFor,
 } from './frames';
 import { expectedShaftPx } from './scale';
 import { marksForAnalyze } from './labels';
@@ -51,6 +51,13 @@ export function policyFps(probe) {
   const container = Number(probe?.containerFps);
   if (Number.isFinite(container) && container >= APPROX_FPS) return container;
   return null;
+}
+
+// The time base of one container frame step, as the phases use it (container fps × slow-mo
+// factor): pass 2's address track measures the clubhead's speed with it. Left out when unknown.
+export function pass2Fps(analysis) {
+  const fps = Number(analysis?.fps?.container) * Number(analysis?.fps?.factor);
+  return Number.isFinite(fps) && fps > 0 ? { captureFps: fps } : {};
 }
 
 // The ball pass 2 seeds the clubhead from: the golfer's own ball mark ([x, y, r] normalised,
@@ -122,10 +129,11 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
     try {
       const dir = new Directory(Paths.document, 'swings', swingId, 'frames');
       if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
-      // D28: an apiVersion 3 binary also writes the scrub proxies; an older one is not asked
-      // over the swing window only, so the decode span stays close to the checkpoints' one
+      // D28: an apiVersion 3 binary also writes the scrub proxies (every 2nd frame from apiVersion 6);
+      // an older one is not asked. Over the swing window only, so the decode span stays close to the
+      // checkpoints' one
       const proxies = api.proxySupport?.()
-        ? { proxyEvery: PROXY_EVERY, proxyDir: proxyDir(swingId).uri, proxyRange: proxyWindow(first, pose.video?.frameCount ?? 0) }
+        ? { proxyEvery: proxyEveryFor(api), proxyDir: proxyDir(swingId).uri, proxyRange: proxyWindow(first, pose.video?.frameCount ?? 0) }
         : {};
       // apiVersion 4: also ask for the learned club detector; an older binary is not asked
       const club = api.clubModelSupport?.() ? { clubModel: true } : {};
@@ -136,6 +144,8 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
         ball: pass2Ball(saved?.ball?.final, pose.ball),
         expectedShaftPx: expectedShaftPx(first.scale.pxPerCm),
         addressSearch: first.addressSearch ?? null,
+        // apiVersion 6 times the address track with it (older binaries ignore it)
+        ...pass2Fps(first),
         outDir: dir.uri,
         ...proxies,
         ...club,

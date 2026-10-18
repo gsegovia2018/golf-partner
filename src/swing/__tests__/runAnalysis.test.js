@@ -15,7 +15,7 @@ jest.mock('../frames', () => ({
   getStill: jest.fn(() => 'file:///doc/swings/s1/frames/556.jpg'),
   proxyDir: jest.fn(() => ({ uri: 'file:///doc/swings/s1/proxy' })),
   proxyWindow: jest.requireActual('../frames').proxyWindow,
-  PROXY_EVERY: 4,
+  proxyEveryFor: jest.requireActual('../frames').proxyEveryFor,
 }));
 jest.mock('../../store/swingStore', () => ({
   getSwing: jest.fn(),
@@ -137,6 +137,17 @@ describe('runAnalysis', () => {
     await runAnalysis('s1');
     expect(v2.extractCheckpoints.mock.calls[0][1]).not.toHaveProperty('proxyEvery');
     expect(v2.extractCheckpoints.mock.calls[0][1]).not.toHaveProperty('proxyDir');
+  });
+
+  test('apiVersion 6: every 2nd frame as a proxy, and the frame step\'s time base for the address track', async () => {
+    const v6 = makeApi({ proxySupport: () => true, scrubSupport: () => true });
+    frames.nativeApi.mockReturnValue(v6);
+    await runAnalysis('s1');
+    const opts = v6.extractCheckpoints.mock.calls[0][1];
+    expect(opts.proxyEvery).toBe(2);
+    // container fps × slow-mo factor, the phases' own time base (an older binary ignores it)
+    const first = store.saveAnalysis.mock.calls[0][1];
+    expect(opts.captureFps).toBeCloseTo(first.fps.container * first.fps.factor, 6);
   });
 
   test('apiVersion 4 binary is asked for the club model and its club block is stored; an older one is not asked', async () => {

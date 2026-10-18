@@ -1150,50 +1150,193 @@ def choose_factor_d15(pose: dict, info: dict, handed: str, grip_k: float) -> tup
     return f, S, P, src
 
 
-def clubhead_onset(path: Path, ball: dict, px_cm: float, run: tuple[int, int], latest: int,
-                   static: tuple[int, int], fps: float) -> tuple[int | None, dict]:
-    """P1 address from the image: the last frame before the clubhead starts moving back.
+# P1 address (apiVersion 6): the clubhead's own track. The old rule (motion energy in a patch around
+# the ball, clubhead_onset up to apiVersion 5) missed the soled head (it rests in front of the ball,
+# mostly outside the patch), the takeaway's slow creep and heads that move after the hands; the new
+# one follows the head itself with a masked template and reads its speed in cm/s.
+ADDR_PRE_S = 0.5          # the head track starts this long before the hands' still run
+ADDR_STRIP_D = 6.0        # strip around the ball: ± this many ball diameters
+ADDR_SAMPLES = 6          # detector frames, evenly spread over [start, leadArm), to find the resting head
+ADDR_HEAD_MIN = 0.25      # detector score for a head proposal
+ADDR_HEAD_CM = 30.0       # a head farther than this from the ball is not soled at it
+ADDR_TPL_CM = (8.0, 6.0)  # template around the head (w × h), cm
+ADDR_BALL_MASK_D = 0.6    # template pixels within this many diameters of the ball centre are ignored
+ADDR_SEARCH_D = 1.5       # template search: ± this many ball diameters
+ADDR_LAG_S = 0.04         # speed = displacement over this lag
+ADDR_HOLD_S = 0.1         # a resting head holds still at least this long
+ADDR_MOVING_CMS = 10.0    # "moving": faster than this (the creep of a takeaway counts; jitter doesn't)
+ADDR_FAST = 3.0           # the head has gone: tracking lost, or ADDR_FAST × the moving speed
+ADDR_LOST_NCC = 0.5
 
-    At address the clubhead is soled against the ball, so motion of the clubhead shows up as
-    change in a patch of ±1.5 ball diameters around the ball. Signal = mean absolute frame-to-
-    frame difference of that patch, 3-frame median filtered (kills single-frame compression
-    pops). Noise ceiling = the max of the same signal while the ball sits alone (lead arm ->
-    top: club in the air, scene static) — measured on this clip. Onset = start of the LAST run of
-    >= ONSET_SUSTAIN_S above the ceiling that starts inside the hands' still run (waggles come
-    earlier); address = onset − 1.
-    """
-    half = max(3, int(round(1.5 * BALL_CM * px_cm)))
-    bx, by = int(round(ball["x"])), int(round(ball["y"]))
-    want = set(range(run[0] - 1, run[1] + 1)) | set(range(static[0] - 1, static[1] + 1))
+
+def addr_strip_geom(px_cm: float) -> tuple[int, int]:
+    """(half, step) of the address strip in frame px: ± ADDR_STRIP_D ball diameters around the
+    ball, point-sampled every step px so a diameter spans >= 8 samples."""
+    d = BALL_CM * px_cm
+    return max(4, int(round(ADDR_STRIP_D * d))), max(1, int(d // 8))
+
+
+def addr_strip_rect(ball_xy: tuple[float, float], px_cm: float, w: int, h: int) -> tuple[int, int, int, int, int]:
+    """(x0, y0, x1, y1, step): the strip rectangle in frame px, clipped to the frame."""
+    half, step = addr_strip_geom(px_cm)
+    bx, by = int(round(ball_xy[0])), int(round(ball_xy[1]))
+    return max(0, bx - half), max(0, by - half), min(w, bx + half + 1), min(h, by + half + 1), step
+
+
+def addr_samples(lo: int, lead_arm: int) -> list[int]:
+    """The detector frames for the resting head: ADDR_SAMPLES evenly over [lo, leadArm)."""
+    n = ADDR_SAMPLES
+    return sorted({lo + int(math.floor(i * (lead_arm - lo) / n + 0.5)) for i in range(n)})
+
+
+def resting_head(heads: dict[int, tuple[float, float, float] | None], ball_xy, px_cm: float):
+    """(frame, x, y) of the earliest sample whose best head (score >= ADDR_HEAD_MIN) is within
+    ADDR_HEAD_CM of the ball, frame px; None without one."""
+    for f in sorted(heads):
+        h = heads[f]
+        if h and h[2] >= ADDR_HEAD_MIN and math.hypot(h[0] - ball_xy[0], h[1] - ball_xy[1]) / px_cm <= ADDR_HEAD_CM:
+            return f, h[0], h[1]
+    return None
+
+
+def fallback_head(ball_xy, hands_xy, px_cm: float) -> tuple[float, float]:
+    """Where the head rests without a detector: half a diameter towards the golfer and 0.8 below
+    the ball (toward the camera), the owner's six down-the-line swings (all within 1.3 D)."""
+    d = BALL_CM * px_cm
+    sgn = 1.0 if ball_xy[0] >= hands_xy[0] else -1.0
+    return ball_xy[0] - 0.5 * sgn * d, ball_xy[1] + 0.8 * d
+
+
+def masked_ncc(win: np.ndarray, tpl: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Zero-mean normalised cross-correlation of tpl over every offset of win, mask pixels only
+    (cv2.TM_CCOEFF_NORMED with a mask); -1 where either side is flat."""
+    th, tw = tpl.shape
+    t = tpl[mask].astype(np.float64)
+    t = t - t.mean()
+    tn = math.sqrt(float((t * t).sum()))
+    n, m = win.shape[0] - th + 1, win.shape[1] - tw + 1
+    r = np.full((n, m), -1.0)
+    for dy in range(n):
+        for dx in range(m):
+            q = win[dy:dy + th, dx:dx + tw][mask].astype(np.float64)
+            q = q - q.mean()
+            qn = math.sqrt(float((q * q).sum()))
+            if qn > 0 and tn > 0:
+                r[dy, dx] = float((q * t).sum()) / (qn * tn)
+    return r
+
+
+def _parabola(a: float, b: float, c: float) -> float:
+    d = a - 2 * c + b
+    return 0.0 if d >= 0 else 0.5 * (a - b) / d
+
+
+def head_track(strips: dict[int, np.ndarray], step: int, origin: tuple[int, int], ref: int,
+               head_xy, ball_xy, px_cm: float) -> dict[int, tuple[float, float, float, bool]]:
+    """Per frame: (dx, dy) cm of the head relative to where it is at `ref`, the match score, and
+    whether the match sits on the search border. strips = frame -> grey strip (frame px every
+    `step`, top-left at `origin`); head_xy / ball_xy in frame px. {} when the template does not fit."""
+    pps = px_cm / step
+    d = BALL_CM * pps
+    x = int(round((head_xy[0] - origin[0]) / step))
+    y = int(round((head_xy[1] - origin[1]) / step))
+    tw = max(2, int(round(ADDR_TPL_CM[0] / 2 * pps)))
+    th = max(2, int(round(ADDR_TPL_CM[1] / 2 * pps)))
+    s = max(2, int(round(ADDR_SEARCH_D * d)))
+    g = strips.get(ref)
+    if g is None or y - th - s < 0 or x - tw - s < 0 or y + th + s >= g.shape[0] or x + tw + s >= g.shape[1]:
+        return {}
+    tpl = g[y - th:y + th + 1, x - tw:x + tw + 1]
+    yy, xx = np.mgrid[y - th:y + th + 1, x - tw:x + tw + 1]
+    bx, by = (ball_xy[0] - origin[0]) / step, (ball_xy[1] - origin[1]) / step
+    mask = (xx - bx) ** 2 + (yy - by) ** 2 > (ADDR_BALL_MASK_D * d) ** 2
+    if mask.sum() < 4:
+        return {}
+    out = {}
+    for f in sorted(strips):
+        win = strips[f][y - th - s:y + th + s + 1, x - tw - s:x + tw + s + 1]
+        if win.shape != (2 * (th + s) + 1, 2 * (tw + s) + 1):
+            continue
+        r = masked_ncc(win, tpl, mask)
+        my, mx = np.unravel_index(int(np.argmax(r)), r.shape)
+        v = float(r[my, mx])
+        ox = _parabola(r[my, mx - 1], r[my, mx + 1], v) if 0 < mx < r.shape[1] - 1 else 0.0
+        oy = _parabola(r[my - 1, mx], r[my + 1, mx], v) if 0 < my < r.shape[0] - 1 else 0.0
+        edge = mx in (0, r.shape[1] - 1) or my in (0, r.shape[0] - 1)
+        out[f] = ((mx + ox - s) / pps, (my + oy - s) / pps, v, edge)
+    return out
+
+
+def address_from_track(track: dict, ref: int, lead_arm: int, fps: float, clip_start: bool) -> int | None:
+    """The last frame before the clubhead starts moving back (the creep counts as moving).
+
+    speed(f) = head displacement over ADDR_LAG_S, cm/s. The head has gone at the first frame after
+    `ref` where tracking is lost or the speed passes ADDR_FAST × ADDR_MOVING_CMS (else leadArm).
+    Walking back from there through the moving frames (> ADDR_MOVING_CMS), the address is the end
+    of the first stretch of ADDR_HOLD_S not-moving frames: a pause inside the takeaway is shorter.
+    Reaching the first tracked frame: that frame when the track starts at the clip's start
+    (`clip_start`, the clip begins mid-creep), else None."""
+    lag = max(1, int(round(ADDR_LAG_S * fps)))
+    hold = max(2, int(round(ADDR_HOLD_S * fps)))
+
+    def speed(f):
+        a, b = track.get(f), track.get(f - lag)
+        if a is None or b is None:
+            return None
+        return math.hypot(a[0] - b[0], a[1] - b[1]) / (lag / fps)
+
+    gone = lead_arm
+    for f in sorted(track):
+        v = speed(f)
+        if f > ref and (track[f][2] < ADDR_LOST_NCC or track[f][3] or (v is not None and v > ADDR_FAST * ADDR_MOVING_CMS)):
+            gone = f
+            break
+    moving = {}
+    for f in track:
+        v = speed(f)
+        if f < gone and v is not None:
+            moving[f] = v > ADDR_MOVING_CMS
+    if not moving:
+        return None
+    first = min(moving)
+    f = gone - 1
+    while True:
+        while f >= first and moving.get(f, True):
+            f -= 1
+        if f - hold < first:
+            return first if clip_start else None
+        if all(not moving.get(j, True) for j in range(f - hold, f + 1)):
+            return f
+        f -= 1
+
+
+def clubhead_address(path: Path, ball: dict, hands_xy, px_cm: float, run_start: int, lead_arm: int,
+                     fps: float, heads: dict | None = None) -> tuple[int | None, dict]:
+    """P1 from the video: reads the address strips over [run_start − ADDR_PRE_S, leadArm], finds the
+    resting head (detector `heads` = frame -> (x, y, score) at addr_samples(), else the fallback
+    position) and runs head_track + address_from_track."""
+    lo = max(0, run_start - int(round(ADDR_PRE_S * fps)))
     cap = cv2.VideoCapture(str(path))
-    cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, min(want)))
-    f, patches = max(0, min(want)), {}
-    while f <= max(want):
+    w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    bxy = (ball["x"], ball["y"])
+    x0, y0, x1, y1, step = addr_strip_rect(bxy, px_cm, w, h)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, lo)
+    strips, f = {}, lo
+    while f <= lead_arm:
         ok, frame = cap.read()
         if not ok:
             break
-        if f in want:
-            g = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).astype(np.float32)
-            patches[f] = g[max(0, by - half):by + half + 1, max(0, bx - half):bx + half + 1]
+        strips[f] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)[y0:y1:step, x0:x1:step]
         f += 1
     cap.release()
-
-    def sig(a, b):
-        fr = [x for x in range(a, b + 1) if x in patches and x - 1 in patches]
-        fd = np.array([np.mean(np.abs(patches[x] - patches[x - 1])) for x in fr])
-        m3 = np.array([np.median(fd[max(0, i - 1):i + 2]) for i in range(len(fd))])
-        return np.array(fr), m3
-    _, ms = sig(static[0], static[1])
-    fr, m3 = sig(run[0], run[1])
-    info = {"patchHalfPx": half, "noiseCeiling": None, "runs": []}
-    if not len(ms) or not len(fr):
+    rest = resting_head(heads, bxy, px_cm) if heads else None
+    ref, hx, hy = rest if rest else (lo, *fallback_head(bxy, hands_xy, px_cm))
+    track = head_track(strips, step, (x0, y0), ref, (hx, hy), bxy, px_cm)
+    info = {"ref": ref, "head": [round(hx, 1), round(hy, 1)], "headSource": "model" if rest else "fallback",
+            "strip": [x0, y0, x1, y1, step], "from": lo}
+    if not track:
         return None, info
-    ceil_ = float(ms.max())
-    info["noiseCeiling"] = round(ceil_, 2)
-    need = max(2, int(math.ceil(ONSET_SUSTAIN_S * fps)))
-    starts = [fr[a] for a, b in runs(m3 > ceil_) if b - a + 1 >= need and fr[a] <= latest]
-    info["runs"] = [int(s) for s in starts]
-    return (int(starts[-1]) - 1 if starts else None), info
+    return address_from_track(track, ref, lead_arm, fps, clip_start=lo == 0), info
 
 
 # =============================================================================================
@@ -1290,22 +1433,91 @@ def detect_ball(grays: list[np.ndarray], poses: list[np.ndarray], hands: np.ndar
             "nFrames": len(found)}
 
 
-def ball_gone_frame(patches: dict[int, np.ndarray], quiet_frames: list[int], top: int) -> int | None:
-    """§4.3 impact refinement: first frame after top whose ball-patch difference to the previous
-    frame exceeds 4x the quiet-window noise. PLAN-GAPs:
-    - noise = the MAX frame-to-frame patch difference over the address quiet window (floor 0.5
-      grey levels). Re-encoded clips (WhatsApp) have keyframe "pops" every ~10-30 frames that are
-      ~8x the mean difference; a mean-based noise fires on them long before impact.
-    - patch = the ball's own footprint (1 diameter square, >= 5 px), so the clubhead arriving
-      next to the ball doesn't count."""
-    def d(a, b):
-        return float(np.mean(np.abs(patches[a] - patches[b])))
-    q = [d(f, f - 1) for f in quiet_frames if f in patches and f - 1 in patches]
-    if not q:
+# Impact (apiVersion 6): the ball still sitting where it was. The old rule (the first big frame
+# difference in the ball's footprint after the top) fired when the shaft swept over the ball, 2-7
+# frames early. Now the ball is matched against its own picture.
+GONE_TPL_D = 0.7      # template half size, ball diameters (the ball and a ring of ground)
+GONE_SEARCH_D = 0.4   # the match may shift this much (the ball's spot, not its exact pixel)
+GONE_MATCH = 0.7      # "still there": NCC at least this ...
+GONE_CONTRAST = 0.7   # ... on a patch with at least this share of the template's contrast
+GONE_FOR_S = 0.1      # gone = absent for this long without coming back
+
+
+def ball_recentre(med: np.ndarray, x: int, y: int, d: float) -> tuple[int, int]:
+    """The ball's centre in a static (median) grey image: the brightest 3x3 mean within ±d of
+    (x, y), then the centroid of the pixels within ±0.7 d of it that are at least half way from
+    the ground (median of ±2 d) to that window's brightest pixel."""
+    h = max(1, int(round(d)))
+    r = max(1, int(round(0.7 * d)))
+    best, cx, cy = -1.0, x, y
+    for yy in range(y - h, y + h + 1):
+        for xx in range(x - h, x + h + 1):
+            v = float(med[yy - 1:yy + 2, xx - 1:xx + 2].sum())
+            if v > best:
+                best, cx, cy = v, xx, yy
+    win = med[cy - r:cy + r + 1, cx - r:cx + r + 1]
+    ground = float(np.median(med[y - 2 * h:y + 2 * h + 1, x - 2 * h:x + 2 * h + 1]))
+    lvl = (float(win.max()) + ground) / 2
+    ys, xs = np.nonzero(win >= lvl)
+    return int(math.floor(cx - r + xs.mean() + 0.5)), int(math.floor(cy - r + ys.mean() + 0.5))
+
+
+def ball_match(win: np.ndarray, tpl: np.ndarray) -> float:
+    """The best NCC of tpl over win among offsets whose patch keeps >= GONE_CONTRAST of the
+    template's contrast (an empty patch of grass can correlate, it can't be as contrasted); -2
+    when no offset qualifies."""
+    th, tw = tpl.shape
+    t = tpl.astype(np.float64) - tpl.mean()
+    tn = math.sqrt(float((t * t).sum()))
+    best = -2.0
+    if tn == 0:
+        return best
+    for dy in range(win.shape[0] - th + 1):
+        for dx in range(win.shape[1] - tw + 1):
+            q = win[dy:dy + th, dx:dx + tw].astype(np.float64)
+            q = q - q.mean()
+            qn = math.sqrt(float((q * q).sum()))
+            if qn == 0 or qn < GONE_CONTRAST * tn:
+                continue
+            best = max(best, float((q * t).sum()) / (qn * tn))
+    return best
+
+
+def ball_gone_frame(grays: dict[int, np.ndarray], ball_xy: tuple[float, float], d: float,
+                    tpl_frames: range, after: int, fps: float) -> int | None:
+    """§4.3 impact refinement: the first frame after `after` (the hands' top) from which the ball
+    is absent for GONE_FOR_S; impact = that − 1.
+
+    grays = frame -> working grey image (or any crop of it, same origin for all); ball_xy and the
+    ball diameter d in its px. Template = the per-pixel median over tpl_frames (lead arm -> top:
+    the club is in the air, the ball sits alone) of the UPPER half of a ±GONE_TPL_D patch around the
+    re-centred ball, its centre row included (the club arrives from below, so the lower half is
+    covered first). Present = ball_match >= GONE_MATCH within ±GONE_SEARCH_D. A brief absence
+    (the hosel passing in front) does not count; neither does a match that comes back."""
+    fs = [f for f in tpl_frames if f in grays]
+    if not fs:
         return None
-    noise = max(float(np.max(q)), 0.5)
-    for f in sorted(patches):
-        if f > top and f - 1 in patches and d(f, f - 1) > 4 * noise:
+    r = max(2, int(round(GONE_TPL_D * d)))
+    s = max(1, int(round(GONE_SEARCH_D * d)))
+    h = max(1, int(round(d)))
+    x, y = int(round(ball_xy[0])), int(round(ball_xy[1]))
+    m = 2 * h + r + s + 2
+    g0 = grays[fs[0]]
+    if y - m < 0 or x - m < 0 or y + m >= g0.shape[0] or x + m >= g0.shape[1]:
+        return None
+    med = np.median(np.stack([grays[f][y - m:y + m + 1, x - m:x + m + 1].astype(np.float64) for f in fs]), 0)
+    cx, cy = ball_recentre(med, m, m, d)
+    tpl = med[cy - r:cy + 1, cx - r:cx + r + 1]
+    X, Y = x - m + cx, y - m + cy
+    n = max(2, int(round(GONE_FOR_S * fps)))
+    later = sorted(f for f in grays if f > after)
+    present = {}
+    for f in later:
+        win = grays[f][Y - r - s:Y + s + 1, X - r - s:X + r + s + 1]
+        present[f] = ball_match(win, tpl) >= GONE_MATCH
+    for f in later:
+        run = [f + k for k in range(n)]
+        if all(k in present and not present[k] for k in run):
             return f
     return None
 
@@ -1460,11 +1672,9 @@ def pass2(path: Path, info: dict, S: dict, P: dict, scale: dict, out_dir: Path, 
     # ---- ballGoneFrame
     bgf = None
     if ball:
-        half = max(2, int(round(0.5 * ball_d)))
-        bx, by = int(round(ball["x"] * ws)), int(round(ball["y"] * ws))
-        patches = {fr: g[by - half:by + half + 1, bx - half:bx + half + 1]
-                   for fr, g in grays.items() if fr >= quiet_frames[0] - 1}
-        bgf = ball_gone_frame(patches, quiet_frames, P["top"])
+        bgf = ball_gone_frame({fr: g for fr, g in grays.items() if fr >= quiet_frames[0]},
+                              (ball["x"] * ws, ball["y"] * ws), ball_d,
+                              range(quiet_frames[0], quiet_frames[-1] + 1), P["top"], fps)
 
     # ---- shaft tracking
     t1 = time.perf_counter()
@@ -1649,12 +1859,12 @@ def main() -> None:
     onset_info = None
     if d15:
         P["takeawaySource"] = P["shaftDownSource"] = "grip-at-trail-hip"
-        # P1 address: clubhead onset in the ball patch (image), else the pose motion start
+        # P1 address: the clubhead's own track (image), else the pose motion start. The lab runs
+        # no detector here: the head starts at its fallback position (eval_address_impact.py runs
+        # the app's detector on addr_samples()).
         if R["ball"]:
-            hold = P["_d"]["hold_w"]
-            onset, onset_info = clubhead_onset(path, R["ball"], scale["pxPerCm"],
-                                               (P["addressRun"][0], P["motionStart"] + hold), P["motionStart"],
-                                               (P["leadArm"], P["top"]), S["effFps"])
+            onset, onset_info = clubhead_address(path, R["ball"], R["handsAt"](P["address"]), scale["pxPerCm"],
+                                                 P["addressRun"][0], P["leadArm"], S["effFps"])
             if onset is not None:
                 P["address"], P["conf"]["address"], P["addressSource"] = onset, 0.8, "clubhead-onset"
         P.setdefault("addressSource", "pose-motionStart")
@@ -1728,7 +1938,7 @@ def main() -> None:
             "impactSource": P["impactSource"], "takeawaySource": P["takeawaySource"],
             "shaftDownSource": P["shaftDownSource"], "trailArmCrosses": P["trailArmCrosses"],
             "expectedShaftPx": round(R["expectedShaftPx"], 1), "notes": P["notes"],
-            **({"d15": {"gripK": a.grip_k, "addressSource": P["addressSource"], "clubheadOnset": onset_info,
+            **({"d15": {"gripK": a.grip_k, "addressSource": P["addressSource"], "clubheadAddress": onset_info,
                         "handsTop": P["handsTop"], "sigmaGripPx": round(S["sigmaGrip"], 2),
                         "sigmaHeadPx": round(S["sigmaHead"], 2), "armPx": round(S["armPx"], 1),
                         "levelBandPx": round(P["_d"]["band"], 1), "holdFrames": P["_d"]["hold_w"],
