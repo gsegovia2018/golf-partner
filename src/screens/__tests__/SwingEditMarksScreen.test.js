@@ -165,12 +165,12 @@ beforeEach(() => {
 });
 
 describe('the layout (D28: frame first, then marks)', () => {
-  test('one slim top row: close, the six pictogram chips with status dots, the count; the old strip and tiles are gone', async () => {
+  test('one slim top row: close, the seven pictogram chips with status dots, the count; the old strip and tiles are gone', async () => {
     const u = await open({ mode: 'pass', marks: PARTIAL });
-    ['address', 'leadArm', 'top', 'shaftDown', 'impact', 'shaftThrough'].forEach((k) => expect(u.getByTestId(`chapter-${k}`)).toBeTruthy());
-    ['takeaway', 'transition', 'trailArm', 'finish'].forEach((k) => expect(u.queryByTestId(`chapter-${k}`)).toBeNull());
+    ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(u.getByTestId(`chapter-${k}`)).toBeTruthy());
+    ['transition', 'shaftThrough', 'finish'].forEach((k) => expect(u.queryByTestId(`chapter-${k}`)).toBeNull());
     expect(u.getByTestId('chapter-address').props.accessibilityState.selected).toBe(true);
-    expect(within(u.getByTestId('mark-count')).getByText('1/6')).toBeTruthy();
+    expect(within(u.getByTestId('mark-count')).getByText('1/7')).toBeTruthy();
     expect(within(u.getByTestId('mark-count')).getByText(M.tally(0, 0))).toBeTruthy();
     expect(u.queryByTestId('mark-fine-strip')).toBeNull();
     expect(u.queryByTestId('mark-undo')).toBeNull();
@@ -181,7 +181,7 @@ describe('the layout (D28: frame first, then marks)', () => {
   });
 
   test('step 1: the cue INSIDE the video (pictogram, FIRST/LAST FRAME, stop phrase, watch), the track, the zoomed row ±4, "Proposed frame looks right"', async () => {
-    const u = await open({ mode: 'pass', marks: { ...PARTIAL, pass: { state: 'partial', skipped: ['address', 'leadArm'] } } });
+    const u = await open({ mode: 'pass', marks: { ...PARTIAL, pass: { state: 'partial', skipped: ['address', 'takeaway', 'leadArm'] } } });
     expect(step(u)).toBe(1);
     const video = u.getByTestId('mark-video');
     const cue = within(video).getByTestId('mark-stop-line');
@@ -202,9 +202,9 @@ describe('the layout (D28: frame first, then marks)', () => {
   });
 
   test('"More" expands the full cue over the video; a tap on it closes it', async () => {
-    const u = await open({ mode: 'pass', marks: { ...PARTIAL, pass: { state: 'partial', skipped: ['address', 'leadArm', 'top', 'shaftDown', 'impact'] } } });
+    const u = await open({ mode: 'pass', marks: { ...PARTIAL, pass: { state: 'partial', skipped: ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact'] } } });
     await press(u.getByTestId('mark-stop-line'));
-    expect(within(u.getByTestId('mark-video')).getByText(/often points away from the camera/)).toBeTruthy();
+    expect(within(u.getByTestId('mark-video')).getByText(/first frame your right arm is level in the follow-through/)).toBeTruthy();
     await press(u.getByTestId('mark-cue'));
     expect(u.queryByTestId('mark-cue')).toBeNull();
     expect(u.getByTestId('mark-stop-line')).toBeTruthy();
@@ -283,7 +283,7 @@ describe('step 1 → step 2 → next (the pass)', () => {
     const addr = savedMarks().frames.find((x) => x.checkpoint === 'address');
     expect(addr).toMatchObject({ confirmed: true, corrected: false, confirmedFrame: true });
     expect(savedMarks().ball.confirmed).toBe(true);
-    expect(u.getByTestId('chapter-leadArm').props.accessibilityState.selected).toBe(true);
+    expect(u.getByTestId('chapter-takeaway').props.accessibilityState.selected).toBe(true);
     expect(step(u)).toBe(1);
     expect(within(u.getByTestId('mark-count')).getByText(M.tally(1, 0))).toBeTruthy();
     await press(u.getByTestId('mark-use-frame'));
@@ -308,14 +308,14 @@ describe('step 1 → step 2 → next (the pass)', () => {
 
   test('Skip (step 1) records the skip and moves on; the finish sheet counts and explains; See results', async () => {
     const u = await open({ mode: 'pass', marks: PARTIAL });
-    await walk(u, 2); // address, lead arm (no clubhead)
+    await walk(u, 3); // address, takeaway, lead arm (no clubhead)
     expect(u.getByTestId('chapter-top').props.accessibilityState.selected).toBe(true);
     await press(u.getByTestId('mark-skip'));
     expect(savedMarks().pass.skipped).toEqual(['top']);
     expect(savedMarks().frames.find((x) => x.checkpoint === 'top')).toBeUndefined();
-    await walk(u, 3); // shaft down, impact, shaft through
+    await walk(u, 3); // shaft down, impact, trail arm
     const sheet = await u.findByTestId('mark-finish-sheet');
-    expect(within(sheet).getByText(M.finishTitle(5, 6))).toBeTruthy();
+    expect(within(sheet).getByText(M.finishTitle(6, 7))).toBeTruthy();
     expect(within(sheet).getByText(M.skippedLine(['Top']))).toBeTruthy();
     expect(within(sheet).getByText(/No clubhead at .*Lead arm/)).toBeTruthy();
     expect(within(u.getByTestId('finish-row-top')).getByText(M.chip.skipped)).toBeTruthy();
@@ -336,7 +336,7 @@ describe('step 1 → step 2 → next (the pass)', () => {
       fireEvent.press(u.getByTestId('mark-primary'));
       fireEvent.press(u.getByTestId('mark-primary'));
     });
-    expect(u.getByTestId('chapter-leadArm').props.accessibilityState.selected).toBe(true);
+    expect(u.getByTestId('chapter-takeaway').props.accessibilityState.selected).toBe(true);
     expect(step(u)).toBe(1);
   });
 
@@ -345,13 +345,13 @@ describe('step 1 → step 2 → next (the pass)', () => {
     let done;
     store.saveMarks.mockImplementationOnce(() => new Promise((r) => { done = r; }));
     await walk(u, 1); // address
-    expect(u.getByTestId('chapter-leadArm').props.accessibilityState.selected).toBe(true); // before the save has finished
+    expect(u.getByTestId('chapter-takeaway').props.accessibilityState.selected).toBe(true); // before the save has finished
     store.saveMarks.mockRejectedValueOnce(new Error('disk'));
-    await press(u.getByTestId('mark-skip')); // lead arm, queued behind the first save, and failing
+    await press(u.getByTestId('mark-skip')); // takeaway, queued behind the first save, and failing
     await act(async () => { done(); });
     expect(u.getByText(M.saveFailed)).toBeTruthy();
-    await press(u.getByTestId('mark-skip')); // top: still saved
-    expect(savedMarks().pass.skipped).toEqual(['leadArm', 'top']);
+    await press(u.getByTestId('mark-skip')); // lead arm: still saved
+    expect(savedMarks().pass.skipped).toEqual(['takeaway', 'leadArm']);
     store.saveMarks.mockRejectedValueOnce(new Error('disk'));
     await press(u.getByTestId('mark-close'));
     const [title, , buttons] = Alert.alert.mock.calls[Alert.alert.mock.calls.length - 1];
@@ -362,7 +362,7 @@ describe('step 1 → step 2 → next (the pass)', () => {
 
   test('a finish-sheet row reopens that position (a confirmed one at step 2); the next step goes back to the sheet', async () => {
     const st = (keys) => ({ ...FRESH, pass: { state: 'partial', skipped: keys } });
-    const u = await open({ mode: 'pass', marks: st(['address', 'leadArm', 'top', 'shaftDown', 'impact', 'shaftThrough']), at: 'mark-finish-sheet' });
+    const u = await open({ mode: 'pass', marks: st(['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm']), at: 'mark-finish-sheet' });
     await press(u.getByTestId('finish-row-impact'));
     expect(step(u)).toBe(1); // skipped: the frame first
     await walk(u, 1);
@@ -373,7 +373,7 @@ describe('step 1 → step 2 → next (the pass)', () => {
   });
 
   test('"Finish frame looks wrong? Fix it" opens P10 at step 1; the chosen frame is saved and the sheet returns', async () => {
-    const u = await open({ mode: 'pass', marks: { ...FRESH, pass: { state: 'partial', skipped: ['address', 'leadArm', 'top', 'shaftDown', 'impact', 'shaftThrough'] } }, at: 'mark-finish-sheet' });
+    const u = await open({ mode: 'pass', marks: { ...FRESH, pass: { state: 'partial', skipped: ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'] } }, at: 'mark-finish-sheet' });
     await press(u.getByTestId('mark-fix-finish'));
     expect(step(u)).toBe(1);
     expect(within(u.getByTestId('mark-count')).getByText(M.auto)).toBeTruthy();
@@ -389,13 +389,13 @@ describe('step 1 → step 2 → next (the pass)', () => {
   test('resume: a partial pass opens at the first position to do, with the counts so far', async () => {
     const done = await (async () => {
       const u = await open({ mode: 'pass', marks: PARTIAL });
-      await walk(u, 2);
+      await walk(u, 3);
       return savedMarks();
     })();
     const again = await open({ mode: 'pass', marks: { ...done, pass: { state: 'partial', skipped: ['top'] } } });
     expect(again.getByTestId('chapter-shaftDown').props.accessibilityState.selected).toBe(true);
-    expect(within(again.getByTestId('mark-count')).getByText('4/6')).toBeTruthy();
-    expect(within(again.getByTestId('mark-count')).getByText(M.tally(2, 1))).toBeTruthy();
+    expect(within(again.getByTestId('mark-count')).getByText('5/7')).toBeTruthy();
+    expect(within(again.getByTestId('mark-count')).getByText(M.tally(3, 1))).toBeTruthy();
   });
 
   test('marks from before the mark-first flow resume too', async () => {
@@ -414,7 +414,7 @@ describe('step 1 → step 2 → next (the pass)', () => {
     expect(u.getByTestId('mark-discard-sheet')).toBeTruthy();
     await press(u.getByLabelText(M.confirmLeave));
     expect(savedMarks().pass.state).toBe('partial');
-    expect(savedMarks().frames.find((x) => x.checkpoint === 'leadArm').head.confirmed).toBe(true);
+    expect(savedMarks().frames.find((x) => x.checkpoint === 'takeaway').head.confirmed).toBe(true);
     expect(u.navigation.goBack).toHaveBeenCalled();
   });
 });
@@ -460,8 +460,8 @@ describe('changing the frame resets that position\'s marks (D28)', () => {
     const saved = savedMarks();
     first.unmount();
     const u = await open({ mode: 'pass', marks: saved });
-    const f = FIRST.checkpoints.leadArm.i;
-    expect(u.getByTestId('chapter-leadArm').props.accessibilityState.selected).toBe(true);
+    const f = FIRST.checkpoints.takeaway.i;
+    expect(u.getByTestId('chapter-takeaway').props.accessibilityState.selected).toBe(true);
     expect(step(u)).toBe(1);
     await press(u.getByTestId(`zoom-${f + 1}`));
     expect(u.getByLabelText(M.primary.useReset(f + 1))).toBeTruthy();
@@ -724,7 +724,7 @@ describe('step 2: placing the marks', () => {
     expect(step(u)).toBe(2);
     expect(u.getByTestId('mark-pospill').props.accessibilityLabel).toBe(M.posPill('P10', 'Finish', FIRST.checkpoints.finish.i, false));
     expect(within(u.getByTestId('mark-count')).getByText(M.auto)).toBeTruthy();
-    ['address', 'leadArm', 'top', 'shaftDown', 'impact', 'shaftThrough'].forEach((k) => expect(u.getByTestId(`chapter-${k}`).props.accessibilityState.selected).toBe(false));
+    ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(u.getByTestId(`chapter-${k}`).props.accessibilityState.selected).toBe(false));
     await press(u.getByTestId('mark-change-frame'));
     expect(within(u.getByTestId('mark-stop-line')).getByText(M.stopKind.first)).toBeTruthy();
   });

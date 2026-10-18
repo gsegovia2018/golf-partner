@@ -73,8 +73,8 @@ describe('runAnalysis', () => {
     const res = await runAnalysis('s1', { onProgress: (p) => stages.push(p.stage), onPartial: partial });
 
     expect(res.pass2).toBe('done');
-    expect(res.analysis.main.fault).toBe('top_position'); // D21: earliest significant phase (the address is good)
-    expect(res.analysis.main.consequences).toContain('early_extension');
+    expect(res.analysis.main.fault).toBe('early_extension'); // checks v2: impact is tier 1 and red
+    expect(res.analysis.schema).toBe('swing-analysis/2');
     expect([...new Set(stages)]).toEqual(['reading', 'pose', 'planes']);
     expect(api.analyzePose).toHaveBeenCalledWith('file:///doc/swings/s1/video.mp4', { model: 'full', handedness: 'right', heightCm: 176 });
     // The result opens after the first save, before pass 2 finishes.
@@ -111,13 +111,14 @@ describe('runAnalysis', () => {
     expect(poseOptions(right, undefined)).not.toHaveProperty('captureFps');
   });
 
-  test('pass 2 asks native for the thirteen checkpoint frames with their grip estimate', async () => {
+  test('pass 2 asks native for the seven positions and the finish (checks v2), with their grip estimate', async () => {
     const api = makeApi();
     frames.nativeApi.mockReturnValue(api);
     await runAnalysis('s1');
     const [, opts] = api.extractCheckpoints.mock.calls[0];
-    expect(opts.frames).toHaveLength(13);
-    expect(opts.frames.map((f) => f.key)).toEqual(expect.arrayContaining(['address', 'impact', 'shaftThrough', 'preImpact', 'postImpact', 'lateBackswing']));
+    expect(opts.frames.map((f) => f.key)).toEqual(['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm', 'finish']);
+    // P5, P8 and the internal frames are no longer asked for
+    ['transition', 'shaftThrough', 'lateBackswing', 'preImpact', 'postImpact'].forEach((k) => expect(opts.frames.map((f) => f.key)).not.toContain(k));
     opts.frames.forEach((f) => { expect(f.neighbours).toBe(2); expect(f.hands).toHaveLength(2); });
     expect(opts.expectedShaftPx).toBeGreaterThan(100);
     expect(opts.ball).toEqual(expect.objectContaining({ x: ball.x }));

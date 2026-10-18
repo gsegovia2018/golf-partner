@@ -1,8 +1,9 @@
-// Re-run analyze() for a stored swing with another club (D19). No native call: the stored
-// pose.json (with its pass-2 clubhead seeds), probe.json and marks.json are all it needs, and
-// the club only changes which THRESHOLDS column the checks read. Pure.
+// Re-run analyze() for a stored swing with another club (D19), or to bring an older analysis to
+// the current schema (swing checks v2, spec §7). No native call: the stored pose.json (with its
+// pass-2 clubhead seeds), probe.json and marks.json are all it needs, and the club only changes
+// which THRESHOLDS column the checks read. Pure.
 
-import { analyze } from './analyze';
+import { analyze, SCHEMA } from './analyze';
 import { marksForAnalyze } from './labels';
 
 /**
@@ -25,4 +26,25 @@ export function reanalyzeForClub({
     swingId: analysis.swingId,
     createdAt: analysis.createdAt,
   });
+}
+
+/**
+ * A stored analysis at the current SCHEMA: an older one is re-run with its own club. Returns
+ * `{ analysis, upgraded }`; a re-run that cannot run (no pose) or fails keeps the stored analysis
+ * and names the reason in `error`.
+ */
+export function upgradeAnalysis({
+  pose, probe, marks, analysis,
+}) {
+  if (!analysis || analysis.error || analysis.schema === SCHEMA) return { analysis, upgraded: false };
+  if (!pose) return { analysis, upgraded: false, error: 'no_pose' };
+  try {
+    const next = reanalyzeForClub({
+      pose, probe, marks, analysis,
+    }, analysis.club);
+    if (next.error) return { analysis, upgraded: false, error: next.error };
+    return { analysis: next, upgraded: true };
+  } catch (e) {
+    return { analysis, upgraded: false, error: e?.message ?? 'failed' };
+  }
 }

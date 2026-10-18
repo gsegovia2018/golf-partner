@@ -13,12 +13,14 @@ import { resolveClub } from './club';
 import { runChecks, normClub } from './checks';
 import { mainFault } from './priority';
 
-export const SCHEMA = 'swing-analysis/1';
+export const SCHEMA = 'swing-analysis/2'; // 2: the v2 checks (spec 2026-10-18); older ones re-run on open
 export const MAX_CLIP_S = 15; // captured seconds; the importer warns above this
 const MIN_USABLE = 10;
 const MIN_COVERAGE = 0.8;
 const BODY_VISIBLE = 0.5;
-const CLUB_KEYS = [...CHECKPOINT_KEYS, 'lateBackswing', 'preImpact', 'postImpact'];
+// The frames whose clubhead is resolved (and asked of pass 2): the seven positions plus the finish
+// (swing checks v2, spec §3). P5, P8 and the internal frames stay in phases.js only, to find others.
+export const CLUB_KEYS = ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm', 'finish'];
 const BODY_LM = [LM.lSh, LM.rSh, LM.lHip, LM.rHip, LM.lKnee, LM.rKnee, LM.lAnk, LM.rAnk];
 
 const toPx = (p, W, H) => (p ? { x: p[0] * W, y: p[1] * H } : null);
@@ -92,7 +94,7 @@ export function analyze(native, opts = {}) {
   const S = ph.series;
   const handsAt = (f) => ({ x: interp(f, idx, S.hands.map((p) => p[0])), y: interp(f, idx, S.hands.map((p) => p[1])) });
 
-  // The thirteen checkpoints: frame, smoothed grip, and the club (user mark > native seed > prior).
+  // The ten checkpoints' frames; the club (user mark > native seed > prior) at CLUB_KEYS.
   const frames = { ...Object.fromEntries(CHECKPOINT_KEYS.map((k) => [k, ph.checkpoints[k].i])), ...ph.internal };
   const checkpoints = { ...ph.checkpoints };
   const moved = CHECKPOINT_KEYS.filter((k) => Number.isFinite(marks[k]?.frame) && marks[k].frame !== frames[k]);

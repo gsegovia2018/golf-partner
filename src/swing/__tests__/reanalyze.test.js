@@ -1,6 +1,6 @@
 // Changing the club on Results re-scores the stored pose and marks (D19): same numbers, other limits.
-import { analyze } from '../analyze';
-import { reanalyzeForClub } from '../reanalyze';
+import { analyze, SCHEMA } from '../analyze';
+import { reanalyzeForClub, upgradeAnalysis } from '../reanalyze';
 import { emptyMarks, frameLabel, withFrame } from '../labels';
 import { fixtureNative, TRUTH, W, H } from './helpers';
 
@@ -44,5 +44,49 @@ describe('reanalyzeForClub', () => {
   test('passes an analyze() error through instead of throwing', () => {
     const bad = reanalyzeForClub({ pose: { ...pose, frames: [] }, probe: null, marks, analysis: iron }, 'driver');
     expect(bad.error).toBe('no_pose');
+  });
+});
+
+describe('upgradeAnalysis (checks v2, spec §7)', () => {
+  const v2 = analyze(pose, { ...base, marks: ownerMarks, club: 'driver' });
+  // An analysis.json written by the schema-1 checks: old rows, old main fault.
+  const v1 = {
+    ...v2,
+    schema: 'swing-analysis/1',
+    checks: [{ id: 'waist_bend', status: 'green' }, { id: 'top_direction', status: 'yellow', dir: 'across' }],
+    main: { fault: 'top_position', phase: 'backswing', consequences: ['over_the_top'] },
+  };
+
+  test('an older analysis is re-run from the stored pose and marks, with its own club', () => {
+    const r = upgradeAnalysis({
+      pose, probe: null, marks, analysis: v1,
+    });
+    expect(r.upgraded).toBe(true);
+    expect(r.analysis.schema).toBe(SCHEMA);
+    expect(r.analysis.club).toBe('driver');
+    expect(r.analysis.checks).toEqual(v2.checks);
+    expect(r.analysis.checks.map((c) => c.id)).toContain('clubhead_plane_takeaway');
+    expect(r.analysis.main.fault).toBe(v2.main.fault);
+  });
+
+  test('a current analysis is returned as it is', () => {
+    const r = upgradeAnalysis({
+      pose, probe: null, marks, analysis: v2,
+    });
+    expect(r).toEqual({ analysis: v2, upgraded: false });
+  });
+
+  test('a re-run that cannot run or fails keeps the old analysis and says why', () => {
+    expect(upgradeAnalysis({
+      pose: null, probe: null, marks, analysis: v1,
+    })).toEqual({ analysis: v1, upgraded: false, error: 'no_pose' });
+    expect(upgradeAnalysis({
+      pose: { ...pose, frames: [] }, probe: null, marks, analysis: v1,
+    })).toEqual({ analysis: v1, upgraded: false, error: 'no_pose' });
+    const thrown = upgradeAnalysis({
+      pose: { ...pose, video: null }, probe: null, marks, analysis: v1,
+    });
+    expect(thrown).toMatchObject({ analysis: v1, upgraded: false });
+    expect(thrown.error).toBeTruthy();
   });
 });

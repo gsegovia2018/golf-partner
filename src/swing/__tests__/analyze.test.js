@@ -8,66 +8,67 @@ const norm = (p) => (p ? [p.x / W, p.y / H] : null);
 const ball = { x: TRUTH.ball.x / W, y: TRUTH.ball.y / H, r: 2.1 / W };
 const native = (extra = {}) => fixtureNative({ ball, ballGoneFrame: lab.expected.ballGoneFrame, ...extra });
 const pass2 = { addressFrame: lab.expected.addressFrame, shaft: {} };
-const ownerMarks = () => {
-  const out = Object.fromEntries(Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, {
-    hands: norm(c.hands), head: c.hidden ? null : norm(c.head), hidden: c.hidden,
-  }]));
-  out.preImpact = { hands: norm({ x: 222, y: 400 }), head: norm({ x: 240, y: 470 }), hidden: false };
-  return out;
-};
+const ownerMarks = () => Object.fromEntries(Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, {
+  hands: norm(c.hands), head: c.hidden ? null : norm(c.head), hidden: c.hidden,
+}]));
 const byId = (a, id, cp) => a.checks.find((c) => c.id === id && (!cp || c.cp === cp));
 
 describe('analyze: the whole pipeline on the fixture', () => {
   const a = analyze(native(), { pass2, handedness: 'right', heightCm: 176, club: 'iron', source: 'import', swingId: 's1', createdAt: 'x' });
 
-  test('shape of analysis.json (schema swing-analysis/1)', () => {
+  test('shape of analysis.json (schema swing-analysis/2)', () => {
     expect(a.error).toBeUndefined();
     expect(a.schema).toBe(SCHEMA);
+    expect(SCHEMA).toBe('swing-analysis/2');
     expect(a).toMatchObject({ swingId: 's1', club: 'iron', handedness: 'right', view: 'dtl', source: 'import' });
     expect(a.fps).toMatchObject({ factor: 8, source: 'estimate', approximate: false });
     expect(a.scale.approx).toBe(false);
     expect(a.scale.pxPerCm).toBeGreaterThan(1.1);
     expect(Object.keys(a.checkpoints)).toEqual(['address', 'takeaway', 'leadArm', 'top', 'transition', 'shaftDown', 'impact', 'shaftThrough', 'trailArm', 'finish']);
-    expect(Object.keys(a.clubMarks)).toHaveLength(13);
+    // checks v2: the club is resolved at the seven positions and the finish only (P5 and P8 are not checkpoints any more)
+    expect(Object.keys(a.clubMarks)).toEqual(['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm', 'finish']);
     expect(a.reference.ball).toEqual([ball.x, ball.y]);
     expect(Math.abs(a.reference.shaftPlaneDeg - 52)).toBeLessThanOrEqual(6);
   });
 
-  test('all 23 rows produce a status; counts add up', () => {
-    expect(a.checks).toHaveLength(23);
+  test('all 27 rows produce a status; counts add up', () => {
+    expect(a.checks).toHaveLength(27);
     a.checks.forEach((c) => expect(['green', 'yellow', 'red', 'unknown']).toContain(c.status));
     const c = a.counts;
-    expect(c.green + c.yellow + c.red + c.unknown).toBe(23);
+    expect(c.green + c.yellow + c.red + c.unknown).toBe(27);
   });
 
   test('D16: without placed marks the club-dependent checks are unknown, the rest are measured', () => {
-    ['butt_extension', 'top_direction', 'shaft_angle_impact'].forEach((id) => expect(byId(a, id).status).toBe('unknown'));
-    expect(a.checks.filter((c) => c.id === 'clubhead_vs_plane').every((c) => c.status === 'unknown')).toBe(true);
+    expect(a.checks.filter((c) => c.status === 'unknown').map((c) => c.id)).toEqual([
+      'shaft_plane', 'clubhead_plane_takeaway', 'butt_extension', 'clubhead_plane_down', 'down_vs_takeaway',
+      'shaft_through_ball', 'through_vs_halfway', 'shaft_angle_impact',
+    ]);
+    a.checks.filter((c) => c.status === 'unknown').forEach((c) => expect(c.reason).toBe('unplaced'));
     expect(byId(a, 'spine_loss').status).not.toBe('unknown');
     expect(a.clubMarks.address.source).toBe('prior');
     expect(a.clubMarks.address.priorHead).toBeDefined();
     expect(a.clubMarks.top.priorHead).toBeUndefined();
   });
 
-  test('main fault (D21): the top is the earliest significant fault (the address is good); early extension is a consequence', () => {
-    expect(a.main.fault).toBe('top_position');
-    expect(a.main.evidence.length).toBeGreaterThanOrEqual(2);
-    expect(a.main.drills[0]).toBe('pl-vidrio'); // D24: the drill for the first evidence check leads
-    expect(a.main.consequences).toEqual(expect.arrayContaining(['over_the_top', 'early_extension']));
+  test('main fault (spec §6): impact is tier 1 and red, so early extension leads; the top is red before it', () => {
+    expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: 'top', consequences: [] });
+    expect(a.main.evidence[0].id).toBe('hip_drift');
+    expect(a.main.drills[0]).toBe('ee-silla');
   });
 });
 
 describe('analyze with the owner marks as user marks (golden)', () => {
   const a = analyze(native(), { pass2, marks: ownerMarks(), heightCm: 176 });
 
-  test('every club check has a verdict; the top leads and the early-extension story follows (D21)', () => {
-    // The owner marked the clubhead hidden at shaft down and has not placed one at shaft through (D23).
-    expect(a.checks.filter((c) => c.status === 'unknown').map((c) => c.id)).toEqual(['shaft_down_shallow', 'shaft_through_steep']);
-    expect(a.main.fault).toBe('top_position');
-    expect(a.main.consequences).toContain('early_extension');
+  test('every club check with a visible clubhead has a verdict; early extension leads, starting at the takeaway', () => {
+    // The owner marked the clubhead hidden at shaft down (P6) and at the trail arm (P9).
+    expect(a.checks.filter((c) => c.status === 'unknown').map((c) => [c.id, c.reason])).toEqual([
+      ['clubhead_plane_down', 'hidden'], ['down_vs_takeaway', 'hidden'], ['shaft_through_ball', 'hidden'], ['through_vs_halfway', 'hidden'],
+    ]);
+    expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: 'takeaway' });
     expect(a.clubMarks.impact.source).toBe('user');
     expect(byId(a, 'hands_out_impact').status).toBe('red');
-    expect(byId(a, 'clubhead_vs_plane', 'impact').status).toBe('green');
+    expect(byId(a, 'clubhead_plane_takeaway')).toMatchObject({ status: 'red', dir: 'flat' });
   });
 
   test('a user mark replaces the proposed hands and survives as normalised coordinates', () => {
@@ -87,13 +88,15 @@ describe('analyze: native clubhead seeds and approximations', () => {
     expect(analyze(native(), { pass2: mk(0.2) }).clubMarks.impact.source).toBe('prior');
   });
 
-  test('a low-score model candidate at shaft down is a placed head: shaft_down_shallow gets a status', () => {
+  test('the clubhead gate (spec §5): a 0.05 model head at shaft down is proposed to the canvas but no check reads it', () => {
     const base = analyze(native(), { pass2 });
     const f = base.checkpoints.shaftDown.i;
-    expect(byId(base, 'shaft_down_shallow').status).toBe('unknown');
-    const a = analyze(native(), { pass2: { ...pass2, shaft: { [f]: { head: [260, 430], hidden: false, conf: 0.05, source: 'model' } } } });
-    expect(a.clubMarks.shaftDown.source).toBe('model');
-    expect(byId(a, 'shaft_down_shallow').status).not.toBe('unknown');
+    const at = (conf) => analyze(native(), { pass2: { ...pass2, shaft: { [f]: { head: [260, 430], hidden: false, conf, source: 'model' } } } });
+    const weak = at(0.05);
+    expect(weak.clubMarks.shaftDown).toMatchObject({ source: 'model', conf: 0.05 });
+    expect(weak.clubMarks.shaftDown.head).not.toBeNull();
+    expect(byId(weak, 'clubhead_plane_down')).toMatchObject({ status: 'unknown', reason: 'unplaced' });
+    expect(byId(at(0.5), 'clubhead_plane_down').status).not.toBe('unknown');
   });
 
   test('frame-doubled slow-mo is approximate and flagged on impact checks', () => {

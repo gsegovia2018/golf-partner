@@ -8,7 +8,7 @@ describe('drills catalogue (plan 5.6)', () => {
   test('every fault has at least one drill', () => {
     const faults = Object.keys(SWING_STRINGS.fault);
     faults.forEach((f) => expect(drillsForFault(f).length).toBeGreaterThanOrEqual(1));
-    FAULTS.forEach((f) => expect(drillsForFault(f.id).length).toBeGreaterThanOrEqual(1));
+    FAULTS.forEach((f) => expect(drillsForFault(f).length).toBeGreaterThanOrEqual(1));
     expect(DRILL_FAULTS.sort()).toEqual(faults.sort());
   });
 
@@ -35,19 +35,29 @@ describe('drills catalogue (plan 5.6)', () => {
   test('D24: the stick behind you and the pane of glass serve the faults they were asked for', () => {
     ['over_the_top', 'flat_backswing', 'flip'].forEach((f) => expect(drillsForFault(f).map((d) => d.id)).toContain('pl-palo-atras'));
     ['top_position', 'steep_backswing', 'across_the_line'].forEach((f) => expect(drillsForFault(f).map((d) => d.id)).toContain('pl-vidrio'));
-    expect(DRILLS.find((d) => d.id === 'pl-vidrio').checks).toEqual(['lead_arm_shoulder_plane', 'hands_over_heels']);
+    expect(DRILLS.find((d) => d.id === 'pl-vidrio').checks).toEqual(['lead_arm_spine', 'hands_over_heels']);
   });
 
   test('D24: each setup check has its own drill, and it leads when that check is the evidence', () => {
-    ['hands_under_shoulders', 'waist_bend', 'back_line', 'hand_gap'].forEach((id) => {
+    ['hands_under_shoulders', 'back_line', 'knee_flex'].forEach((id) => {
       const main = { fault: 'posture', evidence: [{ id }] };
       const first = drillsForMain(main)[0];
       expect(first.checks).toContain(id);
       expect(first.fault).toBe('posture');
     });
     expect(drillsForMain(null)).toEqual([]);
-    const ids = drillsForMain({ fault: 'posture', evidence: [{ id: 'hand_gap' }] }).map((d) => d.id);
+    const ids = drillsForMain({ fault: 'posture', evidence: [{ id: 'knee_flex' }] }).map((d) => d.id);
+    expect(DRILLS.map((d) => d.id)).not.toEqual(expect.arrayContaining(['su-bisagra']));
+    expect(DRILLS.some((d) => d.id === 'su-palmo')).toBe(false);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  test('checks v2: the new faults and rows have their drills', () => {
+    expect(drillsForFault('posture_loss').map((d) => d.id)).toEqual(['pl-columna', 'pl-rodilla']);
+    expect(drillsForFault('stuck').map((d) => d.id)).toEqual(['st-salida']);
+    expect(drillsForMain({ fault: 'steep_backswing', evidence: [{ id: 'clubhead_plane_takeaway' }] })[0].id).toBe('tk-plano');
+    expect(drillsForMain({ fault: 'posture_loss', evidence: [{ id: 'knee_hold' }] })[0].id).toBe('pl-rodilla');
+    expect(drillsForMain({ fault: 'over_the_top', evidence: [{ id: 'down_vs_takeaway' }] })[0].id).toBe('pl-palo-atras');
   });
 
   test('D24: one progression line for every drill: slow with a 7-iron, filmed, then up to speed', () => {

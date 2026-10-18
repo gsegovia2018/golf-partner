@@ -39,28 +39,33 @@ describe('checkpointChecks', () => {
     expect(g.green.filter((c) => tied.includes(c))).toEqual(tied);
   });
 
-  test('every check has a home among the ten checkpoints, and clubhead_vs_plane rows live at impact', () => {
-    expect(unmarked.checks).toHaveLength(23);
+  test('every check has a home among the ten checkpoints: its position, or (an extra) impact or the finish', () => {
+    expect(unmarked.checks).toHaveLength(27);
     unmarked.checks.forEach((c) => expect(checksAt(unmarked.checks, homeOf(c))).toContain(c));
-    expect(checksAt(unmarked.checks, 'impact').filter((c) => c.id === 'clubhead_vs_plane')).toHaveLength(2);
-    expect(checksAt(unmarked.checks, 'takeaway')).toHaveLength(0);
+    expect(checksAt(unmarked.checks, 'takeaway').map(CHECK_KEY)).toEqual(['clubhead_plane_takeaway', 'spine_hold@takeaway', 'knee_hold@takeaway']);
     expect(checksAt(unmarked.checks, 'transition')).toHaveLength(0);
+    expect(checksAt(unmarked.checks, 'shaftThrough')).toHaveLength(0);
+    expect(checksAt(unmarked.checks, 'finish').map((c) => c.id)).toEqual(['finish_balance']);
   });
 
   test('a timeline dot is the worst measured status; unknowns do not count', () => {
     expect(worstAt(marked.checks, 'impact')).toBe('red');
     const w = worstByCheckpoint(marked.checks);
     expect(Object.keys(w)).toHaveLength(10);
-    expect(w.takeaway).toBe('none');
-    const onlyUnknown = [{ id: 'top_direction', status: 'unknown' }];
+    expect(w.takeaway).toBe('red');
+    expect(w.trailArm).toBe('none'); // the owner hid the clubhead there
+    expect(w.transition).toBe('none');
+    const onlyUnknown = [{ id: 'lead_arm_spine', position: 'top', status: 'unknown' }];
     expect(worstAt(onlyUnknown, 'top')).toBe('none');
+    // an extra never colours its home
+    expect(worstAt([{ id: 'finish_balance', extra: true, position: null, status: 'red' }], 'finish')).toBe('none');
   });
 
   test('D16: an unplaced clubhead names the checkpoint to place it at; a hidden mark does not', () => {
     const butt = row(unmarked, 'butt_extension');
     expect(butt.status).toBe('unknown');
     expect(unplacedCheckpoint(butt, unmarked.clubMarks)).toBe('leadArm');
-    expect(unplacedCheckpoint(row(unmarked, 'clubhead_vs_plane', 'preImpact'), unmarked.clubMarks)).toBe('preImpact');
+    expect(unplacedCheckpoint(row(unmarked, 'down_vs_takeaway'), unmarked.clubMarks)).toBe('takeaway');
     // The owner hid the shaft-down clubhead: a decision, not a gap.
     expect(marked.clubMarks.shaftDown.hidden).toBe(true);
     expect(unplacedCheckpoint({ ...butt, cps: ['shaftDown'] }, marked.clubMarks)).toBeNull();

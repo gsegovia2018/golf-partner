@@ -66,6 +66,7 @@ const { emptyMarks } = require('../../swing/labels');
 
 const seedVideo = (uri = 'file:///picked/clip.mp4') => fs.__files.set(uri, 'VIDEO-BYTES');
 const analysisFixture = {
+  schema: 'swing-analysis/2',
   handedness: 'right',
   club: 'iron',
   fps: { capture: 240, effective: 240, factor: 8, approximate: false },
@@ -171,6 +172,50 @@ describe('saveAnalysis / marks', () => {
     const row = await store.createSwing({ videoUri: 'file:///picked/clip.mp4' });
     fs.__files.set(`file:///doc/swings/${row.id}/marks.json`, '{not json');
     expect(await store.readMarks(row.id)).toBeNull();
+  });
+
+  describe('an analysis from before checks v2 (spec §7)', () => {
+    const { fixtureNative, TRUTH, W, H } = require('../../swing/__tests__/helpers');
+    const lab = require('../../swing/__tests__/fixtures/lab-d15-pass1.json');
+    const { analyze, SCHEMA } = require('../../swing/analyze');
+    const ball = { x: TRUTH.ball.x / W, y: TRUTH.ball.y / H, r: 2.1 / W };
+    const pose = { ...fixtureNative({ ball, ballGoneFrame: lab.expected.ballGoneFrame }), pass2: { addressFrame: lab.expected.addressFrame, shaft: {} } };
+    const stored = async (club) => {
+      const row = await store.createSwing({ videoUri: 'file:///picked/clip.mp4', club });
+      const fresh = analyze(pose, { pass2: pose.pass2, club, heightCm: 176 });
+      const v1 = {
+        ...fresh, schema: 'swing-analysis/1', checks: [{ id: 'waist_bend', status: 'green' }], main: { fault: 'top_position', consequences: ['over_the_top'] },
+      };
+      await store.saveAnalysis(row.id, v1, { pose, probe: { containerFps: 29.97 } });
+      return { row, v1 };
+    };
+    const onDisk = (id) => JSON.parse(fs.__files.get(`file:///doc/swings/${id}/analysis.json`));
+
+    it('opening it re-runs analyze() from the stored pose / probe / marks once, saves it and updates the index row', async () => {
+      const { row } = await stored('driver');
+      expect(store.getSwing(row.id).mainFault).toBe('top_position');
+      const a = await store.readAnalysis(row.id);
+      expect(a.schema).toBe(SCHEMA);
+      expect(a).toMatchObject({ swingId: row.id, createdAt: row.createdAt, club: 'driver' });
+      expect(a.checks.map((c) => c.id)).toContain('spine_hold');
+      expect(onDisk(row.id).schema).toBe(SCHEMA);
+      expect(store.getSwing(row.id)).toMatchObject({ status: 'ready', mainFault: a.main.fault, consequences: a.main.consequences });
+      expect(JSON.parse(await AsyncStorage.getItem('golf_swings.v1'))[0].mainFault).toBe(a.main.fault);
+      // the second open reads the saved v2 file as it is
+      expect(await store.readAnalysis(row.id)).toEqual(onDisk(row.id));
+    });
+
+    it('a re-run that fails keeps the old analysis, untouched, and logs why', async () => {
+      const { row } = await stored('iron');
+      fs.__files.delete(`file:///doc/swings/${row.id}/pose.json`);
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const a = await store.readAnalysis(row.id);
+      expect(a.schema).toBe('swing-analysis/1');
+      expect(onDisk(row.id).schema).toBe('swing-analysis/1');
+      expect(store.getSwing(row.id).mainFault).toBe('top_position');
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/kept, re-run failed: no_pose/));
+      warn.mockRestore();
+    });
   });
 
   it('markSwingFailed records the D12 error', async () => {
@@ -371,15 +416,16 @@ describe('the marking pass on the row (D26) and the club per video (D27)', () =>
   it('existing swings still open: a row from before D26 gets its state from marks.json on hydrate', async () => {
     const old = (id) => ({ id, createdAt: `2026-10-0${id}T10:00:00.000Z`, name: id, status: 'ready', source: 'import', club: 'iron' });
     await AsyncStorage.setItem('golf_swings.v1', JSON.stringify([old('1'), old('2'), { ...old('3'), status: 'error' }]));
-    // swing 1 had three positions corrected in the old Edit marks; swing 2 every one of the six
+    // swing 1 had four positions corrected in the old Edit marks; swing 2 every one of the six of that
+    // time's pass (with P8): still done under checks v2, with five of the seven positions counted
     const legacy = (keys) => JSON.stringify({ ...emptyMarks({ swingId: 'x' }), frames: keys.map((k) => frame(k, { corrected: true })) });
     fs.__files.set('file:///doc/swings/1/marks.json', legacy(['address', 'top', 'takeaway', 'impact']));
     fs.__files.set('file:///doc/swings/2/marks.json', legacy(['address', 'leadArm', 'top', 'shaftDown', 'impact', 'shaftThrough']));
     await store.hydrateSwings();
-    expect(store.getSwing('1').marked).toEqual({ state: 'partial', count: 3 });
-    expect(store.getSwing('2').marked).toEqual({ state: 'done', count: 6 });
+    expect(store.getSwing('1').marked).toEqual({ state: 'partial', count: 4 });
+    expect(store.getSwing('2').marked).toEqual({ state: 'done', count: 5 });
     expect(store.getSwing('3').marked).toBeUndefined(); // a failed analysis has nothing to mark
-    expect(JSON.parse(await AsyncStorage.getItem('golf_swings.v1')).find((r) => r.id === '1').marked).toEqual({ state: 'partial', count: 3 });
+    expect(JSON.parse(await AsyncStorage.getItem('golf_swings.v1')).find((r) => r.id === '1').marked).toEqual({ state: 'partial', count: 4 });
   });
 });
 

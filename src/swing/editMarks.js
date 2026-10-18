@@ -2,7 +2,7 @@
 // the live recompute of the club-dependent checks, and the conversion to marks.json.
 // Pure: no I/O, no React. Coordinates are normalised to the decoded frame.
 //
-// A draft holds, per checkpoint (the ten plus the three internal frames):
+// A draft holds, per club frame (analyze.js CLUB_KEYS: the seven positions and the finish):
 //   frame   the checkpoint's frame (the user can move it: "Set <checkpoint> to this frame")
 //   hands   [x, y] the user placed, or null = automatic (the smoothed grip at that frame)
 //   head    [x, y] | null  the clubhead; null with hidden=false means "not placed yet" (D16)
@@ -10,22 +10,23 @@
 //   confirmed { hands, head }  the golfer confirmed that mark (D26); moving it clears the flag
 //   frameOk the golfer chose this frame in step 1 ("Find the frame", D28)
 // plus the ball ([x, y, r], one for the swing, markable at address) with `ballConfirmed`, and
-// `status` { [key]: 'confirmed' | 'skipped' } for the positions of the marking pass (markPass.js).
+// `status` { [key]: 'confirmed' | 'skipped' } for the positions of the marking pass (markPass.js),
+// and `kept`: the marks.json labels of frames that are no longer edited (P5, P8 and the internal
+// frames of swings marked before checks v2), written back unchanged so no label is lost.
 // `base` keeps what analyze() proposed, so every label stores proposed and final side by side
 // (the v2 training data) and a status word can say whether a mark moved. Besides the proposal on its
 // own frame, `base.cps[k].atFrame` holds the clubhead proposals the model made on other frames the golfer
 // chose (club on demand, plan 2026-10-16): the status of a head is judged against the proposal at
 // the draft's own frame.
 
-import { analyze } from './analyze';
-import { CHECKPOINT_KEYS } from './phases';
+import { analyze, CLUB_KEYS } from './analyze';
 import {
   emptyMarks, frameLabel, withFrame, withBall, handsPlaced,
 } from './labels';
 import { frameOfKey } from './checkpointChecks';
 import { MARKED_KEYS, statusFromMarks, passCounts, MARK_TOTAL } from './markPass';
 
-export const EDIT_KEYS = [...CHECKPOINT_KEYS, 'lateBackswing', 'preImpact', 'postImpact'];
+export const EDIT_KEYS = CLUB_KEYS;
 export const HIT_RADIUS_PX = 28; // 56 px across: comfortably over the 44 px minimum
 
 const sameXY = (a, b) => (a == null && b == null) || (a != null && b != null && a[0] === b[0] && a[1] === b[1]);
@@ -98,9 +99,10 @@ export function buildDraft(analysis, pose, marks) {
   const ballProposed = marks?.ball?.proposed ?? nativeBall ?? (analysis.reference?.ball ? [...analysis.reference.ball, 0.012] : null);
   const ball = marks?.ball?.final ?? ballProposed;
   const ballConfirmed = !!(marks?.ball?.confirmed ?? (legacy && marks.ball?.corrected));
+  const kept = (marks?.frames ?? []).filter((f) => !EDIT_KEYS.includes(f.checkpoint));
   return {
     draft: {
-      cps, ball, ballConfirmed, status: statusFromMarks(marks),
+      cps, ball, ballConfirmed, status: statusFromMarks(marks), kept,
     },
     base: { cps: proposed, ball: ballProposed },
   };
@@ -148,7 +150,7 @@ export function recompute({ pose, probe, analysis, draft, base }) {
 
 /**
  * The draft as marks.json (swing-club-labels/1): proposed and final for every corrected or
- * confirmed frame, plus the pass (D26). `passState` defaults to done once all six are confirmed.
+ * confirmed frame, plus the pass (D26). `passState` defaults to done once all seven are confirmed.
  */
 export function draftToMarks({
   draft, base, live, swingId, video = null, handedness = 'right', editedAt, passState,
@@ -161,7 +163,7 @@ export function draftToMarks({
     const ok = d.confirmed ?? {};
     const confirmed = status[k] === 'confirmed';
     const q = proposalAt(base, k, d.frame);
-    // Only frames the user touched or confirmed: preImpact / postImpact follow impact by themselves.
+    // Only frames the user touched or confirmed.
     if (!touched(d, p, q ?? NO_PROPOSAL) && !confirmed && !ok.hands && !ok.head) return;
     const label = frameLabel({
       i: d.frame,
@@ -188,6 +190,7 @@ export function draftToMarks({
     });
     if (label.corrected || confirmed || ok.hands || ok.head) m = withFrame(m, label);
   });
+  (draft.kept ?? []).forEach((f) => { m = withFrame(m, f); });
   const state = passState ?? (passCounts(status).confirmed === MARK_TOTAL ? 'done' : 'partial');
   m = withBall(m, { proposed: base.ball, final: draft.ball, confirmed: !!draft.ballConfirmed });
   return { ...m, pass: { state, skipped: MARKED_KEYS.filter((k) => status[k] === 'skipped') } };

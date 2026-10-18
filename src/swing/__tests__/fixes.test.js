@@ -6,29 +6,46 @@ import { SWING_STRINGS } from '../strings';
 const KEYS = {
   posture_address: ['tall', 'over'],
   hands_under_shoulders: ['out', 'in'],
-  waist_bend: ['over', 'tall'],
   back_line: ['dropped', 'up'],
-  hand_gap: ['close', 'far'],
-  hands_between_planes: ['steep', 'flat'],
+  knee_flex: ['stiff', 'squat'],
+  shaft_plane: ['upright', 'flat'],
+  clubhead_plane_takeaway: ['steep', 'flat'],
+  spine_hold: ['up', 'down'],
+  knee_hold: ['straighten', 'flex'],
   butt_extension: ['flat', 'steep'],
-  top_direction: ['across', 'laid_off'],
+  lead_arm_spine: ['upright', 'flat'],
   hands_over_heels: ['deep', 'shallow'],
-  lead_arm_shoulder_plane: ['above', 'below'],
-  downswing_path: ['out'],
-  shaft_down_shallow: ['shallow', 'steep'],
-  shaft_through_steep: ['flat'],
-  clubhead_vs_plane: ['steep', 'under'],
+  clubhead_plane_down: ['steep', 'under'],
+  down_vs_takeaway: ['steeper'],
+  hip_drift: ['toward'],
+  spine_loss: ['lost'],
+  shaft_through_ball: ['beyond', 'inside'],
+  through_vs_halfway: ['beyond', 'inside'],
+  tempo: ['fast', 'slow'],
+  finish_balance: ['off'],
+  head_drift: ['moved'],
   hands_height_impact: ['up', 'down'],
   hands_out_impact: ['in', 'out'],
   shaft_angle_impact: ['up', 'down'],
-  spine_loss: ['lost'],
-  hip_drift: ['toward'],
-  head_drift: ['moved'],
-  tempo: ['fast', 'slow'],
-  finish_balance: ['off'],
 };
-const EE = ['hands_height_impact', 'hands_out_impact', 'shaft_angle_impact', 'spine_loss', 'hip_drift'];
-const row = (id, status, extra = {}) => ({ id, status, ...(EE.includes(id) ? { cluster: 'early_extension' } : {}), ...extra });
+// The fault each row names (checks.js), by id and, where it depends on it, direction.
+const FAULT = {
+  posture_address: 'posture', hands_under_shoulders: 'posture', back_line: 'posture', knee_flex: 'posture', shaft_plane: 'posture',
+  clubhead_plane_takeaway: { steep: 'steep_backswing', flat: 'flat_backswing' },
+  spine_hold: 'posture_loss', knee_hold: 'posture_loss',
+  butt_extension: { steep: 'steep_backswing', flat: 'flat_backswing' },
+  lead_arm_spine: 'top_position', hands_over_heels: 'top_position',
+  clubhead_plane_down: { steep: 'over_the_top', under: 'stuck' }, down_vs_takeaway: 'over_the_top',
+  hip_drift: 'early_extension', spine_loss: 'early_extension',
+  shaft_through_ball: { beyond: 'flip', inside: 'over_the_top' }, through_vs_halfway: 'flip',
+  tempo: { fast: 'tempo_fast', slow: 'tempo_slow' }, finish_balance: 'balance', head_drift: 'head_sway',
+  hands_height_impact: 'early_extension', hands_out_impact: 'early_extension', shaft_angle_impact: 'early_extension',
+};
+const faultOf = (id, dir) => (typeof FAULT[id] === 'object' ? FAULT[id][dir] : FAULT[id]) ?? null;
+const POS = { hip_drift: 'impact', spine_loss: 'impact', hands_under_shoulders: 'address', back_line: 'address', knee_flex: 'address' };
+const row = (id, status, extra = {}) => ({
+  id, status, position: POS[id] ?? null, fault: faultOf(id, extra.dir), severity: 0, ...extra,
+});
 
 describe('fixCopy strings', () => {
   const pairs = Object.entries(KEYS).flatMap(([id, dirs]) => dirs.map((d) => [id, d]));
@@ -59,12 +76,13 @@ describe('fixKey', () => {
   });
   test('uses dir when it is a copy key', () => {
     expect(fixKey(row('butt_extension', 'red', { dir: 'flat' }))).toBe('flat');
-    expect(fixKey(row('shaft_down_shallow', 'yellow', { dir: 'steep' }))).toBe('steep');
+    expect(fixKey(row('clubhead_plane_down', 'yellow', { dir: 'under' }))).toBe('under');
+    expect(fixKey(row('knee_hold', 'red', { dir: 'straighten' }))).toBe('straighten');
   });
   test('derives the key for dir-less checks', () => {
     expect(fixKey(row('posture_address', 'red', { value: 12 }))).toBe('tall');
     expect(fixKey(row('posture_address', 'yellow', { value: 44 }))).toBe('over');
-    expect(fixKey(row('downswing_path', 'red', { value: 9 }))).toBe('out');
+    expect(fixKey(row('down_vs_takeaway', 'red', { value: 9, dir: 'steeper' }))).toBe('steeper');
     expect(fixKey(row('hands_height_impact', 'red', { value: 9 }))).toBe('up');
     expect(fixKey(row('hands_height_impact', 'red', { value: -9 }))).toBe('down');
     expect(fixKey(row('hands_out_impact', 'red', { value: 9 }))).toBe('in');
@@ -80,17 +98,22 @@ describe('fixKey', () => {
 
 describe('drillForCheck', () => {
   test('an aimed drill wins over the fault generic one', () => {
-    expect(drillForCheck(row('hand_gap', 'red', { dir: 'far' })).id).toBe('su-palmo');
+    expect(drillForCheck(row('knee_flex', 'red', { dir: 'stiff' })).id).toBe('su-rodillas');
+    expect(drillForCheck(row('knee_hold', 'red', { dir: 'straighten' })).id).toBe('pl-rodilla');
+    expect(drillForCheck(row('clubhead_plane_takeaway', 'red', { dir: 'flat' })).id).toBe('tk-plano');
     expect(drillForCheck(row('posture_address', 'red', { value: 12 })).id).toBe('po-espejo');
-    expect(drillForCheck(row('clubhead_vs_plane', 'red', { dir: 'under' })).id).toBe('pl-palo-atras');
   });
-  test('null for an unknown check', () => {
+  test('else the fault own drill: stuck, posture loss, over the top', () => {
+    expect(drillForCheck(row('clubhead_plane_down', 'red', { dir: 'under' })).id).toBe('st-salida');
+    expect(drillForCheck(row('spine_hold', 'red', { dir: 'up' })).id).toBe('pl-columna');
+    expect(drillForCheck(row('clubhead_plane_down', 'red', { dir: 'steep' })).id).toBe('ott-toalla');
+  });
+  test('null for a check with no fault', () => {
     expect(drillForCheck(row('nope', 'red'))).toBeNull();
   });
 });
 
 describe('fixesFor', () => {
-  const setup = (id, status, extra) => row(id, status, { phase: 'setup', ...extra });
   const ids = (checks, max) => fixesFor({ checks }, max).map((f) => f.check.id);
 
   test('empty when everything is green', () => {
@@ -98,58 +121,30 @@ describe('fixesFor', () => {
     expect(fixesFor(null)).toEqual([]);
   });
 
-  test('one per fault, the setup fault before the impact fault', () => {
+  test('one per fault, in the order of the main fault: tier, then severity', () => {
     const checks = [
-      row('hip_drift', 'red', { phase: 'impact', cluster: 'early_extension', value: 9 }),
-      row('spine_loss', 'red', { phase: 'impact', cluster: 'early_extension', value: 12 }),
-      setup('hands_under_shoulders', 'red', { dir: 'out', value: 9 }),
+      row('hip_drift', 'red', { value: 9, severity: 0.5 }),
+      row('spine_loss', 'red', { value: 12, severity: 1.2 }),
+      row('hands_under_shoulders', 'red', { dir: 'out', value: 14, severity: 0.5 }),
     ];
     const out = fixesFor({ checks });
     expect(out.map((f) => [f.check.id, f.fault])).toEqual([
+      ['spine_loss', 'early_extension'], // tier 1, the most severe; hip_drift never repeats the fault
       ['hands_under_shoulders', 'posture'],
-      ['hip_drift', 'early_extension'], // a tie keeps analysis order; spine_loss never repeats the fault
     ]);
-    expect(ids(checks, 2)).toEqual(['hands_under_shoulders', 'hip_drift']);
-    expect(out[0].copy.headline).toBe("You're reaching for the ball");
-    expect(out[0].drill.id).toBe('su-brazos');
+    expect(ids(checks, 1)).toEqual(['spine_loss']);
+    expect(out[1].copy.headline).toBe("You're reaching for the ball");
+    expect(out[1].drill.id).toBe('su-brazos');
   });
 
-  test('the worst check of a fault: red before yellow, then analysis order', () => {
+  test('reds before yellows, capped at max', () => {
     const checks = [
-      setup('hand_gap', 'yellow', { dir: 'far', value: 24 }),
-      setup('hands_under_shoulders', 'red', { dir: 'out', value: 9 }),
-      setup('back_line', 'red', { dir: 'dropped', value: 25 }),
+      row('knee_flex', 'yellow', { dir: 'stiff', value: 12, position: 'address', severity: 0.6 }),
+      row('lead_arm_spine', 'red', { dir: 'upright', value: 25, position: 'top', severity: 0.5 }),
+      row('head_drift', 'yellow', { value: 7, extra: true, severity: 0.4 }),
+      row('finish_balance', 'red', { value: 0, extra: true, severity: 1 }),
     ];
-    expect(ids(checks, 1)).toEqual(['hands_under_shoulders']);
-  });
-
-  test('reds fill after the fault entries, by phase', () => {
-    const checks = [
-      setup('hands_under_shoulders', 'red', { dir: 'out', value: 9 }),
-      row('finish_balance', 'red', { phase: 'finish', value: 0 }),
-      row('hands_between_planes', 'yellow', { phase: 'backswing', dir: 'steep', value: 3 }),
-      row('top_direction', 'yellow', { phase: 'backswing', dir: 'across', value: 0.2 }),
-    ];
-    // posture (significant) first, then the lone red; yellows only fill the rest
-    expect(ids(checks, 3)).toEqual(['hands_under_shoulders', 'finish_balance', 'hands_between_planes']);
-  });
-
-  test('yellows fill only while there is room, capped at max', () => {
-    const checks = [
-      setup('hand_gap', 'yellow', { dir: 'far', value: 22 }),
-      row('top_direction', 'yellow', { phase: 'backswing', dir: 'across', value: 0.2 }),
-      row('head_drift', 'yellow', { phase: 'impact', value: 7 }),
-      row('finish_balance', 'yellow', { phase: 'finish', value: 1 }),
-    ];
-    expect(ids(checks)).toEqual(['hand_gap', 'top_direction', 'head_drift']);
-    expect(ids(checks, 2)).toEqual(['hand_gap', 'top_direction']);
-    const reds = [
-      setup('hands_under_shoulders', 'red', { dir: 'out', value: 9 }),
-      setup('waist_bend', 'red', { dir: 'over', value: 100 }),
-      setup('hand_gap', 'red', { dir: 'far', value: 30 }),
-      row('finish_balance', 'red', { phase: 'finish', value: 0 }),
-    ];
-    // one fix per fault: the other posture reds never take a slot of their own
-    expect(ids([...reds, setup('back_line', 'yellow', { dir: 'up', value: 15 })])).toEqual(['hands_under_shoulders', 'finish_balance']);
+    expect(ids(checks)).toEqual(['lead_arm_spine', 'finish_balance', 'knee_flex']);
+    expect(ids(checks, 2)).toEqual(['lead_arm_spine', 'finish_balance']);
   });
 });

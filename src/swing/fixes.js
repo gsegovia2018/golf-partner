@@ -2,15 +2,14 @@
 // drill that goes with each, and a short ordered list for the results screen. Pure.
 
 import { DRILLS, drillsForFault } from './drills';
-import { FAULTS, PHASES, significantFaults } from './priority';
+import { rankedRows } from './priority';
 import { SWING_STRINGS as T } from './strings';
 
 // Checks with no `dir` (or a dir that is not a copy key) read their key from the value.
-const SINGLE = { downswing_path: 'out', spine_loss: 'lost', hip_drift: 'toward', head_drift: 'moved', finish_balance: 'off' };
-const POSTURE_MID = 30; // degrees of spine tilt: below = too upright, above = bent over (both clubs)
-
-// Checks whose fault has no drill of its own in FAULTS.
-const DRILL_ID = { 'clubhead_vs_plane.under': 'pl-palo-atras', 'top_direction.across': 'atl-objetivo', 'top_direction.laid_off': 'lo-objetivo' };
+const SINGLE = {
+  spine_loss: 'lost', hip_drift: 'toward', head_drift: 'moved', finish_balance: 'off', down_vs_takeaway: 'steeper',
+};
+const POSTURE_MID = 30; // degrees of spine tilt: a row without a dir (schema 1) reads below = too upright
 
 /** 'over', 'tall', ... the key into fixCopy[check.id], or null for a green / unknown row. */
 export function fixKey(check) {
@@ -39,48 +38,21 @@ export function fixCopy(check) {
 export function drillForCheck(check) {
   const aimed = DRILLS.find((d) => d.checks?.includes(check.id));
   if (aimed) return aimed;
-  const byId = DRILL_ID[`${check.id}.${fixKey(check)}`];
-  if (byId) return DRILLS.find((d) => d.id === byId) || null;
-  const fault = FAULTS.find((f) => f.pick(check));
-  if (!fault) return null;
-  const own = drillsForFault(fault.id);
+  if (!check.fault) return null;
+  const own = drillsForFault(check.fault);
   return own.find((d) => !d.checks) || own[0] || null;
 }
 
-const phaseRank = (p) => PHASES.indexOf(p);
-const severity = (c) => (c.status === 'red' ? 1 : 0);
-
 /**
- * Up to `max` fixes in swing order: one per significant fault (its worst check), then the
- * remaining reds, then the remaining yellows while there is room.
+ * Up to `max` fixes, most important first (the order of the main fault, spec §6): one per fault
+ * (its worst check), reds before yellows.
  * @returns {{check: object, copy: object, drill: object|null, fault: string|null}[]}
  */
 export function fixesFor(analysis, max = 3) {
-  const checks = analysis?.checks || [];
   const out = [];
-  const used = new Set();
-  const add = (check, fault) => {
-    used.add(check);
-    out.push({ check, copy: fixCopy(check), drill: drillForCheck(check), fault });
-  };
-  const faultOf = (c) => FAULTS.find((f) => f.pick(c))?.id ?? null;
-
-  [...significantFaults(checks)]
-    .sort((a, b) => phaseRank(a.fault.phase) - phaseRank(b.fault.phase) || b.score - a.score)
-    .forEach(({ fault, evidence }) => {
-      // red before yellow; a tie keeps analysis order (values in cm and degrees don't compare)
-      const worst = evidence.filter(fixCopy).sort((a, b) => severity(b) - severity(a))[0];
-      if (worst && !used.has(worst)) add(worst, fault.id);
-    });
-
-  // one fix per fault: a fault already listed is not listed again through another of its checks
-  const listed = (fault) => fault && out.some((f) => f.fault === fault);
-  ['red', 'yellow'].forEach((status) => {
-    checks
-      .filter((c) => c.status === status && !used.has(c) && fixCopy(c))
-      .sort((a, b) => phaseRank(a.phase) - phaseRank(b.phase))
-      .forEach((c) => { if (!listed(faultOf(c))) add(c, faultOf(c)); });
+  rankedRows(analysis?.checks || []).forEach((check) => {
+    if (!fixCopy(check) || out.some((f) => f.fault === check.fault)) return;
+    out.push({ check, copy: fixCopy(check), drill: drillForCheck(check), fault: check.fault });
   });
-
   return out.slice(0, max);
 }

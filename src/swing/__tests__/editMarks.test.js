@@ -1,10 +1,12 @@
 // The Edit marks model on the owner fixture: draft, live recompute, marks.json round trip.
 import { analyze } from '../analyze';
 import {
-  buildDraft, analyzeMarks, recompute, draftToMarks, isDirty, patchCheckpoint, hitTest, clampPt,
+  buildDraft, analyzeMarks, recompute, draftToMarks, isDirty, patchCheckpoint, hitTest, clampPt, EDIT_KEYS,
   chooseFrame, markStatus, hasMarks, applyProposal, proposalAt, placeMark, setHidden, confirmMark,
 } from '../editMarks';
-import { marksForAnalyze } from '../labels';
+import {
+  marksForAnalyze, frameLabel, withFrame, emptyMarks,
+} from '../labels';
 import { cueFor, CHECKPOINT_DEFS } from '../checkpoints';
 import { fixtureNative, TRUTH, W, H } from './helpers';
 
@@ -35,26 +37,39 @@ describe('buildDraft / recompute', () => {
     expect(byId(live, 'butt_extension').status).not.toBe('unknown');
     // nothing else changed
     expect(byId(live, 'spine_loss').value).toBe(byId(first, 'spine_loss').value);
-    expect(byId(live, 'top_direction').status).toBe('unknown');
+    expect(byId(live, 'shaft_through_ball').status).toBe('unknown');
     expect(live.clubMarks.leadArm.source).toBe('user');
   });
 
-  test('moving the clubhead changes clubhead_vs_plane', () => {
+  test('moving the clubhead changes clubhead_plane_takeaway', () => {
     const c = ctx(first);
-    const near = recompute({ ...c, draft: patchCheckpoint(c.draft, 'impact', { head: [273 / W, 505 / H] }) });
-    const far = recompute({ ...c, draft: patchCheckpoint(c.draft, 'impact', { head: [330 / W, 505 / H] }) });
-    const a = byId(near, 'clubhead_vs_plane', 'impact');
-    const b = byId(far, 'clubhead_vs_plane', 'impact');
+    const near = recompute({ ...c, draft: patchCheckpoint(c.draft, 'takeaway', { head: [200 / W, 410 / H] }) });
+    const far = recompute({ ...c, draft: patchCheckpoint(c.draft, 'takeaway', { head: [150 / W, 420 / H] }) });
+    const a = byId(near, 'clubhead_plane_takeaway');
+    const b = byId(far, 'clubhead_plane_takeaway');
     expect(a.status).not.toBe('unknown');
     expect(a.value).not.toBe(b.value);
   });
 
   test('hidden is a decision: the check says hidden rather than unplaced', () => {
     const c = ctx(first);
-    const live = recompute({ ...c, draft: patchCheckpoint(c.draft, 'top', { hidden: true }) });
-    expect(byId(live, 'top_direction').status).toBe('unknown');
-    expect(byId(live, 'top_direction').reason).toBe('hidden');
-    expect(live.clubMarks.top.hidden).toBe(true);
+    const live = recompute({ ...c, draft: patchCheckpoint(c.draft, 'trailArm', { hidden: true }) });
+    expect(byId(live, 'shaft_through_ball').status).toBe('unknown');
+    expect(byId(live, 'shaft_through_ball').reason).toBe('hidden');
+    expect(live.clubMarks.trailArm.hidden).toBe(true);
+  });
+
+  test('checks v2: the canvas edits the seven positions and the finish; older labels of P5 / P8 are kept as they were', () => {
+    expect(EDIT_KEYS).toEqual(['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm', 'finish']);
+    const old = frameLabel({
+      i: 560, checkpoint: 'shaftThrough', hands: { proposed: [0.4, 0.5], final: [0.41, 0.5] }, head: { proposed: null, final: [0.6, 0.6] }, editedAt: 'then',
+    });
+    const c = ctx(first, withFrame({ ...emptyMarks({ swingId: 's1' }), pass: { state: 'partial', skipped: [] } }, old));
+    expect(Object.keys(c.draft.cps)).toEqual(EDIT_KEYS);
+    const draft = patchCheckpoint(c.draft, 'leadArm', { head: [0.24, 0.32] });
+    const marks = draftToMarks({ draft, base: c.base, live: recompute({ ...c, draft }), swingId: 's1', editedAt: 'now' });
+    expect(marks.frames.find((f) => f.checkpoint === 'shaftThrough')).toEqual(old);
+    expect(marks.frames.map((f) => f.checkpoint).sort()).toEqual(['leadArm', 'shaftThrough']);
   });
 
   test('Set checkpoint to this frame moves the checkpoint, its internal frames and the automatic hands', () => {

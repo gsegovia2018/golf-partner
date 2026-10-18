@@ -147,13 +147,13 @@ describe('SwingHomeScreen', () => {
       expect(getByTestId('club-chip-d').props.children).toBe('Driver');
     });
 
-    test('an unfinished marking pass says "n of 6 confirmed · Continue" and resumes the canvas, not Results', () => {
+    test('an unfinished marking pass says "n of 7 confirmed · Continue" and resumes the canvas, not Results', () => {
       const partial = sw('m', '2026-10-12T10:00:00.000Z', { marked: { state: 'partial', count: 2 } });
       const fresh = sw('n', '2026-10-12T09:00:00.000Z', { marked: { state: 'none', count: 0 } });
       const { getByText, getByLabelText, navigation } = setup({ swings: [partial, fresh] });
-      expect(getByText(SWING_STRINGS.home.continueMarking(2, 6))).toBeTruthy();
-      expect(getByText(SWING_STRINGS.home.continueMarking(0, 6))).toBeTruthy();
-      fireEvent.press(getByLabelText(/^2 of 6 confirmed/));
+      expect(getByText(SWING_STRINGS.home.continueMarking(2, 7))).toBeTruthy();
+      expect(getByText(SWING_STRINGS.home.continueMarking(0, 7))).toBeTruthy();
+      fireEvent.press(getByLabelText(/^2 of 7 confirmed/));
       expect(navigation.navigate).toHaveBeenCalledWith('SwingEditMarks', { swingId: 'm', mode: 'pass' });
     });
 

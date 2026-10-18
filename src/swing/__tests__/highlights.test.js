@@ -23,7 +23,7 @@ describe('highlightFor roles', () => {
   });
 
   test('a check with only your own drawing has no target', () => {
-    const out = highlightFor({ id: 'waist_bend', status: 'red', value: 20, unit: '°' }, ctx);
+    const out = highlightFor({ id: 'knee_flex', status: 'red', value: 40, unit: '°' }, ctx);
     expect(out.filter((p) => p.role === 'target')).toHaveLength(0);
   });
 });
@@ -46,34 +46,39 @@ describe('key lines and references', () => {
     frameOf: () => 1,
   };
 
-  test('shaft down shallow brings the original shaft plane and the toe and ball ticks', () => {
-    const out = highlightFor({ id: 'shaft_down_shallow', cp: 'shaftDown', status: 'red', value: 12, unit: '°' }, kctx);
-    const targets = out.filter((p) => p.role === 'target');
-    expect(targets.find((p) => p.t === 'line' && p.dash)).toMatchObject({ a: [0.6, 0.85] });
-    expect(targets.filter((p) => p.t === 'line' && !p.dash)).toHaveLength(2);
+  test('halfway back: your shaft line to the ground, with the toe and ball ticks', () => {
+    const out = highlightFor({ id: 'butt_extension', position: 'leadArm', status: 'red', value: 12, unit: 'cm' }, kctx);
+    expect(out.some((p) => p.t === 'dot' && !p.role)).toBe(true);
+    expect(out.filter((p) => p.t === 'line' && p.role === 'target' && !p.dash)).toHaveLength(2);
     expect(out.filter((p) => p.t === 'label' && p.role === 'target').map((p) => p.text)).toEqual(['Toes', 'Ball']);
+    expect(homeOf({ id: 'butt_extension', position: 'leadArm' })).toBe('leadArm');
   });
 
-  test('hands between planes draws both planes and the hands', () => {
-    const out = highlightFor({ id: 'hands_between_planes', cp: 'top', status: 'red', value: 3, unit: 'cm' }, kctx);
-    expect(out.filter((p) => p.t === 'line' && p.role === 'target')).toHaveLength(2);
-    expect(out.some((p) => p.t === 'rect')).toBe(true);
-  });
-
-  test('hands between planes: the value shows only at the position it was read at', () => {
-    const check = { id: 'hands_between_planes', at: 'top', status: 'red', value: 3, unit: 'cm' };
-    expect(highlightFor(check, kctx).some((p) => p.t === 'label')).toBe(true);
-    expect(highlightFor(check, { ...kctx, cp: 'leadArm' }).some((p) => p.t === 'label')).toBe(false);
-    expect(homeOf(check)).toBe('top');
+  test('through vs halfway: the halfway-back landing is the target dot', () => {
+    const out = highlightFor({ id: 'through_vs_halfway', position: 'trailArm', status: 'red', value: 22, unit: 'cm' }, {
+      ...kctx, analysis: { ...kctx.analysis, clubMarks: { ...marks, trailArm: { hands: [0.42, 0.45], head: [0.6, 0.35] } } },
+    });
+    expect(out.some((p) => p.t === 'dot' && p.role === 'target')).toBe(true);
   });
 
   test('no ground ticks without a shaft line to land on them', () => {
-    expect(keyLinesAt('shaftThrough', kctx).extra).toEqual([]);
+    expect(keyLinesAt('trailArm', kctx).extra).toEqual([]);
   });
 
-  test('clubhead vs plane brings the shaft plane', () => {
-    const out = highlightFor({ id: 'clubhead_vs_plane', cp: 'shaftDown', status: 'red', value: 5, unit: 'cm' }, kctx);
-    expect(out.some((p) => p.t === 'line' && p.role === 'target')).toBe(true);
+  test('the clubhead on plane rows bring the shaft plane and ring the clubhead', () => {
+    const down = highlightFor({ id: 'clubhead_plane_down', position: 'shaftDown', status: 'red', value: 12, unit: 'cm' }, kctx);
+    expect(down.some((p) => p.t === 'line' && p.role === 'target')).toBe(true);
+    expect(down.find((p) => p.t === 'circle')).toMatchObject({ c: [0.5, 0.65] });
+    const both = highlightFor({ id: 'down_vs_takeaway', position: 'shaftDown', status: 'red', value: 12, unit: 'cm' }, {
+      ...kctx, analysis: { ...kctx.analysis, clubMarks: { ...marks, takeaway: { hands: [0.44, 0.58], head: [0.38, 0.62] } } },
+    });
+    expect(both.filter((p) => p.t === 'circle').map((p) => p.role ?? 'you')).toEqual(['target', 'you']);
+  });
+
+  test('spine and knee holds draw at the position they were read at', () => {
+    expect(highlightFor({ id: 'spine_hold', cp: 'top', position: 'top', status: 'red', value: 7, unit: '°' }, kctx).length).toBeGreaterThan(0);
+    expect(highlightFor({ id: 'knee_hold', cp: 'takeaway', position: 'takeaway', status: 'red', value: -12, unit: '°' }, kctx).some((p) => p.t === 'poly')).toBe(true);
+    expect(highlightFor({ id: 'lead_arm_spine', position: 'top', status: 'red', value: 25, unit: '°' }, kctx).some((p) => p.role === 'target')).toBe(true);
   });
 
   test('keyLinesAt: each position keeps its own lines', () => {
@@ -89,13 +94,13 @@ describe('key lines and references', () => {
 });
 
 describe('references without a clubhead', () => {
-  test('shaft down shallow still draws the original plane and the ticks when the clubhead is hidden', () => {
-    const out = highlightFor({ id: 'shaft_down_shallow', status: 'unknown', value: null, unit: null }, {
-      analysis: { handedness: 'right', clubMarks: { shaftDown: { hands: [0.42, 0.55], head: null } }, reference: { ball: [0.6, 0.85], handsAddress: [0.45, 0.6], trailShoulder: [0.4, 0.35] } },
+  test('the follow-through shaft line still draws the ticks when the clubhead is hidden', () => {
+    const out = highlightFor({ id: 'shaft_through_ball', position: 'trailArm', status: 'unknown', value: null, unit: null }, {
+      analysis: { handedness: 'right', clubMarks: { trailArm: { hands: [0.42, 0.55], head: null } }, reference: { ball: [0.6, 0.85], handsAddress: [0.45, 0.6], trailShoulder: [0.4, 0.35] } },
       poseAt: () => flat(),
       frameOf: () => 1,
     });
-    expect(out.find((p) => p.t === 'line' && p.dash && p.role === 'target')).toMatchObject({ a: [0.6, 0.85] });
+    expect(out.filter((p) => p.t === 'label' && p.role === 'target').map((p) => p.text)).toEqual(['Toes', 'Ball']);
     expect(out.some((p) => p.t === 'dot')).toBe(false);
   });
 });

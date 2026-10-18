@@ -15,19 +15,22 @@ const TEMPO_TARGET = 3; // 3:1 backswing to downswing
 const SCORE = {
   tempo: { of: (v) => Math.abs(v - TEMPO_TARGET), eps: 0.1 },
   finish_balance: { of: (v) => -v, eps: 0.5 },
-  // Signed readings (D21): the size of the miss either way, or the distance from the middle of the band.
+  // Signed readings: the size of the miss either way, or the distance from the middle of the band.
   hands_under_shoulders: { of: Math.abs, eps: 1 },
   hands_over_heels: { of: Math.abs, eps: 1 },
-  lead_arm_shoulder_plane: { of: Math.abs, eps: 1 },
-  waist_bend: { of: (v) => Math.abs(v - 135), eps: 1 },
-  hand_gap: { of: (v) => Math.abs(v - 15), eps: 1 },
-  // D23: at P6 further beyond the ball is shallower (better); at P8 further inside is better.
-  shaft_down_shallow: { of: (v) => -v, eps: 1 },
-}; // shaft_through_steep: smaller (further inside the ball) is better, the default
+  knee_flex: { of: (v) => Math.abs(v - 22.5), eps: 1 },
+  shaft_plane: { of: Math.abs, eps: 1 },
+  clubhead_plane_takeaway: { of: Math.abs, eps: 1 },
+  spine_hold: { of: Math.abs, eps: 1 },
+  knee_hold: { of: Math.abs, eps: 1 },
+  lead_arm_spine: { of: Math.abs, eps: 1 },
+  through_vs_halfway: { of: Math.abs, eps: 1 },
+  // Above the plane counts three times what under it does (green to 4 cm above, to 12 cm under).
+  clubhead_plane_down: { of: (v) => (v > 0 ? 3 * v : -v), eps: 1 },
+}; // butt_extension, shaft_through_ball, down_vs_takeaway: smaller is better, the default
 const DEFAULT_SCORE = { of: (v) => v, eps: 1 };
-// Posture tilt and the shaft direction at the top are angles with no better direction,
-// only a band: inside one band the swings are the same.
-const BAND_ONLY = new Set(['posture_address', 'top_direction']);
+// Posture tilt is an angle with no better direction, only a band: inside one band the swings are the same.
+const BAND_ONLY = new Set(['posture_address']);
 
 const known = (c) => c && c.status !== 'unknown' && c.value != null;
 

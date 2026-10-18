@@ -25,7 +25,9 @@ describe('changeOf: judged by meaning, not by sign', () => {
 
   test('angles with no better direction stay the same inside a band', () => {
     expect(changeOf(chk('posture_address', 'green', 32, '°'), chk('posture_address', 'green', 38, '°'))).toBe('same');
-    expect(changeOf(chk('top_direction', 'green', 2, '°'), chk('top_direction', 'yellow', 9, '°'))).toBe('better');
+    expect(changeOf(chk('posture_address', 'green', 30, '°'), chk('posture_address', 'yellow', 43, '°'))).toBe('better');
+    // the plane at P6: above counts three times what under does
+    expect(changeOf(chk('clubhead_plane_down', 'green', -10, 'cm'), chk('clubhead_plane_down', 'green', 4, 'cm'))).toBe('better');
   });
 
   test('unknown on either side, or a check missing from one swing, is unclear', () => {
@@ -40,14 +42,14 @@ describe('compareAnalyses', () => {
     chk('hands_height_impact', 'yellow', 4, 'cm'),
     chk('hip_drift', 'red', 12, 'cm'),
     chk('tempo', 'yellow', 2.6, ':1'),
-    chk('clubhead_vs_plane', 'unknown', null, null, { cp: 'impact' }),
+    chk('spine_hold', 'unknown', null, null, { cp: 'shaftDown', position: 'shaftDown' }),
   ], 'early_extension');
   const older = swing([
     chk('spine_loss', 'red', 9, '°'),
     chk('hands_height_impact', 'yellow', 7, 'cm'),
     chk('hip_drift', 'red', 12, 'cm'),
     chk('tempo', 'yellow', 2.0, ':1'),
-    chk('clubhead_vs_plane', 'yellow', 3, 'cm', { cp: 'impact' }),
+    chk('spine_hold', 'yellow', 3, '°', { cp: 'shaftDown', position: 'shaftDown' }),
   ], 'early_extension');
 
   test('counts, verdict, sentence and the deltas', () => {
@@ -59,14 +61,15 @@ describe('compareAnalyses', () => {
     const rows = r.groups.flatMap((g) => g.rows);
     expect(rows.find((x) => x.id === 'spine_loss')).toMatchObject({ change: 'better', delta: '−2°', a: { text: '7°' }, b: { text: '9°' } });
     expect(rows.find((x) => x.id === 'hands_height_impact').delta).toBe('−3 cm');
-    expect(rows.find((x) => x.id === 'clubhead_vs_plane')).toMatchObject({ change: 'unclear', delta: '', a: { text: '—' } });
+    expect(rows.find((x) => x.id === 'spine_hold')).toMatchObject({ change: 'unclear', delta: '', a: { text: '—' } });
   });
 
   test('rows are grouped by checkpoint in timeline order', () => {
     const r = compareAnalyses(newer, older);
-    expect(r.groups.map((g) => g.cp)).toEqual(['impact']);
-    const wide = compareAnalyses(swing([chk('posture_address', 'green', 32, '°'), ...newer.checks]), swing([chk('posture_address', 'green', 30, '°'), ...older.checks]));
-    expect(wide.groups.map((g) => g.cp)).toEqual(['address', 'impact']);
+    expect(r.groups.map((g) => g.cp)).toEqual(['shaftDown', 'impact']);
+    const addr = (v) => chk('posture_address', 'green', v, '°', { position: 'address' });
+    const wide = compareAnalyses(swing([addr(32), ...newer.checks]), swing([addr(30), ...older.checks]));
+    expect(wide.groups.map((g) => g.cp)).toEqual(['address', 'shaftDown', 'impact']);
   });
 
   test('swapping the swings flips better and worse', () => {
