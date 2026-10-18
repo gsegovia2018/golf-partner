@@ -115,6 +115,12 @@ describe('SwingHomeScreen', () => {
     expect(getByLabelText(/^Over the top, .*, low frame rate, 120 fps$/)).toBeTruthy();
   });
 
+  test('a 240 fps clip measured at 239.7 fps does not warn (anything from 200 up is full slow motion)', () => {
+    const real = sw('r', '2026-10-11T16:42:00.000Z', { fps: { capture: 239.67, effective: 239.67, factor: 8, approximate: false } });
+    const { queryByTestId } = setup({ swings: [real] });
+    expect(queryByTestId('fps-warn-r')).toBeNull();
+  });
+
   test('a 240 fps capture marked approximate still warns', () => {
     const approx = sw('x', '2026-10-11T16:42:00.000Z', { fps: { capture: 240, effective: 240, factor: 8, approximate: true } });
     const { getByText } = setup({ swings: [approx] });

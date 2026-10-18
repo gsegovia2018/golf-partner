@@ -52,7 +52,8 @@ export function formatBytes(n) {
 }
 
 // The frame rate is only worth a word when it is a problem: approximate, or under 240 fps.
-const fpsLow = (fps) => fps.approximate || fps.effective < 240;
+// 240 fps clips measure 239.x: anything from 200 up is a full slow-motion clip.
+const fpsLow = (fps) => fps.approximate || fps.effective < 200;
 
 export default function SwingHomeScreen({ navigation }) {
   useT(); // the swing copy reads the language as it renders: re-render when it changes
@@ -205,27 +206,23 @@ export default function SwingHomeScreen({ navigation }) {
                 <View style={[s.progFill, { width: `${Math.min(100, (sw.marked.count / MARK_TOTAL) * 100)}%` }]} />
               </View>
             ) : null}
+            {c || fps != null ? (
+              <View style={s.metaLine}>
+                {c ? ['green', 'yellow', 'red'].map((k) => (
+                  <View key={k} style={s.count}>
+                    <View style={[s.dotSm, { backgroundColor: tone[k] }]} />
+                    <Text style={s.countNum}>{c[k]}</Text>
+                  </View>
+                )) : null}
+                {fps != null ? (
+                  <View style={s.fpsWarn} testID={`fps-warn-${sw.id}`}>
+                    <Feather name="alert-triangle" size={12} color={tone.yellow} />
+                    <Text style={[s.fpsWarnText, { color: tone.yellow }]}>{T.fpsWarn(fps)}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
           </View>
-          {c || fps != null ? (
-            <View style={s.rowRight}>
-              {c ? (
-                <View style={s.counts}>
-                  {['green', 'yellow', 'red'].map((k) => (
-                    <View key={k} style={s.count}>
-                      <View style={[s.dotSm, { backgroundColor: tone[k] }]} />
-                      <Text style={s.countNum}>{c[k]}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-              {fps != null ? (
-                <View style={s.fpsWarn} testID={`fps-warn-${sw.id}`}>
-                  <Feather name="alert-triangle" size={12} color={tone.yellow} />
-                  <Text style={[s.fpsWarnText, { color: tone.yellow }]}>{T.fpsWarn(fps)}</Text>
-                </View>
-              ) : null}
-            </View>
-          ) : null}
           {selecting ? null : marking ? (
             <View style={s.contPill}><Text style={s.contText}>{T.continue}</Text></View>
           ) : <Feather name="chevron-right" size={18} color={theme.text.muted} />}
@@ -326,6 +323,7 @@ export default function SwingHomeScreen({ navigation }) {
               style={[s.btn, s.btnFlex]}
               icon="download"
               label={T.import}
+              textStyle={{ color: theme.text.primary }}
               disabled={!canAnalyse || busy}
               onPress={() => gate(doImport)}
               accessibilityLabel={T.import}
@@ -466,8 +464,7 @@ const makeStyles = (theme) => {
     backgroundColor: theme.bg.secondary,
   },
   progFill: { height: '100%', backgroundColor: theme.accent.primary },
-  rowRight: { alignItems: 'flex-end', gap: 6 },
-  counts: { flexDirection: 'row', gap: 8 },
+  metaLine: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
   count: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   countNum: { ...ty.label, fontVariant: ['tabular-nums'] },
   dotSm: { width: 7, height: 7, borderRadius: 4 },

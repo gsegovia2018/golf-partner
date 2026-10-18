@@ -43,8 +43,12 @@ Core features:
 
 ### Shipping to Android
 
-- `GOLF_ANDROID_BUILD_ARCHS=arm64-v8a npx eas-cli update --branch preview -m "…"`
-  — push JS/asset changes over the air to installed preview builds. No
+- `GOLF_ANDROID_BUILD_ARCHS=arm64-v8a npx eas-cli update --branch preview --environment preview -m "…"`
+  — push JS/asset changes over the air to installed preview builds.
+  `--environment preview` is NOT optional either: the Supabase URL/key live in
+  the EAS `preview` environment, and without the flag the bundle ships without
+  them and the app crashes on start ("supabaseUrl is required"). Recovery:
+  `npx eas-cli update:republish --group <last good group> --destination-branch preview`. No
   rebuild, no reinstall. The env var is NOT optional: the installed APK comes
   from the `preview-arm64` profile, whose env makes `app.config.js` add the
   `expo-build-properties` plugin, and that plugin is part of the runtime

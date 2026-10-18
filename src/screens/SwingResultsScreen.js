@@ -383,7 +383,7 @@ export function SwingResultsView({
                   ? { ...row0, text: T.waitingFor(needs.map((n) => (n.kind === 'ball' ? T.needBall : T.needHead(SWING_STRINGS.checkpoint[n.cp]))).join(', ')) } : row0;
                 const isSel = !!selected && CHECK_KEY(selected) === CHECK_KEY(c);
                 return (
-                  <React.Fragment key={CHECK_KEY(c)}>
+                  <View key={CHECK_KEY(c)} style={isSel && selFix ? s.selGroup : null}>
                     <SwingCheckRow
                       check={c}
                       step={cp}
@@ -394,7 +394,7 @@ export function SwingResultsView({
                       placeAt={needs.length && unlockedBy(analysis, row0, needs[0].cp) ? unplacedCheckpoint(c, analysis.clubMarks) : null}
                     />
                     {isSel && selFix ? <SwingFixPeek copy={selFix} onOpen={() => openFixFor(selected)} /> : null}
-                  </React.Fragment>
+                  </View>
                 );
               })}
               {stepAsk?.kind === 'ball' ? (
@@ -755,6 +755,7 @@ const makeStyles = (theme) => StyleSheet.create({
   askRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 8, marginTop: 4, borderRadius: 10, backgroundColor: theme.bg.secondary },
   askText: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, lineHeight: 17, color: theme.text.primary },
   askBtn: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.accent.primary },
+  selGroup: { backgroundColor: theme.accent.light, borderRadius: 10 }, // the selected row and its fix read as one block
   listHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 2, marginBottom: -4 },
   editLink: { minHeight: 36, justifyContent: 'center', paddingLeft: 12 },
   navCard: { padding: 0, gap: 0 },

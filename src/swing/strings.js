@@ -215,6 +215,7 @@ export const SWING_STRINGS = build({
     close: L,
     cancel: L,
     names: { hands: L, head: L, ball: L },
+    dockName: { hands: L, head: L, ball: L }, // the dock tile: one short word
     status: {
       proposed: L, confirmed: L, hidden: L, missing: L, moved: L, unsure: L,
     },

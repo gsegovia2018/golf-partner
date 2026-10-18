@@ -217,7 +217,7 @@ function MarkDockImpl({
           >
             {off ? null : <DockBadge mark={m} status={statuses[m]} />}
             <Swatch mark={m} on={on} size={14} />
-            <Text style={[styles.dkName, on && styles.dkInk]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{T.names[m]}</Text>
+            <Text style={[styles.dkName, on && styles.dkInk]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{T.dockName[m]}</Text>
           </Pressable>
         );
       })}
