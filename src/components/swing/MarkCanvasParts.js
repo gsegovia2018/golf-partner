@@ -185,7 +185,7 @@ function MarkDockImpl({
           >
             <Swatch mark={m} on={on} size={14} />
             <Text style={[styles.dkName, on && styles.dkInk]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{T.names[m]}</Text>
-            <Text style={[styles.dkWord, on && styles.dkInk]} numberOfLines={1}>{word}</Text>
+            <Text style={[styles.dkWord, on && styles.dkInk]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{word}</Text>
           </Pressable>
         );
       })}
@@ -310,8 +310,8 @@ const styles = StyleSheet.create({
   },
   dkOn: { backgroundColor: hud.text, borderColor: hud.text },
   dkOff: { opacity: 0.4 },
-  dkName: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 8.5, letterSpacing: 0.4, textTransform: 'uppercase', color: hud.textSoft },
-  dkWord: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 7.5, color: hud.textSoft, opacity: 0.85 },
+  dkName: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase', color: hud.textSoft },
+  dkWord: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: hud.textSoft, opacity: 0.85 },
   dkInk: { color: INK },
 
   cue: {
@@ -323,15 +323,15 @@ const styles = StyleSheet.create({
   cueLine: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
   kind: { backgroundColor: hud.accent, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2, marginTop: 1 },
   kindLast: { backgroundColor: HUD_WARN },
-  kindText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 8.5, letterSpacing: 0.8, color: hud.onAccent },
+  kindText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, letterSpacing: 0.8, color: hud.onAccent },
   cueMain: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, lineHeight: 16, color: hud.text },
   cueWatch: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10.5, color: hud.textSoft, marginTop: 2 },
-  moreText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11.5, color: hud.accent },
+  moreText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: hud.accent },
   cueFull: {
     position: 'absolute', left: 0, right: 0, top: 0, gap: 6, paddingTop: 10, paddingHorizontal: 12, paddingBottom: 14,
     backgroundColor: hud.scrimStrong,
   },
-  cueText: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12.5, lineHeight: 18, color: hud.textSoft },
+  cueText: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, lineHeight: 18, color: hud.textSoft },
   cueBold: { fontFamily: 'PlusJakartaSans-Bold', color: hud.text },
 
   chrow: { height: 52, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4 },
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   cd: { width: 6, height: 6, borderRadius: 3, borderWidth: 1.5, borderColor: hud.textMuted },
   cdDone: { backgroundColor: hud.accent, borderColor: hud.accent },
   cdSkip: { backgroundColor: HUD_WARN, borderColor: HUD_WARN, borderRadius: 1 },
-  chP: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, color: hud.textSoft },
-  chName: { maxWidth: '100%', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 8, letterSpacing: 0.3, color: hud.textMuted },
+  chP: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, color: hud.textSoft },
+  chName: { maxWidth: '100%', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, letterSpacing: 0.3, color: hud.textMuted },
   chOnText: { color: hud.text },
 });

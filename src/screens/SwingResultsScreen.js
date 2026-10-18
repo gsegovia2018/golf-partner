@@ -10,6 +10,8 @@ import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import PressableScale from '../components/ui/PressableScale';
 import BottomSheet from '../components/BottomSheet';
+import { PrimaryButton, SecondaryButton } from '../components/ui/Buttons';
+import { Overline } from '../components/swing/swingStyles';
 import SwingSummary from '../components/swing/SwingSummary';
 import PositionBar from '../components/swing/PositionBar';
 import StepStill from '../components/swing/StepStill';
@@ -62,7 +64,7 @@ function PracticePlan({
         accessibilityLabel={open ? P.hide : P.show}
         accessibilityState={{ expanded: open }}
       >
-        <Text style={[s.overlineDark, s.flex]}>{P.title}</Text>
+        <Overline style={[s.overlinePad, s.flex]}>{P.title}</Overline>
         <Feather name={open ? 'chevron-up' : 'chevron-down'} size={18} color={theme.text.secondary} />
       </PressableScale>
       {open ? P.blocks.map((b) => (
@@ -98,13 +100,9 @@ function ErrorSlot({ s, error, onPrimary, primaryLabel, onSecondary, secondaryLa
       </View>
       <View style={s.btnRow}>
         {onPrimary ? (
-          <PressableScale style={[s.btn, s.btnPrimary, s.flex]} onPress={onPrimary} accessibilityRole="button" accessibilityLabel={primaryLabel}>
-            <Text style={s.btnPrimaryText}>{primaryLabel}</Text>
-          </PressableScale>
+          <PrimaryButton style={[s.btn, s.flex]} label={primaryLabel} onPress={onPrimary} accessibilityLabel={primaryLabel} />
         ) : null}
-        <PressableScale style={[s.btn, s.btnSecondary, s.flex]} onPress={onSecondary} accessibilityRole="button" accessibilityLabel={secondaryLabel}>
-          <Text style={s.btnSecondaryText}>{secondaryLabel}</Text>
-        </PressableScale>
+        <SecondaryButton style={[s.btn, s.flex]} label={secondaryLabel} onPress={onSecondary} accessibilityLabel={secondaryLabel} />
       </View>
     </>
   );
@@ -404,7 +402,7 @@ export function SwingResultsView({
 
             {showPractise ? (
               <View style={s.card} testID="results-practise">
-                <Text style={s.overlineDark}>{T.practiseTitle}</Text>
+                <Overline style={s.overlinePad}>{T.practiseTitle}</Overline>
                 {groupDrills.length ? (
                   <>
                     {shownDrills.map((d) => (
@@ -432,14 +430,8 @@ export function SwingResultsView({
             ) : null}
 
             <View style={s.btnStack}>
-              <PressableScale style={[s.btn, s.btnPrimary]} onPress={onPlay} accessibilityRole="button" accessibilityLabel={T.play}>
-                <Feather name="play" size={16} color={theme.text.inverse} />
-                <Text style={s.btnPrimaryText}>{T.play}</Text>
-              </PressableScale>
-              <PressableScale style={[s.btn, s.btnSecondary]} onPress={() => openEdit(cp)} accessibilityRole="button" accessibilityLabel={T.editMarks}>
-                <Feather name="edit-2" size={16} color={theme.text.primary} />
-                <Text style={s.btnSecondaryText}>{T.editMarks}</Text>
-              </PressableScale>
+              <PrimaryButton style={s.btn} icon="play" label={T.play} onPress={onPlay} accessibilityLabel={T.play} />
+              <SecondaryButton style={s.btn} icon="edit-2" label={T.editMarks} onPress={() => openEdit(cp)} accessibilityLabel={T.editMarks} />
             </View>
           </>
         ) : null}
@@ -477,15 +469,13 @@ export function SwingResultsView({
               maxLength={60}
               autoFocus
             />
-            <PressableScale
-              style={[s.btn, s.btnPrimary, !nameDraft.trim() && s.btnOff]}
+            <PrimaryButton
+              style={s.btn}
+              label={T.save}
               disabled={!nameDraft.trim()}
               onPress={() => { onRename?.(nameDraft); setSheet(null); }}
-              accessibilityRole="button"
               accessibilityLabel={T.save}
-            >
-              <Text style={s.btnPrimaryText}>{T.save}</Text>
-            </PressableScale>
+            />
           </>
         ) : (
           <>
@@ -744,8 +734,8 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: theme.bg.card, borderRadius: theme.radius.lg, padding: 12,
     borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
   },
-  bannerText: { flex: 1, fontFamily: 'PlusJakartaSans-Medium', fontSize: 12.5, color: theme.text.primary, lineHeight: 18 },
-  hint: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11.5, color: theme.text.secondary, lineHeight: 16 },
+  bannerText: { flex: 1, fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, color: theme.text.primary, lineHeight: 18 },
+  hint: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, color: theme.text.secondary, lineHeight: 16 },
   hintPad: { paddingHorizontal: 8, paddingTop: 6 },
 
   askRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 8, marginTop: 4, borderRadius: 10, backgroundColor: theme.bg.secondary },
@@ -760,12 +750,12 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.bg.card, borderRadius: theme.radius.lg, padding: 12, gap: 2,
     borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
   },
-  overlineDark: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: theme.text.secondary, paddingHorizontal: 4, paddingBottom: 4 },
+  overlinePad: { paddingHorizontal: 4, paddingBottom: 4 },
   drill: { paddingVertical: 8, paddingHorizontal: 4, gap: 2 },
   drillTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.text.primary },
-  drillBody: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12.5, lineHeight: 18, color: theme.text.secondary },
-  drillPass: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, color: theme.accent.primary },
-  drillProgress: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11.5, lineHeight: 16, color: theme.text.secondary, fontStyle: 'italic' },
+  drillBody: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, lineHeight: 18, color: theme.text.secondary },
+  drillPass: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.accent.primary },
+  drillProgress: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, lineHeight: 16, color: theme.text.secondary, fontStyle: 'italic' },
   plan: { marginTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border.subtle },
   practiceHead: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingRight: 4 },
   practiceRow: { flexDirection: 'row', gap: 12, paddingVertical: 8, paddingHorizontal: 4 },
@@ -774,12 +764,7 @@ const makeStyles = (theme) => StyleSheet.create({
 
   btnRow: { flexDirection: 'row', gap: 10 },
   btnStack: { gap: 10 },
-  btn: { minHeight: 48, borderRadius: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  btnPrimary: { backgroundColor: theme.accent.primary },
-  btnPrimaryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.text.inverse },
-  btnSecondary: { backgroundColor: theme.bg.secondary, borderWidth: 1, borderColor: theme.border.default },
-  btnSecondaryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.text.primary },
-  btnOff: { opacity: 0.5 },
+  btn: { paddingHorizontal: 16 },
 
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   deleteLink: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
@@ -787,7 +772,7 @@ const makeStyles = (theme) => StyleSheet.create({
 
   errorSlot: { gap: 8, paddingTop: 12, paddingBottom: 8 },
   errorTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 26, lineHeight: 32, color: theme.text.primary },
-  errorBody: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13.5, lineHeight: 20, color: theme.text.secondary },
+  errorBody: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, lineHeight: 20, color: theme.text.secondary },
 
   sheet: { backgroundColor: theme.bg.primary, padding: 20, paddingBottom: 32, borderTopLeftRadius: 24, borderTopRightRadius: 24, gap: 8 },
   sheetTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary, marginBottom: 6 },

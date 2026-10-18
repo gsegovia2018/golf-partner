@@ -26,7 +26,7 @@ export default function PositionBar({
   const first = i <= 0;
   const last = i >= STEPS.length - 1;
   const p = step === EXTRAS ? null : cueFor(step)?.p;
-  const word = step === EXTRAS ? `${i + 1}/${STEPS.length}` : waiting ? SWING_STRINGS.statusWord.yellow : status === 'unknown' ? '' : SWING_STRINGS.statusWord[status];
+  const word = step === EXTRAS ? `${i + 1}/${STEPS.length}` : waiting ? R.needsHead : status === 'unknown' ? '' : SWING_STRINGS.statusWord[status];
   return (
     <View style={s.bar}>
       <PressableScale style={[s.nav, first && s.navOff]} disabled={first} onPress={onPrev} accessibilityRole="button" accessibilityLabel={R.prevPos} testID="position-prev">
@@ -57,6 +57,6 @@ const makeStyles = (theme) => StyleSheet.create({
   p: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10.5, letterSpacing: 0.6, color: theme.text.secondary },
   name: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 19, color: theme.text.primary, flexShrink: 1 },
   tag: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, borderColor: 'transparent' },
-  tagText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9.5, letterSpacing: 0.6, textTransform: 'uppercase', color: '#ffffff' },
-  word: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, color: theme.text.secondary },
+  tagText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase', color: '#ffffff' },
+  word: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.text.secondary },
 });

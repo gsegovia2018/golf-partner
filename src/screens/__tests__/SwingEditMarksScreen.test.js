@@ -1174,7 +1174,7 @@ describe('checks v2: seven positions, the unsure clubhead, the deep link', () =>
       expect(dockLabel(u, 'head')).toBe(SWING_STRINGS.mark.dockLabel('Cabeza del palo', 'Dudosa'));
       expect(u.getByText(/Dudosa · confírmala o toca donde está/)).toBeTruthy();
       expect(within(u.getByTestId('chapter-shaftDown')).getByText('Bajada')).toBeTruthy();
-      expect(within(u.getByTestId('chapter-trailArm')).getByText('Seguim.')).toBeTruthy();
+      expect(within(u.getByTestId('chapter-trailArm')).getByText('Acabado')).toBeTruthy();
     } finally {
       await act(async () => { await setLanguagePref('en'); });
     }

@@ -209,9 +209,6 @@ export const SWING_STRINGS = build({
     edit: L,
     auto: L,
     names: { hands: L, head: L, ball: L },
-    short: {
-      address: L, takeaway: L, leadArm: L, top: L, shaftDown: L, impact: L, trailArm: L,
-    },
     status: {
       proposed: L, confirmed: L, hidden: L, missing: L, moved: L, unsure: L,
     },
@@ -315,7 +312,8 @@ export const SWING_STRINGS = build({
     loadFailed: L,
   },
 
-  // The short names of the seven positions and the extras step (Results' summary dots, the canvas chips).
+  // Each position has two names: the full name `checkpoint.<key>` (headings, sentences) and this chip
+  // name (Results' summary dots, the canvas chips, the extras step). There is no third.
   position: {
     short: {
       address: L, takeaway: L, leadArm: L, top: L, shaftDown: L, impact: L, trailArm: L, extras: L,
@@ -338,6 +336,7 @@ export const SWING_STRINGS = build({
     extrasHint: L,
     readWithout: (name) => t('swing.results.readWithout', { name }),
     stateNoHead: L,
+    needsHead: L,
     stepA11y: (name, state) => t('swing.results.stepA11y', { name, state }),
     posOf: (name, n, total) => t('swing.results.posOf', { name, n, total }),
     prevPos: L,
@@ -377,7 +376,6 @@ export const SWING_STRINGS = build({
     fix: (n) => t('swing.results.fixCount', { n }),
     fpsChip: (fps) => `${formatNumber(Math.round(fps))} fps`,
     approxChip: L,
-    cpSuffix: { takeaway: L, leadArm: L, top: L, shaftDown: L }, // spine_hold / knee_hold run at several positions
     approxBanner: L,
     approxHeightBanner: L,
     noStill: L,

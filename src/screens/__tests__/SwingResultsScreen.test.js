@@ -167,7 +167,7 @@ describe('SwingResultsScreen: the summary and the stepper (checks v2, design D)'
     STEPS.forEach((k) => expect(u.getByTestId(`summary-step-${k}`)).toBeTruthy());
     expect(u.getByTestId(`summary-step-${MAIN_AT}`).props.accessibilityLabel).toBe(`${T.stepA11y(cpName(MAIN_AT), SWING_STRINGS.statusWord.red)}, ${T.tagFirst}`);
     expect(u.getByTestId(`summary-step-${MARKED.main.startsAt}`).props.accessibilityLabel).toMatch(new RegExp(`${T.tagStarts}$`));
-    ['Address', 'Takeaway', 'Halfway', 'Top', 'Down', 'Impact', 'Through', 'Extras'].forEach((n) => expect(u.getAllByText(n).length).toBeGreaterThan(0));
+    ['Address', 'Takeaway', 'Halfway', 'Top', 'Down', 'Impact', 'Finish', 'Extras'].forEach((n) => expect(u.getAllByText(n).length).toBeGreaterThan(0));
     expect(u.queryByLabelText(/^Transition|^Shaft through/)).toBeNull(); // P5 and P8 are gone
   });
 
@@ -311,6 +311,9 @@ describe('SwingResultsScreen: placing the clubhead on the still (design D)', () 
     expect(u.getByLabelText(T.placeToFinish(cpName('shaftDown')))).toBeTruthy(); // the summary's place line
     expect(u.getByTestId('summary-step-shaftDown').props.accessibilityLabel).toBe(T.stepA11y(cpName('shaftDown'), T.stateNoHead));
     expect(u.queryByTestId('results-nudge')).toBeNull(); // the mark goes on the saved frame
+    // the position bar says what is missing, not a verdict ("Watch")
+    expect(within(u.getByTestId('position-bar')).getByText(T.needsHead)).toBeTruthy();
+    expect(within(u.getByTestId('position-bar')).queryByText(SWING_STRINGS.statusWord.yellow)).toBeNull();
   });
 
   test('two taps from the summary: the place line opens place mode on a position that was not showing', async () => {
@@ -597,7 +600,7 @@ describe('SwingResultsScreen: Spanish', () => {
     expect(u.getByLabelText('Coloca la cabeza del palo en la posición de bajada para completar la lectura')).toBeTruthy();
     expect(u.getByText('Toca donde está la cabeza del palo · fotograma', { exact: false })).toBeTruthy();
     expect(u.getByTestId('summary-step-shaftDown').props.accessibilityLabel).toBe('Bajada, cabeza del palo sin colocar');
-    ['Prep.', 'Inicio', 'Mitad', 'Top', 'Bajada', 'Impacto', 'Seguim.', 'Extras'].forEach((n) => expect(u.getAllByText(n).length).toBeGreaterThan(0));
+    ['Prep.', 'Inicio', 'Mitad', 'Top', 'Bajada', 'Impacto', 'Acabado', 'Extras'].forEach((n) => expect(u.getAllByText(n).length).toBeGreaterThan(0));
   });
 
   test('a marked swing says "Lo primero" and where it likely starts', async () => {
@@ -846,7 +849,7 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
     expect(getByText(T.stepOf(2, 3))).toBeTruthy();
     // up next: the seven positions the marking pass asks for (checks v2)
     expect(getByText(T.upNextTitle(7))).toBeTruthy();
-    ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(getByText(SWING_STRINGS.mark.short[k])).toBeTruthy());
+    ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(getByText(SWING_STRINGS.checkpoint[k])).toBeTruthy());
     expect(getByText(SWING_STRINGS.privacy)).toBeTruthy();
 
     await act(async () => { finish({ analysis: UNMARKED, pass2: 'done' }); });

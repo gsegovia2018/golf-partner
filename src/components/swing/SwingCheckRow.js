@@ -20,7 +20,8 @@ export default function SwingCheckRow({
   const { theme } = useTheme();
   const tone = useSwingTone();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const name = check.cp && T.cpSuffix[check.cp] ? `${check.label}, ${T.cpSuffix[check.cp]}` : check.label;
+  // spine_hold / knee_hold run at several positions: the row names its position.
+  const name = check.cp && SWING_STRINGS.checkpoint[check.cp] ? `${check.label}, ${SWING_STRINGS.checkpoint[check.cp].toLowerCase()}` : check.label;
   const { status } = check;
   const word = status === 'unknown'
     ? (check.reason === 'hidden' ? SWING_STRINGS.statusWord.unknown : '—')
@@ -69,12 +70,12 @@ const makeStyles = (theme) => StyleSheet.create({
   dotWait: { backgroundColor: 'transparent', borderWidth: 2, borderStyle: 'dashed' },
   dot: { width: 10, height: 10, borderRadius: 5 },
   mid: { flex: 1, gap: 2 },
-  label: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13.5, color: theme.text.primary },
+  label: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.text.primary },
   text: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, lineHeight: 17, color: theme.text.secondary },
   right: { alignItems: 'flex-end', gap: 2, maxWidth: 128 },
-  value: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13.5, color: theme.text.primary, fontVariant: ['tabular-nums'] },
+  value: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13, color: theme.text.primary, fontVariant: ['tabular-nums'] },
   approx: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10.5, color: theme.text.secondary },
-  word: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, color: theme.text.secondary },
+  word: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.text.secondary },
   cta: {
     minHeight: 36, minWidth: 44, borderRadius: 18, paddingHorizontal: 12, justifyContent: 'center',
     backgroundColor: theme.accent.primary,

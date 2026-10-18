@@ -6,8 +6,11 @@
 // Primary: Clubhouse Green, ExtraBold 14, 14px radius, 14px vertical padding.
 // Secondary: hairline border, Slate text (Bold 14). `secondaryTextAccent` is
 // the green-text variant used inside sheets and beside a primary action.
+// `icon` / `iconRight` (Feather names) sit before / after the label in its colour;
+// `numberOfLines` caps the label.
 import React from 'react';
 import { TouchableOpacity, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 
 export function buttonStyles(theme) {
@@ -27,12 +30,13 @@ export function buttonStyles(theme) {
 }
 
 function Base({
-  variant, label, onPress, disabled, busy, accent, style, textStyle, children, ...rest
+  variant, label, onPress, disabled, busy, accent, style, textStyle, icon, iconRight, numberOfLines, children, ...rest
 }) {
   const { theme } = useTheme();
   const b = buttonStyles(theme);
   const primary = variant === 'primary';
   const textBase = primary ? b.primaryText : (accent ? b.secondaryTextAccent : b.secondaryText);
+  const iconColor = StyleSheet.flatten([textBase, textStyle]).color;
   return (
     <TouchableOpacity
       activeOpacity={0.8}
@@ -41,14 +45,16 @@ function Base({
       {...rest}
       onPress={onPress}
       disabled={disabled || busy}
-      style={[primary ? b.primaryBtn : b.secondaryBtn, (disabled || busy) && styles.off, style]}
+      style={[primary ? b.primaryBtn : b.secondaryBtn, (icon || iconRight) && styles.withIcon, (disabled || busy) && styles.off, style]}
     >
       {busy ? (
         <ActivityIndicator color={primary ? theme.text.inverse : theme.text.secondary} />
       ) : (
         <>
           {children}
-          {label != null ? <Text style={[textBase, textStyle]}>{label}</Text> : null}
+          {icon ? <Feather name={icon} size={18} color={iconColor} /> : null}
+          {label != null ? <Text style={[textBase, textStyle]} numberOfLines={numberOfLines}>{label}</Text> : null}
+          {iconRight ? <Feather name={iconRight} size={18} color={iconColor} /> : null}
         </>
       )}
     </TouchableOpacity>
@@ -58,4 +64,4 @@ function Base({
 export function PrimaryButton(props) { return <Base variant="primary" {...props} />; }
 export function SecondaryButton(props) { return <Base variant="secondary" {...props} />; }
 
-const styles = StyleSheet.create({ off: { opacity: 0.5 } });
+const styles = StyleSheet.create({ off: { opacity: 0.5 }, withIcon: { gap: 8 } });

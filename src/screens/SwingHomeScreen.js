@@ -8,6 +8,8 @@ import IconButton from '../components/ui/IconButton';
 import PressableScale from '../components/ui/PressableScale';
 import SwipeToDelete from '../components/ui/SwipeToDelete';
 import BottomSheet from '../components/BottomSheet';
+import { PrimaryButton, SecondaryButton } from '../components/ui/Buttons';
+import { Overline } from '../components/swing/swingStyles';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { haptic } from '../lib/haptics';
@@ -257,7 +259,7 @@ export default function SwingHomeScreen({ navigation }) {
           <>
             {groups.map((g) => (
               <View key={g.key}>
-                <Text style={s.sectionLabel}>{g.label}</Text>
+                <Overline style={s.sectionLabel}>{g.label}</Overline>
                 <View style={s.group}>
                   {g.swings.map((sw, i) => (
                     <View key={sw.id} style={i > 0 ? s.divider : null}>{renderRow(sw)}</View>
@@ -283,47 +285,36 @@ export default function SwingHomeScreen({ navigation }) {
         </View>
         {selecting ? (
           <View style={s.btnRow}>
-            <PressableScale
-              style={[s.btn, s.btnPrimary, s.btnFlex, pickedRows.length < 2 && s.btnDisabled]}
+            <PrimaryButton
+              style={[s.btn, s.btnFlex]}
+              icon="columns"
+              label={pickedRows.length === 2 ? T.compareShort : T.comparePick}
+              numberOfLines={1}
               disabled={pickedRows.length < 2}
               onPress={() => { navigation.navigate('SwingCompare', { ids: picked }); endSelect(); }}
-              accessibilityRole="button"
               accessibilityLabel={pickedRows.length === 2 ? T.compare(shortName(pickedRows[0]), shortName(pickedRows[1])) : T.comparePick}
-            >
-              <Feather name="columns" size={18} color={theme.text.inverse} />
-              <Text style={s.btnPrimaryText} numberOfLines={1}>
-                {pickedRows.length === 2 ? T.compareShort : T.comparePick}
-              </Text>
-            </PressableScale>
-            <PressableScale style={[s.btn, s.btnSecondary]} onPress={endSelect} accessibilityRole="button" accessibilityLabel={T.cancel}>
-              <Text style={s.btnSecondaryText}>{T.cancel}</Text>
-            </PressableScale>
+            />
+            <SecondaryButton style={s.btn} label={T.cancel} onPress={endSelect} accessibilityLabel={T.cancel} />
           </View>
         ) : (
           <>
             <View style={s.btnRow}>
-              <PressableScale
-                style={[s.btn, s.btnPrimary, s.btnRecord, !canAnalyse && s.btnDisabled]}
+              <PrimaryButton
+                style={[s.btn, s.btnRecord]}
+                icon="camera"
+                label={T.record}
                 disabled={!canAnalyse}
                 onPress={() => gate(doRecord)}
-                accessibilityRole="button"
                 accessibilityLabel={T.record}
-                accessibilityState={{ disabled: !canAnalyse }}
-              >
-                <Feather name="camera" size={18} color={theme.text.inverse} />
-                <Text style={s.btnPrimaryText}>{T.record}</Text>
-              </PressableScale>
-              <PressableScale
-                style={[s.btn, s.btnSecondary, s.btnFlex, (!canAnalyse || busy) && s.btnDisabled]}
+              />
+              <SecondaryButton
+                style={[s.btn, s.btnFlex]}
+                icon="download"
+                label={T.import}
                 disabled={!canAnalyse || busy}
                 onPress={() => gate(doImport)}
-                accessibilityRole="button"
                 accessibilityLabel={T.import}
-                accessibilityState={{ disabled: !canAnalyse || busy }}
-              >
-                <Feather name="download" size={18} color={theme.text.primary} />
-                <Text style={s.btnSecondaryText}>{T.import}</Text>
-              </PressableScale>
+              />
             </View>
           </>
         )}
@@ -352,7 +343,7 @@ export default function SwingHomeScreen({ navigation }) {
       <BottomSheet visible={sheet} onClose={() => setSheet(false)} sheetStyle={s.sheet}>
         <Text style={s.sheetTitle}>{P.title}</Text>
         <Text style={s.sheetBody}>{P.body}</Text>
-        <Text style={s.fieldLabel}>{P.height}</Text>
+        <Overline style={s.fieldLabel}>{P.height}</Overline>
         <View style={s.inputWrap}>
           <TextInput
             style={s.input}
@@ -369,7 +360,7 @@ export default function SwingHomeScreen({ navigation }) {
           <Text style={s.unit}>{P.cm}</Text>
         </View>
         {heightText && !heightValid ? <Text style={s.error}>{P.invalid}</Text> : null}
-        <Text style={s.fieldLabel}>{P.handedness}</Text>
+        <Overline style={s.fieldLabel}>{P.handedness}</Overline>
         <View style={s.pills}>
           {[['right', P.right], ['left', P.left]].map(([k, label]) => (
             <Pressable
@@ -384,18 +375,13 @@ export default function SwingHomeScreen({ navigation }) {
             </Pressable>
           ))}
         </View>
-        <PressableScale
-          style={[s.btn, s.btnPrimary, !heightValid && s.btnDisabled]}
-          disabled={!heightValid}
-          onPress={() => closeSheet(true)}
-          accessibilityRole="button"
-          accessibilityLabel={P.save}
-        >
-          <Text style={s.btnPrimaryText}>{P.save}</Text>
-        </PressableScale>
-        <PressableScale style={[s.btn, s.btnSecondary, s.sheetSkip]} onPress={() => closeSheet(false)} accessibilityRole="button" accessibilityLabel={P.skip(defaultHeightCm())}>
-          <Text style={s.btnSecondaryText}>{P.skip(defaultHeightCm())}</Text>
-        </PressableScale>
+        <PrimaryButton style={s.btn} label={P.save} disabled={!heightValid} onPress={() => closeSheet(true)} accessibilityLabel={P.save} />
+        <SecondaryButton
+          style={[s.btn, s.sheetSkip]}
+          label={P.skip(defaultHeightCm())}
+          onPress={() => closeSheet(false)}
+          accessibilityLabel={P.skip(defaultHeightCm())}
+        />
       </BottomSheet>
     </ScreenContainer>
   );
@@ -419,12 +405,9 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   bannerText: { flex: 1 },
   bannerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.text.primary },
-  bannerBody: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12.5, color: theme.text.secondary, marginTop: 2, lineHeight: 18 },
+  bannerBody: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, color: theme.text.secondary, marginTop: 2, lineHeight: 18 },
 
-  sectionLabel: {
-    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 10,
-    letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 16, marginBottom: 6,
-  },
+  sectionLabel: { marginTop: 16, marginBottom: 6 },
   group: {
     backgroundColor: theme.bg.card, borderRadius: theme.radius.lg, overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
@@ -443,7 +426,7 @@ const makeStyles = (theme) => StyleSheet.create({
   faultLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   fault: { flex: 1, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15, color: theme.text.primary },
   rowName: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: theme.text.secondary },
-  rowSub: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11.5, color: theme.text.muted },
+  rowSub: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, color: theme.text.muted },
   metaLine: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
   counts: { flexDirection: 'row', gap: 8 },
   count: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -478,7 +461,7 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary },
   emptyBody: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, color: theme.text.secondary, lineHeight: 19 },
-  emptyHint: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11.5, color: theme.text.muted },
+  emptyHint: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, color: theme.text.muted },
 
   bottomBar: {
     paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12,
@@ -487,19 +470,11 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   privacy: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginBottom: 10 },
   privacyIcon: { marginTop: 1 },
-  privacyText: { flex: 1, fontFamily: 'PlusJakartaSans-Medium', fontSize: 11.5, color: theme.text.secondary, lineHeight: 16 },
+  privacyText: { flex: 1, fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme.text.secondary, lineHeight: 16 },
   btnRow: { flexDirection: 'row', gap: 10 },
-  btn: {
-    minHeight: 48, borderRadius: 14, paddingHorizontal: 16,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-  },
+  btn: { paddingHorizontal: 16 },
   btnFlex: { flex: 1 },
   btnRecord: { flex: 1.4 },
-  btnPrimary: { backgroundColor: theme.accent.primary },
-  btnPrimaryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.text.inverse },
-  btnSecondary: { backgroundColor: theme.bg.secondary, borderWidth: 1, borderColor: theme.border.default },
-  btnSecondaryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.text.primary },
-  btnDisabled: { opacity: 0.5 },
 
   sheet: {
     backgroundColor: theme.bg.primary, padding: 20, paddingBottom: 32,
@@ -507,10 +482,7 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   sheetTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary },
   sheetBody: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, color: theme.text.secondary, marginTop: 6, lineHeight: 19 },
-  fieldLabel: {
-    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 10,
-    letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 16, marginBottom: 6,
-  },
+  fieldLabel: { marginTop: 16, marginBottom: 6 },
   inputWrap: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: theme.bg.card,
     borderRadius: 12, borderWidth: 1.5, borderColor: theme.border.default, paddingHorizontal: 14,

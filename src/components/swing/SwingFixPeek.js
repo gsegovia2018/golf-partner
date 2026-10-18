@@ -27,8 +27,8 @@ export default function SwingFixPeek({ copy, onOpen }) {
 
 const makeStyles = (theme) => StyleSheet.create({
   wrap: { paddingHorizontal: 8, paddingBottom: 6, gap: 6 },
-  headline: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14.5, lineHeight: 20, color: theme.text.primary },
-  cost: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12.5, lineHeight: 18, color: theme.text.secondary },
+  headline: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, lineHeight: 20, color: theme.text.primary },
+  cost: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, lineHeight: 18, color: theme.text.secondary },
   tryBox: { backgroundColor: theme.accent.light, borderRadius: 10, padding: 10, gap: 2 },
   tryTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: theme.accent.primary },
   tryCue: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, lineHeight: 18, color: theme.text.primary },

@@ -596,7 +596,7 @@ export function SwingMarkCanvas({
   const bg = stillFor(draft.cps.address.frame);
   const markLine = statuses[active] === 'missing' ? T.line.missing(T.names[active]) : T.line[statuses[active]];
   const canConfirm = ['proposed', 'unsure', 'moved'].includes(statuses[active]);
-  const short = T.short[cp] ?? cue?.name ?? cp;
+  const short = SWING_STRINGS.checkpoint[cp] ?? cue?.name ?? cp;
 
   // Hooks below stay above the sheets' early returns. Handlers have a stable identity (useStable) so the
   // memoised chrome (chips, dock, scrubber, buttons) does not re-render with every canvas render.
@@ -961,11 +961,11 @@ const s = StyleSheet.create({
   tag: {
     position: 'absolute', right: 10, bottom: 10, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: hud.scrimStrong,
   },
-  tagText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, letterSpacing: 0.8, color: hud.textSoft, fontVariant: ['tabular-nums'] },
+  tagText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, letterSpacing: 0.8, color: hud.textSoft, fontVariant: ['tabular-nums'] },
   loadingPill: {
     position: 'absolute', bottom: 10, left: 10, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: hud.scrimStrong,
   },
-  loadingText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11.5, color: hud.textSoft },
+  loadingText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: hud.textSoft },
 
   // the panel: one fixed band in both steps
   panel: { paddingHorizontal: 12, paddingTop: 8, gap: 5, backgroundColor: hud.bg },
@@ -1014,15 +1014,15 @@ const s = StyleSheet.create({
   sheetBody: { gap: 10, paddingBottom: 8 },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: hud.textDim, alignSelf: 'center', marginBottom: 4 },
   sheetTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, color: hud.text },
-  sheetSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12.5, lineHeight: 18, color: hud.textSoft },
+  sheetSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, lineHeight: 18, color: hud.textSoft },
   finRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingVertical: 6, borderTopWidth: 1, borderTopColor: hud.line,
   },
   finP: { width: 30, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: hud.textMuted },
   finName: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: hud.text },
-  finSub: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, lineHeight: 16, color: hud.textMuted },
+  finSub: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, lineHeight: 16, color: hud.textMuted },
   stc: {
-    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9.5, letterSpacing: 0.6, textTransform: 'uppercase', color: hud.textSoft,
+    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase', color: hud.textSoft,
     borderWidth: 1, borderColor: hud.line, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, overflow: 'hidden',
   },
   stcOk: { color: hud.accent, borderColor: withAlpha(hud.accent, 0.4) },
