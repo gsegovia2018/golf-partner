@@ -24,10 +24,14 @@ const FINISH_QUIET_S = 0.4;
 export const CLUBS = ['iron', 'driver'];
 // The setup and top-position checks (D21). PROVISIONAL 2026-10-12: the same values for both
 // clubs until real swings say otherwise.
+// 2026-10-18: hands, back line and hand gap recalibrated on the owner's address (green on
+// swingcheck.org, red here): see hand_gap's offset and back_line's two sides below.
 const SETUP_TOP = {
-  handsUnderShoulders: [4, 8], // cm, |grip x - shoulder-midpoint x|
+  handsUnderShoulders: [8, 12], // cm, |grip x - shoulder-midpoint x|; 4 cm was ~4 deg of arm lean, inside landmark noise
   waistBend: { green: [125, 145], yellow: [115, 155] }, // degrees at the hip, torso vs thigh
-  backLine: [10, 20], // degrees between ear->shoulder and shoulder->hip
+  // degrees between ear->shoulder and shoulder->hip. Looking down at the ball bends the neck,
+  // so a dropped head gets that room (the owner's straight back reads 33-38); a lifted one does not.
+  backLine: { dropped: [40, 50], up: [10, 20] },
   handGap: { green: [10, 20], yellow: [6, 25] }, // cm, grip to the lead thigh line
   handsOverHeels: [6, 12], // cm, |grip x - trail heel x| at the top
   leadArmPlane: [10, 20], // degrees between the lead arm and the address shoulder plane
@@ -61,6 +65,11 @@ export const THRESHOLDS = {
 /** 'iron' | 'driver'; anything else (null, undefined, an old 'wood') reads as the default. */
 export const normClub = (club) => (CLUBS.includes(club) ? club : DEFAULT_CLUB);
 const FINISH_BALANCE_H = 0.08; // mid-hip x within 0.08 H of the lead ankle x
+// hand_gap is measured from the hip -> knee joint line, which runs down the middle of the thigh,
+// to the middle of the grip. The gap a golfer means (a hand's width) is front of the thigh to
+// the back of the hands, so take off half the thigh's depth and half the hands'.
+const THIGH_HALF_DEPTH_H = 0.05; // of body height, ~9 cm at 176 cm
+const GRIP_HALF_DEPTH_CM = 3;
 
 // Checks whose value depends on the impact frame inherit `approximate` from the fps model.
 const IMPACT_DEPENDENT = new Set([
@@ -211,7 +220,7 @@ export function runChecks(input) {
       // Which side of the hip -> shoulder line the ear sits: + = toward the ball / down (head dropped).
       const side = (sh.x - hip.x) * (ear.y - sh.y) - (sh.y - hip.y) * (ear.x - sh.x);
       const dir = side > 0 ? 'dropped' : 'up';
-      const s = band(ang, ...TH.backLine);
+      const s = band(ang, ...TH.backLine[dir]);
       push(m, s, round(ang, 0), '°', s === 'green' ? T.checkText.back_line_ok : T.checkText.back_line(ang, dir), { dir });
     }
   }
@@ -225,7 +234,7 @@ export function runChecks(input) {
     const x = a && hip && knee ? extendToY(hip, knee, a.hands.y) : null;
     if (x === null) rows.push(unknown(m, 'nopose', T.reason.nopose(at('address'))));
     else {
-      const d = (a.hands.x - x) * cm;
+      const d = (a.hands.x - x) * cm - (THIGH_HALF_DEPTH_H * heightCm + GRIP_HALF_DEPTH_CM);
       const s = range(d, TH.handGap);
       const close = d < (TH.handGap.green[0] + TH.handGap.green[1]) / 2;
       push(m, s, round(d, 0), 'cm', s === 'green' ? T.checkText.hand_gap_ok(d) : close ? T.checkText.hand_gap_close(d) : T.checkText.hand_gap_far(d),

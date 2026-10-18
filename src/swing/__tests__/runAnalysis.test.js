@@ -58,7 +58,7 @@ describe('runAnalysis', () => {
     const res = await runAnalysis('s1', { onProgress: (p) => stages.push(p.stage), onPartial: partial });
 
     expect(res.pass2).toBe('done');
-    expect(res.analysis.main.fault).toBe('posture'); // D21: the setup comes first
+    expect(res.analysis.main.fault).toBe('top_position'); // D21: earliest significant phase (the address is good)
     expect(res.analysis.main.consequences).toContain('early_extension');
     expect([...new Set(stages)]).toEqual(['reading', 'pose', 'planes']);
     expect(api.analyzePose).toHaveBeenCalledWith('file:///doc/swings/s1/video.mp4', { model: 'full', handedness: 'right', heightCm: 176 });

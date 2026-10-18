@@ -8,7 +8,7 @@ const row = (id, status, extra = {}) => ({ id, status, ...extra });
 const ee = (status) => ({ cluster: 'early_extension', status });
 
 describe('priority: the one main fault', () => {
-  test('golden (D21): the setup is the earliest significant fault; what it causes follows', () => {
+  test('golden (D21): the top is the earliest significant fault; what it causes follows', () => {
     const { idx, L } = fixtureSamples();
     const scale = scaleFromWindow(idx, L, [328, 338], 'right', 176);
     const cps = Object.fromEntries(Object.entries(TRUTH.checkpoints).map(([k, c]) => [k, {
@@ -18,17 +18,15 @@ describe('priority: the one main fault', () => {
       checkpoints: cps, ball: TRUTH.ball, pose: (f) => L[idx.indexOf(f)] || null, pxPerCm: scale.pxPerCm, heightCm: 176, motionStart: 385, finishQuietS: 0.6,
     });
     const main = mainFault(checks);
-    // Honest reading of the owner swing with the D21 setup checks (thresholds provisional):
-    // hands 8 cm out past the shoulders, head and upper back 38 deg off the spine line, hands
-    // 29 cm from the lead thigh. Early extension (the old verdict) is still significant, now
-    // as a consequence of the setup.
-    expect(main.fault).toBe('posture');
-    expect(main.phase).toBe('setup');
-    expect(main.label).toBe('Posture at address');
-    expect(main.evidence.map((c) => c.id)).toEqual(['hands_under_shoulders', 'back_line', 'hand_gap']);
-    expect(main.consequences).toEqual(['flat_backswing', 'top_position', 'over_the_top', 'early_extension']);
-    // D24: drills aimed at the evidence checks lead, then the cluster's own
-    expect(main.drills).toEqual(['su-brazos', 'su-palo-espalda', 'su-palmo', 'su-bisagra', 'po-espejo']);
+    // The owner's address is good (green on swingcheck.org; setup recalibrated 2026-10-18): one
+    // yellow, not significant. The top leads; over the top and early extension follow from it.
+    expect(main.fault).toBe('top_position');
+    expect(main.phase).toBe('backswing');
+    expect(main.label).toBe('Top position');
+    expect(main.evidence.map((c) => c.id)).toEqual(['hands_over_heels', 'lead_arm_shoulder_plane']);
+    expect(main.consequences).toEqual(['over_the_top', 'early_extension']);
+    // D24: drills aimed at the evidence checks lead, then the cluster's own and borrowed ones
+    expect(main.drills).toEqual(['pl-vidrio', 'fb-codo', 'atl-objetivo']);
   });
 
   test('D21: the earliest significant phase wins over a bigger later score, and names what it causes', () => {

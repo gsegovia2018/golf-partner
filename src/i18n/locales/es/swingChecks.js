@@ -54,7 +54,7 @@ export default {
   'swing.fault.top_position': 'Posición del top',
   'swing.fault.flip': 'Palo tumbado tras el impacto',
   'swing.checkText.hands_under_shoulders_ok': 'Los brazos cuelgan rectos desde los hombros',
-  'swing.checkText.back_line_ok': 'Cabeza, hombros y caderas forman una sola línea',
+  'swing.checkText.back_line_ok': 'Espalda recta, cabeza inclinada hacia la bola',
   'swing.checkText.hands_over_heels_ok': 'Las manos quedan sobre el talón trasero en el top',
   'swing.checkText.lead_arm_shoulder_plane_ok': 'El brazo adelantado coincide con el plano de los hombros en el top',
   'swing.checkText.hands_between_planes_ok': 'Las manos viajan entre el plano del palo y el de los hombros',

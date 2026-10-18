@@ -34,9 +34,9 @@ const at = (frame, hands, head = null) => ({
 
 // D21: the setup and top-position limits, provisional and the same for both clubs.
 const SETUP_TOP = {
-  handsUnderShoulders: [4, 8],
+  handsUnderShoulders: [8, 12],
   waistBend: { green: [125, 145], yellow: [115, 155] },
-  backLine: [10, 20],
+  backLine: { dropped: [40, 50], up: [10, 20] },
   handGap: { green: [10, 20], yellow: [6, 25] },
   handsOverHeels: [6, 12],
   leadArmPlane: [10, 20],
