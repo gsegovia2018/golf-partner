@@ -205,6 +205,39 @@ describe('saveAnalysis / marks', () => {
       expect(await store.readAnalysis(row.id)).toEqual(onDisk(row.id));
     });
 
+    it('a save that fails (storage full) still returns the upgraded analysis and leaves the v1 file whole', async () => {
+      const { row } = await stored('iron');
+      const write = fs.File.prototype.write;
+      fs.File.prototype.write = function failing(s) {
+        if (this.uri.endsWith('/analysis.json')) throw new Error('ENOSPC');
+        return write.call(this, s);
+      };
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const a = await store.readAnalysis(row.id);
+        expect(a.schema).toBe(SCHEMA);
+        expect(a.swingId).toBe(row.id);
+        expect(onDisk(row.id).schema).toBe('swing-analysis/1');
+        expect(warn).toHaveBeenCalledWith(expect.stringMatching(/upgraded analysis not saved: ENOSPC/));
+      } finally {
+        fs.File.prototype.write = write;
+        warn.mockRestore();
+      }
+      expect((await store.readAnalysis(row.id)).schema).toBe(SCHEMA); // the next open upgrades and saves
+      expect(onDisk(row.id).schema).toBe(SCHEMA);
+    });
+
+    it('the v1 file is kept beside the upgrade: an analysis.json cut short opens from it', async () => {
+      const { row } = await stored('iron');
+      await store.readAnalysis(row.id);
+      expect(JSON.parse(fs.__files.get(`file:///doc/swings/${row.id}/analysis.v1.json`)).schema).toBe('swing-analysis/1');
+      fs.__files.set(`file:///doc/swings/${row.id}/analysis.json`, '{"schema":"swing-analysis/2","chec');
+      const a = await store.readAnalysis(row.id);
+      expect(a.schema).toBe(SCHEMA);
+      expect(a.checks.map((c) => c.id)).toContain('spine_hold');
+      expect(onDisk(row.id).schema).toBe(SCHEMA); // rewritten whole
+    });
+
     it('a re-run that fails keeps the old analysis, untouched, and logs why', async () => {
       const { row } = await stored('iron');
       fs.__files.delete(`file:///doc/swings/${row.id}/pose.json`);

@@ -23,6 +23,19 @@ describe('changeOf: judged by meaning, not by sign', () => {
     expect(changeOf(chk('finish_balance', 'yellow', 2, 'of 2'), chk('finish_balance', 'yellow', 1, 'of 2'))).toBe('better');
   });
 
+  test('the shaft line at the ball is judged by how far it lands outside the toes .. ball zone, either way', () => {
+    const line = (id, status, value, miss) => chk(id, status, value, 'cm', { miss });
+    ['butt_extension', 'shaft_through_ball'].forEach((id) => {
+      // beyond the ball by 8 against inside the toes by 12: closer to the zone is better, whatever the sign
+      expect(changeOf(line(id, 'yellow', 18, 8), line(id, 'yellow', -112, 12))).toBe('better');
+      expect(changeOf(line(id, 'yellow', -110, 10), line(id, 'yellow', 14, 4))).toBe('worse');
+      // inside the zone it is green with no miss: two greens read the same
+      expect(changeOf(line(id, 'green', -20, 0), line(id, 'green', -60, 0))).toBe('same');
+    });
+    // a row written before checks v2 (no miss) falls back to the distance from the ball
+    expect(changeOf(chk('butt_extension', 'red', 20, 'cm'), chk('butt_extension', 'red', -30, 'cm'))).toBe('better');
+  });
+
   test('angles with no better direction stay the same inside a band', () => {
     expect(changeOf(chk('posture_address', 'green', 32, '°'), chk('posture_address', 'green', 38, '°'))).toBe('same');
     expect(changeOf(chk('posture_address', 'green', 30, '°'), chk('posture_address', 'yellow', 43, '°'))).toBe('better');

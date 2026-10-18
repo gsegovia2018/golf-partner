@@ -122,8 +122,9 @@ export function analyzeMarks(draft, base) {
     if (d.frame !== p.frame) m.frame = d.frame;
     if (d.hands) m.hands = d.hands;
     // On a moved frame the clubhead is what the golfer saw there, never the old frame's proposal
-    // read again by analyze() (marks.json stores it as head.final the same way).
-    if (headChanged(d, q) || d.frame !== p.frame) {
+    // read again by analyze() (marks.json stores it as head.final the same way). A confirmed head is
+    // the golfer's mark even unmoved: analyze() then reads it past the checks' gate (marksForAnalyze too).
+    if (headChanged(d, q) || d.frame !== p.frame || d.confirmed?.head) {
       if (d.hidden) m.hidden = true;
       else if (d.head) m.head = d.head;
     }

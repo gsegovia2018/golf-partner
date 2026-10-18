@@ -92,7 +92,7 @@ Dropped: `hands_between_planes`.
 
 | Row | Status | Measure | Bands | Fault (dir) |
 |---|---|---|---|---|
-| Lead arm vs spine | **new** `lead_arm_spine` | 2D angle between the spine (mid-hip → mid-shoulder) and the lead arm (lead shoulder → lead wrist) − 90; + = upright (the arm points more vertically than the perpendicular to the spine), − = flat | 10 / 20° | top_position |
+| Lead arm vs spine | **new** `lead_arm_spine` | 90 − the 2D angle between the spine (mid-hip → mid-shoulder) and the lead arm (lead shoulder → lead wrist); + = upright (the arm points more vertically than the perpendicular to the spine, closing the angle with the spine), − = flat | 10 / 20° | top_position |
 | Hands over trail heel | keep `hands_over_heels` | as today | 6 / 12 cm | top_position |
 | Spine holds | `spine_hold` at P4 | as above | as above | posture_loss |
 

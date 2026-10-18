@@ -151,13 +151,18 @@ export const readPose = (id) => readJson(id, 'pose.json');
 export const readProbe = (id) => readJson(id, 'probe.json');
 export async function readMarks(id) { return parseMarks(await readJson(id, 'marks.json')); }
 
+// The analysis.json an upgrade replaced, kept beside it: a write cut short (a crash, a full disk)
+// leaves an analysis.json that does not parse, and the swing opens from this copy instead.
+const ANALYSIS_BACKUP = 'analysis.v1.json';
+
 /**
  * analysis.json at the current schema (swing checks v2, spec §7): an older analysis is re-run
  * from its stored pose / probe / marks (pure JS, milliseconds) and saved with its index row, so
- * every screen that opens a swing gets the v2 rows. A re-run that fails keeps the old analysis.
+ * every screen that opens a swing gets the v2 rows. A re-run that fails keeps the old analysis;
+ * a save that fails still returns the new one (it is re-run on the next open).
  */
 export async function readAnalysis(id) {
-  const stored = await readJson(id, 'analysis.json');
+  const stored = (await readJson(id, 'analysis.json')) ?? (await readJson(id, ANALYSIS_BACKUP));
   if (!stored || stored.error || stored.schema === SCHEMA) return stored;
   const [pose, probe, marks] = await Promise.all([readPose(id), readProbe(id), readMarks(id)]);
   const r = upgradeAnalysis({
@@ -169,7 +174,12 @@ export async function readAnalysis(id) {
   }
   const row = getSwing(id);
   if (!row) return r.analysis; // not in the index (yet): use it, save on a later open
-  await saveAnalysis(id, r.analysis, { status: row.status === 'pending' ? 'pending' : 'ready' });
+  try {
+    if (!swingFile(id, ANALYSIS_BACKUP).exists) writeJson(id, ANALYSIS_BACKUP, stored);
+    await saveAnalysis(id, r.analysis, { status: row.status === 'pending' ? 'pending' : 'ready' });
+  } catch (e) {
+    console.warn(`swing ${id}: upgraded analysis not saved: ${e?.message}`);
+  }
   return { ...r.analysis, swingId: id, createdAt: row.createdAt };
 }
 

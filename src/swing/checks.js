@@ -211,6 +211,7 @@ export function runChecks(input) {
     return { d: sideOfLine(c.head, planes.shaft.a, planes.shaft.b) * cm };
   };
   // The shaft line (clubhead -> grip) carried to ball height (D23), against the ball and the toes.
+  // `miss` (cm) is how far it lands outside the good zone (toes .. ball, with the 10 % margin), 0 inside it.
   const landing = (k) => {
     const c = C[k];
     if (!c) return { reason: 'nodata', text: why('noMark', { what: cpName(k) }) };
@@ -220,11 +221,10 @@ export function runChecks(input) {
     const toes = toesX();
     const span = toes !== null && toes < ball.x ? bx - toes : 0;
     const margin = 0.1 * span;
+    const beyond = (x - bx - margin) * cm; // + = beyond the ball
+    const inside = toes !== null && span ? (toes + margin - x) * cm : -Infinity; // + = inside the toes
     return {
-      x,
-      fromBall: (x - bx) * cm,
-      beyond: (x - bx - margin) * cm, // + = beyond the ball
-      inside: toes !== null && span ? (toes + margin - x) * cm : -Infinity, // + = inside the toes
+      x, fromBall: (x - bx) * cm, beyond, inside, miss: Math.max(0, beyond, inside),
     };
   };
 
@@ -370,7 +370,9 @@ export function runChecks(input) {
         j = judge(r.inside, [0, TH.buttYellowCm]);
         text = T.checkText.butt_extension_steep(r.inside);
       }
-      push(m, j, round(r.fromBall, 0), 'cm', text, { dir, fault: dir === 'steep' ? 'steep_backswing' : dir === 'flat' ? 'flat_backswing' : null });
+      push(m, j, round(r.fromBall, 0), 'cm', text, {
+        dir, miss: round(r.miss, 0), fault: dir === 'steep' ? 'steep_backswing' : dir === 'flat' ? 'flat_backswing' : null,
+      });
     }
   }
   spineHold('leadArm');
@@ -488,7 +490,9 @@ export function runChecks(input) {
       }
       const text = dir === 'beyond' ? T.checkText.shaft_through_ball_beyond(through.beyond)
         : dir === 'inside' ? T.checkText.shaft_through_ball_inside(through.inside) : T.checkText.shaft_through_ball_ok;
-      push(m, j, round(through.fromBall, 0), 'cm', text, { dir, fault: dir === 'inside' ? 'over_the_top' : dir === 'beyond' ? 'flip' : null });
+      push(m, j, round(through.fromBall, 0), 'cm', text, {
+        dir, miss: round(through.miss, 0), fault: dir === 'inside' ? 'over_the_top' : dir === 'beyond' ? 'flip' : null,
+      });
     }
   }
 

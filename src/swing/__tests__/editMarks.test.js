@@ -8,6 +8,7 @@ import {
   marksForAnalyze, frameLabel, withFrame, emptyMarks,
 } from '../labels';
 import { cueFor, CHECKPOINT_DEFS } from '../checkpoints';
+import { unplacedCheckpoint } from '../checkpointChecks';
 import { fixtureNative, TRUTH, W, H } from './helpers';
 
 const lab = require('./fixtures/lab-d15-pass1.json');
@@ -95,6 +96,47 @@ describe('buildDraft / recompute', () => {
     const live = recompute({ ...c, draft: { ...c.draft, ball: [ball.x + 0.02, ball.y, ball.r] } });
     expect(live.reference.ball[0]).toBeCloseTo(ball.x + 0.02);
     expect(live.reference.shaftPlaneDeg).not.toBeCloseTo(first.reference.shaftPlaneDeg, 1);
+  });
+});
+
+describe('a confirmed clubhead below the gate (spec §5) is the golfer\'s mark', () => {
+  // Pass 2 proposed a weak model head (0.1, under CHECK_MIN_CONF) at shaft down: the canvas shows it,
+  // no check reads it until the golfer confirms it, moved or not.
+  const f = first.checkpoints.shaftDown.i;
+  const weakPose = { ...pose, pass2: { ...pose.pass2, shaft: { [f]: { head: [230, 470], hidden: false, conf: 0.1, source: 'model' } } } };
+  const weak = analyze(weakPose, { ...base0, pass2: weakPose.pass2 });
+  const c = { pose: weakPose, probe, analysis: weak, ...buildDraft(weak, weakPose, null) };
+  const confirmed = confirmMark(c.draft, c.base, 'shaftDown', 'head');
+
+  test('unconfirmed it is proposed but gated: unknown, and "tap to place" sends the golfer to shaft down', () => {
+    expect(weak.clubMarks.shaftDown).toMatchObject({ source: 'model', conf: 0.1 });
+    const row = byId(weak, 'clubhead_plane_down');
+    expect(row).toMatchObject({ status: 'unknown', reason: 'unplaced' });
+    expect(unplacedCheckpoint(row, weak.clubMarks)).toBe('shaftDown');
+    expect(markStatus(c.draft, c.base, 'shaftDown', 'head')).toBe('proposed');
+  });
+
+  test('confirmed in the canvas, the live recompute measures it and stops asking', () => {
+    expect(markStatus(confirmed, c.base, 'shaftDown', 'head')).toBe('confirmed');
+    expect(analyzeMarks(confirmed, c.base).shaftDown).toEqual({ head: [230 / W, 470 / H] });
+    const live = recompute({ ...c, draft: confirmed });
+    const row = byId(live, 'clubhead_plane_down');
+    expect(row.status).not.toBe('unknown');
+    expect(live.clubMarks.shaftDown.source).toBe('user');
+    expect(unplacedCheckpoint(row, live.clubMarks)).toBeNull();
+  });
+
+  test('saved to marks.json and read back by analyze() (re-analysis, schema upgrade), it is measured too', () => {
+    const live = recompute({ ...c, draft: confirmed });
+    const marks = draftToMarks({
+      draft: confirmed, base: c.base, live, swingId: 's1', editedAt: 'now',
+    });
+    const label = marks.frames.find((x) => x.checkpoint === 'shaftDown');
+    expect(label).toMatchObject({ corrected: false, head: { confirmed: true } });
+    expect(marksForAnalyze(marks).shaftDown.head).toEqual([230 / W, 470 / H]);
+    const again = analyze(weakPose, { ...base0, pass2: weakPose.pass2, marks: marksForAnalyze(marks) });
+    expect(byId(again, 'clubhead_plane_down')).toMatchObject({ status: byId(live, 'clubhead_plane_down').status, value: byId(live, 'clubhead_plane_down').value });
+    expect(unplacedCheckpoint(byId(again, 'clubhead_plane_down'), again.clubMarks)).toBeNull();
   });
 });
 

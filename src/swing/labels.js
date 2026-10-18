@@ -80,10 +80,14 @@ export function withBall(marks, { proposed = marks.ball.proposed, final, confirm
 /** Did the user place the hands (older files without the flag: they did if they differ from the proposal)? */
 export const handsPlaced = (f) => f.hands.placed ?? !sameXY(f.hands.final, f.hands.proposed);
 
-/** Marks in the shape analyze() takes as opts.marks: { [checkpoint]: { hands, head, hidden } }. */
+/**
+ * Marks in the shape analyze() takes as opts.marks: { [checkpoint]: { hands, head, hidden } }. A
+ * clubhead the golfer confirmed without moving is their mark too: it counts as a user mark, so a
+ * detection below the checks' gate (CHECK_MIN_CONF) is read once it is confirmed.
+ */
 export function marksForAnalyze(marks) {
   const out = {};
-  (marks?.frames || []).filter((f) => f.corrected).forEach((f) => {
+  (marks?.frames || []).filter((f) => f.corrected || f.head?.confirmed).forEach((f) => {
     out[f.checkpoint] = { hands: handsPlaced(f) ? f.hands.final : null, head: f.head.final, hidden: f.head.finalHidden };
     if (f.iProposed != null && f.iProposed !== f.i) out[f.checkpoint].frame = f.i; // the checkpoint itself moved
   });

@@ -27,7 +27,11 @@ const SCORE = {
   through_vs_halfway: { of: Math.abs, eps: 1 },
   // Above the plane counts three times what under it does (green to 4 cm above, to 12 cm under).
   clubhead_plane_down: { of: (v) => (v > 0 ? 3 * v : -v), eps: 1 },
-}; // butt_extension, shaft_through_ball, down_vs_takeaway: smaller is better, the default
+  // The shaft line at the ball: how far it lands outside the toes .. ball zone (the row's `miss`),
+  // either way; a row without it (written before checks v2) falls back to the distance from the ball.
+  butt_extension: { of: (v, c) => c?.miss ?? Math.abs(v), eps: 1 },
+  shaft_through_ball: { of: (v, c) => c?.miss ?? Math.abs(v), eps: 1 },
+}; // down_vs_takeaway: smaller is better, the default
 const DEFAULT_SCORE = { of: (v) => v, eps: 1 };
 // Posture tilt is an angle with no better direction, only a band: inside one band the swings are the same.
 const BAND_ONLY = new Set(['posture_address']);
@@ -44,7 +48,7 @@ export function changeOf(a, b) {
   if (a.status !== b.status) return RANK[a.status] < RANK[b.status] ? 'better' : 'worse';
   if (!known(a) || !known(b) || BAND_ONLY.has(a.id)) return 'same';
   const { of, eps } = SCORE[a.id] ?? DEFAULT_SCORE;
-  const d = of(a.value) - of(b.value);
+  const d = of(a.value, a) - of(b.value, b);
   if (Math.abs(d) < eps) return 'same';
   return d < 0 ? 'better' : 'worse';
 }
