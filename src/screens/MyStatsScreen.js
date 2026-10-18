@@ -177,6 +177,10 @@ export default function MyStatsScreen({ navigation, route }) {
   const tabScrollXRef = useRef(0);
   const pagerRef = useRef(null);
   const currentOffsetRef = useRef(0);
+  // Opening on a later tab (route param) scrolls before the pages are laid
+  // out, so web and Android drop that first scrollTo; re-issue it once the
+  // pager's content is wide enough to reach the page.
+  const pendingPagerScrollRef = useRef(true);
   const reduced = useReducedMotion();
   const [pageWidth, setPageWidth] = useState(() => Dimensions.get('window').width);
   const scrollX = useSharedValue(0);
@@ -851,6 +855,15 @@ export default function MyStatsScreen({ navigation, route }) {
         onLayout={(event) => {
           const w = event.nativeEvent.layout.width;
           if (w && Math.abs(w - pageWidth) > 1) { setPageWidth(w); pageWidthSV.value = w; }
+        }}
+        onContentSizeChange={(contentWidth) => {
+          if (!pendingPagerScrollRef.current) return;
+          if (activeIndex === 0) { pendingPagerScrollRef.current = false; return; }
+          const targetX = activeIndex * pageWidth;
+          if (contentWidth < targetX + pageWidth - 2) return;
+          pendingPagerScrollRef.current = false;
+          currentOffsetRef.current = targetX;
+          pagerRef.current?.scrollTo?.({ x: targetX, animated: false });
         }}
       >
         {ALL_TABS.map((t, i) => (
