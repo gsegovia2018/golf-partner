@@ -305,6 +305,9 @@ export const HolePage = React.memo(function HolePage({
             for scramble (one ball per team has no personal miss pattern). */}
         {aimStats && meId && !official && !isScramble && (editable ? editable(meId) : true) ? (
           <HoleBriefingCard
+            // Keyed by hole: a page reused for another hole must not carry
+            // the previous hole's tapped open/folded state.
+            key={`aim-${pageHole.number}`}
             par={pageHole.par}
             holeNumber={pageHole.number}
             courseName={courseName}
