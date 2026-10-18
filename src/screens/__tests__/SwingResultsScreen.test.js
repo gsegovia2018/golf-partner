@@ -499,9 +499,9 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
     expect(getByText('240')).toBeTruthy();
     expect(getAllByText('4.1 s').length).toBeGreaterThan(0);
     expect(getByText(T.stepOf(2, 3))).toBeTruthy();
-    // up next: the six positions the marking pass asks for
-    expect(getByText(T.upNextTitle(6))).toBeTruthy();
-    ['address', 'leadArm', 'top', 'shaftDown', 'impact', 'shaftThrough'].forEach((k) => expect(getByText(SWING_STRINGS.mark.short[k])).toBeTruthy());
+    // up next: the seven positions the marking pass asks for (checks v2)
+    expect(getByText(T.upNextTitle(7))).toBeTruthy();
+    ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(getByText(SWING_STRINGS.mark.short[k])).toBeTruthy());
     expect(getByText(SWING_STRINGS.privacy)).toBeTruthy();
 
     await act(async () => { finish({ analysis: UNMARKED, pass2: 'done' }); });
