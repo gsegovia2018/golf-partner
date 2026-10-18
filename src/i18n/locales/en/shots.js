@@ -166,4 +166,12 @@ export default {
   'shots.why.situation.wrong-shot': 'Wrong shot',
   'shots.why.notThisRound': 'Not this round',
   'shots.why.done': 'Done',
+  'shots.focus.label': 'Focus',
+  'shots.focus.thisShot': 'This shot',
+  'shots.focus.ask.below-feet': 'Ball below your feet',
+  'shots.focus.ask.above-feet': 'Ball above your feet',
+  'shots.focus.ask.uphill': 'Uphill lie',
+  'shots.focus.ask.downhill': 'Downhill lie',
+  'shots.focus.ask.bad-lie': 'Bad lie',
+  'shots.focus.ask.wind': 'Into or across the wind',
 };

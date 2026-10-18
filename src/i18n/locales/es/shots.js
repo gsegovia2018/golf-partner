@@ -166,4 +166,12 @@ export default {
   'shots.why.situation.wrong-shot': 'Golpe equivocado',
   'shots.why.notThisRound': 'No en esta vuelta',
   'shots.why.done': 'Listo',
+  'shots.focus.label': 'Foco',
+  'shots.focus.thisShot': 'Este golpe',
+  'shots.focus.ask.below-feet': 'Bola bajo los pies',
+  'shots.focus.ask.above-feet': 'Bola sobre los pies',
+  'shots.focus.ask.uphill': 'Terreno cuesta arriba',
+  'shots.focus.ask.downhill': 'Terreno cuesta abajo',
+  'shots.focus.ask.bad-lie': 'Mal terreno',
+  'shots.focus.ask.wind': 'Viento de cara o de lado',
 };
