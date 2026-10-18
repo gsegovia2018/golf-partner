@@ -54,7 +54,7 @@ export default {
   'swing.fault.top_position': 'Top position',
   'swing.fault.flip': 'Flat through impact',
   'swing.checkText.hands_under_shoulders_ok': 'Arms hang straight down from the shoulders',
-  'swing.checkText.back_line_ok': 'Head, shoulders and hips form one line',
+  'swing.checkText.back_line_ok': 'Straight back, head tilted down to the ball',
   'swing.checkText.hands_over_heels_ok': 'Hands sit over the trail heel at the top',
   'swing.checkText.lead_arm_shoulder_plane_ok': 'Lead arm matches the shoulder plane at the top',
   'swing.checkText.hands_between_planes_ok': 'Hands travel between shaft and shoulder planes',

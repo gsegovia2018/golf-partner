@@ -19,14 +19,14 @@ const one = (checks, id) => checks.find((c) => c.id === id);
 
 describe('hands_under_shoulders (address)', () => {
   const read = (handsX) => one(run({ address: at(1, [handsX, 100]) }, () => pose({ ...both(11, 12, [50, 0]) })), 'hands_under_shoulders');
-  test('green within 4 cm either way, yellow to 8, red beyond; + is out toward the ball', () => {
-    expect(read(53).status).toBe('green');
-    expect(read(46).status).toBe('green');
-    expect(read(56)).toMatchObject({ status: 'yellow', value: 6, dir: 'out' });
-    expect(read(43)).toMatchObject({ status: 'yellow', value: -7, dir: 'in' });
-    expect(read(60)).toMatchObject({ status: 'red', dir: 'out' });
-    expect(read(60).text).toMatch(/out past the shoulders/);
-    expect(read(40).text).toMatch(/inside the shoulders/);
+  test('green within 8 cm either way, yellow to 12, red beyond; + is out toward the ball', () => {
+    expect(read(57).status).toBe('green');
+    expect(read(43).status).toBe('green');
+    expect(read(60)).toMatchObject({ status: 'yellow', value: 10, dir: 'out' });
+    expect(read(39)).toMatchObject({ status: 'yellow', value: -11, dir: 'in' });
+    expect(read(64)).toMatchObject({ status: 'red', dir: 'out' });
+    expect(read(64).text).toMatch(/out past the shoulders/);
+    expect(read(36).text).toMatch(/inside the shoulders/);
   });
 });
 
@@ -54,18 +54,23 @@ describe('back_line (address)', () => {
     const ear = [sh[0] + 30 * Math.cos(a), sh[1] - 30 * Math.sin(a)];
     return one(run({ address: at(1, [0, 0]) }, () => pose({ ...both(23, 24, [0, 0]), ...both(11, 12, sh), ...both(7, 8, ear) })), 'back_line');
   };
-  test('green up to 10 degrees, yellow to 20, red beyond; the side names the fault', () => {
+  test('dropped (looking down at the ball): green to 40 degrees, yellow to 50; lifted: green to 10, yellow to 20', () => {
     expect(read(5)).toMatchObject({ status: 'green', value: 5 });
-    expect(read(15)).toMatchObject({ status: 'yellow', dir: 'dropped' });
-    expect(read(30)).toMatchObject({ status: 'red', dir: 'dropped' });
-    expect(read(30).text).toMatch(/rounded/);
+    expect(read(35)).toMatchObject({ status: 'green', value: 35, dir: 'dropped' });
+    expect(read(45)).toMatchObject({ status: 'yellow', dir: 'dropped' });
+    expect(read(55)).toMatchObject({ status: 'red', dir: 'dropped' });
+    expect(read(55).text).toMatch(/rounded/);
     expect(read(-15)).toMatchObject({ status: 'yellow', dir: 'up' });
+    expect(read(-25)).toMatchObject({ status: 'red', dir: 'up' });
   });
 });
 
 describe('hand_gap (address)', () => {
-  // lead hip (23) at x 0, lead knee (25) straight below: the thigh line is x = 0.
-  const read = (gap) => one(run({ address: at(1, [gap, 60]) }, () => pose({ 23: [0, 0], 25: [0, 80] })), 'hand_gap');
+  // lead hip (23) at x 0, lead knee (25) straight below: the thigh line is x = 0. That line runs
+  // down the middle of the thigh to the middle of the grip; the gap is front of thigh to back of
+  // the hands, OFF cm less at 176 cm (half the thigh, 5 % of height, plus half the hands, 3 cm).
+  const OFF = 0.05 * 176 + 3;
+  const read = (gap) => one(run({ address: at(1, [gap + OFF, 60]) }, () => pose({ 23: [0, 0], 25: [0, 80] })), 'hand_gap');
   test('green 10-20 cm, yellow 6-10 / 20-25, red closer or further', () => {
     expect(read(15)).toMatchObject({ status: 'green', value: 15 });
     expect(read(8)).toMatchObject({ status: 'yellow', dir: 'close' });
@@ -75,8 +80,11 @@ describe('hand_gap (address)', () => {
     expect(read(30).text).toMatch(/reaching/);
   });
   test('reads the thigh line extended to the hands, not the hip x', () => {
-    const slanted = one(run({ address: at(1, [30, 100]) }, () => pose({ 23: [0, 0], 25: [10, 50] })), 'hand_gap');
+    const slanted = one(run({ address: at(1, [30 + OFF, 100]) }, () => pose({ 23: [0, 0], 25: [10, 50] })), 'hand_gap');
     expect(slanted.value).toBe(10); // the line is at x = 20 at the hands' height
+  });
+  test('the owner address (26 cm joint line to grip centre) is a 14 cm gap: green', () => {
+    expect(read(26 - OFF)).toMatchObject({ status: 'green', value: 14 });
   });
 });
 

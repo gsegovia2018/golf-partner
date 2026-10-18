@@ -69,12 +69,13 @@ describe('golden checks on the owner marks', () => {
     expect(byId(checks, 'clubhead_vs_plane', 'impact').status).toBe('green');
   });
 
-  test('D21 setup and top checks on the owner swing (provisional limits, read honestly)', () => {
+  test('D21 setup and top checks on the owner swing (setup recalibrated 2026-10-18)', () => {
     const v = (id) => [byId(checks, id).status, byId(checks, id).value, byId(checks, id).dir];
-    expect(v('hands_under_shoulders')).toEqual(['red', 8, 'out']);
+    // A good address (green on swingcheck.org): only the hands, a hair over 8 cm out, are yellow.
+    expect(v('hands_under_shoulders')).toEqual(['yellow', 8, 'out']);
     expect(v('waist_bend')).toEqual(['green', 134, null]);
-    expect(v('back_line')).toEqual(['red', 38, 'dropped']);
-    expect(v('hand_gap')).toEqual(['red', 29, 'far']);
+    expect(v('back_line')).toEqual(['green', 38, 'dropped']);
+    expect(v('hand_gap')).toEqual(['green', 17, null]);
     expect(v('hands_over_heels')).toEqual(['red', 16, 'shallow']);
     expect(v('lead_arm_shoulder_plane')).toEqual(['yellow', -16, 'below']);
     ['hands_under_shoulders', 'waist_bend', 'back_line', 'hand_gap'].forEach((id) => expect(byId(checks, id).phase).toBe('setup'));
