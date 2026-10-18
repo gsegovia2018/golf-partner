@@ -66,7 +66,7 @@ const { emptyMarks } = require('../../swing/labels');
 
 const seedVideo = (uri = 'file:///picked/clip.mp4') => fs.__files.set(uri, 'VIDEO-BYTES');
 const analysisFixture = {
-  schema: 'swing-analysis/2',
+  schema: 'swing-analysis/3',
   handedness: 'right',
   club: 'iron',
   fps: { capture: 240, effective: 240, factor: 8, approximate: false },
@@ -203,6 +203,15 @@ describe('saveAnalysis / marks', () => {
       expect(JSON.parse(await AsyncStorage.getItem('golf_swings.v1'))[0].mainFault).toBe(a.main.fault);
       // the second open reads the saved v2 file as it is
       expect(await store.readAnalysis(row.id)).toEqual(onDisk(row.id));
+    });
+
+    it('a schema-2 analysis (v2 checks before the lab-calibrated limits) is re-run on open too', async () => {
+      const row = await store.createSwing({ videoUri: 'file:///picked/clip.mp4', club: 'iron' });
+      const v2 = { ...analyze(pose, { pass2: pose.pass2, club: 'iron', heightCm: 176 }), schema: 'swing-analysis/2' };
+      await store.saveAnalysis(row.id, v2, { pose, probe: { containerFps: 29.97 } });
+      const a = await store.readAnalysis(row.id);
+      expect(a.schema).toBe(SCHEMA);
+      expect(onDisk(row.id).schema).toBe(SCHEMA);
     });
 
     it('a save that fails (storage full) still returns the upgraded analysis and leaves the v1 file whole', async () => {

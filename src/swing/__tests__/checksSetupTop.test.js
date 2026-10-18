@@ -52,12 +52,14 @@ describe('back_line (address)', () => {
 
 describe('hands_over_heels (top)', () => {
   const read = (x) => one(run({ top: at(5, [x, 0]) }, () => pose({ 30: [100, 300] })), 'hands_over_heels');
-  test('green within 6 cm of the trail heel, yellow to 12, red beyond; behind = too deep', () => {
+  test('green within 6 cm of the trail heel, yellow to 18, red beyond; behind = too deep', () => {
     expect(read(104).status).toBe('green');
     expect(read(92)).toMatchObject({ status: 'yellow', value: -8, dir: 'deep' });
-    expect(read(85)).toMatchObject({ status: 'red', dir: 'deep' });
-    expect(read(115)).toMatchObject({ status: 'red', dir: 'shallow' });
-    expect(read(115).text).toMatch(/not enough depth/);
+    expect(read(85)).toMatchObject({ status: 'yellow', value: -15, dir: 'deep' });
+    expect(read(80)).toMatchObject({ status: 'red', dir: 'deep' });
+    expect(read(115)).toMatchObject({ status: 'yellow', dir: 'shallow' });
+    expect(read(120)).toMatchObject({ status: 'red', dir: 'shallow' });
+    expect(read(120).text).toMatch(/not enough depth/);
   });
   test('unknown without a top mark', () => {
     expect(one(run({}, () => pose({})), 'hands_over_heels').status).toBe('unknown');

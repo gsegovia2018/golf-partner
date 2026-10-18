@@ -33,6 +33,13 @@ describe('halfway back (P3): the shaft points at the ball', () => {
   test('a red flat P3 is a flat backswing', () => {
     expect(mainFault([lead(330)]).fault).toBe('flat_backswing');
   });
+  test('a nearly flat shaft is capped 50 cm outside the zone, on either side, and stays red', () => {
+    // 900 cm beyond the ball (the 122 cm lab reading, worse): reads 50 and says it was capped
+    expect(lead(1200)).toMatchObject({ status: 'red', dir: 'flat', value: 50, capped: true });
+    // far inside the toes: the cap is measured from the toes, so it never lands back in the green zone
+    expect(lead(-700)).toMatchObject({ status: 'red', dir: 'steep', value: -150, capped: true });
+    expect(lead(330).capped).toBe(false);
+  });
 });
 
 describe('follow-through (P9): the same reading after impact', () => {
