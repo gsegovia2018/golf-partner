@@ -353,3 +353,13 @@ test('missReasons keeps each valid value and ignores anything else', () => {
   const manual = { ...DEFAULT_APP_SETTINGS, missReasons: 'manual' };
   expect(mergeAppSettings(manual, { missReasons: 'nope' }).missReasons).toBe('manual');
 });
+
+test('recordGpsTrail defaults to off and only takes a boolean', () => {
+  expect(DEFAULT_APP_SETTINGS.recordGpsTrail).toBe(false);
+  expect(mergeAppSettings(DEFAULT_APP_SETTINGS, { recordGpsTrail: true }).recordGpsTrail).toBe(true);
+  ['true', 1, null, {}, undefined].forEach((bad) => {
+    expect(mergeAppSettings(DEFAULT_APP_SETTINGS, { recordGpsTrail: bad }).recordGpsTrail).toBe(false);
+  });
+  const on = { ...DEFAULT_APP_SETTINGS, recordGpsTrail: true };
+  expect(mergeAppSettings(on, { recordGpsTrail: 'no' }).recordGpsTrail).toBe(true);
+});

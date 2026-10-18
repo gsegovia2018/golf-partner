@@ -13,6 +13,8 @@ export default {
   "settings.section.notifications": "NOTIFICATIONS",
   "settings.gps.label": "GPS distances",
   "settings.gps.hint": "Live distances from your position. Off: distances measure from the tee and the app never asks for your location.",
+  "settings.recordGpsTrail.label": "Record GPS trail (test)",
+  "settings.recordGpsTrail.hint": "Saves your position during live rounds so we can test automatic shot detection. Only you can see it.",
   "settings.shotMeasuring.label": "Shot measuring button",
   "settings.shotMeasuring.hint": "Floating button on the scorecard to measure your shots",
   "settings.showLastShot.label": "Shot recommendation",

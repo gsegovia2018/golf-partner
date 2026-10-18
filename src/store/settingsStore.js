@@ -59,6 +59,10 @@ export const DEFAULT_APP_SETTINGS = {
   // Aim tips (aim-tips spec §2.3): a one-line aim tip on the live hole when
   // your misses lean one way. Boolean; anything else reads the base value.
   aimTips: true,
+  // GPS trail experiment (owner-only): saves this phone's own position
+  // during live rounds to golf_gps_trail so automatic shot detection can be
+  // evaluated offline (store/gpsTrailStore.js). Boolean, off by default.
+  recordGpsTrail: false,
 };
 
 export const MISS_REASONS_MODES = ['ask', 'manual', 'off'];
@@ -85,7 +89,7 @@ export function mergeAppSettings(base, patch) {
       out[k] = MISS_REASONS_MODES.includes(v) ? v : base[k];
       continue;
     }
-    if (k === 'aimTips') {
+    if (k === 'aimTips' || k === 'recordGpsTrail') {
       out[k] = typeof v === 'boolean' ? v : base[k];
       continue;
     }

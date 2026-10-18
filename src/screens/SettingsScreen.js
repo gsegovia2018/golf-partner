@@ -108,6 +108,12 @@ export default function SettingsScreen({ navigation }) {
           <SwitchRow testID="setting-gpsEnabled" label={t('settings.gps.label')} first
             hint={t('settings.gps.hint')}
             value={appSettings.gpsEnabled} onChange={(v) => setKey({ gpsEnabled: v })} theme={theme} s={s} />
+          {/* GPS trail experiment: only the Android round tracker records it. */}
+          {Platform.OS === 'android' ? (
+            <SwitchRow testID="setting-recordGpsTrail" label={t('settings.recordGpsTrail.label')}
+              hint={t('settings.recordGpsTrail.hint')}
+              value={appSettings.recordGpsTrail} onChange={(v) => setKey({ recordGpsTrail: v })} theme={theme} s={s} />
+          ) : null}
           <SwitchRow testID="setting-shotMeasuring" label={t('settings.shotMeasuring.label')}
             hint={t('settings.shotMeasuring.hint')}
             value={appSettings.shotMeasuring !== 'off'}

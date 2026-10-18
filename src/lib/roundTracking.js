@@ -1,6 +1,7 @@
 import { AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import { recordTrailFixes } from '../store/gpsTrailStore';
 
 // Keeps GPS alive while a live round's scorecard is open, screen off or not.
 //
@@ -47,7 +48,11 @@ if (isRoundTrackingSupported()) {
   TaskManager.defineTask(ROUND_LOCATION_TASK, ({ data, error }) => {
     if (error) return;
     const locs = data?.locations;
-    if (locs?.length) publish(locs[locs.length - 1]);
+    if (!locs?.length) return;
+    publish(locs[locs.length - 1]);
+    // GPS trail experiment: every fix of the batch, not just the newest. A
+    // no-op unless the setting is on and a live round is active; never throws.
+    recordTrailFixes(locs);
   });
 }
 

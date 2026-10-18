@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { setRoundTracking } from '../lib/roundTracking';
+import { setActiveTrailRound, flushTrails } from '../store/gpsTrailStore';
 import { formatDistance, unitSuffix } from '../lib/units';
 import { t, useT, getLanguage, formatNumber } from '../i18n';
 
@@ -37,7 +38,12 @@ export function roundTrackingText({ courseName, holeNumber, distances, source, u
   };
 }
 
-export function useRoundTracking({ active, courseName, holeNumber, distances, source, units }) {
+// `trail` ({ userId, tournamentId, roundId, roundIndex }, or null when the
+// signed-in user is not a player scoring on this phone) names the round the
+// GPS trail experiment records under while tracking is active; whether it
+// records at all is the `recordGpsTrail` setting, checked per fix in
+// store/gpsTrailStore.
+export function useRoundTracking({ active, courseName, holeNumber, distances, source, units, trail }) {
   const last = useRef(null); // { holeNumber, source, center, lang } of the last update sent
   useT(); // re-render (and re-send the text) when the language changes
   const lang = getLanguage();
@@ -63,4 +69,19 @@ export function useRoundTracking({ active, courseName, holeNumber, distances, so
 
   // Leaving the scorecard ends tracking whatever `active` last said.
   useEffect(() => () => setRoundTracking(null), []);
+
+  // Keyed by value, not identity: a fresh `trail` object per render must not
+  // stop and restart the trail. Stopping (inactive, another round, unmount)
+  // uploads what was recorded.
+  const trailKey = active && trail?.userId && trail.tournamentId && trail.roundId && Number.isInteger(trail.roundIndex)
+    ? JSON.stringify([trail.userId, trail.tournamentId, trail.roundId, trail.roundIndex])
+    : null;
+  useEffect(() => {
+    if (!trailKey) return undefined;
+    const [userId, tournamentId, roundId, roundIndex] = JSON.parse(trailKey);
+    setActiveTrailRound({ userId, tournamentId, roundId, roundIndex });
+    return () => {
+      setActiveTrailRound(null).then(() => flushTrails());
+    };
+  }, [trailKey]);
 }

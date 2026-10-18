@@ -2,8 +2,13 @@ import React from 'react';
 import { render } from '@testing-library/react-native';
 import { useRoundTracking, roundTrackingText, NOTIFICATION_MIN_DELTA_M } from '../useRoundTracking';
 import { setRoundTracking } from '../../lib/roundTracking';
+import { setActiveTrailRound, flushTrails } from '../../store/gpsTrailStore';
 
 jest.mock('../../lib/roundTracking', () => ({ setRoundTracking: jest.fn() }));
+jest.mock('../../store/gpsTrailStore', () => ({
+  setActiveTrailRound: jest.fn().mockResolvedValue(),
+  flushTrails: jest.fn().mockResolvedValue({ uploaded: 0, failed: false }),
+}));
 
 function Probe(props) {
   useRoundTracking(props);
@@ -19,7 +24,11 @@ const base = {
   distances: { front: 131, center: 143, back: 156 },
 };
 
-beforeEach(() => { setRoundTracking.mockClear(); });
+beforeEach(() => {
+  setRoundTracking.mockClear();
+  setActiveTrailRound.mockClear();
+  flushTrails.mockClear();
+});
 
 describe('roundTrackingText', () => {
   test('live fix: hole and centre in the title, front/back and course in the body', () => {
@@ -79,4 +88,39 @@ test('inactive stops tracking; so does unmount', () => {
   expect(setRoundTracking).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Hole 7 · 143 m to the centre' }));
   view.unmount();
   expect(setRoundTracking).toHaveBeenLastCalledWith(null);
+});
+
+describe('GPS trail round', () => {
+  const trail = { userId: 'u1', tournamentId: 't-1', roundId: 'r0', roundIndex: 0 };
+  const flushed = () => new Promise((r) => setTimeout(r, 0));
+
+  test('active with a trail names the round; a fresh object with the same ids does not restart it', () => {
+    const view = render(<Probe {...base} trail={trail} />);
+    expect(setActiveTrailRound).toHaveBeenCalledTimes(1);
+    expect(setActiveTrailRound).toHaveBeenLastCalledWith(trail);
+    view.rerender(<Probe {...base} trail={{ ...trail }} distances={{ front: 100, center: 110, back: 120 }} />);
+    expect(setActiveTrailRound).toHaveBeenCalledTimes(1);
+  });
+
+  test('tracking stopping clears the round and uploads the trail', async () => {
+    const view = render(<Probe {...base} trail={trail} />);
+    view.rerender(<Probe {...base} trail={trail} active={false} />);
+    expect(setActiveTrailRound).toHaveBeenLastCalledWith(null);
+    await flushed();
+    expect(flushTrails).toHaveBeenCalledTimes(1);
+  });
+
+  test('unmount clears the round and uploads the trail', async () => {
+    const view = render(<Probe {...base} trail={trail} />);
+    view.unmount();
+    expect(setActiveTrailRound).toHaveBeenLastCalledWith(null);
+    await flushed();
+    expect(flushTrails).toHaveBeenCalledTimes(1);
+  });
+
+  test('no trail (not a player on this phone) or inactive → no round is named', () => {
+    render(<Probe {...base} trail={null} />);
+    render(<Probe {...base} active={false} trail={trail} />);
+    expect(setActiveTrailRound).not.toHaveBeenCalled();
+  });
 });

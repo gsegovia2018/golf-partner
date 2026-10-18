@@ -865,6 +865,10 @@ export default function ScorecardScreen({ navigation, route }) {
     distances: trackingGps.distances,
     source: trackingGps.source,
     units: appSettings.units,
+    // GPS trail experiment: only when the signed-in user plays in this round.
+    trail: user?.id && meId && tournament?.id && round?.id
+      ? { userId: user.id, tournamentId: tournament.id, roundId: round.id, roundIndex }
+      : null,
   });
 
   // Lock a freshly opened finished round to view-only. "Finished" means
