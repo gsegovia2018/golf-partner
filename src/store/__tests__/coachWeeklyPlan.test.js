@@ -300,3 +300,55 @@ describe('determinism', () => {
     expect(buildWeeklyPlan(input)).toEqual(buildWeeklyPlan({ ...input, today: '2030-01-01' }));
   });
 });
+
+describe('strategy-only causes (lie, decision) get no drill minutes', () => {
+  const apprLeak = leak('approach', null, -1.4);
+  const lieDiag = diag({ leaks: [apprLeak, putting], top: apprLeak });
+  const byId = Object.fromEntries(DRILLS.map((d) => [d.id, d]));
+  const lieInput = (id, over = {}) => base({
+    diagnosis: lieDiag, causes: causes(id), secondCauses: causes('cause:putting:lag'), ...over,
+  });
+
+  it.each([
+    'cause:approach:why:lie', 'cause:approach:why:decision',
+    'cause:tee:why:lie', 'cause:tee:why:decision',
+    'cause:short:why:lie', 'cause:short:why:decision',
+  ])('%s as focus: no area drills, the minutes go to the next block', (id) => {
+    const p = buildWeeklyPlan(lieInput(id));
+    const drills = drillsOf(p);
+    expect(drills.some((d) => d.role === 'focus')).toBe(false);
+    expect(drills.some((d) => ['approach', 'offTheTee', 'shortGame'].includes(byId[d.drillId]?.area))).toBe(false);
+    // the second block (putting) inherits the focus block's 55 %: more than its own 25 %
+    const second = drills.filter((d) => d.role === 'second').reduce((a, d) => a + d.minutes, 0);
+    expect(second).toBeGreaterThan(15);
+    expect(total(p)).toBeLessThanOrEqual(60);
+  });
+
+  it('the course task still names the cause', () => {
+    expect(buildWeeklyPlan(lieInput('cause:approach:why:lie')).courseTask.key)
+      .toBe('stats.my.coach.plan.course.approach.why.lie');
+    expect(buildWeeklyPlan(lieInput('cause:tee:why:decision')).courseTask.key)
+      .toBe('stats.my.coach.plan.course.tee.why.decision');
+  });
+
+  it('with no other block the plan has no drills for it, only the course task', () => {
+    const p = buildWeeklyPlan(lieInput('cause:approach:why:lie', {
+      diagnosis: diag({ leaks: [apprLeak], top: apprLeak, categories: [cat('approach', -1.4)] }),
+      secondCauses: undefined, minutesPerWeek: 30,
+    }));
+    expect(p.sessions).toEqual([]);
+    expect(p.courseTask.key).toBe('stats.my.coach.plan.course.approach.why.lie');
+    expect(p.signature.causeId).toBe('cause:approach:why:lie');
+  });
+
+  it('a strategy-only second leak gives its minutes to the focus block', () => {
+    const p = buildWeeklyPlan(base({ minutesPerWeek: 60, secondCauses: causes('cause:approach:why:lie') }));
+    expect(drillsOf(p).some((d) => d.role === 'second')).toBe(false);
+    expect(drillsOf(p).filter((d) => d.role === 'focus').length).toBeGreaterThan(0);
+  });
+
+  it('a swing why cause still gets its drill', () => {
+    const p = buildWeeklyPlan(lieInput('cause:approach:why:swing:curve:right'));
+    expect(drillsOf(p).filter((d) => d.role === 'focus')[0].drillId).toBe('appr-path-gate');
+  });
+});

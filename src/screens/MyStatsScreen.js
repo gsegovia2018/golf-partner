@@ -486,12 +486,13 @@ export default function MyStatsScreen({ navigation, route }) {
   // GPS shot log feeds the real club-distance stat; subscribe so it refreshes
   // as shots sync in without a manual reload.
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
+  const handedness = getSwingProfile().handedness;
   const stats = useMemo(
     () => (selected.length
-      ? computeMyStats(selected, { n, targetHandicap: targetHandicap ?? 0, shots: getShots() })
+      ? computeMyStats(selected, { n, targetHandicap: targetHandicap ?? 0, shots: getShots(), handedness })
       : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selected, n, targetHandicap, shotsVersion],
+    [selected, n, targetHandicap, shotsVersion, handedness],
   );
 
   const coachFocusVerdict = useMemo(

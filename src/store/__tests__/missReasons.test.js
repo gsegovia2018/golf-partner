@@ -298,6 +298,17 @@ describe('missReasonStats', () => {
     expect(short.subs.lowPoint).toBe(1);
   });
 
+  test('lies count every lie situation on lie-family misses', () => {
+    const r = round({
+      1: { approachBucket: '100-150', approachResult: 'miss', approachSituation: ['below-feet', 'wind'] },
+      2: { approachBucket: '100-150', approachResult: 'miss', approachSituation: ['below-feet'] },
+      3: { approachBucket: '100-150', approachResult: 'miss', approachSituation: ['decision'] },
+    }, { 1: 5, 2: 5, 3: 5 });
+    const { approach } = missReasonStats([r], 'me');
+    expect(approach.all.lies).toEqual({ 'below-feet': 2, wind: 1 });
+    expect(missReasonStats([], 'me').tee.lies).toEqual({});
+  });
+
   test('other players / empty input', () => {
     expect(missReasonStats([], 'me').approach.all.misses).toBe(0);
     expect(missReasonStats(null, 'me').tee.misses).toBe(0);

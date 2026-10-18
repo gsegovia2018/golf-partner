@@ -61,7 +61,7 @@ describe('drill causes, kind, minutes and levels', () => {
     });
   });
   test('every cause a drill names is a known cause id shape', () => {
-    DRILLS.forEach((d) => d.causes.forEach((c) => expect(c).toMatch(/^cause:[a-z]+(:[a-z]+)*$/)));
+    DRILLS.forEach((d) => d.causes.forEach((c) => expect(c).toMatch(/^cause:[a-z]+(:[a-zA-Z]+)*$/)));
   });
 });
 
@@ -77,6 +77,7 @@ describe('drillsForCause', () => {
     expect(ids('cause:approach:short')).toEqual([
       'appr-green-reps-125', 'appr-long-iron-reps', 'appr-club-up-back-half',
       'appr-wedge-ladder', 'appr-distance-windows', 'appr-layup-ladder', 'appr-call-your-half', 'appr-start-line-gate',
+      'appr-path-gate', 'appr-low-point-line', 'appr-strike-tape',
     ]);
   });
   test('a cause served outside its area still ranks first (bunker)', () => {
@@ -105,6 +106,33 @@ describe('drillsForCause', () => {
     };
     Object.entries(NEW).forEach(([id, cause]) => {
       expect(DRILLS.find((d) => d.id === id).causes).toContain(cause);
+    });
+  });
+});
+
+describe('drillsForCause: why causes', () => {
+  const first = (id) => drillsForCause(id)[0]?.id;
+  test('each swing sub maps to its drill first', () => {
+    ['left', 'right'].forEach((side) => {
+      expect(first(`cause:approach:why:swing:start:${side}`)).toBe('appr-start-line-gate');
+      expect(first(`cause:tee:why:swing:start:${side}`)).toBe('tee-shape-window');
+      expect(first(`cause:approach:why:swing:curve:${side}`)).toBe('appr-path-gate');
+      expect(first(`cause:approach:why:swing:strike:${side}`)).toBe('appr-strike-tape');
+    });
+    expect(first('cause:approach:why:swing:lowPoint')).toBe('appr-low-point-line');
+    expect(first('cause:short:why:swing:lowPoint')).toBe('sg-landing-towel');
+  });
+  test('lie and decision causes are strategy-only: no drills', () => {
+    ['approach', 'tee', 'short'].forEach((area) => {
+      expect(drillsForCause(`cause:${area}:why:lie`)).toEqual([]);
+      expect(drillsForCause(`cause:${area}:why:decision`)).toEqual([]);
+    });
+  });
+  test('the three new drills: approach, range, 15 min, three levels', () => {
+    ['appr-path-gate', 'appr-low-point-line', 'appr-strike-tape'].forEach((id) => {
+      const d = DRILLS.find((x) => x.id === id);
+      expect(d).toMatchObject({ area: 'approach', kind: 'range', location: 'range', minutes: 15, bucket: null });
+      expect(d.levels).toHaveLength(3);
     });
   });
 });

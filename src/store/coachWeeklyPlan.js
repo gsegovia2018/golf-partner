@@ -78,6 +78,12 @@ const CATEGORY_AREA = {
 const COLLECT_DRILLS = ['putt-mixed-ladder', 'putt-clock-2m', 'putt-lag-ladder', 'putt-gate-short', 'putt-tap-in-pressure'];
 const DRILL_BY_ID = Object.fromEntries(DRILLS.map((d) => [d.id, d]));
 
+// Why causes fixed by a different play, not by practice (miss reasons, spec §5.6):
+// their block gets no drills and its minutes go to the next block.
+export const STRATEGY_ONLY_CAUSES = new Set(
+  ['approach', 'tee', 'short'].flatMap((area) => [`cause:${area}:why:lie`, `cause:${area}:why:decision`]),
+);
+
 const areaMsg = (category) => msg(`${P}area.${category}`);
 
 function entry(drill, role, level) {
@@ -92,6 +98,7 @@ function entry(drill, role, level) {
 // Drills for a block: cause-matched when there is a cause, else the area's
 // (bucket match first, then generic, then the rest).
 function poolFor({ causeId, category, bucket }) {
+  if (STRATEGY_ONLY_CAUSES.has(causeId)) return [];
   if (causeId) {
     const byCause = drillsForCause(causeId);
     if (byCause.length) return byCause;
@@ -279,11 +286,14 @@ export function buildWeeklyPlan({
   const used = new Set();
   const withKind = blocks.map((b) => {
     const pool = poolFor(b.chain);
-    return { ...b, pool, kind: pool[0]?.kind ?? 'course' };
+    return { ...b, pool, kind: pool[0]?.kind ?? 'course', strategyOnly: STRATEGY_ONLY_CAUSES.has(b.chain.causeId) };
   });
-  const focusBlock = withKind[0];
-  const kept = withKind.filter((b) => b === focusBlock || b.target >= MIN_DRILL_MINUTES);
-  withKind.filter((b) => !kept.includes(b)).forEach((b) => {
+  // A strategy-only block has no drills: its minutes move to the next block.
+  const live = withKind.filter((b) => !b.strategyOnly);
+  if (live.length) live[0].target += withKind.filter((b) => b.strategyOnly).reduce((a, b) => a + b.target, 0);
+  const focusBlock = live[0] ?? withKind[0];
+  const kept = live.filter((b) => b === focusBlock || b.target >= MIN_DRILL_MINUTES);
+  live.filter((b) => !kept.includes(b)).forEach((b) => {
     const host = kept.find((k) => k.kind === b.kind) ?? focusBlock;
     host.target += b.target;
   });
@@ -310,7 +320,7 @@ export function buildWeeklyPlan({
   const roleMinutes = (role) => Object.values(byKind).reduce((a, k) => a + sum(k.drills.filter((d) => d.role === role)), 0);
   const topUpOrder = ['keep', 'second', 'tie', 'focus'];
   [...kept].sort((x, y) => topUpOrder.indexOf(x.role) - topUpOrder.indexOf(y.role)).forEach((b) => {
-    const own = ['focus', 'tie'].includes(b.role);
+    const own = b === focusBlock || ['focus', 'tie'].includes(b.role);
     const room = own ? left : Math.min(left, roleMinutes(focusBlock.role) - roleMinutes(b.role));
     const drills = pack(b.pool, b.kind, used, room, b.level, b.role, room);
     byKind[b.kind].drills.push(...drills);

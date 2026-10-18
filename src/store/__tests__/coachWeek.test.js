@@ -172,3 +172,28 @@ describe('buildCheck', () => {
     });
   });
 });
+
+describe('buildCoachWeek: coverage hint (pooled tagged misses under the why floor)', () => {
+  const rows = (approach, tee) => ({
+    missReasons: { approach: { all: { tagged: approach }, byBucket: {} }, tee: { tagged: tee }, short: { tagged: 0 } },
+  });
+  const withRows = (stats, r) => ({ ...stats, ...r });
+
+  it('an approach top leak under 6 pooled tagged misses carries { tagged, needed }', () => {
+    const w = week(withRows(approachShort(), rows(3, 0)));
+    expect(w.chains[0].coverage).toEqual({ tagged: 3, needed: 6 });
+  });
+  it('an off-the-tee top leak reads the tee row', () => {
+    const w = week(withRows(teeLeft(), rows(9, 2)));
+    expect(w.chains[0].coverage).toEqual({ tagged: 2, needed: 6 });
+  });
+  it('is absent at the floor, for other areas, and without miss-reason stats', () => {
+    expect(week(withRows(approachShort(), rows(6, 0))).chains[0].coverage).toBeNull();
+    expect(week(withRows(onePutting(), rows(0, 0))).chains[0].coverage).toBeNull();
+    expect(week(approachShort()).chains[0].coverage).toBeNull();
+  });
+  it('a tie gives each chain its own hint', () => {
+    const w = week(withRows(tieStats(), rows(1, 4)));
+    expect(w.chains.map((c) => c.coverage)).toEqual([{ tagged: 1, needed: 6 }, { tagged: 4, needed: 6 }]);
+  });
+});
