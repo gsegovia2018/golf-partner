@@ -15,13 +15,14 @@ const T = SWING_STRINGS.results;
  * (draws it on the still); `onPlace` opens Edit marks on the checkpoint that needs a mark.
  */
 export default function SwingCheckRow({
-  check, selected = false, expanded, onPress, onPlace, placeAt = null,
+  check, selected = false, expanded, onPress, onPlace, placeAt = null, step = null,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
   const s = useMemo(() => makeStyles(theme), [theme]);
   // spine_hold / knee_hold run at several positions: the row names its position.
-  const name = check.cp && SWING_STRINGS.checkpoint[check.cp] ? `${check.label}, ${SWING_STRINGS.checkpoint[check.cp].toLowerCase()}` : check.label;
+  // the list header names the position on screen: a row only names its checkpoint when it is another one
+  const name = check.cp && check.cp !== step && SWING_STRINGS.checkpoint[check.cp] ? `${check.label}, ${SWING_STRINGS.checkpoint[check.cp].toLowerCase()}` : check.label;
   const { status } = check;
   const word = status === 'unknown'
     ? (check.reason === 'hidden' ? SWING_STRINGS.statusWord.unknown : '—')
