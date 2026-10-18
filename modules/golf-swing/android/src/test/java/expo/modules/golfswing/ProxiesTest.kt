@@ -23,16 +23,22 @@ class ProxiesTest {
   }
 
   @Test
+  fun everySecondFrameInsideTheWindow() {
+    // apiVersion 6: the JS asks for every 2nd frame (frames.js proxyEvery)
+    assertEquals(listOf(100, 102, 104, 106, 108, 110), Proxies.frames(960, 2, 99..110))
+  }
+
+  @Test
   fun noProxiesWhenOff() {
     assertTrue(Proxies.frames(960, 0).isEmpty())
     assertTrue(Proxies.frames(0, 4).isEmpty())
   }
 
   @Test
-  fun shortSideIs160AndTheAspectIsKept() {
-    assertEquals(Pair(160, 284), Proxies.size(1080, 1920)) // portrait 9:16
-    assertEquals(Pair(160, 213), Proxies.size(720, 960)) // the mock's 3:4
-    assertEquals(Pair(284, 160), Proxies.size(1920, 1080)) // landscape
+  fun shortSideIs240AndTheAspectIsKept() {
+    assertEquals(Pair(240, 427), Proxies.size(1080, 1920)) // portrait 9:16
+    assertEquals(Pair(240, 320), Proxies.size(720, 960)) // the mock's 3:4
+    assertEquals(Pair(427, 240), Proxies.size(1920, 1080)) // landscape
     assertEquals(Pair(120, 200), Proxies.size(120, 200)) // never upscaled
   }
 
@@ -44,8 +50,8 @@ class ProxiesTest {
     f.u.fill(0x80.toByte())
     f.v.fill(0x80.toByte())
     val (px, w, h) = Proxies.pixels(f)
-    assertEquals(Pair(160, 284), Pair(w, h))
-    assertEquals(160 * 284, px.size)
+    assertEquals(Pair(240, 427), Pair(w, h))
+    assertEquals(240 * 427, px.size)
     assertEquals(0xFFFFFFFF.toInt(), px[0])
   }
 }

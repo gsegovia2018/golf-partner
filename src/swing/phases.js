@@ -229,7 +229,8 @@ function finishQuietSeconds(P, fps) {
  * @param {number} [o.bodyH]  px; default: bounding box of the first pose
  * @param {number|null} [o.ballGoneFrame]  native: first frame the ball patch changes sharply
  * @param {number|null} [o.addressFrame]  native: last still frame before the clubhead moves
- *   back (onset in the ball patch - 1). Without it P1 falls back to `motionStart` (plan 5.1).
+ *   back (apiVersion 6: from the clubhead's own track; before, onset in the ball patch - 1).
+ *   Without it P1 falls back to `motionStart` (plan 5.1).
  * @param {number} [o.gripK]
  */
 export function detectPhases(idx, L, o) {

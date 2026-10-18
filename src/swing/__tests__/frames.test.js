@@ -119,6 +119,37 @@ describe('scrub proxies (D28): the swing window, every 4th frame, no I/O per fra
     expect(getProxy('s1', 205, meta)).toBe('file:///doc/swings/s1/proxy/204.jpg');
     expect(getProxy('s1', 205, undefined)).toBeNull();
   });
+
+  test('apiVersion 6 swings have a proxy every 2nd frame; the stored spacing decides, so both kinds work', () => {
+    const { proxyFrame, proxyEveryFor } = require('../frames');
+    expect(proxyEveryFor({ scrubSupport: () => true })).toBe(2);
+    expect(proxyEveryFor({ scrubSupport: () => false })).toBe(4);
+    expect(proxyEveryFor({})).toBe(4); // a binary bundle without the gate
+    expect(proxyEveryFor(null)).toBe(4);
+    const dense = { every: 2, from: 200, to: 680, count: 241 };
+    expect(proxyFrame(205, dense)).toBe(206); // half way rounds up
+    expect(proxyFrame(204, dense)).toBe(204);
+    expect(proxyFrame(207, dense)).toBe(208);
+    expect(proxyFrame(206, meta)).toBe(208); // an every-4 swing keeps its spacing
+  });
+});
+
+describe('releaseFrameDecoder (apiVersion 6)', () => {
+  test('closes the warm decoder on a binary that has one, never throws, does nothing otherwise', async () => {
+    const releaseFrames = jest.fn(() => Promise.reject(new Error('gone')));
+    jest.doMock('../native', () => ({ REQUIRED_API_VERSION: 1, apiVersion: 6, analyzePose: jest.fn(), scrubSupport: () => true, releaseFrames }), { virtual: true });
+    const { releaseFrameDecoder } = require('../frames');
+    expect(() => releaseFrameDecoder()).not.toThrow();
+    expect(releaseFrames).toHaveBeenCalledTimes(1);
+    await Promise.resolve(); // the rejection is swallowed
+  });
+
+  test('an older binary is not asked', () => {
+    const releaseFrames = jest.fn();
+    jest.doMock('../native', () => ({ REQUIRED_API_VERSION: 1, apiVersion: 5, analyzePose: jest.fn(), scrubSupport: () => false, releaseFrames }), { virtual: true });
+    require('../frames').releaseFrameDecoder();
+    expect(releaseFrames).not.toHaveBeenCalled();
+  });
 });
 
 describe('ensureStills lanes (target first, neighbours after, superseded work dropped)', () => {

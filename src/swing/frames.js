@@ -18,7 +18,8 @@
 //       module.addListener('progress', cb) -> { remove() }
 //   extractCheckpoints(videoPath, { frames: [{ key, i, hands: [x, y], neighbours: 2 }],
 //                                    ball: { x, y, r } | null, expectedShaftPx,
-//                                    addressSearch: { run, latest, quiet, minRun } | null, outDir })
+//                                    addressSearch: { run, latest, quiet, minRun } | null, outDir,
+//                                    proxyEvery, proxyDir, proxyRange, clubModel, captureFps })
 //                         -> { stills: { [key]: { [frame]: 'file://.../frames/<frame>.jpg' } },
 //                              shaft: { [frame]: { head: [x, y] px | null, hidden, conf, source } },
 //                              (source 'edge' | 'prior', or from apiVersion 4 'model' | 'model-shaft'; see native.js),
@@ -26,7 +27,8 @@
 //   extractFrames(videoPath, { frames: number[], outDir })
 //                         -> { [frame]: 'file://.../frames/<frame>.jpg' }
 //       any frame by index (the Edit marks scrubber). One sequential decode, never a seek per
-//       frame.
+//       frame; from apiVersion 6 the decoder stays warm between calls (scrubSupport()), and
+//       releaseFrames() closes it (releaseFrameDecoder below).
 //   detectClub({ frames: [{ frame, still, grip }], video, pxPerCm, scenery })      (apiVersion 5, see native.js)
 //                         -> { frames: { [frame]: { head: [x, y] px | null, hidden, conf, source, boxes } }, timings }
 //       the club detector on the stills of chosen frames (clubOnDemand.js); releaseClub() closes it.
@@ -37,7 +39,9 @@
 // the frames that are missing.
 //
 // Scrub proxies (D28, apiVersion 3) live in <swing dir>/proxy/<frame>.jpg, one every
-// PROXY_EVERY frames of the whole clip, written by pass 2 (extractCheckpoints' proxyEvery).
+// proxyEveryFor() frames of the swing window (PROXY_EVERY, or PROXY_EVERY_DENSE from apiVersion 6),
+// written by pass 2 (extractCheckpoints' proxyEvery). The canvas reads the spacing a swing has from
+// `pose.pass2.proxies.every`, so swings analysed with either keep working.
 // They go with the swing folder. A swing analysed by an older binary has none: getProxy()
 // returns null and the canvas keeps the last full-resolution still while scrubbing.
 
@@ -57,6 +61,18 @@ export function nativeApi() {
 }
 
 export const PROXY_EVERY = 4;
+export const PROXY_EVERY_DENSE = 2;
+
+/** The proxy spacing to ask a binary for: every 2nd frame from apiVersion 6 (scrubSupport), else every 4th. */
+export const proxyEveryFor = (api) => (api?.scrubSupport?.() ? PROXY_EVERY_DENSE : PROXY_EVERY);
+
+/** Closes the scrubber's warm decoder (the canvas unmounts); never throws, a no-op without one. */
+export function releaseFrameDecoder() {
+  try {
+    const api = nativeApi();
+    if (api?.scrubSupport?.()) Promise.resolve(api.releaseFrames()).catch(() => {});
+  } catch { /* nothing to release */ }
+}
 
 const framesDir = (swingId) => new Directory(Paths.document, 'swings', swingId, 'frames');
 export const proxyDir = (swingId) => new Directory(Paths.document, 'swings', swingId, 'proxy');

@@ -14,8 +14,8 @@ import kotlin.math.roundToInt
  * full-resolution still on release. Pure JVM except [write], so the geometry is unit-tested.
  */
 internal object Proxies {
-  /** The short side of a proxy, px (a 9:16 portrait clip gives 160 × 284). */
-  const val SHORT_SIDE = 160
+  /** The short side of a proxy, px (a 9:16 portrait clip gives 240 × 427; 160 up to apiVersion 5). */
+  const val SHORT_SIDE = 240
   private const val JPEG_QUALITY = 70
 
   /**

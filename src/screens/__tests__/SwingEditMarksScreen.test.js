@@ -10,7 +10,7 @@ import { ThemeProvider } from '../../theme/ThemeContext';
 import SwingEditMarksScreen, { PANEL_H } from '../SwingEditMarksScreen';
 import SwingOverlay, { fitRect } from '../../components/swing/SwingOverlay';
 import * as store from '../../store/swingStore';
-import { getStill, ensureStills, getProxy } from '../../swing/frames';
+import { getStill, ensureStills, getProxy, releaseFrameDecoder } from '../../swing/frames';
 import { analyze } from '../../swing/analyze';
 import { emptyMarks } from '../../swing/labels';
 import {
@@ -54,6 +54,7 @@ jest.mock('../../swing/frames', () => ({
   getStill: jest.fn(() => 'file:///doc/swings/s1/frames/x.jpg'),
   getProxy: jest.fn(() => null),
   ensureStills: jest.fn(() => Promise.resolve({})),
+  releaseFrameDecoder: jest.fn(),
 }));
 
 jest.mock('../../swing/native', () => ({
@@ -1156,6 +1157,7 @@ describe('club on demand: the model proposes a clubhead on the frame the golfer 
     expect(detectClub.mock.calls[0][0].frames).toEqual([]);
     u.unmount();
     expect(releaseClub).toHaveBeenCalled();
+    expect(releaseFrameDecoder).toHaveBeenCalled(); // and the scrubber's warm decoder (apiVersion 6)
   });
 });
 

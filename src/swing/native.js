@@ -35,6 +35,14 @@ export const CLUB_MODEL_API_VERSION = 4;
 // canvas never calls detectClub there (the head goes Missing on a frame other than the proposal's).
 export const CLUB_ONDEMAND_API_VERSION = 5;
 
+// apiVersion 6 (swing polish, native): the scrubber's decoder stays warm between extractFrames calls
+// (releaseFrames closes it), and pass 2 writes denser, sharper proxies (frames.js asks for every 2nd
+// frame; 240 px short side). Gated on its own: an apiVersion 2-5 binary keeps every 4th frame and has
+// no releaseFrames. The same binary also detects impact (ballGoneFrame: the ball's own picture) and
+// the address (addressFrame: the clubhead's track, timed by extractCheckpoints' `captureFps`) with
+// new rules; their contract is unchanged, so nothing here gates on them.
+export const SCRUB_API_VERSION = 6;
+
 // Finished text in the active language: call at the moment it is shown (docs/i18n.md).
 export const updateAppMessage = () => t('misc.swing.updateApp');
 
@@ -114,6 +122,12 @@ export function proxySupport() {
 export function clubModelSupport() {
   const s = swingSupport();
   return s.supported && s.apiVersion >= CLUB_MODEL_API_VERSION;
+}
+
+/** Does this binary keep extractFrames' decoder warm and write dense proxies (apiVersion >= SCRUB_API_VERSION)? */
+export function scrubSupport() {
+  const s = swingSupport();
+  return s.supported && s.apiVersion >= SCRUB_API_VERSION;
 }
 
 /** Can this binary propose a clubhead on a chosen frame (apiVersion >= CLUB_ONDEMAND_API_VERSION)? */
@@ -202,15 +216,18 @@ export async function analyzePose(path, opts = {}) {
  * Pass 2 (plan 3, D16): one sequential decode of the checkpoint span.
  * - stills: every checkpoint ± neighbours (JPEG q85, display orientation, `<outDir>/<frame>.jpg`);
  *   `address` lists the stills around the final address frame.
- * - addressFrame: the image-based P1 (the last frame before the clubhead moves the ball patch),
- *   searched inside `addressSearch` (phases.js); null without a ball, a window or an onset.
+ * - addressFrame: the image-based P1 (the last frame before the clubhead starts moving back), from
+ *   `addressSearch` (phases.js); null without a ball, a window or a still stretch. apiVersion 6
+ *   tracks the clubhead itself from 0.5 s before `addressSearch.run` to the lead arm (`quiet[0]`),
+ *   its speed timed by `captureFps` (one container frame step; default 240); older binaries
+ *   looked for motion in a patch around the ball inside `run`.
  * - shaft: the clubhead proposal at address (at addressFrame when found) and impact only,
  *   from a radial search seeded hands -> ball; head in display px, `source: 'edge'`. Every other
  *   requested checkpoint frame is `{ head: null, hidden: false, conf: 0.1, source: 'prior' }`
  *   (no shaft tracking in v1). No ball or expectedShaftPx: priors everywhere.
  * - proxies (apiVersion 3, D28): with `proxyEvery` > 0 and `proxyDir`, every proxyEvery-th frame of
- *   the whole clip as a small JPEG (short side 160 px, q70), `<proxyDir>/<frame>.jpg`; an older
- *   binary ignores both fields and returns no `proxies`.
+ *   `proxyRange` as a small JPEG (short side 160 px, 240 from apiVersion 6, q70),
+ *   `<proxyDir>/<frame>.jpg`; an older binary ignores both fields and returns no `proxies`.
  * - clubModel (apiVersion 4): with `clubModel: true` the learned detector also proposes the clubhead at the
  *   other checkpoints: `source: 'model'` (head box) or `'model-shaft'` (shaft-box corner), `conf` = the
  *   detector's score (0.03-0.95, not the edge ratio), `hidden` always false, plus `boxes` (display px).
@@ -219,7 +236,8 @@ export async function analyzePose(path, opts = {}) {
  *   clubMs, clubFrames, clubFailures, clubDelegate }  (club* only from apiVersion 4).
  * @param {{ frames: Array<{ key, i, hands?: [x, y], neighbours?: number }>, ball?: { x, y, r } | null,
  *   expectedShaftPx?: number, addressSearch?: { run: [a, b], latest, quiet: [a, b], minRun } | null,
- *   outDir: string, proxyEvery?: number, proxyDir?: string, clubModel?: boolean }} opts  hands and ball normalised; expectedShaftPx in display px
+ *   outDir: string, proxyEvery?: number, proxyDir?: string, proxyRange?: [a, b], clubModel?: boolean,
+ *   captureFps?: number }} opts  hands and ball normalised; expectedShaftPx in display px
  * @returns {Promise<{ stills: { [key]: { [frame]: string } },
  *   shaft: { [frame]: { head: [x, y] | null, hidden, conf, source: 'model'|'model-shaft'|'edge'|'prior',
  *     boxes?: Array<{ cls: 'shaft'|'head'|'hands', score, box: [x1, y1, x2, y2] }>, angleDeg?, lengthPx? } },
@@ -234,12 +252,19 @@ export async function extractCheckpoints(path, opts) {
 
 /**
  * JPEGs of arbitrary frames for the Edit-marks scrubber: `<outDir>/<frame>.jpg`, decode
- * resolution (halved when the long side is over 1920), display orientation.
+ * resolution (halved when the long side is over 1920), display orientation. From apiVersion 6 the
+ * decoder stays warm for a few seconds, so a request at or after the last one decodes on without
+ * a seek; releaseFrames() closes it.
  * @param {{ frames: number[], outDir: string }} opts
  * @returns {Promise<{ [frame]: string }>}  file:// URIs
  */
 export async function extractFrames(path, opts) {
   return requireSupported().extractFrames(path, opts);
+}
+
+/** Closes extractFrames' warm decoder now (the canvas unmounts). A no-op below SCRUB_API_VERSION. */
+export async function releaseFrames() {
+  if (scrubSupport()) await nativeModule().releaseFrames();
 }
 
 /**

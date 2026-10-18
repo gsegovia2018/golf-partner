@@ -73,7 +73,8 @@ internal class PoseAnalyzer(
     /** Threads converting a model input frame (the decode thread is one of them). */
     private const val CONVERT_THREADS = 3
     private const val QUEUE = 4
-    private const val SEARCH_MARGIN_CM = 8.0
+    /** Strip margin around the ball ROI: ballGoneFrame reads ±(3.1 diameters + 2 px) ≈ 13.3 cm around the ball. */
+    private const val SEARCH_MARGIN_CM = 14.0
     /** Hint-session target per inference: below what it takes, so the clocks stay up (see [PerfHint]). */
     private const val HINT_TARGET_NS = 12_000_000L
   }
@@ -82,6 +83,8 @@ internal class PoseAnalyzer(
 
   private lateinit var track: TrackInfo
   private lateinit var policy: SamplingPolicy
+  /** Capture rate of one container frame step (the policy's time base): ballGoneFrame's "for 0.1 s". */
+  private var fps = 240.0
   private lateinit var worker: PoseWorker
   private lateinit var bands: BandRunner
   private lateinit var hint: PerfHint
@@ -122,7 +125,8 @@ internal class PoseAnalyzer(
     val t0 = SystemClock.elapsedRealtimeNanos()
     track = Media.scan(context, path)
     val captureFps = opts.captureFps ?: Media.captureFps(context, path)
-    policy = SamplingPolicy(captureFps ?: 240.0, opts.sparseEvery, opts.midEvery, opts.followEvery)
+    fps = captureFps ?: 240.0
+    policy = SamplingPolicy(fps, opts.sparseEvery, opts.midEvery, opts.followEvery)
     val scale = min(1.0, MAX_SIDE.toDouble() / max(track.dispW, track.dispH))
     outW = (track.dispW * scale).roundToInt()
     outH = (track.dispH * scale).roundToInt()
@@ -416,7 +420,7 @@ internal class PoseAnalyzer(
       Log.i(TAG, "ball not found in ${win.leadArm}..${win.handsTop}")
       return Pair(null, null)
     }
-    val gone = Ball.goneFrame(strips, b.x * ws, b.y * ws, expDWork, (win.leadArm + 1)..win.handsTop, win.handsTop)
+    val gone = Ball.goneFrame(strips, b.x * ws, b.y * ws, expDWork, win.leadArm..win.handsTop, win.handsTop, fps)
     Log.i(TAG, "ball search window ${win.leadArm}..${win.handsTop}: $b gone=$gone")
     val ball = mapOf(
       "x" to b.x / track.dispW,

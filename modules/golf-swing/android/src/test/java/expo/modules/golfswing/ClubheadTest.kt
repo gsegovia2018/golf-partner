@@ -9,6 +9,8 @@ import org.junit.Test
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
 
 class ClubheadTest {
@@ -103,45 +105,143 @@ class ClubheadTest {
     assertEquals(0, ShaftSearch.reflect(-1, 1))
   }
 
-  // ---- image-based address (clubhead onset)
+  // ---- image-based address (apiVersion 6: the clubhead's track)
 
-  /** A 6×6 patch per frame; [level] shifts every pixel, so the frame-to-frame signal = |Δlevel|. */
-  private fun patches(levels: Map<Int, Int>): Map<Int, Gray> =
-    levels.mapValues { (_, l) -> Gray(0, 0, 6, 6, ByteArray(36) { (100 + l).toByte() }) }
-
-  @Test
-  fun onsetIsTheLastSustainedRunBeforeLatestMinusOne() {
-    val lv = HashMap<Int, Int>()
-    // quiet window (lead arm -> top): alternating 0/1 => noise ceiling 1
-    for (f in 499..520) lv[f] = f % 2
-    // the address run: a short waggle at 105-106 (2 samples), still, then the takeaway from 130
-    var level = 0
-    for (f in 99..170) {
-      if (f in 105..106 || f >= 130) level += 6
-      lv[f] = level
+  /** A track standing still, then moving at [speeds] (frame → cm/s along x) from a frame on. */
+  private fun trackOf(range: IntRange, fps: Double, speed: (Int) -> Double, score: (Int) -> Double = { 0.95 }): Map<Int, HeadPos> {
+    val out = LinkedHashMap<Int, HeadPos>()
+    var x = 0.0
+    for (f in range) {
+      x += speed(f) / fps
+      out[f] = HeadPos(x, 0.0, score(f), false)
     }
-    val p = patches(lv)
-    assertEquals(129, ClubheadOnset.detect(p, 100..170, 150, 500..520, 5))
-    // a waggle long enough counts, but only the LAST qualifying run wins
-    for (f in 105..112) lv[f] = (lv[f - 1] ?: 0) + 6
-    assertEquals(129, ClubheadOnset.detect(patches(lv), 100..170, 150, 500..520, 5))
-    // a run that starts after `latest` is not the onset: the waggle is
-    assertEquals(104, ClubheadOnset.detect(patches(lv), 100..170, 120, 500..520, 5))
+    return out
   }
 
   @Test
-  fun noQuietWindowOrNoRunMeansNoOnset() {
-    val lv = HashMap<Int, Int>()
-    for (f in 99..170) lv[f] = 0
-    assertNull(ClubheadOnset.detect(patches(lv), 100..170, 150, 500..520, 5))
-    for (f in 499..520) lv[f] = f % 2
-    assertNull(ClubheadOnset.detect(patches(lv), 100..170, 150, 500..520, 5))
+  fun addressIsTheLastFrameBeforeTheHeadMovesBack() {
+    // 100 fps: lag 4 frames, hold 10. Still to 100, then 30 cm/s: the backward speed is 7.5 cm/s
+    // at 101 and 15 at 102, so 101 is the last "not moving" frame (a frame of latency at this speed)
+    val t = trackOf(0..200, 100.0, { if (it > 100) 30.0 else 0.0 })
+    assertEquals(101, ClubheadTrack.address(t, 10, 200, 100.0, clipStart = false))
   }
 
   @Test
-  fun onsetPatchIsOnePointFiveBallDiametersClippedLikeANumpySlice() {
-    // 1.5 × 4.27 cm × 2 px/cm = 12.8 → 13 px half
-    assertEquals(Rect(87, 187, 114, 214), ClubheadOnset.patchRect(100.0, 200.0, 2.0, 640, 480))
-    assertEquals(Rect(0, 0, 10, 15), ClubheadOnset.patchRect(-4.0, 0.6, 2.0, 640, 480))
+  fun theSlowCreepCountsAndAShortPauseInsideItDoesNot() {
+    // creep at 15 cm/s from 60, a 6-frame pause (< hold) at 90, faster from 110, gone at 150
+    val t = trackOf(0..200, 100.0, {
+      when {
+        it <= 60 -> 0.0
+        it in 90..95 -> 0.0
+        it < 110 -> 15.0
+        else -> 25.0
+      }
+    }, score = { if (it >= 150) 0.3 else 0.95 })
+    val a = ClubheadTrack.address(t, 10, 200, 100.0, clipStart = false)!!
+    assertTrue("address $a", a in 60..62)
+  }
+
+  @Test
+  fun jitterBelowTheMovingSpeedIsStill() {
+    // ±0.02 cm frame to frame (2 cm/s over the lag at most), then the takeaway
+    val out = LinkedHashMap<Int, HeadPos>()
+    for (f in 0..200) out[f] = HeadPos(if (f > 120) (f - 120) * 0.5 else if (f % 2 == 0) 0.02 else 0.0, 0.0, 0.95, false)
+    assertEquals(120, ClubheadTrack.address(out, 0, 200, 100.0, clipStart = false))
+  }
+
+  @Test
+  fun aTrackThatStartsMidCreepIsTheClipStartOnlyAtTheClipStart() {
+    val t = trackOf(0..100, 100.0, { if (it < 80) 15.0 else 60.0 })
+    assertEquals(4, ClubheadTrack.address(t, 0, 100, 100.0, clipStart = true)) // the first frame with a speed
+    assertNull(ClubheadTrack.address(t, 0, 100, 100.0, clipStart = false))
+  }
+
+  @Test
+  fun samplesSpreadOverTheWindowAndTheEarliestHeadAtTheBallWins() {
+    assertEquals(listOf(100, 117, 133, 150, 167, 183), ClubheadTrack.samples(100, 200))
+    val heads = mapOf(
+      100 to null,
+      117 to Triple(500.0, 500.0, 0.9), // far from the ball (a spare club)
+      133 to Triple(110.0, 210.0, 0.2), // too weak
+      150 to Triple(112.0, 212.0, 0.8),
+      167 to Triple(111.0, 211.0, 0.9),
+    )
+    assertEquals(Triple(150, 112.0, 212.0), ClubheadTrack.restingHead(heads, 100.0, 200.0, 2.0))
+    assertNull(ClubheadTrack.restingHead(mapOf(1 to null), 100.0, 200.0, 2.0))
+  }
+
+  @Test
+  fun fallbackHeadSitsTowardTheGolferAndTheCamera() {
+    // d = 4.27 × 2 = 8.54 px; hands left of the ball (right-hander filmed down the line)
+    val (x, y) = ClubheadTrack.fallbackHead(100.0, 200.0, 40.0, 2.0)
+    assertEquals(100 - 0.5 * 8.54, x, 1e-9)
+    assertEquals(200 + 0.8 * 8.54, y, 1e-9)
+    assertEquals(100 + 0.5 * 8.54, ClubheadTrack.fallbackHead(100.0, 200.0, 160.0, 2.0).first, 1e-9)
+  }
+
+  @Test
+  fun stripIsSixDiametersSampledToEightPerDiameter() {
+    // d = 4.27 × 5 = 21.35 px: half 128, step 2
+    val (r, step) = ClubheadTrack.stripRect(500.0, 900.0, 5.0, 1080, 1920)
+    assertEquals(Rect(372, 772, 629, 1029), r)
+    assertEquals(2, step)
+    assertEquals(Rect(0, 0, 78, 129), ClubheadTrack.stripRect(-51.0, 0.4, 5.0, 1080, 1920).first)
+    assertEquals(1, ClubheadTrack.stripRect(500.0, 900.0, 1.5, 1080, 1920).second)
+  }
+
+  /** A textured strip with a fixed ball and a bright clubhead block at ([hx], [hy]) (sub-pixel by area). */
+  private fun stripWith(hx: Double, hy: Double, seed: Long): Gray {
+    val w = 120
+    val h = 120
+    val rnd = java.util.Random(seed)
+    val px = ByteArray(w * h)
+    for (y in 0 until h) for (x in 0 until w) {
+      // static texture (the same in every frame) plus a little sensor noise
+      var v = 80.0 + 20 * sin(x * 0.7) * cos(y * 0.45) + rnd.nextInt(3)
+      if (hypot(x - 60.0, y - 60.0) <= 4.5) v = 230.0
+      // the head: a 12 × 6 block, its edges covered by area for sub-pixel moves
+      val cx = (min(x + 1.0, hx + 6) - max(x.toDouble(), hx - 6)).coerceIn(0.0, 1.0)
+      val cy = (min(y + 1.0, hy + 3) - max(y.toDouble(), hy - 3)).coerceIn(0.0, 1.0)
+      v = v * (1 - cx * cy) + 200 * cx * cy
+      px[y * w + x] = v.toInt().coerceIn(0, 255).toByte()
+    }
+    return Gray(0, 0, w, h, px)
+  }
+
+  @Test
+  fun trackFollowsTheHeadPastTheBallItRestsBeside() {
+    // strip px = frame px (step 1), 2 px/cm: d = 8.5 px; the head rests below-left of the ball
+    val strips = HashMap<Int, Gray>()
+    for (f in 0..20) strips[f] = stripWith(54.0 + (if (f > 10) (f - 10) * 0.5 else 0.0), 67.0, f.toLong())
+    val t = ClubheadTrack.track(strips, Pair(0, 0), 1, 0, 54.0, 67.0, 60.0, 60.0, 2.0)
+    assertEquals(21, t.size)
+    assertEquals(0.0, t.getValue(5).dx, 0.05)
+    // 10 frames × 0.5 px = 5 px = 2.5 cm
+    assertEquals(2.5, t.getValue(20).dx, 0.15)
+    assertEquals(0.0, t.getValue(20).dy, 0.15)
+    // the static texture inside the template lowers the score as the head moves off: still tracked
+    assertTrue(t.values.all { it.score > ClubheadTrack.LOST_NCC && !it.edge })
+    assertEquals(1.0, t.getValue(0).score, 1e-9)
+  }
+
+  @Test
+  fun noTrackWhenTheSearchLeavesTheStrip() {
+    val strips = mapOf(0 to stripWith(54.0, 67.0, 0))
+    assertTrue(ClubheadTrack.track(strips, Pair(0, 0), 1, 0, 3.0, 67.0, 60.0, 60.0, 2.0).isEmpty())
+    assertTrue(ClubheadTrack.track(strips, Pair(0, 0), 1, 7, 54.0, 67.0, 60.0, 60.0, 2.0).isEmpty()) // no strip at ref
+  }
+
+  @Test
+  fun maskedNccIgnoresTheMaskedPixels() {
+    // a window equal to the template except inside the "masked" pixels: a perfect match
+    val rnd = java.util.Random(3)
+    val g = Gray(0, 0, 5, 5, ByteArray(25) { (50 + rnd.nextInt(150)).toByte() })
+    val idx = listOf(0, 1, 2, 4, 6, 8) // a 3-wide template without offsets 3, 5, 7
+    val tpl = DoubleArray(idx.size) { k -> g.at(1 + idx[k] % 3, 1 + idx[k] / 3).toDouble() }
+    g.px[2 * 5 + 1] = 0 // offset 3 at (1, 1): masked, so the match stays perfect
+    val out = DoubleArray(9)
+    ClubheadTrack.maskedNcc(g, 0, 0, 3, idx, tpl, 3, out)
+    assertEquals(1.0, out[4], 1e-9)
+    assertTrue(out.withIndex().all { (i, v) -> i == 4 || v < 0.99 })
   }
 }

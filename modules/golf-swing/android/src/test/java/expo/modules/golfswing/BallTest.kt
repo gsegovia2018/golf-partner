@@ -43,12 +43,61 @@ class BallTest {
     assertEquals(97.02, Ball.percentile98(IntArray(100) { it }), 1e-9)
   }
 
+  // ---- ballGoneFrame (apiVersion 6): the ball matched against its own picture
+
+  /** 80 × 60 grass with the ball at (40, 30), r 3 (d 6 px); [cover] paints a club-grey block over it. */
+  private fun scene(f: Int, ball: Boolean, cover: Boolean = false, dx: Int = 0): Gray {
+    val g = frame(80, 60, if (ball) (40.0 + dx) to 30.0 else null, 3.0, seed = f % 3)
+    if (cover) for (y in 26..36) for (x in 33..47) g.px[y * 80 + x] = 150.toByte()
+    return g
+  }
+
   @Test
-  fun ballGoneIsTheFirstFrameWhoseFootprintChangesAfterTheQuietWindow() {
-    val strips = HashMap<Int, Gray>()
-    for (f in 100..130) strips[f] = frame(60, 40, if (f < 121) 30.0 to 20.0 else null, 3.0, seed = f % 2)
-    val gone = Ball.goneFrame(strips, 30.0, 20.0, 6.0, 101..110, 110)
-    assertEquals(121, gone)
+  fun ballGoneIsTheFirstFrameOfALastingAbsence() {
+    // fps 40: gone = absent for 4 frames
+    val strips = (100..140).associateWith { scene(it, it < 121) }
+    assertEquals(121, Ball.goneFrame(strips, 40.0, 30.0, 6.0, 100..110, 110, 40.0))
+  }
+
+  @Test
+  fun aClubPassingInFrontOfTheBallIsNotItLeaving() {
+    // covered at 115-116, back at 117-120, gone from 121
+    val strips = (100..140).associateWith { scene(it, it < 121, cover = it in 115..116) }
+    assertEquals(121, Ball.goneFrame(strips, 40.0, 30.0, 6.0, 100..110, 110, 40.0))
+  }
+
+  @Test
+  fun aBallThatMovesOffItsSpotHasGone() {
+    // the ball leaves its spot by 2 diameters (out of the ±0.4 d search) at 121
+    val strips = (100..140).associateWith { scene(it, true, dx = if (it >= 121) 12 else 0) }
+    assertEquals(121, Ball.goneFrame(strips, 40.0, 30.0, 6.0, 100..110, 110, 40.0))
+  }
+
+  @Test
+  fun aReferenceOffTheBallIsRecentredAndABallThatStaysIsNeverGone() {
+    // the ball reference one diameter off: the template is re-centred on the ball
+    val gone = (100..140).associateWith { scene(it, it < 121) }
+    assertEquals(121, Ball.goneFrame(gone, 45.0, 27.0, 6.0, 100..110, 110, 40.0))
+    val stays = (100..140).associateWith { scene(it, true) }
+    assertNull(Ball.goneFrame(stays, 40.0, 30.0, 6.0, 100..110, 110, 40.0))
+    // an absence that runs out of strips before it lasts: not gone either
+    val late = (100..140).associateWith { scene(it, it < 139) }
+    assertNull(Ball.goneFrame(late, 40.0, 30.0, 6.0, 100..110, 110, 40.0))
+  }
+
+  @Test
+  fun noGoneFrameWhenThePatchLeavesTheStrip() {
+    val strips = (100..140).associateWith { scene(it, it < 121) }
+    assertNull(Ball.goneFrame(strips, 8.0, 30.0, 6.0, 100..110, 110, 40.0))
+    assertNull(Ball.goneFrame(strips, 40.0, 30.0, 6.0, 200..210, 110, 40.0)) // no template frames
+  }
+
+  @Test
+  fun matchNeedsTheTemplatesContrast() {
+    val tpl = doubleArrayOf(0.0, 100.0, 0.0, 100.0)
+    // the same pattern at a fifth of the contrast correlates perfectly but does not count
+    assertEquals(-2.0, Ball.match(doubleArrayOf(40.0, 60.0, 40.0, 60.0), 2, 2, tpl, 2, 2), 1e-12)
+    assertEquals(1.0, Ball.match(doubleArrayOf(10.0, 90.0, 10.0, 90.0), 2, 2, tpl, 2, 2), 1e-12)
   }
 
   @Test
