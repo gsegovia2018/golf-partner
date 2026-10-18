@@ -39,7 +39,7 @@ import HandicapTab from '../components/mystats/tabs/HandicapTab';
 import { resolveStatExplainer } from '../components/mystats/statExplainers';
 import {
   loadFocus, saveFocus, clearFocus, archiveFocus, makeFocusCommit, focusVerdict, needsRebase, rebaseFocus,
-  loadFocusNotice, dismissFocusNotice,
+  loadFocusNotice, dismissFocusNotice, roundsSinceCommit,
 } from '../store/coachFocus';
 import { buildCoachWeek, previousPlanFor, advancePlanMemory, loadPlanMemory, savePlanMemory } from '../store/coachWeek';
 import { subscribeSwings, getSwingsVersion, getSwings, getSwingProfile } from '../store/swingStore';
@@ -495,9 +495,28 @@ export default function MyStatsScreen({ navigation, route }) {
     [selected, n, targetHandicap, shotsVersion, handedness],
   );
 
+  // The focus is judged only on the selected rounds that ended after its
+  // commit (after its rebase for the reading): a second, small stats pass,
+  // with the same options, and only when there is something to read.
+  const focusSince = useMemo(
+    () => (coachFocus ? roundsSinceCommit(selected, coachFocus) : null),
+    [selected, coachFocus],
+  );
+  const statsSince = useMemo(
+    () => (focusSince?.judged.length
+      ? computeMyStats(focusSince.judged, { n, targetHandicap: targetHandicap ?? 0, shots: getShots(), handedness })
+      : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [focusSince, n, targetHandicap, shotsVersion, handedness],
+  );
+
   const coachFocusVerdict = useMemo(
-    () => (coachFocus && stats ? focusVerdict(coachFocus, stats) : null),
-    [coachFocus, stats],
+    () => (coachFocus && stats
+      ? focusVerdict(coachFocus, stats, {
+        stats: statsSince, rounds: focusSince.committed.length, judged: focusSince.judged.length,
+      })
+      : null),
+    [coachFocus, stats, statsSince, focusSince],
   );
 
   // Coach v2: the swing link and the weekly plan need what only the screen
@@ -524,10 +543,11 @@ export default function MyStatsScreen({ navigation, route }) {
         previousPlan: previousPlanFor(planMemory, roundKey),
         lastRound,
         today: todayKey,
+        statsSince,
       })
       : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stats, coachFocus, coachFocusVerdict, swingsVersion, appSettings.practiceMinutesPerWeek, planMemory, roundKey, lastRound, todayKey],
+    [stats, statsSince, coachFocus, coachFocusVerdict, swingsVersion, appSettings.practiceMinutesPerWeek, planMemory, roundKey, lastRound, todayKey],
   );
   const swingSupport = useMemo(() => getSwingAvailability(), []);
 

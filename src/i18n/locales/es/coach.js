@@ -364,6 +364,7 @@ export default {
   'stats.my.coach.ui.focus.targetChanged': 'Hándicap objetivo cambiado a {to} el {date}: el veredicto se reinicia con los números de hoy.',
   'stats.my.coach.ui.focus.noData': 'Todavía no hay lectura de esta métrica.',
   'stats.my.coach.ui.notice.v1Closed': 'Se cerró tu foco anterior; elige uno nuevo.',
+  'stats.my.coach.ui.notice.sinceCommit': 'Tu foco ahora se mide solo con las vueltas jugadas desde que lo empezaste.',
   'stats.my.coach.ui.notice.dismiss': 'Descartar',
 
   // ── Interfaz: panel ────────────────────────────────────────────────────

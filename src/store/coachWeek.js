@@ -4,7 +4,10 @@
 // memoises buildCoachWeek and the tab only composes (spec §6, §12).
 //
 // buildCoachWeek({ stats, focus, verdict, swings, profile, minutesPerWeek,
-//                  previousPlan, lastRound, today }) → null | {
+//                  previousPlan, lastRound, today, statsSince }) → null | {
+//   statsSince  stats over the rounds the focus is judged on (focusVerdict's
+//            since.stats) or null: the focus chain's Check reads it, so its "Now"
+//            agrees with the Focus card; every other chain reads `stats`
 //   kind     'one' | 'tie' | 'focus' (a committed focus's chain) | 'few'
 //            (leaks under the sample gates) | 'candidate' | 'noLeak' | 'noDetail'
 //   chains   [Chain] (two on a tie): { leak, causes, swingLink, check, drills, courseTask,
@@ -40,7 +43,7 @@ function coverageFor(leak, stats) {
 const causesOf = (leak, stats) => leak?.causes ?? (leak ? causesForLeak(leak, stats) : null);
 
 export function buildCoachWeek({
-  stats, focus, verdict, swings, profile, minutesPerWeek, previousPlan, lastRound, today,
+  stats, focus, verdict, swings, profile, minutesPerWeek, previousPlan, lastRound, today, statsSince = null,
 } = {}) {
   const diagnosis = stats?.coachDiagnosis ?? null;
   if (!diagnosis) return null;
@@ -72,7 +75,9 @@ export function buildCoachWeek({
     causes: cs,
     swingLink: link,
     isFocus,
-    check: buildCheck({ leak, cause: cs?.primary, focus: isFocus ? committed : null, stats }),
+    check: buildCheck({
+      leak, cause: cs?.primary, focus: isFocus ? committed : null, stats: isFocus && statsSince ? statsSince : stats,
+    }),
     drills: drillsFor(roles),
     courseTask,
     coverage: coverageFor(leak, stats),

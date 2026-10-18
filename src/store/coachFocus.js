@@ -10,7 +10,8 @@
 //     committedAt, roundCountAtCommit, swingId?,
 //     targetHandicap?,                           ← the target the baseline was read against
 //     focusLie?,                                 ← approach lie cause only: the dominant lie at commit
-//     measuredSince: 'commit',                   ← stamped on every new record
+//     measuredSince: 'commit',                   ← stamped on every new record (and by loadFocus on
+//                                                  an older one, with a one-time notice)
 //     roundCountAtBaseline?, rebasedAt?,
 //     rebaseReason? }                            ← only after an SG rebase; { kind: 'target', from, to }
 //                                                  when the target handicap changed
@@ -182,6 +183,29 @@ export function rebaseFocus(focus, stats, rebasedAt) {
   };
 }
 
+// The rounds a focus is measured on (round focus loop spec §2.3): those whose
+// endedAt (ms) is after the commit, and — for `judged` — after the rebase, which
+// restarts the verdict window but not the level. A round without an end time
+// cannot be placed and is left out. Input order is kept.
+//   → { committed: MyRound[], judged: MyRound[] }
+export function roundsSinceCommit(myRounds, focus) {
+  const from = Date.parse(focus?.committedAt);
+  if (!Array.isArray(myRounds) || !Number.isFinite(from)) return { committed: [], judged: [] };
+  const rebased = Date.parse(focus.rebasedAt);
+  const judgedFrom = Number.isFinite(rebased) ? Math.max(from, rebased) : from;
+  const committed = myRounds.filter((r) => Number.isFinite(r?.endedAt) && r.endedAt > from);
+  return { committed, judged: committed.filter((r) => r.endedAt > judgedFrom) };
+}
+
+// focusVerdict(focus, stats, since = null)
+//   stats  the screen's selection stats: the rebase checks (baseline version,
+//          target) and, without `since`, the reading and the round counts
+//          (roundCount − roundCountAtCommit / roundCountAtBaseline)
+//   since  { stats, rounds, judged } — the reading comes from `since.stats`
+//          (stats over the judged rounds; null when there are none → no
+//          reading), roundsSince = `since.rounds` (rounds since the commit),
+//          and the needs-more-rounds / early gates count `since.judged`
+//          (rounds since the rebase, else the commit). See roundsSinceCommit.
 // → null (no v2 focus) | {
 //     state: 'needs-more-rounds' | 'improving' | 'flat' | 'worse' | 'resolved',
 //     early,          true under EARLY_ROUNDS judged rounds ("early read")
@@ -194,13 +218,22 @@ export function rebaseFocus(focus, stats, rebasedAt) {
 //                     (null unless improving / flat / worse)
 //     threshold,      max(minChange, baselineSe)
 //   }
-export function focusVerdict(focus, stats) {
+export function focusVerdict(focus, stats, since = null) {
   if (!isV2Focus(focus)) return null;
   const metric = METRICS[focus.metricKey] ?? null;
-  const roundCount = stats?.roundCount ?? 0;
-  const roundsSince = Math.max(0, roundCount - (focus.roundCountAtCommit ?? 0));
-  const judged = Math.max(0, roundCount - (focus.roundCountAtBaseline ?? focus.roundCountAtCommit ?? 0));
-  const reading = metric ? metric.read(stats) : null;
+  let roundsSince;
+  let judged;
+  let reading;
+  if (since) {
+    roundsSince = Math.max(0, since.rounds ?? 0);
+    judged = Math.max(0, since.judged ?? 0);
+    reading = metric && since.stats ? metric.read(since.stats) : null;
+  } else {
+    const roundCount = stats?.roundCount ?? 0;
+    roundsSince = Math.max(0, roundCount - (focus.roundCountAtCommit ?? 0));
+    judged = Math.max(0, roundCount - (focus.roundCountAtBaseline ?? focus.roundCountAtCommit ?? 0));
+    reading = metric ? metric.read(stats) : null;
+  }
   const unit = metric?.unit ?? null;
   const minChange = Number.isFinite(focus.minChange) ? focus.minChange : (MIN_CHANGE[unit] ?? 0);
   const base = {
@@ -223,6 +256,11 @@ export function focusVerdict(focus, stats) {
   }
   if (judged < MIN_VERDICT_ROUNDS) {
     return result('needs-more-rounds', { roundsNeeded: MIN_VERDICT_ROUNDS - judged });
+  }
+  // Since the commit, no reading means the focus shots weren't played or logged
+  // yet, not that the leak went away: ask for another round instead of "resolved".
+  if (since && metric && base.current == null) {
+    return result('needs-more-rounds', { roundsNeeded: 1, noData: true });
   }
   if (!metric || base.current == null || base.baseline == null) return result('resolved');
   const sign = metric.polarity === 'lower' ? -1 : 1;
@@ -268,11 +306,29 @@ async function archiveV1(userId, focus, now) {
   await AsyncStorage.removeItem(focusKey(userId));
 }
 
+// A v2 record from before the since-commit verdict (no `measuredSince`): the
+// one-time notice first, then the stamped record — the archiveV1 order, so a
+// failed write leaves the record unstamped and the next load tries again.
+async function stampMeasuredSince(userId, focus, now) {
+  const stamped = { ...focus, measuredSince: 'commit' };
+  try {
+    await AsyncStorage.setItem(noticeKey(userId), JSON.stringify({ kind: 'since-commit', at: now }));
+    await saveFocus(userId, stamped);
+    return stamped;
+  } catch (_) {
+    return focus;
+  }
+}
+
 // The active focus, or null. A v1 record is archived (once) and reads null;
-// anything else that is not a v2 record reads null and is left alone.
+// an unstamped v2 record is stamped (once) with a notice; anything else that
+// is not a v2 record reads null and is left alone.
 export async function loadFocus(userId, now) {
   const focus = await readJson(focusKey(userId), null);
-  if (isV2Focus(focus)) return focus;
+  if (isV2Focus(focus)) {
+    if (focus.measuredSince) return focus;
+    return stampMeasuredSince(userId, focus, now ?? new Date().toISOString());
+  }
   if (isV1Focus(focus)) {
     try {
       await archiveV1(userId, focus, now ?? new Date().toISOString());
@@ -317,9 +373,10 @@ export async function archiveFocus(userId, focus, verdict) {
   return next;
 }
 
-// One-time notice left by loadFocus when it closed a v1 focus:
-// { kind: 'v1-closed', closedAt } or null. The Coach tab shows "Your old focus
-// was closed; pick a new one" and dismisses it.
+// One-time notice left by loadFocus, or null: { kind: 'v1-closed', closedAt }
+// when it closed a v1 focus, { kind: 'since-commit', at } when it moved an
+// existing v2 focus to the since-commit verdict. The Coach tab picks its text
+// by kind and dismisses it.
 export async function loadFocusNotice(userId) {
   const notice = await readJson(noticeKey(userId), null);
   return notice && typeof notice === 'object' && notice.kind ? notice : null;
