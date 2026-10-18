@@ -247,7 +247,7 @@ function makeStyles(theme) {
       borderTopColor: theme.border.default,
     },
     rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.border.default },
-    coverage: { ...theme.typography.caption, color: theme.text.muted },
+    coverage: { ...theme.typography.caption, color: theme.text.secondary },
     swingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 },
     swingText: { ...theme.typography.subhead, flex: 1, minWidth: 0, color: theme.text.secondary },
     swingOpen: { minHeight: 44, justifyContent: 'center' },
