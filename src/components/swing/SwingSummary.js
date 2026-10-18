@@ -17,7 +17,7 @@ export const stepName = (k) => (k === EXTRAS ? R.extras : SWING_STRINGS.checkpoi
  * "+"; the Extras dot is a ring because extras never colour a position.
  */
 export default function SwingSummary({
-  statuses, pending = {}, main, soFar = false, current, onSelect, onPlace, unconfirmed = 0,
+  statuses, pending = {}, main, soFar = false, ask = null, current, onSelect, onAsk, unconfirmed = 0,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
@@ -30,6 +30,8 @@ export default function SwingSummary({
   const noFault = measured.length === positions.length && !waiting ? { line: R.noFaultAll, why: true }
     : waiting ? { line: R.noFaultPlace, why: false }
       : measured.length ? { line: R.noFaultSoFar, why: false } : { line: R.nothingMeasured, why: false };
+  // what the summary asks for: a clubhead that unlocks a row, or the ball when the address plane is missing
+  const askText = ask ? (ask.kind === 'ball' ? R.askBall : R.placeToFinish(stepName(ask.cp))) : null;
   const mainStep = main ? main.position ?? EXTRAS : null;
   const alsoCausing = main?.consequences?.length
     ? R.alsoCausing(main.consequences.map((f) => SWING_STRINGS.fault[f] ?? f)) : null;
@@ -64,8 +66,11 @@ export default function SwingSummary({
               )}
               <Text style={[s.segName, on && s.segNameOn]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{SWING_STRINGS.position.short[k]}</Text>
               {tag ? (
-                <View style={[s.mark, tag === 'first' ? { backgroundColor: tone.red } : { borderColor: tone.red, borderWidth: 1.5, backgroundColor: theme.bg.card }]}>
-                  <Text style={[s.markText, tag === 'starts' && { color: tone.red }]}>{tag === 'first' ? R.markFirst : R.markStarts}</Text>
+                // a strip wider than the chip, so the badge sits centred on one line and never wraps over the dot
+                <View style={s.markWrap} pointerEvents="none">
+                  <View style={[s.mark, tag === 'first' ? { backgroundColor: tone.red } : { borderColor: tone.red, borderWidth: 1.5, backgroundColor: theme.bg.card }]}>
+                    <Text style={[s.markText, tag === 'starts' && { color: tone.red }]} numberOfLines={1}>{tag === 'first' ? R.markFirst : R.markStarts}</Text>
+                  </View>
                 </View>
               ) : null}
             </PressableScale>
@@ -96,17 +101,17 @@ export default function SwingSummary({
             {noFault.why ? <Text style={s.hint}>{R.noFaultWhy}</Text> : null}
           </>
         )}
-        {soFar && pending.shaftDown ? (
+        {soFar && ask ? (
           <PressableScale
             style={s.placeLine}
-            onPress={() => onPlace('shaftDown')}
+            onPress={() => onAsk(ask)}
             accessibilityRole="button"
-            accessibilityLabel={R.placeToFinish(stepName('shaftDown'))}
+            accessibilityLabel={askText}
             testID="results-place-line"
           >
             <View style={[s.dot, s.dotWait, { borderColor: tone.unknown }]} />
-            <Text style={s.placeText}>{R.placeToFinish(stepName('shaftDown'))}</Text>
-            <View style={s.placeBtn}><Text style={s.placeBtnText}>{R.place}</Text></View>
+            <Text style={s.placeText}>{askText}</Text>
+            <View style={s.placeBtn}><Text style={s.placeBtnText}>{ask.kind === 'ball' ? R.markBall : R.place}</Text></View>
           </PressableScale>
         ) : null}
         {unconfirmed ? <Text style={s.hint} testID="results-unconfirmed">{R.unconfirmedChip(unconfirmed)}</Text> : null}
@@ -132,8 +137,9 @@ const makeStyles = (theme) => StyleSheet.create({
   plus: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, lineHeight: 10, marginTop: -1 },
   segName: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 9, lineHeight: 10, color: theme.text.secondary, textAlign: 'center' },
   segNameOn: { color: theme.text.primary },
-  mark: { position: 'absolute', top: -6, right: -2, borderRadius: 999, paddingHorizontal: 5, paddingVertical: 1 },
-  markText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 8.5, letterSpacing: 0.4, textTransform: 'uppercase', color: '#ffffff' },
+  markWrap: { position: 'absolute', top: -7, left: -8, right: -8, alignItems: 'center' },
+  mark: { borderRadius: 999, paddingHorizontal: 4, paddingVertical: 1 },
+  markText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 8, letterSpacing: 0.2, textTransform: 'uppercase', color: '#ffffff' },
   head: { paddingHorizontal: 6, paddingTop: 2, gap: 2 },
   line: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, lineHeight: 21, color: theme.text.primary },
   fault: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary },

@@ -1140,6 +1140,12 @@ describe('checks v2: seven positions, the unsure clubhead, the deep link', () =>
     expect(u.getByTestId('mark-pospill').props.accessibilityLabel).toBe(M.posPill('P6', 'Downswing', FIRST.checkpoints.shaftDown.i, false));
   });
 
+  test('the deep link can ask for the Ball at Address (no ball, no address plane)', async () => {
+    const u = await open({ checkpoint: 'address', active: 'ball' });
+    expect(step(u)).toBe(2);
+    expect(dock(u, 'ball').props.accessibilityState.selected).toBe(true);
+  });
+
   test('without the link, Edit marks still opens on the hands', async () => {
     const u = await open({ checkpoint: 'shaftDown' });
     expect(dock(u, 'hands').props.accessibilityState.selected).toBe(true);

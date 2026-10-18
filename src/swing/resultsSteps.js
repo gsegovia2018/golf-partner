@@ -6,7 +6,9 @@ import {
   POSITIONS, unplacedCheckpoint, CHECK_KEY,
 } from './checkpointChecks';
 import { positionStatuses } from './priority';
-import { headTrusted } from './club';
+import { clubheadOpen, askAt } from './rowNeeds';
+
+export { clubheadOpen };
 
 export const EXTRAS = 'extras';
 export const STEPS = [...POSITIONS, EXTRAS];
@@ -18,12 +20,6 @@ const RANK = { red: 3, yellow: 2, green: 1 };
 export const stepRows = (checks, step) => (step === EXTRAS
   ? checks.filter((c) => c.extra)
   : checks.filter((c) => !c.extra && c.position === step));
-
-/** A clubhead the golfer has not decided and the checks would not read (below the gate, or none). */
-export const clubheadOpen = (clubMarks, key) => {
-  const m = clubMarks?.[key];
-  return !!m && !m.hidden && (!m.head || !headTrusted(m.source, m.conf));
-};
 
 /** { [position]: true } for each position with a row still waiting for its clubhead (extras do not count). */
 export function pendingSteps(analysis) {
@@ -48,12 +44,16 @@ export const mainSoFar = (analysis) => !!pendingSteps(analysis)[DOWNSWING] && cl
 
 /**
  * Where the screen opens (owner's pick, design D with E's mix): on the Downswing step in place mode
- * when its clubhead is unplaced; else on the main fault's position (its Extras step for an extra);
+ * when its clubhead is unplaced AND placing it lets a row compute (without the ball there is no address
+ * plane: the step opens without place mode and the summary asks for the ball); else on the main fault's position (its Extras step for an extra);
  * with no fault, on Address.
  * @returns {{ step: string, place: boolean }}
  */
 export function openingStep(analysis) {
-  if (mainSoFar(analysis)) return { step: DOWNSWING, place: true };
+  if (mainSoFar(analysis)) {
+    const ask = askAt(analysis, DOWNSWING);
+    return { step: DOWNSWING, place: ask?.kind === 'clubhead' && ask.cp === DOWNSWING };
+  }
   const main = analysis.main;
   if (!main) return { step: POSITIONS[0], place: false };
   return { step: main.position ?? EXTRAS, place: false };

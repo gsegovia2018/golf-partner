@@ -35,6 +35,7 @@ import {
   EXTRAS, stepRows, stepStatuses, pendingSteps, mainSoFar, openingStep, tagOf, neighbour, defaultRow, clubheadOpen,
 } from '../swing/resultsSteps';
 import { placeHead } from '../swing/placeHead';
+import { askAt, rowNeeds, unlockedBy } from '../swing/rowNeeds';
 import { CHECKPOINT_KEYS } from '../swing/phases';
 import { drillsForMain, progression } from '../swing/drills';
 import { fixesFor, fixCopy, drillForCheck } from '../swing/fixes';
@@ -185,6 +186,8 @@ export function SwingResultsView({
   const statuses = useMemo(() => (ready ? stepStatuses(analysis) : {}), [ready, analysis]);
   const pending = useMemo(() => (ready ? pendingSteps(analysis) : {}), [ready, analysis]);
   const soFar = ready ? mainSoFar(analysis) : false;
+  const ask = useMemo(() => (ready ? askAt(analysis, 'shaftDown') : null), [ready, analysis]); // what "main fault so far" waits for
+  const stepAsk = useMemo(() => (ready && step !== EXTRAS ? askAt(analysis, step) : null), [ready, analysis, step]);
 
   useEffect(() => { setShowPlaced(true); }, [placed]);
 
@@ -221,6 +224,8 @@ export function SwingResultsView({
     setStepState(k); setPlaceState(p); setOff(0); setSelKey(key); setShowPlaced(false);
   }, []);
   const startPlace = (k) => goTo(k, { placing: true });
+  // a clubhead is placed on the still; the ball only exists at Address, in the canvas
+  const onAsk = (a) => (a.kind === 'ball' ? openEdit('address', { active: 'ball' }) : startPlace(a.cp));
   const stepBy = (dir) => { const k = neighbour(step, dir); if (k) goTo(k); };
   const seeOnSwing = (c) => goTo(c.extra ? EXTRAS : c.position, { row: CHECK_KEY(c) });
   const tSec = ready ? (frame / analysis.fps.capture).toFixed(3) : '';
@@ -296,9 +301,10 @@ export function SwingResultsView({
               pending={pending}
               main={main}
               soFar={soFar}
+              ask={ask}
               current={step}
               onSelect={(k) => goTo(k)}
-              onPlace={startPlace}
+              onAsk={onAsk}
               unconfirmed={MARK_TOTAL - (row?.marked?.count ?? MARK_TOTAL)}
             />
             {analysis.approximate ? (
@@ -332,9 +338,18 @@ export function SwingResultsView({
                 keyLines: off === 0 ? keyLines : (keyLines && { ...keyLines, extra: [] }),
                 keyTone: statuses[cp] === 'red' || statuses[cp] === 'yellow' ? focusTone(statuses[cp]) : '#4fae8a',
                 focus: focusOn,
+                legend: !placing, // the instruction bars sit where the legend would
                 tone: focusTone(selected?.status),
                 label: T.stillA11y(SWING_STRINGS.checkpoint[cp], frame),
               }}
+              toast={placed && showPlaced ? (
+                <PlacedBanner
+                  name={SWING_STRINGS.checkpoint[placed.cp ?? cp]}
+                  mainChange={placed.mainAfter && placed.mainAfter !== placed.mainBefore ? SWING_STRINGS.fault[placed.mainAfter] ?? placed.mainAfter : null}
+                  failed={!!placed.failed}
+                  onUndo={() => { setShowPlaced(false); onUndoPlace?.(); }}
+                />
+              ) : null}
               placing={placing}
               proposal={proposal}
               stepLabel={SWING_STRINGS.checkpoint[cp]}
@@ -356,27 +371,31 @@ export function SwingResultsView({
               />
             ) : null}
 
-            {placed && showPlaced ? (
-              <PlacedBanner
-                name={SWING_STRINGS.checkpoint[placed.cp ?? cp]}
-                mainChange={placed.mainAfter && placed.mainAfter !== placed.mainBefore ? SWING_STRINGS.fault[placed.mainAfter] ?? placed.mainAfter : null}
-                failed={!!placed.failed}
-                onUndo={() => { setShowPlaced(false); onUndoPlace?.(); }}
-              />
-            ) : null}
 
             <View style={s.card} testID="results-rows">
-              {rows.map((c) => (
-                <SwingCheckRow
-                  key={CHECK_KEY(c)}
-                  check={c}
+              {rows.map((row0) => {
+                // a row waiting for more than one mark says which; its button only when one clubhead is all it lacks
+                const needs = rowNeeds(analysis, row0);
+                const c = needs.length && !unlockedBy(analysis, row0, needs[0].cp)
+                  ? { ...row0, text: T.waitingFor(needs.map((n) => (n.kind === 'ball' ? T.needBall : T.needHead(SWING_STRINGS.checkpoint[n.cp]))).join(', ')) } : row0;
+                return (
+                  <SwingCheckRow
+                    key={CHECK_KEY(c)}
+                    check={c}
                   selected={!!selected && CHECK_KEY(selected) === CHECK_KEY(c)}
                   expanded={fixCopy(c) ? !!selected && CHECK_KEY(selected) === CHECK_KEY(c) : undefined}
                   onPress={() => setSelKey(CHECK_KEY(c))}
-                  onPlace={startPlace}
-                  placeAt={unplacedCheckpoint(c, analysis.clubMarks)}
-                />
-              ))}
+                    onPlace={startPlace}
+                    placeAt={needs.length && unlockedBy(analysis, row0, needs[0].cp) ? unplacedCheckpoint(c, analysis.clubMarks) : null}
+                  />
+                );
+              })}
+              {stepAsk?.kind === 'ball' ? (
+                <PressableScale style={s.askRow} onPress={() => onAsk(stepAsk)} accessibilityRole="button" accessibilityLabel={`${T.markBall}: ${T.askBall}`} testID="results-ask-ball">
+                  <Text style={s.askText}>{T.askBall}</Text>
+                  <Text style={s.askBtn}>{`${T.markBall} ›`}</Text>
+                </PressableScale>
+              ) : null}
               {step === EXTRAS ? <Text style={s.hint}>{T.extrasHint}</Text> : null}
               {pending[step] ? <Text style={[s.hint, s.hintPad]}>{T.readWithout(SWING_STRINGS.checkpoint[step])}</Text> : null}
             </View>
@@ -729,6 +748,9 @@ const makeStyles = (theme) => StyleSheet.create({
   hint: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11.5, color: theme.text.secondary, lineHeight: 16 },
   hintPad: { paddingHorizontal: 8, paddingTop: 6 },
 
+  askRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 8, marginTop: 4, borderRadius: 10, backgroundColor: theme.bg.secondary },
+  askText: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, lineHeight: 17, color: theme.text.primary },
+  askBtn: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.accent.primary },
   nudgeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   nudge: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   nudgeOff: { opacity: 0.3 },
