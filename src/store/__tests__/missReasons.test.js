@@ -10,6 +10,7 @@ import {
   isBlockedApproach,
   classifyMiss,
   missReasonStats,
+  APPROACH_LIES,
 } from '../missReasons';
 
 describe('flightOf (spec §3 table)', () => {
@@ -313,5 +314,58 @@ describe('missReasonStats', () => {
     expect(missReasonStats([], 'me').approach.all.misses).toBe(0);
     expect(missReasonStats(null, 'me').tee.misses).toBe(0);
     expect(missReasonStats([round({}, {})], 'other').short.misses).toBe(0);
+  });
+});
+
+describe('encounters', () => {
+  const holes = [1, 2, 3, 4, 5].map((n) => ({ number: n, par: n === 5 ? 3 : 4 }));
+  const stats = (details) => missReasonStats([{ holes, scores: { me: {} }, shotDetails: { me: details } }], 'me');
+
+  test('APPROACH_LIES is the lie family', () => {
+    expect(APPROACH_LIES).toEqual(['above-feet', 'below-feet', 'uphill', 'downhill', 'bad-lie', 'wind']);
+  });
+
+  test('a tagged green hit counts shots and greens; a tagged miss shots only; untagged ignored', () => {
+    const { approach } = stats({
+      1: { approachBucket: '100-150', approachResult: 'green', approachSituation: ['uphill'] },
+      2: { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'left', approachSituation: ['uphill'] },
+      3: { approachBucket: '100-150', approachResult: 'green' },
+    });
+    expect(approach.byBucket['100-150'].encounters).toEqual({ uphill: { shots: 2, greens: 1 } });
+    expect(approach.all.encounters).toEqual({ uphill: { shots: 2, greens: 1 } });
+  });
+
+  test('bucket and all both count; other buckets stay empty; non-lie situations are ignored', () => {
+    const { approach } = stats({
+      1: { approachBucket: '50-100', approachResult: 'green', approachSituation: ['wind', 'decision'] },
+      2: { approachBucket: '150-200', approachResult: 'miss', approachMiss: 'long', approachSituation: ['wind', 'blocked'] },
+    });
+    expect(approach.byBucket['50-100'].encounters).toEqual({ wind: { shots: 1, greens: 1 } });
+    expect(approach.byBucket['150-200'].encounters).toEqual({ wind: { shots: 1, greens: 0 } });
+    expect(approach.byBucket['0-50'].encounters).toEqual({});
+    expect(approach.all.encounters).toEqual({ wind: { shots: 2, greens: 1 } });
+  });
+
+  test('bucket set but no result, no bucket, and par 3 are not counted', () => {
+    const { approach } = stats({
+      1: { approachBucket: '100-150', approachSituation: ['uphill'] },
+      2: { approachResult: 'green', approachSituation: ['uphill'] },
+      5: { approachBucket: '100-150', approachResult: 'green', approachSituation: ['uphill'] },
+    });
+    expect(approach.all.encounters).toEqual({});
+  });
+
+  test('tee and short rows have empty encounters', () => {
+    const { tee, short } = stats({ 1: { drive: 'left', driveSituation: ['wind'] } });
+    expect(tee.encounters).toEqual({});
+    expect(short.encounters).toEqual({});
+  });
+
+  test('clearedReasonPatch keepSituation omits the situation key only', () => {
+    expect(clearedReasonPatch('approach', { keepSituation: true }))
+      .toEqual({ approachStart: null, approachContact: null });
+    expect(clearedReasonPatch('short', { keepSituation: true }))
+      .toEqual({ shortResult: null, shortContact: null });
+    expect(clearedReasonPatch('approach')).toHaveProperty('approachSituation', null);
   });
 });

@@ -5,7 +5,8 @@
 // MISS_REASON_KEYS   { drive, approach, short } → the three detail keys of each type
 // OPTIONS            the choices per question, in display order (the order is a
 //                    UI contract: never reorder approachSituation)
-// clearedReasonPatch(shotType)      → { key: null } for that type's three keys
+// clearedReasonPatch(shotType, { keepSituation }) → { key: null } for that type's three keys
+//                                   (the situation key left out with keepSituation)
 // situations(detail, key)           → array; null / non-array → []
 // hasReason(shotType, detail)       → true when any of the type's keys is set
 // flightOf({ start, finish })       → { start, curve, family } | null
@@ -59,9 +60,15 @@ export const OPTIONS = {
   shortSituation: ['bad-lie', 'short-sided', 'wrong-shot'],
 };
 
-export function clearedReasonPatch(shotType) {
+// `keepSituation` leaves the situation key out: a lie is a fact about the
+// shot, so it survives a finish that is no longer a miss.
+export function clearedReasonPatch(shotType, { keepSituation = false } = {}) {
   const patch = {};
-  for (const key of MISS_REASON_KEYS[shotType] || []) patch[key] = null;
+  const situationKey = FIELDS[shotType]?.situation;
+  for (const key of MISS_REASON_KEYS[shotType] || []) {
+    if (keepSituation && key === situationKey) continue;
+    patch[key] = null;
+  }
   return patch;
 }
 
@@ -128,9 +135,10 @@ export function isBlockedApproach(detail) {
   return situations(detail, 'approachSituation').includes('blocked');
 }
 
+export const APPROACH_LIES = ['above-feet', 'below-feet', 'uphill', 'downhill', 'bad-lie', 'wind'];
 const LIE = {
   drive: ['wind'],
-  approach: ['above-feet', 'below-feet', 'uphill', 'downhill', 'bad-lie', 'wind'],
+  approach: APPROACH_LIES,
   short: ['bad-lie', 'short-sided'],
 };
 const DECISION = { drive: 'decision', approach: 'decision', short: 'wrong-shot' };
@@ -168,7 +176,18 @@ const emptyRow = () => ({
     lowPoint: 0,
   },
   lies: {},
+  // approach rows only: per lie, the approaches played from it and the greens hit
+  encounters: {},
 });
+
+function addEncounter(row, detail) {
+  const lies = situations(detail, 'approachSituation').filter((x) => APPROACH_LIES.includes(x));
+  lies.forEach((x) => {
+    const e = row.encounters[x] ?? (row.encounters[x] = { shots: 0, greens: 0 });
+    e.shots += 1;
+    if (detail.approachResult === 'green') e.greens += 1;
+  });
+}
 
 function addMiss(row, shotType, detail) {
   row.misses += 1;
@@ -201,6 +220,11 @@ export function missReasonStats(rounds, playerId) {
       if (hole.par !== 3 && d.approachBucket && d.approachResult === 'miss') {
         if (byBucket[d.approachBucket]) addMiss(byBucket[d.approachBucket], 'approach', d);
         addMiss(all, 'approach', d);
+      }
+      if (hole.par !== 3 && d.approachBucket
+        && (d.approachResult === 'green' || d.approachResult === 'miss')) {
+        if (byBucket[d.approachBucket]) addEncounter(byBucket[d.approachBucket], d);
+        addEncounter(all, d);
       }
       if (hole.par >= 4 && (d.drive === 'left' || d.drive === 'right' || d.drive === 'short')) {
         addMiss(tee, 'drive', d);

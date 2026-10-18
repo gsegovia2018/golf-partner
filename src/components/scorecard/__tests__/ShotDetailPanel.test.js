@@ -191,7 +191,8 @@ describe('ShotDetailPanel approach finish grid', () => {
     await flush();
     fireEvent.press(r.getByLabelText('Approach finish On green'));
     expect(onChange).toHaveBeenCalledWith({
-      approachResult: 'green', approachMiss: null, approachBunker: false, ...clearedReasonPatch('approach'),
+      approachResult: 'green', approachMiss: null, approachBunker: false,
+      ...clearedReasonPatch('approach', { keepSituation: true }),
     });
   });
 

@@ -99,6 +99,7 @@ describe('makeFocusCommit', () => {
       targetHandicap: 15,
       committedAt: COMMITTED_AT,
       roundCountAtCommit: 6,
+      measuredSince: 'commit',
     });
     expect(FOCUS_VERSION).toBe(2);
     expect(isV2Focus(focus)).toBe(true);
@@ -154,6 +155,48 @@ describe('makeFocusCommit', () => {
 
   test('committedAt defaults to now', () => {
     expect(typeof makeFocusCommit(leak, baseStats).committedAt).toBe('string');
+  });
+
+  describe('approach lie cause', () => {
+    const row = (lies, tagged) => ({
+      misses: tagged, tagged, untagged: 0, blocked: 0, families: { forced: 0, lie: tagged, decision: 0, swing: 0 },
+      subs: {}, lies, encounters: {},
+    });
+    const withRows = (all, byBucket = {}) => ({
+      ...baseStats, missReasons: { approach: { all, byBucket }, tee: row({}, 0), short: row({}, 0) },
+    });
+    const lieCause = (metricKey = 'approach.why.lieRate.all') => ({ id: 'cause:approach:why:lie', metricKey });
+
+    test('stores the dominant lie; the metric is not swapped', () => {
+      const stats = withRows(row({ 'below-feet': 3, uphill: 1 }, 4));
+      const focus = makeFocusCommit({ leak, cause: lieCause() }, stats, COMMITTED_AT);
+      expect(focus).toMatchObject({
+        causeId: 'cause:approach:why:lie',
+        metricKey: 'approach.why.lieRate.all',
+        focusLie: 'below-feet',
+        baselineValue: 100,
+        measuredSince: 'commit',
+      });
+    });
+
+    test('a tie picks the OPTIONS.approachSituation order', () => {
+      const stats = withRows(row({ wind: 2, uphill: 2, 'bad-lie': 2 }, 6));
+      expect(makeFocusCommit({ leak, cause: lieCause() }, stats, COMMITTED_AT).focusLie).toBe('uphill');
+    });
+
+    test('reads the scope the metric names', () => {
+      const stats = withRows(row({ wind: 3 }, 3), { '100-150': row({ downhill: 2 }, 2) });
+      expect(makeFocusCommit({ leak, cause: lieCause('approach.why.lieRate.100-150') }, stats, COMMITTED_AT).focusLie)
+        .toBe('downhill');
+    });
+
+    test('no lie counts → no focusLie; other causes never get one', () => {
+      const stats = withRows(row({}, 2));
+      expect(makeFocusCommit({ leak, cause: lieCause() }, stats, COMMITTED_AT)).not.toHaveProperty('focusLie');
+      const focus = makeFocusCommit({ leak, cause: { id: 'cause:putting:lag', metricKey: 'putting.threePuttRate.6+' } },
+        withRows(row({ wind: 3 }, 3)), COMMITTED_AT);
+      expect(focus).not.toHaveProperty('focusLie');
+    });
   });
 });
 
