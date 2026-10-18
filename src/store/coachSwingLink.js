@@ -49,13 +49,37 @@ const P = 'stats.my.coach.swing.';
 //   iron|driver  that club only
 //   driverFirst  driver fits, iron is allowed but only 'possible'
 export const SWING_FAULT_LINKS = {
-  over_the_top: { clubs: 'matched', causes: ['tee:side:right', 'tee:side:left', 'tee:trouble:driver', 'approach:side:left', 'approach:side:right'] },
+  over_the_top: {
+    clubs: 'matched',
+    causes: [
+      'tee:side:right', 'tee:side:left', 'tee:trouble:driver', 'approach:side:left', 'approach:side:right',
+      'approach:why:swing:curve:right', 'tee:why:swing:curve:right', 'approach:why:swing:start:left',
+    ],
+  },
   steep_backswing: { clubs: 'both', causes: ['tee:side:right', 'approach:side:right', 'approach:short'] },
   top_position: { clubs: 'both', causes: ['tee:side:right', 'approach:side:right', 'approach:short'] },
-  flat_backswing: { clubs: 'both', causes: ['tee:side:left', 'approach:side:left'] },
-  early_extension: { clubs: 'both', causes: ['approach:short', 'approach:distance', 'short:chip', 'tee:side:right'] },
-  flip: { clubs: 'iron', causes: ['approach:short', 'approach:distance', 'short:chip'] },
-  head_sway: { clubs: 'both', causes: ['approach:short', 'approach:distance', 'tee:side:left', 'tee:side:right'] },
+  flat_backswing: {
+    clubs: 'both',
+    causes: [
+      'tee:side:left', 'approach:side:left',
+      'approach:why:swing:curve:left', 'tee:why:swing:curve:left', 'approach:why:swing:start:right',
+    ],
+  },
+  early_extension: {
+    clubs: 'both',
+    causes: [
+      'approach:short', 'approach:distance', 'short:chip', 'tee:side:right',
+      'approach:why:swing:strike:right', 'approach:why:swing:lowPoint', 'short:why:swing:lowPoint',
+    ],
+  },
+  flip: {
+    clubs: 'iron',
+    causes: ['approach:short', 'approach:distance', 'short:chip', 'approach:why:swing:lowPoint', 'short:why:swing:lowPoint'],
+  },
+  head_sway: {
+    clubs: 'both',
+    causes: ['approach:short', 'approach:distance', 'tee:side:left', 'tee:side:right', 'approach:why:swing:lowPoint'],
+  },
   posture: { clubs: 'both', causes: ['approach:short', 'tee:distance', 'approach:distance'] },
   tempo_fast: { clubs: 'driverFirst', causes: ['tee:trouble:driver', 'tee:side:left', 'tee:side:right', 'penalty:tee'] },
   tempo_slow: { clubs: 'driver', causes: ['tee:distance'] },
@@ -74,7 +98,7 @@ export function mirrorCauseId(id, handedness) {
 export function clubOfCause(causeId) {
   const id = stripPrefix(causeId);
   if (id.startsWith('tee:') || id.startsWith('penalty:tee')) return 'driver';
-  if (id.startsWith('approach:') || id === 'short:chip') return 'iron';
+  if (id.startsWith('approach:') || id === 'short:chip' || id.startsWith('short:why:')) return 'iron';
   return null;
 }
 
@@ -83,7 +107,10 @@ const listsCause = (fault, causeId, handedness) => {
   return !!row && row.causes.some((c) => mirrorCauseId(c, handedness) === causeId);
 };
 
-const inTable = (causeId) => Object.keys(SWING_FAULT_LINKS).some((f) => listsCause(f, causeId, 'right'));
+// Gate on the hands actually in play (profile + analysed swings): a one-sided
+// row (strike:right) mirrors for a left-hander, and a right-hander's opposite
+// side must not slip through.
+const inTable = (causeId, hand) => Object.keys(SWING_FAULT_LINKS).some((f) => listsCause(f, causeId, hand));
 
 // 'fit' | 'allowed' | 'no'
 function clubFit(rule, causeId, club) {
@@ -157,7 +184,8 @@ export function buildSwingLink({ causes, swings = [], profile = null, today = nu
     };
   };
 
-  if (!causeId || !inTable(causeId)) return swingOnly() ?? base;
+  const hands = new Set([profileHand, ...(swings ?? []).map((r) => r?.handedness).filter(Boolean)]);
+  if (!causeId || ![...hands].some((h) => inTable(causeId, h))) return swingOnly() ?? base;
 
   const clubNeeded = clubOfCause(causeId) ?? 'driver';
   const related = ready

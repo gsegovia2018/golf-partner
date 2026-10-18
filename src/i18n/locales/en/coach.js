@@ -49,6 +49,25 @@ export default {
   'stats.my.coach.cause.penalty.other.bench': 'penalties from other shots ({count} of your {total} penalties, {perRound} a round against {benchPerRound} for a {hcp} handicap).',
   'stats.my.coach.cause.penalty.other.bench.scratch': 'penalties from other shots ({count} of your {total} penalties, {perRound} a round against {benchPerRound} for a scratch player).',
 
+  // ── Causes: why (miss reasons) ──
+  'stats.my.coach.cause.approach.why.scope.bucket': 'from {bucket} m',
+  'stats.my.coach.cause.approach.why.scope.all': 'across your approaches',
+  'stats.my.coach.cause.approach.why.swing.start': '{count} of your {total} tagged misses {scope} that started {side} — the clubface at impact or your aim.',
+  'stats.my.coach.cause.approach.why.swing.curve': '{count} of your {total} tagged misses {scope} that curved {side} — the face is not square to your swing path.',
+  'stats.my.coach.cause.approach.why.swing.strike': '{count} of your {total} tagged misses {scope} that came off the toe or heel and finished {side}.',
+  'stats.my.coach.cause.approach.why.swing.lowPoint': '{count} of your {total} tagged misses {scope} that were heavy or thin — the low point of your swing.',
+  'stats.my.coach.cause.approach.why.lie': '{count} of your {total} tagged misses {scope} that came from awkward lies or wind — aim for the lie, not the flag.',
+  'stats.my.coach.cause.approach.why.decision': '{count} of your {total} tagged misses {scope} that were the wrong call — strategy, not swing.',
+  'stats.my.coach.cause.tee.why.swing.start': '{count} of your {total} tagged drive misses that started {side} — the clubface at impact or your aim.',
+  'stats.my.coach.cause.tee.why.swing.curve': '{count} of your {total} tagged drive misses that curved {side} — the face is not square to your swing path.',
+  'stats.my.coach.cause.tee.why.swing.strike': '{count} of your {total} tagged drive misses that came off the toe or heel and finished {side}.',
+  'stats.my.coach.cause.tee.why.swing.lowPoint': '{count} of your {total} tagged drive misses that were topped or skied — the low point of your swing.',
+  'stats.my.coach.cause.tee.why.lie': '{count} of your {total} tagged drive misses that the wind pushed off line — allow for it when you aim.',
+  'stats.my.coach.cause.tee.why.decision': '{count} of your {total} tagged drive misses that were the wrong call — a safer club or target, not a swing fix.',
+  'stats.my.coach.cause.short.why.swing.lowPoint': '{count} of your {total} tagged short-game misses that were heavy or thin — the low point of your swing.',
+  'stats.my.coach.cause.short.why.lie': '{count} of your {total} tagged short-game misses that came from a bad lie or a short-sided miss — play to the side with room.',
+  'stats.my.coach.cause.short.why.decision': '{count} of your {total} tagged short-game misses that were the wrong shot — pick the shot the lie allows, not the one the pin asks for.',
+
   // ── Swing link ─────────────────────────────────────────────────────────
   'stats.my.coach.swing.linked.consistent': 'Your {club} swing recorded {date} shows {fault}, the fault that usually causes this.',
   'stats.my.coach.swing.linked.possible': 'Your {club} swing recorded {date} may show {fault}, which can cause this.',
@@ -113,6 +132,23 @@ export default {
   'stats.my.coach.plan.course.area.putting': 'On the course, count your putts on every green.',
   'stats.my.coach.plan.course.area.penalties': 'On the course, name the trouble before each shot that could cost a penalty.',
   'stats.my.coach.plan.course.collect': 'On the course, keep score with shot detail so the next plan has data.',
+
+  // ── Weekly plan: the on-course task, why causes ──
+  'stats.my.coach.plan.course.approach.why.swing.start': 'On the course, pick a spot a metre ahead of the ball on your line and note each approach that starts {side}.',
+  'stats.my.coach.plan.course.approach.why.swing.curve': 'On the course, note each approach that curves {side} off its start line.',
+  'stats.my.coach.plan.course.approach.why.swing.strike': 'On the course, note each approach struck off the toe or heel that finishes {side}.',
+  'stats.my.coach.plan.course.approach.why.swing.lowPoint': 'On the course, note each approach that comes out heavy or thin.',
+  'stats.my.coach.plan.course.approach.why.lie': 'On the course, read the lie before each approach and aim for the safe side of the green.',
+  'stats.my.coach.plan.course.approach.why.decision': 'On the course, before each approach, name the shot that keeps the trouble out of play.',
+  'stats.my.coach.plan.course.tee.why.swing.start': 'On the course, pick a spot on your line before each drive and note each one that starts {side}.',
+  'stats.my.coach.plan.course.tee.why.swing.curve': 'On the course, note each drive that curves {side} off its start line.',
+  'stats.my.coach.plan.course.tee.why.swing.strike': 'On the course, note each drive struck off the toe or heel that finishes {side}.',
+  'stats.my.coach.plan.course.tee.why.swing.lowPoint': 'On the course, note each drive that is topped or skied.',
+  'stats.my.coach.plan.course.tee.why.lie': 'On the course, check the wind before each drive and aim to allow for it.',
+  'stats.my.coach.plan.course.tee.why.decision': 'On the course, before each drive, choose the club and target that keep the trouble out of play.',
+  'stats.my.coach.plan.course.short.why.swing.lowPoint': 'On the course, note each chip or pitch that comes out heavy or thin.',
+  'stats.my.coach.plan.course.short.why.lie': 'On the course, read the lie before each chip and play to the side of the green with room.',
+  'stats.my.coach.plan.course.short.why.decision': 'On the course, before each chip, pick the shot the lie allows, not the one the pin asks for.',
 
   // ── Weekly plan: what to log next ──────────────────────────────────────
   'stats.my.coach.plan.log.possible': 'Log {rounds} more rounds with shot detail to confirm this.',
@@ -191,6 +227,29 @@ export default {
   'stats.my.coach.ui.issue.penalty.tee': 'Penalties off the tee',
   'stats.my.coach.ui.issue.penalty.other': 'Penalties from other shots',
 
+  // ── Issue names: why causes ──
+  'stats.my.coach.ui.issue.approach.why.swing.start.left': 'Approaches starting left',
+  'stats.my.coach.ui.issue.tee.why.swing.start.left': 'Drives starting left',
+  'stats.my.coach.ui.issue.approach.why.swing.start.right': 'Approaches starting right',
+  'stats.my.coach.ui.issue.tee.why.swing.start.right': 'Drives starting right',
+  'stats.my.coach.ui.issue.approach.why.swing.curve.left': 'Approaches curving left',
+  'stats.my.coach.ui.issue.tee.why.swing.curve.left': 'Drives curving left',
+  'stats.my.coach.ui.issue.approach.why.swing.curve.right': 'Approaches curving right',
+  'stats.my.coach.ui.issue.tee.why.swing.curve.right': 'Drives curving right',
+  'stats.my.coach.ui.issue.approach.why.swing.strike.left': 'Off-centre strikes, missing left',
+  'stats.my.coach.ui.issue.tee.why.swing.strike.left': 'Off-centre drives, missing left',
+  'stats.my.coach.ui.issue.approach.why.swing.strike.right': 'Off-centre strikes, missing right',
+  'stats.my.coach.ui.issue.tee.why.swing.strike.right': 'Off-centre drives, missing right',
+  'stats.my.coach.ui.issue.approach.why.swing.lowPoint': 'Heavy and thin approaches',
+  'stats.my.coach.ui.issue.approach.why.lie': 'Approaches from awkward lies',
+  'stats.my.coach.ui.issue.approach.why.decision': 'Approach strategy misses',
+  'stats.my.coach.ui.issue.tee.why.swing.lowPoint': 'Topped and skied drives',
+  'stats.my.coach.ui.issue.tee.why.lie': 'Drives pushed by the wind',
+  'stats.my.coach.ui.issue.tee.why.decision': 'Drive strategy misses',
+  'stats.my.coach.ui.issue.short.why.swing.lowPoint': 'Heavy and thin chips',
+  'stats.my.coach.ui.issue.short.why.lie': 'Chips from awkward lies',
+  'stats.my.coach.ui.issue.short.why.decision': 'Wrong shot around the green',
+
   // ── Coach tab UI: the two bars under the issue ─────────────────────────
   'stats.my.coach.ui.pair.you': 'You',
   'stats.my.coach.ui.pair.now': 'Now',
@@ -216,6 +275,9 @@ export default {
   'stats.my.coach.ui.pair.single.sideMiss': '{count} of {total} drives miss {side}',
   'stats.my.coach.ui.pair.single.penaltyTee': '{count} of {total} penalties off the tee',
   'stats.my.coach.ui.pair.single.penaltyOther': '{count} of {total} penalties from other shots',
+
+  // ── Pair: why causes ──
+  'stats.my.coach.ui.pair.single.why': '{count} of {total} tagged misses',
 
   // ── Coach tab UI: swing line ───────────────────────────────────────────
   'stats.my.coach.ui.swing.title': 'Swing',
@@ -263,6 +325,18 @@ export default {
   'stats.my.coach.ui.metric.upDownGrass': 'Up-and-down rate from grass',
   'stats.my.coach.ui.metric.penaltiesTee': 'Penalties off the tee per round',
   'stats.my.coach.ui.metric.penaltiesOther': 'Other penalties per round',
+
+  // ── Metric names: why ──
+  'stats.my.coach.ui.metric.why.shot.approachBucket': 'approach misses from {bucket} m',
+  'stats.my.coach.ui.metric.why.shot.approachAll': 'approach misses',
+  'stats.my.coach.ui.metric.why.shot.tee': 'drive misses',
+  'stats.my.coach.ui.metric.why.shot.short': 'missed up-and-downs',
+  'stats.my.coach.ui.metric.why.start': 'Share of {shot} that start {side}',
+  'stats.my.coach.ui.metric.why.curve': 'Share of {shot} that curve {side}',
+  'stats.my.coach.ui.metric.why.strike': 'Share of {shot} off the toe or heel, finishing {side}',
+  'stats.my.coach.ui.metric.why.lowPoint': 'Share of {shot} that are heavy or thin',
+  'stats.my.coach.ui.metric.why.lie': 'Share of {shot} from awkward lies or wind',
+  'stats.my.coach.ui.metric.why.decision': 'Share of {shot} that were the wrong call',
 
   // ── Coach tab UI: weekly plan card ─────────────────────────────────────
   'stats.my.coach.ui.week.title': 'This week',

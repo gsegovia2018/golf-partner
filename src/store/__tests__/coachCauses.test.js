@@ -336,3 +336,144 @@ describe('ranking', () => {
     expect(stats).toEqual(frozen);
   });
 });
+
+describe('why rules', () => {
+  const row = (o = {}) => ({
+    misses: 0, tagged: 0, untagged: 0, blocked: 0,
+    families: { forced: 0, lie: 0, decision: 0, swing: 0 },
+    subs: { start: { left: 0, right: 0 }, curve: { left: 0, right: 0 }, strike: { left: 0, right: 0 }, lowPoint: 0 },
+    ...o,
+  });
+  // A row with `tagged` misses, of which `n` are in the given family/sub.
+  const swingRow = (tagged, sub, side, n) => {
+    const subs = row().subs;
+    if (side) subs[sub][side] = n; else subs[sub] = n;
+    return row({ misses: tagged, tagged, families: { forced: 0, lie: 0, decision: 0, swing: n }, subs });
+  };
+  const familyRow = (tagged, family, n) => row({
+    misses: tagged, tagged, families: { forced: 0, lie: 0, decision: 0, swing: 0, [family]: n },
+  });
+  const why = (parts) => ({ missReasons: { approach: { byBucket: {}, all: row() }, tee: row(), short: row(), ...parts } });
+  const withBucket = (bucket, r, all = r) => ({ approach: { byBucket: { [bucket]: r }, all } });
+  const A = leak('approach', '100-150');
+  const T = leak('offTheTee');
+  const S = leak('aroundGreen');
+  const pr = (l, s) => causesForLeak(l, base(s)).primary;
+
+  test('thresholds are pinned', () => {
+    expect(CAUSE_MIN).toMatchObject({ whyTagged: 6, whyFamilyPct: 50, whyLikelyPct: 70 });
+  });
+
+  test('approach start line: fires at 6 tagged and 50 %, side only on start/curve/strike', () => {
+    const c = pr(A, why(withBucket('100-150', swingRow(6, 'start', 'right', 3))));
+    expect(c).toMatchObject({
+      id: 'cause:approach:why:swing:start:right', strength: 'consistent', sample: 6,
+      metricKey: 'approach.why.swing.start.rightRate.100-150',
+    });
+    expect(c.msg.key).toBe('stats.my.coach.cause.approach.why.swing.start');
+    expect(c.msg.params).toMatchObject({ count: 3, total: 6 });
+    expect(c.msg.params.side.key).toBe('stats.my.fan.right');
+    expect(c.msg.params.scope).toEqual({ key: 'stats.my.coach.cause.approach.why.scope.bucket', params: { bucket: '100-150' } });
+    expect(c.evidence).toMatchObject({ scope: 'bucket', bucket: '100-150', family: 'swing', sub: 'start', side: 'right', count: 3, tagged: 6 });
+  });
+
+  test('curve and strike carry a side; low point does not', () => {
+    expect(pr(A, why(withBucket('100-150', swingRow(8, 'curve', 'left', 6)))).id).toBe('cause:approach:why:swing:curve:left');
+    expect(pr(A, why(withBucket('100-150', swingRow(8, 'strike', 'right', 6)))).id).toBe('cause:approach:why:swing:strike:right');
+    const lp = pr(A, why(withBucket('100-150', swingRow(8, 'lowPoint', null, 6))));
+    expect(lp.id).toBe('cause:approach:why:swing:lowPoint');
+    expect(lp.metricKey).toBe('approach.why.swing.lowPointRate.100-150');
+    expect(lp.msg.params).not.toHaveProperty('side');
+  });
+
+  test('lie and decision families', () => {
+    expect(pr(A, why(withBucket('100-150', familyRow(8, 'lie', 5)))).id).toBe('cause:approach:why:lie');
+    expect(pr(A, why(withBucket('100-150', familyRow(8, 'decision', 5)))).id).toBe('cause:approach:why:decision');
+  });
+
+  test('below 6 tagged or below 50 % it does not fire', () => {
+    expect(pr(A, why(withBucket('100-150', swingRow(5, 'start', 'right', 5))))).toBeNull();
+    expect(pr(A, why(withBucket('100-150', swingRow(10, 'start', 'right', 4))))).toBeNull();
+  });
+
+  test('forced shots are never a cause; they only dilute the denominator', () => {
+    const forced = row({ misses: 10, tagged: 10, families: { forced: 10, lie: 0, decision: 0, swing: 0 } });
+    expect(pr(A, why(withBucket('100-150', forced)))).toBeNull();
+  });
+
+  test('a split swing family with no dominant sub does not fire', () => {
+    const r = swingRow(10, 'start', 'right', 3);
+    r.subs.start.left = 3;
+    r.subs.lowPoint = 2;
+    r.families.swing = 8;
+    expect(pr(A, why(withBucket('100-150', r)))).toBeNull();
+  });
+
+  test('likely at 70 %, consistent below', () => {
+    expect(pr(A, why(withBucket('100-150', swingRow(10, 'start', 'right', 7)))).strength).toBe('likely');
+    expect(pr(A, why(withBucket('100-150', swingRow(10, 'start', 'right', 6)))).strength).toBe('consistent');
+  });
+
+  test('the leak bucket wins when it has 6 tagged; otherwise the pooled row is read', () => {
+    const bucketRow = swingRow(6, 'start', 'left', 6);
+    const allRow = swingRow(20, 'lowPoint', null, 15);
+    expect(pr(A, why(withBucket('100-150', bucketRow, allRow))).id).toBe('cause:approach:why:swing:start:left');
+    const pooled = pr(A, why(withBucket('100-150', swingRow(5, 'start', 'left', 5), allRow)));
+    expect(pooled).toMatchObject({
+      id: 'cause:approach:why:swing:lowPoint', metricKey: 'approach.why.swing.lowPointRate.all', sample: 20,
+    });
+    expect(pooled.evidence.scope).toBe('all');
+    expect(pooled.msg.params.scope.key).toBe('stats.my.coach.cause.approach.why.scope.all');
+    // no bucket on the leak: pooled too
+    expect(pr(leak('approach'), why(withBucket('100-150', bucketRow, allRow))).evidence.scope).toBe('all');
+  });
+
+  test('outranks the side rule at equal strength, loses to a stronger one', () => {
+    const missStats = apprStats('100-150', missRow({ leftRate: 60, directionKnown: 12 }));
+    const r = swingRow(10, 'start', 'left', 6);
+    const both = { ...missStats, ...why(withBucket('100-150', r)), approachMissCost: { byFinish: {} } };
+    const out = causesForLeak(A, both);
+    expect(out.primary.id).toBe('cause:approach:why:swing:start:left');
+    expect(out.alsoPossible.map((c) => c.id)).toEqual(['cause:approach:side:left']);
+    const likelySide = { ...both, approachMissByDistance: { buckets: { '100-150': missRow({ leftRate: 80, directionKnown: 12 }) } } };
+    expect(causesForLeak(A, likelySide).primary.id).toBe('cause:approach:side:left');
+  });
+
+  test('causes carry a priority: why 0, the others 1', () => {
+    const missStats = apprStats('100-150', missRow({ leftRate: 60 }));
+    const out = causesForLeak(A, { ...missStats, ...why(withBucket('100-150', swingRow(10, 'start', 'left', 6))) });
+    expect(out.primary.priority).toBe(0);
+    expect(out.alsoPossible[0].priority).toBe(1);
+  });
+
+  test('under whyTagged the approach cause is today\'s', () => {
+    const missStats = apprStats('100-150', missRow({ leftRate: 60 }));
+    const out = causesForLeak(A, { ...missStats, ...why(withBucket('100-150', swingRow(5, 'start', 'left', 5))), approachMissCost: { byFinish: {} } });
+    expect(out.primary.id).toBe('cause:approach:side:left');
+  });
+
+  test('tee: swing subs, wind as lie, decision', () => {
+    const t = pr(T, why({ tee: swingRow(8, 'curve', 'right', 6) }));
+    expect(t).toMatchObject({ id: 'cause:tee:why:swing:curve:right', metricKey: 'tee.why.swing.curve.rightRate', sample: 8 });
+    expect(t.msg.key).toBe('stats.my.coach.cause.tee.why.swing.curve');
+    expect(t.evidence).toMatchObject({ scope: 'tee', count: 6, tagged: 8 });
+    expect(pr(T, why({ tee: swingRow(8, 'lowPoint', null, 6) })).id).toBe('cause:tee:why:swing:lowPoint');
+    expect(pr(T, why({ tee: familyRow(8, 'lie', 5) })).id).toBe('cause:tee:why:lie');
+    expect(pr(T, why({ tee: familyRow(8, 'decision', 5) })).id).toBe('cause:tee:why:decision');
+    expect(pr(T, why({ tee: swingRow(5, 'curve', 'right', 5) }))).toBeNull();
+  });
+
+  test('short game: low point, lie, decision', () => {
+    const lp = pr(S, why({ short: swingRow(7, 'lowPoint', null, 5) }));
+    expect(lp).toMatchObject({ id: 'cause:short:why:swing:lowPoint', metricKey: 'short.why.swing.lowPointRate', strength: 'likely' });
+    expect(lp.msg.key).toBe('stats.my.coach.cause.short.why.swing.lowPoint');
+    expect(pr(S, why({ short: familyRow(7, 'lie', 4) })).id).toBe('cause:short:why:lie');
+    expect(pr(S, why({ short: familyRow(7, 'decision', 4) })).id).toBe('cause:short:why:decision');
+    expect(pr(S, why({ short: swingRow(5, 'lowPoint', null, 5) }))).toBeNull();
+  });
+
+  test('no missReasons in the stats changes nothing', () => {
+    const s = apprStats('100-150', missRow({ leftRate: 60 }));
+    expect(primaryId(A, { ...s, approachMissCost: { byFinish: {} } })).toBe('cause:approach:side:left');
+  });
+});

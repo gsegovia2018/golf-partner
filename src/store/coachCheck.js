@@ -23,9 +23,26 @@ const round1 = (v) => Math.round(v * 10) / 10;
 const side = (s) => lower(msg(`stats.my.fan.${s}`));
 const area = (c) => msg(`stats.my.coach.plan.area.${c}`);
 
+// Why metrics: `<area>.why.<reason>Rate[.<bucket|all>]`, reason = swing.<sub>[.<side>] | lie | decision.
+function whyLabel(p) {
+  const [area, , ...rest] = p;
+  const scope = area === 'approach' ? rest.pop() : null;
+  const reason = rest.join('.').replace(/Rate$/, '').split('.');
+  let shot;
+  if (area === 'tee' || area === 'short') shot = msg(`${K}why.shot.${area}`);
+  else if (scope === 'all') shot = msg(`${K}why.shot.approachAll`);
+  else shot = msg(`${K}why.shot.approachBucket`, { bucket: scope });
+  if (reason[0] === 'swing') {
+    const sub = reason[1];
+    return msg(`${K}why.${sub}`, sub === 'lowPoint' ? { shot } : { shot, side: side(reason[2]) });
+  }
+  return msg(`${K}why.${reason[0]}`, { shot });
+}
+
 // The metric key → the sentence naming it (descriptor).
 export function metricLabel(key) {
   const p = String(key ?? '').split('.');
+  if (p[1] === 'why') return whyLabel(p);
   if (p[0] === 'sg' && p.length === 2) return msg(`${K}sgCategory`, { area: area(p[1]) });
   if (p[0] === 'sg' && p[1] === 'putting') return msg(`${K}sgPutt`, { bucket: p[3] });
   if (p[0] === 'sg' && p[1] === 'approach') return msg(`${K}sgApproach`, { bucket: p[3] });

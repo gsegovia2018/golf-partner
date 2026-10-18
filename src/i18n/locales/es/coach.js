@@ -49,6 +49,25 @@ export default {
   'stats.my.coach.cause.penalty.other.bench': 'penalizaciones en otros golpes ({count} de tus {total} penalizaciones, {perRound} por vuelta frente a {benchPerRound} de un hándicap de {hcp}).',
   'stats.my.coach.cause.penalty.other.bench.scratch': 'penalizaciones en otros golpes ({count} de tus {total} penalizaciones, {perRound} por vuelta frente a {benchPerRound} de un jugador scratch).',
 
+  // ── Causes: why (miss reasons) ──
+  'stats.my.coach.cause.approach.why.scope.bucket': 'desde {bucket} m',
+  'stats.my.coach.cause.approach.why.scope.all': 'en el conjunto de tus aproximaciones',
+  'stats.my.coach.cause.approach.why.swing.start': '{count} de tus {total} fallos etiquetados {scope} que salieron a la {side} — la cara del palo en el impacto o tu alineación.',
+  'stats.my.coach.cause.approach.why.swing.curve': '{count} de tus {total} fallos etiquetados {scope} que se curvaron a la {side} — la cara no está cuadrada respecto a la trayectoria del swing.',
+  'stats.my.coach.cause.approach.why.swing.strike': '{count} de tus {total} fallos etiquetados {scope} que salieron de la punta o del talón y acabaron a la {side}.',
+  'stats.my.coach.cause.approach.why.swing.lowPoint': '{count} de tus {total} fallos etiquetados {scope} que fueron golpes gordos o finos — el punto bajo de tu swing.',
+  'stats.my.coach.cause.approach.why.lie': '{count} de tus {total} fallos etiquetados {scope} que vinieron de malas posiciones o del viento — apunta a la posición, no a la bandera.',
+  'stats.my.coach.cause.approach.why.decision': '{count} de tus {total} fallos etiquetados {scope} que fueron una mala decisión — estrategia, no swing.',
+  'stats.my.coach.cause.tee.why.swing.start': '{count} de tus {total} fallos de salida etiquetados que salieron a la {side} — la cara del palo en el impacto o tu alineación.',
+  'stats.my.coach.cause.tee.why.swing.curve': '{count} de tus {total} fallos de salida etiquetados que se curvaron a la {side} — la cara no está cuadrada respecto a la trayectoria del swing.',
+  'stats.my.coach.cause.tee.why.swing.strike': '{count} de tus {total} fallos de salida etiquetados que salieron de la punta o del talón y acabaron a la {side}.',
+  'stats.my.coach.cause.tee.why.swing.lowPoint': '{count} de tus {total} fallos de salida etiquetados que salieron topados o en globo — el punto bajo de tu swing.',
+  'stats.my.coach.cause.tee.why.lie': '{count} de tus {total} fallos de salida etiquetados que el viento sacó de la línea — cuenta con él al apuntar.',
+  'stats.my.coach.cause.tee.why.decision': '{count} de tus {total} fallos de salida etiquetados que fueron una mala decisión — un palo o una línea más segura, no un arreglo de swing.',
+  'stats.my.coach.cause.short.why.swing.lowPoint': '{count} de tus {total} fallos de juego corto etiquetados que fueron golpes gordos o finos — el punto bajo de tu swing.',
+  'stats.my.coach.cause.short.why.lie': '{count} de tus {total} fallos de juego corto etiquetados que vinieron de una mala posición o de quedarse corto de lado — juega al lado del green con más espacio.',
+  'stats.my.coach.cause.short.why.decision': '{count} de tus {total} fallos de juego corto etiquetados que fueron el golpe equivocado — elige el golpe que permite la posición, no el que pide la bandera.',
+
   // ── Swing link ─────────────────────────────────────────────────────────
   'stats.my.coach.swing.linked.consistent': 'Tu swing con el {club} grabado el {date} muestra {fault}, el fallo que suele provocar esto.',
   'stats.my.coach.swing.linked.possible': 'Tu swing con el {club} grabado el {date} podría mostrar {fault}, que a veces provoca esto.',
@@ -113,6 +132,23 @@ export default {
   'stats.my.coach.plan.course.area.putting': 'En el campo, cuenta tus putts en cada green.',
   'stats.my.coach.plan.course.area.penalties': 'En el campo, di qué zona evitas antes de cada golpe que pueda costar una penalización.',
   'stats.my.coach.plan.course.collect': 'En el campo, anota tus golpes con detalle para que el próximo plan tenga datos.',
+
+  // ── Weekly plan: the on-course task, why causes ──
+  'stats.my.coach.plan.course.approach.why.swing.start': 'En el campo, elige un punto a un metro delante de la bola sobre tu línea y anota cada aproximación que sale a la {side}.',
+  'stats.my.coach.plan.course.approach.why.swing.curve': 'En el campo, anota cada aproximación que se curva a la {side} desde su línea inicial.',
+  'stats.my.coach.plan.course.approach.why.swing.strike': 'En el campo, anota cada aproximación golpeada con la punta o el talón que acaba a la {side}.',
+  'stats.my.coach.plan.course.approach.why.swing.lowPoint': 'En el campo, anota cada aproximación que sale gorda o fina.',
+  'stats.my.coach.plan.course.approach.why.lie': 'En el campo, lee la posición antes de cada aproximación y apunta al lado seguro del green.',
+  'stats.my.coach.plan.course.approach.why.decision': 'En el campo, antes de cada aproximación, nombra el golpe que deja la zona difícil fuera de juego.',
+  'stats.my.coach.plan.course.tee.why.swing.start': 'En el campo, elige un punto sobre tu línea antes de cada salida y anota cada una que sale a la {side}.',
+  'stats.my.coach.plan.course.tee.why.swing.curve': 'En el campo, anota cada salida que se curva a la {side} desde su línea inicial.',
+  'stats.my.coach.plan.course.tee.why.swing.strike': 'En el campo, anota cada salida golpeada con la punta o el talón que acaba a la {side}.',
+  'stats.my.coach.plan.course.tee.why.swing.lowPoint': 'En el campo, anota cada salida que sale topada o en globo.',
+  'stats.my.coach.plan.course.tee.why.lie': 'En el campo, comprueba el viento antes de cada salida y apunta contando con él.',
+  'stats.my.coach.plan.course.tee.why.decision': 'En el campo, antes de cada salida, elige el palo y la línea que dejan la zona difícil fuera de juego.',
+  'stats.my.coach.plan.course.short.why.swing.lowPoint': 'En el campo, anota cada chip o pitch que sale gordo o fino.',
+  'stats.my.coach.plan.course.short.why.lie': 'En el campo, lee la posición antes de cada chip y juega al lado del green con más espacio.',
+  'stats.my.coach.plan.course.short.why.decision': 'En el campo, antes de cada chip, elige el golpe que permite la posición, no el que pide la bandera.',
 
   // ── Weekly plan: what to log next ──────────────────────────────────────
   'stats.my.coach.plan.log.possible': 'Registra {rounds} vueltas más con detalle de golpes para confirmarlo.',
@@ -191,6 +227,29 @@ export default {
   'stats.my.coach.ui.issue.penalty.tee': 'Penalizaciones desde la salida',
   'stats.my.coach.ui.issue.penalty.other': 'Penalizaciones en otros golpes',
 
+  // ── Issue names: why causes ──
+  'stats.my.coach.ui.issue.approach.why.swing.start.left': 'Aproximaciones que salen a la izquierda',
+  'stats.my.coach.ui.issue.tee.why.swing.start.left': 'Salidas que salen a la izquierda',
+  'stats.my.coach.ui.issue.approach.why.swing.start.right': 'Aproximaciones que salen a la derecha',
+  'stats.my.coach.ui.issue.tee.why.swing.start.right': 'Salidas que salen a la derecha',
+  'stats.my.coach.ui.issue.approach.why.swing.curve.left': 'Aproximaciones que se curvan a la izquierda',
+  'stats.my.coach.ui.issue.tee.why.swing.curve.left': 'Salidas que se curvan a la izquierda',
+  'stats.my.coach.ui.issue.approach.why.swing.curve.right': 'Aproximaciones que se curvan a la derecha',
+  'stats.my.coach.ui.issue.tee.why.swing.curve.right': 'Salidas que se curvan a la derecha',
+  'stats.my.coach.ui.issue.approach.why.swing.strike.left': 'Golpes de punta o talón, a la izquierda',
+  'stats.my.coach.ui.issue.tee.why.swing.strike.left': 'Salidas de punta o talón, a la izquierda',
+  'stats.my.coach.ui.issue.approach.why.swing.strike.right': 'Golpes de punta o talón, a la derecha',
+  'stats.my.coach.ui.issue.tee.why.swing.strike.right': 'Salidas de punta o talón, a la derecha',
+  'stats.my.coach.ui.issue.approach.why.swing.lowPoint': 'Aproximaciones gordas o finas',
+  'stats.my.coach.ui.issue.approach.why.lie': 'Aproximaciones desde malas posiciones',
+  'stats.my.coach.ui.issue.approach.why.decision': 'Aproximaciones mal decididas',
+  'stats.my.coach.ui.issue.tee.why.swing.lowPoint': 'Salidas topadas o en globo',
+  'stats.my.coach.ui.issue.tee.why.lie': 'Salidas sacadas por el viento',
+  'stats.my.coach.ui.issue.tee.why.decision': 'Salidas mal decididas',
+  'stats.my.coach.ui.issue.short.why.swing.lowPoint': 'Chips gordos o finos',
+  'stats.my.coach.ui.issue.short.why.lie': 'Chips desde malas posiciones',
+  'stats.my.coach.ui.issue.short.why.decision': 'Golpe equivocado cerca del green',
+
   // ── Interfaz: las dos barras bajo el problema ──────────────────────────
   'stats.my.coach.ui.pair.you': 'Tú',
   'stats.my.coach.ui.pair.now': 'Ahora',
@@ -216,6 +275,9 @@ export default {
   'stats.my.coach.ui.pair.single.sideMiss': '{count} de {total} salidas fallan a la {side}',
   'stats.my.coach.ui.pair.single.penaltyTee': '{count} de {total} penalizaciones desde la salida',
   'stats.my.coach.ui.pair.single.penaltyOther': '{count} de {total} penalizaciones en otros golpes',
+
+  // ── Pair: why causes ──
+  'stats.my.coach.ui.pair.single.why': '{count} de {total} fallos etiquetados',
 
   // ── Interfaz: línea de swing ───────────────────────────────────────────
   'stats.my.coach.ui.swing.title': 'Swing',
@@ -263,6 +325,18 @@ export default {
   'stats.my.coach.ui.metric.upDownGrass': 'Porcentaje de up & down desde hierba',
   'stats.my.coach.ui.metric.penaltiesTee': 'Penalizaciones de salida por vuelta',
   'stats.my.coach.ui.metric.penaltiesOther': 'Otras penalizaciones por vuelta',
+
+  // ── Metric names: why ──
+  'stats.my.coach.ui.metric.why.shot.approachBucket': 'fallos de aproximación desde {bucket} m',
+  'stats.my.coach.ui.metric.why.shot.approachAll': 'fallos de aproximación',
+  'stats.my.coach.ui.metric.why.shot.tee': 'fallos de salida',
+  'stats.my.coach.ui.metric.why.shot.short': 'up-and-downs fallados',
+  'stats.my.coach.ui.metric.why.start': 'Porcentaje de {shot} que salen a la {side}',
+  'stats.my.coach.ui.metric.why.curve': 'Porcentaje de {shot} que se curvan a la {side}',
+  'stats.my.coach.ui.metric.why.strike': 'Porcentaje de {shot} de punta o talón, a la {side}',
+  'stats.my.coach.ui.metric.why.lowPoint': 'Porcentaje de {shot} gordos o finos',
+  'stats.my.coach.ui.metric.why.lie': 'Porcentaje de {shot} desde malas posiciones o con viento',
+  'stats.my.coach.ui.metric.why.decision': 'Porcentaje de {shot} que fueron una mala decisión',
 
   // ── Interfaz: tarjeta del plan semanal ─────────────────────────────────
   'stats.my.coach.ui.week.title': 'Esta semana',
