@@ -101,6 +101,7 @@ import { initDeviceAuthorId } from './src/store/deviceId';
 import { startReplication } from './src/engine/store/replicator';
 import { hydrateCourseGeometry } from './src/store/courseGeometryStore';
 import { hydrateShots } from './src/store/shotStore';
+import { startGpsTrailSync } from './src/store/gpsTrailStore';
 import { hydrateAppSettings } from './src/store/settingsStore';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Notifications from 'expo-notifications';
@@ -583,6 +584,9 @@ export default function App() {
     hydrateCourseGeometry();
     // Personal GPS shot log — cache-first, upgrades to Supabase. Non-blocking.
     hydrateShots();
+    // GPS trail experiment: uploads recorded trails now and on every return
+    // to the foreground. A no-op when nothing was recorded.
+    startGpsTrailSync();
     return () => { cancelled = true; };
   }, []);
 

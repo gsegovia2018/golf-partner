@@ -98,3 +98,27 @@ test('aim tips switch writes the setting', async () => {
   fireEvent(screen.getByTestId('setting-aimTips'), 'valueChange', false);
   await waitFor(() => expect(getAppSettings().aimTips).toBe(false));
 });
+
+describe('GPS trail switch', () => {
+  const { Platform } = require('react-native');
+  const realOS = Platform.OS;
+  const pinOS = (os) => Object.defineProperty(Platform, 'OS', { configurable: true, get: () => os });
+  afterEach(() => pinOS(realOS));
+
+  test('on Android: off by default, and the switch writes the setting', async () => {
+    pinOS('android');
+    renderScreen();
+    expect(await screen.findByText('Record GPS trail (test)')).toBeTruthy();
+    expect(screen.getByText('Saves your position during live rounds so we can test automatic shot detection. Only you can see it.')).toBeTruthy();
+    expect(getAppSettings().recordGpsTrail).toBe(false);
+    fireEvent(screen.getByTestId('setting-recordGpsTrail'), 'valueChange', true);
+    await waitFor(() => expect(getAppSettings().recordGpsTrail).toBe(true));
+  });
+
+  test('elsewhere (no background tracking) the row is hidden', async () => {
+    pinOS('web');
+    renderScreen();
+    await screen.findByText('ON THE COURSE');
+    expect(screen.queryByTestId('setting-recordGpsTrail')).toBeNull();
+  });
+});

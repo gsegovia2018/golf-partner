@@ -13,6 +13,8 @@ export default {
   "settings.section.notifications": "NOTIFICACIONES",
   "settings.gps.label": "Distancias GPS",
   "settings.gps.hint": "Distancias en directo desde tu posición. Desactivado: las distancias se miden desde la salida y la app nunca pide tu ubicación.",
+  "settings.recordGpsTrail.label": "Grabar recorrido GPS (prueba)",
+  "settings.recordGpsTrail.hint": "Guarda tu posición durante las vueltas en directo para probar la detección automática de golpes. Solo tú puedes verlo.",
   "settings.shotMeasuring.label": "Botón de medir golpes",
   "settings.shotMeasuring.hint": "Botón flotante en la tarjeta para medir tus golpes",
   "settings.showLastShot.label": "Recomendación de golpe",

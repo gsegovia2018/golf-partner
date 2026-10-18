@@ -7,6 +7,7 @@ jest.mock('expo-location', () => ({
   hasStartedLocationUpdatesAsync: jest.fn().mockResolvedValue(false),
   Accuracy: { High: 4 },
 }));
+jest.mock('../../store/gpsTrailStore', () => ({ recordTrailFixes: jest.fn().mockResolvedValue(0) }));
 
 const TEXT_A = { title: 'Hole 7 · 143 m to the centre', body: '131 m front · 156 m back · Lomas-Bosque' };
 const TEXT_B = { title: 'Hole 7 · 137 m to the centre', body: '125 m front · 150 m back · Lomas-Bosque' };
@@ -71,6 +72,19 @@ test('the task publishes its newest location to subscribers and as the live fix'
   unsub();
   run({ data: { locations: [older] } });
   expect(seen).toHaveLength(1);
+});
+
+test('the task hands every location of a batch to the GPS trail recorder', () => {
+  const { recordTrailFixes } = require('../../store/gpsTrailStore');
+  recordTrailFixes.mockClear();
+  const run = TaskManager.defineTask.mock.calls[0][1];
+  const a = { coords: { latitude: 40.1, longitude: -3.7, accuracy: 5 }, timestamp: 1 };
+  const b = { coords: { latitude: 40.2, longitude: -3.7, accuracy: 5 }, timestamp: 2 };
+  run({ data: { locations: [a, b] } });
+  expect(recordTrailFixes).toHaveBeenCalledWith([a, b]);
+  run({ error: new Error('provider gone') });
+  run({ data: { locations: [] } });
+  expect(recordTrailFixes).toHaveBeenCalledTimes(1);
 });
 
 test('the first text starts the service as a foreground service; identical text is a no-op', async () => {
