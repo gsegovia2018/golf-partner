@@ -193,13 +193,20 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   never set for `eas build`/`eas update` (see "Shipping to Android").
 - Swing videos and analysis never leave the phone; the only planned exit is
   the explicit training-data export (plan §7.3).
-- Swing checks v2 screens (spec/plan `2026-10-18-swing-checks-v2`): Results is "summary + stepper"
-  (`SwingSummary`: seven position dots + Extras, "Work on first" / "Likely starts at"; one position
-  at a time under it: `PositionBar`, `StepStill` with swipe and place-on-the-still). Which step opens,
-  statuses and rows are pure in `src/swing/resultsSteps.js`; `placeHead.js` saves a placed clubhead with
-  the canvas's own model (marks + analysis, Undo writes them back). The marking canvas has seven
-  position chips (P-number, dot, short name), the count in the panel header, an "Unsure" status for a
-  detection under `CHECK_MIN_CONF`, and `route.params.active: 'head'` for the tap-to-place deep link.
+- Swing checks v2 screens (spec/plan `2026-10-18-swing-checks-v2`, polished per the 2026-10-18 UI review):
+  Results is "verdict + strip + one position" (`SwingSummary`: "Work on first" over the fault's name,
+  "Downswing · starts at Top ›", then seven position dots + Extras, the main fault's dot ringed in red;
+  `StepStill` carries the position pill, play at ⅛ and frame ‹ › on glass, with swipe and
+  place-on-the-still). Which step opens, statuses and rows are pure in `src/swing/resultsSteps.js`;
+  `placeHead.js` saves a placed clubhead with the canvas's own model (marks + analysis, Undo writes them
+  back). The marking canvas has seven position chips (dot, short name: the dots are the progress), a
+  plain cue with a before | after rail at step 1 (`stop.line`, `stop.before`/`stop.after`), dock tiles with
+  status badges, one confirm (the primary), an "Unsure" status for a detection under `CHECK_MIN_CONF`,
+  and `route.params.active: 'head'` for the tap-to-place deep link.
+- Swing UI rules (`components/swing/swingStyles.js`): two names per position (`swing.checkpoint`,
+  `swing.position.short`), sizes only from `swingType` (26/20/15/13/11/10, nothing under 10),
+  Playfair only for the one thing to read first, `glass` only over video/stills; shared
+  `PrimaryButton`/`SecondaryButton`. The privacy sentence lives on capture and in My swing's About sheet.
 - Some screens are large monoliths (`ScorecardScreen`) — prefer extracting
   components/hooks over growing them further.
 - Game Stats (`StatsScreen`) is a thin shell: tabs Summary · Rounds · Players ·
