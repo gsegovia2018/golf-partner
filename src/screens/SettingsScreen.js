@@ -160,6 +160,9 @@ export default function SettingsScreen({ navigation }) {
             </View>
             <Text style={s.unitsHint}>{t(`settings.missReasons.hint.${appSettings.missReasons}`)}</Text>
           </View>
+          <SwitchRow testID="setting-aimTips" label={t('settings.aimTips.label')}
+            hint={t('settings.aimTips.hint')}
+            value={appSettings.aimTips} onChange={(v) => setKey({ aimTips: v })} theme={theme} s={s} />
         </Section>
 
         <Reveal delay={REVEAL_STEP * 3}>

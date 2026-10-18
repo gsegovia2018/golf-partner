@@ -56,6 +56,9 @@ export const DEFAULT_APP_SETTINGS = {
   // Miss reasons (spec §4.3): 'ask' = the Why? sheet opens on a tapped miss;
   // 'manual' = only from the Why? chip; 'off' = no chips or sheet.
   missReasons: 'ask',
+  // Aim tips (aim-tips spec §2.3): a one-line aim tip on the live hole when
+  // your misses lean one way. Boolean; anything else reads the base value.
+  aimTips: true,
 };
 
 export const MISS_REASONS_MODES = ['ask', 'manual', 'off'];
@@ -80,6 +83,10 @@ export function mergeAppSettings(base, patch) {
     }
     if (k === 'missReasons') {
       out[k] = MISS_REASONS_MODES.includes(v) ? v : base[k];
+      continue;
+    }
+    if (k === 'aimTips') {
+      out[k] = typeof v === 'boolean' ? v : base[k];
       continue;
     }
     out[k] = v && typeof v === 'object' && !Array.isArray(v) ? { ...base[k], ...v } : v;

@@ -43,6 +43,8 @@ export default {
   "settings.missReasons.hint.ask": "Al apuntar una salida o un approach fallados, pregunta por qué. Alimenta al coach.",
   "settings.missReasons.hint.manual": "Solo cuando tocas ¿Por qué? en un fallo. Alimenta al coach.",
   "settings.missReasons.hint.off": "No apuntar por qué fallan los golpes.",
+  "settings.aimTips.label": "Consejos de apuntado",
+  "settings.aimTips.hint": "Un consejo de una línea en el hoyo cuando tus fallos se inclinan hacia un lado.",
   "settings.statGroups.penalties.label": "Penalizaciones",
   "settings.statGroups.penalties.loss": "Desactivado: sin estadísticas de penalizaciones, sin SG de penalizaciones",
   "settings.theme.light": "Claro",

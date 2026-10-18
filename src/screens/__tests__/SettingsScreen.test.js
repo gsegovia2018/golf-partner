@@ -90,3 +90,11 @@ describe('Spanish', () => {
     expect(screen.getByText('Tema')).toBeTruthy();
   });
 });
+
+test('aim tips switch writes the setting', async () => {
+  renderScreen();
+  expect(await screen.findByText('Aim tips')).toBeTruthy();
+  expect(screen.getByText('A one-line tip on the hole when your misses lean one way.')).toBeTruthy();
+  fireEvent(screen.getByTestId('setting-aimTips'), 'valueChange', false);
+  await waitFor(() => expect(getAppSettings().aimTips).toBe(false));
+});
