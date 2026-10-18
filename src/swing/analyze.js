@@ -127,7 +127,8 @@ export function analyze(native, opts = {}) {
     club,
     pxPerCm: scale.pxPerCm,
     heightCm,
-    motionStart: ph.internal.motionStart,
+    // tempo's backswing starts at the address frame the golfer moved, else where the pose sees the grip rise
+    motionStart: Number.isFinite(marks.address?.frame) ? marks.address.frame : ph.internal.backswingStart,
     finishQuietS: ph.finishQuietS,
     approximate: ph.fps.approximate,
   });

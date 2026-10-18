@@ -173,3 +173,23 @@ describe('analyze: the club picks the thresholds (D19)', () => {
     expect(driver.counts.red).toBeLessThan(iron.counts.red);
   });
 });
+
+describe('analyze: where tempo starts the backswing', () => {
+  const run = (marks) => analyze(native(), { pass2, marks, heightCm: 176 });
+  const ratio = (a, start) => Math.round(((a.checkpoints.top.i - start) / (a.checkpoints.impact.i - a.checkpoints.top.i)) * 10) / 10;
+
+  test('without marks, from where the grip starts to rise (not motionStart, the end of the still window)', () => {
+    const a = run(undefined);
+    expect(a.internal.backswingStart).toBeLessThan(a.internal.motionStart);
+    expect(byId(a, 'tempo').value).toBe(ratio(a, a.internal.backswingStart));
+  });
+
+  test('a moved address frame is the start', () => {
+    const auto = run(undefined);
+    const frame = auto.internal.backswingStart - 20;
+    const a = run({ address: { hands: null, head: null, hidden: false, frame } });
+    expect(a.checkpoints.address.i).toBe(frame);
+    expect(byId(a, 'tempo').value).toBe(ratio(a, frame));
+    expect(byId(a, 'tempo').value).toBeGreaterThan(byId(auto, 'tempo').value);
+  });
+});

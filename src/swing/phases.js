@@ -24,6 +24,7 @@ const BALL_GONE_SLACK_S = 0.05;
 const ONSET_SUSTAIN_S = 0.02; // clubhead motion at address must last this long (detect.py)
 const PRE_IMPACT_S = 0.025; // preImpact = impact - 25 ms
 const POST_IMPACT_FRAMES = 10;
+const BACKSWING_START_FRAC = 0.1; // of the grip's rise from address to motionStart
 
 // Python's round() is banker's rounding; the lab's window midpoints rely on it.
 const pyRound = (x) => {
@@ -123,8 +124,22 @@ function phasesD15(S) {
 
   conf.impact = 0.5;
   const kRun = Math.min(kMs, Math.max(0, kMs - (kHi - kMs)));
+
+  // backswingStart (tempo): motionStart is the end of the last still window, so it trails the
+  // takeaway by up to a window plus the slow first inches (owner clip 2026-10-10: 397 against a
+  // marked 333; 2026-10-18: 92 against ~64). Back from it to the last frame the grip was still
+  // within 10 % of its rise (address height -> motionStart) of the address run's lowest point.
+  const yLow = Math.max(...gy.slice(kRun, kMs + 1));
+  const rise = yLow - gy[kMs];
+  let kBs = kMs;
+  if (rise > rGrip) {
+    const near = yLow - BACKSWING_START_FRAC * rise;
+    while (kBs > kRun && gy[kBs] < near) kBs--;
+  }
+  const backswingStart = F[kBs];
+
   const P = {
-    motionStart, top, handsTop, impact: idx[kBottom], descentEnd: idx[kBottom], conf, notes,
+    motionStart, backswingStart, top, handsTop, impact: idx[kBottom], descentEnd: idx[kBottom], conf, notes,
     addressRun: [F[kRun], motionStart],
     d: { F, gy, leadDy, trailDy, hipY, leadHipY, vg, vn, tg, tn, band, holdW },
   };
@@ -265,6 +280,7 @@ export function detectPhases(idx, L, o) {
   const impact = P.impact;
   const internal = {
     motionStart: P.motionStart,
+    backswingStart: P.backswingStart,
     handsTop: P.handsTop,
     lateBackswing: pyRound((P.leadArm + P.top) / 2),
     preImpact: impact - Math.max(1, Math.round(PRE_IMPACT_S * fps)),
