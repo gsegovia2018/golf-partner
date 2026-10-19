@@ -235,7 +235,7 @@ export const HolePage = React.memo(function HolePage({
     courseName,
     enabled: !!meId && !official && !isScramble && (editable ? editable(meId) : true),
     strokes: myStrokes,
-    putts: meId ? shotDetails?.[meId]?.[pageHole.number]?.putts ?? null : null,
+    detail: meId ? shotDetails?.[meId]?.[pageHole.number] ?? null : null,
     pickedUp: !!meId && isPickupScore(
       myStrokes, pageHole.par, fullHandicaps[meId] ?? players.find((p) => p.id === meId)?.handicap,
       pageHole.strokeIndex, holeCount,

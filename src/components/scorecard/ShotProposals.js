@@ -15,7 +15,7 @@ import { ClubWheel, wheelClubsFor } from './ClubWheel';
 // "seen" pins (drawn by the map page) with a card for the tapped one, plus a
 // pill when the hole's score says shots are missing.
 
-// The map button's badge: "3 seen", "1 missing", or both. Nothing otherwise.
+// The map button's badge: "3 seen", "1 unmarked", or both. Nothing otherwise.
 export function SeenBadge({ seen, missing }) {
   const { theme } = useTheme();
   const tl = useT();
@@ -41,7 +41,7 @@ export function SeenBadge({ seen, missing }) {
   );
 }
 
-// On the map: "1 shot missing", bottom-left, out of the shot buttons' way.
+// On the map: "1 shot not on the map", bottom-left, out of the shot buttons' way.
 export function MissingPill({ missing }) {
   const tl = useT();
   if (!(missing > 0)) return null;

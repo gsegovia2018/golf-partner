@@ -36,7 +36,7 @@ export function HoleFlyover({
   position, visible, onClose, onEdit,
   roundId, roundIndex, seenEnabled = false,
   // My score for this hole, for the missing-shot count (see useShotProposals).
-  strokes = null, putts = null, pickedUp = false,
+  strokes = null, detail = null, pickedUp = false,
 }) {
   const geometry = useCourseGeometry(courseName);
   const appSettings = useAppSettings();
@@ -54,7 +54,7 @@ export function HoleFlyover({
   // Automatically detected shots as hollow "seen" pins; tapping one opens the
   // "Shot from here?" card. `missing` drives the pill and "+1 from here".
   const seen = useShotProposals({
-    roundId, roundIndex, holeNumber, courseName, enabled: seenEnabled, strokes, putts, pickedUp,
+    roundId, roundIndex, holeNumber, courseName, enabled: seenEnabled, strokes, detail, pickedUp,
   });
   const seenPins = useMemo(() => (seen.open.length ? seen.open.map((p) => ({ lat: p.lat, lng: p.lng })) : NO_SEEN), [seen.open]);
   const [seenIdx, setSeenIdx] = useState(null);

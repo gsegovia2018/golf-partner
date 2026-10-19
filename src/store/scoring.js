@@ -1207,6 +1207,33 @@ export function shotDetailStrokeCount(detail) {
     + (detail.sandShots ?? 0);
 }
 
+// One hole's strokes, accounted the two ways the scorecard shows them. Both
+// come from here so they never disagree; they answer different questions,
+// which is why they are two numbers with two labels:
+//   leftToAssign: strokes not yet in the shot-detail counters (putts, tee and
+//     other penalties, sand shots). Caps those steppers; every full swing is
+//     "left", so 5 strokes with 2 putts leaves 3. null with no score.
+//   notOnMap: swings that have no spot on the hole map: strokes − putts −
+//     penalty strokes (no swing, no spot) − spots off the green (a spot on the
+//     green is where the first putt was struck, so it is one of the putts).
+//     A merged GPS stop hides a duff, a re-tee or a drop, so this is the
+//     "+1 from here" prompt. null = can't tell, so say nothing: no score yet,
+//     putts not entered, a pick-up (the stroke count is a cap, not what was
+//     played), or no spot at all on the hole (shot tracking wasn't used).
+// Neither is ever negative.
+export function holeStrokeAccount({
+  strokes, detail = null, spots = [], isOnGreen = () => false, pickedUp = false,
+}) {
+  const scored = Number.isInteger(strokes) && strokes > 0;
+  const leftToAssign = strokes == null ? null : Math.max(0, strokes - shotDetailStrokeCount(detail));
+  const putts = detail?.putts;
+  const notOnMap = !scored || pickedUp || !Number.isInteger(putts) || putts < 0 || !spots.length
+    ? null
+    : Math.max(0, strokes - putts - (detail.teePenalties ?? 0) - (detail.otherPenalties ?? 0)
+      - spots.filter((sp) => !isOnGreen(sp)).length);
+  return { leftToAssign, notOnMap };
+}
+
 // Trims a hole's shot detail so its counters never exceed `strokes`. Strokes
 // is the master value. Trims in order putts -> sandShots -> otherPenalties ->
 // teePenalties until the detail fits. Clears firstPuttBucket when putts is
