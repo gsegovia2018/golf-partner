@@ -64,14 +64,19 @@ const SHARED = {
   downPlane: { above: [4, 10], under: [12, 20] }, // cm, clubhead above / under the address plane at P6
   downVsTakeaway: [0, 10], // cm, P6 clubhead minus P2 clubhead vs the plane (+ = steeper coming down)
   throughVsHalfway: [10, 20], // cm, P9 shaft landing minus P3 shaft landing
-  hipDrift: [3, 6], // cm
-  handsOut: [4, 8], // cm
+  // cm, the hip point farthest from the ball. Reference swings: five tour swings -3..+1, the
+  // owner's five calibrated ones +5..+12 (his early extension is real, #238).
+  hipDrift: [3, 6],
 };
 export const DEFAULT_CLUB = 'iron';
 export const THRESHOLDS = {
   iron: {
     posture: { green: [25, 40], yellow: [20, 45] }, // spine tilt from vertical, degrees
-    handsHeight: [5, 8], // cm
+    // cm. Tour impact sits higher and further out than address: the reference swings read
+    // height 4-11 and out 4-9 cm (the owner 5-11 and 7-12); the backside line catches the
+    // early extension these used to stand in for.
+    handsHeight: [8, 12],
+    handsOut: [6, 10],
     shaftAngle: [6, 10], // degrees
     spineLoss: [3, 6], // degrees
     spineHold: [3, 6], // degrees of tilt lost (or gained) since address, P2-P6
@@ -81,7 +86,8 @@ export const THRESHOLDS = {
   },
   driver: {
     posture: { green: [20, 35], yellow: [15, 40] },
-    handsHeight: [8, 12],
+    handsHeight: [10, 14],
+    handsOut: [8, 12],
     shaftAngle: [8, 12],
     spineLoss: [4, 7],
     spineHold: [4, 7],
@@ -460,14 +466,21 @@ export function runChecks(input) {
 
   // --- 6 Impact (P7) ----------------------------------------------------------------------
 
-  // hip_drift: the trail hip toward the ball since address
+  // hip_drift: the backside line, the hip farthest from the ball, toward it since address. The
+  // trail hip alone moves toward the ball as the pelvis turns open, so every good impact read as
+  // early extension; the hip behind it (the lead one at impact) only moves when the hips thrust.
   {
     const m = M('hip_drift', 'impact', ['address', 'impact'], { fault: 'early_extension' });
-    const a = lm('address', trailHipIdx);
-    const i = lm('impact', trailHipIdx);
-    if (!a || !i) rows.push(unknown(m, 'nopose', T.reason.nopose(at('addressImpact'))));
+    const backside = (k) => {
+      const l = lm(k, LM.lHip);
+      const r = lm(k, LM.rHip);
+      return l && r ? Math.min(l.x, r.x) : null;
+    };
+    const a = backside('address');
+    const i = backside('impact');
+    if (a === null || i === null) rows.push(unknown(m, 'nopose', T.reason.nopose(at('addressImpact'))));
     else {
-      const d = (i.x - a.x) * cm;
+      const d = (i - a) * cm;
       push(m, judge(d, TH.hipDrift), round(d, 0), 'cm', T.checkText.hip_drift(d));
     }
   }

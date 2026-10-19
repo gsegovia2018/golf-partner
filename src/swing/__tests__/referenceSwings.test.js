@@ -10,18 +10,17 @@ describe('reference swings', () => {
     expect(analyzeReference(fx).error).toBeUndefined();
   });
 
-  // A floor at today's readings: a change may make these swings greener, never redder.
-  const FLOOR = {
-    'tour-oosthuizen-driver': { green: 14, red: 3 },
-    'tour-els-hybrid': { green: 10, red: 1 },
-    'tour-mcilroy-iron': { green: 11, red: 1 },
-    'tour-mcilroy-driver': { green: 14, red: 1 },
-  };
-  test.each(TOUR.map((f) => [f.name, f]))('%s is no redder than today', (name, fx) => {
-    const a = analyzeReference(fx);
-    expect(a.counts.green).toBeGreaterThanOrEqual(FLOOR[name].green);
-    expect(a.counts.red).toBeLessThanOrEqual(FLOOR[name].red);
-    expect(decided(a)).toBeGreaterThan(0);
+  // Tour swings read mostly green, not all green: no swing with more than one red, green the
+  // largest group on each, and seven in ten decided rows green over the set.
+  test.each(TOUR.map((f) => [f.name, f]))('%s reads mostly green', (_n, fx) => {
+    const { counts } = analyzeReference(fx);
+    expect(counts.red).toBeLessThanOrEqual(1);
+    expect(counts.green).toBeGreaterThan(counts.yellow + counts.red);
+  });
+  test('seven in ten decided rows are green over the tour swings', () => {
+    const all = TOUR.map(analyzeReference);
+    const green = all.reduce((n, a) => n + a.counts.green, 0);
+    expect(green / all.reduce((n, a) => n + decided(a), 0)).toBeGreaterThanOrEqual(0.7);
   });
 
   test('a clubhead proposal on the chest is no reading: Rose\'s impact shaft angle asks to place it', () => {
@@ -32,5 +31,8 @@ describe('reference swings', () => {
   test.each(OWNER.map((f) => [f.name, f]))('%s keeps its early extension flagged', (_n, fx) => {
     const hip = analyzeReference(fx).checks.find((c) => c.id === 'hip_drift');
     expect(hip.status).not.toBe('green');
+  });
+  test('early extension stays the main fault on four of the owner\'s five swings', () => {
+    expect(OWNER.filter((fx) => analyzeReference(fx).main?.fault === 'early_extension')).toHaveLength(4);
   });
 });

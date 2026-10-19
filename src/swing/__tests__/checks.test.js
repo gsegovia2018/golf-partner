@@ -64,8 +64,8 @@ describe('golden checks on the owner marks', () => {
     expect(byId(checks, 'clubhead_plane_down')).toMatchObject({ status: 'unknown', reason: 'hidden' });
     expect(byId(checks, 'down_vs_takeaway')).toMatchObject({ status: 'unknown', reason: 'hidden' });
     expect(v('spine_hold', 'shaftDown')).toEqual(['yellow', 3, 'up']);
-    // Impact: the hips 10 cm toward the ball and 8 degrees of spine lost.
-    expect(v('hip_drift')).toEqual(['red', 10, null]);
+    // Impact: the backside 7 cm toward the ball and 8 degrees of spine lost.
+    expect(v('hip_drift')).toEqual(['red', 7, null]);
     expect(v('spine_loss')).toEqual(['red', 8, null]);
     // Follow-through: the clubhead is hidden at the trail arm too.
     expect(byId(checks, 'shaft_through_ball')).toMatchObject({ status: 'unknown', reason: 'hidden' });
@@ -78,20 +78,22 @@ describe('golden checks on the owner marks', () => {
     // the earliest red position. The spec expected the downswing, but the owner's P6 clubhead is hidden.
     const main = mainFault(checks);
     expect(main).toMatchObject({
-      fault: 'early_extension', position: 'impact', tier: 1, severity: 1.48, startsAt: 'takeaway', consequences: [],
+      fault: 'early_extension', position: 'impact', tier: 1, severity: 0.61, startsAt: 'takeaway', consequences: [],
     });
-    expect(main.evidence[0].id).toBe('hip_drift');
+    expect(main.evidence[0].id).toBe('spine_loss');
   });
 
+  // Hands 10 cm high and 9 cm out are a watch since the tour reference swings (referenceSwings.test.js): the
+  // backside line and the spine carry the early extension.
   test('the early-extension cluster: spine loss red (7 deg), hands 10 cm high, hands 9 cm toward the ball', () => {
     const spine = byId(checks, 'spine_loss');
     expect(spine.status).toBe('red');
     expect(Math.abs(spine.value - 7)).toBeLessThanOrEqual(2);
     const height = byId(checks, 'hands_height_impact');
-    expect(height.status).toBe('red');
+    expect(height.status).toBe('yellow');
     expect(Math.abs(height.value - 10)).toBeLessThanOrEqual(3);
     const out = byId(checks, 'hands_out_impact'); // D11
-    expect(out.status).toBe('red');
+    expect(out.status).toBe('yellow');
     expect(Math.abs(out.value - 9)).toBeLessThanOrEqual(2);
     expect(out).toMatchObject({ fault: 'early_extension', extra: true, position: null });
     const shaft = byId(checks, 'shaft_angle_impact');
@@ -137,7 +139,7 @@ describe('club-dependent checks stay unknown until the clubhead is placed (D16)'
       expect(byId(checks, id)).toMatchObject({ status: 'unknown', reason: 'unplaced', text: 'Clubhead not visible — tap to place' });
     });
     expect(byId(checks, 'spine_loss').status).toBe('red');
-    expect(byId(checks, 'hands_out_impact').status).toBe('red');
+    expect(byId(checks, 'hands_out_impact').status).toBe('yellow');
     expect(checks).toHaveLength(27);
   });
 

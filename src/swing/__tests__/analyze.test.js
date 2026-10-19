@@ -54,7 +54,7 @@ describe('analyze: the whole pipeline on the fixture', () => {
     // Without marks the takeaway and halfway-back clubheads are unplaced, and the top is a yellow
     // since the lab table (hands over heels 6 / 18 cm), so there is no earlier red to start from.
     expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: null, consequences: [] });
-    expect(a.main.evidence[0].id).toBe('hip_drift');
+    expect(a.main.evidence[0].id).toBe('spine_loss');
     expect(a.main.drills[0]).toBe('ee-silla');
   });
 });
@@ -69,7 +69,7 @@ describe('analyze with the owner marks as user marks (golden)', () => {
     ]);
     expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: 'takeaway' });
     expect(a.clubMarks.impact.source).toBe('user');
-    expect(byId(a, 'hands_out_impact').status).toBe('red');
+    expect(byId(a, 'hands_out_impact').status).toBe('yellow');
     expect(byId(a, 'clubhead_plane_takeaway')).toMatchObject({ status: 'red', dir: 'flat' });
   });
 
@@ -166,7 +166,7 @@ describe('analyze: the club picks the thresholds (D19)', () => {
     const driver = run('driver');
     expect(driver.club).toBe('driver');
     expect(driver.checks.map((c) => c.value)).toEqual(iron.checks.map((c) => c.value));
-    expect(byId(iron, 'hands_height_impact').status).toBe('red');
+    expect(byId(iron, 'hands_height_impact').status).toBe('yellow'); // ~11 cm: a watch in both columns
     expect(byId(driver, 'hands_height_impact').status).toBe('yellow');
     expect(byId(iron, 'butt_extension').status).toBe('red');
     expect(byId(driver, 'butt_extension').status).toBe('yellow');
