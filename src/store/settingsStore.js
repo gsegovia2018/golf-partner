@@ -63,6 +63,9 @@ export const DEFAULT_APP_SETTINGS = {
   // during live rounds to golf_gps_trail so automatic shot detection can be
   // evaluated offline (store/gpsTrailStore.js). Boolean, off by default.
   recordGpsTrail: false,
+  // Usage counts (lib/telemetry.js → app_events): which app
+  // features get used. Boolean, on by default; off records and sends nothing.
+  usageStats: true,
 };
 
 export const MISS_REASONS_MODES = ['ask', 'manual', 'off'];
@@ -89,7 +92,7 @@ export function mergeAppSettings(base, patch) {
       out[k] = MISS_REASONS_MODES.includes(v) ? v : base[k];
       continue;
     }
-    if (k === 'aimTips' || k === 'recordGpsTrail') {
+    if (k === 'aimTips' || k === 'recordGpsTrail' || k === 'usageStats') {
       out[k] = typeof v === 'boolean' ? v : base[k];
       continue;
     }

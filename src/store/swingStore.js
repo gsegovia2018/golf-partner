@@ -8,6 +8,7 @@ import { normClub, DEFAULT_CLUB } from '../swing/checks';
 import { newPass, markedFromMarks } from '../swing/markPass';
 import { SCHEMA } from '../swing/analyze';
 import { upgradeAnalysis } from '../swing/reanalyze';
+import { track } from '../lib/telemetry';
 
 // Local swing library (plan 7). Same shape as shotStore.js (module state, a
 // version counter for useSyncExternalStore, an AsyncStorage mirror) with no
@@ -235,6 +236,7 @@ export async function createSwing({ videoUri, source = 'import', createdAt = new
   };
   SWINGS = sortNewest([...SWINGS, row]);
   emit();
+  track('swing_recorded', { source });
   await persistIndex();
   return row;
 }

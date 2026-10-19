@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase';
 import { haversineMeters } from '../lib/geo';
+import { track } from '../lib/telemetry';
 
 // Personal GPS shot log (golf_shot table). Shots are private to the author,
 // so this is a single-user store: one in-memory list of every shot the signed
@@ -124,6 +125,7 @@ export async function logShot({ roundId, roundIndex, holeNumber, pos, club = nul
   };
   SHOTS = [...SHOTS, shot];
   emit();
+  track('shot_logged', { round: roundId, hole: holeNumber });
   await persistCache();
   try {
     if (userId) {

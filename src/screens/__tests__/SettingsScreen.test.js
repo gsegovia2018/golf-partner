@@ -99,6 +99,15 @@ test('aim tips switch writes the setting', async () => {
   await waitFor(() => expect(getAppSettings().aimTips).toBe(false));
 });
 
+test('usage stats switch is on by default and turns off', async () => {
+  renderScreen();
+  expect(await screen.findByText('PRIVACY')).toBeTruthy();
+  expect(screen.getByText('Share usage stats')).toBeTruthy();
+  expect(screen.getByTestId('setting-usageStats').props.value).toBe(true);
+  fireEvent(screen.getByTestId('setting-usageStats'), 'valueChange', false);
+  await waitFor(() => expect(getAppSettings().usageStats).toBe(false));
+});
+
 describe('GPS trail switch', () => {
   const { Platform } = require('react-native');
   const realOS = Platform.OS;
