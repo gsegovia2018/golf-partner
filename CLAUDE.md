@@ -11,6 +11,18 @@ Core features:
 - Course library, player stats, media/memories, push notifications
 - Multi-platform: web + Android from a single codebase
 
+## Workflow
+
+Personal project. The `deliver` skill applies (plan, three designs for UI, implement,
+verify, stop for OK), adapted for no dev / UAT / prod environments and no PR flow:
+
+- **Verify (step 4):** `npm test` + `npm run lint`, and the `/verify` skill on the Expo
+  web build for UI changes. Native-only behaviour (GPS, swing, watch) is verified on the
+  device by Marcos — say so rather than claiming it.
+- **PR + merge (step 5):** skipped.
+- **Deploy (step 6):** ship as "Shipping to Android" below describes (OTA for JS, APK
+  for native changes). No UAT walkthrough.
+
 ## Stack
 
 - **App:** Expo SDK 54, React Native 0.81, React 19. Web target via
