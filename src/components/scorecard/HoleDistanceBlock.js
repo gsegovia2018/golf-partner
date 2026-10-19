@@ -2,12 +2,15 @@ import React, { useMemo, useSyncExternalStore } from 'react';
 import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
-import { useT } from '../../i18n';
+import { useT, formatTime } from '../../i18n';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { recommendClub } from '../../lib/shotStats';
 import { getShots, subscribeShots, getShotsVersion } from '../../store/shotStore';
 import { useTourTarget } from '../tour/tourTargets';
+import { holeFeatures, bearingDeg } from '../../lib/geo';
+import { usePlayConditions } from '../../hooks/usePlayConditions';
+import { windText } from '../../lib/playConditions';
 
 // Right-hand side of the hole header: live GPS distances to the green, or —
 // when the player isn't on the hole (or has no fix) — the same distances
@@ -19,7 +22,7 @@ import { useTourTarget } from '../tour/tourTargets';
 // GPS-health status line (working-far / locating / location-off) so a tee
 // number isn't mistaken for a dead GPS. That line is hidden when GPS is off.
 export function HoleDistanceBlock({
-  gps, onPress, compact = false,
+  gps, onPress, compact = false, courseName, holeNumber,
 }) {
   const { theme } = useTheme();
   const tx = useT();
@@ -28,14 +31,26 @@ export function HoleDistanceBlock({
   const s = useMemo(() => makeStyles(theme), [theme]);
   const tourRef = useTourTarget(compact ? null : 'hole-distances');
 
-  // Club suggestion for the distance shown in the chip (center to green).
+  // Playing conditions (when the player switched them on): the wind is taken
+  // along the shot — from the live fix, or the tee — to the green centre.
+  const fromPos = gps?.source === 'gps' ? gps?.position : null;
+  const bearing = useMemo(() => {
+    const f = courseName ? holeFeatures(courseName, holeNumber) : null;
+    const from = fromPos ?? f?.start;
+    return from && f?.greenCenter ? bearingDeg(from, f.greenCenter) : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseName, holeNumber, fromPos?.[0], fromPos?.[1]]);
+  const cond = usePlayConditions(courseName, bearing);
+
+  // Club suggestion for the distance shown in the chip (center to green),
+  // clubbed to its plays-like distance when conditions are on.
   // Subscribed to the shot store so it re-picks as the player's carry
   // averages evolve. Computed before the early return to keep hook order stable.
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   const club = useMemo(
-    () => recommendClub(gps?.distances?.center, appSettings.bag, getShots(), appSettings.clubDistances, { excludeDriver: !!gps?.offTee }),
+    () => recommendClub(cond.plays(gps?.distances?.center), appSettings.bag, getShots(), appSettings.clubDistances, { excludeDriver: !!gps?.offTee }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [gps?.distances?.center, gps?.offTee, appSettings.bag, appSettings.clubDistances, shotsVersion],
+    [gps?.distances?.center, gps?.offTee, appSettings.bag, appSettings.clubDistances, shotsVersion, cond],
   );
 
   if (!gps?.available) return null;
@@ -54,6 +69,37 @@ export function HoleDistanceBlock({
     denied:    { color: pick(theme.semantic?.destructive), labelKey: 'scorecard.dist.locationOff', action: true },
   };
   const status = fixState && fixState !== 'disabled' ? STATUS[fixState] : null;
+
+  // "PLAYS 162 ↘ 18" under the front/back line, plus a source caption when the
+  // forecast is an older one (offline) or there is none (month estimate).
+  const playsPill = cond.enabled && distances?.center != null ? (() => {
+    const approx = cond.source === 'estimate' ? '≈' : '';
+    const value = `${approx}${fmt(cond.plays(distances.center))}`;
+    const w = cond.wind;
+    const caption = cond.source === 'forecast'
+      ? tx('shared.conditions.forecastAt', { time: formatTime(cond.fetchedAt) })
+      : cond.source === 'estimate' ? tx('shared.conditions.noWind') : null;
+    return (
+      <>
+        <View
+          style={s.plays}
+          accessible
+          accessibilityLabel={tx('shared.conditions.playsA11y', { dist: `${value} ${unitSuffix(units)}`, wind: windText(w) ?? '' }).trim()}
+        >
+          <Text style={s.playsK}>{tx('shared.conditions.plays')}</Text>
+          <Text style={s.playsV}>{value}</Text>
+          {w && w.kind !== 'calm' && (
+            <View style={s.playsW}>
+              <Feather name="arrow-up" size={11} color={theme.text.secondary} style={{ transform: [{ rotate: `${Math.round(w.arrowDeg)}deg` }] }} />
+              <Text style={s.playsWTxt}>{Math.round(w.kmh)}</Text>
+            </View>
+          )}
+          {w?.kind === 'calm' && <Text style={s.playsWTxt}>{tx('shared.conditions.calm')}</Text>}
+        </View>
+        {!!caption && <Text style={s.playsSrc}>{caption}</Text>}
+      </>
+    );
+  })() : null;
 
   // Belt-and-suspenders: the hook never yields a live GPS distance beyond 1 km,
   // so a >3 km non-tee reading would be a bug — hide it rather than render a
@@ -92,6 +138,7 @@ export function HoleDistanceBlock({
           <Text style={s.unit}>{unitSuffix(units)}</Text>
         </View>
         <Text style={s.fb}>{tx('scorecard.dist.frontBack', { front: fmt(distances.front), back: fmt(distances.back) })}</Text>
+        {playsPill}
         <Text style={s.mapHint}>{tx('scorecard.dist.tapForMap')}</Text>
         {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
         {!!status && (
@@ -128,6 +175,7 @@ export function HoleDistanceBlock({
             <Text style={s.unit}>{unitSuffix(units)}</Text>
           </View>
           <Text style={s.fb}>{tx('scorecard.dist.frontBack', { front: fmt(distances.front), back: fmt(distances.back) })}</Text>
+          {playsPill}
           {!!club && <Text style={s.club}>{club.label}</Text>}
           <Text style={s.mapHint}>{tx('scorecard.dist.tapForMap')}</Text>
           {poorFix && <Text style={s.caption}>{`±${fmt(accuracy)}${unitSuffix(units)}`}</Text>}
@@ -221,6 +269,42 @@ function makeStyles(theme) {
       fontSize: 9,
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 0.7,
+      textTransform: 'uppercase',
+    },
+    plays: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: theme.accent.light,
+      borderRadius: 999,
+      paddingHorizontal: 9,
+      paddingVertical: 3,
+      marginTop: 3,
+    },
+    playsK: {
+      color: theme.text.secondary,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      letterSpacing: 1.2,
+    },
+    playsV: {
+      color: theme.accent.primary,
+      fontSize: 15,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontVariant: ['tabular-nums'],
+    },
+    playsW: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+    playsWTxt: {
+      color: theme.text.secondary,
+      fontSize: 11,
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontVariant: ['tabular-nums'],
+    },
+    playsSrc: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 0.6,
       textTransform: 'uppercase',
     },
     compactRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },

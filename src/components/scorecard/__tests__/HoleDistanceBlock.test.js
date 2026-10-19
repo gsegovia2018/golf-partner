@@ -27,6 +27,15 @@ jest.mock('../../../store/shotStore', () => ({
   shotsForHole: () => mockShots,
 }));
 
+// Controllable forecast for the playing-conditions tests (null = none cached).
+let mockWeather = null;
+jest.mock('../../../store/weatherStore', () => ({
+  subscribeWeather: () => () => {},
+  getWeatherVersion: () => 1,
+  prefetchWeather: jest.fn(() => Promise.resolve()),
+  weatherAt: () => mockWeather,
+}));
+
 const gpsBase = (over = {}, dist = {}) => ({
   available: true,
   accuracy: 8,
@@ -242,6 +251,44 @@ describe('HoleDistanceBlock', () => {
       const { getByText, queryByText } = render(<HoleDistanceBlock gps={gpsBase({ accuracy: 31 })} onPress={() => {}} />);
       getByText('±34yd'); // 31m * 1.09361 rounded
       expect(queryByText('±31m')).toBeNull();
+    });
+  });
+
+  describe('playing conditions', () => {
+    const { setCourseGeometry } = jest.requireActual('../../../lib/geo');
+    beforeEach(() => {
+      setCourseGeometry([{
+        key: 'tc', name: 'Test Course', matchTokens: [['test', 'course']], mode: 'holes',
+        holes: [{ number: 1, start: [40, -3], greenCenter: [40.002, -3] }],
+      }]);
+    });
+    afterEach(() => {
+      __resetAppSettingsForTests();
+      setCourseGeometry([]);
+      mockWeather = null;
+    });
+
+    it('shows no plays pill while conditions are off', () => {
+      const { queryByText } = render(<HoleDistanceBlock gps={gpsBase()} courseName="Test Course" holeNumber={1} onPress={() => {}} />);
+      expect(queryByText('PLAYS')).toBeNull();
+    });
+
+    it('folds a 10 mph head wind into plays-like (+10%) with the wind speed', async () => {
+      await updateAppSettings({ conditionsEnabled: true });
+      mockWeather = { tempC: 20, windKmh: 16.09344, windFromDeg: 0, gustKmh: null, elevationM: 0, fetchedAt: Date.now(), fresh: true };
+      const gps = gpsBase({ position: [39.999, -3] }, { center: 150 });
+      const { getByText, getByLabelText } = render(<HoleDistanceBlock gps={gps} courseName="Test Course" holeNumber={1} onPress={() => {}} />);
+      getByText('PLAYS');
+      getByText('165');
+      getByText('16');
+      getByLabelText('Plays like 165 m. 16 km/h · into');
+    });
+
+    it('without a forecast falls back to the estimate, marked ≈ and "No wind data"', async () => {
+      await updateAppSettings({ conditionsEnabled: true });
+      const { getByText } = render(<HoleDistanceBlock gps={gpsBase()} courseName="Test Course" holeNumber={1} onPress={() => {}} />);
+      getByText(/^≈\d+$/);
+      getByText('No wind data');
     });
   });
 });

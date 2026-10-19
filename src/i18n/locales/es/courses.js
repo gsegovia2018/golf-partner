@@ -139,7 +139,7 @@ export default {
   'courses.bag.resetA11y': 'Eliminar todos los golpes registrados y restablecer todas las distancias por palo',
   'courses.bag.carryA11y': 'Vuelo de {club} en {unit}',
   'courses.bag.conditionsLabel': 'CONDICIONES DE JUEGO',
-  'courses.bag.conditionsHint': 'Ajusta las distancias objetivo según la temperatura (del mes) y la altitud del campo. El aire cálido y alto hace volar la bola más lejos: el hoyo juega más corto.',
+  'courses.bag.conditionsHint': 'Ajusta las distancias objetivo según el viento y la temperatura reales y la altitud del campo. Sin cobertura usa la última previsión o la media del mes.',
   'courses.bag.noCourses': 'Todavía no hay campos con datos de mapa.',
   'courses.bag.elevationA11y': 'Altitud de {course} en metros',
   'courses.bag.editClubs': 'Editar palos',

@@ -1,5 +1,6 @@
 import {
   estimateTempC, tempFactor, altitudeFactor, conditionFactor, playsLike, describeConditions,
+  windComponents, windFactor, windText, compassPoint,
 } from '../playConditions';
 import { setLanguagePref } from '../../i18n';
 
@@ -77,5 +78,64 @@ describe('describeConditions in Spanish', () => {
 describe('describeConditions text keys', () => {
   it('resolves in English', () => {
     expect(describeConditions({ month: 6, altitudeM: 620 }).text).toMatch(/^holes play ~\d+% shorter$/);
+  });
+});
+
+describe('real temperature', () => {
+  it('a reading replaces the month estimate', () => {
+    expect(conditionFactor({ month: 6, altitudeM: 0, tempC: 20 })).toBeCloseTo(1, 5);
+    expect(describeConditions({ month: 6, altitudeM: 0, tempC: 11 }).tempC).toBe(11);
+  });
+});
+
+describe('windComponents', () => {
+  it('wind from where the shot points is all head wind', () => {
+    const w = windComponents(20, 0, 0);
+    expect(w.headKmh).toBeCloseTo(20, 5);
+    expect(w.kind).toBe('into');
+    expect(w.side).toBeNull();
+    expect(w.arrowDeg).toBe(180); // blows back at the player
+  });
+  it('wind from behind helps', () => {
+    expect(windComponents(20, 180, 0)).toMatchObject({ kind: 'helping' });
+    expect(windComponents(20, 180, 0).headKmh).toBeCloseTo(-20, 5);
+  });
+  it('front-left wind: into, from the left, arrow down-right', () => {
+    const w = windComponents(18, 280, 315); // from W, shot NW: 35° off the nose
+    expect(w.kind).toBe('into');
+    expect(w.side).toBe('left');
+    expect(w.headKmh).toBeCloseTo(18 * Math.cos((35 * Math.PI) / 180), 5);
+    expect(w.arrowDeg).toBeCloseTo(145, 5);
+  });
+  it('mostly sideways is across; light wind is calm', () => {
+    expect(windComponents(20, 90, 0)).toMatchObject({ kind: 'across', side: 'right' });
+    expect(windComponents(3, 0, 0).kind).toBe('calm');
+  });
+  it('null without a bearing', () => {
+    expect(windComponents(10, 0, null)).toBeNull();
+  });
+});
+
+describe('windFactor', () => {
+  it('head wind ~1%/mph longer, tail ~0.5%/mph shorter, none 1', () => {
+    expect(windFactor(16.09344)).toBeCloseTo(1.1, 5); // 10 mph into
+    expect(windFactor(-16.09344)).toBeCloseTo(0.95, 5); // 10 mph helping
+    expect(windFactor(0)).toBe(1);
+    expect(windFactor(NaN)).toBe(1);
+  });
+});
+
+describe('windText / compassPoint', () => {
+  it('describes the wind along the shot', () => {
+    expect(windText(windComponents(18, 280, 315))).toBe('18 km/h · into, from the left');
+    expect(windText(windComponents(18, 0, 0))).toBe('18 km/h · into');
+    expect(windText(windComponents(18, 0, 0), { row: true })).toBe('Wind 18 km/h, into');
+    expect(windText(windComponents(2, 0, 0))).toBe('calm');
+    expect(windText(null)).toBeNull();
+  });
+  it('names eight compass points', () => {
+    expect(compassPoint(280)).toBe('W');
+    expect(compassPoint(350)).toBe('N');
+    expect(compassPoint(135)).toBe('SE');
   });
 });

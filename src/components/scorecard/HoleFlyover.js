@@ -3,10 +3,11 @@ import {
   View, Text, StyleSheet, Modal, Pressable, Animated, PanResponder,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useT, formatNumber } from '../../i18n';
+import { useT, formatNumber, formatTime } from '../../i18n';
 import {
-  holeFeatures, haversineMeters, pointInPolygon,
+  holeFeatures, haversineMeters, pointInPolygon, bearingDeg,
 } from '../../lib/geo';
+import { windText } from '../../lib/playConditions';
 import { useCourseGeometry } from '../../hooks/useCourseGeometry';
 import { anchorFor } from '../../lib/flyoverModel';
 import { hud } from '../../theme/tokens';
@@ -33,7 +34,6 @@ export function HoleFlyover({
   const appSettings = useAppSettings();
   const tl = useT();
   const { units } = appSettings;
-  const cond = usePlayConditions(courseName);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geometry]);
 
@@ -48,6 +48,35 @@ export function HoleFlyover({
     const r = anchorFor({ player: position, tee: feat.start, greenCenter: feat.greenCenter });
     return { pos: r.anchor, source: r.source, playerDistance: r.playerDistance };
   }, [feat, position]);
+
+  // Playing conditions, wind taken along the shot: the map's anchor (live fix
+  // or tee) to the green centre — the same point the HUD measures from.
+  const shotBearing = anchorInfo?.pos && feat?.greenCenter ? bearingDeg(anchorInfo.pos, feat.greenCenter) : null;
+  const cond = usePlayConditions(courseName, shotBearing);
+  // What the map's Plays row and breakdown need: multipliers + final copy.
+  const plays = useMemo(() => {
+    if (!cond.enabled) return null;
+    const b = cond.breakdown(100);
+    const est = cond.source === 'estimate';
+    const { tempC, altitudeM } = cond.describe;
+    return {
+      air: (100 + b.air) / 100,
+      wind: b.plays / (100 + b.air),
+      approx: est,
+      arrowDeg: cond.wind && cond.wind.kind !== 'calm' ? cond.wind.arrowDeg : null,
+      windLine: windText(cond.wind) ?? tl('shared.conditions.noWind'),
+      labels: {
+        plays: tl('shared.conditions.plays'),
+        measured: tl('shared.conditions.measured'),
+        windRow: cond.wind && cond.wind.kind !== 'calm' ? windText(cond.wind, { row: true }) : null,
+        air: tl(est ? 'shared.conditions.airEstimate' : 'shared.conditions.air', { temp: formatNumber(tempC), alt: formatNumber(altitudeM) }),
+        total: tl('shared.conditions.playsLike'),
+        foot: est
+          ? tl('shared.conditions.noForecastMap')
+          : `${tl('shared.conditions.forecastAt', { time: formatTime(cond.fetchedAt) })} · ${tl('shared.conditions.source')}`,
+      },
+    };
+  }, [cond, tl]);
 
   // Top-left card: distance from the last logged shot to the green center, plus
   // a club tip for the next shot. Skipped when the setting is off, before any
@@ -99,7 +128,8 @@ export function HoleFlyover({
     shots: shotPins, // initial paint; live marks arrive via the shots prop below
     showRec: appSettings.showLastShot, // gates the top-left last-shot-to-green card
     lastShot, // initial paint; live updates arrive via the lastShot prop below
-  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins, appSettings.showLastShot, lastShot, tl]);
+    plays, // initial paint; live updates arrive via the plays prop below
+  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins, appSettings.showLastShot, lastShot, plays, tl]);
 
   // Latest aim state reported by the map: { pos, rings } — pos is the ring
   // nearest the green (for "Add shot" fallback), rings is the full
@@ -180,6 +210,7 @@ export function HoleFlyover({
                 anchor={anchorInfo}
                 shots={shotPins}
                 lastShot={lastShot}
+                plays={plays}
                 targets={targetsCmd}
                 onShotMove={(i, p) => {
                   const sh = shotsForHole(roundId, roundIndex, holeNumber)[i];
