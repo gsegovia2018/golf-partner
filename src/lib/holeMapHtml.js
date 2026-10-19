@@ -229,7 +229,10 @@ function drawNow() {
 // on the pin it leaves. Drawn inside draw() so they survive player/hole
 // redraws. Pins are tappable and post a shot-tap to the host; an untagged
 // leading origin (older logs, seeded from the tee) is not.
-function shotIcon(n){ return L.divIcon({ className:'', iconSize:[22,22], iconAnchor:[11,11], html:'<div class="shotpin">'+n+'</div>' }); }
+// stack = how many earlier pins sit on the same spot ("+1 from here"): each
+// is shifted right by a pin's width so every number stays readable and tappable.
+function shotIcon(n, stack){ return L.divIcon({ className:'', iconSize:[22,22], iconAnchor:[11 - 18*(stack||0),11], html:'<div class="shotpin">'+n+'</div>' }); }
+const SAME_SPOT_M = 2; // closer than this is one spot: stack the pins, no carry chip
 function drawShots(){
   const list = shots || [];
   const pts = list.map(sh => [sh.lat, sh.lng]);
@@ -240,7 +243,9 @@ function drawShots(){
     if (!valid(pts[i])) continue;
     const origin = i === 0 && !list[i].club; // the seeded tee carries no club
     const live = !origin && hole.mode !== 'replay'; // replay pins are inert
-    const mk = L.marker(pts[i], { icon: shotIcon(i+1), interactive: live, draggable: live, zIndexOffset:500 });
+    let stack = 0;
+    for (let j = 0; j < i; j++) if (valid(pts[j]) && dist(pts[j], pts[i]) < SAME_SPOT_M) stack++;
+    const mk = L.marker(pts[i], { icon: shotIcon(i+1, stack), interactive: live, draggable: live, zIndexOffset:500 });
     if (live) {
       mk.on('click', (e) => {
         L.DomEvent.stopPropagation(e);      // don't let the tap move the aim ring
@@ -258,6 +263,7 @@ function drawShots(){
   for (let i=1;i<list.length;i++){
     if (!valid(pts[i-1]) || !valid(pts[i])) continue;
     const d = dist(pts[i-1], pts[i]);
+    if (d < SAME_SPOT_M) continue; // a second shot from the same spot has no carry to show
     const mid = [(pts[i-1][0]+pts[i][0])/2, (pts[i-1][1]+pts[i][1])/2];
     add(L.marker(mid, { interactive:false, icon: L.divIcon({ className:'', html:'<div class="dchip">'+disp(d)+' '+U+'</div>', iconSize:[0,0] }) }));
   }
