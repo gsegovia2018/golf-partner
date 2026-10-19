@@ -31,8 +31,8 @@ export const DEFAULT_APP_SETTINGS = {
   // the club picker when logging shots. null/missing → clubs.js DEFAULT_BAG.
   bag: null,
   // Playing-conditions adjustment (see src/lib/playConditions.js). When on,
-  // club recommendations use a "plays like" distance derived from the month
-  // and the course elevation. `courseAltitudes` maps a course name → metres
+  // club recommendations use a "plays like" distance from the cached forecast
+  // (wind, temperature — else the month estimate) and the course elevation. `courseAltitudes` maps a course name → metres
   // (set once per course); merges key-wise so editing one keeps the rest.
   conditionsEnabled: false,
   courseAltitudes: {},

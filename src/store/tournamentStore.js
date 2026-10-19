@@ -8,6 +8,7 @@ import { runExclusiveForTournament } from './tournamentMutex';
 import { isOnline } from '../lib/connectivity';
 import { t } from '../i18n';
 import { teeByLabel, resolveTeeForPlayer } from './tees';
+import { prefetchWeatherForRounds } from './weatherStore';
 // Pure scoring & handicap math lives in ./scoring. Imported here for this
 // module's own use and re-exported below so existing call sites that do
 // `import { calcStablefordPoints } from '../store/tournamentStore'` keep working.
@@ -478,6 +479,9 @@ export async function loadTournament(options = {}) {
       await clearActiveTournamentIfMatches(activeId);
       return null;
     }
+    // The active game is the one being played today: refresh the forecast
+    // for its current round's course while there is signal (non-blocking).
+    prefetchWeatherForRounds([cached.rounds?.[cached.currentRound ?? 0]]);
     // Kick remote refresh in background; do not block the UI. Overlay this
     // tournament's still-undrained queued mutations onto the fresh remote
     // state (race-guarded — see _overlayAndSave) so we never clobber an

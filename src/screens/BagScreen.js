@@ -10,7 +10,7 @@ import Reveal from '../components/ui/Reveal';
 import GappingChart, { GappingLegend } from '../components/bag/GappingChart';
 import ClubDistanceSheet from '../components/bag/ClubDistanceSheet';
 import { useTheme } from '../theme/ThemeContext';
-import { useT } from '../i18n';
+import { useT, formatTime } from '../i18n';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings } from '../store/settingsStore';
 import {
@@ -19,7 +19,10 @@ import {
 import {
   subscribeCourseGeometry, getCourseGeometryVersion, getCourseGeometry, hasCourseDetails,
 } from '../lib/geo';
-import { describeConditions } from '../lib/playConditions';
+import { describeConditions, compassPoint } from '../lib/playConditions';
+import {
+  subscribeWeather, getWeatherVersion, weatherAt, loadCachedWeather,
+} from '../store/weatherStore';
 import {
   CLUB_CATALOG, DEFAULT_BAG, isClubKey, clubOrder,
 } from '../lib/clubs';
@@ -91,6 +94,7 @@ export default function BagScreen({ navigation }) {
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
 
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
+  useSyncExternalStore(subscribeWeather, getWeatherVersion, getWeatherVersion); // re-render as forecasts land
   // Courses to offer an elevation input for, de-duped by name: only those
   // with details loaded (bundled, or opened this session) or an altitude set —
   // not the whole course index.
@@ -99,6 +103,9 @@ export default function BagScreen({ navigation }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [geomVersion, courseAltitudes]);
   const month = new Date().getMonth();
+  useEffect(() => {
+    if (conditionsEnabled) courses.forEach((c) => { loadCachedWeather(c.name); });
+  }, [conditionsEnabled, courses]);
 
   const setAltitude = (name, meters) => {
     updateAppSettings({ courseAltitudes: { [name]: meters } }).catch(() => {});
@@ -267,12 +274,21 @@ export default function BagScreen({ navigation }) {
                     <Text style={s.emptyText}>{t('courses.bag.noCourses')}</Text>
                   ) : courses.map((c, i) => {
                     const alt = (courseAltitudes && courseAltitudes[c.name]) || 0;
-                    const d = describeConditions({ month, altitudeM: alt });
+                    const w = weatherAt(c.name);
+                    const d = describeConditions({ month, altitudeM: alt || w?.elevationM || 0, tempC: w?.tempC });
+                    const meta = w
+                      ? [
+                        t(w.fresh ? 'shared.conditions.liveAt' : 'shared.conditions.forecastAt', { time: formatTime(w.fetchedAt) }),
+                        `${d.tempC} °C`,
+                        t('shared.conditions.windFrom', { kmh: Math.round(w.windKmh), dir: compassPoint(w.windFromDeg) })
+                          + (w.gustKmh != null ? `, ${t('shared.conditions.gusts', { kmh: Math.round(w.gustKmh) })}` : ''),
+                      ].join(' · ')
+                      : `≈ ${d.tempC} °C · ${t('shared.conditions.noForecast')}`;
                     return (
                       <View key={c.name} style={[s.condRow, i > 0 && s.rowDivider]}>
                         <View style={s.condLeft}>
                           <Text style={s.condName} numberOfLines={1}>{c.name}</Text>
-                          <Text style={s.condMeta}>{`≈ ${d.tempC}°C · ${d.text}`}</Text>
+                          <Text style={s.condMeta}>{meta}</Text>
                         </View>
                         <View style={s.condRight}>
                           <AltitudeInput
@@ -290,6 +306,7 @@ export default function BagScreen({ navigation }) {
                   })}
                 </View>
               )}
+              {conditionsEnabled && <Text style={s.credit}>{t('shared.conditions.credit')}</Text>}
             </Reveal>
 
             {canReset && (
@@ -397,6 +414,10 @@ const makeStyles = (theme) => StyleSheet.create({
   condMeta: {
     fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 11,
     marginTop: 2,
+  },
+  credit: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary, fontSize: 11,
+    marginTop: 8, marginHorizontal: 2,
   },
   condRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   altInput: {

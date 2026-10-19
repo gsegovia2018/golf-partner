@@ -13,6 +13,16 @@ jest.mock('../../../hooks/useAppSettings', () => ({
   useAppSettings: () => ({ units: 'meters', bag: undefined, clubDistances: {} }),
 }));
 jest.mock('../ClubWheel', () => ({ ClubWheel: () => null }));
+// Plays-like: identity unless a test sets mockPlays (conditions on).
+let mockPlays = (d) => d;
+jest.mock('../../../hooks/usePlayConditions', () => ({
+  useShotPlayConditions: () => ({ plays: (d) => mockPlays(d) }),
+}));
+jest.mock('../../../lib/shotStats', () => {
+  const actual = jest.requireActual('../../../lib/shotStats');
+  return { ...actual, recommendClub: jest.fn(actual.recommendClub) };
+});
+const { recommendClub } = require('../../../lib/shotStats');
 
 const { logMeasuredShot, deleteShot } = require('../../../store/shotStore');
 
@@ -23,9 +33,15 @@ const base = {
   fix: { position: START, accuracy: 8 }, targetMeters: 150, onOpenMap: jest.fn(),
 };
 
-beforeEach(() => { jest.clearAllMocks(); });
+beforeEach(() => { jest.clearAllMocks(); mockPlays = (d) => d; });
 
 describe('MeasureFab', () => {
+  it('picks the club for the plays-like distance, like every other club tip', () => {
+    mockPlays = (d) => d * 1.1;
+    render(<MeasureFab {...base} courseName="Test Course" />);
+    expect(recommendClub.mock.calls[0][0]).toBeCloseTo(165, 5);
+  });
+
   it('arms on tap with a good fix', () => {
     const { getByLabelText } = render(<MeasureFab {...base} />);
     fireEvent.press(getByLabelText('Measure my shot'));

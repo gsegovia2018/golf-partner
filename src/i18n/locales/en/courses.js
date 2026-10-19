@@ -133,7 +133,7 @@ export default {
   'courses.bag.resetA11y': 'Delete every marked shot and reset all club distances',
   'courses.bag.carryA11y': '{club} carry in {unit}',
   'courses.bag.conditionsLabel': 'PLAYING CONDITIONS',
-  'courses.bag.conditionsHint': 'Adjust target distances for temperature (from the month) and course elevation. Warm, high air flies farther — the hole plays shorter.',
+  'courses.bag.conditionsHint': 'Adjust target distances for live wind and temperature, and course elevation. Without signal it uses the last forecast, or the month average.',
   'courses.bag.noCourses': 'No courses with map data yet.',
   'courses.bag.elevationA11y': '{course} elevation in metres',
   'courses.bag.editClubs': 'Edit clubs',

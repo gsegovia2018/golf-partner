@@ -3,6 +3,7 @@ import { saveLocal, readLocal, _setSyncStatus } from './tournamentStore';
 import { isOnline } from '../lib/connectivity';
 import { normalizeRoundNotes } from './roundNotes';
 import { ROUND_UPSERT_OWNED_FIELDS } from './mutationWrites';
+import { prefetchWeatherForRounds } from './weatherStore';
 
 // Maps a mutation to a stable dotted path identifying what it touches.
 // Asserted on directly by tests/legacy call sites — it is NOT a queue
@@ -509,6 +510,11 @@ export async function mutate(tournamentBefore, mutation, opts = {}) {
     if (isOnline()) scheduleSync();
     else _setSyncStatus('pending');
   }
+
+  // 5. A new game or round: fetch its course weather now, while there is
+  // signal, so plays-like has a forecast on the course (non-blocking).
+  if (m.type === 'tournament.create') prefetchWeatherForRounds(t.rounds);
+  else if (m.type === 'round.upsert' && m.isNew) prefetchWeatherForRounds([m.round]);
 
   return t;
 }

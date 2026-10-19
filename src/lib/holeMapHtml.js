@@ -10,6 +10,9 @@
 //   host -> page:  { type:'tile-data', id, dataUrl|null }     (tile answer)
 //   page -> host:  { type:'aim', pos:[lat,lng], rings:[[lat,lng],...] }
 //   host -> page:  { type:'set-targets', targets:[[lat,lng],...] } (replaces rings)
+//   host -> page:  { type:'plays', plays:{ air, wind, approx, arrowDeg, windLine,
+//                    labels:{ plays, measured, windRow, air, total, foot } }|null }
+//                  (plays-like multipliers + copy; null hides the Plays row)
 //
 // data: { mode:'view'|'edit'|'replay', holeLabel, green, greenFront, greenCenter,
 //         greenBack, tee, hazards:[{kind,poly}], player, activeField, hudLabels }
@@ -45,6 +48,17 @@ export function buildHoleMapHtml(data) {
   .tri .u{font-size:13px;font-weight:600;color:#9fb0a4}
   .tri .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase;width:34px;text-align:left}
   .tri .src{font-size:9px;font-weight:800;letter-spacing:.09em;color:#7f8f95;text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,.18);padding-bottom:5px;margin-bottom:5px}
+  .tri .pr{all:unset;display:block;pointer-events:auto;cursor:pointer;border-top:1px solid rgba(255,255,255,.18);margin-top:5px;padding-top:5px;min-height:38px;min-width:100%;border-radius:6px}
+  .tri .pr:focus-visible{outline:2px solid #4fae8a;outline-offset:2px}
+  .tri .pv{font-size:20px;font-weight:800;color:#4fae8a;font-variant-numeric:tabular-nums}
+  .tri .ws{font-size:11px;font-weight:700;color:#cfe3d5;display:flex;justify-content:flex-end;align-items:center;gap:4px}
+  .tri .ws svg{width:12px;height:12px}
+  .why{text-align:left;max-width:230px;margin-top:6px;border-top:1px solid rgba(255,255,255,.18);padding-top:6px;font-size:12px;color:#cfe3d5}
+  .why .wr{display:flex;justify-content:space-between;gap:12px;padding:3px 0;font-variant-numeric:tabular-nums}
+  .why .wr b{color:#fff}
+  .why .tot{border-top:1px solid #23332a;margin-top:4px;padding-top:6px}
+  .why .tot b{color:#4fae8a;font-size:16px}
+  .why .ft{font-size:11px;color:#9fb0a4;margin-top:6px}
   .lastbox{position:absolute;top:56px;left:12px;z-index:600;color:#fff;background:rgba(14,22,28,.72);border-radius:14px;padding:7px 12px 8px;min-width:78px}
   .lastbox.hide{display:none}
   .lastbox .rl{font-size:8px;font-weight:800;letter-spacing:.09em;color:#8fa6ad;text-transform:uppercase}
@@ -123,6 +137,18 @@ let activeField = DATA.activeField || 'center';
 let shots = DATA.shots || []; // logged shots for this hole: [{lat,lng,club}]
 let seen = DATA.seen || []; // automatically detected shots to review: [{lat,lng}]
 let lastShot = DATA.lastShot || null; // { meters, club } for the top-left card, or null to hide
+let plays = DATA.plays || null; // plays-like info from the host, or null (conditions off)
+let whyOpen = false; // the plays-like breakdown card under the HUD box
+let whyTimer = null;
+// The breakdown covers part of the hole on a phone: it closes on its own
+// after a few seconds, or as soon as the map moves.
+const WHY_MS = 6000;
+function closeWhy(){
+  clearTimeout(whyTimer);
+  if (!whyOpen) return;
+  whyOpen = false;
+  if (hudArgs) hud(hudArgs[0], hudArgs[1]);
+}
 const layers = [];
 const clear = () => { layers.forEach(l => map.removeLayer(l)); layers.length = 0; };
 const add = (l) => { layers.push(l.addTo(map)); return l; };
@@ -362,10 +388,36 @@ function hudSource(aim){
   return { from: valid(aim) ? aim : null, label: (DATA.hudLabels || {}).aim || 'Aim' };
 }
 
+// Plays-like: the centre distance times the host's air and wind multipliers,
+// a tappable row under F/C/B that opens the breakdown (wind +x, air -y).
+const esc = (x) => String(x == null ? '' : x).replace(/[&<>"]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' })[c]);
+const signed = (x) => { const v = disp(Math.abs(x)); return v === 0 || v === '—' ? '0' : (x < 0 ? '−' : '+') + v; };
+function playsRow(c){
+  if (!plays || c == null) return '';
+  const v = (plays.approx ? '≈' : '') + disp(c * plays.air * plays.wind);
+  const arrow = plays.arrowDeg == null ? '' : '<svg viewBox="0 0 24 24" style="transform:rotate('+Math.round(plays.arrowDeg)+'deg)" aria-hidden="true"><path d="M12 3v18M12 3l-6 6M12 3l6 6" fill="none" stroke="#cfe3d5" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  return '<button class="pr" aria-expanded="'+whyOpen+'" aria-label="'+esc(plays.labels.total+' '+v+' '+U+'. '+plays.windLine)+'">'+
+    '<div class="row"><span class="lbl">'+esc(plays.labels.plays)+'</span><span class="pv">'+v+'</span></div>'+
+    '<div class="ws">'+arrow+esc(plays.windLine)+'</div></button>';
+}
+function whyCard(c){
+  if (!plays || !whyOpen || c == null) return '';
+  const air = c * plays.air, total = air * plays.wind;
+  const row = (l, v) => '<div class="wr"><span>'+esc(l)+'</span><b>'+v+'</b></div>';
+  return '<div class="why" role="region">'+
+    row(plays.labels.measured, disp(c)+' '+U)+
+    (plays.labels.windRow ? row(plays.labels.windRow, signed(total - air)) : '')+
+    row(plays.labels.air, signed(air - c))+
+    '<div class="wr tot"><span>'+esc(plays.labels.total)+'</span><b>'+(plays.approx ? '≈' : '')+disp(total)+' '+U+'</b></div>'+
+    '<div class="ft">'+esc(plays.labels.foot)+'</div></div>';
+}
+
 // Top-right F/C/B box: how far the player is from the green, front and back.
 // Anchored per hudSource, so dragging an aim ring no longer moves these — ring
 // distances live on the chips along the measuring line instead.
+let hudArgs = null; // last hud() call, so a plays update can repaint the box alone
 function hud(aim, g){
+  hudArgs = [aim, g];
   const h = document.getElementById('hud');
   const { from, label } = hudSource(aim);
   const d = (p) => valid(p) && valid(from) ? dist(from, p) : null;
@@ -375,7 +427,10 @@ function hud(aim, g){
       '<div class="row"><span class="lbl">Back</span><span class="sm">'+disp(d(g.b))+'</span></div>'+
       '<div class="row"><span class="lbl"></span><span class="bign">'+disp(d(g.c))+'</span><span class="u">'+U+'</span></div>'+
       '<div class="row"><span class="lbl">Front</span><span class="sm">'+disp(d(g.f))+'</span></div>'+
+      playsRow(d(g.c))+whyCard(d(g.c))+
     '</div>';
+  const pr = h.querySelector('.pr');
+  if (pr) pr.onclick = (e) => { e.stopPropagation(); whyOpen = !whyOpen; clearTimeout(whyTimer); if (whyOpen) whyTimer = setTimeout(closeWhy, WHY_MS); hud(aim, g); const n = document.querySelector('#hud .pr'); if (n) n.focus(); };
 }
 
 // Top-left card: distance from the last logged shot to the green, plus a club
@@ -466,6 +521,7 @@ function updateRecenter(){
   document.getElementById('recenter').classList.toggle('show', hole.mode !== 'edit' && viewDiverged());
 }
 map.on('moveend zoomend', updateRecenter);
+map.on('move', closeWhy); // not in drawNow's map.off() list, so it survives redraws
 document.getElementById('recenter').addEventListener('click', () => {
   if (homeView) map.flyTo(homeView.center, homeView.zoom, { duration: 0.5 });
 });
@@ -478,6 +534,7 @@ window.addEventListener('message', (ev) => {
   if (m.type === 'shots') { shots = m.shots || []; draw(); }
   if (m.type === 'seen') { seen = m.seen || []; draw(); }
   if (m.type === 'last-shot') { lastShot = m.lastShot || null; renderLast(); }
+  if (m.type === 'plays') { plays = m.plays || null; if (!plays) whyOpen = false; if (hudArgs) hud(hudArgs[0], hudArgs[1]); }
   // host -> page: { type:'set-targets', targets:[[lat,lng],...] } replaces the
   // aim rings wholesale (e.g. collapsing to the landing after a shot is logged).
   if (m.type === 'set-targets') {
