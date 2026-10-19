@@ -6,8 +6,9 @@
 -- (upsert ... on conflict do nothing). `created_at` is when the event
 -- happened on the phone, not when it arrived.
 --
--- Write-only for users: insert their own rows, nothing else. There is no
--- select/update/delete policy, so only the service role / SQL editor reads.
+-- Users insert their own rows and can read back only their own (needed by
+-- the upsert below); there is no update/delete policy. Everyone's events
+-- are read through the service role / SQL editor.
 create table if not exists public.app_events (
   id          uuid primary key,
   user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
@@ -24,6 +25,11 @@ alter table public.app_events enable row level security;
 
 create policy app_events_insert on public.app_events
   for insert to authenticated with check (user_id = (select auth.uid()));
+
+-- The client writes with upsert ... on conflict do nothing (retry-safe), and
+-- Postgres only allows that under RLS when the row is also visible to the user.
+create policy app_events_select_own on public.app_events
+  for select to authenticated using (user_id = (select auth.uid()));
 
 -- Queries (SQL editor):
 --
