@@ -52,7 +52,7 @@ def build(lab, clip, a):
         "frames": frames,
         "ball": {"x": round(ball["x"] / w, 4), "y": round(ball["y"] / h, 4), "r": round(ball["r"] / w, 4),
                  "conf": ball.get("conf")} if ball else None,
-        "ballGoneFrame": auto.get("ballGoneFrame"),
+        "ballGoneFrame": (auto.get("debug") or {}).get("ballGoneFrame"),
         "proposals": {k: proposal(auto["checkpoints"][k]) for k in ("address", "impact")},
         "addressFrame": auto["checkpoints"]["address"]["frame"],
         "marks": None,
