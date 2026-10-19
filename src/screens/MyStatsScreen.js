@@ -32,6 +32,7 @@ import { formatRoundDuration } from '../store/roundDuration';
 import MyStatsRoundSelector from '../components/MyStatsRoundSelector';
 import StatDetailSheet from '../components/StatDetailSheet';
 import CoachTab from '../components/mystats/tabs/CoachTab';
+import { track } from '../lib/telemetry';
 import FormTab from '../components/mystats/tabs/FormTab';
 import BreakdownTab from '../components/mystats/tabs/BreakdownTab';
 import ShotsTab from '../components/mystats/tabs/ShotsTab';
@@ -137,6 +138,7 @@ export default function MyStatsScreen({ navigation, route }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [loadNonce, setLoadNonce] = useState(0);
   const [tab, setTab] = useState(normalizeStatsTab(route?.params?.tab));
+  useEffect(() => { track('stats_tab_viewed', { tab }); }, [tab]);
   const [reportRoundKey, setReportRoundKey] = useState(route?.params?.roundKey ?? null);
   const [infoKey, setInfoKey] = useState(null);
   const [targetHandicap, setTargetHandicap] = useState(null);

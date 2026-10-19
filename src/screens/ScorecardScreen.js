@@ -85,6 +85,7 @@ import {
   buildScorecardTournamentBackState, shouldMarkTournamentFinishedFromScorecard,
   canShowQuickFinish, buildConflictRows, roundDecisionNoticeForPair,
 } from '../store/scorecardFlow';
+import { track } from '../lib/telemetry';
 
 // Stable empty roster so the useRoundRoster memo below does not see a new
 // array identity on every render while the tournament is still loading.
@@ -918,9 +919,16 @@ export default function ScorecardScreen({ navigation, route }) {
   // scorer who enters seven holes in one go leaves nothing near tee-off.
   // Official rounds are not stamped from here (they have their own flow).
   const startStampedRef = useRef(false);
+  const startTrackedRef = useRef(false);
   const stampRoundStarted = useCallback(() => {
     if (official) return;
     const t = tournamentRef.current;
+    // Once per open scorecard, on my first entry (a reopen counts again —
+    // the queries count distinct tid/round).
+    if (!startTrackedRef.current) {
+      startTrackedRef.current = true;
+      track('round_started', { tid: t?.id ?? null, round: roundIndex, kind: t?.kind ?? null });
+    }
     // A league round (Setup's switch) tells the league it teed off on my
     // first tap — even when a partner's phone already stamped startedAt.
     // Fire-and-forget; requestLeagueTeeOff is once-only and retries offline.
@@ -1481,6 +1489,7 @@ export default function ScorecardScreen({ navigation, route }) {
         }).catch(() => {});
       }
 
+      track('round_finished', { tid: freshT.id, round: roundIndex, kind: freshT.kind ?? null, official: !!official });
       haptic('success');
       setRoundCompleteVisible(true);
       setTimeout(() => {

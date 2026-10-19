@@ -102,6 +102,7 @@ import { startReplication } from './src/engine/store/replicator';
 import { hydrateCourseGeometry } from './src/store/courseGeometryStore';
 import { hydrateShots } from './src/store/shotStore';
 import { startGpsTrailSync } from './src/store/gpsTrailStore';
+import { startTelemetry, track } from './src/lib/telemetry';
 import { hydrateAppSettings } from './src/store/settingsStore';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Notifications from 'expo-notifications';
@@ -135,6 +136,7 @@ function MainTabs() {
     <Tab.Navigator
       initialRouteName="Home"
       screenOptions={{ headerShown: false }}
+      screenListeners={({ route }) => ({ focus: () => track('tab_viewed', { tab: route.name }) })}
       tabBar={(props) => <FloatingTabBar {...props} />}
     >
       {TAB_ROUTE_NAMES.map((routeName) => {
@@ -587,6 +589,8 @@ export default function App() {
     // GPS trail experiment: uploads recorded trails now and on every return
     // to the foreground. A no-op when nothing was recorded.
     startGpsTrailSync();
+    // Usage counts (opt-out in Settings): sends what earlier runs queued.
+    startTelemetry();
     return () => { cancelled = true; };
   }, []);
 

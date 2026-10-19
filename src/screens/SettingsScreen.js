@@ -270,7 +270,13 @@ export default function SettingsScreen({ navigation }) {
             onChange={(v) => setKey({ notifications: { media: v } })} theme={theme} s={s} />
         </Section>
 
-        <Reveal delay={REVEAL_STEP * 5}>
+        <Section title={t('settings.section.privacy')} delay={REVEAL_STEP * 5} s={s}>
+          <SwitchRow testID="setting-usageStats" label={t('settings.usageStats.label')} first
+            hint={t('settings.usageStats.hint')}
+            value={appSettings.usageStats} onChange={(v) => setKey({ usageStats: v })} theme={theme} s={s} />
+        </Section>
+
+        <Reveal delay={REVEAL_STEP * 6}>
           <Text style={s.aboutText}>
             {t('settings.about.version', { version: Constants?.expoConfig?.version ?? '?' })}
             {Platform.OS !== 'web' && Constants?.nativeBuildVersion ? ` (${Constants.nativeBuildVersion})` : ''}

@@ -5,6 +5,7 @@ import { File as FsFile } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
 import { takesMonth } from './leagueRules';
 import { leagueErrorDescriptor } from './leagueErrors';
+import { track } from '../lib/telemetry';
 
 // Client surface for the league tables and RPCs (see
 // supabase/migrations/20261004000000_leagues.sql and
@@ -71,6 +72,7 @@ async function rpc(fn, args) {
     throw toLeagueError(e);
   }
   if (res.error) throw toLeagueError(res.error);
+  if (!fn.startsWith('get_')) track('league_action', { action: fn });
   return res.data;
 }
 
