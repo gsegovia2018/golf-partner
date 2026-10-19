@@ -57,19 +57,50 @@ export function cardCandidates(tournaments, userId, now = Date.now()) {
 // peers' cards) and reach the tournament blob only after the server projects
 // them. Overlay what this phone shows (engine/cards.js `shownScores`) on the
 // current round, cell by cell, so Home sees a hole the moment it is scored.
-export function withCardScores(tournaments, cardScoresByKey) {
-  if (!cardScoresByKey || cardScoresByKey.size === 0) return tournaments;
+export function withCardScores(tournaments, cardScoresByKey, cardShotsByKey = null) {
+  const none = (m) => !m || m.size === 0;
+  if (none(cardScoresByKey) && none(cardShotsByKey)) return tournaments;
+  const merge = (base, over) => {
+    const out = { ...(base ?? {}) };
+    for (const [pid, byHole] of Object.entries(over ?? {})) out[pid] = { ...(out[pid] ?? {}), ...byHole };
+    return out;
+  };
   return (tournaments ?? []).map((t) => {
     const c = Number(t?.currentRound) || 0;
     const round = t?.rounds?.[c];
-    const shown = round ? cardScoresByKey.get(`${t.id}:${round.id}`) : null;
-    if (!shown || Object.keys(shown).length === 0) return t;
-    const scores = { ...(round.scores ?? {}) };
-    for (const [pid, byHole] of Object.entries(shown)) scores[pid] = { ...(scores[pid] ?? {}), ...byHole };
+    const key = round ? `${t.id}:${round.id}` : null;
+    const shown = key ? cardScoresByKey?.get(key) : null;
+    const shots = key ? cardShotsByKey?.get(key) : null;
+    const hasShown = shown && Object.keys(shown).length > 0;
+    const hasShots = shots && Object.keys(shots).length > 0;
+    if (!hasShown && !hasShots) return t;
     const rounds = t.rounds.slice();
-    rounds[c] = { ...round, scores };
+    rounds[c] = {
+      ...round,
+      ...(hasShown ? { scores: merge(round.scores, shown) } : {}),
+      ...(hasShots ? { shotDetails: merge(round.shotDetails, shots) } : {}),
+    };
     return { ...t, rounds };
   });
+}
+
+// Shot detail (putts, tee shot, ...) from my own card: what I published, with
+// the hole I am on overlaid from the draft. Same rule as useCardViews.
+export function cardShotDetails(state) {
+  const out = {};
+  const put = (h, playerId, detail) => {
+    if (detail == null) return;
+    if (!out[playerId]) out[playerId] = {};
+    out[playerId][h] = detail;
+  };
+  const myCard = state?.cardsByAuthor?.[state?.myAuthorId];
+  for (const [h, entry] of Object.entries(myCard?.holes ?? {})) {
+    for (const [pid, d] of Object.entries(entry?.shots ?? {})) put(h, pid, d);
+  }
+  for (const [h, draft] of Object.entries(state?.draft ?? {})) {
+    for (const [pid, d] of Object.entries(draft?.shots ?? {})) put(h, pid, d);
+  }
+  return out;
 }
 
 export function homePhase(tournaments, { userId = null, now = Date.now(), lastActivityByKey = null } = {}) {

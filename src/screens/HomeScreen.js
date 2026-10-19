@@ -25,6 +25,7 @@ import BottomSheet from '../components/BottomSheet';
 import { BeforeHero, LiveHero, AfterHero, AfterLine, CreatePills, YourGame } from '../components/HomePhase';
 import { beforeModel, liveModel, afterModel } from '../store/homePhase';
 import { useHomePhase } from '../hooks/useHomePhase';
+import { LiveCardA, LiveCardB, LiveCardC, LiveVariantSwitch } from '../components/HomeLiveVariants';
 import { getSwings } from '../store/swingStore';
 import { SWING_STRINGS } from '../swing/strings';
 import PressableScale from '../components/ui/PressableScale';
@@ -176,6 +177,7 @@ export default function HomeScreen({ navigation, route }) {
   const homePhase = useHomePhase(viewMode === 'tournament' ? NO_TOURNAMENTS : allTournaments, currentUserId);
   // During a round everything but the live hero folds behind one row.
   const [liveMoreOpen, setLiveMoreOpen] = useState(false);
+  const [liveVariant, setLiveVariant] = useState('current');
   const [openableIds, setOpenableIds] = useState(null); // null = all openable
   const [loading, setLoading] = useState(() => !initialTournament);
   // Drop the boot splash overlay (App.js) once this screen has real content
@@ -1260,7 +1262,15 @@ export default function HomeScreen({ navigation, route }) {
           if (phase === 'live') {
             return (
               <>
-                <LiveHero model={liveModel(live, currentUserId)} onOpen={() => openPhaseScorecard(live)} />
+                {/* shortcut: dev-only Live design switch (A/B/C scorecard takes), remove once Marcos picks one. */}
+                {__DEV__ ? <LiveVariantSwitch value={liveVariant} onChange={setLiveVariant} /> : null}
+                {(() => {
+                  const LiveVariant = { A: LiveCardA, B: LiveCardB, C: LiveCardC }[liveVariant];
+                  const model = liveModel(live, currentUserId);
+                  return LiveVariant
+                    ? <LiveVariant entry={live} model={model} userId={currentUserId} onOpen={() => openPhaseScorecard(live)} />
+                    : <LiveHero model={model} onOpen={() => openPhaseScorecard(live)} />;
+                })()}
                 <TouchableOpacity
                   style={s.phaseMore}
                   onPress={() => setLiveMoreOpen((v) => !v)}
