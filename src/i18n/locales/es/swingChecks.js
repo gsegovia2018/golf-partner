@@ -67,7 +67,7 @@ export default {
   'swing.checkText.shaft_angle_impact_up': 'Palo {deg}° más vertical que en la preparación',
   'swing.checkText.shaft_angle_impact_down': 'Palo {deg}° más tumbado que en la preparación',
   'swing.checkText.spine_loss': 'Inclinación de la columna {from}° → {to}° ({loss}° perdidos)',
-  'swing.checkText.hip_drift': 'Cadera trasera {cm} cm hacia la bola',
+  'swing.checkText.hip_drift': 'Caderas {cm} cm hacia la bola',
   'swing.checkText.head_drift': 'La cabeza se movió {cm} cm desde la preparación',
   'swing.checkText.tempo': 'Subida {back} : bajada {down} fotogramas = {ratio}:1 (2,5–3,5 está bien)',
   'swing.checkText.finish_balance.both': 'Acabado mantenido, con el peso sobre la pierna adelantada',
