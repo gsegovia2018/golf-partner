@@ -1306,7 +1306,7 @@ export default function HomeScreen({ navigation, route }) {
           return null;
         })()}
         {(homePhase.phase !== 'live' || liveMoreOpen) && (<>
-        {homePhase.phase === 'before' || homePhase.phase === 'after' ? (
+        {homePhase.phase === 'before' ? (
           <CreatePills
             onGame={() => navigation.navigate('Setup', { kind: 'game' })}
             onTournament={() => setShowTournamentKindChoice(true)}
@@ -1351,7 +1351,7 @@ export default function HomeScreen({ navigation, route }) {
 
         <LeagueListSection navigation={navigation} rows={leagueRows} />
 
-        {homePhase.phase === 'idle' && (
+        {(homePhase.phase === 'idle' || homePhase.phase === 'after') && (
           <YourGame
             swingLine={(() => {
               const sw = getSwings().find((x) => x.mainFault && x.status !== 'error');
@@ -1362,7 +1362,7 @@ export default function HomeScreen({ navigation, route }) {
           />
         )}
 
-        {(homePhase.phase === 'idle' || homePhase.phase === 'live') && <TouchableOpacity
+        {homePhase.phase !== 'before' && <TouchableOpacity
           style={s.joinTile}
           onPress={() => navigation.navigate('JoinTournament')}
           activeOpacity={0.85}

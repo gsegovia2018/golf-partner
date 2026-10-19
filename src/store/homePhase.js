@@ -36,6 +36,42 @@ export function holesPlayed(round, players) {
 const within = (ms, now) => ms != null && ms <= now && now - ms <= PHASE_WINDOW_MS;
 const latest = (list, key) => list.reduce((best, c) => (best == null || c[key] > best[key] ? c : best), null);
 
+// Rounds whose card-engine state Home should read: the current round of
+// every open game I'm in that is started, or new enough to be Before.
+export function cardCandidates(tournaments, userId, now = Date.now()) {
+  const out = [];
+  for (const t of tournaments ?? []) {
+    if (!t || t.kind === 'official' || t._role === 'viewer' || isTournamentFinished(t)) continue;
+    if (!myPlayerIn(t, userId)) continue;
+    const rounds = t.rounds ?? [];
+    const c = Number(t.currentRound) || 0;
+    const round = rounds[c];
+    if (!round?.id) continue;
+    const recent = within(parseFinishedAt(t.createdAt), now) || (c > 0 && within(roundEndedAt(t, rounds[c - 1]), now));
+    if (recent || holesPlayed(round, t.players ?? []) > 0) out.push({ tournament: t, round });
+  }
+  return out;
+}
+
+// Scores live in the card engine first (my draft, my published holes, the
+// peers' cards) and reach the tournament blob only after the server projects
+// them. Overlay what this phone shows (engine/cards.js `shownScores`) on the
+// current round, cell by cell, so Home sees a hole the moment it is scored.
+export function withCardScores(tournaments, cardScoresByKey) {
+  if (!cardScoresByKey || cardScoresByKey.size === 0) return tournaments;
+  return (tournaments ?? []).map((t) => {
+    const c = Number(t?.currentRound) || 0;
+    const round = t?.rounds?.[c];
+    const shown = round ? cardScoresByKey.get(`${t.id}:${round.id}`) : null;
+    if (!shown || Object.keys(shown).length === 0) return t;
+    const scores = { ...(round.scores ?? {}) };
+    for (const [pid, byHole] of Object.entries(shown)) scores[pid] = { ...(scores[pid] ?? {}), ...byHole };
+    const rounds = t.rounds.slice();
+    rounds[c] = { ...round, scores };
+    return { ...t, rounds };
+  });
+}
+
 export function homePhase(tournaments, { userId = null, now = Date.now(), lastActivityByKey = null } = {}) {
   const lives = [];
   const befores = [];

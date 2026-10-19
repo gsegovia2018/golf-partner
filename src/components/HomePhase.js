@@ -63,7 +63,7 @@ export function BeforeHero({ model, modeLabel, onStart, onEditTeams }) {
           ))}
         </View>
       ) : (
-        <View style={[s.team, s.teamsSolo]}>{model.players.map(person)}</View>
+        <View style={s.solo}>{model.players.map(person)}</View>
       )}
       <Cta
         s={s}
@@ -260,7 +260,8 @@ const makeStyles = (theme) => StyleSheet.create({
   meta: { color: onDeep.soft, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13 },
   teams: { flexDirection: 'row', gap: 8, marginTop: 8 },
   team: { flex: 1, backgroundColor: onDeep.fill, borderRadius: 10, padding: 10, gap: 4, minWidth: 0 },
-  teamsSolo: { flex: 0, marginTop: 8 },
+  // No flex here: in a column, flex collapses the box to nothing on web.
+  solo: { backgroundColor: onDeep.fill, borderRadius: 10, padding: 10, gap: 4, marginTop: 8 },
   teamHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   teamDot: { width: 7, height: 7, borderRadius: 4 },
   teamLabel: { color: onDeep.faint, fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase' },

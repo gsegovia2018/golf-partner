@@ -1,59 +1,64 @@
 import { useEffect, useMemo, useState } from 'react';
-import { homePhase, myPlayerIn, holesPlayed } from '../store/homePhase';
-import { isTournamentFinished } from '../store/tournamentStore';
+import { homePhase, holesPlayed, cardCandidates, withCardScores } from '../store/homePhase';
 import { fetchRoundActivity } from '../store/tournamentRepo';
 import { loadRound, getRoundState } from '../engine/store';
+import { shownScores } from '../engine/cards';
 import { roundSpan } from '../store/roundDuration';
 import { loadRoundMedia } from '../store/mediaStore';
 import { collectMyRounds } from '../store/personalStats';
 import { buildRoundReportCard } from '../store/roundReportCard';
 import { isOnline } from '../lib/connectivity';
 
-// Last hole published on each started, unfinished current round I'm in:
-// this device's cards first, then the server for rounds scored elsewhere.
-// Missing entries stay unknown (isRoundLive keeps those live).
-async function loadLastActivity(tournaments, userId) {
-  const started = (tournaments ?? []).filter((t) => {
-    const round = t?.rounds?.[t.currentRound ?? 0];
-    return round && t.kind !== 'official' && !isTournamentFinished(t) && myPlayerIn(t, userId)
-      && holesPlayed(round, t.players ?? []) > 0;
-  });
-  const map = new Map();
-  await Promise.all(started.map(async (t) => {
-    const round = t.rounds[t.currentRound ?? 0];
+// What the card engine knows about each candidate round (homePhase.js
+// cardCandidates): the scores this phone shows and the last hole published.
+// Rounds with no local cards ask the server for their last activity.
+// Missing activity stays unknown (isRoundLive keeps those live).
+async function loadCardState(tournaments, userId) {
+  const candidates = cardCandidates(tournaments, userId);
+  const activity = new Map();
+  const scores = new Map();
+  await Promise.all(candidates.map(async ({ tournament: t, round }) => {
+    const key = `${t.id}:${round.id}`;
     try {
       await loadRound(t.id, round.id);
-      const span = roundSpan(getRoundState(t.id, round.id).cardsByAuthor);
-      if (span) map.set(`${t.id}:${round.id}`, span.lastAt);
+      const state = getRoundState(t.id, round.id);
+      const span = roundSpan(state.cardsByAuthor);
+      if (span) activity.set(key, span.lastAt);
+      const shown = shownScores(state, (t.players ?? []).map((p) => p.id), (round.holes ?? []).map((h) => h.number));
+      if (Object.keys(shown).length > 0) scores.set(key, shown);
     } catch { /* unknown */ }
   }));
-  const missing = started.filter((t) => !map.has(`${t.id}:${t.rounds[t.currentRound ?? 0].id}`));
+  const missing = candidates.filter(({ tournament: t, round }) => {
+    const key = `${t.id}:${round.id}`;
+    return !activity.has(key) && (scores.has(key) || holesPlayed(round, t.players ?? []) > 0);
+  });
   if (missing.length > 0 && isOnline()) {
     try {
-      const rows = await fetchRoundActivity(missing.map((t) => t.id));
+      const rows = await fetchRoundActivity(missing.map(({ tournament: t }) => t.id));
       for (const row of rows) {
         const key = `${row.tournament_id}:${row.round_id}`;
         const ms = Number(row.last_hole_ts) > 0 ? Number(row.last_hole_ts) : Date.parse(row.activity_ts);
-        if (!map.has(key) && Number.isFinite(ms)) map.set(key, ms);
+        if (!activity.has(key) && Number.isFinite(ms)) activity.set(key, ms);
       }
     } catch { /* offline or old server: unknown */ }
   }
-  return map;
+  return { activity, scores };
 }
 
 // The Play tab's phase plus the async extras its After card shows: photos
 // of the round and the report card's verdict.
 export function useHomePhase(tournaments, userId, displayName = null) {
-  const [activity, setActivity] = useState(null);
+  const [cards, setCards] = useState(null);
   useEffect(() => {
     let alive = true;
-    loadLastActivity(tournaments, userId).then((m) => { if (alive) setActivity(m); });
+    loadCardState(tournaments, userId).then((c) => { if (alive) setCards(c); });
     return () => { alive = false; };
   }, [tournaments, userId]);
 
+  const merged = useMemo(() => withCardScores(tournaments, cards?.scores), [tournaments, cards]);
   const phase = useMemo(
-    () => homePhase(tournaments, { userId, now: Date.now(), lastActivityByKey: activity }),
-    [tournaments, userId, activity],
+    () => homePhase(merged, { userId, now: Date.now(), lastActivityByKey: cards?.activity ?? null }),
+    [merged, userId, cards],
   );
 
   const after = phase.after;
@@ -72,12 +77,12 @@ export function useHomePhase(tournaments, userId, displayName = null) {
   const report = useMemo(() => {
     if (!after || phase.phase !== 'after') return null;
     try {
-      const mine = collectMyRounds(tournaments, userId, displayName);
+      const mine = collectMyRounds(merged, userId, displayName);
       return buildRoundReportCard(mine, `${after.tournament.id}:${after.roundIndex}`)?.headline ?? null;
     } catch {
       return null;
     }
-  }, [after, phase.phase, tournaments, userId, displayName]);
+  }, [after, phase.phase, merged, userId, displayName]);
 
   return { ...phase, photos: photos.key === afterKey ? photos.items : [], report };
 }

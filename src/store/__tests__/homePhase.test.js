@@ -1,4 +1,6 @@
-import { homePhase, beforeModel, liveModel, afterModel, PHASE_WINDOW_MS } from '../homePhase';
+import {
+  homePhase, beforeModel, liveModel, afterModel, PHASE_WINDOW_MS, withCardScores, cardCandidates,
+} from '../homePhase';
 
 const NOW = Date.parse('2026-10-19T12:00:00Z');
 const H = 60 * 60 * 1000;
@@ -113,5 +115,31 @@ describe('phase models', () => {
     const b = afterModel({ tournament: t, round: t.rounds[0], roundIndex: 0, endedAt: NOW - H }, 'u2');
     expect(b.place).toBe(1);
     expect(b.winner).toBeNull();
+  });
+});
+
+describe('card-engine scores (the stuck "Ready to start" fix)', () => {
+  it('a hole scored only in the card engine moves Before to Live', () => {
+    const t = game();
+    expect(phaseOf([t]).phase).toBe('before');
+    const merged = withCardScores([t], new Map([['g1:r1', { p1: { 1: 5 } }]]));
+    expect(phaseOf(merged).phase).toBe('live');
+    expect(liveModel(phaseOf(merged).live, 'u1').thru).toBe(1);
+  });
+
+  it('overlays cell by cell and leaves other rounds and games alone', () => {
+    const t = game({}, { scores: { p1: { 1: 4, 2: 5 } } });
+    const [m] = withCardScores([t], new Map([['g1:r1', { p1: { 2: 6, 3: 4 }, p2: { 1: 3 } }]]));
+    expect(m.rounds[0].scores).toEqual({ p1: { 1: 4, 2: 6, 3: 4 }, p2: { 1: 3 } });
+    expect(t.rounds[0].scores).toEqual({ p1: { 1: 4, 2: 5 } });
+    expect(withCardScores([t], new Map())[0]).toBe(t);
+  });
+
+  it('reads the card engine for fresh or started rounds only', () => {
+    const fresh = game();
+    const old = game({ id: 'g2', createdAt: iso(NOW - 40 * H) });
+    const started = game({ id: 'g3', createdAt: iso(NOW - 40 * H) }, { id: 'r3', scores: { p1: { 1: 4 } } });
+    const ids = cardCandidates([fresh, old, started], 'u1', NOW).map((c) => c.tournament.id);
+    expect(ids).toEqual(['g1', 'g3']);
   });
 });
