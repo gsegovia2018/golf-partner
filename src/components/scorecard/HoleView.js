@@ -243,6 +243,7 @@ export function HoleView({ leaguePlayers = '', medalLeague = false, round, round
         position={gps.position}
         roundId={round.id}
         roundIndex={roundIndex}
+        seenEnabled={!!meId && !official && !isScrambleMode(rawMode) && (editable ? editable(meId) : true)}
         onClose={() => setFlyoverOpen(false)}
         onEdit={isAdmin ? () => { setFlyoverOpen(false); setEditorOpen(true); } : undefined}
       />

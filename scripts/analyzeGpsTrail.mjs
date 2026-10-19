@@ -17,7 +17,7 @@ import { createClient } from '@supabase/supabase-js';
 import { assembleCourses } from '../src/lib/courseGeometryShape.js';
 import {
   cleanTrail, detectStops, mergeStops, assignStopsToHoles, inferHoleDistances, holeRefs, haversine,
-} from './lib/gpsTrailStops.js';
+} from '../src/lib/gpsTrailStops.js';
 
 const args = process.argv.slice(2);
 const flag = (name) => {

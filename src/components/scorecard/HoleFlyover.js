@@ -18,6 +18,10 @@ import { recommendClub } from '../../lib/shotStats';
 import { clubLabel } from '../../lib/clubs';
 import { HoleMapView } from './HoleMapView';
 import { ShotTracker } from './ShotTracker';
+import { SeenMapCard } from './ShotProposals';
+import { useShotProposals } from '../../hooks/useShotProposals';
+
+const NO_SEEN = [];
 
 // Full-screen interactive satellite flyover of one hole (Leaflet + Esri tiles,
 // pan/zoom). Green markers/outline, your live position, a draggable aim ring
@@ -27,7 +31,7 @@ import { ShotTracker } from './ShotTracker';
 export function HoleFlyover({
   courseName, holeNumber, par, strokeIndex,
   position, visible, onClose, onEdit,
-  roundId, roundIndex,
+  roundId, roundIndex, seenEnabled = false,
 }) {
   const geometry = useCourseGeometry(courseName);
   const appSettings = useAppSettings();
@@ -42,6 +46,14 @@ export function HoleFlyover({
   const shotPinsRaw = roundId != null ? shotsForHole(roundId, roundIndex, holeNumber) : [];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const shotPins = useMemo(() => shotPinsRaw.map((sh) => ({ lat: sh.lat, lng: sh.lng, club: sh.club })), [roundId, roundIndex, holeNumber, shotsVersion]);
+
+  // Option A of the shot-detection review: detected shots as hollow pins;
+  // tapping one opens the "Shot from here?" card.
+  const seen = useShotProposals({ roundId, roundIndex, holeNumber, courseName, enabled: seenEnabled });
+  const seenOn = seen.ui === 'A';
+  const seenPins = useMemo(() => (seenOn ? seen.open.map((p) => ({ lat: p.lat, lng: p.lng })) : NO_SEEN), [seenOn, seen.open]);
+  const [seenIdx, setSeenIdx] = useState(null);
+  const seenSel = seenOn && seenIdx != null ? seen.open[seenIdx] ?? null : null;
 
   const anchorInfo = useMemo(() => {
     if (!feat) return null;
@@ -97,9 +109,10 @@ export function HoleFlyover({
     anchor: anchorInfo,
     units,
     shots: shotPins, // initial paint; live marks arrive via the shots prop below
+    seen: seenPins, // same for detected shots (option A)
     showRec: appSettings.showLastShot, // gates the top-left last-shot-to-green card
     lastShot, // initial paint; live updates arrive via the lastShot prop below
-  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins, appSettings.showLastShot, lastShot, tl]);
+  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins, seenPins, appSettings.showLastShot, lastShot, tl]);
 
   // Latest aim state reported by the map: { pos, rings } — pos is the ring
   // nearest the green (for "Add shot" fallback), rings is the full
@@ -179,6 +192,8 @@ export function HoleFlyover({
                 player={position}
                 anchor={anchorInfo}
                 shots={shotPins}
+                seen={seenPins}
+                onSeenTap={setSeenIdx}
                 lastShot={lastShot}
                 targets={targetsCmd}
                 onShotMove={(i, p) => {
@@ -205,6 +220,14 @@ export function HoleFlyover({
                   onCollapseTargets={(t) => setTargetsCmd(t)}
                 />
               )}
+              {seenSel ? (
+                <SeenMapCard
+                  proposal={seenSel}
+                  index={seen.proposals.indexOf(seenSel)}
+                  onAdd={() => { seen.confirm([seenSel]); setSeenIdx(null); }}
+                  onDismiss={() => { seen.dismiss(seenSel.id); setSeenIdx(null); }}
+                />
+              ) : null}
             </View>
           ) : (
             <View style={s.center}><Text style={s.muted}>{tl('map.noGeometry')}</Text></View>

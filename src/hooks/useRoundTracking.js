@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { setRoundTracking } from '../lib/roundTracking';
 import { setActiveTrailRound, flushTrails } from '../store/gpsTrailStore';
+import { setDetectionHole } from '../store/shotProposalStore';
 import { formatDistance, unitSuffix } from '../lib/units';
 import { t, useT, getLanguage, formatNumber } from '../i18n';
 
@@ -66,6 +67,10 @@ export function useRoundTracking({ active, courseName, holeNumber, distances, so
     last.current = { holeNumber, source, center: text.center, lang };
     setRoundTracking({ title: text.title, body: text.body });
   }, [active, courseName, holeNumber, distances, source, units, lang]);
+
+  // Shot detection stamps stops with the hole on screen (used when the
+  // course has no geometry to place them by).
+  useEffect(() => { setDetectionHole(holeNumber); }, [holeNumber]);
 
   // Leaving the scorecard ends tracking whatever `active` last said.
   useEffect(() => () => setRoundTracking(null), []);

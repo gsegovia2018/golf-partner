@@ -15,6 +15,8 @@ import { isScrambleMode } from '../scoringModes';
 import { HoleDistanceBlock } from './HoleDistanceBlock';
 import { PlayerCard } from './PlayerCard';
 import HoleBriefingCard from './HoleBriefingCard';
+import { SeenBadge, SeenCard, SeenStrip } from './ShotProposals';
+import { useShotProposals } from '../../hooks/useShotProposals';
 import { holePoints, holeEdgeShots } from './scoreModel';
 import { teamsByPlayer } from './teamModel';
 import { useTourTarget } from '../tour/tourTargets';
@@ -221,6 +223,16 @@ export const HolePage = React.memo(function HolePage({
     // pickup hint match how the duel is actually scored (identity elsewhere).
     : matchPlayEffectiveHandicaps(mode, round, players);
   const holePts = holePoints({ mode, hole: pageHole, players: scoringPlayers, scores, handicaps, round });
+
+  // Automatically detected shots on my own card (GPS trail test setting).
+  // Scramble has no personal ball; official cards are attested, not tracked.
+  const seen = useShotProposals({
+    roundId: round.id,
+    roundIndex,
+    holeNumber: pageHole.number,
+    courseName,
+    enabled: !!meId && !official && !isScramble && (editable ? editable(meId) : true),
+  });
   const teams = useMemo(() => teamsByPlayer(round), [round]);
 
   // Who plays this hole with shots the rest don't get (SI shots minus the
@@ -298,8 +310,14 @@ export const HolePage = React.memo(function HolePage({
               roundIndex={roundIndex}
               onPress={onOpenFlyover}
             />
+            {seen.ui === 'A' && gps?.available ? <SeenBadge count={seen.open.length} /> : null}
           </View>
         </View>
+
+        {seen.ui === 'B' ? <SeenCard seen={seen} holeNumber={pageHole.number} /> : null}
+        {seen.ui === 'C' ? (
+          <SeenStrip seen={seen} scored={scores[effectiveMeId]?.[pageHole.number] != null} />
+        ) : null}
 
         {/* Hole briefing: owner only, on the editable casual scorecard, never
             for scramble (one ball per team has no personal miss pattern). */}

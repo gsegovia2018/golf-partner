@@ -52,6 +52,8 @@ export function buildHoleMapHtml(data) {
   .lastbox .lc svg{width:13px;height:13px}
   .hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(14,22,28,.85);color:#fff;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px}
   .dchip{background:rgba(14,22,28,.88);color:#fff;font-weight:800;font-size:13px;padding:4px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;border:1px solid rgba(255,255,255,.25);transform:translate(-50%,-50%);display:inline-block}
+  .seenpin{width:26px;height:26px;border-radius:50%;border:2.5px dashed #fff;background:rgba(10,13,16,.35);display:flex;align-items:center;justify-content:center;box-sizing:border-box}
+  .seenpin i{width:8px;height:8px;border-radius:50%;background:#fff;display:block}
   .shotpin{width:22px;height:22px;border-radius:50%;background:#f4c04a;border:2px solid #0a0d10;color:#0a0d10;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.5);font-variant-numeric:tabular-nums}
   #recenter{position:absolute;left:12px;bottom:14px;width:40px;height:40px;border-radius:999px;background:rgba(14,22,28,.85);border:1px solid rgba(255,255,255,.25);color:#fff;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;z-index:600;opacity:0;pointer-events:none;transform:scale(.9);transition:opacity .15s,transform .15s}
   #recenter.show{opacity:1;pointer-events:auto;transform:scale(1)}
@@ -119,6 +121,7 @@ let player = DATA.player || null;
 let anchor = DATA.anchor || { pos: null, source: null, playerDistance: null };
 let activeField = DATA.activeField || 'center';
 let shots = DATA.shots || []; // logged shots for this hole: [{lat,lng,club}]
+let seen = DATA.seen || []; // automatically detected shots to review: [{lat,lng}]
 let lastShot = DATA.lastShot || null; // { meters, club } for the top-left card, or null to hide
 const layers = [];
 const clear = () => { layers.forEach(l => map.removeLayer(l)); layers.length = 0; };
@@ -175,6 +178,7 @@ function drawNow() {
   if (g.c) add(L.circleMarker(g.c, { radius:5, color:'#3f8f43', weight:2, fillColor:'#fff', fillOpacity:1 }));
   if (hole.tee) add(L.circleMarker(hole.tee, { radius:6, color:'#fff', weight:2, fillColor:'#2f6bff', fillOpacity:1 }));
   drawShots();
+  drawSeen();
   renderLast();
   // Replay: a finished hole read back from the shot log. Pins and the trail
   // only — no aim rings, no measuring line, no map click handlers.
@@ -257,6 +261,16 @@ function drawShots(){
     const mid = [(pts[i-1][0]+pts[i][0])/2, (pts[i-1][1]+pts[i][1])/2];
     add(L.marker(mid, { interactive:false, icon: L.divIcon({ className:'', html:'<div class="dchip">'+disp(d)+' '+U+'</div>', iconSize:[0,0] }) }));
   }
+}
+
+// Detected shots awaiting an answer: hollow dashed pins, tap posts seen-tap.
+function drawSeen(){
+  (seen || []).forEach((p, i) => {
+    if (!valid([p.lat, p.lng])) return;
+    const mk = L.marker([p.lat, p.lng], { zIndexOffset:400, icon: L.divIcon({ className:'', iconSize:[26,26], iconAnchor:[13,13], html:'<div class="seenpin"><i></i></div>' }) });
+    mk.on('click', (e) => { L.DomEvent.stopPropagation(e); post({ type:'seen-tap', index:i }); });
+    add(mk);
+  });
 }
 
 // Aim circles: recreated wholesale on any structural change (add/remove/tap);
@@ -456,6 +470,7 @@ window.addEventListener('message', (ev) => {
   if (m.type === 'activeField') { activeField = m.field; if (hole.mode==='edit') drawEdit(fcb()); }
   if (m.type === 'hole') { hole = m.hole; draw(); } // redraw markers, keep current pan/zoom
   if (m.type === 'shots') { shots = m.shots || []; draw(); }
+  if (m.type === 'seen') { seen = m.seen || []; draw(); }
   if (m.type === 'last-shot') { lastShot = m.lastShot || null; renderLast(); }
   // host -> page: { type:'set-targets', targets:[[lat,lng],...] } replaces the
   // aim rings wholesale (e.g. collapsing to the landing after a shot is logged).
