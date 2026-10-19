@@ -31,7 +31,8 @@ describe('SWING_STRINGS follows the active language', () => {
 
   test('functions and plurals render in Spanish with locale numbers', async () => {
     await act(async () => { await setLanguagePref('es'); });
-    expect(SWING_STRINGS.home.footer(1, '1,5 GB')).toBe('1 swing · 1,5 GB en este móvil · desliza una fila o mantenla pulsada para ver más');
+    expect(SWING_STRINGS.home.footer(1, '1,5 GB')).toBe('1 swing · 1,5 GB');
+    expect(SWING_STRINGS.home.storage(2, '1,5 GB')).toBe('2 swings · 1,5 GB en este móvil');
     expect(SWING_STRINGS.results.moreDrills(2)).toBe('2 ejercicios más');
     expect(SWING_STRINGS.results.unconfirmedChip(1)).toBe('1 posición sin confirmar');
     expect(SWING_STRINGS.checkText.hands_under_shoulders_out(1234.4)).toBe('Manos 1.234 cm por delante de los hombros (te estiras hacia la bola)');
@@ -48,8 +49,8 @@ describe('SWING_STRINGS follows the active language', () => {
     expect(fixCopy({ id: 'tempo', status: 'red', dir: 'fast' }).headline).toBe('Aceleras el swing desde el top');
     expect(cueFor('leadArm', 'right').what).toBe('Brazo izquierdo paralelo al suelo en la subida.');
     expect(cueFor('leadArm', 'left').what).toBe('Brazo derecho paralelo al suelo en la subida.');
-    expect(cueFor('shaftThrough', 'left').stop.short).toMatch(/cadera derecha/);
-    expect(cueFor('top').stop.watch).toBe('la cabeza del palo, no las manos');
+    expect(cueFor('shaftThrough', 'left').what).toMatch(/cadera derecha/);
+    expect(cueFor('leadArm', 'left').stop.line).toBe('Primer fotograma con el brazo derecho horizontal');
     expect(DRILLS.find((d) => d.id === 'ee-silla').title).toBe('La silla');
     expect(progression()).toMatch(/hierro 7/);
   });

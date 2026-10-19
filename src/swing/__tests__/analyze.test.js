@@ -16,10 +16,10 @@ const byId = (a, id, cp) => a.checks.find((c) => c.id === id && (!cp || c.cp ===
 describe('analyze: the whole pipeline on the fixture', () => {
   const a = analyze(native(), { pass2, handedness: 'right', heightCm: 176, club: 'iron', source: 'import', swingId: 's1', createdAt: 'x' });
 
-  test('shape of analysis.json (schema swing-analysis/3)', () => {
+  test('shape of analysis.json (schema swing-analysis/4)', () => {
     expect(a.error).toBeUndefined();
     expect(a.schema).toBe(SCHEMA);
-    expect(SCHEMA).toBe('swing-analysis/3');
+    expect(SCHEMA).toBe('swing-analysis/4');
     expect(a).toMatchObject({ swingId: 's1', club: 'iron', handedness: 'right', view: 'dtl', source: 'import' });
     expect(a.fps).toMatchObject({ factor: 8, source: 'estimate', approximate: false });
     expect(a.scale.approx).toBe(false);
@@ -171,5 +171,25 @@ describe('analyze: the club picks the thresholds (D19)', () => {
     expect(byId(iron, 'butt_extension').status).toBe('red');
     expect(byId(driver, 'butt_extension').status).toBe('yellow');
     expect(driver.counts.red).toBeLessThan(iron.counts.red);
+  });
+});
+
+describe('analyze: where tempo starts the backswing', () => {
+  const run = (marks) => analyze(native(), { pass2, marks, heightCm: 176 });
+  const ratio = (a, start) => Math.round(((a.checkpoints.top.i - start) / (a.checkpoints.impact.i - a.checkpoints.top.i)) * 10) / 10;
+
+  test('without marks, from where the grip starts to rise (not motionStart, the end of the still window)', () => {
+    const a = run(undefined);
+    expect(a.internal.backswingStart).toBeLessThan(a.internal.motionStart);
+    expect(byId(a, 'tempo').value).toBe(ratio(a, a.internal.backswingStart));
+  });
+
+  test('a moved address frame is the start', () => {
+    const auto = run(undefined);
+    const frame = auto.internal.backswingStart - 20;
+    const a = run({ address: { hands: null, head: null, hidden: false, frame } });
+    expect(a.checkpoints.address.i).toBe(frame);
+    expect(byId(a, 'tempo').value).toBe(ratio(a, frame));
+    expect(byId(a, 'tempo').value).toBeGreaterThan(byId(auto, 'tempo').value);
   });
 });

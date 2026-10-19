@@ -28,6 +28,9 @@ internal class ClubWarm<T : AutoCloseable>(
 
   val isOpen get() = instance != null
 
+  /** The open instance, or null (it stays open: no idle re-arm). */
+  val current: T? get() = instance
+
   /**
    * [block] with the instance (opened now when none: an [open] failure propagates and leaves
    * nothing open) and whether it was already open; the idle close is re-armed afterwards, also

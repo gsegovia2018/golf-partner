@@ -126,6 +126,11 @@ export function defaultSwingName(date, lang) {
   return `${formatDate(d, 'short', lang)} · ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
+/** True when the golfer renamed the swing (the default name in either language is not a name). */
+export function hasCustomName(sw) {
+  return !!sw?.name && sw.name !== defaultSwingName(sw.createdAt, 'en') && sw.name !== defaultSwingName(sw.createdAt, 'es');
+}
+
 // --- Files -------------------------------------------------------------------
 
 function swingDir(id) { return new Directory(Paths.document, 'swings', id); }

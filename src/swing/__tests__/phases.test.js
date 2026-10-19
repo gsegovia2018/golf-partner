@@ -53,6 +53,13 @@ describe('golden phases: the lab d15 pass-1 samples against the owner labels', (
     CHECKPOINT_KEYS.slice(1).forEach((k, n) => expect(f[k]).toBeGreaterThan(f[CHECKPOINT_KEYS[n]]));
   });
 
+  test('backswingStart (tempo) is where the owner marked the address, not the end of the still window', () => {
+    // motionStart (397) trails the marked takeaway start (333) by more than a hold window, which
+    // read this swing's tempo as 1.4:1 (owner report 2026-10-18).
+    expect(Math.abs(r.internal.backswingStart - truth.address)).toBeLessThanOrEqual(3);
+    expect(r.internal.motionStart - r.internal.backswingStart).toBeGreaterThan(lab.expected.holdFrames);
+  });
+
   test('D22: shaftThrough (P8) sits between impact and the trail arm, where the grip is back at lead-hip height', () => {
     const f = frames(r);
     expect(f.shaftThrough).toBeGreaterThan(f.impact);

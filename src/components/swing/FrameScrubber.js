@@ -2,12 +2,14 @@ import React, {
   memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore,
 } from 'react';
 import {
-  View, Text, Image, Pressable, StyleSheet,
+  View, Text, Pressable, StyleSheet,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import Animated, { useSharedValue, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { hud, semantic } from '../../theme/tokens';
+import { withAlpha } from '../../theme/alpha';
 import { SWING_STRINGS } from '../../swing/strings';
 import {
   trackFrame, trackX, snapFrame, zoomFrames,
@@ -121,26 +123,39 @@ function FrameScrubberImpl({
   const step = (d) => onPick(Math.min(maxFrame, Math.max(0, view + d)));
   return (
     <View style={styles.wrap} testID="mark-scrubber">
+      <View style={styles.pillRow}>
+        <View
+          style={[styles.pill, off ? styles.pillWarn : styles.pillOk]}
+          accessible
+          accessibilityLabel={`${T.frameLine(cursor, (cursor / fps).toFixed(3))}, ${off ? T.offProposal(off) : T.onProposal}`}
+          testID="mark-frame-offset"
+        >
+          <Text style={[styles.pillText, off ? styles.warn : styles.ok]} testID="mark-frame-line">
+            {`${T.frameNum(cursor)} · ${off ? `${off > 0 ? '+' : '−'}${Math.abs(off)}` : T.onProposal}`}
+          </Text>
+        </View>
+      </View>
       <View style={styles.zoom}>
         <Pressable style={styles.arr} onPress={() => step(-1)} disabled={view <= 0} accessibilityRole="button" accessibilityLabel={T.prevFrame} testID="mark-prev">
           <Feather name="chevron-left" size={18} color={hud.text} />
         </Pressable>
         {zoomFrames(cursor, maxFrame).map((f, k) => {
-          if (f == null) return <View key={`e${k}`} style={styles.z} />;
+          if (f == null) return <View key={`e${k}`} style={styles.zSlot}><View style={styles.z} /></View>;
           const uri = thumbFor(f);
           return (
-            <Pressable
-              key={f}
-              style={[styles.z, f === proposed && styles.zProp, f === cursor && styles.zOn]}
-              onPress={() => onPick(f)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: f === cursor }}
-              accessibilityLabel={T.thumbLabel(f, f - proposed)}
-              testID={`zoom-${f}`}
-            >
-              {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
-              {f === proposed ? <View style={styles.zFlag} /> : null}
-            </Pressable>
+            <View key={f} style={styles.zSlot}>
+              <Pressable
+                style={[styles.z, f === proposed && styles.zProp, f === cursor && styles.zOn]}
+                onPress={() => onPick(f)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: f === cursor }}
+                accessibilityLabel={T.thumbLabel(f, f - proposed)}
+                testID={`zoom-${f}`}
+              >
+                {/* expo-image: decoded thumbs stay in memory, so a drag tick does not reload all nine */}
+                {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={null} /> : null}
+              </Pressable>
+            </View>
           );
         })}
         <Pressable style={styles.arr} onPress={() => step(1)} disabled={view >= maxFrame} accessibilityRole="button" accessibilityLabel={T.nextFrame} testID="mark-next">
@@ -170,10 +185,6 @@ function FrameScrubberImpl({
         </View>
       </GestureDetector>
 
-      <View style={styles.frl}>
-        <Text style={styles.frlText} testID="mark-frame-line">{T.frameLine(cursor, (cursor / fps).toFixed(3))}</Text>
-        <Text style={[styles.frlText, off ? styles.warn : styles.ok]}>{off ? T.offProposal(off) : T.onProposal}</Text>
-      </View>
     </View>
   );
 }
@@ -183,20 +194,19 @@ export default memo(FrameScrubberImpl);
 
 const styles = StyleSheet.create({
   wrap: { gap: 4 },
-  zoom: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  zoom: {
+    flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4,
+  },
   arr: {
     width: 36, height: 44, borderRadius: 10, backgroundColor: hud.fill, borderWidth: 1, borderColor: hud.line,
     alignItems: 'center', justifyContent: 'center',
   },
+  zSlot: { flex: 1, alignItems: 'center' },
   z: {
-    flex: 1, height: 44, borderRadius: 4, overflow: 'hidden', backgroundColor: hud.inset, borderWidth: 1.5, borderColor: 'transparent', opacity: 0.7,
+    alignSelf: 'stretch', height: 44, borderRadius: 4, overflow: 'hidden', backgroundColor: hud.inset, borderWidth: 1.5, borderColor: 'transparent', opacity: 0.7,
   },
   zProp: { borderColor: hud.accent, opacity: 1 },
   zOn: { borderColor: hud.text, opacity: 1 },
-  zFlag: {
-    position: 'absolute', top: 0, alignSelf: 'center', width: 0, height: 0,
-    borderLeftWidth: 4, borderRightWidth: 4, borderTopWidth: 5, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: hud.accent,
-  },
   track: { height: 32, marginHorizontal: 2, justifyContent: 'flex-start' },
   bar: { position: 'absolute', left: 0, right: 0, top: 13, height: 3, borderRadius: 2, backgroundColor: hud.line },
   tk: { position: 'absolute', top: 9, width: 2, height: 11, borderRadius: 1, backgroundColor: hud.textDim },
@@ -211,8 +221,11 @@ const styles = StyleSheet.create({
     position: 'absolute', left: 0, top: 4, width: 3, height: 20, borderRadius: 2, backgroundColor: hud.text,
     borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.5)',
   },
-  frl: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  frlText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: hud.textSoft, fontVariant: ['tabular-nums'] },
+  pillRow: { alignItems: 'center' },
+  pill: { borderRadius: 99, paddingHorizontal: 12, paddingVertical: 4 },
+  pillOk: { backgroundColor: withAlpha(hud.accent, 0.16) },
+  pillWarn: { backgroundColor: withAlpha(HUD_WARN, 0.16) },
+  pillText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, lineHeight: 16, fontVariant: ['tabular-nums'] },
   warn: { color: HUD_WARN },
   ok: { color: hud.accent },
 });

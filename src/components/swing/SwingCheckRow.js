@@ -15,12 +15,14 @@ const T = SWING_STRINGS.results;
  * (draws it on the still); `onPlace` opens Edit marks on the checkpoint that needs a mark.
  */
 export default function SwingCheckRow({
-  check, selected = false, expanded, onPress, onPlace, placeAt = null,
+  check, selected = false, expanded, onPress, onPlace, placeAt = null, step = null,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const name = check.cp && T.cpSuffix[check.cp] ? `${check.label}, ${T.cpSuffix[check.cp]}` : check.label;
+  // spine_hold / knee_hold run at several positions: the row names its position.
+  // the list header names the position on screen: a row only names its checkpoint when it is another one
+  const name = check.cp && check.cp !== step && SWING_STRINGS.checkpoint[check.cp] ? `${check.label}, ${SWING_STRINGS.checkpoint[check.cp].toLowerCase()}` : check.label;
   const { status } = check;
   const word = status === 'unknown'
     ? (check.reason === 'hidden' ? SWING_STRINGS.statusWord.unknown : '—')
@@ -69,12 +71,12 @@ const makeStyles = (theme) => StyleSheet.create({
   dotWait: { backgroundColor: 'transparent', borderWidth: 2, borderStyle: 'dashed' },
   dot: { width: 10, height: 10, borderRadius: 5 },
   mid: { flex: 1, gap: 2 },
-  label: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13.5, color: theme.text.primary },
+  label: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.text.primary },
   text: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, lineHeight: 17, color: theme.text.secondary },
   right: { alignItems: 'flex-end', gap: 2, maxWidth: 128 },
-  value: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13.5, color: theme.text.primary, fontVariant: ['tabular-nums'] },
+  value: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13, color: theme.text.primary, fontVariant: ['tabular-nums'] },
   approx: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10.5, color: theme.text.secondary },
-  word: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, color: theme.text.secondary },
+  word: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.text.secondary },
   cta: {
     minHeight: 36, minWidth: 44, borderRadius: 18, paddingHorizontal: 12, justifyContent: 'center',
     backgroundColor: theme.accent.primary,

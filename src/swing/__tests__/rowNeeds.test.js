@@ -41,6 +41,16 @@ describe('what a row is still waiting for', () => {
     expect(unlockedBy(NO_BALL, r, 'shaftDown')).toBe(false);
   });
 
+  test('a placed halfway-back clubhead with no ball: the row asks for the ball instead of reading "hidden"', () => {
+    const c = TRUTH.checkpoints.leadArm;
+    const marks = { leadArm: { hands: norm(c.hands), head: norm(c.head), hidden: false } };
+    const a = analyze(fixtureNative({ ballGoneFrame: lab.expected.ballGoneFrame }), { ...base, marks });
+    const r = row(a, 'butt_extension');
+    expect(r).toMatchObject({ status: 'unknown', reason: 'nodata' });
+    expect(names(rowNeeds(a, r))).toEqual(['ball:address']);
+    expect(askAt(a, 'leadArm')).toEqual({ kind: 'ball', cp: 'address' });
+  });
+
   test('a measured row or a spine row needs nothing', () => {
     WITH_BALL.checks.filter((c) => c.status !== 'unknown').forEach((c) => expect(rowNeeds(WITH_BALL, c)).toEqual([]));
   });

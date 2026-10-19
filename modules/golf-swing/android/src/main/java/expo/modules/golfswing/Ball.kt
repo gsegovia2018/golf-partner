@@ -1,7 +1,6 @@
 package expo.modules.golfswing
 
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.max
@@ -174,38 +173,148 @@ internal object Ball {
     return a + (pos - lo) * (b - a)
   }
 
+  // Impact (apiVersion 6, detect.py ball_gone_frame): the ball still sitting where it was, matched
+  // against its own picture. The old rule (the first big frame difference in the ball's footprint
+  // after the top) fired when the shaft swept over the ball, 2-7 frames early.
+  /** Template half size, ball diameters (the ball and a ring of ground). */
+  const val GONE_TPL_D = 0.7
+  /** The match may shift this much: the ball's spot, not its exact pixel. */
+  const val GONE_SEARCH_D = 0.4
+  /** "Still there": NCC at least this ... */
+  const val GONE_MATCH = 0.7
+  /** ... on a patch with at least this share of the template's contrast. */
+  const val GONE_CONTRAST = 0.7
+  /** Gone = absent this long without coming back. */
+  const val GONE_FOR_S = 0.1
+
   /**
-   * detect.py `ball_gone_frame`: the patch is the ball's own footprint (half = max(2,
-   * round(d/2)) work px); noise = the max frame-to-frame patch difference over [quiet]
-   * (floor 0.5 grey levels); ballGone = the first frame after [after] whose difference to
-   * the previous frame exceeds 4 × noise. [strips] maps frame → grey; only consecutive
-   * frames are compared.
+   * The first frame after [after] (the hands' top) from which the ball is absent for
+   * [GONE_FOR_S]; impact = that − 1. [strips] maps frame → working grey (same origin for all);
+   * the ball at ([ballWorkX], [ballWorkY]) with diameter [dWork], work px; [fps] = capture rate.
+   *
+   * Template = the per-pixel median over [tplFrames] (lead arm → top: the club is in the air, the
+   * ball sits alone) of the UPPER half of a ±[GONE_TPL_D] patch around the re-centred ball, centre
+   * row included (the club arrives from below, so the lower half is covered first). Present =
+   * [match] ≥ [GONE_MATCH] within ±[GONE_SEARCH_D]. A brief absence (the hosel in front of the
+   * ball) does not count, nor does a match that comes back. null when the patch leaves the strip
+   * or the ball never goes.
    */
-  fun goneFrame(strips: Map<Int, Gray>, ballWorkX: Double, ballWorkY: Double, dWork: Double, quiet: IntRange, after: Int): Int? {
-    val half = max(2, Math.rint(0.5 * dWork).toInt())
-    val bx = Math.rint(ballWorkX).toInt()
-    val by = Math.rint(ballWorkY).toInt()
-    fun diff(a: Gray, b: Gray): Double? {
-      var s = 0L
-      var n = 0
-      for (y in max(0, by - half)..by + half) for (x in max(0, bx - half)..bx + half) {
-        if (!a.contains(x, y) || !b.contains(x, y)) return null
-        s += abs(a.at(x, y) - b.at(x, y))
-        n++
-      }
-      return if (n == 0) null else s.toDouble() / n
+  fun goneFrame(strips: Map<Int, Gray>, ballWorkX: Double, ballWorkY: Double, dWork: Double, tplFrames: IntRange, after: Int, fps: Double): Int? {
+    val fs = tplFrames.mapNotNull { strips[it] }
+    if (fs.isEmpty()) return null
+    val r = max(2, Math.rint(GONE_TPL_D * dWork).toInt())
+    val s = max(1, Math.rint(GONE_SEARCH_D * dWork).toInt())
+    val h = max(1, Math.rint(dWork).toInt())
+    val x = Math.rint(ballWorkX).toInt()
+    val y = Math.rint(ballWorkY).toInt()
+    val m = 2 * h + r + s + 2
+    if (!fs[0].contains(x - m, y - m) || !fs[0].contains(x + m, y + m)) return null
+    val n = 2 * m + 1
+    // per-pixel median of the static frames over the ±m square (numpy.median: mean of the middle two)
+    val med = DoubleArray(n * n)
+    val col = DoubleArray(fs.size)
+    for (j in 0 until n) for (i in 0 until n) {
+      for (k in fs.indices) col[k] = fs[k].at(x - m + i, y - m + j).toDouble()
+      med[j * n + i] = medianOf(col)
     }
-    val q = quiet.mapNotNull { f -> strips[f]?.let { a -> strips[f - 1]?.let { b -> diff(a, b) } } }
-    if (q.isEmpty()) return null
-    val noise = max(q.max(), 0.5)
-    for (f in strips.keys.sorted()) {
-      if (f <= after) continue
-      val a = strips[f] ?: continue
-      val b = strips[f - 1] ?: continue
-      val d = diff(a, b) ?: continue
-      if (d > 4 * noise) return f
+    val (cx, cy) = recentre(med, n, m, m, dWork)
+    val tw = 2 * r + 1
+    val th = r + 1
+    val tpl = DoubleArray(tw * th) { med[(cy - r + it / tw) * n + (cx - r + it % tw)] }
+    val bx = x - m + cx
+    val by = y - m + cy
+    val need = max(2, Math.rint(GONE_FOR_S * fps).toInt())
+    val later = strips.keys.filter { it > after }.sorted()
+    val present = HashMap<Int, Boolean>()
+    val ww = tw + 2 * s
+    val wh = th + 2 * s
+    val win = DoubleArray(ww * wh)
+    for (f in later) {
+      val g = strips.getValue(f)
+      if (!g.contains(bx - r - s, by - r - s) || !g.contains(bx + r + s, by + s)) continue
+      for (j in 0 until wh) for (i in 0 until ww) win[j * ww + i] = g.at(bx - r - s + i, by - r - s + j).toDouble()
+      present[f] = match(win, ww, wh, tpl, tw, th) >= GONE_MATCH
+    }
+    for (f in later) {
+      if ((0 until need).all { present[f + it] == false }) return f
     }
     return null
+  }
+
+  /**
+   * The ball's centre in a static grey image [med] ([n] × [n]): the brightest 3 × 3 sum within
+   * ±d of ([x], [y]), then the centroid of the pixels within ±0.7 d of it that are at least half
+   * way from the ground (median of ±2 d) to that window's brightest pixel.
+   */
+  fun recentre(med: DoubleArray, n: Int, x: Int, y: Int, d: Double): Pair<Int, Int> {
+    val h = max(1, Math.rint(d).toInt())
+    val r = max(1, Math.rint(0.7 * d).toInt())
+    var best = -1.0
+    var cx = x
+    var cy = y
+    for (yy in y - h..y + h) for (xx in x - h..x + h) {
+      var v = 0.0
+      for (b in -1..1) for (a in -1..1) v += med[(yy + b) * n + xx + a]
+      if (v > best) {
+        best = v
+        cx = xx
+        cy = yy
+      }
+    }
+    var top = Double.NEGATIVE_INFINITY
+    for (yy in cy - r..cy + r) for (xx in cx - r..cx + r) top = max(top, med[yy * n + xx])
+    val ring = DoubleArray((4 * h + 1) * (4 * h + 1))
+    var k = 0
+    for (yy in y - 2 * h..y + 2 * h) for (xx in x - 2 * h..x + 2 * h) ring[k++] = med[yy * n + xx]
+    val lvl = (top + medianOf(ring)) / 2
+    var sx = 0.0
+    var sy = 0.0
+    var cnt = 0
+    for (yy in cy - r..cy + r) for (xx in cx - r..cx + r) {
+      if (med[yy * n + xx] >= lvl) {
+        sx += xx
+        sy += yy
+        cnt++
+      }
+    }
+    return Pair(floor(sx / cnt + 0.5).toInt(), floor(sy / cnt + 0.5).toInt())
+  }
+
+  /**
+   * The best zero-mean NCC of [tpl] ([tw] × [th]) over [win] ([ww] × [wh]) among the offsets whose
+   * patch keeps ≥ [GONE_CONTRAST] of the template's contrast (an empty patch of grass can
+   * correlate, it can't be as contrasted); −2 when no offset qualifies.
+   */
+  fun match(win: DoubleArray, ww: Int, wh: Int, tpl: DoubleArray, tw: Int, th: Int): Double {
+    val tm = tpl.average()
+    var tn = 0.0
+    for (v in tpl) tn += (v - tm) * (v - tm)
+    tn = sqrt(tn)
+    var best = -2.0
+    if (tn == 0.0) return best
+    val np = tw * th
+    for (dy in 0..wh - th) for (dx in 0..ww - tw) {
+      var sum = 0.0
+      for (j in 0 until th) for (i in 0 until tw) sum += win[(dy + j) * ww + dx + i]
+      val qm = sum / np
+      var qn = 0.0
+      var dot = 0.0
+      for (j in 0 until th) for (i in 0 until tw) {
+        val q = win[(dy + j) * ww + dx + i] - qm
+        qn += q * q
+        dot += q * (tpl[j * tw + i] - tm)
+      }
+      qn = sqrt(qn)
+      if (qn == 0.0 || qn < GONE_CONTRAST * tn) continue
+      best = max(best, dot / (qn * tn))
+    }
+    return best
+  }
+
+  private fun medianOf(v: DoubleArray): Double {
+    val s = v.sortedArray()
+    val m = s.size / 2
+    return if (s.size % 2 == 1) s[m] else (s[m - 1] + s[m]) / 2
   }
 
   /** pxPerCm from the camera-nearer (trail) leg at address (plan §4.6, detect.py leg_scale). */

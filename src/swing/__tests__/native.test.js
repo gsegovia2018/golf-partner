@@ -212,3 +212,29 @@ describe('club detector on demand: apiVersion 5, gated on its own', () => {
     expect(load({ mod: null }).native.clubOnDemandSupport()).toBe(false);
   });
 });
+
+describe('scrubber decoder and dense proxies: apiVersion 6, gated on their own', () => {
+  it('apiVersion 6: scrubSupport and releaseFrames are forwarded', async () => {
+    const mod = { ...fakeModule(6), releaseFrames: jest.fn(async () => {}) };
+    const { native } = load({ mod });
+    expect(native.SCRUB_API_VERSION).toBe(6);
+    expect(native.scrubSupport()).toBe(true);
+    expect(native.clubOnDemandSupport()).toBe(true);
+    await native.releaseFrames();
+    expect(mod.releaseFrames).toHaveBeenCalledTimes(1);
+  });
+
+  it('apiVersion 5: everything else stays, nothing reaches a releaseFrames it lacks', async () => {
+    const mod = { ...fakeModule(5), releaseFrames: jest.fn() };
+    const { native } = load({ mod });
+    expect(native.scrubSupport()).toBe(false);
+    expect(native.clubOnDemandSupport()).toBe(true);
+    await native.releaseFrames();
+    expect(mod.releaseFrames).not.toHaveBeenCalled();
+  });
+
+  it('no module (web, or an APK without it): no scrub support', () => {
+    expect(load({ os: 'web' }).native.scrubSupport()).toBe(false);
+    expect(load({ mod: null }).native.scrubSupport()).toBe(false);
+  });
+});

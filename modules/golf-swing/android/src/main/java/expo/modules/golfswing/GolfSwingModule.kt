@@ -8,7 +8,6 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -19,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * refuses to call a binary whose apiVersion is older than the one it was written for, so an
  * OTA bundle never calls a method the installed APK lacks.
  */
-const val API_VERSION = 5 // 2: N2 pass 2 and GolfSwingCamera (capture, N3), one APK; 3: pass-2 scrub proxies (D28); 4: learned club detector in pass 2 (plan 2026-10-16); 5: detectClub / releaseClub, pass2.club.scenery (plan 2026-10-16 on demand)
+const val API_VERSION = 6 // 2: N2 pass 2 and GolfSwingCamera (capture, N3), one APK; 3: pass-2 scrub proxies (D28); 4: learned club detector in pass 2 (plan 2026-10-16); 5: detectClub / releaseClub, pass2.club.scenery (plan 2026-10-16 on demand); 6: ballGoneFrame from the ball's own picture, addressFrame from the clubhead's track (extractCheckpoints captureFps), 240 px proxies, warm extractFrames + releaseFrames
 
 private const val MIN_HEIGHT_CM = 120.0
 private const val MAX_HEIGHT_CM = 230.0
@@ -83,6 +82,8 @@ class ExtractCheckpointsOptions : Record {
   @Field val proxyRange: List<Int>? = null
   /** apiVersion 4: also run the learned club detector on the checkpoint frames (plan 2026-10-16 §5). */
   @Field val clubModel: Boolean = false
+  /** apiVersion 6: capture rate of one container frame step (the address track's time base); null = 240. */
+  @Field val captureFps: Double? = null
 }
 
 class ExtractFramesOptions : Record {
@@ -123,7 +124,10 @@ class DetectClubOptions : Record {
 class GolfSwingModule : Module() {
   // Long-running work gets its own thread: Expo's shared async queue would stall every
   // other module's async calls for the seconds an analysis takes.
-  private val executor = Executors.newSingleThreadExecutor { Thread(it, "golf-swing").apply { isDaemon = true } }
+  private val executor = ScheduledThreadPoolExecutor(1) { Thread(it, "golf-swing").apply { isDaemon = true } }.apply {
+    removeOnCancelPolicy = true
+    executeExistingDelayedTasksAfterShutdownPolicy = false
+  }
   private val busy = AtomicBoolean(false)
   /** One token per running or queued job: cancelAnalysis stops those, never a later call. */
   private val jobs = ConcurrentHashMap.newKeySet<AtomicBoolean>()
@@ -155,6 +159,16 @@ class GolfSwingModule : Module() {
   }
 
   private val context get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
+
+  // extractFrames' warm decoder (apiVersion 6): lives on [executor] only (every extractFrames, the
+  // idle close, releaseFrames), so it never races a call. Heavier jobs close it first: they need the codecs.
+  private val frameSessions = FrameSessions(
+    { context },
+    IdleScheduler { delayMs, task ->
+      val f = executor.schedule(task, delayMs, TimeUnit.MILLISECONDS)
+      ({ f.cancel(false) })
+    },
+  )
 
   // detectClub (plan 2026-10-16 on demand §3.1): its own thread, so a stills prefetch on [executor]
   // never delays a proposal, and cancelAnalysis never reaches it (no cancellation: a call is ≤ 1 s
@@ -216,6 +230,7 @@ class GolfSwingModule : Module() {
           heightCm = (o.heightCm?.takeIf { it.isFinite() } ?: Ball.DEFAULT_HEIGHT_CM).coerceIn(MIN_HEIGHT_CM, MAX_HEIGHT_CM),
           captureFps = o.captureFps?.takeIf { it.isFinite() && it > 0 },
         )
+        frameSessions.release()
         PoseAnalyzer(ctx, opts, cancelled) { stage, done, total ->
           sendEvent("progress", mapOf("stage" to stage, "done" to done, "total" to total))
         }.run(path)
@@ -244,7 +259,9 @@ class GolfSwingModule : Module() {
           proxyDir = options.proxyDir,
           proxyRange = options.proxyRange?.takeIf { it.size == 2 }?.let { it[0]..it[1] },
           clubModel = options.clubModel,
+          captureFps = options.captureFps?.takeIf { it.isFinite() && it > 0 },
         )
+        frameSessions.release()
         Checkpoints(ctx, req, cancelled).run(path)
       })
     }
@@ -257,12 +274,19 @@ class GolfSwingModule : Module() {
       }
     }
 
-    /** Edit-marks scrubber: JPEGs of arbitrary frames, `<outDir>/<frame>.jpg` → { [frame]: uri }. */
+    /**
+     * Edit-marks scrubber: JPEGs of arbitrary frames, `<outDir>/<frame>.jpg` → { [frame]: uri }. The
+     * decoder stays warm a few seconds (apiVersion 6), so the next request near this one decodes on.
+     */
     AsyncFunction("extractFrames") { path: String, options: ExtractFramesOptions, promise: Promise ->
-      val ctx = context
       job(promise, "ERR_STILLS", { cancelled ->
-        Stills.extract(ctx, path, options.frames, options.outDir, cancelled).mapKeys { it.key.toString() }
+        frameSessions.extract(path, options.frames, options.outDir, cancelled).mapKeys { it.key.toString() }
       })
+    }
+
+    /** apiVersion 6: closes extractFrames' warm decoder now (the canvas unmounts); the next call reopens it. */
+    AsyncFunction("releaseFrames") { promise: Promise ->
+      job(promise, "ERR_STILLS", { frameSessions.release(); null })
     }
 
     /**
@@ -300,7 +324,13 @@ class GolfSwingModule : Module() {
 
     OnDestroy {
       jobs.forEach { it.set(true) }
-      executor.shutdownNow()
+      // queued work is dropped; the warm decoder closes on its own thread once the running job ends
+      executor.queue.clear()
+      try {
+        executor.execute { frameSessions.release() }
+      } catch (_: RejectedExecutionException) {
+      }
+      executor.shutdown()
       // queued detectClub calls finish first, then the warm detector closes on its own thread
       try {
         clubExecutor.execute { clubWarm.release() }

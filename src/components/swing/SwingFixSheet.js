@@ -2,11 +2,11 @@ import React, { useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, useWindowDimensions,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import BottomSheet from '../BottomSheet';
 import IconButton from '../ui/IconButton';
-import PressableScale from '../ui/PressableScale';
+import { PrimaryButton, SecondaryButton } from '../ui/Buttons';
 import SwingOverlay from './SwingOverlay';
+import { Overline } from './swingStyles';
 import { focusTone } from './swingTone';
 import { useTheme } from '../../theme/ThemeContext';
 import { SWING_STRINGS } from '../../swing/strings';
@@ -52,7 +52,7 @@ export default function SwingFixSheet({
       {fix ? (
         <ScrollView style={{ maxHeight: winH * 0.88 }} contentContainerStyle={s.content} showsVerticalScrollIndicator={false} testID="fix-sheet">
           <View style={s.top}>
-            <Text style={[s.overline, s.flex]}>{F.sheetOverline(index + 1, total, cpName)}</Text>
+            <Overline style={s.flex}>{F.sheetOverline(index + 1, total, cpName)}</Overline>
             <IconButton icon="x" accessibilityLabel={F.close} onPress={onClose} />
           </View>
           <Text style={s.headline} accessibilityRole="header">{fix.copy.headline}</Text>
@@ -74,11 +74,11 @@ export default function SwingFixSheet({
           </View>
           <Text style={s.saw}>{F.saw(check.text)}</Text>
           <View style={s.block}>
-            <Text style={s.overline}>{F.whyTitle}</Text>
+            <Overline>{F.whyTitle}</Overline>
             <Text style={s.body}>{fix.copy.cost}</Text>
           </View>
           <View style={s.block}>
-            <Text style={s.overline}>{F.howTitle}</Text>
+            <Overline>{F.howTitle}</Overline>
             {fix.copy.steps.map((t, i) => (
               <View key={t} style={s.step} accessible accessibilityLabel={F.stepLabel(i + 1, t)}>
                 <View style={s.stepNum}><Text style={s.stepNumText}>{i + 1}</Text></View>
@@ -95,18 +95,14 @@ export default function SwingFixSheet({
             </View>
           ) : null}
           <View style={s.btnRow}>
-            <PressableScale style={[s.btn, s.btnSecondary, s.flex]} onPress={() => onSeeOnSwing?.(check)} accessibilityRole="button" accessibilityLabel={F.seeOnSwing}>
-              <Text style={s.btnSecondaryText}>{F.seeOnSwing}</Text>
-            </PressableScale>
-            <PressableScale
-              style={[s.btn, s.btnPrimary, s.flex]}
+            <SecondaryButton style={[s.btn, s.flex]} label={F.seeOnSwing} onPress={() => onSeeOnSwing?.(check)} accessibilityLabel={F.seeOnSwing} />
+            <PrimaryButton
+              style={[s.btn, s.flex]}
+              label={last ? F.done : F.next}
+              iconRight={last ? undefined : 'chevron-right'}
               onPress={last ? onClose : () => onIndex(index + 1)}
-              accessibilityRole="button"
               accessibilityLabel={last ? F.done : F.next}
-            >
-              <Text style={s.btnPrimaryText}>{last ? F.done : F.next}</Text>
-              {last ? null : <Feather name="chevron-right" size={18} color={theme.text.inverse} />}
-            </PressableScale>
+            />
           </View>
         </ScrollView>
       ) : null}
@@ -119,26 +115,21 @@ const makeStyles = (theme) => StyleSheet.create({
   content: { paddingHorizontal: 20, paddingBottom: 8, gap: 12 },
   flex: { flex: 1 },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  overline: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: theme.text.secondary },
   headline: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, lineHeight: 28, color: theme.text.primary },
   still: { borderRadius: theme.radius.lg, overflow: 'hidden', alignItems: 'center', backgroundColor: '#0a0d10' },
-  saw: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12.5, lineHeight: 18, color: theme.text.secondary },
+  saw: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, lineHeight: 18, color: theme.text.secondary },
   block: { gap: 6 },
-  body: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 13.5, lineHeight: 20, color: theme.text.primary },
+  body: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, lineHeight: 20, color: theme.text.primary },
   step: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   stepNum: { width: 24, height: 24, borderRadius: 12, backgroundColor: theme.accent.primary, alignItems: 'center', justifyContent: 'center' },
-  stepNumText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12.5, color: theme.text.inverse },
+  stepNumText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13, color: theme.text.inverse },
   drill: {
     backgroundColor: theme.bg.card, borderRadius: theme.radius.lg, padding: 14, gap: 4,
     borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
   },
   drillTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.text.primary },
   goal: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: theme.accent.primary },
-  progress: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11.5, lineHeight: 16, color: theme.text.secondary, fontStyle: 'italic' },
+  progress: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, lineHeight: 16, color: theme.text.secondary },
   btnRow: { flexDirection: 'row', gap: 10 },
-  btn: { minHeight: 48, borderRadius: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  btnPrimary: { backgroundColor: theme.accent.primary },
-  btnPrimaryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.text.inverse },
-  btnSecondary: { backgroundColor: theme.bg.secondary, borderWidth: 1, borderColor: theme.border.default },
-  btnSecondaryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.text.primary },
+  btn: { paddingHorizontal: 16 },
 });

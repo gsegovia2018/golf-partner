@@ -223,7 +223,9 @@ export function runChecks(input) {
   const landing = (k) => {
     const c = C[k];
     if (!c) return { reason: 'nodata', text: why('noMark', { what: cpName(k) }) };
-    if (!c.head || !ball) return { reason: c.unplaced ? 'unplaced' : 'hidden', text: headMissing(c, cpName(k)) };
+    if (!c.head) return { reason: c.unplaced ? 'unplaced' : 'hidden', text: headMissing(c, cpName(k)) };
+    // no ball is not a hidden clubhead: say what is missing, so the results screen asks for the ball
+    if (!ball) return { reason: 'nodata', text: why('noAddressPlane') };
     const raw = extendToY(c.head, c.hands, ball.y);
     if (raw === null) return { reason: 'nodata', text: why('shaftHorizontal') };
     const toes = toesX();

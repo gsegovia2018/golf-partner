@@ -173,6 +173,21 @@ internal class YuvFrame(val codedW: Int, val codedH: Int, val rotation: Int, val
     }
     return Gray(r.x0, r.y0, r.w, r.h, out)
   }
+
+  /**
+   * Grey of every [step]-th pixel of [r] (frame px), like numpy's `g[y0:y1:step, x0:x1:step]`:
+   * `Gray(0, 0, …)` in sample units ([ClubheadTrack]'s address strips).
+   */
+  fun graySampled(r: Rect, step: Int): Gray {
+    val nx = (r.w + step - 1) / step
+    val ny = (r.h + step - 1) / step
+    val out = ByteArray(nx * ny)
+    var k = 0
+    for (j in 0 until ny) for (i in 0 until nx) {
+      out[k++] = gray((r.x0 + i * step).coerceAtMost(dispW - 1), (r.y0 + j * step).coerceAtMost(dispH - 1)).toByte()
+    }
+    return Gray(0, 0, nx, ny, out)
+  }
 }
 
 /**

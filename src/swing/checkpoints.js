@@ -3,8 +3,9 @@
 // text; cueFor(key, handedness) mirrors left and right for left-handed golfers.
 //
 // The ten definitions follow the P-system (P1-P10; P8 added by D22). `stop` is the marking
-// canvas's always-visible stop line (D26): FIRST or LAST frame, the condition in a few words,
-// what to watch, and the before / after captions of the fine strip; derived from `stopWhen`.
+// canvas's always-visible stop line (D26): FIRST or LAST frame, the moment as one sentence (`line`,
+// the cue panel), the condition in a few words, what to watch, and the before / after words of the
+// cue's rail; derived from `stopWhen`.
 // The three internal frames (lateBackswing, preImpact, postImpact) keep a short cue of their own
 // (and no stop line) for marks saved before checks v2, which stopped reading them.
 //
@@ -24,10 +25,7 @@ function def(key, p, stopKind) {
       enumerable: true,
       get: () => ({
         kind: stopKind,
-        short: cueText(key, 'stop.short'),
-        watch: cueText(key, 'stop.watch'),
-        before: cueText(key, 'stop.before'),
-        after: cueText(key, 'stop.after'),
+        line: cueText(key, 'stop.line'),
       }),
     });
   }
@@ -69,7 +67,7 @@ export function cueFor(key, handedness = 'right') {
   if (!d) return null;
   if (handedness !== 'left') return { ...d };
   const s = d.stop;
-  const stop = s ? { ...s, short: swapLR(s.short), watch: swapLR(s.watch) } : undefined;
+  const stop = s ? { ...s, line: swapLR(s.line) } : undefined;
   return {
     ...d, what: swapLR(d.what), stopWhen: swapLR(d.stopWhen), markTips: swapLR(d.markTips), stop,
   };

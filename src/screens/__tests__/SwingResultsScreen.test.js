@@ -51,6 +51,8 @@ jest.mock('../../store/swingStore', () => ({
   getSwingProfile: jest.fn(() => ({ practiceOpen: false })),
   setPracticeOpen: jest.fn(() => Promise.resolve(true)),
   markSwingFailed: jest.fn(() => Promise.resolve()),
+  hasCustomName: jest.requireActual('../../store/swingStore').hasCustomName,
+  defaultSwingName: jest.requireActual('../../store/swingStore').defaultSwingName,
   deleteSwing: jest.fn(() => Promise.resolve()),
   swingVideoUri: jest.fn(() => 'file:///doc/swings/s1/video.mp4'),
 }));
@@ -121,7 +123,8 @@ const cpName = (k) => SWING_STRINGS.checkpoint[k];
 const faultName = (a) => SWING_STRINGS.fault[a.main.fault];
 const MAIN_AT = MARKED.main.position;
 const textOf = (n) => [n.props.children].flat(Infinity).map((c) => (c && typeof c === 'object' ? textOf(c) : c ?? '')).join('');
-const HEADLINE = `${T.workFirst}: ${cpName(MAIN_AT)} · ${faultName(MARKED)}`; // checks v2 summary, owner swing
+const HEADLINE = faultName(MARKED); // the verdict: the fault's name is the headline (polish), owner swing
+const verdictLabel = (u) => textOf(u.getByTestId('results-verdict-label'));
 const ready = (u) => u.findByTestId('results-summary');
 const goStep = (u, k) => fireEvent.press(u.getByTestId(`summary-step-${k}`));
 const posBar = (u) => u.getByTestId('position-bar').props.accessibilityLabel;
@@ -153,10 +156,12 @@ describe('SwingResultsScreen: the summary and the stepper (checks v2, design D)'
     const u = setup();
     await ready(u);
     expect(textOf(u.getByTestId('results-headline'))).toBe(HEADLINE);
+    expect(verdictLabel(u)).toBe(T.workFirst);
     expect(posBar(u)).toBe(T.posOf(cpName(MAIN_AT), STEPS.indexOf(MAIN_AT) + 1, 8));
     expect(u.getByTestId(`summary-step-${MAIN_AT}`).props.accessibilityState).toMatchObject({ selected: true });
     expect(MARKED.main.startsAt).toBeTruthy();
-    expect(textOf(u.getByTestId('results-starts-at'))).toBe(`${T.startsAt('')}${cpName(MARKED.main.startsAt)} ›`);
+    expect(textOf(u.getByTestId('results-starts-at'))).toBe(` · ${T.startsAtShort(cpName(MARKED.main.startsAt))} ›`);
+    expect(u.getByTestId('results-starts-at').props.accessibilityLabel).toBe(T.startsAt(cpName(MARKED.main.startsAt)));
     expect(u.getByTestId('results-fix-peek')).toBeTruthy(); // the fix of the row on screen
     expect(u.queryByTestId('place-box')).toBeNull(); // the Impact clubhead is the owner's: nothing to place
   });
@@ -167,7 +172,7 @@ describe('SwingResultsScreen: the summary and the stepper (checks v2, design D)'
     STEPS.forEach((k) => expect(u.getByTestId(`summary-step-${k}`)).toBeTruthy());
     expect(u.getByTestId(`summary-step-${MAIN_AT}`).props.accessibilityLabel).toBe(`${T.stepA11y(cpName(MAIN_AT), SWING_STRINGS.statusWord.red)}, ${T.tagFirst}`);
     expect(u.getByTestId(`summary-step-${MARKED.main.startsAt}`).props.accessibilityLabel).toMatch(new RegExp(`${T.tagStarts}$`));
-    ['Address', 'Takeaway', 'Halfway', 'Top', 'Down', 'Impact', 'Through', 'Extras'].forEach((n) => expect(u.getAllByText(n).length).toBeGreaterThan(0));
+    ['Address', 'Takeaway', 'Halfway', 'Top', 'Down', 'Impact', 'Finish', 'Extras'].forEach((n) => expect(u.getAllByText(n).length).toBeGreaterThan(0));
     expect(u.queryByLabelText(/^Transition|^Shaft through/)).toBeNull(); // P5 and P8 are gone
   });
 
@@ -190,18 +195,16 @@ describe('SwingResultsScreen: the summary and the stepper (checks v2, design D)'
     expect(posBar(u)).toMatch(new RegExp(`^${cpName(MARKED.main.startsAt)},`));
   });
 
-  test('‹ and › step to the neighbours and stop at both ends', async () => {
+  test('swipes step to the neighbours and stop at both ends (the strip\'s tabs are the non-gesture path)', async () => {
     const u = setup({ analysis: ALLGREEN }); // opens on Address
     await ready(u);
     expect(posBar(u)).toBe(T.posOf(cpName('address'), 1, 8));
-    expect(u.getByTestId('position-prev').props.accessibilityState).toMatchObject({ disabled: true });
-    fireEvent.press(u.getByTestId('position-next'));
-    expect(posBar(u)).toBe(T.posOf(cpName('takeaway'), 2, 8));
-    fireEvent.press(u.getByTestId('position-prev'));
+    await swipe(90); // previous: nothing before Address
     expect(posBar(u)).toBe(T.posOf(cpName('address'), 1, 8));
-    for (let i = 0; i < 7; i += 1) fireEvent.press(u.getByTestId('position-next'));
-    expect(posBar(u)).toBe(T.posOf(T.extras, 8, 8));
-    expect(u.getByTestId('position-next').props.accessibilityState).toMatchObject({ disabled: true });
+    for (let i = 0; i < 8; i += 1) await swipe(-90);
+    expect(posBar(u)).toBe(T.posOf(T.extras, 8, 8)); // and nothing after Extras
+    goStep(u, 'top');
+    expect(posBar(u)).toBe(T.posOf(cpName('top'), 4, 8));
   });
 
   test('a swipe on the still steps too: left is next, right is previous, a short one does nothing', async () => {
@@ -307,7 +310,7 @@ describe('SwingResultsScreen: placing the clubhead on the still (design D)', () 
     expect(posBar(u)).toBe(T.posOf(cpName('shaftDown'), 5, 8));
     expect(u.getByTestId('place-box')).toBeTruthy();
     expect(u.getByText(new RegExp(`^${T.tapWhere}`))).toBeTruthy();
-    expect(textOf(u.getByTestId('results-headline'))).toMatch(new RegExp(`^${T.mainSoFar}: `));
+    expect(verdictLabel(u)).toBe(T.mainSoFar);
     expect(u.getByLabelText(T.placeToFinish(cpName('shaftDown')))).toBeTruthy(); // the summary's place line
     expect(u.getByTestId('summary-step-shaftDown').props.accessibilityLabel).toBe(T.stepA11y(cpName('shaftDown'), T.stateNoHead));
     expect(u.queryByTestId('results-nudge')).toBeNull(); // the mark goes on the saved frame
@@ -348,7 +351,7 @@ describe('SwingResultsScreen: placing the clubhead on the still (design D)', () 
     expect(await u.findByText(T.placed(cpName('shaftDown')))).toBeTruthy();
     expect(posBar(u)).toBe(T.posOf(cpName('shaftDown'), 5, 8)); // the same screen
     expect(u.queryByTestId('place-box')).toBeNull();
-    expect(textOf(u.getByTestId('results-headline'))).toMatch(new RegExp(`^${T.workFirst}: `)); // no longer "so far"
+    expect(verdictLabel(u)).toBe(T.workFirst); // no longer "so far"
     expect(u.queryByTestId('results-place-line')).toBeNull();
   });
 
@@ -473,19 +476,16 @@ describe('SwingResultsScreen: phone findings (2026-10)', () => {
   const NOBALL = analyze(fixtureNative({ ballGoneFrame: lab.expected.ballGoneFrame }), base); // no ball: no address plane
   const doneMarks = { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: [] } };
 
-  test('"starts" is a one-line badge centred on its chip, and Spanish says ORIGEN, not Inicio', async () => {
+  test('the main fault and its start are named in words only in the verdict and the tab labels, never as chip badges', async () => {
     const u = setup();
     await ready(u);
-    const badge = u.getAllByText(T.markStarts)[0];
-    expect(badge.props.numberOfLines).toBe(1);
-    expect(T.markStarts).toBe('starts');
+    expect(u.queryByText(/^(1st|starts|origen)$/i)).toBeNull();
     u.unmount();
     await act(async () => { await setLanguagePref('es'); });
     try {
       const es = setup();
       await ready(es);
-      expect(es.getAllByText('origen')[0].props.numberOfLines).toBe(1);
-      expect(es.queryByText('inicio')).toBeNull();
+      expect(es.queryByText('origen')).toBeNull();
       expect(within(es.getByTestId('summary-step-takeaway')).getByText('Inicio')).toBeTruthy(); // the chip name keeps it
     } finally {
       await act(async () => { await setLanguagePref('en'); });
@@ -592,19 +592,20 @@ describe('SwingResultsScreen: Spanish', () => {
   test('the summary, the position and the place line speak Spanish', async () => {
     const u = setup({ analysis: UNMARKED });
     await ready(u);
-    expect(textOf(u.getByTestId('results-headline'))).toMatch(/^Lo principal que corregir, por ahora: /);
+    expect(verdictLabel(u)).toBe('Lo principal que corregir, por ahora');
     expect(posBar(u)).toBe('Bajada, posición 5 de 8');
     expect(u.getByLabelText('Coloca la cabeza del palo en la posición de bajada para completar la lectura')).toBeTruthy();
     expect(u.getByText('Toca donde está la cabeza del palo · fotograma', { exact: false })).toBeTruthy();
     expect(u.getByTestId('summary-step-shaftDown').props.accessibilityLabel).toBe('Bajada, cabeza del palo sin colocar');
-    ['Prep.', 'Inicio', 'Mitad', 'Top', 'Bajada', 'Impacto', 'Seguim.', 'Extras'].forEach((n) => expect(u.getAllByText(n).length).toBeGreaterThan(0));
+    ['Prep.', 'Inicio', 'Mitad', 'Top', 'Bajada', 'Impacto', 'Acabado', 'Extras'].forEach((n) => expect(u.getAllByText(n).length).toBeGreaterThan(0));
   });
 
   test('a marked swing says "Lo primero" and where it likely starts', async () => {
     const u = setup();
     await ready(u);
-    expect(textOf(u.getByTestId('results-headline'))).toMatch(/^Lo primero: /);
-    expect(textOf(u.getByTestId('results-starts-at'))).toMatch(/^Probablemente empieza en: /);
+    expect(verdictLabel(u)).toBe('Lo primero');
+    expect(textOf(u.getByTestId('results-starts-at'))).toMatch(/^ · empieza en /);
+    expect(u.getByTestId('results-starts-at').props.accessibilityLabel).toMatch(/^Probablemente empieza en: /);
   });
 });
 
@@ -650,23 +651,13 @@ describe('SwingResultsScreen: coaching', () => {
     await waitFor(() => expect(u.queryByTestId('fix-sheet')).toBeNull());
   });
 
-  test('D24: the practice card under the drills opens, remembers, and slots the main drill into Block', async () => {
-    const { findByTestId, getByLabelText, queryByText, getByText } = setup();
+  test('D24: the practice plan row opens the 60-minute plan with the main drill in Block', async () => {
+    const { findByTestId, getByTestId, queryByText, getByText } = setup();
     await findByTestId('results-summary');
     expect(queryByText(T.practice.blocks[1].body)).toBeNull();
-    fireEvent.press(getByLabelText(T.practice.show));
-    expect(store.setPracticeOpen).toHaveBeenCalledWith(true);
+    fireEvent.press(getByTestId('results-practise-plan'));
     T.practice.blocks.forEach((b) => expect(getByText(b.name)).toBeTruthy());
-    expect(getByText(T.practice.drillIn(drillsForMain(MARKED.main)[0].title))).toBeTruthy(); // the main fault's first drill
-    fireEvent.press(getByLabelText(T.practice.hide));
-    expect(store.setPracticeOpen).toHaveBeenLastCalledWith(false);
-  });
-
-  test('D24: the practice card opens as it was left', async () => {
-    store.getSwingProfile.mockReturnValueOnce({ practiceOpen: true });
-    const { findByTestId, getByText } = setup();
-    await findByTestId('results-summary');
-    expect(getByText(T.practice.blocks[3].body)).toBeTruthy();
+    expect(within(getByTestId('results-practice')).getByText(T.practice.drillIn(drillsForMain(MARKED.main)[0].title))).toBeTruthy(); // the main fault's first drill
   });
 
   test('shows the drills for the main fault and expands the rest', async () => {
@@ -676,6 +667,8 @@ describe('SwingResultsScreen: coaching', () => {
     };
     const { findByTestId, getByText, queryByText, getByLabelText } = setup({ analysis: ee });
     await findByTestId('results-summary');
+    expect(getByText(T.fixes.drill('The chair'))).toBeTruthy(); // the row names the first drill
+    fireEvent.press(getByLabelText(new RegExp(`^${T.fixes.drill('The chair')}`)));
     expect(getByText(T.practiseTitle)).toBeTruthy();
     expect(getByText('The chair')).toBeTruthy();
     expect(queryByText('Club behind the heels')).toBeNull();
@@ -694,11 +687,15 @@ describe('SwingResultsScreen: a stored swing', () => {
     expect(getByText(/\(-2\)/)).toBeTruthy();
   });
 
-  test('approximate clips say so in the banner, and flag cm values', async () => {
-    const approx = { ...MARKED, approximate: true, checks: MARKED.checks.map((c) => (c.unit === 'cm' ? { ...c, approximate: true } : c)) };
+  test('approximate clips say so in one notice that opens to the reasons, and flag cm values', async () => {
+    const approx = { ...MARKED, approximate: true, scale: { ...MARKED.scale, approx: true }, checks: MARKED.checks.map((c) => (c.unit === 'cm' ? { ...c, approximate: true } : c)) };
     const u = setup({ analysis: approx });
     await ready(u);
+    expect(u.getByText(T.approxShort(`${T.approxFps}, ${T.approxHeight}`))).toBeTruthy();
+    expect(u.queryByText(T.approxBanner)).toBeNull();
+    fireEvent.press(u.getByTestId('results-approx'));
     expect(u.getByText(T.approxBanner)).toBeTruthy();
+    expect(u.getByText(T.approxHeightBanner)).toBeTruthy();
     goStep(u, 'takeaway');
     expect(u.getAllByText(/approx\./).length).toBeGreaterThan(0);
   });
@@ -846,7 +843,7 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
     expect(getByText(T.stepOf(2, 3))).toBeTruthy();
     // up next: the seven positions the marking pass asks for (checks v2)
     expect(getByText(T.upNextTitle(7))).toBeTruthy();
-    ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(getByText(SWING_STRINGS.mark.short[k])).toBeTruthy());
+    ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(getByText(SWING_STRINGS.checkpoint[k])).toBeTruthy());
     expect(getByText(SWING_STRINGS.privacy)).toBeTruthy();
 
     await act(async () => { finish({ analysis: UNMARKED, pass2: 'done' }); });

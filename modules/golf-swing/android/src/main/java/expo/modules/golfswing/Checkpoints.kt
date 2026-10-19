@@ -27,7 +27,11 @@ import kotlin.math.roundToInt
 /** One checkpoint of the pass-2 request; [hands] normalised (null = unknown). */
 internal class CheckpointSpec(val key: String, val frame: Int, val hands: Pt?, val neighbours: Int)
 
-/** The window for the image-based address (detect.py clubhead_onset), container frames. */
+/**
+ * The window for the image-based address, container frames (phases.js addressSearch). apiVersion 6
+ * tracks the clubhead from [ClubheadTrack.PRE_S] before [run]'s start to the lead arm (the start of
+ * [quiet]); [latest] and [minRun] were the onset rule's and are no longer read.
+ */
 internal class AddressSearchSpec(val run: IntRange, val latest: Int, val quiet: IntRange, val minRun: Int)
 
 /** [ball] = (x, y) normalised; [expectedShaftPx] display px (105 cm × px/cm, scale.js). */
@@ -47,19 +51,25 @@ internal class Pass2Request(
   val proxyRange: IntRange? = null,
   /** The learned club detector (plan 2026-10-16) on the checkpoint frames; false = today's output, unchanged. */
   val clubModel: Boolean = false,
+  /** Capture rate of one container frame step (the address track's time base); null = 240. */
+  val captureFps: Double? = null,
 )
 
 /**
  * Pass 2 (plan §3 extractCheckpoints, §4.1, D16): one sequential decode of the checkpoint
  * span that writes the stills (checkpoint ± neighbours, JPEG encodes on a small pool so they
- * overlap the decode), measures the ball patch for the image-based address (P1), and runs
- * the radial shaft search at address and impact only, seeded with hands → ball. Every other
- * checkpoint gets a `prior` entry: v1 does no shaft tracking (D16). A second short decode
- * only when the address moved onto frames whose stills the first one didn't write.
+ * overlap the decode), keeps grey strips around the ball for the image-based address (P1,
+ * [ClubheadTrack]), and runs the radial shaft search at address and impact only, seeded with
+ * hands → ball. Every other checkpoint gets a `prior` entry: v1 does no shaft tracking (D16). A
+ * second short decode only when the address moved onto frames whose stills the first one didn't
+ * write.
  *
  * With [Pass2Request.clubModel] (plan 2026-10-16 §4.2) the learned detector also runs on the
  * final checkpoint frames, after the decode and while the JPEG pool finishes: its head (or
- * shaft-box corner) wins over the edge search and the prior at every checkpoint where it finds one.
+ * shaft-box corner) wins over the edge search and the prior at every checkpoint where it finds
+ * one. It also runs on [ClubheadTrack.SAMPLES] frames of the address window, which only say where
+ * the clubhead rests (the address track's template); without it the track starts from
+ * [ClubheadTrack.fallbackHead].
  */
 internal class Checkpoints(
   private val context: Context,
@@ -117,21 +127,25 @@ internal class Checkpoints(
     fun span(c: CheckpointSpec) = (c.frame - c.neighbours..c.frame + c.neighbours).filter { it in 0 until n }
     val stills = cps.flatMap { span(it) }.toSortedSet()
     val search = if (addr != null) req.addressSearch else null
-    val onsetRect = search?.let { ClubheadOnset.patchRect(ball!!.x / decim.toDouble(), ball.y / decim.toDouble(), pxPerCm!! / decim, frameW, frameH) }
-    val onsetFrames = search?.let { s -> ((s.run.first - 1)..s.run.last).toSet() + ((s.quiet.first - 1)..s.quiet.last) }
-      ?.filter { it in 0 until n }?.toSet() ?: emptySet()
-    // Memory: only ONE address grey is ever kept (the requested frame, the fallback). The
-    // onset frame is only known after the quiet window, so its grey comes from the short
-    // follow-up decode below instead of keeping a patch for every frame of the still run
-    // (~200 MB for 1080p 240 fps with a 2 s hold). What the main pass retains: the ball
-    // patches (±1.5 ball diameters: ~40 × 40 px at 1080p, < 2 KB/frame, ~1 MB per clip),
-    // two shaft greys (≤ (2 × 1.1 × expected shaft)² work px, ~250 KB at 1080p) and at most
-    // JPEG_IN_FLIGHT + 2 full frames (~3 MB each at 1080p) waiting for the encoders.
+    val fps = req.captureFps?.takeIf { it.isFinite() && it > 0 } ?: 240.0
+    // apiVersion 6 address (ClubheadTrack): frame-px strips around the ball from PRE_S before the
+    // hands' still run to the lead arm, and the detector on SAMPLES frames of that window
+    val ballF = ball?.let { Pt(it.x / decim, it.y / decim) }
+    val pxCmF = (pxPerCm ?: 0.0) / decim
+    val addrRange = search?.let { ClubheadTrack.start(it.run.first, fps)..it.quiet.first.coerceAtMost(n - 1) }?.takeIf { it.first < it.last }
+    val strip = addrRange?.let { ClubheadTrack.stripRect(ballF!!.x.toDouble(), ballF.y.toDouble(), pxCmF, frameW, frameH) }
+    val samples = if (addrRange != null && req.clubModel) ClubheadTrack.samples(addrRange.first, addrRange.last).toSet() else emptySet()
+    // Memory: only ONE address grey is ever kept (the requested frame, the fallback); the moved
+    // address's grey comes from the short follow-up decode below. What the main pass retains: the
+    // address strips (±6 ball diameters sampled to ~8 px per diameter: ≤ 100 × 100 px, ≤ 10 KB a
+    // frame, ≤ 6 MB for the ~2.5 s window at 240 fps), two shaft greys (≤ (2 × 1.1 × expected
+    // shaft)² work px, ~250 KB at 1080p), the detector inputs (1.2 MB each: checkpoints + SAMPLES)
+    // and at most JPEG_IN_FLIGHT + 2 full frames (~3 MB each at 1080p) waiting for the encoders.
     val addrRoi = addr?.let { roi(it.hands!!, exp, ballD) }
     val impRoi = imp?.let { roi(it.hands!!, exp, ballD) }
 
     // filled from both decoder threads (decodeSplit)
-    val patches = ConcurrentHashMap<Int, Gray>()
+    val strips = ConcurrentHashMap<Int, Gray>()
     val addrGrays = ConcurrentHashMap<Int, Gray>()
     val impactShaft = AtomicReference<ShaftFound?>()
     val shaftNs = AtomicLong()
@@ -146,7 +160,7 @@ internal class Checkpoints(
     val proxyNs = AtomicLong()
     // The club detector's inputs: each checkpoint frame stretched to 640 × 640 RGB on the decoder
     // thread (1.2 MB each, so the frame can be a reused scratch one), inferred after the decode.
-    val clubFrames = if (req.clubModel) cps.map { it.frame }.filter { it in 0 until n }.toSet() else emptySet()
+    val clubFrames = if (req.clubModel) (cps.map { it.frame } + samples).filter { it in 0 until n }.toSet() else emptySet()
     val clubInputs = ConcurrentHashMap<Int, ByteArray>()
     val clubFailures = AtomicInteger()
     fun clubInput(f: Int, y: YuvFrame) {
@@ -206,16 +220,18 @@ internal class Checkpoints(
     var onsetMs = 0L
     var waitMs = 0L
     var onset: Int? = null
+    var headSource: String? = null
     var addressShaft: ShaftFound? = null
     var clubMs = 0L
     var clubDets: Map<Int, List<ClubBox>>? = null
     var clubScenery: List<ClubBox> = emptyList()
     var clubDelegate = "cpu"
+    var detector: ClubDetector? = null
     try {
-      val wanted = stills + onsetFrames + listOfNotNull(addr?.frame, imp?.frame) + proxyFrames + clubFrames
+      val wanted = stills + (addrRange?.toSet() ?: emptySet()) + listOfNotNull(addr?.frame, imp?.frame) + proxyFrames + clubFrames
       var t = SystemClock.elapsedRealtime()
       decodeSplit(path, wanted, keep = { it in stills }) { f, y ->
-        if (f in onsetFrames) patches[f] = y.grayStrip(onsetRect!!, 1)
+        if (addrRange != null && f in addrRange) strips[f] = y.graySampled(strip!!.first, strip.second)
         if (addr != null && f == addr.frame) addrGrays[f] = y.grayStrip(addrRoi!!, step)
         if (imp != null && f == imp.frame) {
           val s = System.nanoTime()
@@ -228,8 +244,61 @@ internal class Checkpoints(
       }
       mainMs = SystemClock.elapsedRealtime() - t
 
+      // The detector, opened once for the address samples, the checkpoints and the moved address. A
+      // failure to open (no model, no runtime) leaves today's proposals and the fallback head.
+      val dets = HashMap<Int, List<ClubBox>>()
+      fun infer(frames: Collection<Int>) {
+        val d = detector ?: return
+        val t1 = SystemClock.elapsedRealtime()
+        val sx = track.dispW / ClubDecode.SIZE.toDouble()
+        val sy = track.dispH / ClubDecode.SIZE.toDouble()
+        for (f in frames.sorted()) {
+          if (cancelled()) throw CancelledException()
+          val px = clubInputs.remove(f) ?: continue
+          try {
+            dets[f] = d.detect(px).map { it.scaled(sx, sy) }
+          } catch (e: Exception) {
+            clubFailures.incrementAndGet()
+            Log.w(PoseAnalyzer.TAG, "club detector failed at frame $f", e)
+          }
+        }
+        clubMs += SystemClock.elapsedRealtime() - t1
+      }
+      if (req.clubModel) {
+        t = SystemClock.elapsedRealtime()
+        try {
+          detector = ClubDetector.open(context).also { clubDelegate = it.delegate }
+        } catch (e: Throwable) {
+          // also LinkageError: a binary without the runtime's native library
+          clubFailures.incrementAndGet()
+          Log.w(PoseAnalyzer.TAG, "club detector unavailable, keeping today's proposals", e)
+        }
+        clubMs += SystemClock.elapsedRealtime() - t
+        // the checkpoints the address cannot move, and the address window's samples
+        infer(cps.filter { it.key != "address" }.map { it.frame } + samples)
+      }
+
       t = SystemClock.elapsedRealtime()
-      onset = search?.let { ClubheadOnset.detect(patches, it.run, it.latest, it.quiet, it.minRun) }?.takeIf { it in 0 until n }
+      if (addrRange != null) {
+        // the resting head: the earliest sample with a head at the ball, the scenery the checkpoints
+        // already voted out removed; else the fallback position at the window's first frame
+        val places = cps.filter { it.key != "address" && it.frame in dets }.associate { it.frame to ClubRules.place(it.key) }
+        val scenery = ClubRules.scenery(ClubRules.splitStatic(dets.filterKeys { it in places }, places).second.values.flatten())
+        val heads = samples.associateWith { f ->
+          dets[f]?.let { ClubRules.dropScenery(it, scenery) }?.filter { it.cls == ClubDecode.HEAD }?.maxByOrNull { it.score }
+            ?.let { Triple(it.cx / decim, it.cy / decim, it.score) }
+        }
+        val bx = ballF!!.x.toDouble()
+        val by = ballF.y.toDouble()
+        val rest = ClubheadTrack.restingHead(heads, bx, by, pxCmF)
+        val (ref, hx, hy) = rest ?: ClubheadTrack.fallbackHead(bx, by, addr!!.hands!!.x.toDouble() / decim, pxCmF)
+          .let { Triple(addrRange.first, it.first, it.second) }
+        headSource = if (rest != null) "model" else "fallback"
+        val (rect, stepS) = strip!!
+        val headTrack = ClubheadTrack.track(strips, Pair(rect.x0, rect.y0), stepS, ref, hx, hy, bx, by, pxCmF)
+        onset = ClubheadTrack.address(headTrack, ref, addrRange.last, fps, clipStart = addrRange.first == 0)?.takeIf { it in 0 until n }
+        strips.clear()
+      }
       onsetMs = SystemClock.elapsedRealtime() - t
       if (addr != null) {
         val at = onset ?: addr.frame
@@ -239,7 +308,7 @@ internal class Checkpoints(
           t = SystemClock.elapsedRealtime()
           decodeSpan(path, missing + at, keep = { it in missing }, handle = { f2, y ->
             if (f2 == at) addrGrays[f2] = y.grayStrip(addrRoi!!, step)
-            if (f2 == at && req.clubModel) clubInput(f2, y)
+            if (f2 == at && req.clubModel && !clubInputs.containsKey(f2) && !dets.containsKey(f2)) clubInput(f2, y)
             if (f2 in missing) encode(f2, y)
           })
           addrMs = SystemClock.elapsedRealtime() - t
@@ -250,15 +319,17 @@ internal class Checkpoints(
           shaftNs.addAndGet(System.nanoTime() - s)
         }
       }
-      if (req.clubModel) {
-        t = SystemClock.elapsedRealtime()
-        club(cps, onset, clubInputs, clubFailures) { clubDelegate = it }?.let { (kept, scenery) ->
-          clubDets = kept
-          clubScenery = scenery
-        }
-        clubInputs.clear()
-        clubMs = SystemClock.elapsedRealtime() - t
+      if (detector != null) {
+        // the final address (moved or not), then the static vote over the final checkpoint places
+        val finalAddress = cps.firstOrNull { it.key == "address" }?.let { if (onset != null) onset!! else it.frame }
+        infer(listOfNotNull(finalAddress))
+        val places = LinkedHashMap<Int, String>()
+        for (c in cps) places.putIfAbsent(if (c.key == "address" && onset != null) onset!! else c.frame, ClubRules.place(c.key))
+        val (kept, dropped) = ClubRules.splitStatic(dets.filterKeys { it in places }, places)
+        clubDets = kept
+        clubScenery = ClubRules.scenery(dropped.values.flatten())
       }
+      clubInputs.clear()
       t = SystemClock.elapsedRealtime()
       for (j in synchronized(jobs) { jobs.toList() }) {
         try {
@@ -269,6 +340,7 @@ internal class Checkpoints(
       }
       waitMs = SystemClock.elapsedRealtime() - t
     } finally {
+      detector?.close()
       pool.shutdownNow()
       // a cancel (the swing being deleted) must not leave a write landing after the folder is gone
       pool.awaitTermination(2, TimeUnit.SECONDS)
@@ -313,7 +385,7 @@ internal class Checkpoints(
     )
     Log.i(
       PoseAnalyzer.TAG,
-      "pass2 address=${addr?.frame}->${addressFrame} addrShaft=$addressShaft impact=${imp?.frame} impShaft=${impactShaft.get()} timings=$timings",
+      "pass2 address=${addr?.frame}->${addressFrame} head=$headSource addrShaft=$addressShaft impact=${imp?.frame} impShaft=${impactShaft.get()} timings=$timings",
     )
     val proxies = proxyDir?.let {
       mapOf(
@@ -336,47 +408,6 @@ internal class Checkpoints(
         "scenery" to ClubRules.boxJson(clubScenery),
       )
     })
-  }
-
-  /**
-   * The detector on the final checkpoint frames (the moved address included), sequentially on
-   * this thread: (frame → display-px boxes after the static drop, the scenery it dropped
-   * clustered by [ClubRules.scenery]), or null when it could not run (no model, no runtime, an
-   * interpreter error at load). A frame that fails is left out. Both are counted in [failures]
-   * and never fail pass 2: those frames keep today's entries.
-   */
-  private fun club(
-    cps: List<CheckpointSpec>, onset: Int?, inputs: Map<Int, ByteArray>, failures: AtomicInteger, onDelegate: (String) -> Unit,
-  ): Pair<Map<Int, List<ClubBox>>, List<ClubBox>>? {
-    val places = LinkedHashMap<Int, String>()
-    for (c in cps) places.putIfAbsent(if (c.key == "address" && onset != null) onset else c.frame, ClubRules.place(c.key))
-    val sx = track.dispW / ClubDecode.SIZE.toDouble()
-    val sy = track.dispH / ClubDecode.SIZE.toDouble()
-    val dets = LinkedHashMap<Int, List<ClubBox>>()
-    try {
-      ClubDetector.open(context).use { d ->
-        onDelegate(d.delegate)
-        for (f in places.keys.sorted()) {
-          if (cancelled()) throw CancelledException()
-          val px = inputs[f] ?: continue
-          try {
-            dets[f] = d.detect(px).map { it.scaled(sx, sy) }
-          } catch (e: Exception) {
-            failures.incrementAndGet()
-            Log.w(PoseAnalyzer.TAG, "club detector failed at frame $f", e)
-          }
-        }
-      }
-    } catch (e: CancelledException) {
-      throw e
-    } catch (e: Throwable) {
-      // also LinkageError: a binary without the runtime's native library
-      failures.incrementAndGet()
-      Log.w(PoseAnalyzer.TAG, "club detector unavailable, keeping today's proposals", e)
-      return null
-    }
-    val (kept, dropped) = ClubRules.splitStatic(dets, places)
-    return Pair(kept, ClubRules.scenery(dropped.values.flatten()))
   }
 
   /**

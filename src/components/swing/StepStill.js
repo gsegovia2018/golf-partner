@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Feather } from '@expo/vector-icons';
 import PressableScale from '../ui/PressableScale';
 import SwingOverlay, { fitRect } from './SwingOverlay';
 import { hud } from '../../theme/tokens';
@@ -18,10 +19,13 @@ const TARGET_R = 20;
  * neighbouring position (one Pan; ‹ › stay the non-gesture path), and, in place mode, a tap puts the
  * clubhead there (the dashed dot the detector was unsure about is a target ring: tap it, or "Confirm the
  * dot", to accept it). Two taps from the summary's place line, one when the screen opens in place mode.
- * It draws on a photograph, so the palette is the fixed HUD one.
+ * It draws on a photograph, so the palette is the fixed HUD one. The dark frame spans `frameWidth`
+ * (the column the strip and the cards share) with the picture centred in it; the only control on
+ * the picture is the round play button.
  */
 export default function StepStill({
   overlay, placing = false, proposal = null, toast = null, stepLabel, frame, onSwipe, onPlacePoint, onConfirmProposal, onOpenEdit,
+  frameWidth = null, onPlay = null,
 }) {
   const { width, height, video } = overlay;
   const rect = useMemo(() => fitRect(width, height, video?.width, video?.height), [width, height, video]);
@@ -50,7 +54,7 @@ export default function StepStill({
   }, [placing, rect.w, rect.h, proposal, onSwipe, onPlacePoint, onConfirmProposal]);
 
   return (
-    <View style={s.wrap}>
+    <View style={[s.wrap, frameWidth != null && { width: frameWidth }]}>
       <SwingOverlay {...overlay}>
         <GestureDetector gesture={gesture}>
           <View style={StyleSheet.absoluteFill} testID="step-touch-layer" accessible={placing} accessibilityLabel={placing ? R.tapWhereA11y(stepLabel, frame) : undefined} />
@@ -61,6 +65,11 @@ export default function StepStill({
           </Svg>
         ) : null}
       </SwingOverlay>
+      {onPlay && !placing ? (
+        <PressableScale style={s.play} onPress={onPlay} accessibilityRole="button" accessibilityLabel={R.play} testID="results-play">
+          <Feather name="play" size={17} color={hud.text} style={s.playIcon} />
+        </PressableScale>
+      ) : null}
       {toast ? <View style={s.toast} pointerEvents="box-none" testID="step-toast">{toast}</View> : null}
       {placing ? (
         <View style={s.place} pointerEvents="box-none" testID="place-box">
@@ -85,8 +94,13 @@ export default function StepStill({
 }
 
 const s = StyleSheet.create({
-  wrap: { borderRadius: 14, overflow: 'hidden', alignItems: 'center', backgroundColor: '#0a0d10' },
+  wrap: { alignSelf: 'center', borderRadius: 14, overflow: 'hidden', alignItems: 'center', backgroundColor: '#0a0d10' },
   toast: { position: 'absolute', left: 8, right: 8, top: 8 },
+  play: {
+    position: 'absolute', right: 10, bottom: 10, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: hud.scrimStrong, borderWidth: 1, borderColor: hud.line,
+  },
+  playIcon: { marginLeft: 2 }, // the triangle's optical centre
   place: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 10, gap: 6 },
   box: {
     flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: hud.scrimStrong, borderWidth: 1, borderColor: hud.line, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, minHeight: 44,

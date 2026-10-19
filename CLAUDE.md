@@ -43,8 +43,12 @@ Core features:
 
 ### Shipping to Android
 
-- `GOLF_ANDROID_BUILD_ARCHS=arm64-v8a npx eas-cli update --branch preview -m "…"`
-  — push JS/asset changes over the air to installed preview builds. No
+- `GOLF_ANDROID_BUILD_ARCHS=arm64-v8a npx eas-cli update --branch preview --environment preview -m "…"`
+  — push JS/asset changes over the air to installed preview builds.
+  `--environment preview` is NOT optional either: the Supabase URL/key live in
+  the EAS `preview` environment, and without the flag the bundle ships without
+  them and the app crashes on start ("supabaseUrl is required"). Recovery:
+  `npx eas-cli update:republish --group <last good group> --destination-branch preview`. No
   rebuild, no reinstall. The env var is NOT optional: the installed APK comes
   from the `preview-arm64` profile, whose env makes `app.config.js` add the
   `expo-build-properties` plugin, and that plugin is part of the runtime
@@ -172,15 +176,18 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   decode, MediaPipe pose in `PoseAnalyzer.kt`, pass-2 `extractCheckpoints` in
   `Checkpoints.kt`, Camera2 high-speed capture in `camera/`); pure JS analysis
   in `src/swing/`; screens `Swing*Screen.js`. Plan: `docs/superpowers/plans/2026-10-11-swing-analyzer.md`.
-- Swing `apiVersion` gate: native `API_VERSION` (`GolfSwingModule.kt`, currently 5)
+- Swing `apiVersion` gate: native `API_VERSION` (`GolfSwingModule.kt`, currently 6)
   vs JS `REQUIRED_API_VERSION` (`src/swing/native.js`, currently 2): a binary below
   REQUIRED shows "Update the app" instead of crashing. Bump native on every contract
   change; raise REQUIRED only when the bundle cannot work without the new methods.
   Additive features get their own gate instead: `CAPTURE_API_VERSION` 2 (recording)
   and `PROXY_API_VERSION` 3 (pass-2 scrub proxies, D28), and `CLUB_MODEL_API_VERSION`
   4 (learned club detector, `clubModelSupport()`) and `CLUB_ONDEMAND_API_VERSION` 5
-  (`detectClub` on a chosen frame, `clubOnDemandSupport()`), so older binaries still
-  analyse and mark.
+  (`detectClub` on a chosen frame, `clubOnDemandSupport()`), and `SCRUB_API_VERSION` 6 (warm
+  frame decoder, `releaseFrames()`, dense 240 px proxies every 2nd frame, `scrubSupport()`), so
+  older binaries still analyse and mark. Address/Impact from the image (6): `Clubhead.kt` tracks
+  the resting clubhead, `Ball.goneFrame` matches the ball's own picture; the lab twin is
+  `tools/swing-lab/detect.py`, scored by `eval_address_impact.py` on exported swings.
 - Club model (plan `2026-10-16-swing-club-detector.md`): the `club_yolox_tiny_v1.tflite`
   asset and the `litert` dependency are native (APK, `preview-arm64`). Pass 2 runs it on
   the 13 checkpoint frames, GPU delegate with CPU fallback (`timings.clubMs ≤ 2000`;
@@ -193,13 +200,20 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   never set for `eas build`/`eas update` (see "Shipping to Android").
 - Swing videos and analysis never leave the phone; the only planned exit is
   the explicit training-data export (plan §7.3).
-- Swing checks v2 screens (spec/plan `2026-10-18-swing-checks-v2`): Results is "summary + stepper"
-  (`SwingSummary`: seven position dots + Extras, "Work on first" / "Likely starts at"; one position
-  at a time under it: `PositionBar`, `StepStill` with swipe and place-on-the-still). Which step opens,
-  statuses and rows are pure in `src/swing/resultsSteps.js`; `placeHead.js` saves a placed clubhead with
-  the canvas's own model (marks + analysis, Undo writes them back). The marking canvas has seven
-  position chips (P-number, dot, short name), the count in the panel header, an "Unsure" status for a
-  detection under `CHECK_MIN_CONF`, and `route.params.active: 'head'` for the tap-to-place deep link.
+- Swing checks v2 screens (spec/plan `2026-10-18-swing-checks-v2`, polished per the 2026-10-18 UI review):
+  Results is "verdict + strip + one position" (`SwingSummary`: "Work on first" over the fault's name,
+  "Downswing · starts at Top ›", then seven position dots + Extras, the main fault's dot ringed in red;
+  `StepStill` carries the position pill, play at ⅛ and frame ‹ › on glass, with swipe and
+  place-on-the-still). Which step opens, statuses and rows are pure in `src/swing/resultsSteps.js`;
+  `placeHead.js` saves a placed clubhead with the canvas's own model (marks + analysis, Undo writes them
+  back). The marking canvas has seven position chips (dot, short name: the dots are the progress), a
+  plain cue with a before | after rail at step 1 (`stop.line`, `stop.before`/`stop.after`), dock tiles with
+  status badges, one confirm (the primary), an "Unsure" status for a detection under `CHECK_MIN_CONF`,
+  and `route.params.active: 'head'` for the tap-to-place deep link.
+- Swing UI rules (`components/swing/swingStyles.js`): two names per position (`swing.checkpoint`,
+  `swing.position.short`), sizes only from `swingType` (26/20/15/13/11/10, nothing under 10),
+  Playfair only for the one thing to read first, `glass` only over video/stills; shared
+  `PrimaryButton`/`SecondaryButton`. The privacy sentence lives on capture and in My swing's About sheet.
 - Some screens are large monoliths (`ScorecardScreen`) — prefer extracting
   components/hooks over growing them further.
 - Game Stats (`StatsScreen`) is a thin shell: tabs Summary · Rounds · Players ·

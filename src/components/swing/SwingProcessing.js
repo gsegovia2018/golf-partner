@@ -108,7 +108,7 @@ export default function SwingProcessing({ progress }) {
           {MARKED_KEYS.map((k) => (
             <View key={k} style={s.position}>
               <Text style={s.posP}>{P_OF[k]}</Text>
-              <Text style={s.posName}>{SWING_STRINGS.mark.short[k]}</Text>
+              <Text style={s.posName}>{SWING_STRINGS.checkpoint[k]}</Text>
             </View>
           ))}
         </View>
@@ -163,13 +163,13 @@ const makeStyles = (theme) => StyleSheet.create({
   stats: { flexDirection: 'row', gap: 8 },
   stat: { flex: 1 },
   statValue: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 17, color: theme.text.primary, fontVariant: ['tabular-nums'] },
-  statLabel: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, color: theme.text.secondary },
+  statLabel: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.text.secondary },
 
   steps: { flexDirection: 'row', gap: 6 },
   step: { flex: 1, gap: 6 },
   stepBar: { height: 3, borderRadius: 2, backgroundColor: theme.bg.secondary, overflow: 'hidden' },
   stepFill: { height: 3, backgroundColor: theme.accent.primary },
-  stepText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, lineHeight: 15, color: theme.text.primary },
+  stepText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, lineHeight: 15, color: theme.text.primary },
   stepTodo: { color: theme.text.secondary },
 
   next: {
@@ -178,7 +178,7 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   overline: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: theme.text.secondary },
   nextTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 16, color: theme.text.primary },
-  nextBody: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12.5, lineHeight: 18, color: theme.text.secondary },
+  nextBody: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, lineHeight: 18, color: theme.text.secondary },
   positions: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, marginTop: 6 },
   position: {
     width: '47%', flexGrow: 1, flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingVertical: 7,

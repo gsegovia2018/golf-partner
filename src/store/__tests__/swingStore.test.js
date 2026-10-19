@@ -66,7 +66,7 @@ const { emptyMarks } = require('../../swing/labels');
 
 const seedVideo = (uri = 'file:///picked/clip.mp4') => fs.__files.set(uri, 'VIDEO-BYTES');
 const analysisFixture = {
-  schema: 'swing-analysis/3',
+  schema: 'swing-analysis/4',
   handedness: 'right',
   club: 'iron',
   fps: { capture: 240, effective: 240, factor: 8, approximate: false },

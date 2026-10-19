@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Image, Text, StyleSheet } from 'react-native';
+import { Image as CachedImage } from 'expo-image';
 import Svg, {
   G, Line, Circle, Rect, Polyline, Text as SvgText,
 } from 'react-native-svg';
@@ -57,6 +58,7 @@ function PlaneLabel({ p, X, Y, w, text, color }) {
 export default function SwingOverlay({
   width, height, video, uri = null, pose = null, club = null, ball = null, reference = null,
   highlight = [], keyLines = null, keyTone = HIGHLIGHT, showPlanes = true, edit = false, focus = false, legend = true, tone = DEFAULT_TONE, label, style, children, resizeMethod,
+  cached = false,
 }) {
   const r = fitRect(width, height, video?.width, video?.height);
   const X = (x) => x * r.w;
@@ -113,7 +115,11 @@ export default function SwingOverlay({
   return (
     <View style={[styles.box, { width, height }, style]}>
       <View style={[styles.frame, { left: r.x, top: r.y, width: r.w, height: r.h }]}>
-        {uri ? (
+        {uri && cached ? (
+          // `cached` (the marking canvas while finding the frame): expo-image keeps the previous picture
+          // until the next one is decoded (no blank between frames) and keeps decoded stills in memory
+          <CachedImage source={{ uri }} style={{ width: r.w, height: r.h }} contentFit="fill" cachePolicy="memory-disk" transition={null} accessibilityLabel={label} accessibilityIgnoresInvertColors />
+        ) : uri ? (
           // the marking canvas passes resizeMethod "scale": decoded once at full size and scaled by the
           // GPU, so its loupe (DragLoupe, same uri) reuses this bitmap instead of decoding it again
           <Image source={{ uri }} style={{ width: r.w, height: r.h }} resizeMode="stretch" resizeMethod={resizeMethod} accessibilityLabel={label} accessibilityIgnoresInvertColors />
