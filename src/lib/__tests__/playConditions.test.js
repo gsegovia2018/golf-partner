@@ -1,6 +1,6 @@
 import {
   estimateTempC, tempFactor, altitudeFactor, conditionFactor, playsLike, describeConditions,
-  windComponents, windFactor, windText, compassPoint,
+  windComponents, windFactor, windText,
 } from '../playConditions';
 import { setLanguagePref } from '../../i18n';
 
@@ -125,17 +125,12 @@ describe('windFactor', () => {
   });
 });
 
-describe('windText / compassPoint', () => {
+describe('windText', () => {
   it('describes the wind along the shot', () => {
     expect(windText(windComponents(18, 280, 315))).toBe('18 km/h · into, from the left');
     expect(windText(windComponents(18, 0, 0))).toBe('18 km/h · into');
     expect(windText(windComponents(18, 0, 0), { row: true })).toBe('Wind 18 km/h, into');
     expect(windText(windComponents(2, 0, 0))).toBe('calm');
     expect(windText(null)).toBeNull();
-  });
-  it('names eight compass points', () => {
-    expect(compassPoint(280)).toBe('W');
-    expect(compassPoint(350)).toBe('N');
-    expect(compassPoint(135)).toBe('SE');
   });
 });

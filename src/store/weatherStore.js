@@ -115,13 +115,6 @@ export function prefetchWeather(courseName) {
   return run;
 }
 
-// Load a course's stored forecast without touching the network (screens that
-// list courses, like Your bag, show what is cached but never fetch for all).
-export function loadCachedWeather(courseName) {
-  const entry = courseName ? findCourseGeometry(courseName) : null;
-  return entry ? readCache(entry.key) : Promise.resolve();
-}
-
 // Fire-and-forget prefetch for every course of a game (or one round), only
 // while the player uses playing conditions (nothing else reads it yet).
 export function prefetchWeatherForRounds(rounds) {

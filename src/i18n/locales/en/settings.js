@@ -22,6 +22,8 @@ export default {
   "settings.shotMeasuring.hint": "Floating button on the scorecard to measure your shots",
   "settings.showLastShot.label": "Shot recommendation",
   "settings.showLastShot.hint": "Card on the hole map with the distance from your last shot to the green and a club tip.",
+  "settings.conditions.label": "Playing conditions",
+  "settings.conditions.hint": "Live wind, temperature and altitude adjust plays-like distances and club tips.",
   "settings.keepAwake.label": "Keep screen awake",
   "settings.keepAwake.hint": "Stops the screen sleeping while the scorecard is open.",
   "settings.autoAdvance.label": "Auto-advance hole",

@@ -38,6 +38,20 @@ describe('guessClub', () => {
   });
 });
 
+describe('playConditionsFor altitude', () => {
+  const saved = base({ courseAltitudes: { X: 900 } });
+  it('uses the forecast ground elevation over an old saved one', () => {
+    mockWeather = { ...calmAir(0, 0), elevationM: 635 };
+    expect(playConditionsFor({ courseName: 'X', settings: saved }).altitudeM).toBe(635);
+  });
+  it('falls back to the saved elevation, then sea level, with no forecast', () => {
+    expect(playConditionsFor({ courseName: 'X', settings: saved }).altitudeM).toBe(900);
+    const est = playConditionsFor({ courseName: 'X', settings: base() });
+    expect(est.altitudeM).toBe(0);
+    expect(est.source).toBe('estimate');
+  });
+});
+
 describe('shotBearing', () => {
   it('points from the tee (or a given spot) to the green centre', () => {
     setCourseGeometry([{

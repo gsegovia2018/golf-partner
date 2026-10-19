@@ -106,10 +106,3 @@ export function windText(wind, { row = false } = {}) {
   if (!wind.side) return t(prefix, { kmh, kind });
   return t(`${prefix}Side`, { kmh, kind, side: t(wind.side === 'left' ? 'shared.conditions.fromLeft' : 'shared.conditions.fromRight') });
 }
-
-// Eight-point compass name for where the wind blows from ("W", "NO"…).
-export function compassPoint(deg) {
-  if (!Number.isFinite(deg)) return '';
-  const names = t('shared.conditions.compass').split(',');
-  return names[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
-}

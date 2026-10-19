@@ -15,15 +15,17 @@ import { weatherAt } from './weatherStore';
 const OFF = { enabled: false, altitudeM: 0, factor: 1, plays: (d) => d, breakdown: null, describe: null, wind: null, source: null };
 
 // Playing conditions now for a course and a shot direction (`bearing`,
-// compass degrees; null for no wind), from `settings` (conditionsEnabled,
-// courseAltitudes) and the cached forecast, falling back to the month
-// estimate. `plays(m)` turns real metres into plays-like metres. `source`:
+// compass degrees; null for no wind), from `settings` (conditionsEnabled)
+// and the cached forecast, falling back to the month estimate. `plays(m)` turns real metres into plays-like metres. `source`:
 // 'live' (fresh forecast) | 'forecast' (older, offline) | 'estimate'.
 export function playConditionsFor({ courseName, bearing = null, settings, now = Date.now() }) {
   if (!settings?.conditionsEnabled) return OFF;
   const w = weatherAt(courseName, now);
-  // A set elevation wins; otherwise the forecast's ground elevation.
-  const altitudeM = (courseName && settings.courseAltitudes?.[courseName]) || w?.elevationM || 0;
+  // The forecast's ground elevation; an elevation saved by older builds
+  // (no UI sets it any more) only when there is no forecast; else sea level.
+  const altitudeM = Number.isFinite(w?.elevationM)
+    ? w.elevationM
+    : (courseName && settings.courseAltitudes?.[courseName]) || 0;
   const month = new Date(now).getMonth();
   const tempC = w?.tempC;
   const factor = conditionFactor({ month, altitudeM, tempC });

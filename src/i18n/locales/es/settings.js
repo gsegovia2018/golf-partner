@@ -22,6 +22,8 @@ export default {
   "settings.shotMeasuring.hint": "Botón flotante en la tarjeta para medir tus golpes",
   "settings.showLastShot.label": "Recomendación de golpe",
   "settings.showLastShot.hint": "Tarjeta en el mapa del hoyo con la distancia desde tu último golpe al green y un consejo de palo.",
+  "settings.conditions.label": "Condiciones de juego",
+  "settings.conditions.hint": "El viento, la temperatura y la altitud reales ajustan la distancia \"juega como\" y los consejos de palo.",
   "settings.keepAwake.label": "Mantener la pantalla encendida",
   "settings.keepAwake.hint": "Evita que la pantalla se apague mientras la tarjeta está abierta.",
   "settings.autoAdvance.label": "Avance automático de hoyo",

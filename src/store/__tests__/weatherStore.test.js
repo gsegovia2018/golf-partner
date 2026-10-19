@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   prefetchWeather, prefetchWeatherForRounds, weatherAt, parseForecast, coursePoint,
-  getWeatherVersion, _resetForTests, FRESH_MS, loadCachedWeather,
+  getWeatherVersion, _resetForTests, FRESH_MS,
 } from '../weatherStore';
 import { setCourseGeometry } from '../../lib/geo';
 import { isOnline } from '../../lib/connectivity';
@@ -127,11 +127,3 @@ describe('prefetchWeatherForRounds', () => {
   });
 });
 
-describe('loadCachedWeather', () => {
-  it('reads the stored forecast and never fetches', async () => {
-    AsyncStorage.getItem.mockResolvedValue(JSON.stringify(parseForecast(API_JSON, NOW)));
-    await loadCachedWeather('Test Course');
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(weatherAt('Test Course')).toMatchObject({ tempC: 11, fresh: true });
-  });
-});

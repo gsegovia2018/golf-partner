@@ -38,6 +38,13 @@ function renderScreen() {
 beforeEach(() => mockUpdate.mockClear());
 
 describe('BagScreen clubs', () => {
+  test('is clubs only: playing conditions moved to Settings', async () => {
+    const { queryByText } = renderScreen();
+    await flush();
+    expect(queryByText(/playing conditions/i)).toBeNull();
+    expect(queryByText(/Open-Meteo/)).toBeNull();
+  });
+
   test('Edit clubs lists every catalog club exactly once', async () => {
     const { getByTestId, getAllByText } = renderScreen();
     await flush();
