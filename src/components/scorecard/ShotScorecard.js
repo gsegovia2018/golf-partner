@@ -29,7 +29,7 @@ const SCORE_H = 24;
 const GLYPH = { fairway: '↑', super: '★', left: '←', right: '→', short: '↓' };
 const GOOD_DRIVE = new Set(['fairway', 'super']);
 
-function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID, grand, grandStyle, labelStyle }) {
+function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID, labelStyle }) {
   return (
     <View style={[s.row, style]}>
       {typeof label === 'string' ? <Text style={[s.label, labelStyle]} numberOfLines={1}>{label}</Text> : label}
@@ -46,11 +46,6 @@ function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint,
       <View style={[s.total, { height }, totalStyle]}>
         <Text style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={totalTestID}>{total ?? '–'}</Text>
       </View>
-      {grand !== undefined && (
-        <View style={[s.total, { height }, grandStyle]}>
-          <Text style={s.totalText} numberOfLines={1} adjustsFontSizeToFit>{grand ?? '–'}</Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -202,11 +197,10 @@ function scoreCells({ row, nine, mode, card, s, theme, t, idp }) {
 }
 
 // Optional, for the Home Live card: `currentHole` rings that hole's column,
-// `grandTotal` adds a round-total column after Out/In, `labelOf(row)` and
-// `labelWidth` replace the three-letter row label, `pointsRow` adds a points
-// row under a solo ledger's strokes.
+// `labelOf(row)` and `labelWidth` replace the three-letter row label,
+// `pointsRow` adds a points row under a solo ledger's strokes.
 export default function ShotScorecard({
-  card, mode = 'strokes', currentHole = null, grandTotal = false, labelOf = null, labelWidth = null, pointsRow = false,
+  card, mode = 'strokes', currentHole = null, labelOf = null, labelWidth = null, pointsRow = false,
 }) {
   const { theme } = useTheme();
   const t = useT();
@@ -224,7 +218,6 @@ export default function ShotScorecard({
   };
   const wide = labelWidth ? { width: labelWidth } : null;
   const ring = (number) => (number === currentHole ? s.current : null);
-  const grandHead = grandTotal ? t('stats.game.ledger.tot') : undefined;
 
   let totalLine = null;
   if (soloRow) {
@@ -247,8 +240,6 @@ export default function ShotScorecard({
             cells={head.holes.map((h) => ({ key: h.number, style: ring(h.number), child: <Text style={[s.dim, h.number === currentHole && s.currentText]}>{h.number}</Text> }))}
             total={t(`stats.game.ledger.${head.key}`)}
             totalStyle={s.totalHead}
-            grand={grandHead}
-            grandStyle={s.totalHead}
             labelStyle={wide}
           />
           <Row
@@ -256,7 +247,6 @@ export default function ShotScorecard({
             label={t('stats.game.ledger.par')}
             cells={head.holes.map((h) => ({ key: h.number, child: <Text style={s.dim}>{h.par}</Text> }))}
             total={head.par}
-            grand={grandTotal ? (card.par ?? card.nines.reduce((sum, n) => sum + n.par, 0)) : undefined}
             labelStyle={wide}
           />
           {card.rows.map((row) => {
@@ -268,10 +258,7 @@ export default function ShotScorecard({
               : labelOf
                 ? <Text style={[s.label, s.name, s.nameText, wide, row.isMe && s.meLabel]} numberOfLines={1} testID={`card-name-${row.id}`}>{labelOf(row)}</Text>
                 : <NameButton row={row} open={open} onToggle={onToggle} s={s} theme={theme} t={t} />;
-            const grand = grandTotal ? (() => {
-              const v = isPoints ? row.total.points : row.total.strokes;
-              return v == null ? null : formatNumber(v);
-            })() : undefined;
+
             return (
               <View key={row.id} style={!card.solo && s.player}>
                 <Row
@@ -281,7 +268,6 @@ export default function ShotScorecard({
                   cells={scoreCells({ row, nine, mode, card, s, theme, t, idp }).map((c) => (c.key === currentHole ? { ...c, style: [c.style, s.currentCell] } : c))}
                   total={totalOf(nine)}
                   totalTestID={`${idp}-total-${head.key}`}
-                  grand={grand}
                   style={row.isMe && labelOf ? s.meRow : null}
                   labelStyle={wide}
                 />

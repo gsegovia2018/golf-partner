@@ -1,20 +1,23 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
-import { useT, formatOrdinal } from '../i18n';
+import { useT } from '../i18n';
 import { useCourseGeometry } from '../hooks/useCourseGeometry';
 import { useShotPlayConditions } from '../hooks/usePlayConditions';
 import { holeFeatures, haversineMeters } from '../lib/geo';
-import { liveScorecard } from '../store/liveScorecard';
+import { liveScorecard, liveCardKind } from '../store/liveScorecard';
 import ShotScorecard from './scorecard/ShotScorecard';
-import { ModeToggle, shortName } from './gamestats/ui';
+import { shortName } from './gamestats/ui';
 
-// Design-step variants of the Live hero, all built on the read-only
-// scorecard (ShotScorecard + scorecardModel), picked with a dev-only switch
-// on Home: A the group card on the current nine, B the same grid in points
-// with places, C my full card plus the group's totals. Production keeps
-// HomePhase's LiveHero until one is chosen.
+// Home's Live card, built on the read-only scorecard (ShotScorecard +
+// scorecardModel): a group round gets the points card (the nine being played,
+// place and running total per row, the gap to the leader), a solo round my
+// whole card. Both ring the current hole, show the next hole in one line and
+// open the scorecard from the button or a tap anywhere on the card.
+export default function LiveScorecard(props) {
+  return liveCardKind(props.entry) === 'solo' ? <LiveCardSolo {...props} /> : <LiveCardGroup {...props} />;
+}
 
 // Tee-to-green metres for a mapped hole, and the plays-like length.
 function useNextHole(courseName, number) {
@@ -79,25 +82,9 @@ function gapLine(t, gap, nameOf) {
   return t('home.live.behind', { gap: gap.gap, name: nameOf(gap.playerId) });
 }
 
-// A — the group card on the nine being played, strokes or points.
-export function LiveCardA({ entry, model, userId, onOpen }) {
-  const { s } = useLiveStyles();
-  const t = useT();
-  const data = useData(entry, userId);
-  const nameOf = useNames(entry, t);
-  const [mode, setMode] = useState('strokes');
-  return (
-    <Shell model={model} data={data} onOpen={onOpen} s={s} t={t} testID="home-live-a"
-      right={<ModeToggle value={mode} onChange={setMode} testID="live-a-mode" />}
-    >
-      <ShotScorecard card={data.nineCard} mode={mode} currentHole={data.next?.number ?? null} grandTotal labelOf={nameOf} labelWidth={62} />
-    </Shell>
-  );
-}
-
-// B — the same grid in Stableford points, with place and running total in
-// the row header and one line on the gap to the leader.
-export function LiveCardB({ entry, model, userId, onOpen }) {
+// Group round: the nine being played in Stableford points, with place and
+// running total in the row header and one line on the gap to the leader.
+function LiveCardGroup({ entry, model, userId, onOpen }) {
   const { s } = useLiveStyles();
   const t = useT();
   const data = useData(entry, userId);
@@ -111,7 +98,7 @@ export function LiveCardB({ entry, model, userId, onOpen }) {
   const rowOf = (id) => data.card.rows.find((r) => r.id === id);
   const line = gapLine(t, data.gap, (id) => (rowOf(id) ? nameOf(rowOf(id)) : '?'));
   return (
-    <Shell model={model} data={data} onOpen={onOpen} s={s} t={t} testID="home-live-b"
+    <Shell model={model} data={data} onOpen={onOpen} s={s} t={t} testID="home-live-group"
       right={<Text style={s.thru}>{t('home.phase.live.thru', { count: model.thru })}</Text>}
     >
       <ShotScorecard card={data.nineCard} mode="points" currentHole={data.next?.number ?? null} labelOf={label} labelWidth={92} />
@@ -120,48 +107,17 @@ export function LiveCardB({ entry, model, userId, onOpen }) {
   );
 }
 
-// C — my whole card (both nines, strokes, points, handicap dots, putts) and
-// the group as a totals strip.
-export function LiveCardC({ entry, model, userId, onOpen }) {
-  const { theme, s } = useLiveStyles();
+// Solo round: my whole card (both nines, strokes, points, handicap dots, putts).
+function LiveCardSolo({ entry, model, userId, onOpen }) {
+  const { s } = useLiveStyles();
   const t = useT();
   const data = useData(entry, userId);
-  const nameOf = useNames(entry, t);
   return (
-    <Shell model={model} data={data} onOpen={onOpen} s={s} t={t} testID="home-live-c"
+    <Shell model={model} data={data} onOpen={onOpen} s={s} t={t} testID="home-live-solo"
       right={<Text style={s.thru}>{t('home.live.ptsThru', { points: model.myPoints ?? 0, count: model.thru })}</Text>}
     >
       {data.myCard ? <ShotScorecard card={data.myCard} mode="strokes" currentHole={data.next?.number ?? null} pointsRow /> : null}
-      {data.standings.length > 1 ? (
-        <View style={s.strip} accessibilityRole="list">
-          {data.standings.map((x) => {
-            const row = data.card.rows.find((r) => r.id === x.id);
-            return (
-              <View key={x.id} style={[s.chip, x.me && { backgroundColor: theme.accent.primary }]}>
-                <Text style={[s.chipPlace, x.me && s.chipOn]}>{formatOrdinal(x.place)}</Text>
-                <Text style={[s.chipName, x.me && s.chipOn]} numberOfLines={1}>{x.me ? t('home.phase.you') : (row ? nameOf(row) : x.label)}</Text>
-                <Text style={[s.chipPts, x.me && s.chipOn]}>{x.points}</Text>
-              </View>
-            );
-          })}
-        </View>
-      ) : null}
     </Shell>
-  );
-}
-
-// Dev-only: which Live hero Home shows while the design is being picked.
-export const LIVE_VARIANTS = ['current', 'A', 'B', 'C'];
-export function LiveVariantSwitch({ value, onChange }) {
-  const { theme, s } = useLiveStyles();
-  return (
-    <View style={s.switch}>
-      {LIVE_VARIANTS.map((k) => (
-        <TouchableOpacity key={k} onPress={() => onChange(k)} style={[s.switchBtn, value === k && { backgroundColor: theme.accent.primary }]} accessibilityRole="button" testID={`live-variant-${k}`}>
-          <Text style={[s.switchText, value === k && { color: theme.text.inverse }]}>{k}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
   );
 }
 
@@ -191,13 +147,4 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   ctaText: { color: theme.text.inverse, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15 },
   gap: { color: theme.text.primary, fontFamily: 'PlusJakartaSans-Bold', fontSize: 14 },
-  strip: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.bg.secondary, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, maxWidth: '100%' },
-  chipPlace: { color: theme.text.secondary, fontFamily: 'PlusJakartaSans-Bold', fontSize: 11 },
-  chipName: { color: theme.text.primary, fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, flexShrink: 1 },
-  chipPts: { color: theme.text.primary, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13, fontVariant: ['tabular-nums'] },
-  chipOn: { color: theme.text.inverse },
-  switch: { flexDirection: 'row', gap: 6, marginBottom: 8, alignSelf: 'flex-start', flexWrap: 'wrap' },
-  switchBtn: { minWidth: 44, minHeight: 32, borderRadius: 999, borderWidth: 1, borderColor: theme.border.default, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
-  switchText: { color: theme.text.secondary, fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
 });

@@ -7,9 +7,9 @@ import { useT, formatOrdinal, formatTime } from '../i18n';
 import { verdictKey } from './mystats/reportKeys';
 import { fmtDelta } from './mystats/reportCardView';
 
-// The Play tab's phase heroes (store/homePhase.js picks the phase): Before,
-// Live and After on the deep-green play surface, plus the one-line After,
-// the compact create row and the idle "Your game" pair.
+// The Play tab's phase heroes (store/homePhase.js picks the phase): Before on
+// the deep-green play surface and After, plus the one-line After, the compact
+// create row and the "Your game" pair. Live is HomeLiveScorecard.
 const CREAM = '#f3efe6';
 
 function Cta({ icon, label, onPress, a11y, s }) {
@@ -77,49 +77,6 @@ export function BeforeHero({ model, modeLabel, onStart, onEditTeams }) {
           <Text style={s.linkText}>{t('home.phase.before.editTeams')}</Text>
         </TouchableOpacity>
       ) : null}
-    </View>
-  );
-}
-
-export function LiveHero({ model, onOpen }) {
-  const { s } = useStyles();
-  const t = useT();
-  const sub = model.unit === 'holes'
-    ? t('home.phase.live.holesWon', { count: model.thru })
-    : t('home.phase.live.pointsAfter', { count: model.thru });
-  return (
-    <View style={s.deep} testID="home-phase-live">
-      <View style={s.row}>
-        <View style={s.liveMark}><View style={s.liveDot} /><Text style={s.liveText}>{t('shared.live').toUpperCase()}</Text></View>
-        <Text style={[s.overline, s.flex]} numberOfLines={1}>{t('shared.round.numbered', { n: model.roundNumber })} · {model.courseName || model.name}</Text>
-      </View>
-      <View style={s.liveTop}>
-        <View>
-          <Text style={s.big}>{model.myPoints ?? '–'}</Text>
-          <Text style={s.bigSub}>{sub}</Text>
-        </View>
-        {model.next ? (
-          <View style={s.next}>
-            <Text style={s.nextLabel}>{t('home.phase.live.next')}</Text>
-            <Text style={s.nextNum}>{model.next.number}</Text>
-            {model.next.par != null ? (
-              <Text style={s.nextMeta}>{t('map.parSi', { par: model.next.par, si: model.next.strokeIndex ?? '–' })}</Text>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
-      {model.board.length > 1 ? (
-        <View style={s.board} accessibilityRole="list">
-          {model.board.map((b) => (
-            <View key={b.id} style={s.boardRow}>
-              <Text style={[s.boardName, b.me && s.bold]} numberOfLines={1}>{b.me ? t('home.phase.you') : b.name}</Text>
-              <Text style={[s.boardPts, b.me && s.bold]}>{b.points}</Text>
-              <Text style={s.boardThru}>{t('home.phase.live.thru', { count: b.thru })}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-      <Cta s={s} icon="clipboard" label={t('home.phase.live.open')} onPress={onOpen} />
     </View>
   );
 }
@@ -250,7 +207,6 @@ export function YourGame({ swingLine, onSwing, onCoach }) {
 const makeStyles = (theme) => StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   bold: { fontFamily: 'PlusJakartaSans-ExtraBold' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   deep: {
     backgroundColor: theme.bg.deep, borderRadius: 14, paddingTop: 15, paddingBottom: 12, paddingHorizontal: 16,
     marginBottom: 16, gap: 4,
@@ -275,21 +231,6 @@ const makeStyles = (theme) => StyleSheet.create({
   ctaText: { color: '#00553c', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14 },
   link: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 12, minHeight: 44, justifyContent: 'center' },
   linkText: { color: onDeep.strong, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
-  liveMark: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#ff6b5e' },
-  liveText: { color: '#ffffff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4 },
-  liveTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, marginTop: 6 },
-  big: { color: CREAM, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 40, lineHeight: 44, fontVariant: ['tabular-nums'] },
-  bigSub: { color: onDeep.soft, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13 },
-  next: { backgroundColor: onDeep.chip, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, alignItems: 'center' },
-  nextLabel: { color: onDeep.faint, fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase' },
-  nextNum: { color: CREAM, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 22, lineHeight: 26 },
-  nextMeta: { color: onDeep.soft, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11 },
-  board: { marginTop: 10, borderTopWidth: 1, borderTopColor: onDeep.border },
-  boardRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: onDeep.border },
-  boardName: { flex: 1, color: CREAM, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13 },
-  boardPts: { color: CREAM, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, fontVariant: ['tabular-nums'], minWidth: 24, textAlign: 'right' },
-  boardThru: { color: onDeep.soft, fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, minWidth: 64, textAlign: 'right' },
   card: {
     backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1,
     borderColor: theme.isDark ? theme.glass?.border || theme.border.default : theme.border.default,

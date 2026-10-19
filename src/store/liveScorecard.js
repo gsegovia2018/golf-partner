@@ -22,11 +22,15 @@ export function cardNine(card, key) {
   if (idx < 0) return card;
   return {
     ...card,
-    // The round's par, for a round-total column next to this nine.
-    par: card.nines.reduce((sum, n) => sum + n.par, 0),
     nines: [card.nines[idx]],
     rows: card.rows.map((r) => ({ ...r, nines: [r.nines[idx]] })),
   };
+}
+
+// Which Live card a round gets: my own card when I play alone, the group's
+// points card otherwise.
+export function liveCardKind({ tournament }) {
+  return (tournament?.players ?? []).length <= 1 ? 'solo' : 'group';
 }
 
 export function liveScorecard({ tournament, round }, userId) {

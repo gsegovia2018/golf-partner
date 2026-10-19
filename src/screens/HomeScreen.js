@@ -22,10 +22,10 @@ import { scoringModeUsesTeams, leaderboardToggleLabels, getScoringMode, isScramb
 import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
 import BottomSheet from '../components/BottomSheet';
-import { BeforeHero, LiveHero, AfterHero, AfterLine, CreatePills, YourGame } from '../components/HomePhase';
+import { BeforeHero, AfterHero, AfterLine, CreatePills, YourGame } from '../components/HomePhase';
 import { beforeModel, liveModel, afterModel } from '../store/homePhase';
 import { useHomePhase } from '../hooks/useHomePhase';
-import { LiveCardA, LiveCardB, LiveCardC, LiveVariantSwitch } from '../components/HomeLiveVariants';
+import LiveScorecard from '../components/HomeLiveScorecard';
 import { getSwings } from '../store/swingStore';
 import { SWING_STRINGS } from '../swing/strings';
 import PressableScale from '../components/ui/PressableScale';
@@ -176,8 +176,6 @@ export default function HomeScreen({ navigation, route }) {
   // The tournament detail view (same component) has no phase hero.
   const homePhase = useHomePhase(viewMode === 'tournament' ? NO_TOURNAMENTS : allTournaments, currentUserId);
   // During a round everything but the live hero folds behind one row.
-  const [liveMoreOpen, setLiveMoreOpen] = useState(false);
-  const [liveVariant, setLiveVariant] = useState('current');
   const [openableIds, setOpenableIds] = useState(null); // null = all openable
   const [loading, setLoading] = useState(() => !initialTournament);
   // Drop the boot splash overlay (App.js) once this screen has real content
@@ -1262,24 +1260,7 @@ export default function HomeScreen({ navigation, route }) {
           if (phase === 'live') {
             return (
               <>
-                {/* shortcut: dev-only Live design switch (A/B/C scorecard takes), remove once Marcos picks one. */}
-                {__DEV__ ? <LiveVariantSwitch value={liveVariant} onChange={setLiveVariant} /> : null}
-                {(() => {
-                  const LiveVariant = { A: LiveCardA, B: LiveCardB, C: LiveCardC }[liveVariant];
-                  const model = liveModel(live, currentUserId);
-                  return LiveVariant
-                    ? <LiveVariant entry={live} model={model} userId={currentUserId} onOpen={() => openPhaseScorecard(live)} />
-                    : <LiveHero model={model} onOpen={() => openPhaseScorecard(live)} />;
-                })()}
-                <TouchableOpacity
-                  style={s.phaseMore}
-                  onPress={() => setLiveMoreOpen((v) => !v)}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: liveMoreOpen }}
-                >
-                  <Text style={s.phaseMoreText}>{tx(liveMoreOpen ? 'home.phase.live.less' : 'home.phase.live.more')}</Text>
-                  <Feather name={liveMoreOpen ? 'chevron-up' : 'chevron-down'} size={16} color={theme.text.muted} />
-                </TouchableOpacity>
+                <LiveScorecard entry={live} model={liveModel(live, currentUserId)} userId={currentUserId} onOpen={() => openPhaseScorecard(live)} />
               </>
             );
           }
@@ -1315,7 +1296,6 @@ export default function HomeScreen({ navigation, route }) {
           }
           return null;
         })()}
-        {(homePhase.phase !== 'live' || liveMoreOpen) && (<>
         {homePhase.phase === 'before' ? (
           <CreatePills
             onGame={() => navigation.navigate('Setup', { kind: 'game' })}
@@ -1361,7 +1341,7 @@ export default function HomeScreen({ navigation, route }) {
 
         <LeagueListSection navigation={navigation} rows={leagueRows} />
 
-        {(homePhase.phase === 'idle' || homePhase.phase === 'after') && (
+        {homePhase.phase !== 'before' && (
           <YourGame
             swingLine={(() => {
               const sw = getSwings().find((x) => x.mainFault && x.status !== 'error');
@@ -1398,7 +1378,6 @@ export default function HomeScreen({ navigation, route }) {
           onStart={handleQuickStartStart}
           onEditDetails={handleQuickStartEditDetails}
         />
-        </>)}
 
         {reloadError && (
           <View style={s.errorCard}>
@@ -1421,7 +1400,7 @@ export default function HomeScreen({ navigation, route }) {
           </View>
         )}
 
-        {(homePhase.phase !== 'live' || liveMoreOpen) && (() => {
+        {(() => {
           const renderCard = (t) => {
             const openable = !openableIds || openableIds.has(t.id);
             const rounds = t.rounds ?? [];
@@ -2667,11 +2646,6 @@ const makeStyles = (t) => StyleSheet.create({
   },
 
   // Start tiles (Game / Tournament)
-  phaseMore: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44,
-    borderTopWidth: 1, borderTopColor: t.border.default, paddingVertical: 10, marginBottom: 12,
-  },
-  phaseMoreText: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.secondary, fontSize: 13 },
   startHeading: {
     fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary,
     fontSize: 15, marginBottom: 10,

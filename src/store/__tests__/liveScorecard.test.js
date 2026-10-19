@@ -1,4 +1,4 @@
-import { liveScorecard, currentNineKey, cardNine } from '../liveScorecard';
+import { liveScorecard, currentNineKey, cardNine, liveCardKind } from '../liveScorecard';
 
 const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
 const sc = (arr) => Object.fromEntries(arr.map((v, i) => [i + 1, v]));
@@ -40,7 +40,6 @@ describe('liveScorecard', () => {
     expect(m.nineKey).toBe('out');
     expect(m.nineCard.nines.map((n) => n.key)).toEqual(['out']);
     expect(m.nineCard.rows[0].nines).toHaveLength(1);
-    expect(m.nineCard.par).toBe(72);
   });
 
   it('says when I lead, and gives my own card', () => {
@@ -48,5 +47,14 @@ describe('liveScorecard', () => {
     expect(lead.gap).toEqual({ kind: 'lead', gap: 2, playerId: 'p2' });
     expect(lead.myCard.solo).toBe(true);
     expect(cardNine(lead.card, 'in').nines[0].key).toBe('in');
+  });
+});
+
+describe('liveCardKind', () => {
+  it('gives a solo round my card and a group round the points card', () => {
+    expect(liveCardKind(entry({}))).toBe('group');
+    const solo = entry({});
+    solo.tournament.players = [players[0]];
+    expect(liveCardKind(solo)).toBe('solo');
   });
 });
