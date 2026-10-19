@@ -22,7 +22,11 @@ import { scoringModeUsesTeams, leaderboardToggleLabels, getScoringMode, isScramb
 import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
 import BottomSheet from '../components/BottomSheet';
-import LiveRoundCard from '../components/LiveRoundCard';
+import { BeforeHero, LiveHero, AfterHero, AfterLine, CreatePills, YourGame } from '../components/HomePhase';
+import { beforeModel, liveModel, afterModel } from '../store/homePhase';
+import { useHomePhase } from '../hooks/useHomePhase';
+import { getSwings } from '../store/swingStore';
+import { SWING_STRINGS } from '../swing/strings';
 import PressableScale from '../components/ui/PressableScale';
 import StakesSheet, { stakesSummary } from '../components/StakesSheet';
 import SettleUpCard from '../components/SettleUpCard';
@@ -137,6 +141,8 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   }
 }
 
+const NO_TOURNAMENTS = [];
+
 export default function HomeScreen({ navigation, route }) {
   const viewMode = route?.params?.viewMode ?? 'auto';
   const routeTournamentId = route?.params?.tournamentId ?? null;
@@ -166,6 +172,10 @@ export default function HomeScreen({ navigation, route }) {
   const [tournament, setTournament] = useState(() => initialTournament);
   const [allTournaments, setAllTournaments] = useState(() => (initialTournament ? [initialTournament] : []));
   const [listStale, setListStale] = useState(false);
+  // The tournament detail view (same component) has no phase hero.
+  const homePhase = useHomePhase(viewMode === 'tournament' ? NO_TOURNAMENTS : allTournaments, currentUserId);
+  // During a round everything but the live hero folds behind one row.
+  const [liveMoreOpen, setLiveMoreOpen] = useState(false);
   const [openableIds, setOpenableIds] = useState(null); // null = all openable
   const [loading, setLoading] = useState(() => !initialTournament);
   // Drop the boot splash overlay (App.js) once this screen has real content
@@ -603,6 +613,21 @@ export default function HomeScreen({ navigation, route }) {
       return CommonActions.reset({ ...state, routes, index: routes.length - 1 });
     });
   }, [navigation]);
+
+  // Phase hero actions (store/homePhase.js): the scorecard, NextRound and
+  // EditTeams read the active tournament, so the phase's one becomes active.
+  async function openPhaseScorecard({ tournament: t, roundIndex }) {
+    await setActiveTournament(t.id);
+    pushTournamentScorecard({ roundIndex, tournamentId: t.id });
+  }
+  async function startPhaseRound(entry) {
+    if (!entry.next) return openPhaseScorecard(entry);
+    await setActiveTournament(entry.tournament.id);
+    navigation.navigate('NextRound');
+  }
+  function openPhaseSummary({ tournament: t, round }, tab) {
+    navigation.navigate('RoundSummary', { tournamentId: t.id, roundId: round.id, ...(tab ? { tab } : {}) });
+  }
 
   const navigateToCreatedGame = useCallback(() => {
     pushTournamentScorecard({ roundIndex: 0 });
@@ -1230,7 +1255,64 @@ export default function HomeScreen({ navigation, route }) {
             <Feather name="chevron-right" size={16} color={theme.accent.primary} />
           </TouchableOpacity>
         )}
-        <LiveRoundCard onOpen={() => pushTournamentScorecard()} />
+        {(() => {
+          const { phase, live, before, after } = homePhase;
+          if (phase === 'live') {
+            return (
+              <>
+                <LiveHero model={liveModel(live, currentUserId)} onOpen={() => openPhaseScorecard(live)} />
+                <TouchableOpacity
+                  style={s.phaseMore}
+                  onPress={() => setLiveMoreOpen((v) => !v)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: liveMoreOpen }}
+                >
+                  <Text style={s.phaseMoreText}>{tx(liveMoreOpen ? 'home.phase.live.less' : 'home.phase.live.more')}</Text>
+                  <Feather name={liveMoreOpen ? 'chevron-up' : 'chevron-down'} size={16} color={theme.text.muted} />
+                </TouchableOpacity>
+              </>
+            );
+          }
+          if (phase === 'before') {
+            const m = beforeModel(before, currentUserId);
+            return (
+              <>
+                <BeforeHero
+                  model={m}
+                  modeLabel={roundModeLabel(roundScoringMode(before.tournament, before.round), tx)}
+                  onStart={() => startPhaseRound(before)}
+                  onEditTeams={before.next ? null : async () => {
+                    await setActiveTournament(before.tournament.id);
+                    navigation.navigate('EditTeams', { roundIndex: before.roundIndex, tournamentId: before.tournament.id });
+                  }}
+                />
+                {after ? <AfterLine model={afterModel(after, currentUserId)} onOpen={() => openPhaseSummary(after)} /> : null}
+              </>
+            );
+          }
+          if (phase === 'after') {
+            return (
+              <View style={{ marginBottom: 16 }}>
+                <AfterHero
+                  model={afterModel(after, currentUserId)}
+                  report={homePhase.report}
+                  photos={homePhase.photos}
+                  onOpen={() => openPhaseSummary(after)}
+                  onAddPhotos={() => openPhaseSummary(after, 'photos')}
+                />
+              </View>
+            );
+          }
+          return null;
+        })()}
+        {(homePhase.phase !== 'live' || liveMoreOpen) && (<>
+        {homePhase.phase === 'before' || homePhase.phase === 'after' ? (
+          <CreatePills
+            onGame={() => navigation.navigate('Setup', { kind: 'game' })}
+            onTournament={() => setShowTournamentKindChoice(true)}
+            onJoin={() => navigation.navigate('JoinTournament')}
+          />
+        ) : (<>
         <Text style={s.startHeading}>{tx('home.list.startPlaying')}</Text>
         <View style={s.startTilesRow}>
           <PressableScale
@@ -1265,9 +1347,22 @@ export default function HomeScreen({ navigation, route }) {
           </PressableScale>
         </View>
 
+        </>)}
+
         <LeagueListSection navigation={navigation} rows={leagueRows} />
 
-        <TouchableOpacity
+        {homePhase.phase === 'idle' && (
+          <YourGame
+            swingLine={(() => {
+              const sw = getSwings().find((x) => x.mainFault && x.status !== 'error');
+              return sw ? tx('home.phase.swingLast', { fault: SWING_STRINGS.fault[sw.mainFault] ?? sw.mainFault }) : null;
+            })()}
+            onSwing={() => navigation.navigate('SwingHome')}
+            onCoach={() => navigation.navigate('MyStats', { tab: 'coach' })}
+          />
+        )}
+
+        {(homePhase.phase === 'idle' || homePhase.phase === 'live') && <TouchableOpacity
           style={s.joinTile}
           onPress={() => navigation.navigate('JoinTournament')}
           activeOpacity={0.85}
@@ -1278,7 +1373,7 @@ export default function HomeScreen({ navigation, route }) {
             <Text style={s.joinTileSub}>{tx('home.list.joinSub')}</Text>
           </View>
           <Feather name="chevron-right" size={18} color={theme.text.muted} />
-        </TouchableOpacity>
+        </TouchableOpacity>}
 
         <QuickStartCourses
           courses={quickStartCourses}
@@ -1293,6 +1388,7 @@ export default function HomeScreen({ navigation, route }) {
           onStart={handleQuickStartStart}
           onEditDetails={handleQuickStartEditDetails}
         />
+        </>)}
 
         {reloadError && (
           <View style={s.errorCard}>
@@ -1315,7 +1411,7 @@ export default function HomeScreen({ navigation, route }) {
           </View>
         )}
 
-        {(() => {
+        {(homePhase.phase !== 'live' || liveMoreOpen) && (() => {
           const renderCard = (t) => {
             const openable = !openableIds || openableIds.has(t.id);
             const rounds = t.rounds ?? [];
@@ -2561,6 +2657,11 @@ const makeStyles = (t) => StyleSheet.create({
   },
 
   // Start tiles (Game / Tournament)
+  phaseMore: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44,
+    borderTopWidth: 1, borderTopColor: t.border.default, paddingVertical: 10, marginBottom: 12,
+  },
+  phaseMoreText: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.secondary, fontSize: 13 },
   startHeading: {
     fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary,
     fontSize: 15, marginBottom: 10,
