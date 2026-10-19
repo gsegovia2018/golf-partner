@@ -3,7 +3,6 @@ import React, {
 } from 'react';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import { Text, Platform, Animated, Alert } from 'react-native';
-import { useReducedMotion } from 'react-native-reanimated';
 import ScreenContainer from '../components/ScreenContainer';
 import { haptic } from '../lib/haptics';
 
@@ -50,11 +49,7 @@ import LeagueOptInSheet from '../components/league/LeagueOptInSheet';
 import { useT, formatDate, formatNumber } from '../i18n';
 import { requestLeagueTeeOff, retryLeagueTeeOff } from '../lib/leagueTeeOff';
 import { normalizeRoundNotes } from '../store/roundNotes';
-import {
-  DEFAULT_SHOT,
-  CELEBRATION_TIERS,
-  celebrationFor,
-} from '../components/scorecard/constants';
+import { DEFAULT_SHOT, celebrationFor } from '../components/scorecard/constants';
 import {
   reconcileShotDetail, normalizeWatchShotPatch, roundScoringMode, roundBestBallValues,
   isScrambleMode,
@@ -65,6 +60,7 @@ import {
   closeLive, getLastError, onSynced, openLive, pull, reconnect, schedulePush,
 } from '../engine/store/replicator';
 import { useRoundCards, useSyncStatus } from '../hooks/useRoundCards';
+import { useScoreCelebration } from '../hooks/useScoreCelebration';
 import { useCardViews } from '../hooks/useCardViews';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
@@ -212,15 +208,12 @@ export default function ScorecardScreen({ navigation, route }) {
   // True while a note edit has not been written yet: a reload that lands in
   // that window must not put the pre-keystroke text back on screen.
   const notesDirtyRef = useRef(false);
-  const scoreAnims = useRef({});
   const hasAutoJumpedRef = useRef(false);
   // Mirrors hasAutoJumpedRef as state, so the watch bridge re-renders on it.
   const [holeResumed, setHoleResumed] = useState(false);
-  const [celebration, setCelebration] = useState({
-    playerId: null, holeNumber: null, label: null, delta: null,
-  });
-  const celebrationAnim = useRef(new Animated.Value(0)).current;
-  const reducedMotion = useReducedMotion();
+  const {
+    celebration, celebrationAnim, triggerCelebration, getScoreAnim,
+  } = useScoreCelebration();
   const [lightboxItems, setLightboxItems] = useState([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxVisible, setLightboxVisible] = useState(false);
@@ -748,42 +741,6 @@ export default function ScorecardScreen({ navigation, route }) {
   useFocusEffect(useCallback(() => {
     if (leagueCardId) retryLeagueTeeOff(leagueCardId);
   }, [leagueCardId]));
-
-  // Hold time and haptic come from the tier, not from a chain here. The old
-  // chain ended in `else 1800 // HOLE IN ONE`, which silently gave NOELADA the
-  // longest hold of any tier, and it fired haptic('success') for every result
-  // including a double bogey.
-  // `toPar`, not `delta`: `stepScore` already has a `delta` in scope that means
-  // the stepper increment (±1), and the two must never be confused. The state
-  // field stays `delta` because CelebrationToast reads it under that name.
-  const triggerCelebration = useCallback((playerId, holeNumber, label, toPar) => {
-    const tier = CELEBRATION_TIERS[label] ?? CELEBRATION_TIERS.BIRDIE;
-    haptic(tier.haptic);
-    celebrationAnim.stopAnimation();
-    celebrationAnim.setValue(0);
-    setCelebration({ playerId, holeNumber, label, delta: toPar });
-    // Reduced motion: cut to shown, hold, cut away — the spring/scale/ring
-    // ride on this value, so zero-duration steps suppress all of them while
-    // the overlay (and its live-region announcement) still happens.
-    Animated.sequence([
-      reducedMotion
-        ? Animated.timing(celebrationAnim, { toValue: 1, duration: 0, useNativeDriver: true })
-        : Animated.spring(celebrationAnim, {
-          toValue: 1, friction: 6, tension: 80, useNativeDriver: true,
-        }),
-      Animated.delay(tier.holdMs),
-      Animated.timing(celebrationAnim, {
-        toValue: 0, duration: reducedMotion ? 0 : 420, useNativeDriver: true,
-      }),
-    ]).start(({ finished }) => {
-      if (finished) setCelebration({ playerId: null, holeNumber: null, label: null, delta: null });
-    });
-  }, [celebrationAnim, reducedMotion]);
-
-  const getScoreAnim = useCallback((playerId) => {
-    if (!scoreAnims.current[playerId]) scoreAnims.current[playerId] = new Animated.Value(1);
-    return scoreAnims.current[playerId];
-  }, []);
 
   // Per-card write permission. Casual mode: every card is editable. Official
   // mode: a device may only write its own card (`self`) and the one player
