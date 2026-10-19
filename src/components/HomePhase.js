@@ -34,9 +34,15 @@ export function BeforeHero({ model, modeLabel, onStart, onEditTeams }) {
     : t('home.phase.before.overline', { n: model.roundNumber, total: model.roundCount });
   const meta = [model.tee, modeLabel].filter(Boolean).join(' · ');
   const person = (p) => (
-    <View key={p.id} style={s.person}>
+    <View
+      key={p.id}
+      style={s.person}
+      accessible
+      accessibilityLabel={`${p.me ? t('home.phase.you') : p.name}, ${t('home.phase.before.strokesA11y', { count: p.strokes })}`}
+    >
       <Text style={[s.personName, p.me && s.bold]} numberOfLines={1}>{p.me ? t('home.phase.you') : p.name}</Text>
-      <Text style={s.personStrokes}>{t('home.phase.before.strokes', { count: p.strokes })}</Text>
+      {/* A plus handicap gives strokes back: show its own sign. */}
+      <Text style={s.personStrokes}>{p.strokes < 0 ? `−${-p.strokes}` : t('home.phase.before.strokes', { count: p.strokes })}</Text>
     </View>
   );
   return (
