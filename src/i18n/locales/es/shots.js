@@ -8,8 +8,8 @@ export default {
   'shots.detail.holeDistance': 'Distancia al hoyo',
   'shots.detail.approach': 'Aproximación',
   'shots.detail.budgetLeft': {
-    one: 'Queda {count} golpe sin contar aquí',
-    other: 'Quedan {count} golpes sin contar aquí',
+    one: '{count} golpe más',
+    other: '{count} golpes más',
   },
   'shots.detail.budgetAll': {
     one: 'Asignado {count} golpe',

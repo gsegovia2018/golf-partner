@@ -8,8 +8,8 @@ export default {
   'shots.detail.holeDistance': 'Hole distance',
   'shots.detail.approach': 'Approach',
   'shots.detail.budgetLeft': {
-    one: '{count} stroke not in these counts',
-    other: '{count} strokes not in these counts',
+    one: '{count} other shot',
+    other: '{count} other shots',
   },
   'shots.detail.budgetAll': {
     one: 'All {count} stroke assigned',

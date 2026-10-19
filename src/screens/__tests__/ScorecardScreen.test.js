@@ -222,7 +222,7 @@ describe('ShotDetailPanel — stroke budget', () => {
       />
     ));
     await flush();
-    expect(getByText('2 strokes not in these counts')).toBeTruthy();
+    expect(getByText('2 other shots')).toBeTruthy();
     fireEvent.press(getByLabelText('Increase Putts'));
     expect(onChange).toHaveBeenCalledWith({ putts: 3 });
   });
@@ -270,7 +270,7 @@ describe('ShotDetailPanel — stroke budget', () => {
       />
     ));
     await flush();
-    expect(getByText('1 stroke not in these counts')).toBeTruthy();
+    expect(getByText('1 other shot')).toBeTruthy();
   });
 
   test('singular caption — all 1 stroke assigned', async () => {
