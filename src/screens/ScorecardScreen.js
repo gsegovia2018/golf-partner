@@ -856,15 +856,24 @@ export default function ScorecardScreen({ navigation, route }) {
     }
   }, [tid, round?.id, actions]);
 
+  // A patch is merged onto the detail the STORE holds when the write runs, not
+  // onto the last render's: a write queued before the cards are off disk (the
+  // drive-distance fill on a reload) saw an empty detail, and writing that
+  // whole back over the stored draft dropped its putts.
   const setShot = useCallback((playerId, holeNumber, patch) => {
     if (viewOnly || official) return;
-    const current = shotDetailsRef.current[playerId]?.[holeNumber] ?? DEFAULT_SHOT;
-    const detail = { ...DEFAULT_SHOT, ...current, ...patch };
     queueDraft(async () => {
       await seedDraftFromCard(holeNumber);
+      const h = String(holeNumber);
+      const st = tid && round?.id ? getRoundState(tid, round.id) : null;
+      const current = st
+        ? st.draft?.[h]?.shots?.[playerId]
+          ?? st.cardsByAuthor?.[st.myAuthorId]?.holes?.[h]?.shots?.[playerId]
+        : shotDetailsRef.current[playerId]?.[holeNumber];
+      const detail = { ...DEFAULT_SHOT, ...current, ...patch };
       await actions.setDraftShot(holeNumber, playerId, detail);
     }).catch(() => {});
-  }, [viewOnly, official, queueDraft, seedDraftFromCard, actions]);
+  }, [viewOnly, official, queueDraft, seedDraftFromCard, tid, round?.id, actions]);
 
   // When the me-player's strokes change, trim that hole's shot detail so the
   // logged putts/penalties/sand shots never exceed the new stroke total. A
