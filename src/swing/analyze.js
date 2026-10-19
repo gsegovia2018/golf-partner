@@ -173,6 +173,7 @@ export function analyze(native, opts = {}) {
       unknown: checks.filter((c) => c.status === 'unknown').length,
     },
     main,
+    impactFromPose: native.ballGoneFrame == null, // no ball seen: impact and address come from the pose alone
     notes: ph.notes,
     timings: { analyzeMs: Date.now() - t0 },
   };

@@ -1,6 +1,7 @@
 import { analyze, SCHEMA } from '../analyze';
 import { SWING_STRINGS } from '../strings';
 import { fixtureNative, TRUTH, W, H } from './helpers';
+import { analyzeReference, byName } from './referenceSwings';
 
 const lab = require('./fixtures/lab-d15-pass1.json');
 
@@ -191,5 +192,13 @@ describe('analyze: where tempo starts the backswing', () => {
     expect(a.checkpoints.address.i).toBe(frame);
     expect(byId(a, 'tempo').value).toBe(ratio(a, frame));
     expect(byId(a, 'tempo').value).toBeGreaterThan(byId(auto, 'tempo').value);
+  });
+});
+
+describe('analyze: no ball seen', () => {
+  test('flags a swing whose ball was never found, so impact and address come from the pose', () => {
+    expect(analyzeReference(byName('tour-woods-iron')).impactFromPose).toBe(true);
+    expect(analyzeReference(byName('tour-rose-iron')).impactFromPose).toBe(true);
+    expect(analyzeReference(byName('tour-scott-iron')).impactFromPose).toBe(false);
   });
 });
