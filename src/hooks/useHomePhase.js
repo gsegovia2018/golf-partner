@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { homePhase, holesPlayed, cardCandidates, withCardScores } from '../store/homePhase';
+import { homePhase, holesPlayed, cardCandidates, withCardScores, cardShotDetails } from '../store/homePhase';
 import { fetchRoundActivity } from '../store/tournamentRepo';
 import { loadRound, getRoundState } from '../engine/store';
 import { shownScores } from '../engine/cards';
@@ -17,6 +17,7 @@ async function loadCardState(tournaments, userId) {
   const candidates = cardCandidates(tournaments, userId);
   const activity = new Map();
   const scores = new Map();
+  const shots = new Map();
   await Promise.all(candidates.map(async ({ tournament: t, round }) => {
     const key = `${t.id}:${round.id}`;
     try {
@@ -26,6 +27,8 @@ async function loadCardState(tournaments, userId) {
       if (span) activity.set(key, span.lastAt);
       const shown = shownScores(state, (t.players ?? []).map((p) => p.id), (round.holes ?? []).map((h) => h.number));
       if (Object.keys(shown).length > 0) scores.set(key, shown);
+      const mine = cardShotDetails(state);
+      if (Object.keys(mine).length > 0) shots.set(key, mine);
     } catch { /* unknown */ }
   }));
   const missing = candidates.filter(({ tournament: t, round }) => {
@@ -42,7 +45,7 @@ async function loadCardState(tournaments, userId) {
       }
     } catch { /* offline or old server: unknown */ }
   }
-  return { activity, scores };
+  return { activity, scores, shots };
 }
 
 // The Play tab's phase plus the async extras its After card shows: photos
@@ -55,7 +58,7 @@ export function useHomePhase(tournaments, userId, displayName = null) {
     return () => { alive = false; };
   }, [tournaments, userId]);
 
-  const merged = useMemo(() => withCardScores(tournaments, cards?.scores), [tournaments, cards]);
+  const merged = useMemo(() => withCardScores(tournaments, cards?.scores, cards?.shots), [tournaments, cards]);
   const phase = useMemo(
     () => homePhase(merged, { userId, now: Date.now(), lastActivityByKey: cards?.activity ?? null }),
     [merged, userId, cards],

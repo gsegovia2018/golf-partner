@@ -1,5 +1,5 @@
 import {
-  homePhase, beforeModel, liveModel, afterModel, PHASE_WINDOW_MS, withCardScores, cardCandidates,
+  homePhase, beforeModel, liveModel, afterModel, PHASE_WINDOW_MS, withCardScores, cardCandidates, cardShotDetails,
 } from '../homePhase';
 
 const NOW = Date.parse('2026-10-19T12:00:00Z');
@@ -141,5 +141,19 @@ describe('card-engine scores (the stuck "Ready to start" fix)', () => {
     const started = game({ id: 'g3', createdAt: iso(NOW - 40 * H) }, { id: 'r3', scores: { p1: { 1: 4 } } });
     const ids = cardCandidates([fresh, old, started], 'u1', NOW).map((c) => c.tournament.id);
     expect(ids).toEqual(['g1', 'g3']);
+  });
+});
+
+describe('card shot detail', () => {
+  it('reads my published shots with the draft on top, and overlays them', () => {
+    const state = {
+      myAuthorId: 'a1',
+      cardsByAuthor: { a1: { holes: { 1: { shots: { p1: { putts: 2 } } } } }, a2: { holes: { 1: { shots: { p2: { putts: 1 } } } } } },
+      draft: { 2: { shots: { p1: { putts: 3 } } } },
+    };
+    const shots = cardShotDetails(state);
+    expect(shots).toEqual({ p1: { 1: { putts: 2 }, 2: { putts: 3 } } });
+    const [m] = withCardScores([game()], null, new Map([['g1:r1', shots]]));
+    expect(m.rounds[0].shotDetails.p1[2]).toEqual({ putts: 3 });
   });
 });

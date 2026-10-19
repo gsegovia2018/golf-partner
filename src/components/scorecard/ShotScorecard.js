@@ -29,10 +29,10 @@ const SCORE_H = 24;
 const GLYPH = { fairway: '↑', super: '★', left: '←', right: '→', short: '↓' };
 const GOOD_DRIVE = new Set(['fairway', 'super']);
 
-function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID }) {
+function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID, labelStyle }) {
   return (
     <View style={[s.row, style]}>
-      {typeof label === 'string' ? <Text style={s.label} numberOfLines={1}>{label}</Text> : label}
+      {typeof label === 'string' ? <Text style={[s.label, labelStyle]} numberOfLines={1}>{label}</Text> : label}
       {cells.map((c) => (
         <View
           key={c.key}
@@ -196,7 +196,12 @@ function scoreCells({ row, nine, mode, card, s, theme, t, idp }) {
   });
 }
 
-export default function ShotScorecard({ card, mode = 'strokes' }) {
+// Optional, for the Home Live card: `currentHole` rings that hole's column,
+// `labelOf(row)` and `labelWidth` replace the three-letter row label,
+// `pointsRow` adds a points row under a solo ledger's strokes.
+export default function ShotScorecard({
+  card, mode = 'strokes', currentHole = null, labelOf = null, labelWidth = null, pointsRow = false,
+}) {
   const { theme } = useTheme();
   const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -211,6 +216,8 @@ export default function ShotScorecard({ card, mode = 'strokes' }) {
     const v = isPoints ? block.points : block.strokes;
     return v == null ? null : formatNumber(v);
   };
+  const wide = labelWidth ? { width: labelWidth } : null;
+  const ring = (number) => (number === currentHole ? s.current : null);
 
   let totalLine = null;
   if (soloRow) {
@@ -230,15 +237,17 @@ export default function ShotScorecard({ card, mode = 'strokes' }) {
           <Row
             s={s}
             label={t('stats.game.ledger.hole')}
-            cells={head.holes.map((h) => ({ key: h.number, child: <Text style={s.dim}>{h.number}</Text> }))}
+            cells={head.holes.map((h) => ({ key: h.number, style: ring(h.number), child: <Text style={[s.dim, h.number === currentHole && s.currentText]}>{h.number}</Text> }))}
             total={t(`stats.game.ledger.${head.key}`)}
             totalStyle={s.totalHead}
+            labelStyle={wide}
           />
           <Row
             s={s}
             label={t('stats.game.ledger.par')}
             cells={head.holes.map((h) => ({ key: h.number, child: <Text style={s.dim}>{h.par}</Text> }))}
             total={head.par}
+            labelStyle={wide}
           />
           {card.rows.map((row) => {
             const nine = row.nines[ni];
@@ -246,17 +255,35 @@ export default function ShotScorecard({ card, mode = 'strokes' }) {
             const open = card.solo ? row.hasShots : row.canExpand && expanded.includes(row.id);
             const label = card.solo
               ? t(isPoints ? 'stats.game.ledger.points' : 'stats.game.ledger.strokes')
-              : <NameButton row={row} open={open} onToggle={onToggle} s={s} theme={theme} t={t} />;
+              : labelOf
+                ? <Text style={[s.label, s.name, s.nameText, wide, row.isMe && s.meLabel]} numberOfLines={1} testID={`card-name-${row.id}`}>{labelOf(row)}</Text>
+                : <NameButton row={row} open={open} onToggle={onToggle} s={s} theme={theme} t={t} />;
+
             return (
               <View key={row.id} style={!card.solo && s.player}>
                 <Row
                   s={s}
                   height={SCORE_H}
                   label={label}
-                  cells={scoreCells({ row, nine, mode, card, s, theme, t, idp })}
+                  cells={scoreCells({ row, nine, mode, card, s, theme, t, idp }).map((c) => (c.key === currentHole ? { ...c, style: [c.style, s.currentCell] } : c))}
                   total={totalOf(nine)}
                   totalTestID={`${idp}-total-${head.key}`}
+                  style={row.isMe && labelOf ? s.meRow : null}
+                  labelStyle={wide}
                 />
+                {pointsRow && card.solo && (
+                  <Row
+                    s={s}
+                    label={t('stats.game.ledger.points')}
+                    labelStyle={wide}
+                    cells={nine.cells.map((c) => ({
+                      key: c.number,
+                      a11y: c.points == null ? undefined : t('stats.game.ledger.a11y.points', { hole: c.number, count: c.points }),
+                      child: c.points == null ? null : <Text style={[s.plain, { color: c.points >= 3 ? theme.scoreColor('excellent') : c.points === 0 ? theme.destructive : theme.text.primary }]}>{c.points}</Text>,
+                    }))}
+                    total={nine.points == null ? null : formatNumber(nine.points)}
+                  />
+                )}
                 {open && shotRows({ row, nine, s, theme, t, sub: !card.solo, idp })}
               </View>
             );
@@ -305,6 +332,11 @@ function makeStyles(theme) {
       backgroundColor: theme.bg.secondary,
     },
     totalHead: { backgroundColor: 'transparent' },
+    current: { borderWidth: 1.5, borderColor: theme.accent.primary },
+    currentText: { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-ExtraBold' },
+    currentCell: { borderWidth: 1.5, borderColor: theme.accent.primary, borderStyle: 'solid' },
+    meRow: { backgroundColor: theme.accent.light, borderRadius: 6 },
+    meLabel: { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-ExtraBold' },
     totalText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: theme.text.primary, fontVariant: ['tabular-nums'] },
     // Handicap strokes: up to two tiny dots along the foot of the score cell.
     dots: { position: 'absolute', bottom: 2, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 2 },

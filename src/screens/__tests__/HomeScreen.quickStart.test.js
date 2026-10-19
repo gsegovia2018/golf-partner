@@ -239,6 +239,18 @@ jest.mock('../../lib/navigationFocus', () => ({
   shouldHandleStoreChange: jest.fn(() => false),
 }));
 
+// A test can put Home in a phase; null leaves the real hook (idle here).
+let mockPhase = null;
+jest.mock('../../hooks/useHomePhase', () => {
+  const actual = jest.requireActual('../../hooks/useHomePhase');
+  return { useHomePhase: (...args) => mockPhase ?? actual.useHomePhase(...args) };
+});
+jest.mock('../../components/HomeLiveScorecard', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return function MockLiveScorecard() { return <Text testID="live-scorecard">live card</Text>; };
+});
+
 function deferred() {
   let resolve;
   let reject;
@@ -277,6 +289,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockUserId = 'u-one';
   mockLeagueRows = [];
+  mockPhase = null;
   useAuth.mockImplementation(() => ({ user: mockUserId ? { id: mockUserId } : null }));
   getActiveTournamentSnapshot.mockReturnValue({
     id: 'active-1',
@@ -465,4 +478,22 @@ test('a league counts as in play: no empty line, the league card instead', async
   expect(await findByText('Mulligan Tour')).toBeTruthy();
   expect(queryByText('Nothing here yet')).toBeNull();
   expect(queryByText('All caught up')).toBeNull();
+});
+
+test('a live round shows the scorecard card with the whole normal Home under it, no fold', async () => {
+  const live = {
+    tournament: { id: 'g1', kind: 'game', name: 'Domingo', players: [{ id: 'p-one', name: 'Player One', user_id: 'u-one' }], rounds: [] },
+    round: { id: 'r1', courseName: 'Golf Santander', holes: [], scores: {} },
+    roundIndex: 0,
+  };
+  mockPhase = { phase: 'live', live, before: null, after: null, photos: [], report: null };
+  const { findByTestId, getByText, getByTestId, queryByText } = await renderFocusedHome();
+  expect(await findByTestId('live-scorecard')).toBeTruthy();
+  expect(getByText('Start playing')).toBeTruthy();
+  expect(getByText('Your game')).toBeTruthy();
+  expect(getByTestId('home-your-game-swing')).toBeTruthy();
+  expect(getByText('Join with code')).toBeTruthy();
+  expect(getByTestId('quick-start')).toBeTruthy();
+  expect(queryByText('New game, leagues and more')).toBeNull();
+  expect(queryByText('Show less')).toBeNull();
 });
