@@ -136,6 +136,16 @@ let shots = DATA.shots || []; // logged shots for this hole: [{lat,lng,club}]
 let lastShot = DATA.lastShot || null; // { meters, club } for the top-left card, or null to hide
 let plays = DATA.plays || null; // plays-like info from the host, or null (conditions off)
 let whyOpen = false; // the plays-like breakdown card under the HUD box
+let whyTimer = null;
+// The breakdown covers part of the hole on a phone: it closes on its own
+// after a few seconds, or as soon as the map moves.
+const WHY_MS = 6000;
+function closeWhy(){
+  clearTimeout(whyTimer);
+  if (!whyOpen) return;
+  whyOpen = false;
+  if (hudArgs) hud(hudArgs[0], hudArgs[1]);
+}
 const layers = [];
 const clear = () => { layers.forEach(l => map.removeLayer(l)); layers.length = 0; };
 const add = (l) => { layers.push(l.addTo(map)); return l; };
@@ -400,7 +410,7 @@ function hud(aim, g){
       playsRow(d(g.c))+whyCard(d(g.c))+
     '</div>';
   const pr = h.querySelector('.pr');
-  if (pr) pr.onclick = (e) => { e.stopPropagation(); whyOpen = !whyOpen; hud(aim, g); const n = document.querySelector('#hud .pr'); if (n) n.focus(); };
+  if (pr) pr.onclick = (e) => { e.stopPropagation(); whyOpen = !whyOpen; clearTimeout(whyTimer); if (whyOpen) whyTimer = setTimeout(closeWhy, WHY_MS); hud(aim, g); const n = document.querySelector('#hud .pr'); if (n) n.focus(); };
 }
 
 // Top-left card: distance from the last logged shot to the green, plus a club
@@ -491,6 +501,7 @@ function updateRecenter(){
   document.getElementById('recenter').classList.toggle('show', hole.mode !== 'edit' && viewDiverged());
 }
 map.on('moveend zoomend', updateRecenter);
+map.on('move', closeWhy); // not in drawNow's map.off() list, so it survives redraws
 document.getElementById('recenter').addEventListener('click', () => {
   if (homeView) map.flyTo(homeView.center, homeView.zoom, { duration: 0.5 });
 });

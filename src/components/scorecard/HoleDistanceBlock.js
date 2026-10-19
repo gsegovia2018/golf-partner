@@ -8,8 +8,7 @@ import { formatDistance, unitSuffix } from '../../lib/units';
 import { recommendClub } from '../../lib/shotStats';
 import { getShots, subscribeShots, getShotsVersion } from '../../store/shotStore';
 import { useTourTarget } from '../tour/tourTargets';
-import { holeFeatures, bearingDeg } from '../../lib/geo';
-import { usePlayConditions } from '../../hooks/usePlayConditions';
+import { useShotPlayConditions } from '../../hooks/usePlayConditions';
 import { windText } from '../../lib/playConditions';
 
 // Right-hand side of the hole header: live GPS distances to the green, or —
@@ -33,14 +32,7 @@ export function HoleDistanceBlock({
 
   // Playing conditions (when the player switched them on): the wind is taken
   // along the shot — from the live fix, or the tee — to the green centre.
-  const fromPos = gps?.source === 'gps' ? gps?.position : null;
-  const bearing = useMemo(() => {
-    const f = courseName ? holeFeatures(courseName, holeNumber) : null;
-    const from = fromPos ?? f?.start;
-    return from && f?.greenCenter ? bearingDeg(from, f.greenCenter) : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseName, holeNumber, fromPos?.[0], fromPos?.[1]]);
-  const cond = usePlayConditions(courseName, bearing);
+  const cond = useShotPlayConditions(courseName, holeNumber, gps?.source === 'gps' ? gps?.position : null);
 
   // Club suggestion for the distance shown in the chip (center to green),
   // clubbed to its plays-like distance when conditions are on.
@@ -91,7 +83,7 @@ export function HoleDistanceBlock({
           {w && w.kind !== 'calm' && (
             <View style={s.playsW}>
               <Feather name="arrow-up" size={11} color={theme.text.secondary} style={{ transform: [{ rotate: `${Math.round(w.arrowDeg)}deg` }] }} />
-              <Text style={s.playsWTxt}>{Math.round(w.kmh)}</Text>
+              <Text style={s.playsWTxt}>{`${Math.round(w.kmh)} km/h`}</Text>
             </View>
           )}
           {w?.kind === 'calm' && <Text style={s.playsWTxt}>{tx('shared.conditions.calm')}</Text>}

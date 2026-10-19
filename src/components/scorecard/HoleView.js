@@ -389,6 +389,7 @@ export function HoleView({ leaguePlayers = '', medalLeague = false, round, round
             roundId={round.id}
             roundIndex={roundIndex}
             holeNumber={currentHole}
+            courseName={round.courseName}
             fix={{ position: gps.position ?? null, accuracy: gps.accuracy ?? null }}
             targetMeters={gps.distances?.center ?? null}
             offTee={gps.offTee}

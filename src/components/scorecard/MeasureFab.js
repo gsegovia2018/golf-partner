@@ -6,6 +6,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { useT } from '../../i18n';
 import { light as lightTokens } from '../../theme/tokens';
 import { useAppSettings } from '../../hooks/useAppSettings';
+import { useShotPlayConditions } from '../../hooks/usePlayConditions';
 import {
   logMeasuredShot, deleteShot, getShots, subscribeShots, getShotsVersion,
 } from '../../store/shotStore';
@@ -27,7 +28,7 @@ const MAX_ACCURACY_M = 25; // same usable-fix bar as the scorecard header
 // and expands into a live card; tap ② (the whole card) stamps the end and
 // saves via logMeasuredShot. With no usable fix, tap ① opens the hole map —
 // the manual flow. The header distance block never shows this carry.
-export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters, offTee = false, onOpenMap }) {
+export function MeasureFab({ roundId, roundIndex, holeNumber, courseName, fix, targetMeters, offTee = false, onOpenMap }) {
   const tl = useT();
   // Tolerate a missing ThemeProvider (render tests mount this bare) — fall
   // back to the light tokens, matching BottomSheet's theme-defensiveness.
@@ -38,10 +39,12 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
   const bag = useMemo(() => swingClubs(appSettings.bag), [appSettings.bag]);
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   const overrides = appSettings.clubDistances;
+  // Clubbed to the plays-like distance (wind/air), like every other club tip.
+  const cond = useShotPlayConditions(courseName, holeNumber, fix?.position ?? null);
   const suggestion = useMemo(
-    () => recommendClub(targetMeters, appSettings.bag, getShots(), overrides, { excludeDriver: offTee }),
+    () => recommendClub(cond.plays(targetMeters), appSettings.bag, getShots(), overrides, { excludeDriver: offTee }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [targetMeters, appSettings.bag, overrides, offTee, shotsVersion],
+    [targetMeters, appSettings.bag, overrides, offTee, shotsVersion, cond],
   );
 
   const [armed, setArmed] = useState(null);   // { start:[lat,lng], club }

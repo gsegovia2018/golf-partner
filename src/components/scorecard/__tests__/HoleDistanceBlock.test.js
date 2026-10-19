@@ -280,7 +280,7 @@ describe('HoleDistanceBlock', () => {
       const { getByText, getByLabelText } = render(<HoleDistanceBlock gps={gps} courseName="Test Course" holeNumber={1} onPress={() => {}} />);
       getByText('PLAYS');
       getByText('165');
-      getByText('16');
+      getByText('16 km/h');
       getByLabelText('Plays like 165 m. 16 km/h · into');
     });
 

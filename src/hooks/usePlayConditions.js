@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { holeFeatures, bearingDeg } from '../lib/geo';
 import { useAppSettings } from './useAppSettings';
 import {
   conditionFactor, playsLike, describeConditions, windComponents, windFactor,
@@ -58,4 +59,16 @@ export function usePlayConditions(courseName, bearingDeg = null) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conditionsEnabled, courseName, setAltitude, bearingKey, weatherVersion, hour]);
+}
+
+// usePlayConditions for a shot on a hole: the wind is taken from `fromPos`
+// (the live fix; the tee when null) to the hole's green centre.
+export function useShotPlayConditions(courseName, holeNumber, fromPos) {
+  const bearing = useMemo(() => {
+    const f = courseName ? holeFeatures(courseName, holeNumber) : null;
+    const from = fromPos ?? f?.start;
+    return from && f?.greenCenter ? bearingDeg(from, f.greenCenter) : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseName, holeNumber, fromPos?.[0], fromPos?.[1]]);
+  return usePlayConditions(courseName, bearing);
 }
