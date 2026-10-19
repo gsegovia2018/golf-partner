@@ -15,7 +15,7 @@ import { isScrambleMode } from '../scoringModes';
 import { HoleDistanceBlock } from './HoleDistanceBlock';
 import { PlayerCard } from './PlayerCard';
 import HoleBriefingCard from './HoleBriefingCard';
-import { SeenBadge, SeenCard, SeenStrip } from './ShotProposals';
+import { SeenBadge } from './ShotProposals';
 import { useShotProposals } from '../../hooks/useShotProposals';
 import { holePoints, holeEdgeShots } from './scoreModel';
 import { teamsByPlayer } from './teamModel';
@@ -224,14 +224,22 @@ export const HolePage = React.memo(function HolePage({
     : matchPlayEffectiveHandicaps(mode, round, players);
   const holePts = holePoints({ mode, hole: pageHole, players: scoringPlayers, scores, handicaps, round });
 
-  // Automatically detected shots on my own card (GPS trail test setting).
+  // Automatically detected shots on my own card (GPS trail test setting),
+  // and shots my score says are missing — both only hinted on the map button.
   // Scramble has no personal ball; official cards are attested, not tracked.
+  const myStrokes = meId ? scores[meId]?.[pageHole.number] ?? null : null;
   const seen = useShotProposals({
     roundId: round.id,
     roundIndex,
     holeNumber: pageHole.number,
     courseName,
     enabled: !!meId && !official && !isScramble && (editable ? editable(meId) : true),
+    strokes: myStrokes,
+    putts: meId ? shotDetails?.[meId]?.[pageHole.number]?.putts ?? null : null,
+    pickedUp: !!meId && isPickupScore(
+      myStrokes, pageHole.par, fullHandicaps[meId] ?? players.find((p) => p.id === meId)?.handicap,
+      pageHole.strokeIndex, holeCount,
+    ),
   });
   const teams = useMemo(() => teamsByPlayer(round), [round]);
 
@@ -310,14 +318,9 @@ export const HolePage = React.memo(function HolePage({
               roundIndex={roundIndex}
               onPress={onOpenFlyover}
             />
-            {seen.ui === 'A' && gps?.available ? <SeenBadge count={seen.open.length} /> : null}
+            {gps?.available ? <SeenBadge seen={seen.open.length} missing={seen.missing} /> : null}
           </View>
         </View>
-
-        {seen.ui === 'B' ? <SeenCard seen={seen} holeNumber={pageHole.number} /> : null}
-        {seen.ui === 'C' ? (
-          <SeenStrip seen={seen} scored={scores[effectiveMeId]?.[pageHole.number] != null} />
-        ) : null}
 
         {/* Hole briefing: owner only, on the editable casual scorecard, never
             for scramble (one ball per team has no personal miss pattern). */}

@@ -22,11 +22,13 @@ jest.mock('../../../store/shotStore', () => ({
 jest.mock('../ClubWheel', () => {
   const { Text } = require('react-native');
   return {
-    ClubWheel: ({ visible, seqLabel, onDelete, onMove, onInsert }) => (visible ? (
+    wheelClubsFor: jest.requireActual('../ClubWheel').wheelClubsFor,
+    ClubWheel: ({ visible, seqLabel, onDelete, onMove, onInsert, onRepeat }) => (visible ? (
       <>
         <Text onPress={onDelete}>{`wheel:${seqLabel}`}</Text>
         {onMove && <Text onPress={onMove}>wheel-move</Text>}
         {onInsert && <Text onPress={onInsert}>wheel-insert</Text>}
+        {onRepeat && <Text onPress={onRepeat}>wheel-repeat</Text>}
       </>
     ) : null),
   };
@@ -202,5 +204,17 @@ describe('ShotTracker shot editing', () => {
     expect(id).toBe('t');
     expect(lat).toBeCloseTo(38.552, 6);
     expect(lng).toBeCloseTo(-0.141, 6);
+  });
+
+  it('offers +1 from here only while the score says shots are missing', async () => {
+    mockShots = shots;
+    const { queryByText, rerender, getByText } = render(<ShotTracker {...base} tappedShotIndex={1} />);
+    expect(queryByText('wheel-repeat')).toBeNull();
+    rerender(<ShotTracker {...base} tappedShotIndex={1} missing={1} />);
+    await act(async () => { fireEvent.press(getByText('wheel-repeat')); });
+    const [id, pos, club] = insertShotAfter.mock.calls[0];
+    expect(id).toBe(shots[1].id);
+    expect(pos).toEqual([shots[1].lat, shots[1].lng]);
+    expect(club).toBe(shots[1].club ?? null);
   });
 });

@@ -175,33 +175,9 @@ export default {
   'shots.focus.ask.bad-lie': 'Mal terreno',
   'shots.focus.ask.wind': 'Viento de cara o de lado',
   // Detección automática de golpes: propuestas desde el recorrido GPS (ajuste de prueba).
-  'shots.seen.label': 'Visto en este hoyo',
-  'shots.seen.title': {
-    one: '{count} golpe de tu recorrido',
-    other: '{count} golpes de tu recorrido',
-  },
-  'shots.seen.body': 'Te paraste aquí y luego seguiste. Quédate con los que fueron tuyos.',
   'shots.seen.tee': 'Salida',
   'shots.seen.toGreen': 'Quedan {distance}',
-  'shots.seen.shotN': 'Golpe {n}',
-  'shots.seen.when': '{time} · {seconds} s parado',
-  'shots.seen.added': 'Añadido',
-  'shots.seen.notA11y': 'El golpe {n} no fue un golpe',
-  'shots.seen.addA11y': 'Añadir golpe {n}',
-  'shots.seen.undo': 'Deshacer',
-  'shots.seen.notNow': 'Ahora no',
-  'shots.seen.addAll': {
-    one: 'Añadir',
-    other: 'Añadir los {count}',
-  },
-  'shots.seen.addRest': {
-    one: 'Añadir el otro',
-    other: 'Añadir los otros {count}',
-  },
-  'shots.seen.done': {
-    one: '{count} golpe añadido al hoyo {hole}',
-    other: '{count} golpes añadidos al hoyo {hole}',
-  },
+  'shots.seen.here': 'Golpe desde aquí',
   'shots.seen.badge': '{count} vistos',
   'shots.seen.badgeA11y': {
     one: '{count} golpe visto para revisar en el mapa',
@@ -210,12 +186,16 @@ export default {
   'shots.seen.mapAsk': '¿Golpe desde aquí?',
   'shots.seen.mapWhen': 'Estuviste aquí {seconds} s a las {time} y luego seguiste.',
   'shots.seen.notAShot': 'No es un golpe',
-  'shots.seen.addClub': 'Añadir · {club}',
   'shots.seen.add': 'Añadir',
-  'shots.seen.stripTee': 'Salida',
-  'shots.seen.green': 'Green',
-  'shots.seen.stripNote': 'Visto en tu recorrido.',
-  'shots.seen.stripHint': 'Al apuntar el hoyo se guardan. Toca × en los que no fueron tuyos.',
-  'shots.seen.removeA11y': 'Quitar {label}, no fue mío',
-  'shots.seen.removed': 'Quitado: {label}.',
+  'shots.seen.clubA11y': 'Palo: {club}. Toca para cambiarlo',
+  'shots.seen.missing': {
+    one: 'Falta {count} golpe',
+    other: 'Faltan {count} golpes',
+  },
+  'shots.seen.missingBadge': {
+    one: 'falta {count}',
+    other: 'faltan {count}',
+  },
+  'shots.seen.plusOne': '+1 desde aquí',
+  'shots.seen.plusOneA11y': 'Añadir otro golpe jugado desde este mismo punto',
 };

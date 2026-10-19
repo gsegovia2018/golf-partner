@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   feedShotDetection, getRoundStops, loadShotProposals, dismissProposal, confirmProposals,
-  undoProposal, setDetectionHole, PROPOSALS_PREFIX, __resetShotProposalsForTests,
+  setDetectionHole, PROPOSALS_PREFIX, __resetShotProposalsForTests,
 } from '../shotProposalStore';
 import { shotsForHole, pruneShotsToRounds, logShot } from '../shotStore';
 import { getActiveTrailRound, isTrailRecordingEnabled } from '../gpsTrailStore';
@@ -53,7 +53,7 @@ test('nothing is detected with the setting off or no live round', async () => {
   expect(getRoundStops('t1-r0', 0)).toEqual([]);
 });
 
-test('stored proposals load back; confirm writes a shot in order, undo and dismiss', async () => {
+test('stored proposals load back; confirm writes a shot in order; dismiss', async () => {
   const stops = [
     { id: 'a', start: 1, end: 2, lat: 40, lng: -3.7, hole: 1, status: 'open' },
     { id: 'b', start: 3, end: 4, lat: 40 + 200 * M, lng: -3.7, hole: 1, status: 'open' },
@@ -64,15 +64,16 @@ test('stored proposals load back; confirm writes a shot in order, undo and dismi
 
   // A shot marked by hand at 300 m: the 200 m proposal goes before it.
   await logShot({ roundId: 't1-r0', roundIndex: 0, holeNumber: 1, pos: [40 + 300 * M, -3.7], club: '9i' });
-  await confirmProposals({
+  const created = await confirmProposals({
     roundId: 't1-r0', roundIndex: 0, holeNumber: 1, proposals: [stops[1]], green: [40 + 360 * M, -3.7], clubFor: () => '7i',
   });
+  expect(created.map((s) => s.club)).toEqual(['7i']);
   expect(shotsForHole('t1-r0', 0, 1).map((s) => s.club)).toEqual(['7i', '9i']);
   expect(getRoundStops('t1-r0', 0)[1]).toMatchObject({ status: 'added' });
 
-  await undoProposal('t1-r0', 0, 'b');
-  expect(shotsForHole('t1-r0', 0, 1).map((s) => s.club)).toEqual(['9i']);
-  expect(getRoundStops('t1-r0', 0)[1]).toMatchObject({ status: 'open', shotId: null });
+  // Confirming again (a second tap queued behind the first) adds nothing.
+  await confirmProposals({ roundId: 't1-r0', roundIndex: 0, holeNumber: 1, proposals: [stops[1]] });
+  expect(shotsForHole('t1-r0', 0, 1)).toHaveLength(2);
 
   await dismissProposal('t1-r0', 0, 'a');
   expect(getRoundStops('t1-r0', 0)[0].status).toBe('dismissed');

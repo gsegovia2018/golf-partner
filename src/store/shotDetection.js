@@ -80,3 +80,19 @@ export function seqForProposal(proposal, shots, green) {
   }
   return shots.length ? shots[shots.length - 1].seq + 1 : 1;
 }
+
+// How many shots the hole's chain is short of the score: entered strokes −
+// putts − spots played from off the green (a spot on the green is where the
+// first putt was struck, so it is already one of the putts). A merged stop
+// hides a duff, a re-tee after OB, a provisional or a penalty drop, so the
+// chain can come up short even when every proposal was confirmed.
+// null = can't tell, so say nothing: no score yet, putts not entered, a
+// pick-up (the stroke count is a cap, not what was played), or no spot at all
+// on the hole (shot tracking wasn't used here). Never negative.
+export function missingShots({ strokes, putts, spots = [], isOnGreen = () => false, pickedUp = false }) {
+  if (!Number.isInteger(strokes) || strokes <= 0 || pickedUp) return null;
+  if (!Number.isInteger(putts) || putts < 0) return null;
+  if (!spots.length) return null;
+  const played = spots.filter((s) => !isOnGreen(s)).length;
+  return Math.max(0, strokes - putts - played);
+}

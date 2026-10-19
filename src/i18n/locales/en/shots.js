@@ -175,33 +175,9 @@ export default {
   'shots.focus.ask.bad-lie': 'Bad lie',
   'shots.focus.ask.wind': 'Into or across the wind',
   // Automatic shot detection: proposals from the GPS trail (test setting).
-  'shots.seen.label': 'Seen on this hole',
-  'shots.seen.title': {
-    one: '{count} shot from your walk',
-    other: '{count} shots from your walk',
-  },
-  'shots.seen.body': 'You stopped here, then moved on. Keep the ones that were yours.',
   'shots.seen.tee': 'Tee shot',
   'shots.seen.toGreen': '{distance} to the green',
-  'shots.seen.shotN': 'Shot {n}',
-  'shots.seen.when': '{time} · stood {seconds} s',
-  'shots.seen.added': 'Added',
-  'shots.seen.notA11y': 'Shot {n} was not a shot',
-  'shots.seen.addA11y': 'Add shot {n}',
-  'shots.seen.undo': 'Undo',
-  'shots.seen.notNow': 'Not now',
-  'shots.seen.addAll': {
-    one: 'Add',
-    other: 'Add all {count}',
-  },
-  'shots.seen.addRest': {
-    one: 'Add the other one',
-    other: 'Add the other {count}',
-  },
-  'shots.seen.done': {
-    one: '{count} shot added to hole {hole}',
-    other: '{count} shots added to hole {hole}',
-  },
+  'shots.seen.here': 'Shot from here',
   'shots.seen.badge': '{count} seen',
   'shots.seen.badgeA11y': {
     one: '{count} shot seen to review on the map',
@@ -210,12 +186,16 @@ export default {
   'shots.seen.mapAsk': 'Shot from here?',
   'shots.seen.mapWhen': 'You stood here {seconds} s at {time}, then walked on.',
   'shots.seen.notAShot': 'Not a shot',
-  'shots.seen.addClub': 'Add · {club}',
   'shots.seen.add': 'Add',
-  'shots.seen.stripTee': 'Tee',
-  'shots.seen.green': 'Green',
-  'shots.seen.stripNote': 'Seen from your walk.',
-  'shots.seen.stripHint': 'Scoring the hole keeps them. Tap × on any that weren’t yours.',
-  'shots.seen.removeA11y': 'Remove {label}, not mine',
-  'shots.seen.removed': 'Removed {label}.',
+  'shots.seen.clubA11y': 'Club: {club}. Tap to change it',
+  'shots.seen.missing': {
+    one: '{count} shot missing',
+    other: '{count} shots missing',
+  },
+  'shots.seen.missingBadge': {
+    one: '{count} missing',
+    other: '{count} missing',
+  },
+  'shots.seen.plusOne': '+1 from here',
+  'shots.seen.plusOneA11y': 'Add another shot played from this same spot',
 };

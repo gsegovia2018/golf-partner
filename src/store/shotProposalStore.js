@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getActiveTrailRound, isTrailRecordingEnabled, toTrailPoint } from './gpsTrailStore';
 import { takeClosedStops, seqForProposal } from './shotDetection';
-import { shotsForHole, insertShotAt, deleteShot } from './shotStore';
+import { shotsForHole, insertShotAt } from './shotStore';
 
 // Automatic shot detection, stateful half. Fed by lib/roundTracking's location
 // task with every batch of fixes; gated exactly like the GPS trail experiment
@@ -19,12 +19,6 @@ import { shotsForHole, insertShotAt, deleteShot } from './shotStore';
 export const PROPOSALS_PREFIX = '@shot_proposals/';
 export const MAX_BUFFER = 2000; // ~1 h of fixes at the tracker's 2 s / 2 m cadence
 const EMPTY = [];
-
-// shortcut: dev-only switch between the three review UIs while Marcos picks
-// one ('A' map pins, 'B' hole card, 'C' header strip). Delete with the losers.
-export const PROPOSAL_UI_KEY = '@shot_proposals_ui';
-let ui = 'B';
-export const getProposalUi = () => ui;
 
 export const proposalRoundKey = (roundId, roundIndex) => `${roundId}|${roundIndex}`;
 
@@ -56,10 +50,6 @@ export function loadShotProposals(roundId, roundIndex) {
   if (!loaded.has(key)) {
     loaded.set(key, (async () => {
       try {
-        if (typeof __DEV__ !== 'undefined' && __DEV__) {
-          const v = await AsyncStorage.getItem(PROPOSAL_UI_KEY);
-          if (v === 'A' || v === 'B' || v === 'C') ui = v;
-        }
         const raw = await AsyncStorage.getItem(PROPOSALS_PREFIX + key);
         const stored = raw ? JSON.parse(raw) : null;
         if (Array.isArray(stored) && !rounds.has(key)) {
@@ -119,9 +109,10 @@ export function dismissProposal(roundId, roundIndex, id) {
 
 // Confirms proposals on one hole, oldest first, each slotted into the shot
 // chain by distance to `green` (see seqForProposal). `clubFor(proposal)` gives
-// the club to tag (a guess the golfer can change on the map).
+// the club to tag. Resolves to the shots it created, oldest first.
 export function confirmProposals({ roundId, roundIndex, holeNumber, proposals, green = null, clubFor = () => null }) {
   return serial(async () => {
+    const created = [];
     for (const p of [...proposals].sort((a, b) => a.start - b.start)) {
       // Re-read: a second confirm queued behind this one must not add it twice.
       if (getRoundStops(roundId, roundIndex).find((s) => s.id === p.id)?.status !== 'open') continue;
@@ -130,17 +121,9 @@ export function confirmProposals({ roundId, roundIndex, holeNumber, proposals, g
         roundId, roundIndex, holeNumber, seq, pos: [p.lat, p.lng], club: clubFor(p),
       });
       await update(roundId, roundIndex, p.id, { status: 'added', shotId: shot?.id ?? null });
+      if (shot) created.push(shot);
     }
-  });
-}
-
-// Takes an added proposal back out of the shot log; it is open again.
-export function undoProposal(roundId, roundIndex, id) {
-  return serial(async () => {
-    const p = getRoundStops(roundId, roundIndex).find((s) => s.id === id);
-    if (!p) return;
-    if (p.shotId) await deleteShot(p.shotId);
-    await update(roundId, roundIndex, id, { status: 'open', shotId: null });
+    return created;
   });
 }
 
@@ -150,6 +133,5 @@ export function __resetShotProposalsForTests() {
   buffer = [];
   bufferKey = null;
   holeNow = null;
-  ui = 'B';
   chain = Promise.resolve();
 }

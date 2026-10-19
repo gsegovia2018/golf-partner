@@ -11,9 +11,8 @@ import {
 } from '../../store/shotStore';
 import { haversineMeters } from '../../lib/geo';
 import { useT } from '../../i18n';
-import { recommendClub, clubAverages } from '../../lib/shotStats';
-import { swingClubs, clubLabel, clubNominal } from '../../lib/clubs';
-import { ClubWheel } from './ClubWheel';
+import { recommendClub } from '../../lib/shotStats';
+import { ClubWheel, wheelClubsFor } from './ClubWheel';
 
 // How far from the green centre "On the green" still makes sense. A green is
 // in range of an approach, never of a drive on a par 4 — see canFinishOnGreen.
@@ -43,11 +42,12 @@ export function ShotTracker({
   roundId, roundIndex, holeNumber,
   pos, aimPos, aimRings, targetPos,
   tappedShotIndex, onConsumeShotTap, onCollapseTargets,
+  // Shots the hole's score says are missing (useShotProposals), or null.
+  missing = null,
 }) {
   const appSettings = useAppSettings();
   const tl = useT();
   const { units } = appSettings;
-  const bag = useMemo(() => swingClubs(appSettings.bag), [appSettings.bag]);
 
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,12 +122,7 @@ export function ShotTracker({
     : null);
 
   // ── Wheel state derived from the shot being edited ───────────────────────
-  const averages = clubAverages(getShots());
-  const effDist = (k) => {
-    const o = overrides?.[k];
-    return (Number.isFinite(o) && o > 0) ? o : (averages.get(k) ?? clubNominal(k));
-  };
-  const wheelClubs = bag.map((k) => ({ key: k, label: clubLabel(k), distance: effDist(k) }));
+  const wheelClubs = wheelClubsFor(appSettings.bag, overrides, getShots());
   const editIndex = wheelId ? shots.findIndex((sh) => sh.id === wheelId) : -1;
   const editShot = editIndex >= 0 ? shots[editIndex] : null;
   const editCarry = editIndex >= 0 ? carryOf(editIndex) : null;
@@ -163,6 +158,14 @@ export function ShotTracker({
     closeWheel();
     const added = await insertShotAfter(wheelId, insertPos);
     if (added) setWheelId(added.id);
+  };
+
+  // The score says shots are missing (a duff, a re-tee, a drop): play
+  // another one from this same spot.
+  const repeatShot = async () => {
+    if (!editShot) return;
+    closeWheel();
+    await insertShotAfter(editShot.id, [editShot.lat, editShot.lng], editShot.club);
   };
 
   const canAdd = !!(aimPos || pos);
@@ -210,6 +213,7 @@ export function ShotTracker({
         onSelect={chooseClub}
         onMove={movePos ? moveShot : undefined}
         onInsert={insertPos ? insertShot : undefined}
+        onRepeat={missing > 0 ? repeatShot : undefined}
         onDelete={removeShot}
         onClose={closeWheel}
       />

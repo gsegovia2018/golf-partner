@@ -1,4 +1,6 @@
-import { takeClosedStops, proposalsForHole, seqForProposal } from '../shotDetection';
+import {
+  takeClosedStops, proposalsForHole, seqForProposal, missingShots,
+} from '../shotDetection';
 
 // ~1 m of latitude.
 const M = 1 / 111195;
@@ -66,4 +68,35 @@ test('a confirmed proposal goes before the first marked shot closer to the green
   expect(seqForProposal({ lat: spot(340)[0], lng: spot(340)[1] }, shots, green)).toBe(3);
   expect(seqForProposal({ lat: spot(200)[0], lng: spot(200)[1] }, shots, null)).toBe(3);
   expect(seqForProposal({ lat: 0, lng: 0 }, [], green)).toBe(1);
+});
+
+describe('missingShots', () => {
+  const spots = (n) => Array.from({ length: n }, (_, i) => ({ id: String(i) }));
+
+  test('strokes − putts − spots off the green', () => {
+    expect(missingShots({ strokes: 6, putts: 2, spots: spots(3) })).toBe(1);
+    expect(missingShots({ strokes: 5, putts: 2, spots: spots(3) })).toBe(0);
+  });
+
+  test('a spot on the green is a putt, not another shot', () => {
+    const chain = [...spots(2), { id: 'g', onGreen: true }];
+    expect(missingShots({ strokes: 5, putts: 2, spots: chain, isOnGreen: (s) => !!s.onGreen })).toBe(1);
+  });
+
+  test('more shots than strokes is never negative', () => {
+    expect(missingShots({ strokes: 4, putts: 2, spots: spots(4) })).toBe(0);
+  });
+
+  test('no score yet, putts unknown, a pick-up or no spots: say nothing', () => {
+    expect(missingShots({ strokes: null, putts: 2, spots: spots(2) })).toBeNull();
+    expect(missingShots({ strokes: 0, putts: 0, spots: spots(1) })).toBeNull();
+    expect(missingShots({ strokes: 5, putts: null, spots: spots(2) })).toBeNull();
+    expect(missingShots({ strokes: 5, putts: undefined, spots: spots(2) })).toBeNull();
+    expect(missingShots({ strokes: 8, putts: 2, spots: spots(2), pickedUp: true })).toBeNull();
+    expect(missingShots({ strokes: 5, putts: 2, spots: [] })).toBeNull();
+  });
+
+  test('zero putts (holed from off the green) still counts', () => {
+    expect(missingShots({ strokes: 3, putts: 0, spots: spots(2) })).toBe(1);
+  });
 });

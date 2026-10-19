@@ -10,6 +10,19 @@ import { hud } from '../../theme/tokens';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { haptic } from '../../lib/haptics';
 import { useT } from '../../i18n';
+import { clubAverages } from '../../lib/shotStats';
+import { swingClubs, clubLabel, clubNominal } from '../../lib/clubs';
+
+// The wheel's rows for a bag: each club with its carry — the player's own
+// override, else their measured average from `shots`, else the nominal.
+export function wheelClubsFor(bag, overrides, shots) {
+  const averages = clubAverages(shots);
+  return swingClubs(bag).map((k) => {
+    const o = overrides?.[k];
+    const distance = (Number.isFinite(o) && o > 0) ? o : (averages.get(k) ?? clubNominal(k));
+    return { key: k, label: clubLabel(k), distance };
+  });
+}
 
 const ITEM_H = 48;
 const VISIBLE = 5; // odd, so one row sits dead-centre
@@ -26,7 +39,7 @@ const PAD = (WHEEL_H - ITEM_H) / 2;
 export function ClubWheel({
   visible, clubs, value, units,
   seqLabel, carryMeters, toPinMeters,
-  onSelect, onMove, onInsert, onDelete, onClose,
+  onSelect, onMove, onInsert, onRepeat, onDelete, onClose,
 }) {
   const ref = useRef(null);
   const initialIndex = useMemo(() => {
@@ -96,7 +109,7 @@ export function ClubWheel({
             <Text style={s.confirmText}>{tl('shots.wheel.set', { club: clubs[focus]?.label ?? '' })}</Text>
           </PressableScale>
 
-          {(onMove || onInsert || onDelete) && (
+          {(onMove || onInsert || onRepeat || onDelete) && (
             <View style={s.editRow}>
               {onMove && (
                 <PressableScale style={s.editBtn} onPress={onMove} accessibilityLabel={tl('shots.wheel.moveA11y')}>
@@ -108,6 +121,12 @@ export function ClubWheel({
                 <PressableScale style={s.editBtn} onPress={onInsert} accessibilityLabel={tl('shots.wheel.addAfterA11y')}>
                   <Feather name="plus" size={15} color={hud.textSoft} />
                   <Text style={s.editText}>{tl('shots.wheel.addAfter')}</Text>
+                </PressableScale>
+              )}
+              {onRepeat && (
+                <PressableScale style={s.editBtn} onPress={onRepeat} accessibilityLabel={tl('shots.seen.plusOneA11y')}>
+                  <Feather name="rotate-ccw" size={15} color={hud.textSoft} />
+                  <Text style={s.editText}>{tl('shots.seen.plusOne')}</Text>
                 </PressableScale>
               )}
               {onDelete && (
