@@ -8,6 +8,9 @@ module.exports = {
   // shim. jest.resolver.js composes both; see that file for details.
   resolver: '<rootDir>/jest.resolver.js',
   testMatch: ['**/__tests__/**/*.test.js'],
+  // Agents run jest in several worktrees at once. The default (one worker per
+  // core, per run) exhausted WSL's memory and froze the VM, so cap it.
+  maxWorkers: 2,
   collectCoverageFrom: [
     'src/store/scoring.js',
     'src/store/merge.js',
