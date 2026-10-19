@@ -7,13 +7,7 @@ import {
   clampEnteredScore,
   resumeVerifiedUpTo,
   resumeHole,
-} from '../ScorecardScreen';
-
-// ScorecardScreen imports useFocusEffect from @react-navigation/native, whose
-// published ESM isn't transformed under jest; stub it (jest hoists this above
-// the import) so pulling in the screen's helper exports doesn't load the
-// untransformed module.
-jest.mock('@react-navigation/native', () => ({ useFocusEffect: jest.fn() }));
+} from '../../store/scorecardFlow';
 
 describe('clampEnteredScore (screen-level score entry clamp)', () => {
   // Par-4, SI-1 hole. Scratch pickup = par + 2 + 0 extra = 6; ceiling = pickup
