@@ -63,7 +63,7 @@ export default function SwipeToDelete({
           accessibilityLabel={accessibilityLabel ?? t('misc.swipeDelete')}
           testID="swipe-delete-action"
         >
-          <Feather name="trash-2" size={20} color="#ffffff" />
+          <Feather name="trash-2" size={20} color={theme.isDark ? theme.text.inverse : '#ffffff'} />
         </Pressable>
       </View>
       <Animated.View

@@ -44,7 +44,7 @@ export function ShotDetailExplainer({ rowKey, title, body }) {
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 }}
           onPress={dismiss}
         >
-          <View style={{ backgroundColor: theme.bg.card, borderRadius: 12, padding: 20 }}>
+          <View style={{ backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.card, borderRadius: 12, padding: 20 }}>
             <Text style={{ fontSize: 16, fontWeight: '600', color: theme.text.primary, marginBottom: 8 }}>
               {title}
             </Text>

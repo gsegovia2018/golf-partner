@@ -131,7 +131,7 @@ function makeStyles(theme) {
     openRoundText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: theme.accent.primary },
 
     modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-    modalCard: { backgroundColor: theme.bg.card, borderRadius: 16, padding: 16, width: '100%' },
+    modalCard: { backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.card, borderRadius: 16, padding: 16, width: '100%' },
     modalTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 17, color: theme.text.primary, marginBottom: 10 },
     pickRow: { paddingVertical: 11, paddingHorizontal: 10, borderRadius: 10 },
     pickRowOn: { backgroundColor: theme.accent.light },

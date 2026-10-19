@@ -178,7 +178,7 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
 function makeStyles(theme) {
   return StyleSheet.create({
     sheet: {
-      backgroundColor: theme.bg.elevated,
+      backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.elevated,
       borderTopLeftRadius: theme.radius.xl, borderTopRightRadius: theme.radius.xl,
       paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xl,
       paddingTop: theme.spacing.sm, maxHeight: '80%',

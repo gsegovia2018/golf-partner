@@ -220,7 +220,7 @@ export default function SettingsScreen({ navigation }) {
                   <Feather
                     name={opt.icon}
                     size={18}
-                    color={active ? theme.accent.primary : theme.text.muted}
+                    color={active ? theme.accent.primary : theme.text.secondary}
                   />
                   <Text style={[s.appearanceLabel, active && s.appearanceLabelActive]}>
                     {t(opt.label)}
@@ -372,7 +372,7 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.accent.light,
   },
   appearanceLabel: {
-    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 14,
+    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 14,
   },
   appearanceLabelActive: {
     color: theme.accent.primary,

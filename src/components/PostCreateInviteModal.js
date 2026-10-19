@@ -81,7 +81,7 @@ export default function PostCreateInviteModal({
 function makeStyles(theme) {
   return StyleSheet.create({
     sheet: {
-      backgroundColor: theme.bg.card,
+      backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.card,
       borderTopLeftRadius: 22,
       borderTopRightRadius: 22,
       padding: 22,

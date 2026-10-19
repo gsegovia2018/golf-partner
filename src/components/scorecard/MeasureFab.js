@@ -227,7 +227,7 @@ function makeStyles(theme) {
     },
     toast: {
       flexDirection: 'row', alignItems: 'center', gap: 7, width: 212,
-      backgroundColor: theme.bg.elevated, borderWidth: 1, borderColor: theme.border.default,
+      backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.elevated, borderWidth: 1, borderColor: theme.border.default,
       borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9,
       shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10,
       shadowOffset: { width: 0, height: 5 }, elevation: 5,

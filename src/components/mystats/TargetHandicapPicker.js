@@ -43,7 +43,7 @@ export function TargetHandicapPicker({
       >
         <Pressable
           onPress={(e) => e.stopPropagation()}
-          style={{ backgroundColor: theme.bg.card, borderRadius: 12, padding: 20 }}
+          style={{ backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.card, borderRadius: 12, padding: 20 }}
         >
           <Text style={{ fontSize: 16, fontWeight: '600', color: theme.text.primary, marginBottom: 12 }}>
             {t('stats.my.target.set')}
