@@ -229,15 +229,15 @@ describe('checkpoints.js (the lab editor cues)', () => {
     expect(cueFor('trailArm', 'left').what).toMatch(/^Left arm/);
     expect(cueFor('shaftThrough', 'left').what).toMatch(/right hip/);
   });
-  test('D26: every checkpoint has a short stop line (FIRST / LAST frame, condition, what to watch, strip captions)', () => {
+  test('D26: every checkpoint has a one-sentence stop line (FIRST / LAST frame and the condition)', () => {
     CHECKPOINT_DEFS.forEach((d) => {
       expect(['first', 'last']).toContain(d.stop.kind);
-      ['short', 'watch', 'before', 'after'].forEach((f) => expect(d.stop[f]).toEqual(expect.any(String)));
-      expect(d.stopWhen.startsWith(`the ${d.stop.kind} frame`)).toBe(true); // the badge agrees with the full cue
+      expect(d.stop.line).toEqual(expect.any(String));
+      expect(d.stopWhen.startsWith(`the ${d.stop.kind} frame`)).toBe(true); // the line agrees with the full cue
     });
-    expect(cueFor('top').stop).toMatchObject({ kind: 'last', short: 'before the club starts down', watch: 'the clubhead, not the hands' });
-    expect(cueFor('shaftDown', 'left').stop.short).toMatch(/left hip/);
-    expect(cueFor('leadArm', 'left').stop.watch).toBe('the right arm');
+    expect(cueFor('top').stop).toMatchObject({ kind: 'last', line: 'Last frame before the club starts down' });
+    expect(cueFor('address').stop.line).toBe('Last frame before the clubhead starts to move');
+    expect(cueFor('leadArm', 'left').stop.line).toBe('First frame the right arm is level');
     expect(cueFor('preImpact').stop).toBeUndefined();
   });
   test('internal frames have a cue of their own', () => {

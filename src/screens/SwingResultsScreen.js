@@ -22,11 +22,12 @@ import SwingProcessing from '../components/swing/SwingProcessing';
 import { useSwingTone, focusTone } from '../components/swing/swingTone';
 import { useTheme } from '../theme/ThemeContext';
 import { hud } from '../theme/tokens';
-import { cueFor } from '../swing/checkpoints';
 import {
   subscribeSwings, getSwingsVersion, getSwing, hydrateSwings, renameSwing, readAnalysis, readPose,
-  markSwingFailed, deleteSwing, swingVideoUri, readMarks, readProbe, saveMarks, saveAnalysis,
+  markSwingFailed, deleteSwing, swingVideoUri, readMarks, readProbe, saveMarks, saveAnalysis, hasCustomName,
 } from '../store/swingStore';
+import { formatDate } from '../i18n/format';
+import { normClub } from '../swing/checks';
 import { runAnalysis } from '../swing/runAnalysis';
 import { MARK_TOTAL, markedFromMarks, passDone } from '../swing/markPass';
 import { shareSwingExport } from '../swing/shareExport';
@@ -46,6 +47,13 @@ import { SWING_STRINGS } from '../swing/strings';
 import { useT } from '../i18n';
 
 const T = SWING_STRINGS.results;
+
+/** The header names the swing: the golfer's own name, else "Driver · 18 oct" (the time is in the rename field). */
+export function swingTitle(row) {
+  if (!row) return '';
+  if (hasCustomName(row)) return row.name;
+  return `${SWING_STRINGS.club[normClub(row.club)]} · ${formatDate(new Date(row.createdAt), 'day')}`;
+}
 const H = SWING_STRINGS.home; // the delete confirm is shared with the swings list
 const MAX_NUDGE = 2; // stills exist for the checkpoint frame +-2 (D4)
 
@@ -232,8 +240,6 @@ export function SwingResultsView({
     analysis.approximate ? { short: T.approxFps, long: T.approxBanner } : null,
     analysis.scale?.approx ? { short: T.approxHeight, long: T.approxHeightBanner } : null,
   ].filter(Boolean) : [];
-  const badgeWord = !ready || step === EXTRAS ? '' : pending[step] ? T.needsHead
-    : statuses[step] === 'unknown' ? '' : SWING_STRINGS.statusWord[statuses[step]];
   const openEdit = (k, opts) => onEditMarks?.(k, opts);
   const place_ = async (pt) => {
     const ok = await onPlaceHead?.(cp, pt);
@@ -259,7 +265,7 @@ export function SwingResultsView({
   const header = (
     <View style={s.header}>
       <IconButton icon="chevron-left" accessibilityLabel={T.back} onPress={onBack} />
-      <Text style={s.headerTitle} numberOfLines={1}>{row?.name ?? ''}</Text>
+      <Text style={s.headerTitle} numberOfLines={1} testID="results-title">{phase === 'processing' ? T.newSwing : swingTitle(row)}</Text>
       {phase === 'processing' ? (
         <PressableScale style={s.headerAction} onPress={onCancel} accessibilityRole="button" accessibilityLabel={T.cancelAnalysis}>
           <Text style={s.headerActionText}>{T.cancelAnalysis}</Text>
@@ -324,7 +330,6 @@ export function SwingResultsView({
               overlay={{
                 width: picW,
                 height: boxH,
-                legendTop: 46, // under the position pill: the bottom edge carries the frame stepper
                 video,
                 uri,
                 pose: poseAtFrame(pose, frame),
@@ -335,25 +340,12 @@ export function SwingResultsView({
                 keyLines: off === 0 ? keyLines : (keyLines && { ...keyLines, extra: [] }),
                 keyTone: statuses[cp] === 'red' || statuses[cp] === 'yellow' ? focusTone(statuses[cp]) : '#4fae8a',
                 focus: focusOn,
-                legend: !placing, // the instruction bars sit where the legend would
+                legend: false, // the caption row under the picture carries it
                 tone: focusTone(selected?.status),
                 label: T.stillA11y(SWING_STRINGS.checkpoint[cp], frame),
               }}
-              badge={{
-                p: step === EXTRAS ? null : cueFor(step)?.p,
-                name: stepName(step),
-                word: badgeWord,
-                tone: pending[step] ? hud.textSoft : statuses[step] === 'red' || statuses[step] === 'yellow' ? focusTone(statuses[step]) : hud.accent,
-                a11y: T.posOf(stepName(step), STEPS.indexOf(step) + 1, STEPS.length),
-              }}
+              frameWidth={boxW}
               onPlay={onPlay}
-              nudge={{
-                label: `${T.frameShort(frame)}${off ? ` (${off > 0 ? '+' : ''}${off})` : ''}`,
-                canPrev: off > -MAX_NUDGE,
-                canNext: off < MAX_NUDGE,
-                onPrev: () => setOff((o) => Math.max(-MAX_NUDGE, o - 1)),
-                onNext: () => setOff((o) => Math.min(MAX_NUDGE, o + 1)),
-              }}
               toast={placed && showPlaced ? (
                 <PlacedBanner
                   name={SWING_STRINGS.checkpoint[placed.cp ?? cp]}
@@ -371,6 +363,25 @@ export function SwingResultsView({
               onConfirmProposal={() => place_(null)}
               onOpenEdit={() => openEdit(cp, { active: 'head' })}
             />
+            {/* the badge is gone from the picture; TalkBack still hears where a swipe landed */}
+            <View style={s.srOnly} accessible accessibilityLiveRegion="polite" accessibilityLabel={T.posOf(stepName(step), STEPS.indexOf(step) + 1, STEPS.length)} testID="position-bar" />
+            {placing ? null : (
+              <View style={s.caption} testID="results-caption">
+                {focusOn ? (
+                  <View style={s.legend} testID="overlay-legend">
+                    <View style={[s.swatch, { backgroundColor: focusTone(selected?.status) }]} />
+                    <Text style={s.legendText}>{SWING_STRINGS.results.fixes.legendYou}</Text>
+                    <View style={[s.swatch, s.swatchDash, { borderColor: hud.accent }]} />
+                    <Text style={s.legendText}>{SWING_STRINGS.results.fixes.legendTarget}</Text>
+                  </View>
+                ) : <View />}
+                <View style={s.stepper} testID="results-nudge">
+                  <IconButton icon="chevron-left" size={18} style={[s.stepBtn, off <= -MAX_NUDGE && s.stepOff]} disabled={off <= -MAX_NUDGE} onPress={() => setOff((o) => Math.max(-MAX_NUDGE, o - 1))} accessibilityLabel={T.prevFrame} />
+                  <Text style={s.stepText} accessibilityLabel={T.frameShort(frame)}>{`${frame}${off ? ` (${off > 0 ? '+' : ''}${off})` : ''}`}</Text>
+                  <IconButton icon="chevron-right" size={18} style={[s.stepBtn, off >= MAX_NUDGE && s.stepOff]} disabled={off >= MAX_NUDGE} onPress={() => setOff((o) => Math.min(MAX_NUDGE, o + 1))} accessibilityLabel={T.nextFrame} />
+                </View>
+              </View>
+            )}
 
             <View style={s.listHead}>
               <Overline style={s.flex}>{T.checksAt(stepName(step))}</Overline>
@@ -759,6 +770,16 @@ const makeStyles = (theme) => StyleSheet.create({
   askText: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, lineHeight: 17, color: theme.text.primary },
   askBtn: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.accent.primary },
   selGroup: { backgroundColor: theme.accent.light, borderRadius: 10 }, // the selected row and its fix read as one block
+  srOnly: { position: 'absolute', width: 1, height: 1, opacity: 0 },
+  caption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 2, marginTop: -4 },
+  legend: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  swatch: { width: 16, height: 3, borderRadius: 1.5 },
+  swatchDash: { height: 0, borderTopWidth: 2.5, borderStyle: 'dashed', backgroundColor: 'transparent', borderRadius: 0 },
+  legendText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: theme.text.secondary, marginRight: 6 },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  stepBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: theme.bg.card, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default },
+  stepOff: { opacity: 0.4 },
+  stepText: { minWidth: 64, textAlign: 'center', fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.text.primary, fontVariant: ['tabular-nums'] },
   listHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 2, marginBottom: -4 },
   editLink: { minHeight: 36, justifyContent: 'center', paddingLeft: 12 },
   navCard: { padding: 0, gap: 0 },

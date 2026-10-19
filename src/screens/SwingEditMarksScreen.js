@@ -65,7 +65,7 @@ import { useT, getLanguage } from '../i18n';
 const T = SWING_STRINGS.mark;
 const HUD_WARN = semantic.warning.dark; // the HUD amber, as on the capture screen
 const TOP_H = 52;
-export const PANEL_H = 192; // the bottom panel, the same in both steps so the video never jumps
+export const PANEL_H = 196; // the bottom panel, the same in both steps so the video never jumps
 export const WIDE_REACH = 12; // a position opening at step 1 prefetches its proposal ±12 in one decode
 const noProxy = () => null;
 
@@ -606,13 +606,14 @@ export function SwingMarkCanvas({
   const primaryLabel = editLike ? (willChange || fixFrom ? T.primary.editSave : T.primary.editDone) : action === 'noHead' ? T.primary.noHead : T.primary.confirmNext;
   const proposed = proposalFrame;
   const resets = view !== d.frame && hasMarks(draft, base, cp);
-  const frameLabel = resets ? T.primary.useReset(view) : view === proposed ? T.primary.proposedOk : T.primary.useFrame(view);
+  const frameLabel = resets ? T.primary.useReset : T.primary.useFrame;
   const bg = stillFor(draft.cps.address.frame);
   // one hint for the active mark (its status is the dock tile's badge); missing, hidden and an unsure
   // detection still say what they mean
   const markName = T.names[active];
-  const markLine = statuses[active] === 'missing' ? `${markName} · ${T.line.missing(markName)}`
-    : ['hidden', 'unsure'].includes(statuses[active]) ? `${markName} · ${T.line[statuses[active]]}` : T.placeHint(markName);
+  const markHint = statuses[active] === 'missing' ? T.line.missing(markName)
+    : ['hidden', 'unsure'].includes(statuses[active]) ? T.line[statuses[active]] : T.placeHint;
+  const markLine = `${markName} · ${markHint}`;
   const short = SWING_STRINGS.checkpoint[cp] ?? cue?.name ?? cp;
   const cueTitle = `${cue?.p ? `${cue.p} ` : ''}${short}`;
 
@@ -656,24 +657,21 @@ export function SwingMarkCanvas({
         <View style={[s.sheet, { paddingBottom: 24 + insets.bottom }]}>
           <View style={s.handle} />
           <Text style={s.sheetTitle}>{T.clubTitle}</Text>
-          <Text style={s.sheetSub}>{T.clubSub}</Text>
-          <View style={s.row} accessibilityRole="radiogroup" accessibilityLabel={SWING_STRINGS.club.label}>
+          <View style={s.segc} accessibilityRole="radiogroup" accessibilityLabel={SWING_STRINGS.club.label}>
             {CLUBS.map((k) => (
               <Pressable
                 key={k}
-                style={[s.btn, s.flex, club !== k && s.btnGhost]}
+                style={[s.segcItem, club === k && s.segcOn]}
                 onPress={() => setClub(k)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: club === k }}
                 accessibilityLabel={SWING_STRINGS.club[k]}
               >
-                <Text style={[s.btnText, club !== k && s.btnGhostText]}>{SWING_STRINGS.club[k]}</Text>
+                <Text style={[s.segcText, club === k && s.segcTextOn]}>{SWING_STRINGS.club[k]}</Text>
               </Pressable>
             ))}
           </View>
-          <Text style={s.sheetSub}>{T.clubNext}</Text>
           <HudButton label={T.start} onPress={startMarking} disabled={saving} testID="mark-start" />
-          <Text style={[s.sheetSub, s.center]}>{SWING_STRINGS.privacy}</Text>
         </View>
       </View>
     );
@@ -775,14 +773,7 @@ export function SwingMarkCanvas({
           )}
         </View>
 
-        <View style={[s.panel, { height: PANEL_H + insets.bottom, paddingBottom: 12 + insets.bottom }]} testID={`mark-step-${step}`}>
-          <View style={s.steph}>
-            <Text style={s.stephText} accessibilityRole="header">{step1 ? T.findFrame : T.placeMarks}</Text>
-            <View style={s.dots}>
-              <View style={[s.dot, s.dotOn]} />
-              <View style={[s.dot, !step1 && s.dotOn]} />
-            </View>
-          </View>
+        <View style={[s.panel, !step1 && s.panelMarks, { height: PANEL_H + insets.bottom, paddingBottom: 12 + insets.bottom }]} testID={`mark-step-${step}`}>
           {step1 ? (
             <>
               <FrameScrubber
@@ -803,23 +794,22 @@ export function SwingMarkCanvas({
                   <HudButton ghost label={T.cancel} onPress={onCancel} disabled={saving} style={s.btnSide} testID="mark-cancel" />
                 )}
                 {/* off until the picture is this exact frame: "Use frame N" must take what the golfer sees */}
-                <HudButton iconRight="chevron-right" label={frameLabel} onPress={onUseFrame} disabled={saving || loading} style={s.flex} testID="mark-use-frame" />
+                <HudButton label={frameLabel} onPress={onUseFrame} disabled={saving || loading} style={s.btnMain} testID="mark-use-frame" />
               </View>
             </>
           ) : (
             <>
               <View style={s.markRow} testID="mark-row">
                 <Swatch mark={active} size={14} />
-                <Text style={s.markText} numberOfLines={1}>{markLine}</Text>
+                <View style={s.markInfo}>
+                  <Text style={s.markName} numberOfLines={1}>{markName}</Text>
+                  <Text style={[s.hint, toast && s.toast]} accessibilityLiveRegion="polite" numberOfLines={1} testID="mark-hint">{toast || markHint}</Text>
+                </View>
                 {active === 'head' && statuses.head !== 'confirmed' ? (
-                  <Pressable style={[s.mini, s.miniGhost, loading && s.dim]} disabled={loading} onPress={toggleHidden} accessibilityRole="button" accessibilityLabel={d.hidden ? T.unhide : T.hide} testID="mark-hidden">
-                    <Feather name="eye-off" size={13} color={hud.text} />
-                    <Text style={[s.miniText, s.white]}>{d.hidden ? T.unhide : T.hide}</Text>
+                  <Pressable style={[s.nudge, d.hidden && s.nudgeOn, loading && s.dim]} disabled={loading} onPress={toggleHidden} accessibilityRole="button" accessibilityLabel={d.hidden ? T.unhide : T.hide} testID="mark-hidden">
+                    <Feather name={d.hidden ? 'eye' : 'eye-off'} size={16} color={hud.textSoft} />
                   </Pressable>
                 ) : null}
-              </View>
-              <View style={s.tools}>
-                <Text style={[s.hint, s.toast]} accessibilityLiveRegion="polite" numberOfLines={2}>{toast}</Text>
                 {[['left', 'arrow-left', -1, 0], ['up', 'arrow-up', 0, -1], ['down', 'arrow-down', 0, 1], ['right', 'arrow-right', 1, 0]].map(([k, icon, dx, dy]) => (
                   <Pressable key={k} style={s.nudge} onPress={() => nudge(dx, dy)} disabled={loading} accessibilityRole="button" accessibilityLabel={T.nudge[k]}>
                     <Feather name={icon} size={16} color={hud.textSoft} />
@@ -827,8 +817,8 @@ export function SwingMarkCanvas({
                 ))}
               </View>
               <View style={[s.row, s.act]}>
-                <HudButton ghost icon="chevron-left" label={T.changeFrame} a11y={T.changeFrameA11y} onPress={onChangeFrame} disabled={saving} style={s.btnSide} testID="mark-change-frame" />
-                <HudButton icon="check" label={saving ? T.saving : primaryLabel} onPress={onPrimary} disabled={saving || loading} style={s.flex} testID="mark-primary" />
+                <HudButton ghost label={T.changeFrame} a11y={T.changeFrameA11y} onPress={onChangeFrame} disabled={saving} style={s.btnSide} testID="mark-change-frame" />
+                <HudButton label={saving ? T.saving : primaryLabel} onPress={onPrimary} disabled={saving || loading} style={s.btnMain} testID="mark-primary" />
               </View>
             </>
           )}
@@ -967,37 +957,27 @@ const s = StyleSheet.create({
   loadingText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: hud.textSoft },
 
   // the panel: one fixed band in both steps
-  panel: { paddingHorizontal: 12, paddingTop: 8, gap: 5, backgroundColor: hud.bg },
-  steph: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  stephText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, lineHeight: 15, color: hud.text },
-  dots: { flexDirection: 'row', gap: 4 },
-  dot: { width: 16, height: 4, borderRadius: 2, backgroundColor: hud.line },
-  dotOn: { backgroundColor: hud.accent },
+  panel: { paddingHorizontal: 12, paddingTop: 10, gap: 10, backgroundColor: hud.bg },
+  panelMarks: { justifyContent: 'flex-end' }, // step 2 is shorter: it sits on the buttons, the band above stays video-black
   act: { marginTop: 'auto' },
-  markRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4,
-    backgroundColor: hud.inset, borderWidth: 1, borderColor: hud.border,
-  },
-  markText: { flex: 1, fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: hud.text },
-  mini: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 34, borderRadius: 999, paddingHorizontal: 10, backgroundColor: hud.accent,
-  },
-  miniGhost: { backgroundColor: hud.fill },
-  miniText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: hud.onAccent },
-  tools: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  markRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
+  markInfo: { flex: 1, minWidth: 0, marginLeft: 2 },
+  markName: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, lineHeight: 19, color: hud.text },
   nudge: {
-    width: 40, height: 36, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: hud.fill, borderWidth: 1, borderColor: hud.line,
+    width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: hud.fill, borderWidth: 1, borderColor: hud.line,
   },
-  hint: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: hud.textMuted },
+  nudgeOn: { backgroundColor: withAlpha(hud.accent, 0.18), borderColor: hud.accent },
+  hint: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, lineHeight: 16, color: hud.textMuted },
   toast: { fontFamily: 'PlusJakartaSans-Bold', color: hud.accent },
 
   btn: {
-    minHeight: 48, borderRadius: 24, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    minHeight: 48, borderRadius: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: hud.accent,
   },
   btnGhost: { backgroundColor: hud.fill, borderWidth: 1, borderColor: hud.line },
   btnPlain: { backgroundColor: 'transparent' },
-  btnSide: { flexGrow: 0 },
+  btnSide: { flex: 1 },
+  btnMain: { flex: 2 },
   btnText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14, color: hud.onAccent, flexShrink: 1 },
   btnGhostText: { fontFamily: 'PlusJakartaSans-Bold', color: hud.text },
 
@@ -1009,7 +989,12 @@ const s = StyleSheet.create({
   sheetTall: { maxHeight: '88%' },
   sheetBody: { gap: 10, paddingBottom: 8 },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: hud.textDim, alignSelf: 'center', marginBottom: 4 },
-  sheetTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, color: hud.text },
+  sheetTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 20, lineHeight: 26, letterSpacing: -0.3, color: hud.text },
+  segc: { flexDirection: 'row', padding: 3, borderRadius: 12, backgroundColor: hud.inset, borderWidth: 1, borderColor: hud.border },
+  segcItem: { flex: 1, minHeight: 44, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  segcOn: { backgroundColor: withAlpha(hud.accent, 0.18) },
+  segcText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: hud.textMuted },
+  segcTextOn: { color: hud.accent },
   sheetSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, lineHeight: 18, color: hud.textSoft },
   finRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingVertical: 6, borderTopWidth: 1, borderTopColor: hud.line,

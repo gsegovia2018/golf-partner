@@ -26,10 +26,6 @@ function def(key, p, stopKind) {
       get: () => ({
         kind: stopKind,
         line: cueText(key, 'stop.line'),
-        short: cueText(key, 'stop.short'),
-        watch: cueText(key, 'stop.watch'),
-        before: cueText(key, 'stop.before'),
-        after: cueText(key, 'stop.after'),
       }),
     });
   }
@@ -71,9 +67,7 @@ export function cueFor(key, handedness = 'right') {
   if (!d) return null;
   if (handedness !== 'left') return { ...d };
   const s = d.stop;
-  const stop = s ? {
-    ...s, line: swapLR(s.line), short: swapLR(s.short), watch: swapLR(s.watch),
-  } : undefined;
+  const stop = s ? { ...s, line: swapLR(s.line) } : undefined;
   return {
     ...d, what: swapLR(d.what), stopWhen: swapLR(d.stopWhen), markTips: swapLR(d.markTips), stop,
   };

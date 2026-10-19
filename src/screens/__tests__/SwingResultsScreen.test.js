@@ -51,6 +51,8 @@ jest.mock('../../store/swingStore', () => ({
   getSwingProfile: jest.fn(() => ({ practiceOpen: false })),
   setPracticeOpen: jest.fn(() => Promise.resolve(true)),
   markSwingFailed: jest.fn(() => Promise.resolve()),
+  hasCustomName: jest.requireActual('../../store/swingStore').hasCustomName,
+  defaultSwingName: jest.requireActual('../../store/swingStore').defaultSwingName,
   deleteSwing: jest.fn(() => Promise.resolve()),
   swingVideoUri: jest.fn(() => 'file:///doc/swings/s1/video.mp4'),
 }));
@@ -312,9 +314,6 @@ describe('SwingResultsScreen: placing the clubhead on the still (design D)', () 
     expect(u.getByLabelText(T.placeToFinish(cpName('shaftDown')))).toBeTruthy(); // the summary's place line
     expect(u.getByTestId('summary-step-shaftDown').props.accessibilityLabel).toBe(T.stepA11y(cpName('shaftDown'), T.stateNoHead));
     expect(u.queryByTestId('results-nudge')).toBeNull(); // the mark goes on the saved frame
-    // the position bar says what is missing, not a verdict ("Watch")
-    expect(within(u.getByTestId('position-bar')).getByText(T.needsHead)).toBeTruthy();
-    expect(within(u.getByTestId('position-bar')).queryByText(SWING_STRINGS.statusWord.yellow)).toBeNull();
   });
 
   test('two taps from the summary: the place line opens place mode on a position that was not showing', async () => {

@@ -28,7 +28,6 @@ const OUTLINE = withAlpha(hud.text, 0.35);
 export const HANDS_FILL = withAlpha(hud.accent, 0.35);
 const HEAD_PROPOSED_FILL = withAlpha(hud.text, 0.3);
 const SWATCH_ON_FILL = withAlpha(INK, 0.2);
-const RAIL_ON = withAlpha(hud.accent, 0.22); // the side of the change to stop on
 
 // --- The marks on the picture ------------------------------------------------------------------
 
@@ -234,40 +233,13 @@ export function Swatch({ mark, on = false, size = 16 }) {
   return <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2.5, borderColor: ink ?? MARK_COLOR.ball }} />;
 }
 
-// --- The cue, inside the video (step 1): "P1 Address" + the moment, the before | after rail, "?" ------
+// --- The cue, inside the video (step 1): the position and the moment in one sentence, "?" --------
 
 /**
- * Which side of the change to stop on: the before | after words, the accent on the side the frame is
- * on, a white tick between them and "this frame" under its end of the tick. For a LAST cue the frame is
- * the end of "before"; for a FIRST cue the start of "after".
- */
-export function CueRail({ stop }) {
-  const last = stop.kind === 'last';
-  return (
-    <View testID="mark-cue-rail">
-      <View style={styles.rail}>
-        <View style={[styles.seg, styles.segL, last && styles.segOn]} testID={last ? 'mark-rail-on' : undefined}>
-          <Text style={[styles.segText, styles.segTextL, last && styles.segTextOn]} numberOfLines={1}>{stop.before}</Text>
-        </View>
-        <View style={styles.tick} />
-        <View style={[styles.seg, styles.segR, !last && styles.segOn]} testID={last ? undefined : 'mark-rail-on'}>
-          <Text style={[styles.segText, !last && styles.segTextOn]} numberOfLines={1}>{stop.after}</Text>
-        </View>
-      </View>
-      <View style={styles.railLabels}>
-        <View style={[styles.railLabel, styles.railLabelL]} testID="mark-rail-under-before">{last ? <Text style={styles.thisFrame}>{T.thisFrame}</Text> : null}</View>
-        <View style={styles.tickGap} />
-        <View style={styles.railLabel} testID="mark-rail-under-after">{last ? null : <Text style={styles.thisFrame}>{T.thisFrame}</Text>}</View>
-      </View>
-    </View>
-  );
-}
-
-/**
- * The panel at the top of the video: `title` ("P1 Address") in bold and the moment in one plain
- * sentence, the before | after rail under it, and "?" which opens the full cue (what / stop when / mark
- * tips) with the pictogram drawn large; a tap on that closes it. Positions without a stop line (the
- * internal frames) show their `stopWhen` sentence and no rail.
+ * The panel at the top of the video: `title` ("P1 Address") as a small label over the moment in one
+ * plain sentence, and "?" which opens the full cue (what / stop when / mark tips) with the pictogram
+ * drawn large; a tap on that closes it. Positions without a stop line (the internal frames) show their
+ * `stopWhen` sentence.
  */
 function CueCardImpl({
   cue, title, open, onToggle, mirror = false,
@@ -300,15 +272,12 @@ function CueCardImpl({
       <View
         style={styles.flex}
         accessible
-        accessibilityLabel={stop ? T.cueA11y(stop.kind, title, stop.line, stop.before, stop.after) : `${title}. ${cue.stopWhen}`}
+        accessibilityLabel={`${title}. ${line}`}
         accessibilityLiveRegion="polite"
         testID="mark-stop-line"
       >
-        <Text style={styles.cueLine} numberOfLines={2}>
-          <Text style={styles.cueTitle}>{title}</Text>
-          {`  ${line}`}
-        </Text>
-        {stop ? <CueRail stop={stop} /> : null}
+        <Text style={styles.cueTitle} numberOfLines={1}>{title}</Text>
+        <Text style={styles.cueLine} numberOfLines={2}>{line}</Text>
       </View>
       <Pressable
         style={styles.help}
@@ -389,28 +358,14 @@ const styles = StyleSheet.create({
 
   cue: {
     position: 'absolute', left: 8, top: 8, right: 8, flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-    paddingTop: 9, paddingBottom: 6, paddingLeft: 11, paddingRight: 9,
+    paddingVertical: 10, paddingLeft: 12, paddingRight: 10,
   },
-  cueLine: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, lineHeight: 18, color: hud.text },
-  cueTitle: { fontFamily: 'PlusJakartaSans-ExtraBold' },
+  cueTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, lineHeight: 14, letterSpacing: 1.2, textTransform: 'uppercase', color: hud.accent },
+  cueLine: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, lineHeight: 19, color: hud.text, marginTop: 2 },
   help: {
-    width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: hud.line, alignItems: 'center', justifyContent: 'center',
+    width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, borderColor: hud.line, alignItems: 'center', justifyContent: 'center',
   },
   helpText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: hud.textSoft },
-  rail: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  seg: { flex: 1, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: hud.fill },
-  segL: { borderTopLeftRadius: 99, borderBottomLeftRadius: 99 },
-  segR: { borderTopRightRadius: 99, borderBottomRightRadius: 99 },
-  segOn: { backgroundColor: RAIL_ON },
-  segText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: hud.textMuted },
-  segTextL: { textAlign: 'right' },
-  segTextOn: { color: hud.accent },
-  tick: { width: 3, height: 26, borderRadius: 2, backgroundColor: hud.text },
-  tickGap: { width: 3 },
-  railLabels: { flexDirection: 'row', marginTop: 1 },
-  railLabel: { flex: 1, paddingHorizontal: 2 },
-  railLabelL: { alignItems: 'flex-end' },
-  thisFrame: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, color: hud.text },
   moreText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: hud.accent },
   cueFull: {
     position: 'absolute', left: 8, right: 8, top: 8, gap: 6, paddingTop: 10, paddingHorizontal: 12, paddingBottom: 12,

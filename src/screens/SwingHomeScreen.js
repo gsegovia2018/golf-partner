@@ -15,7 +15,7 @@ import { semantic } from '../theme/tokens';
 import { haptic } from '../lib/haptics';
 import {
   subscribeSwings, getSwingsVersion, getSwings, getSwingProfile, hydrateSwings,
-  createSwing, deleteSwing, storageBytes, defaultSwingName, setSwingProfile,
+  createSwing, deleteSwing, storageBytes, defaultSwingName, hasCustomName, setSwingProfile,
 } from '../store/swingStore';
 import { getSwingAvailability } from '../swing/availability';
 import { pickSwingVideo } from '../swing/importVideo';
@@ -164,8 +164,7 @@ export default function SwingHomeScreen({ navigation }) {
       : sw.status === 'error' ? T.failed
         : marking ? T.finishMarking
           : sw.mainFault ? SWING_STRINGS.fault[sw.mainFault] ?? sw.mainFault : T.noFault;
-    const customName = sw.name !== defaultSwingName(sw.createdAt, 'en') && sw.name !== defaultSwingName(sw.createdAt, 'es');
-    const lead = customName ? sw.name : defaultSwingName(sw.createdAt); // date and time: several swings a day are common
+    const lead = hasCustomName(sw) ? sw.name : defaultSwingName(sw.createdAt); // date and time: several swings a day are common
     const c = marking ? null : sw.counts;
     const clubName = SWING_STRINGS.club[normClub(sw.club)];
     const fps = sw.fps && fpsLow(sw.fps) ? Math.round(sw.fps.effective) : null;

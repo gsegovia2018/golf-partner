@@ -28,6 +28,7 @@ jest.mock('../../store/swingStore', () => ({
   storageBytes: jest.fn(() => 184 * 1024 * 1024),
   setSwingProfile: jest.fn(() => Promise.resolve()),
   defaultSwingName: jest.requireActual('../../store/swingStore').defaultSwingName,
+  hasCustomName: jest.requireActual('../../store/swingStore').hasCustomName,
 }));
 jest.mock('../../swing/availability', () => ({ getSwingAvailability: jest.fn() }));
 jest.mock('../../swing/importVideo', () => ({ pickSwingVideo: jest.fn() }));

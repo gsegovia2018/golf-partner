@@ -6,7 +6,6 @@ import Svg, { Circle } from 'react-native-svg';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from '../ui/PressableScale';
-import { glass } from './swingStyles';
 import SwingOverlay, { fitRect } from './SwingOverlay';
 import { hud } from '../../theme/tokens';
 import { SWING_STRINGS } from '../../swing/strings';
@@ -20,11 +19,13 @@ const TARGET_R = 20;
  * neighbouring position (one Pan; ‹ › stay the non-gesture path), and, in place mode, a tap puts the
  * clubhead there (the dashed dot the detector was unsure about is a target ring: tap it, or "Confirm the
  * dot", to accept it). Two taps from the summary's place line, one when the screen opens in place mode.
- * It draws on a photograph, so the palette is the fixed HUD one.
+ * It draws on a photograph, so the palette is the fixed HUD one. The dark frame spans `frameWidth`
+ * (the column the strip and the cards share) with the picture centred in it; the only control on
+ * the picture is the round play button.
  */
 export default function StepStill({
   overlay, placing = false, proposal = null, toast = null, stepLabel, frame, onSwipe, onPlacePoint, onConfirmProposal, onOpenEdit,
-  badge = null, onPlay = null, nudge = null,
+  frameWidth = null, onPlay = null,
 }) {
   const { width, height, video } = overlay;
   const rect = useMemo(() => fitRect(width, height, video?.width, video?.height), [width, height, video]);
@@ -53,7 +54,7 @@ export default function StepStill({
   }, [placing, rect.w, rect.h, proposal, onSwipe, onPlacePoint, onConfirmProposal]);
 
   return (
-    <View style={s.wrap}>
+    <View style={[s.wrap, frameWidth != null && { width: frameWidth }]}>
       <SwingOverlay {...overlay}>
         <GestureDetector gesture={gesture}>
           <View style={StyleSheet.absoluteFill} testID="step-touch-layer" accessible={placing} accessibilityLabel={placing ? R.tapWhereA11y(stepLabel, frame) : undefined} />
@@ -64,29 +65,10 @@ export default function StepStill({
           </Svg>
         ) : null}
       </SwingOverlay>
-      {badge ? (
-        <View style={[glass.pill, s.badge]} accessible accessibilityLiveRegion="polite" accessibilityLabel={badge.a11y} testID="position-bar">
-          {badge.p ? <Text style={s.badgeP}>{badge.p}</Text> : null}
-          <Text style={s.badgeName} numberOfLines={1}>{badge.name}</Text>
-          {badge.word ? <Text style={[s.badgeWord, badge.tone && { color: badge.tone }]}>{badge.word}</Text> : null}
-        </View>
-      ) : null}
       {onPlay && !placing ? (
-        <PressableScale style={[glass.pill, s.play]} onPress={onPlay} accessibilityRole="button" accessibilityLabel={R.play} testID="results-play">
-          <Feather name="play" size={13} color={hud.text} />
-          <Text style={s.playText}>{R.playShort}</Text>
+        <PressableScale style={s.play} onPress={onPlay} accessibilityRole="button" accessibilityLabel={R.play} testID="results-play">
+          <Feather name="play" size={17} color={hud.text} style={s.playIcon} />
         </PressableScale>
-      ) : null}
-      {nudge && !placing ? (
-        <View style={[glass.pill, s.nudge]} testID="results-nudge">
-          <PressableScale style={[s.nb, !nudge.canPrev && s.nbOff]} disabled={!nudge.canPrev} onPress={nudge.onPrev} accessibilityRole="button" accessibilityLabel={R.prevFrame}>
-            <Feather name="chevron-left" size={18} color={hud.text} />
-          </PressableScale>
-          <Text style={s.nudgeText} numberOfLines={1}>{nudge.label}</Text>
-          <PressableScale style={[s.nb, !nudge.canNext && s.nbOff]} disabled={!nudge.canNext} onPress={nudge.onNext} accessibilityRole="button" accessibilityLabel={R.nextFrame}>
-            <Feather name="chevron-right" size={18} color={hud.text} />
-          </PressableScale>
-        </View>
       ) : null}
       {toast ? <View style={s.toast} pointerEvents="box-none" testID="step-toast">{toast}</View> : null}
       {placing ? (
@@ -114,16 +96,11 @@ export default function StepStill({
 const s = StyleSheet.create({
   wrap: { alignSelf: 'center', borderRadius: 14, overflow: 'hidden', alignItems: 'center', backgroundColor: '#0a0d10' },
   toast: { position: 'absolute', left: 8, right: 8, top: 8 },
-  badge: { position: 'absolute', left: 8, top: 8, maxWidth: '70%', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5 },
-  badgeP: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: hud.textSoft },
-  badgeName: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: hud.text, flexShrink: 1 },
-  badgeWord: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: hud.textSoft },
-  play: { position: 'absolute', right: 8, top: 8, minHeight: 32, minWidth: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10 },
-  playText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: hud.text },
-  nudge: { position: 'absolute', bottom: 10, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 2 },
-  nb: { width: 40, height: 36, alignItems: 'center', justifyContent: 'center' },
-  nbOff: { opacity: 0.3 },
-  nudgeText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: hud.text, paddingHorizontal: 6, fontVariant: ['tabular-nums'] },
+  play: {
+    position: 'absolute', right: 10, bottom: 10, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: hud.scrimStrong, borderWidth: 1, borderColor: hud.line,
+  },
+  playIcon: { marginLeft: 2 }, // the triangle's optical centre
   place: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 10, gap: 6 },
   box: {
     flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: hud.scrimStrong, borderWidth: 1, borderColor: hud.line, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, minHeight: 44,

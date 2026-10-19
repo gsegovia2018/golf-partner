@@ -166,14 +166,15 @@ beforeEach(() => {
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 });
 
+const pill = (u) => u.getByTestId('mark-frame-line').props.children;
+
 describe('the layout (D28: frame first, then marks)', () => {
-  test('one slim top row: close and the seven chips (status dot, short name); the chips are the progress, the panel header names the step', async () => {
+  test('one slim top row: close and the seven chips (status dot, short name); the chips are the progress, no panel header', async () => {
     const u = await open({ mode: 'pass', marks: PARTIAL });
     ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(u.getByTestId(`chapter-${k}`)).toBeTruthy());
     ['transition', 'shaftThrough', 'finish'].forEach((k) => expect(u.queryByTestId(`chapter-${k}`)).toBeNull());
     expect(u.getByTestId('chapter-address').props.accessibilityState.selected).toBe(true);
     expect(u.queryByTestId('mark-count')).toBeNull(); // no "1/7 · 0 ✓" and no "Step 1 of 2": the dots say it
-    expect(within(u.getByTestId('mark-step-1')).getByText(M.findFrame)).toBeTruthy();
     expect(u.queryByText(/Step \d of 2/)).toBeNull();
     expect(u.queryByTestId('mark-fine-strip')).toBeNull();
     expect(u.queryByTestId('mark-undo')).toBeNull();
@@ -183,56 +184,43 @@ describe('the layout (D28: frame first, then marks)', () => {
     expect([overlay.props.width, overlay.props.height]).toEqual([480, 1334 - 52 - PANEL_H]); // the video takes the rest
   });
 
-  test('step 1: the cue INSIDE the video ("P4 Top" + the moment, the rail; the pictogram behind "?"), the track, the zoomed row ±4, "Proposed frame looks right"', async () => {
+  test('step 1: the cue INSIDE the video ("P4 Top" over the moment; the pictogram behind "?"), the track, the zoomed row ±4, one status pill', async () => {
     const u = await open({ mode: 'pass', marks: { ...PARTIAL, pass: { state: 'partial', skipped: ['address', 'takeaway', 'leadArm'] } } });
     expect(step(u)).toBe(1);
     const video = u.getByTestId('mark-video');
     const cue = within(video).getByTestId('mark-stop-line');
     expect(within(cue).getByText('P4 Top')).toBeTruthy();
     expect(within(cue).getByText(/Last frame before the club starts down/)).toBeTruthy();
-    expect(within(cue).getByText('going back')).toBeTruthy();
-    expect(within(cue).getByText('coming down')).toBeTruthy();
+    expect(cue.props.accessibilityLabel).toBe('P4 Top. Last frame before the club starts down');
     expect(within(video).queryByTestId('mark-pictogram', { includeHiddenElements: true })).toBeNull(); // behind "?" now
     const f = FIRST.checkpoints.top.i;
     expect(u.getByTestId(`zoom-${f - 4}`)).toBeTruthy();
     expect(u.getByTestId(`zoom-${f + 4}`)).toBeTruthy();
     expect(u.queryByTestId(`zoom-${f + 5}`)).toBeNull();
     expect(u.getByTestId('mark-track')).toBeTruthy();
-    expect(within(u.getByTestId('mark-frame-offset')).getByText(M.onProposal)).toBeTruthy(); // "Suggested"
-    expect(within(u.getByTestId('mark-suggested')).getByText(M.onProposal)).toBeTruthy(); // the pill over the proposed thumb
-    expect(u.getByLabelText(M.primary.proposedOk)).toBeTruthy();
+    expect(pill(u)).toBe(`${M.frameNum(f)} · ${M.onProposal}`); // one pill: "Frame 412 · Suggested"
+    expect(u.queryByTestId('mark-suggested')).toBeNull(); // no second "Suggested" over the thumb
+    expect(u.getByLabelText(M.primary.useFrame)).toBeTruthy();
+    expect(pill(u)).toMatch(new RegExp(` · ${M.onProposal}$`));
     expect(u.getByTestId('mark-skip')).toBeTruthy();
     expect(u.queryByTestId('dock-hands')).toBeNull(); // the marks come in step 2
     expect(u.queryByTestId('mark-frame-tag')).toBeNull(); // the frame line under the strip says the frame
     expect(u.queryByTestId('mark-scrub-note')).toBeNull(); // the picture is the exact frame
   });
 
-  test('the cue rail: a LAST cue stops at the end of "before", a FIRST cue at the start of "after"', async () => {
-    const onWords = (u) => within(u.getByTestId('mark-rail-on')).getAllByText(/./).map((n) => n.props.children);
-    const under = (u, side) => within(u.getByTestId(`mark-rail-under-${side}`)).queryByText(M.thisFrame);
-    // Address (P1): last frame where the clubhead is still · still | moving, "this frame" under the end of "still"
+  test('the cue is the position over one sentence: Address is the last frame before the clubhead moves', async () => {
     const a = await open({ mode: 'pass', marks: PARTIAL });
     const cueA = a.getByTestId('mark-stop-line');
-    expect(within(cueA).getByText(/Last frame where the clubhead is still/)).toBeTruthy();
-    expect(within(cueA).getByText('still')).toBeTruthy();
-    expect(within(cueA).getByText('moving')).toBeTruthy();
-    expect(onWords(a)).toEqual(['still']);
-    expect(under(a, 'before')).toBeTruthy();
-    expect(under(a, 'after')).toBeNull();
-    expect(cueA.props.accessibilityLabel).toBe(M.cueA11y('last', 'P1 Address', 'Last frame where the clubhead is still', 'still', 'moving'));
-    expect(cueA.props.accessibilityLabel).toBe('P1 Address. Last frame where the clubhead is still. Stop on the last “still” frame before “moving”.');
+    expect(within(cueA).getByText('P1 Address')).toBeTruthy();
+    expect(within(cueA).getByText('Last frame before the clubhead starts to move')).toBeTruthy();
+    expect(cueA.props.accessibilityLabel).toBe('P1 Address. Last frame before the clubhead starts to move');
+    expect(a.queryByTestId('mark-cue-rail')).toBeNull();
     a.unmount();
 
-    // Downswing (P6): first frame the shaft is level · not yet level | level, "this frame" under the start of "level"
     const b = await open({ mode: 'pass', marks: { ...PARTIAL, pass: { state: 'partial', skipped: ['address', 'takeaway', 'leadArm', 'top'] } } });
     const cueB = b.getByTestId('mark-stop-line');
     expect(within(cueB).getByText('P6 Downswing')).toBeTruthy();
-    expect(within(cueB).getByText(/First frame the shaft is level/)).toBeTruthy();
-    expect(within(cueB).getByText('not yet level')).toBeTruthy();
-    expect(onWords(b)).toEqual(['level']);
-    expect(under(b, 'before')).toBeNull();
-    expect(under(b, 'after')).toBeTruthy();
-    expect(cueB.props.accessibilityLabel).toContain('Stop on the first “level” frame after “not yet level”');
+    expect(within(cueB).getByText('First frame the shaft is level')).toBeTruthy();
     expect(b.getByLabelText(M.cueHelp)).toBeTruthy();
   });
 
@@ -262,11 +250,11 @@ describe('the layout (D28: frame first, then marks)', () => {
     expect(within(video).getByText(`${M.posTail(f)}`)).toBeTruthy(); // "P4 Top · 112": the frame number shows once
     expect(u.queryByTestId('mark-frame-tag')).toBeNull();
     ['hands', 'head', 'ball'].forEach((m) => expect(within(video).getByTestId(`dock-${m}`)).toBeTruthy());
-    expect(within(u.getByTestId('mark-row')).getByText(M.placeHint('Hands'))).toBeTruthy();
+    expect(within(u.getByTestId('mark-row')).getByText('Hands')).toBeTruthy();
+    expect(within(u.getByTestId('mark-row')).getByText(M.placeHint)).toBeTruthy();
     expect(u.queryByText('1 px nudge')).toBeNull();
     ['left', 'up', 'down', 'right'].forEach((k) => expect(u.getByLabelText(M.nudge[k])).toBeTruthy());
     expect(u.queryByTestId('mark-confirm')).toBeNull(); // one confirm: the primary
-    expect(within(u.getByTestId('mark-step-2')).getByText(M.placeMarks)).toBeTruthy();
     expect(u.getByLabelText(M.changeFrameA11y)).toBeTruthy();
     expect(u.queryByTestId('mark-scrubber')).toBeNull();
     expect(u.queryByTestId('mark-stop-line')).toBeNull();
@@ -314,11 +302,12 @@ describe('step 1 → step 2 → next (the pass)', () => {
     const u = await open({ mode: 'pass', seeded: true, marks: PARTIAL });
     const f = FIRST.checkpoints.address.i;
     await press(u.getByTestId(`zoom-${f - 1}`));
-    expect(u.getByLabelText(M.primary.useFrame(f - 1))).toBeTruthy();
-    expect(within(u.getByTestId('mark-frame-offset')).getByText(M.offProposal(-1))).toBeTruthy();
-    expect(M.offProposal(-1)).toBe('−1 from suggested');
+    expect(u.getByLabelText(M.primary.useFrame)).toBeTruthy();
+    expect(pill(u).startsWith(`${M.frameNum(f - 1)} ·`)).toBe(true);
+    expect(pill(u)).toBe(`${M.frameNum(f - 1)} · −1`); // off the suggestion: the pill says by how much
+    expect(u.getByTestId('mark-frame-offset').props.accessibilityLabel).toContain('−1 from suggested');
     await press(u.getByTestId(`zoom-${f}`));
-    await press(u.getByLabelText(M.primary.proposedOk));
+    await press(u.getByLabelText(M.primary.useFrame));
     expect(step(u)).toBe(2);
     expect(dockLabel(u, 'head')).toBe(M.dockLabel('Clubhead', 'Proposed')); // the seed, on the proposed frame
     expect(store.saveMarks).not.toHaveBeenCalled(); // step 1 → 2 saves nothing yet
@@ -341,7 +330,7 @@ describe('step 1 → step 2 → next (the pass)', () => {
     const f = FIRST.checkpoints.address.i;
     await press(u.getByLabelText(M.nextFrame));
     await press(u.getByLabelText(M.nextFrame));
-    await press(u.getByLabelText(M.primary.useFrame(f + 2)));
+    await press(u.getByLabelText(M.primary.useFrame));
     expect(u.getByTestId('mark-pospill').props.accessibilityLabel).toBe(M.posPill('P1', 'Address', f + 2));
     await press(u.getByTestId('mark-primary'));
     const addr = savedMarks().frames.find((x) => x.checkpoint === 'address');
@@ -474,13 +463,15 @@ describe('changing the frame resets that position\'s marks (D28)', () => {
     expect(dockLabel(u, 'hands')).toBe(M.dockLabel('Hands', 'Moved'));
     await press(u.getByTestId('mark-change-frame'));
     expect(step(u)).toBe(1);
-    expect(u.getByLabelText(M.primary.proposedOk)).toBeTruthy(); // the same frame: nothing will reset
+    expect(u.getByLabelText(M.primary.useFrame)).toBeTruthy(); // the same frame: nothing will reset
+    expect(pill(u)).toMatch(new RegExp(` · ${M.onProposal}$`));
     await press(u.getByTestId('mark-use-frame'));
     expect(dockLabel(u, 'hands')).toBe(M.dockLabel('Hands', 'Moved')); // kept
     expect(u.queryByText(M.framesReset)).toBeNull();
     await press(u.getByTestId('mark-change-frame'));
     await press(u.getByTestId(`zoom-${f + 2}`));
-    expect(u.getByLabelText(M.primary.useReset(f + 2))).toBeTruthy();
+    expect(u.getByLabelText(M.primary.useReset)).toBeTruthy();
+    expect(pill(u).startsWith(`${M.frameNum(f + 2)} ·`)).toBe(true);
     await press(u.getByTestId('mark-use-frame'));
     expect(u.getByText(M.framesReset)).toBeTruthy();
     expect(dockLabel(u, 'hands')).toBe(M.dockLabel('Hands', 'Proposed')); // the tracked grip at the new frame
@@ -509,13 +500,15 @@ describe('changing the frame resets that position\'s marks (D28)', () => {
     expect(u.getByTestId('chapter-takeaway').props.accessibilityState.selected).toBe(true);
     expect(step(u)).toBe(1);
     await press(u.getByTestId(`zoom-${f + 1}`));
-    expect(u.getByLabelText(M.primary.useReset(f + 1))).toBeTruthy();
+    expect(u.getByLabelText(M.primary.useReset)).toBeTruthy();
+    expect(pill(u).startsWith(`${M.frameNum(f + 1)} ·`)).toBe(true);
     await press(u.getByTestId('mark-use-frame'));
     expect(u.getByText(M.framesReset)).toBeTruthy();
     expect(dockLabel(u, 'head')).toBe(M.dockLabel('Clubhead', 'Missing'));
     await press(u.getByTestId('chapter-top')); // untouched: no warning, no toast
     await press(u.getByTestId(`zoom-${FIRST.checkpoints.top.i + 1}`));
-    expect(u.getByLabelText(M.primary.useFrame(FIRST.checkpoints.top.i + 1))).toBeTruthy();
+    expect(u.getByLabelText(M.primary.useFrame)).toBeTruthy();
+    expect(pill(u).startsWith(`${M.frameNum(FIRST.checkpoints.top.i + 1)} ·`)).toBe(true);
     await press(u.getByTestId('mark-use-frame'));
     expect(u.queryByText(M.framesReset)).toBeNull();
   });
@@ -547,7 +540,8 @@ describe('the whole-clip scrub (D28)', () => {
         { state: State.BEGAN, x: 20 }, { state: State.ACTIVE, x: 150 }, { state: State.ACTIVE, x: atFrame(target) }, { state: State.END, x: atFrame(target) },
       ]);
     });
-    expect(u.getByLabelText(M.primary.useFrame(target))).toBeTruthy();
+    expect(u.getByLabelText(M.primary.useFrame)).toBeTruthy();
+    expect(pill(u).startsWith(`${M.frameNum(target)} ·`)).toBe(true);
     expect(within(u.getByTestId('mark-frame-line')).getByText(new RegExp(`^Frame ${target} `))).toBeTruthy();
     expect(u.getByTestId(`zoom-${target}`)).toBeTruthy(); // the zoomed row re-centres on it
   });
@@ -557,14 +551,16 @@ describe('the whole-clip scrub (D28)', () => {
     await layoutTrack(u);
     const top = FIRST.checkpoints.top.i;
     await act(async () => { const g = trackPan().handlers; g.onBegin(ev(atFrame(top) + 3)); g.onFinalize(ev(atFrame(top) + 3), false); });
-    expect(u.getByLabelText(M.primary.useFrame(top))).toBeTruthy();
+    expect(u.getByLabelText(M.primary.useFrame)).toBeTruthy();
+    expect(pill(u).startsWith(`${M.frameNum(top)} ·`)).toBe(true);
   });
 
   test('a scrub the system cancels after it started picks nothing', async () => {
     const u = await open({ mode: 'pass', marks: PARTIAL });
     await layoutTrack(u);
     await act(async () => { const g = trackPan().handlers; g.onBegin(ev(20)); g.onStart(ev(200)); g.onUpdate(ev(200)); g.onFinalize(ev(200), false); });
-    expect(u.getByLabelText(M.primary.proposedOk)).toBeTruthy();
+    expect(u.getByLabelText(M.primary.useFrame)).toBeTruthy();
+    expect(pill(u)).toMatch(new RegExp(` · ${M.onProposal}$`));
     expect(within(u.getByTestId('mark-frame-line')).getByText(new RegExp(`^Frame ${FIRST.checkpoints.address.i} `))).toBeTruthy();
     expect(u.queryByTestId('mark-scrub-note')).toBeNull();
   });
@@ -574,10 +570,12 @@ describe('the whole-clip scrub (D28)', () => {
     await layoutTrack(u);
     const top = FIRST.checkpoints.top.i;
     await act(async () => { fireGestureHandler(trackPan(), [{ state: State.BEGAN, x: atFrame(top) + 5 }, { state: State.END, x: atFrame(top) + 5 }]); });
-    expect(u.getByLabelText(M.primary.useFrame(top))).toBeTruthy();
+    expect(u.getByLabelText(M.primary.useFrame)).toBeTruthy();
+    expect(pill(u).startsWith(`${M.frameNum(top)} ·`)).toBe(true);
     const addr = FIRST.checkpoints.address.i;
     await act(async () => { fireGestureHandler(trackPan(), [{ state: State.BEGAN, x: atFrame(addr) - 4 }, { state: State.END, x: atFrame(addr) - 4 }]); });
-    expect(u.getByLabelText(M.primary.proposedOk)).toBeTruthy();
+    expect(u.getByLabelText(M.primary.useFrame)).toBeTruthy();
+    expect(pill(u)).toMatch(new RegExp(` · ${M.onProposal}$`));
   });
 
   test('while dragging: the nearest proxy, labelled scrubbing, and no analysis or canvas change; on release the full-res still and its neighbours', async () => {
@@ -597,11 +595,13 @@ describe('the whole-clip scrub (D28)', () => {
     expect(picture(u)).toBe(`file:///proxy/${Math.round(target / 4) * 4}.jpg`);
     expect(within(u.getByTestId('mark-scrub-note')).getByText(M.scrubbing)).toBeTruthy();
     expect(u.getByTestId(`zoom-${target}`)).toBeTruthy();
-    expect(u.getByLabelText(M.primary.proposedOk)).toBeTruthy(); // the canvas still has the committed frame
+    expect(u.getByLabelText(M.primary.useFrame)).toBeTruthy(); // the canvas still has the committed frame
+    expect(pill(u).startsWith(`${M.frameNum(target)} ·`)).toBe(true); // the pill follows the finger
     expect(analyze).not.toHaveBeenCalled();
     expect(ensureStills).not.toHaveBeenCalled(); // nothing is decoded while the finger is down
     await act(async () => { g.onFinalize(ev(atFrame(target)), true); });
-    expect(u.getByLabelText(M.primary.useFrame(target))).toBeTruthy();
+    expect(u.getByLabelText(M.primary.useFrame)).toBeTruthy();
+    expect(pill(u).startsWith(`${M.frameNum(target)} ·`)).toBe(true);
     await waitFor(() => expect(ensureStills).toHaveBeenCalledWith('s1', [target], 'target'));
     await waitFor(() => expect(picture(u)).toBe(`file:///still/${target}.jpg`));
     expect(u.queryByTestId('mark-scrub-note')).toBeNull(); // the exact frame: no note on the picture
@@ -653,12 +653,12 @@ describe('step 2: placing the marks', () => {
     expect(within(dock(u, 'head')).queryByTestId('dock-badge-head')).toBeNull(); // missing: no badge
     expect(within(dock(u, 'ball')).queryByTestId('dock-badge-ball')).toBeNull();
     expect(within(dock(u, 'hands')).queryByText('Proposed')).toBeNull(); // no status word in the tile
-    expect(u.getByText(M.placeHint('Hands'))).toBeTruthy();
+    expect(within(u.getByTestId('mark-row')).getByText(M.placeHint)).toBeTruthy();
     await press(dock(u, 'ball'));
     expect(u.getByText(M.ballOnlyAddress)).toBeTruthy();
     expect(dock(u, 'hands').props.accessibilityState.selected).toBe(true);
     await press(dock(u, 'head'));
-    expect(u.getByText(`Clubhead · ${M.line.missing('Clubhead')}`)).toBeTruthy();
+    expect(within(u.getByTestId('mark-row')).getByText(M.line.missing('Clubhead'))).toBeTruthy();
   });
 
   test('D16: a tap places the clubhead (Moved); Save confirms it with the rest and writes it with the flags', async () => {
@@ -817,7 +817,6 @@ describe('step 2: placing the marks', () => {
     ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'].forEach((k) => expect(u.getByTestId(`chapter-${k}`).props.accessibilityState.selected).toBe(false));
     await press(u.getByTestId('mark-change-frame'));
     expect(within(u.getByTestId('mark-stop-line')).getByText(/First frame where body and club have stopped/)).toBeTruthy();
-    expect(within(u.getByTestId('mark-rail-under-after')).getByText(M.thisFrame)).toBeTruthy();
   });
 
   test('edit from Results on a saved chosen frame opens there', async () => {
@@ -876,7 +875,7 @@ describe('step 2: placing the marks', () => {
   test('review: TalkBack cannot reach the canvas behind the discard sheet; the touch layer says what a tap does', async () => {
     const u = await open({ checkpoint: 'leadArm' });
     const layer = () => u.getByTestId('edit-touch-layer');
-    expect(layer().props.accessibilityLabel).toBe(M.placeHint('Hands'));
+    expect(layer().props.accessibilityLabel).toBe(`Hands · ${M.placeHint}`);
     await press(dock(u, 'head'));
     expect(layer().props.accessibilityLabel).toBe(`Clubhead · ${M.line.missing('Clubhead')}`);
     await touch(px([0.24, 0.32]));
@@ -1207,7 +1206,7 @@ describe('checks v2: seven positions, the unsure clubhead, the deep link', () =>
     const u = await open({ analysis: a, poseOverride: p, checkpoint: 'leadArm' });
     await press(dock(u, 'head'));
     expect(dockLabel(u, 'head')).toBe(M.dockLabel('Clubhead', 'Unsure'));
-    expect(u.getByText(`Clubhead · ${M.line.unsure}`)).toBeTruthy();
+    expect(within(u.getByTestId('mark-row')).getByText(M.line.unsure)).toBeTruthy();
     expect(within(dock(u, 'head')).getByTestId('dock-badge-head')).toHaveTextContent('?');
     await press(u.getByLabelText(M.primary.editSave));
     expect(dockLabel(u, 'head')).toBe(M.dockLabel('Clubhead', 'Confirmed'));
@@ -1230,7 +1229,7 @@ describe('checks v2: seven positions, the unsure clubhead, the deep link', () =>
     expect(u.getByTestId('chapter-shaftDown').props.accessibilityState.selected).toBe(true);
     expect(dock(u, 'head').props.accessibilityState.selected).toBe(true);
     expect(dock(u, 'hands').props.accessibilityState.selected).toBe(false);
-    expect(u.getByText(`Clubhead · ${M.line.missing('Clubhead')}`)).toBeTruthy();
+    expect(within(u.getByTestId('mark-row')).getByText(M.line.missing('Clubhead'))).toBeTruthy();
     expect(u.getByTestId('mark-pospill').props.accessibilityLabel).toBe(M.posPill('P6', 'Downswing', FIRST.checkpoints.shaftDown.i));
   });
 
