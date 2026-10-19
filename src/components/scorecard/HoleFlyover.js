@@ -17,7 +17,7 @@ import { courseKeyFor } from '../../store/tileCache';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { usePlayConditions } from '../../hooks/usePlayConditions';
 import { subscribeShots, getShotsVersion, shotsForHole, setShotPos, getShots } from '../../store/shotStore';
-import { recommendClub } from '../../lib/shotStats';
+import { guessClub } from '../../store/clubGuess';
 import { clubLabel } from '../../lib/clubs';
 import { HoleMapView } from './HoleMapView';
 import { ShotTracker } from './ShotTracker';
@@ -123,12 +123,16 @@ export function HoleFlyover({
     const suppressRec = gpsOn && haveFix && offCourse; // real fix, but not on the course
     let club = null;
     if (!onGreen && !suppressRec) {
-      const rec = recommendClub(cond.plays(meters), appSettings.bag, getShots(), appSettings.clubDistances, { excludeDriver: true });
+      // Same guess as the shot tracker's picker: the driver only from the
+      // hole's first mark (the tee).
+      const rec = guessClub({
+        meters, bearing: bearingDeg(pt, feat.greenCenter), courseName, settings: appSettings, fromTee: shotPins.length === 1, shots: getShots(),
+      });
       club = rec ? clubLabel(rec.club) : null;
     }
     return { meters, club };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feat, shotPins, appSettings.showLastShot, appSettings.gpsEnabled, appSettings.bag, appSettings.clubDistances, anchorInfo, cond, shotsVersion]);
+  }, [feat, shotPins, appSettings, anchorInfo, cond, courseName, shotsVersion]);
 
   const data = useMemo(() => (feat ? {
     mode: 'view',
@@ -250,9 +254,8 @@ export function HoleFlyover({
                   pos={position ?? null}
                   aimPos={aim?.pos ?? null}
                   aimRings={aim?.rings ?? null}
+                  courseName={courseName}
                   targetPos={feat?.greenCenter ?? null}
-                  targetMeters={feat?.greenCenter && position
-                    ? cond.plays(haversineMeters(position, feat.greenCenter)) : null}
                   tappedShotIndex={tappedShot}
                   onConsumeShotTap={() => setTappedShot(null)}
                   onCollapseTargets={(t) => setTargetsCmd(t)}

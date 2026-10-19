@@ -9,9 +9,9 @@ import {
   shotsForHole, logShot, logMeasuredShot, setShotClub, setShotPos,
   insertShotAfter, deleteShot,
 } from '../../store/shotStore';
-import { haversineMeters } from '../../lib/geo';
+import { haversineMeters, bearingDeg } from '../../lib/geo';
 import { useT } from '../../i18n';
-import { recommendClub } from '../../lib/shotStats';
+import { guessClub } from '../../store/clubGuess';
 import { ClubWheel, wheelClubsFor } from './ClubWheel';
 
 // How far from the green centre "On the green" still makes sense. A green is
@@ -39,7 +39,7 @@ const MAX_GREEN_CLOSE_M = 250;
 //     approach earns its carry without walking up and marking a spot you'd
 //     only ever putt from.
 export function ShotTracker({
-  roundId, roundIndex, holeNumber,
+  roundId, roundIndex, holeNumber, courseName = null,
   pos, aimPos, aimRings, targetPos,
   tappedShotIndex, onConsumeShotTap, onCollapseTargets,
   // Shots the hole's score says are missing (useShotProposals), or null.
@@ -56,6 +56,13 @@ export function ShotTracker({
   const [wheelId, setWheelId] = useState(null); // shot id whose club wheel is open
 
   const overrides = appSettings.clubDistances;
+  // Every guess here goes through guessClub, so the picker preselects the
+  // same club the header, measure button and map card recommend.
+  const guess = (meters, from, to, fromTee) => (Number.isFinite(meters) && meters > 0
+    ? guessClub({
+      meters, bearing: from && to ? bearingDeg(from, to) : null, courseName, settings: appSettings, fromTee, shots: getShots(),
+    })?.club ?? null
+    : null);
 
   // Add a ball spot at `spot` ([lat,lng]): the shot you're about to play from
   // there. Opens the club wheel on it, pre-focused on the club that covers
@@ -64,11 +71,8 @@ export function ShotTracker({
   const addSpot = async (spot) => {
     const hole = shotsForHole(roundId, roundIndex, holeNumber);
     const toGreen = targetPos ? haversineMeters(spot, targetPos) : null;
-    const guess = toGreen
-      ? recommendClub(toGreen, appSettings.bag, getShots(), overrides,
-        { excludeDriver: hole.length > 0 })?.club ?? null
-      : null;
-    const shot = await logShot({ roundId, roundIndex, holeNumber, pos: spot, club: guess });
+    const club = guess(toGreen, spot, targetPos, hole.length === 0);
+    const shot = await logShot({ roundId, roundIndex, holeNumber, pos: spot, club });
     setWheelId(shot.id);
   };
 
@@ -90,9 +94,9 @@ export function ShotTracker({
     if (aimRings?.length === 2) {
       const [start, end] = aimRings;
       const carry = haversineMeters(start, end);
-      const guess = recommendClub(carry, appSettings.bag, getShots(), overrides)?.club ?? null;
+      const club = guess(carry, start, end, shotsForHole(roundId, roundIndex, holeNumber).length === 0);
       const { originId } = await logMeasuredShot({
-        roundId, roundIndex, holeNumber, start, end, club: guess,
+        roundId, roundIndex, holeNumber, start, end, club,
       });
       setWheelId(originId);
       onCollapseTargets?.([end]);
@@ -129,7 +133,8 @@ export function ShotTracker({
   const editToPin = editShot && targetPos
     ? haversineMeters([editShot.lat, editShot.lng], targetPos) : null;
   const editValue = editShot
-    ? (editShot.club ?? recommendClub(editCarry, appSettings.bag, getShots(), overrides)?.club ?? null)
+    ? (editShot.club ?? guess(editCarry, [editShot.lat, editShot.lng],
+      editIndex < shots.length - 1 ? [shots[editIndex + 1].lat, shots[editIndex + 1].lng] : null, editIndex === 0))
     : null;
 
   const closeWheel = () => setWheelId(null);

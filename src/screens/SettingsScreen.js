@@ -31,12 +31,13 @@ const THEME_OPTIONS = [
 // Stagger step between section reveals on mount.
 const REVEAL_STEP = 40;
 
-function SwitchRow({ testID, label, hint, value, onChange, disabled, first, theme, s }) {
+function SwitchRow({ testID, label, hint, note, value, onChange, disabled, first, theme, s }) {
   return (
     <View style={[s.prefRow, !first && s.prefRowDivider]}>
       <View style={{ flex: 1 }}>
         <Text style={[s.prefLabel, disabled && { color: theme.text.muted }]}>{label}</Text>
         {hint ? <Text style={s.fieldHint}>{hint}</Text> : null}
+        {note ? <Text style={s.fieldNote}>{note}</Text> : null}
       </View>
       <Switch
         testID={testID}
@@ -121,6 +122,9 @@ export default function SettingsScreen({ navigation }) {
           <SwitchRow testID="setting-showLastShot" label={t('settings.showLastShot.label')}
             hint={t('settings.showLastShot.hint')}
             value={appSettings.showLastShot} onChange={(v) => setKey({ showLastShot: v })} theme={theme} s={s} />
+          <SwitchRow testID="setting-conditionsEnabled" label={t('settings.conditions.label')}
+            hint={t('settings.conditions.hint')} note={t('shared.conditions.credit')}
+            value={appSettings.conditionsEnabled} onChange={(v) => setKey({ conditionsEnabled: v })} theme={theme} s={s} />
           <SwitchRow testID="setting-keepAwake" label={t('settings.keepAwake.label')}
             hint={t('settings.keepAwake.hint')}
             value={appSettings.keepAwake} onChange={(v) => setKey({ keepAwake: v })} theme={theme} s={s} />
@@ -313,6 +317,10 @@ const makeStyles = (theme) => StyleSheet.create({
   fieldHint: {
     fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
     fontSize: 11, marginTop: 4,
+  },
+  fieldNote: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 10, marginTop: 3,
   },
 
   groupCard: {

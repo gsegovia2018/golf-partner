@@ -32,8 +32,9 @@ export const DEFAULT_APP_SETTINGS = {
   bag: null,
   // Playing-conditions adjustment (see src/lib/playConditions.js). When on,
   // club recommendations use a "plays like" distance from the cached forecast
-  // (wind, temperature — else the month estimate) and the course elevation. `courseAltitudes` maps a course name → metres
-  // (set once per course); merges key-wise so editing one keeps the rest.
+  // (wind, temperature, ground elevation — else the month estimate). Set in
+  // Settings. `courseAltitudes` (course name → metres) is legacy: no UI sets
+  // it now; it is only the elevation fallback when there is no forecast.
   conditionsEnabled: false,
   courseAltitudes: {},
   // Manual per-club carry overrides (club key → metres). Editable in the Bag

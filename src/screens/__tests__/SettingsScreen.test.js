@@ -35,6 +35,14 @@ test('GPS toggle updates the store', async () => {
   await waitFor(() => expect(getAppSettings().gpsEnabled).toBe(false));
 });
 
+test('playing conditions switch lives in Settings, with the Open-Meteo credit', async () => {
+  renderScreen();
+  const sw = await screen.findByTestId('setting-conditionsEnabled');
+  screen.getByText('Weather data by Open-Meteo.com (CC BY 4.0)');
+  fireEvent(sw, 'valueChange', true);
+  await waitFor(() => expect(getAppSettings().conditionsEnabled).toBe(true));
+});
+
 test('stat group rows show what is lost', async () => {
   renderScreen();
   await screen.findByText(/no putting stats, no GIR/i);

@@ -6,12 +6,13 @@ import { useTheme } from '../../theme/ThemeContext';
 import { useT } from '../../i18n';
 import { light as lightTokens } from '../../theme/tokens';
 import { useAppSettings } from '../../hooks/useAppSettings';
-import { useShotPlayConditions } from '../../hooks/usePlayConditions';
+import { usePlayConditions } from '../../hooks/usePlayConditions';
+import { guessClub, shotBearing } from '../../store/clubGuess';
 import {
   logMeasuredShot, deleteShot, getShots, subscribeShots, getShotsVersion,
 } from '../../store/shotStore';
 import { haversineMeters } from '../../lib/geo';
-import { recommendClub, clubAverages } from '../../lib/shotStats';
+import { clubAverages } from '../../lib/shotStats';
 import { swingClubs, clubLabel, clubNominal } from '../../lib/clubs';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { haptic } from '../../lib/haptics';
@@ -40,11 +41,19 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, courseName, fix, t
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   const overrides = appSettings.clubDistances;
   // Clubbed to the plays-like distance (wind/air), like every other club tip.
-  const cond = useShotPlayConditions(courseName, holeNumber, fix?.position ?? null);
-  const suggestion = useMemo(
-    () => recommendClub(cond.plays(targetMeters), appSettings.bag, getShots(), overrides, { excludeDriver: offTee }),
+  const from = fix?.position ?? null;
+  const bearing = useMemo(
+    () => shotBearing(courseName, holeNumber, from),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [targetMeters, appSettings.bag, overrides, offTee, shotsVersion, cond],
+    [courseName, holeNumber, from?.[0], from?.[1]],
+  );
+  const cond = usePlayConditions(courseName, bearing); // re-guess when the forecast lands
+  const suggestion = useMemo(
+    () => guessClub({
+      meters: targetMeters, bearing, courseName, settings: appSettings, fromTee: !offTee, shots: getShots(),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [targetMeters, appSettings, offTee, shotsVersion, cond, bearing, courseName],
   );
 
   const [armed, setArmed] = useState(null);   // { start:[lat,lng], club }

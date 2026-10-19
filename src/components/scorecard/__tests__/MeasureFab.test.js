@@ -13,16 +13,12 @@ jest.mock('../../../hooks/useAppSettings', () => ({
   useAppSettings: () => ({ units: 'meters', bag: undefined, clubDistances: {} }),
 }));
 jest.mock('../ClubWheel', () => ({ ClubWheel: () => null }));
-// Plays-like: identity unless a test sets mockPlays (conditions on).
-let mockPlays = (d) => d;
-jest.mock('../../../hooks/usePlayConditions', () => ({
-  useShotPlayConditions: () => ({ plays: (d) => mockPlays(d) }),
-}));
-jest.mock('../../../lib/shotStats', () => {
-  const actual = jest.requireActual('../../../lib/shotStats');
-  return { ...actual, recommendClub: jest.fn(actual.recommendClub) };
+jest.mock('../../../hooks/usePlayConditions', () => ({ usePlayConditions: () => ({ plays: (d) => d }) }));
+jest.mock('../../../store/clubGuess', () => {
+  const actual = jest.requireActual('../../../store/clubGuess');
+  return { ...actual, guessClub: jest.fn(actual.guessClub) };
 });
-const { recommendClub } = require('../../../lib/shotStats');
+const { guessClub } = require('../../../store/clubGuess');
 
 const { logMeasuredShot, deleteShot } = require('../../../store/shotStore');
 
@@ -33,13 +29,12 @@ const base = {
   fix: { position: START, accuracy: 8 }, targetMeters: 150, onOpenMap: jest.fn(),
 };
 
-beforeEach(() => { jest.clearAllMocks(); mockPlays = (d) => d; });
+beforeEach(() => { jest.clearAllMocks(); });
 
 describe('MeasureFab', () => {
-  it('picks the club for the plays-like distance, like every other club tip', () => {
-    mockPlays = (d) => d * 1.1;
-    render(<MeasureFab {...base} courseName="Test Course" />);
-    expect(recommendClub.mock.calls[0][0]).toBeCloseTo(165, 5);
+  it('guesses its club through the shared guessClub (same plays-like and driver rule)', () => {
+    render(<MeasureFab {...base} courseName="Test Course" offTee />);
+    expect(guessClub).toHaveBeenCalledWith(expect.objectContaining({ meters: 150, courseName: 'Test Course', fromTee: false }));
   });
 
   it('arms on tap with a good fix', () => {
