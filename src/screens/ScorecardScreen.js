@@ -646,6 +646,30 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [official, tournament, roundIndex]);
   const dismissRoundDecisionNotice = useCallback(() => setRoundDecisionNotice(null), []);
   const openModeSheet = useCallback(() => setReopenPrompt(true), []);
+  // The one setup edit this screen dispatches. It goes through the serial save
+  // chain like every other blob write (so it never races a note or tee-time
+  // save), and a failure shows the save-error banner instead of rejecting
+  // unhandled.
+  const changeScoringMode = useCallback((chosenMode) => {
+    setReopenPrompt(false);
+    if (chosenMode === currentMode) return Promise.resolve();
+    localSetupEditRef.current = Date.now(); // our own pairs rebuild, not a peer's
+    return enqueueSave(async () => {
+      const base = tournamentRef.current;
+      if (!base) return null;
+      // Rebuild round pairs so teams match the new mode (e.g. switching
+      // into Best Ball assigns partnerships, switching out collapses them).
+      const { patches: roundPatches } = setScoringModeRoundPatches(base, chosenMode);
+      const updated = await mutate(base, {
+        type: 'tournament.setScoringMode',
+        scoringMode: chosenMode,
+        roundPatches,
+      });
+      tournamentRef.current = updated;
+      setTournament(updated);
+      return updated;
+    }).catch(() => {}); // enqueueSave already logged it and raised the banner
+  }, [currentMode, enqueueSave]);
 
   useEffect(() => {
     if (prevSettingsMode && settingsMode && prevSettingsMode !== settingsMode) {
@@ -1642,19 +1666,7 @@ export default function ScorecardScreen({ navigation, route }) {
         playerCount={(tournament?.players ?? []).length}
         defaultMode={currentMode}
         title={tl('scorecard.screen.changeMode')}
-        onConfirm={async (chosenMode) => {
-          setReopenPrompt(false);
-          if (chosenMode === currentMode) return;
-          // Rebuild round pairs so teams match the new mode (e.g. switching
-          // into Best Ball assigns partnerships, switching out collapses them).
-          const { patches: roundPatches } = setScoringModeRoundPatches(tournament, chosenMode);
-          localSetupEditRef.current = Date.now(); // our own pairs rebuild, not a peer's
-          await mutate(tournament, {
-            type: 'tournament.setScoringMode',
-            scoringMode: chosenMode,
-            roundPatches,
-          });
-        }}
+        onConfirm={changeScoringMode}
         onCancel={() => setReopenPrompt(false)}
       />
 
