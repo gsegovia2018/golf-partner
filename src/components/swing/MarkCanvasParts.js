@@ -431,6 +431,6 @@ const styles = StyleSheet.create({
   cd: { width: 6, height: 6, borderRadius: 3, borderWidth: 1.5, borderColor: hud.textMuted },
   cdDone: { backgroundColor: hud.accent, borderColor: hud.accent },
   cdSkip: { backgroundColor: HUD_WARN, borderColor: HUD_WARN, borderRadius: 1 },
-  chName: { maxWidth: '100%', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10.5, color: hud.textMuted },
-  chOnText: { color: hud.text },
+  chName: { maxWidth: '100%', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, letterSpacing: -0.3, color: hud.textMuted },
+  chOnText: { fontFamily: 'PlusJakartaSans-Bold', color: hud.text },
 });

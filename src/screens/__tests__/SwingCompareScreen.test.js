@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
-import SwingCompareScreen from '../SwingCompareScreen';
+import SwingCompareScreen, { columnHeads } from '../SwingCompareScreen';
 import * as store from '../../store/swingStore';
 import { getStill, ensureStills } from '../../swing/frames';
 import { SWING_STRINGS } from '../../swing/strings';
@@ -130,5 +130,19 @@ describe('SwingCompareScreen', () => {
     expect(await findByText(T.loadFailed)).toBeTruthy();
     fireEvent.press(getByLabelText(T.back));
     expect(navigation.goBack).toHaveBeenCalled();
+  });
+});
+
+describe('columnHeads', () => {
+  it('shows the dates for swings on different days', () => {
+    const [a, b] = columnHeads('2026-10-11T10:00:00', '2026-10-18T20:20:00');
+    expect(a).not.toBe(b);
+    expect(a).not.toMatch(/:/);
+  });
+
+  it('shows the clock times when both swings are from the same day', () => {
+    const [a, b] = columnHeads('2026-10-18T22:34:00', '2026-10-18T20:20:00');
+    expect(a).toMatch(/10:34|22:34/);
+    expect(b).toMatch(/8:20|20:20/);
   });
 });

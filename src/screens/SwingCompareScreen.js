@@ -17,7 +17,7 @@ import { compareAnalyses } from '../swing/compare';
 import { normClub } from '../swing/checks';
 import { SWING_STRINGS } from '../swing/strings';
 import { useT } from '../i18n';
-import { formatDate } from '../i18n/format';
+import { formatDate, formatTime } from '../i18n/format';
 
 const T = SWING_STRINGS.compare;
 
@@ -25,6 +25,13 @@ const T = SWING_STRINGS.compare;
 export function shortDate(iso) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : formatDate(d, 'day');
+}
+
+/** The two column heads: the dates, or the clock times when both swings are from the same day. */
+export function columnHeads(a, b) {
+  const da = shortDate(a);
+  const db = shortDate(b);
+  return da && da === db ? [formatTime(new Date(a)), formatTime(new Date(b))] : [da, db];
 }
 
 const impactFrame = (analysis) => analysis?.checkpoints?.impact?.i ?? null;
@@ -90,8 +97,7 @@ export function SwingCompareView({ left, right, onBack, onSwap }) {
             <View style={s.card}>
               <View style={s.tr}>
                 <Text style={[s.th, s.cLabel]}>{T.check}</Text>
-                <Text style={[s.th, s.cVal]}>{shortDate(left.row.createdAt)}</Text>
-                <Text style={[s.th, s.cVal]}>{shortDate(right.row.createdAt)}</Text>
+                {columnHeads(left.row.createdAt, right.row.createdAt).map((h, i) => <Text key={i} style={[s.th, s.cVal]}>{h}</Text>)}
                 <Text style={[s.th, s.cChange]}>{T.change}</Text>
               </View>
               {result.groups.map((g) => (

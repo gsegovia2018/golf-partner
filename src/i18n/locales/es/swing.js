@@ -327,7 +327,7 @@ export default {
   'swing.mark.stillA11y': '{name}, imagen del fotograma {frame}',
   'swing.mark.posTail': ' · {f}',
   'swing.mark.primary.useFrame': 'Usar el fotograma {f}',
-  'swing.mark.primary.useReset': 'Usar el fotograma {f} · marcas reiniciadas',
+  'swing.mark.primary.useReset': 'Usar {f} y borrar marcas',
   'swing.mark.finishTitle': '{n} de {of} confirmadas',
   'swing.mark.noClubhead': 'Sin cabeza del palo en {names}:',
   'swing.mark.skippedLine': 'Omitidas: {names}.',

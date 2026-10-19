@@ -59,7 +59,7 @@ function PracticePlan({ s, drill }) {
       <Text style={s.sheetTitle}>{P.title}</Text>
       {P.blocks.map((b) => (
         <View key={b.key} style={s.practiceRow}>
-          <Text style={s.practiceTime}>{b.time}</Text>
+          <Text style={s.practiceTime} numberOfLines={1}>{b.time}</Text>
           <View style={s.flex}>
             <Text style={s.drillTitle}>{b.name}</Text>
             <Text style={s.drillBody}>{b.body}</Text>
@@ -776,9 +776,9 @@ const makeStyles = (theme) => StyleSheet.create({
   drillTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.text.primary },
   drillBody: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, lineHeight: 18, color: theme.text.secondary },
   drillPass: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.accent.primary },
-  drillProgress: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, lineHeight: 16, color: theme.text.secondary, fontStyle: 'italic' },
+  drillProgress: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, lineHeight: 16, color: theme.text.secondary },
   practiceRow: { flexDirection: 'row', gap: 12, paddingVertical: 8, paddingHorizontal: 4 },
-  practiceTime: { width: 64, fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.text.secondary, fontVariant: ['tabular-nums'], paddingTop: 2 },
+  practiceTime: { width: 80, fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.text.secondary, fontVariant: ['tabular-nums'], paddingTop: 2 },
   link: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.accent.primary },
   linkPad: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.accent.primary, paddingVertical: 12, paddingHorizontal: 4 },
 

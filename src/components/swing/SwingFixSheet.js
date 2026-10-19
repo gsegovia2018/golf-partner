@@ -129,7 +129,7 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   drillTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.text.primary },
   goal: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: theme.accent.primary },
-  progress: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, lineHeight: 16, color: theme.text.secondary, fontStyle: 'italic' },
+  progress: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, lineHeight: 16, color: theme.text.secondary },
   btnRow: { flexDirection: 'row', gap: 10 },
   btn: { paddingHorizontal: 16 },
 });

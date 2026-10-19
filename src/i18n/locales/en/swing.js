@@ -327,7 +327,7 @@ export default {
   'swing.mark.stillA11y': '{name} still, frame {frame}',
   'swing.mark.posTail': ' · {f}',
   'swing.mark.primary.useFrame': 'Use frame {f}',
-  'swing.mark.primary.useReset': 'Use frame {f} · marks reset',
+  'swing.mark.primary.useReset': 'Use {f}, clear marks',
   'swing.mark.finishTitle': '{n} of {of} confirmed',
   'swing.mark.noClubhead': 'No clubhead at {names}:',
   'swing.mark.skippedLine': 'Skipped: {names}.',

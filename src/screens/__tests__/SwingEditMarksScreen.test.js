@@ -1182,7 +1182,7 @@ describe('checks v2: seven positions, the unsure clubhead, the deep link', () =>
       const chip = within(u.getByTestId(`chapter-${k}`));
       expect(chip.queryByText(`P${[1, 2, 3, 4, 6, 7, 9][i]}`)).toBeNull();
       expect(chip.getByText(SHORT[k])).toBeTruthy();
-      expect(StyleSheet.flatten(chip.getByText(SHORT[k]).props.style).fontSize).toBe(10.5);
+      expect(StyleSheet.flatten(chip.getByText(SHORT[k]).props.style).fontSize).toBe(10);
       expect(chip.queryByTestId(`pictogram-${k}`)).toBeNull();
     });
     expect(u.getByTestId('chapter-leadArm').props.accessibilityLabel).toBe(M.chapterA11y('Halfway back', 'todo'));

@@ -145,10 +145,10 @@ const makeStyles = (theme) => {
     placeBtnText: { ...t.label, fontSize: 13, color: theme.text.inverse },
 
     strip: {
-      flexDirection: 'row', gap: 1, padding: 4, backgroundColor: theme.bg.card, borderRadius: theme.radius.lg,
+      flexDirection: 'row', padding: 3, backgroundColor: theme.bg.card, borderRadius: theme.radius.lg,
       borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
     },
-    seg: { flex: 1, minHeight: 52, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 1 },
+    seg: { flex: 1, minHeight: 52, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 0 },
     segOn: { backgroundColor: theme.accent.light },
     ringSlot: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent' },
     ring: {},
@@ -156,7 +156,7 @@ const makeStyles = (theme) => {
     dotRing: { borderWidth: 2, backgroundColor: 'transparent' },
     dotWait: { borderWidth: 2, borderStyle: 'dashed', backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
     plus: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 9, lineHeight: 10, marginTop: -1 },
-    segName: { ...t.label, fontSize: 10, letterSpacing: -0.1, color: theme.text.secondary, textAlign: 'center' }, // one size for all eight: no shrink-to-fit
+    segName: { ...t.label, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, letterSpacing: -0.3, color: theme.text.secondary, textAlign: 'center' }, // one size for all eight: no shrink-to-fit
     segNameOn: { color: theme.text.primary },
   });
 };
