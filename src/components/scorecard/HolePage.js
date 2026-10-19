@@ -15,6 +15,8 @@ import { isScrambleMode } from '../scoringModes';
 import { HoleDistanceBlock } from './HoleDistanceBlock';
 import { PlayerCard } from './PlayerCard';
 import HoleBriefingCard from './HoleBriefingCard';
+import { SeenBadge } from './ShotProposals';
+import { useShotProposals } from '../../hooks/useShotProposals';
 import { holePoints, holeEdgeShots } from './scoreModel';
 import { teamsByPlayer } from './teamModel';
 import { useTourTarget } from '../tour/tourTargets';
@@ -221,6 +223,24 @@ export const HolePage = React.memo(function HolePage({
     // pickup hint match how the duel is actually scored (identity elsewhere).
     : matchPlayEffectiveHandicaps(mode, round, players);
   const holePts = holePoints({ mode, hole: pageHole, players: scoringPlayers, scores, handicaps, round });
+
+  // Automatically detected shots on my own card (GPS trail test setting),
+  // and shots my score says are missing — both only hinted on the map button.
+  // Scramble has no personal ball; official cards are attested, not tracked.
+  const myStrokes = meId ? scores[meId]?.[pageHole.number] ?? null : null;
+  const seen = useShotProposals({
+    roundId: round.id,
+    roundIndex,
+    holeNumber: pageHole.number,
+    courseName,
+    enabled: !!meId && !official && !isScramble && (editable ? editable(meId) : true),
+    strokes: myStrokes,
+    putts: meId ? shotDetails?.[meId]?.[pageHole.number]?.putts ?? null : null,
+    pickedUp: !!meId && isPickupScore(
+      myStrokes, pageHole.par, fullHandicaps[meId] ?? players.find((p) => p.id === meId)?.handicap,
+      pageHole.strokeIndex, holeCount,
+    ),
+  });
   const teams = useMemo(() => teamsByPlayer(round), [round]);
 
   // Who plays this hole with shots the rest don't get (SI shots minus the
@@ -298,6 +318,7 @@ export const HolePage = React.memo(function HolePage({
               roundIndex={roundIndex}
               onPress={onOpenFlyover}
             />
+            {gps?.available ? <SeenBadge seen={seen.open.length} missing={seen.missing} /> : null}
           </View>
         </View>
 

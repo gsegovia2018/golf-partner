@@ -1,6 +1,6 @@
 import {
   cleanTrail, detectStops, mergeStops, assignStopsToHoles, inferHoleDistances, haversine,
-} from '../lib/gpsTrailStops';
+} from '../gpsTrailStops';
 
 // ~1 m of latitude.
 const M = 1 / 111195;

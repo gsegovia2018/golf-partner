@@ -24,6 +24,7 @@ import { RoundSummary } from './RoundSummary';
 import { roundTotals } from './scoreModel';
 import { isScrambleMode } from '../scoringModes';
 import { scrambleUnits } from '../../store/tournamentStore';
+import { isPickupScore } from '../../store/scoring';
 import DiscrepancySheet from '../DiscrepancySheet';
 import ConflictWizardSheet from './ConflictWizardSheet';
 import { getShotDetailCollapsed, setShotDetailCollapsed } from '../../lib/prefs';
@@ -214,6 +215,9 @@ export function HoleView({ leaguePlayers = '', medalLeague = false, round, round
     enabled: !isScrambleMode(rawMode) && appSettings.statGroups?.teeShot !== false,
   });
 
+  // My own card (as HolePage scores it), for the map's missing-shot count.
+  const myHoleStrokes = meId ? (myScores ?? scores)?.[meId]?.[currentHole] ?? null : null;
+
   if (!hole) return null;
 
   return (
@@ -243,6 +247,13 @@ export function HoleView({ leaguePlayers = '', medalLeague = false, round, round
         position={gps.position}
         roundId={round.id}
         roundIndex={roundIndex}
+        seenEnabled={!!meId && !official && !isScrambleMode(rawMode) && (editable ? editable(meId) : true)}
+        strokes={myHoleStrokes}
+        putts={meId ? shotDetails?.[meId]?.[currentHole]?.putts ?? null : null}
+        pickedUp={!!meId && isPickupScore(
+          myHoleStrokes, hole?.par, round?.playerHandicaps?.[meId] ?? players.find((p) => p.id === meId)?.handicap,
+          hole?.strokeIndex, holeCount,
+        )}
         onClose={() => setFlyoverOpen(false)}
         onEdit={isAdmin ? () => { setFlyoverOpen(false); setEditorOpen(true); } : undefined}
       />

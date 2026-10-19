@@ -176,15 +176,25 @@ export async function setShotPos(id, pos) {
 export async function insertShotAfter(id, pos, club = null) {
   const anchor = SHOTS.find((s) => s.id === id);
   if (!anchor || !pos) return null;
-  const later = shotsForHole(anchor.roundId, anchor.roundIndex, anchor.holeNumber)
-    .filter((s) => s.seq > anchor.seq);
+  return insertShotAt({
+    roundId: anchor.roundId, roundIndex: anchor.roundIndex, holeNumber: anchor.holeNumber,
+    seq: anchor.seq + 1, pos, club,
+  });
+}
+
+// Insert a spot at `seq` on a hole: every spot from that seq on shifts up one
+// so the chain stays in playing order (an automatically detected shot can sit
+// before shots marked by hand). Returns the new shot.
+export async function insertShotAt({ roundId, roundIndex, holeNumber, seq, pos, club = null }) {
+  if (!pos) return null;
+  const later = shotsForHole(roundId, roundIndex, holeNumber).filter((s) => s.seq >= seq);
   for (const s of later) { s.seq += 1; s.pending = true; }
   const shot = {
     id: uuidv4(),
-    roundId: anchor.roundId,
-    roundIndex: anchor.roundIndex,
-    holeNumber: anchor.holeNumber,
-    seq: anchor.seq + 1,
+    roundId,
+    roundIndex,
+    holeNumber,
+    seq,
     lat: pos[0],
     lng: pos[1],
     club,

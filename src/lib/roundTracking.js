@@ -2,6 +2,7 @@ import { AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { recordTrailFixes } from '../store/gpsTrailStore';
+import { feedShotDetection } from '../store/shotProposalStore';
 
 // Keeps GPS alive while a live round's scorecard is open, screen off or not.
 //
@@ -53,6 +54,8 @@ if (isRoundTrackingSupported()) {
     // GPS trail experiment: every fix of the batch, not just the newest. A
     // no-op unless the setting is on and a live round is active; never throws.
     recordTrailFixes(locs);
+    // Automatic shot detection, same gate as the trail; never throws.
+    feedShotDetection(locs);
   });
 }
 

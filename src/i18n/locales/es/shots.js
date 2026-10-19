@@ -174,4 +174,28 @@ export default {
   'shots.focus.ask.downhill': 'Terreno cuesta abajo',
   'shots.focus.ask.bad-lie': 'Mal terreno',
   'shots.focus.ask.wind': 'Viento de cara o de lado',
+  // Detección automática de golpes: propuestas desde el recorrido GPS (ajuste de prueba).
+  'shots.seen.tee': 'Salida',
+  'shots.seen.toGreen': 'Quedan {distance}',
+  'shots.seen.here': 'Golpe desde aquí',
+  'shots.seen.badge': '{count} vistos',
+  'shots.seen.badgeA11y': {
+    one: '{count} golpe visto para revisar en el mapa',
+    other: '{count} golpes vistos para revisar en el mapa',
+  },
+  'shots.seen.mapAsk': '¿Golpe desde aquí?',
+  'shots.seen.mapWhen': 'Estuviste aquí {seconds} s a las {time} y luego seguiste.',
+  'shots.seen.notAShot': 'No es un golpe',
+  'shots.seen.add': 'Añadir',
+  'shots.seen.clubA11y': 'Palo: {club}. Toca para cambiarlo',
+  'shots.seen.missing': {
+    one: 'Falta {count} golpe',
+    other: 'Faltan {count} golpes',
+  },
+  'shots.seen.missingBadge': {
+    one: 'falta {count}',
+    other: 'faltan {count}',
+  },
+  'shots.seen.plusOne': '+1 desde aquí',
+  'shots.seen.plusOneA11y': 'Añadir otro golpe jugado desde este mismo punto',
 };

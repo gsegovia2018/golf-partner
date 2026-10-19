@@ -1,6 +1,7 @@
-// EXPERIMENTAL — stop detection over a recorded GPS trail (golf_gps_trail),
-// for scripts/analyzeGpsTrail.mjs. A "stop" is where the golfer stood still
-// long enough to be playing a shot, so it approximates a ball position.
+// Stop detection over a GPS trail: offline in scripts/analyzeGpsTrail.mjs,
+// live in store/shotDetection (automatic shot proposals).
+// A "stop" is where the golfer stood still long enough to be playing a shot,
+// so it approximates a ball position.
 // Pure JS, no I/O. Points are { t (ms), lat, lng, acc?, spd? }.
 
 export const STOP_RADIUS_M = 6;
@@ -144,7 +145,7 @@ export function assignStopsToHoles(stops, holes, { maxM = 60 } = {}) {
   return { byHole, unassigned };
 }
 
-const onGreen = (pos, refs) => (refs.poly ? pointInPolygon(pos, refs.poly) : haversine(pos, refs.green) <= 15);
+export const onGreen = (pos, refs) => (refs.poly ? pointInPolygon(pos, refs.poly) : haversine(pos, refs.green) <= 15);
 
 // Drive and approach distances from an ordered list of ball spots on one
 // hole (stops or GPS-marked shots: { lat, lng }). Drive: first spot → next

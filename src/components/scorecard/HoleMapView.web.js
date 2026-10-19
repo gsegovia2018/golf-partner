@@ -6,7 +6,7 @@ import { getTileDataUrl } from '../../store/tileCache';
 // Web host: renders the Leaflet map page in an <iframe>. Rebuilds the page only
 // when the hole/mode identity changes (data.holeKey); live player / activeField
 // / marker updates go through postMessage so the map never reloads.
-export function HoleMapView({ data, player, anchor, activeField, shots, lastShot, targets, onShotMove, onAim, onShotTap, onPoint, style }) {
+export function HoleMapView({ data, player, anchor, activeField, shots, seen, lastShot, targets, onShotMove, onAim, onShotTap, onSeenTap, onPoint, style }) {
   const ref = useRef(null);
   const t = useT(); // re-render when the language changes, so the page is rebuilt in it
   const lang = getLanguage();
@@ -23,6 +23,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, lastShot
       if (m.type === 'shot-move') onShotMove?.(m.index, m.pos);
       if (m.type === 'aim') onAim?.(m.pos, m.rings);
       if (m.type === 'shot-tap') onShotTap?.(m.index);
+      if (m.type === 'seen-tap') onSeenTap?.(m.index);
       if (m.type === 'tile') {
         getTileDataUrl({ z: m.z, x: m.x, y: m.y, bucket })
           .then((dataUrl) => send({ type: 'tile-data', id: m.id, dataUrl }));
@@ -30,10 +31,11 @@ export function HoleMapView({ data, player, anchor, activeField, shots, lastShot
     };
     window.addEventListener('message', h);
     return () => window.removeEventListener('message', h);
-  }, [onPoint, onShotMove, onAim, onShotTap, bucket]);
+  }, [onPoint, onShotMove, onAim, onShotTap, onSeenTap, bucket]);
 
   useEffect(() => { send({ type: 'player', pos: player || null, anchor: anchor ?? null }); }, [player, anchor]);
   useEffect(() => { send({ type: 'shots', shots: shots || [] }); }, [shots]);
+  useEffect(() => { send({ type: 'seen', seen: seen || [] }); }, [seen]);
   useEffect(() => { send({ type: 'last-shot', lastShot: lastShot ?? null }); }, [lastShot]);
   useEffect(() => { if (targets) send({ type: 'set-targets', targets }); }, [targets]);
   useEffect(() => { if (activeField) send({ type: 'activeField', field: activeField }); }, [activeField]);

@@ -174,4 +174,28 @@ export default {
   'shots.focus.ask.downhill': 'Downhill lie',
   'shots.focus.ask.bad-lie': 'Bad lie',
   'shots.focus.ask.wind': 'Into or across the wind',
+  // Automatic shot detection: proposals from the GPS trail (test setting).
+  'shots.seen.tee': 'Tee shot',
+  'shots.seen.toGreen': '{distance} to the green',
+  'shots.seen.here': 'Shot from here',
+  'shots.seen.badge': '{count} seen',
+  'shots.seen.badgeA11y': {
+    one: '{count} shot seen to review on the map',
+    other: '{count} shots seen to review on the map',
+  },
+  'shots.seen.mapAsk': 'Shot from here?',
+  'shots.seen.mapWhen': 'You stood here {seconds} s at {time}, then walked on.',
+  'shots.seen.notAShot': 'Not a shot',
+  'shots.seen.add': 'Add',
+  'shots.seen.clubA11y': 'Club: {club}. Tap to change it',
+  'shots.seen.missing': {
+    one: '{count} shot missing',
+    other: '{count} shots missing',
+  },
+  'shots.seen.missingBadge': {
+    one: '{count} missing',
+    other: '{count} missing',
+  },
+  'shots.seen.plusOne': '+1 from here',
+  'shots.seen.plusOneA11y': 'Add another shot played from this same spot',
 };
