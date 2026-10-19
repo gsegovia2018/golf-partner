@@ -327,7 +327,7 @@ export default function SwingCaptureScreen({ navigation }) {
         ) : null}
         {phase === 'review' || phase === 'saving' ? <ReviewPlayer take={take} /> : null}
         {phase === 'live' && !showFallback && portrait ? (
-          <CaptureGuide rect={rect} left={left} label={T.guideBox} />
+          <CaptureGuide rect={rect} left={left} label={card ? null : T.guideBox} />
         ) : null}
       </View>
 
