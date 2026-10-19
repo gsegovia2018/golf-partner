@@ -1,7 +1,7 @@
 // Reference swings through the whole analysis (pass 1 + pass 2), so a change to a limit or a
 // measure is judged against real swings: tour players should read mostly green, and the owner's
 // calibrated swings keep the early extension he confirmed (#238).
-import { TOUR, OWNER, analyzeReference, byName } from './referenceSwings';
+import { REFERENCE, TOUR, OWNER, analyzeReference, byName } from './referenceSwings';
 
 const decided = (a) => a.counts.green + a.counts.yellow + a.counts.red;
 
@@ -34,5 +34,11 @@ describe('reference swings', () => {
   });
   test('early extension stays the main fault on four of the owner\'s five swings', () => {
     expect(OWNER.filter((fx) => analyzeReference(fx).main?.fault === 'early_extension')).toHaveLength(4);
+  });
+});
+
+describe('view (face-on flag)', () => {
+  test.each(REFERENCE.map((f) => [f.name, f]))('%s', (name, fx) => {
+    expect(analyzeReference(fx).view).toBe(name.startsWith('faceon-') ? 'faceOn' : 'dtl');
   });
 });
