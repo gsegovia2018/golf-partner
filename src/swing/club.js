@@ -30,6 +30,21 @@ const PRIOR_CONF = 0.1;
 
 const asPoint = (p) => (Array.isArray(p) ? { x: p[0], y: p[1] } : p || null);
 
+// A detected address / impact clubhead a club cannot reach is no reading (it becomes unplaced):
+// the shaft (head -> hands) between these angles above horizontal and lengths. Owner-marked heads
+// read 41-67 deg and 73-107 cm; the right tour proposals 56-61 deg but only 41-53 cm (the edge
+// search stops partway down the shaft, which keeps the angle), so the length only bounds the absurd.
+const SHAFT_DEG = [25, 85];
+const SHAFT_CM = [25, 140];
+/** Whether a detected clubhead could be the club's head at address or impact. */
+export function plausibleHead(hands, head, pxPerCm = null) {
+  const deg = (Math.atan2(head.y - hands.y, Math.abs(head.x - hands.x)) * 180) / Math.PI;
+  if (deg < SHAFT_DEG[0] || deg > SHAFT_DEG[1]) return false;
+  if (!pxPerCm) return true;
+  const cm = Math.hypot(head.x - hands.x, head.y - hands.y) / pxPerCm;
+  return cm >= SHAFT_CM[0] && cm <= SHAFT_CM[1];
+}
+
 /**
  * @param {string} key  checkpoint key
  * @param {{x:number,y:number}} hands  the smoothed grip estimate at the checkpoint
@@ -37,11 +52,12 @@ const asPoint = (p) => (Array.isArray(p) ? { x: p[0], y: p[1] } : p || null);
  *   { head: [x, y] | null, hidden, conf, source: 'model'|'model-shaft'|'edge'|'prior' }
  * @param {object|null} userMark  { hands?: {x,y}, head: {x,y}|null, hidden } from Edit marks
  * @param {{x:number,y:number}|null} ball
+ * @param {number|null} [pxPerCm]  bounds the shaft length of a detected address / impact head
  * @returns {{hands, head: {x,y}|null, hidden: boolean, source: 'user'|'model'|'model-shaft'|'edge'|'prior', conf: number, priorHead?: {x,y}}}
  *   `priorHead` (address and impact only) is where the UI draws the dashed ring to drag; it is
  *   never used by a check.
  */
-export function resolveClub(key, hands, candidate, userMark, ball = null) {
+export function resolveClub(key, hands, candidate, userMark, ball = null, pxPerCm = null) {
   if (userMark) {
     const hidden = !!userMark.hidden || !userMark.head;
     return {
@@ -54,7 +70,8 @@ export function resolveClub(key, hands, candidate, userMark, ball = null) {
   }
   if (candidate && candidate.source !== 'prior' && (candidate.conf ?? 0) >= minConf(candidate.source)) {
     const head = candidate.hidden ? null : asPoint(candidate.head);
-    return { hands, head, hidden: !head, source: candidate.source ?? 'edge', conf: candidate.conf };
+    const implausible = head && SEEDED_CHECKPOINTS.includes(key) && !plausibleHead(hands, head, pxPerCm);
+    if (!implausible) return { hands, head, hidden: !head, source: candidate.source ?? 'edge', conf: candidate.conf };
   }
   const prior = { hands, head: null, hidden: false, source: 'prior', conf: PRIOR_CONF };
   if (SEEDED_CHECKPOINTS.includes(key) && ball) prior.priorHead = { x: ball.x, y: ball.y };

@@ -1,4 +1,4 @@
-import { resolveClub, CANDIDATE_MIN_CONF, MODEL_MIN_CONF } from '../club';
+import { resolveClub, plausibleHead, CANDIDATE_MIN_CONF, MODEL_MIN_CONF } from '../club';
 
 const hands = { x: 200, y: 400 };
 const ball = { x: 273, y: 505 };
@@ -57,5 +57,23 @@ describe('resolveClub (plan 5.3, D16)', () => {
 
   test('a user mark still wins over a model candidate', () => {
     expect(resolveClub('top', hands, { head: [1, 1], conf: 0.9, source: 'model' }, { head: { x: 5, y: 6 } })).toMatchObject({ head: { x: 5, y: 6 }, source: 'user' });
+  });
+
+  test('a detected address / impact head a club cannot reach falls back to the prior', () => {
+    // above the hands (the chest), flat out sideways, and too long for any club at 2 px/cm
+    [[230, 330], [400, 410], [520, 800]].forEach((head) => {
+      expect(resolveClub('impact', hands, { head, conf: 0.9, source: 'edge' }, null, ball, 2)).toMatchObject({ head: null, source: 'prior' });
+    });
+    expect(resolveClub('impact', hands, { head: [270, 505], conf: 0.9, source: 'edge' }, null, ball, 2).source).toBe('edge');
+    // the shaft swings everywhere else, and the golfer's own mark is never second-guessed
+    expect(resolveClub('top', hands, { head: [230, 330], conf: 0.9, source: 'model' }, null, ball, 2).source).toBe('model');
+    expect(resolveClub('impact', hands, null, { head: { x: 230, y: 330 } }, ball, 2).source).toBe('user');
+  });
+
+  test('plausibleHead: shaft angle always, length only with a scale', () => {
+    expect(plausibleHead(hands, { x: 270, y: 505 })).toBe(true);
+    expect(plausibleHead(hands, { x: 210, y: 380 })).toBe(false);
+    expect(plausibleHead(hands, { x: 210, y: 410 }, 2)).toBe(false); // 7 cm
+    expect(plausibleHead(hands, { x: 210, y: 410 })).toBe(true); // 45 deg: without a scale only the angle counts
   });
 });

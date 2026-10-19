@@ -1,7 +1,7 @@
 // Reference swings through the whole analysis (pass 1 + pass 2), so a change to a limit or a
 // measure is judged against real swings: tour players should read mostly green, and the owner's
 // calibrated swings keep the early extension he confirmed (#238).
-import { TOUR, OWNER, analyzeReference } from './referenceSwings';
+import { TOUR, OWNER, analyzeReference, byName } from './referenceSwings';
 
 const decided = (a) => a.counts.green + a.counts.yellow + a.counts.red;
 
@@ -22,6 +22,11 @@ describe('reference swings', () => {
     expect(a.counts.green).toBeGreaterThanOrEqual(FLOOR[name].green);
     expect(a.counts.red).toBeLessThanOrEqual(FLOOR[name].red);
     expect(decided(a)).toBeGreaterThan(0);
+  });
+
+  test('a clubhead proposal on the chest is no reading: Rose\'s impact shaft angle asks to place it', () => {
+    const row = analyzeReference(byName('tour-rose-iron')).checks.find((c) => c.id === 'shaft_angle_impact');
+    expect(row).toMatchObject({ status: 'unknown', reason: 'unplaced' });
   });
 
   test.each(OWNER.map((f) => [f.name, f]))('%s keeps its early extension flagged', (_n, fx) => {
