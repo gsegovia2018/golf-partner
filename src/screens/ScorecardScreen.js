@@ -2,17 +2,11 @@ import React, {
   useEffect, useRef, useState, useCallback, useMemo, useSyncExternalStore,
 } from 'react';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
-import {
-  View, Text, TextInput, TouchableOpacity,
-  ScrollView, Platform, Animated,
-  ActivityIndicator, Alert,
-} from 'react-native';
+import { Text, Platform, Animated, Alert } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import ScreenContainer from '../components/ScreenContainer';
-import IconButton from '../components/ui/IconButton';
 import { haptic } from '../lib/haptics';
 
-import { Feather } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
 
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -37,7 +31,6 @@ import { fetchPlayers } from '../store/libraryStore';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import MediaLightbox from '../components/MediaLightbox';
-import BottomSheet from '../components/BottomSheet';
 import SyncStatusSheet from '../components/SyncStatusSheet';
 import useMediaAttachFlow from '../hooks/useMediaAttachFlow';
 import { useRoundMedia } from '../hooks/useRoundMedia';
@@ -54,7 +47,7 @@ import { useScorecardLeague } from '../hooks/useScorecardLeague';
 import { recordRoundCard } from '../lib/leagueOptIn';
 import { ensureRealtimeForTournament } from '../store/realtimeSync';
 import LeagueOptInSheet from '../components/league/LeagueOptInSheet';
-import { useT, tr, formatDate, formatNumber } from '../i18n';
+import { useT, formatDate, formatNumber } from '../i18n';
 import { requestLeagueTeeOff, retryLeagueTeeOff } from '../lib/leagueTeeOff';
 import { normalizeRoundNotes } from '../store/roundNotes';
 import {
@@ -79,6 +72,10 @@ import { GridView, resolveScorecardRows } from '../components/scorecard/GridView
 import { useRoundRoster } from '../hooks/useRoundRoster';
 import ConflictWizardSheet from '../components/scorecard/ConflictWizardSheet';
 import { FlagFinderView } from '../components/scorecard/FlagFinderView';
+import {
+  ScorecardStatus, ScorecardHeader, SaveErrorBanner, RoundDecisionBanner,
+  NotesSheet, RoundCompleteOverlay, OfficialLeaderboardSheet,
+} from '../components/scorecard/ScorecardChrome';
 import TourOverlay from '../components/tour/TourOverlay';
 import { SCORECARD_TOUR_STEPS } from '../components/tour/tourSteps';
 import { subscribeCourseGeometry, getCourseGeometryVersion, hasCourseDetails } from '../lib/geo';
@@ -1607,43 +1604,18 @@ export default function ScorecardScreen({ navigation, route }) {
     }] : [],
   });
 
-  // Explicit load failure — never a blank screen. Keep a working back button.
-  if (loadState === 'error' && !tournament) {
-    return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
-        <View style={s.header}>
-          <IconButton icon="chevron-left" onPress={goBack} accessibilityLabel={tl('common.back')} />
-          <Text style={s.headerTitle}>{tl('scorecard.screen.title')}</Text>
-          <View style={{ width: 36 }} />
-        </View>
-        <View style={s.statusCenter}>
-          <Feather name="alert-circle" size={44} color={theme.text.muted} />
-          <Text style={s.statusTitle}>{tl('scorecard.screen.loadErrorTitle')}</Text>
-          <Text style={s.statusSubtitle}>
-            {tl('scorecard.screen.loadErrorBody')}
-          </Text>
-          <TouchableOpacity style={s.statusRetryBtn} onPress={retryLoad} activeOpacity={0.8}>
-            <Feather name="rotate-ccw" size={14} color={theme.text.inverse} />
-            <Text style={s.statusRetryText}>{tl('scorecard.screen.retry')}</Text>
-          </TouchableOpacity>
-        </View>
-      </ScreenContainer>
-    );
-  }
-
-  // First load in progress — spinner + a working header back button.
+  // Explicit load failure or first load in progress — never a blank screen,
+  // always a working back button.
   if (!tournament || !round) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
-        <View style={s.header}>
-          <IconButton icon="chevron-left" onPress={goBack} accessibilityLabel={tl('common.back')} />
-          <Text style={s.headerTitle}>{tl('scorecard.screen.title')}</Text>
-          <View style={{ width: 36 }} />
-        </View>
-        <View style={s.statusCenter}>
-          <ActivityIndicator color={theme.accent.primary} />
-          <Text style={s.statusSubtitle}>{tl('scorecard.screen.loading')}</Text>
-        </View>
+        <ScorecardStatus
+          s={s}
+          theme={theme}
+          onBack={goBack}
+          error={loadState === 'error' && !tournament}
+          onRetry={retryLoad}
+        />
       </ScreenContainer>
     );
   }
@@ -1656,98 +1628,38 @@ export default function ScorecardScreen({ navigation, route }) {
   const roundNote = notes?.round ?? '';
   const hasCurrentNotes = showNotesControls && !!(holeNote.trim() || roundNote.trim());
   const nextView = view === 'hole' ? 'grid' : 'hole';
-  const viewSwitchLabel = view === 'hole'
-    ? tl('scorecard.screen.viewFull')
-    : tl('scorecard.screen.viewHoles');
-  const viewSwitchIcon = view === 'hole' ? 'grid' : 'circle';
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
-      {/* Header with compact scorecard view switch. */}
-      <View style={s.header}>
-        <IconButton icon="chevron-left" onPress={goBack} accessibilityLabel={tl('common.back')} />
-        <Text style={s.headerTitle}>{tl('scorecard.screen.title')}</Text>
-        <View style={s.headerRight}>
-          <IconButton
-            onPress={() => setSyncSheetOpen(true)}
-            accessibilityLabel={tl('scorecard.screen.syncStatus')}
-          >
-            <SyncIndicator status={syncStatus} saveError={saveError} theme={theme} s={s} />
-          </IconButton>
-          {!official && viewOnly && (
-            <TouchableOpacity
-              onPress={() => setViewOnly(false)}
-              style={s.editRoundBtn}
-              accessibilityRole="button"
-              accessibilityLabel={tl('scorecard.screen.editRound')}
-            >
-              <Feather name="edit-2" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
-              <Text style={s.editRoundBtnText}>{tl('scorecard.screen.editRound')}</Text>
-            </TouchableOpacity>
-          )}
-          <IconButton
-            icon={viewSwitchIcon}
-            onPress={() => setView(nextView)}
-            accessibilityLabel={viewSwitchLabel}
-          />
-          {official && !appSettings.noSpoilers && (
-            <IconButton
-              icon="award"
-              onPress={() => setOfficialLeaderboardOpen(true)}
-              accessibilityLabel={tl('scorecard.screen.officialBoard')}
-            />
-          )}
-          {showNotesControls && (
-            <IconButton
-              icon={hasCurrentNotes ? 'edit-3' : 'edit-2'}
-              onPress={() => setNotesOpen(true)}
-              dot={hasCurrentNotes}
-              accessibilityLabel={hasCurrentNotes ? tl('scorecard.screen.openNotes') : tl('scorecard.screen.addNotes')}
-            />
-          )}
-          {showFlagFinder && (
-            <IconButton
-              icon="flag"
-              onPress={() => setFlagFinderOpen(true)}
-              accessibilityLabel={tl('scorecard.screen.findFlag')}
-            />
-          )}
-          {leagueLayer.canCountMine && (
-            <IconButton
-              icon="award"
-              onPress={leagueLayer.countMine}
-              accessibilityLabel={tl('league.header.countMine', { league: leagueLayer.optIn.league.name })}
-            />
-          )}
-          <IconButton
-            icon="camera"
-            onPress={openCapturePicker}
-            accessibilityLabel={tl('scorecard.screen.attachMemory')}
-          />
-        </View>
-      </View>
+      <ScorecardHeader
+        s={s}
+        theme={theme}
+        onBack={goBack}
+        syncStatus={syncStatus}
+        saveError={saveError}
+        onOpenSync={() => setSyncSheetOpen(true)}
+        showEditRound={!official && viewOnly}
+        onEditRound={() => setViewOnly(false)}
+        view={view}
+        onToggleView={() => setView(nextView)}
+        showLeaderboard={official && !appSettings.noSpoilers}
+        onOpenLeaderboard={() => setOfficialLeaderboardOpen(true)}
+        showNotesControls={showNotesControls}
+        hasCurrentNotes={hasCurrentNotes}
+        onOpenNotes={() => setNotesOpen(true)}
+        showFlagFinder={showFlagFinder}
+        onOpenFlagFinder={() => setFlagFinderOpen(true)}
+        leagueLayer={leagueLayer}
+        onAttachMemory={openCapturePicker}
+      />
 
       {saveError && (
-        <View style={s.saveErrorBanner}>
-          <Feather name="alert-triangle" size={14} color={theme.text.inverse} />
-          <Text style={s.saveErrorText}>
-            {tl('scorecard.screen.saveErrorBody')}
-          </Text>
-          <TouchableOpacity
-            onPress={() => { setSaveError(false); retrySave(); }}
-            accessibilityLabel={tl('scorecard.screen.retrySaving')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={s.saveErrorAction}>{tl('scorecard.screen.retry')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setSaveError(false)}
-            accessibilityLabel={tl('scorecard.screen.dismiss')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Feather name="x" size={14} color={theme.text.inverse} />
-          </TouchableOpacity>
-        </View>
+        <SaveErrorBanner
+          s={s}
+          theme={theme}
+          onRetry={() => { setSaveError(false); retrySave(); }}
+          onDismiss={() => setSaveError(false)}
+        />
       )}
 
       <ScoringModeChangeBanner
@@ -1761,28 +1673,12 @@ export default function ScorecardScreen({ navigation, route }) {
         icon="users"
       />
       {roundDecisionNotice && (
-        <View
-          style={s.roundDecisionBanner}
-          accessibilityRole="alert"
-          accessibilityLiveRegion="polite"
-        >
-          <View style={s.roundDecisionIconWrap}>
-            <Feather name="award" size={17} color={theme.accent.primary} />
-          </View>
-          <View style={s.roundDecisionCopy}>
-            <Text style={s.roundDecisionTitle}>{tr(roundDecisionNotice.title)}</Text>
-            <Text style={s.roundDecisionMessage}>{tr(roundDecisionNotice.message)}</Text>
-          </View>
-          <TouchableOpacity
-            onPress={dismissRoundDecisionNotice}
-            style={s.roundDecisionCloseBtn}
-            accessibilityRole="button"
-            accessibilityLabel={tl('scorecard.screen.dismissRoundDecided')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Feather name="x" size={16} color={theme.text.secondary} />
-          </TouchableOpacity>
-        </View>
+        <RoundDecisionBanner
+          s={s}
+          theme={theme}
+          notice={roundDecisionNotice}
+          onDismiss={dismissRoundDecisionNotice}
+        />
       )}
       <ScoringModeChangeSheet
         visible={reopenPrompt}
@@ -1888,37 +1784,18 @@ export default function ScorecardScreen({ navigation, route }) {
         <TourOverlay chapter="scorecard" steps={SCORECARD_TOUR_STEPS} />
       )}
 
-      {/* Notes modal — per-hole note + shared round note */}
       {showNotesControls && (
-        <BottomSheet visible={notesOpen} onClose={() => setNotesOpen(false)} sheetStyle={s.notesSheet}>
-          <View style={s.notesHandle} />
-          <View style={s.notesHeader}>
-            <Text style={s.notesTitle}>{tl('scorecard.screen.notes')}</Text>
-            <IconButton icon="x" onPress={() => setNotesOpen(false)} />
-          </View>
-          <Text style={s.notesFieldLabel}>{tl('scorecard.screen.notesHole', { hole: formatNumber(currentHole) })}</Text>
-          <TextInput
-            style={s.notesModalInputCompact}
-            placeholder={tl('scorecard.screen.notesHolePlaceholder', { hole: formatNumber(currentHole) })}
-            placeholderTextColor={theme.text.muted}
-            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            selectionColor={theme.accent.primary}
-            multiline
-            value={holeNote}
-            onChangeText={(text) => saveHoleNote(currentHole, text)}
-          />
-          <Text style={[s.notesFieldLabel, s.notesFieldLabelSpaced]}>{tl('scorecard.screen.roundLabel')}</Text>
-          <TextInput
-            style={s.notesModalInputCompact}
-            placeholder={tl('scorecard.screen.roundPlaceholder')}
-            placeholderTextColor={theme.text.muted}
-            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            selectionColor={theme.accent.primary}
-            multiline
-            value={roundNote}
-            onChangeText={saveRoundNote}
-          />
-        </BottomSheet>
+        <NotesSheet
+          s={s}
+          theme={theme}
+          visible={notesOpen}
+          onClose={() => setNotesOpen(false)}
+          currentHole={currentHole}
+          holeNote={holeNote}
+          roundNote={roundNote}
+          onHoleNote={(text) => saveHoleNote(currentHole, text)}
+          onRoundNote={saveRoundNote}
+        />
       )}
 
       {mediaSheets}
@@ -1989,96 +1866,16 @@ export default function ScorecardScreen({ navigation, route }) {
         );
       })()}
 
-      {roundCompleteVisible && (
-        <View
-          pointerEvents="none"
-          accessibilityLiveRegion="polite"
-          accessibilityRole="alert"
-          style={s.roundCompleteRoot}
-        >
-          <View style={s.roundCompleteScrim} />
-          <View style={s.roundCompleteCard}>
-            <View style={s.roundCompleteIconWrap}>
-              <Feather name="flag" size={26} color={theme.accent.primary} />
-            </View>
-            <Text style={s.roundCompleteEyebrow}>{tl('scorecard.screen.roundComplete')}</Text>
-            <Text style={s.roundCompleteTitle}>{tl('scorecard.screen.niceRound')}</Text>
-          </View>
-        </View>
-      )}
+      {roundCompleteVisible && <RoundCompleteOverlay s={s} theme={theme} />}
 
-      {/* Official leaderboard (Task 17). Official-only; built from the flat
-          members / scores lists via buildLeaderboard, ranked by NET
-          Stableford points (Task 7). Holes still in discrepancy are
-          excluded from both gross and points, and flag the row below. */}
       {official && (
-        <BottomSheet
+        <OfficialLeaderboardSheet
+          s={s}
           visible={officialLeaderboardOpen}
           onClose={() => setOfficialLeaderboardOpen(false)}
-          sheetStyle={s.notesSheet}
-        >
-          <View style={s.notesHandle} />
-          <View style={s.notesHeader}>
-            <Text style={s.notesTitle}>{tl('scorecard.screen.leaderboard')}</Text>
-            <IconButton
-              icon="x"
-              onPress={() => setOfficialLeaderboardOpen(false)}
-              accessibilityLabel={tl('scorecard.screen.closeLeaderboard')}
-            />
-          </View>
-          {officialLeaderboard.length === 0 ? (
-            <Text style={s.statusSubtitle}>{tl('scorecard.screen.noScores')}</Text>
-          ) : (
-            <ScrollView style={s.officialLbList}>
-              {officialLeaderboard.map((row, i) => (
-                <View key={row.rosterId} style={s.officialLbRow}>
-                  <Text style={s.officialLbRank}>{i + 1}</Text>
-                  <Text style={s.officialLbName} numberOfLines={1}>
-                    {row.name}
-                    {row.discrepancy ? ' ⚠' : ''}
-                  </Text>
-                  <Text style={s.officialLbThru}>
-                    {row.thru > 0 ? tl('scorecard.screen.thruGross', { thru: formatNumber(row.thru), gross: formatNumber(row.gross) }) : '—'}
-                  </Text>
-                  <Text style={s.officialLbGross}>{tl('scorecard.screen.pts', { points: formatNumber(row.points) })}</Text>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-        </BottomSheet>
+          rows={officialLeaderboard}
+        />
       )}
     </ScreenContainer>
-  );
-}
-
-// Compact header sync/error indicator. Reflects the store's sync status and
-// flips to an explicit error dot when a local save fails.
-function SyncIndicator({ status, saveError, theme, s }) {
-  const tl = useT();
-  if (saveError || status === 'error') {
-    return (
-      <View style={s.syncDot} accessibilityLabel={tl('scorecard.screen.syncError')}>
-        <Feather name="alert-circle" size={14} color={theme.destructive} />
-      </View>
-    );
-  }
-  if (status === 'syncing') {
-    return (
-      <View style={s.syncDot} accessibilityLabel={tl('scorecard.screen.syncing')}>
-        <ActivityIndicator size="small" color={theme.text.muted} />
-      </View>
-    );
-  }
-  if (status === 'pending') {
-    return (
-      <View style={s.syncDot} accessibilityLabel={tl('scorecard.screen.syncPending')}>
-        <Feather name="cloud" size={14} color={theme.text.muted} />
-      </View>
-    );
-  }
-  return (
-    <View style={s.syncDot} accessibilityLabel={tl('scorecard.screen.synced')}>
-      <Feather name="check-circle" size={14} color={theme.accent.primary} />
-    </View>
   );
 }
