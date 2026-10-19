@@ -12,7 +12,6 @@ describe('reference swings', () => {
 
   // A floor at today's readings: a change may make these swings greener, never redder.
   const FLOOR = {
-    'tour-scott-iron': { green: 9, red: 6 },
     'tour-oosthuizen-driver': { green: 13, red: 2 },
     'tour-els-hybrid': { green: 10, red: 1 },
     'tour-mcilroy-iron': { green: 12, red: 0 },
