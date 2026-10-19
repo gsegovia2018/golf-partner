@@ -1,7 +1,7 @@
 // English catalogue: side bets and settle-up (store/sideBets.js). See docs/i18n.md.
 export default {
-  "stakes.title": "Stakes",
-  "stakes.menu": "Stakes",
+  "stakes.title": "Bets on this game",
+  "stakes.menu": "Bets on this game",
   "stakes.none": "None",
   "stakes.summary.pot": "{amount} pot",
   "stakes.summary.perPoint": "{amount} a point",
@@ -20,8 +20,8 @@ export default {
   "stakes.example.perPoint": "Every point between two players is worth {amount}.",
   "stakes.example.skin": "Each skin is worth {amount} from every other player.",
   "stakes.example.none": "No money on this game.",
-  "stakes.save": "Save stakes",
-  "stakes.error.save": "Couldn't save the stakes.",
+  "stakes.save": "Save bets",
+  "stakes.error.save": "Couldn't save the bets.",
 
   "settle.title": "Settle up",
   "settle.final": "Final",
@@ -33,8 +33,8 @@ export default {
   "settle.breakdown.skin": "Skins {amount}",
   "settle.allSquare": "All square. Nobody owes anything.",
   "settle.carry": { one: "{count} skin carried to the next hole.", other: "{count} skins carried to the next hole." },
-  "settle.empty": "No stakes on this game.",
-  "settle.add": "Add stakes",
+  "settle.empty": "No bets on this game.",
+  "settle.add": "Add bets",
   "settle.share": "Share settle-up",
   "settle.shareLine": "{from} → {to} {amount}",
 };

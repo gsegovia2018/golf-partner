@@ -1,7 +1,7 @@
 // Catálogo en español: apuestas y ajuste de cuentas (store/sideBets.js). Ver docs/i18n.md.
 export default {
-  "stakes.title": "Apuestas",
-  "stakes.menu": "Apuestas",
+  "stakes.title": "Apuestas de la partida",
+  "stakes.menu": "Apuestas de la partida",
   "stakes.none": "Ninguna",
   "stakes.summary.pot": "{amount} de bote",
   "stakes.summary.perPoint": "{amount} el punto",
