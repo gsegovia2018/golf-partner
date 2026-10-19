@@ -288,7 +288,7 @@ export default {
   'swing.capture.fps.high': '{fps} fps',
   'swing.capture.fps.ok': '{fps} fps · good enough',
   'swing.capture.fps.low': '{fps} fps · approximate analysis',
-  'swing.capture.autoStop': '/ {max} max',
+  'swing.capture.autoStop': '/ {max}',
   'swing.capture.fallbackTitle': 'This phone can\'t record above {fps} fps here',
   'swing.capture.recordAnyway': 'Record at {fps} fps anyway',
   'swing.capture.review': '{secs} s · {fps} fps',
