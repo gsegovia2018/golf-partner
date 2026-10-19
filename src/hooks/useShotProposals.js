@@ -10,7 +10,8 @@ import { holeRefs, onGreen } from '../lib/gpsTrailStops';
 import {
   subscribeShots, getShotsVersion, getShots, shotsForHole, insertShotAfter,
 } from '../store/shotStore';
-import { recommendClub } from '../lib/shotStats';
+import { guessClub } from '../store/clubGuess';
+import { bearingDeg } from '../lib/geo';
 
 const EMPTY = [];
 
@@ -49,11 +50,18 @@ export function useShotProposals({
       .map((p) => ({
         ...p,
         club: p.toGreen != null
-          ? recommendClub(p.toGreen, settings.bag, getShots(), settings.clubDistances, { excludeDriver: !p.fromTee })?.club ?? null
+          ? guessClub({
+            meters: p.toGreen,
+            bearing: refs?.green ? bearingDeg([p.lat, p.lng], refs.green) : null,
+            courseName,
+            settings,
+            fromTee: !!p.fromTee,
+            shots: getShots(),
+          })?.club ?? null
           : null,
       }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [on, roundId, roundIndex, holeNumber, course, shots, pv, settings.bag, settings.clubDistances]);
+  }, [on, roundId, roundIndex, holeNumber, course, shots, pv, settings, refs, courseName]);
 
   const missing = useMemo(() => (on ? missingShots({
     strokes, putts, pickedUp, spots: shots, isOnGreen: (sh) => !!refs && onGreen([sh.lat, sh.lng], refs),

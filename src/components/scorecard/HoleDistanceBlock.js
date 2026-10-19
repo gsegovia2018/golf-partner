@@ -5,10 +5,10 @@ import { useTheme } from '../../theme/ThemeContext';
 import { useT, formatTime } from '../../i18n';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../lib/units';
-import { recommendClub } from '../../lib/shotStats';
 import { getShots, subscribeShots, getShotsVersion } from '../../store/shotStore';
 import { useTourTarget } from '../tour/tourTargets';
-import { useShotPlayConditions } from '../../hooks/usePlayConditions';
+import { usePlayConditions } from '../../hooks/usePlayConditions';
+import { guessClub, shotBearing } from '../../store/clubGuess';
 import { windText } from '../../lib/playConditions';
 
 // Right-hand side of the hole header: live GPS distances to the green, or —
@@ -32,7 +32,13 @@ export function HoleDistanceBlock({
 
   // Playing conditions (when the player switched them on): the wind is taken
   // along the shot — from the live fix, or the tee — to the green centre.
-  const cond = useShotPlayConditions(courseName, holeNumber, gps?.source === 'gps' ? gps?.position : null);
+  const fromPos = gps?.source === 'gps' ? gps?.position : null;
+  const bearing = useMemo(
+    () => shotBearing(courseName, holeNumber, fromPos),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [courseName, holeNumber, fromPos?.[0], fromPos?.[1]],
+  );
+  const cond = usePlayConditions(courseName, bearing);
 
   // Club suggestion for the distance shown in the chip (center to green),
   // clubbed to its plays-like distance when conditions are on.
@@ -40,7 +46,9 @@ export function HoleDistanceBlock({
   // averages evolve. Computed before the early return to keep hook order stable.
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   const club = useMemo(
-    () => recommendClub(cond.plays(gps?.distances?.center), appSettings.bag, getShots(), appSettings.clubDistances, { excludeDriver: !!gps?.offTee }),
+    () => guessClub({
+      meters: gps?.distances?.center, bearing, courseName, settings: appSettings, fromTee: !gps?.offTee, shots: getShots(),
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [gps?.distances?.center, gps?.offTee, appSettings.bag, appSettings.clubDistances, shotsVersion, cond],
   );
