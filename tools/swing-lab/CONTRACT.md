@@ -68,6 +68,17 @@ If the export also holds `pose.json` (pass-2 club output, `pass2.shaft[frame]` =
 `out/<clip>/pose.json`; `eval_yolo.py <clip> --from-export out/<clip>/pose.json` scores the phone's own boxes against `truth.json`.
 Then `detect.py <clip>` and `eval.py` as usual. Tests: `python3 -m unittest test_import_export` from this directory.
 
+## Reference swings for the app's tests
+`export_fixture.py <clip> --name NAME --who WHO --source youtube:<id>|owner --club iron|driver --height-cm N
+[--positions right|wrong] [--note TEXT] [--export <app .swing.zip>]` writes
+`src/swing/__tests__/fixtures/reference/<NAME>.json`: the d15 pass-1 samples (normalised, landmarks only, no
+picture), the ball and the address / impact clubhead proposals of `detect.py <clip> --variant d15`. With `--export`
+the owner's club, height, capture fps and confirmed checkpoint frames come from the app's export.
+`referenceSwings.test.js` runs them through `analyze()`: tour swings checked as `right` should read mostly green,
+and the owner's calibrated swings keep their early extension. Clip names behind the committed fixtures:
+`pro-scott`, `pro-oosthuizen`, `pro-els`, `rory-dtl-iron`, `rory-dtl-driver` (trimmed to frames 0-409), `pro-tiger`,
+`pro-rose` (trimmed to 0-829), `rory-driver` (face-on), and `own-<export name>` for the owner's exports.
+
 ## Club detector under the phone's rules (plan 2026-10-16-swing-club-detector, L1)
 `models/` is git-ignored, so the table lives here. Run 2 epoch 8 (`models/yolox-club-v2/epoch_8.pth`), conf 0.03,
 `~/.venvs/swing-yolox/bin/python -I eval_yolo.py --yolox <ckpt> --conf 0.03 [--hands pose] [--frames checkpoints]`

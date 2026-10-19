@@ -239,6 +239,8 @@ export function SwingResultsView({
   const approxReasons = ready ? [
     analysis.approximate ? { short: T.approxFps, long: T.approxBanner } : null,
     analysis.scale?.approx ? { short: T.approxHeight, long: T.approxHeightBanner } : null,
+    analysis.impactFromPose ? { short: T.approxBall, long: T.approxBallBanner } : null,
+    analysis.view === 'faceOn' ? { short: T.approxFaceOn, long: T.approxFaceOnBanner } : null,
   ].filter(Boolean) : [];
   const openEdit = (k, opts) => onEditMarks?.(k, opts);
   const place_ = async (pt) => {

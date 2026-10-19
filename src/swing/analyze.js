@@ -5,7 +5,7 @@
 // Inputs and the stored result use coordinates normalised to the decoded frame (plan 7);
 // pixels exist only inside the maths.
 
-import { LM, trailShoulder, planeAngles } from './geometry';
+import { LM, trailShoulder, planeAngles, spineTiltDeg, mid } from './geometry';
 import { interp, median } from './smoothing';
 import { defaultHeightCm, scaleFromWindow } from './scale';
 import { detectPhases, CHECKPOINT_KEYS } from './phases';
@@ -13,7 +13,7 @@ import { resolveClub } from './club';
 import { runChecks, normClub } from './checks';
 import { mainFault } from './priority';
 
-export const SCHEMA = 'swing-analysis/4'; // 2: the v2 checks (spec 2026-10-18); 3: their lab-calibrated limits (spec §8a); 4: tempo from backswingStart. Older ones re-run on open
+export const SCHEMA = 'swing-analysis/5'; // 2: the v2 checks (spec 2026-10-18); 3: their lab-calibrated limits (spec §8a); 4: tempo from backswingStart; 5: tour reference swings (spec §8b: backside hip line, impact hands, implausible clubheads, no-ball and face-on flags). Older ones re-run on open
 export const MAX_CLIP_S = 15; // captured seconds; the importer warns above this
 const MIN_USABLE = 10;
 const MIN_COVERAGE = 0.8;
@@ -22,6 +22,24 @@ const BODY_VISIBLE = 0.5;
 // (swing checks v2, spec §3). P5, P8 and the internal frames stay in phases.js only, to find others.
 export const CLUB_KEYS = ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm', 'finish'];
 const BODY_LM = [LM.lSh, LM.rSh, LM.lHip, LM.rHip, LM.lKnee, LM.rKnee, LM.lAnk, LM.rAnk];
+
+// Face-on at address: the spine stands almost upright and the feet sit apart in the picture.
+// Down the line every lab clip reads >= 22 deg of tilt and an ankle span <= 0.34 torso; face-on 1 deg and 1.1.
+const FACE_ON_MAX_TILT = 12;
+const FACE_ON_MIN_ANKLES = 0.6;
+
+/** 'faceOn' | 'dtl' from the median address-run pose (px landmarks). */
+function viewOf(idx, L, [a0, a1]) {
+  const run = L.filter((_, k) => idx[k] >= a0 && idx[k] <= a1);
+  const xy = (p) => ({ x: p[0], y: p[1] });
+  const tilt = median(run.map((lm) => Math.abs(spineTiltDeg(mid(xy(lm[LM.lHip]), xy(lm[LM.rHip])), mid(xy(lm[LM.lSh]), xy(lm[LM.rSh]))))));
+  const ankles = median(run.map((lm) => {
+    const sh = mid(xy(lm[LM.lSh]), xy(lm[LM.rSh]));
+    const hip = mid(xy(lm[LM.lHip]), xy(lm[LM.rHip]));
+    return Math.abs(lm[LM.lAnk][0] - lm[LM.rAnk][0]) / (Math.hypot(sh.x - hip.x, sh.y - hip.y) || 1);
+  }));
+  return tilt < FACE_ON_MAX_TILT && ankles > FACE_ON_MIN_ANKLES ? 'faceOn' : 'dtl';
+}
 
 const toPx = (p, W, H) => (p ? { x: p[0] * W, y: p[1] * H } : null);
 const toNorm = (p, W, H) => (p ? [p.x / W, p.y / H] : null);
@@ -113,7 +131,7 @@ export function analyze(native, opts = {}) {
     const placed = !!(m && (m.head || m.hidden));
     const mark = placed ? { hands: toPx(m.hands, W, H), head: toPx(m.head, W, H), hidden: m.hidden } : null;
     const cand = pass2.shaft?.[f] ?? null;
-    const c = resolveClub(k, handsAt(f), cand, mark, ballPx);
+    const c = resolveClub(k, handsAt(f), cand, mark, ballPx, scale.pxPerCm);
     if (m?.hands && !placed) c.hands = toPx(m.hands, W, H); // hands-only correction
     resolved[k] = c;
     cps[k] = { frame: f, ...c };
@@ -149,7 +167,7 @@ export function analyze(native, opts = {}) {
     source,
     club,
     handedness,
-    view: 'dtl',
+    view: viewOf(idx, L, ph.addressRun),
     fps: ph.fps,
     approximate: ph.fps.approximate,
     scale: { pxPerCm: scale.pxPerCm, heightCm, approx: approxHeight },
@@ -173,6 +191,7 @@ export function analyze(native, opts = {}) {
       unknown: checks.filter((c) => c.status === 'unknown').length,
     },
     main,
+    impactFromPose: native.ballGoneFrame == null, // no ball seen: impact and address come from the pose alone
     notes: ph.notes,
     timings: { analyzeMs: Date.now() - t0 },
   };

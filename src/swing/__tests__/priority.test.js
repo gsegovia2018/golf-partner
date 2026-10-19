@@ -151,7 +151,7 @@ describe('golden: the owner swing', () => {
       fault: 'early_extension', label: 'Early extension', position: 'impact', phase: 'impact', startsAt: 'takeaway', consequences: [],
     });
     expect(main.evidence.map((c) => c.id)).toEqual([
-      'hip_drift', 'spine_loss', 'hands_height_impact', 'hands_out_impact', 'spine_hold', 'shaft_angle_impact',
+      'spine_loss', 'hip_drift', 'spine_hold', 'hands_out_impact', 'shaft_angle_impact', 'hands_height_impact',
     ]);
     expect(main.drills).toEqual(['ee-silla', 'ee-pared', 'ee-palo-talones']);
   });

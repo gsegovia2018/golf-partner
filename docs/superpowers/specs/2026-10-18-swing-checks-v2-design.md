@@ -186,6 +186,16 @@ not colour a position.
 
 The owner judged the lab table (three fully marked swings) against the pictures and approved: the belt reference raised 0.06 × height above the hip joints (the joint-height reading said 13–20 cm "upright" on a shaft that points at the belt); `hands_over_heels` 6 / 18 cm (his ~15 cm is a watch, not a fix); `knee_hold` 10 / 15°; the shaft landing capped 50 cm outside the zone (a near-flat shaft read 122 cm); the impact limits kept (his early extension is real on all three). Still uncalibrated for lack of marked clubheads: the takeaway, downswing and follow-through clubhead rows and `CHECK_MIN_CONF`.
 
+## 8b. Tour reference swings (2026-10-19)
+
+Tour swings filmed down the line read early extension on six of seven: the trail hip moves toward the ball
+as the pelvis turns open, and good impact has the hands higher and further out than address. With the
+reference swings in `src/swing/__tests__/fixtures/reference/` (`referenceSwings.test.js`): `hip_drift` now
+reads the backside, the hip farther from the ball (tour -3..+1 cm, the owner +4..+12 cm, limits kept at
+3 / 6); `hands_height_impact` 8 / 12 cm iron, 10 / 14 driver; `hands_out_impact` 6 / 10 iron, 8 / 12 driver.
+The trusted tour swings read 71 % green with at most one red each, and early extension stays the owner's
+main fault on four of his five swings.
+
 ## 9. Screens (design step before building)
 
 Three designs (fits in / better / bold) for:

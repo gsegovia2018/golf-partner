@@ -22,6 +22,23 @@ describe('highlightFor roles', () => {
     expect(out.find((p) => p.t === 'circle').role).toBe('target');
   });
 
+  test('hip drift: the address backside line is the target, drawn at the hip farther from the ball', () => {
+    const hips = (lx, rx) => {
+      const lm = flat();
+      lm[23] = [lx, 0.5, 0.9]; // left hip
+      lm[24] = [rx, 0.5, 0.9]; // right hip
+      return lm;
+    };
+    const hctx = { ...ctx, poseAt: (f) => (f === 1 ? hips(0.42, 0.4) : hips(0.38, 0.46)), frameOf: (k) => (k === 'address' ? 1 : 2) };
+    const out = highlightFor({ id: 'hip_drift', status: 'red', value: 8, unit: 'cm' }, hctx);
+    // right-handed, ball on +x: the right hip (0.40) at address, the left one (0.38) at impact
+    expect(out[0]).toMatchObject({ dash: true, role: 'target', a: [0.4, 0.38] });
+    expect(out[1].b).toEqual([0.38, 0.5]);
+    const lefty = highlightFor({ id: 'hip_drift', status: 'red', value: 8, unit: 'cm' }, { ...hctx, analysis: { ...ctx.analysis, handedness: 'left' } });
+    expect(lefty[0].a[0]).toBe(0.42);
+    expect(lefty[1].b).toEqual([0.46, 0.5]);
+  });
+
   test('a check with only your own drawing has no target', () => {
     const out = highlightFor({ id: 'knee_flex', status: 'red', value: 40, unit: '°' }, ctx);
     expect(out.filter((p) => p.role === 'target')).toHaveLength(0);

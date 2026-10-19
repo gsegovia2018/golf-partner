@@ -700,6 +700,22 @@ describe('SwingResultsScreen: a stored swing', () => {
     expect(u.getAllByText(/approx\./).length).toBeGreaterThan(0);
   });
 
+  test('a swing whose ball was never found adds "ball not seen" to the notice', async () => {
+    const u = setup({ analysis: { ...MARKED, impactFromPose: true } });
+    await ready(u);
+    expect(u.getByText(T.approxShort(T.approxBall))).toBeTruthy();
+    fireEvent.press(u.getByTestId('results-approx'));
+    expect(u.getByText(T.approxBallBanner)).toBeTruthy();
+  });
+
+  test('a face-on clip adds its reason to the same notice', async () => {
+    const u = setup({ analysis: { ...MARKED, view: 'faceOn' } });
+    await ready(u);
+    expect(u.getByText(T.approxShort(T.approxFaceOn))).toBeTruthy();
+    fireEvent.press(u.getByTestId('results-approx'));
+    expect(u.getByText(T.approxFaceOnBanner)).toBeTruthy();
+  });
+
   test('Edit marks from the header menu and from the button both open on the position on screen; Rename saves', async () => {
     const { findByTestId, getByLabelText, getByPlaceholderText, navigation } = setup();
     await findByTestId('results-summary');

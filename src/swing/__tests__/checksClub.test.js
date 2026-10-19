@@ -46,7 +46,6 @@ const SHARED = {
   downVsTakeaway: [0, 10],
   throughVsHalfway: [10, 20],
   hipDrift: [3, 6],
-  handsOut: [4, 8],
 };
 
 describe('THRESHOLDS table (D19)', () => {
@@ -58,10 +57,11 @@ describe('THRESHOLDS table (D19)', () => {
     expect(normClub('driver')).toBe('driver');
   });
 
-  test('iron keeps the original values; driver is the provisional column; spine holds like spine loss', () => {
+  test('iron keeps its values but the impact hands (reference swings); driver is the provisional column; spine holds like spine loss', () => {
     expect(THRESHOLDS.iron).toEqual({
       posture: { green: [25, 40], yellow: [20, 45] },
-      handsHeight: [5, 8],
+      handsHeight: [8, 12],
+      handsOut: [6, 10],
       shaftAngle: [6, 10],
       spineLoss: [3, 6],
       spineHold: [3, 6],
@@ -71,7 +71,8 @@ describe('THRESHOLDS table (D19)', () => {
     });
     expect(THRESHOLDS.driver).toEqual({
       posture: { green: [20, 35], yellow: [15, 40] },
-      handsHeight: [8, 12],
+      handsHeight: [10, 14],
+      handsOut: [8, 12],
       shaftAngle: [8, 12],
       spineLoss: [4, 7],
       spineHold: [4, 7],
@@ -101,7 +102,7 @@ describe('each club-aware check, [measured, iron, driver]', () => {
   });
 
   test('hands_height_impact', () => {
-    [[4, 'green', 'green'], [7, 'yellow', 'green'], [10, 'red', 'yellow'], [13, 'red', 'red']].forEach(([d, iron, driver]) => {
+    [[4, 'green', 'green'], [10, 'yellow', 'green'], [13, 'red', 'yellow'], [15, 'red', 'red']].forEach(([d, iron, driver]) => {
       const input = { checkpoints: { address: at(1, H(0, 100)), impact: at(2, H(0, 100 - d)) }, pose: () => null };
       expect([d, status('iron', 'hands_height_impact', input)]).toEqual([d, iron]);
       expect([d, status('driver', 'hands_height_impact', input)]).toEqual([d, driver]);
@@ -191,7 +192,7 @@ describe('the golden owner swing', () => {
     expect(score(undefined)).toEqual(iron);
     expect(score(null)).toEqual(iron);
     expect(statuses(iron)).toMatchObject({
-      posture_address: 'green', butt_extension: 'red', hands_height_impact: 'red', shaft_angle_impact: 'yellow',
+      posture_address: 'green', butt_extension: 'red', hands_height_impact: 'yellow', shaft_angle_impact: 'yellow',
       spine_loss: 'red', head_drift: 'yellow', 'spine_hold@shaftDown': 'yellow',
     });
   });
@@ -200,9 +201,9 @@ describe('the golden owner swing', () => {
     const iron = statuses(score('iron'));
     const driver = statuses(score('driver'));
     expect(driver.butt_extension).toBe('yellow'); // red -> yellow: 20 cm limit
-    expect(driver.hands_height_impact).toBe('yellow'); // red -> yellow: band(8, 12)
+    expect(driver.hands_height_impact).toBe('yellow'); // ~11 cm: yellow in both, band(8, 12) and band(10, 14)
     expect(driver['spine_hold@shaftDown']).toBe('green'); // 3 degrees: yellow -> green, band(4, 7)
     const changed = Object.keys(iron).filter((k) => iron[k] !== driver[k]).sort();
-    expect(changed).toEqual(['butt_extension', 'hands_height_impact', 'spine_hold@shaftDown']);
+    expect(changed).toEqual(['butt_extension', 'spine_hold@shaftDown']);
   });
 });

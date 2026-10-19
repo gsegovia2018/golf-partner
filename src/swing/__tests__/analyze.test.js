@@ -1,6 +1,7 @@
 import { analyze, SCHEMA } from '../analyze';
 import { SWING_STRINGS } from '../strings';
 import { fixtureNative, TRUTH, W, H } from './helpers';
+import { analyzeReference, byName } from './referenceSwings';
 
 const lab = require('./fixtures/lab-d15-pass1.json');
 
@@ -16,10 +17,10 @@ const byId = (a, id, cp) => a.checks.find((c) => c.id === id && (!cp || c.cp ===
 describe('analyze: the whole pipeline on the fixture', () => {
   const a = analyze(native(), { pass2, handedness: 'right', heightCm: 176, club: 'iron', source: 'import', swingId: 's1', createdAt: 'x' });
 
-  test('shape of analysis.json (schema swing-analysis/4)', () => {
+  test('shape of analysis.json (schema swing-analysis/5)', () => {
     expect(a.error).toBeUndefined();
     expect(a.schema).toBe(SCHEMA);
-    expect(SCHEMA).toBe('swing-analysis/4');
+    expect(SCHEMA).toBe('swing-analysis/5');
     expect(a).toMatchObject({ swingId: 's1', club: 'iron', handedness: 'right', view: 'dtl', source: 'import' });
     expect(a.fps).toMatchObject({ factor: 8, source: 'estimate', approximate: false });
     expect(a.scale.approx).toBe(false);
@@ -54,7 +55,7 @@ describe('analyze: the whole pipeline on the fixture', () => {
     // Without marks the takeaway and halfway-back clubheads are unplaced, and the top is a yellow
     // since the lab table (hands over heels 6 / 18 cm), so there is no earlier red to start from.
     expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: null, consequences: [] });
-    expect(a.main.evidence[0].id).toBe('hip_drift');
+    expect(a.main.evidence[0].id).toBe('spine_loss');
     expect(a.main.drills[0]).toBe('ee-silla');
   });
 });
@@ -69,7 +70,7 @@ describe('analyze with the owner marks as user marks (golden)', () => {
     ]);
     expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: 'takeaway' });
     expect(a.clubMarks.impact.source).toBe('user');
-    expect(byId(a, 'hands_out_impact').status).toBe('red');
+    expect(byId(a, 'hands_out_impact').status).toBe('yellow');
     expect(byId(a, 'clubhead_plane_takeaway')).toMatchObject({ status: 'red', dir: 'flat' });
   });
 
@@ -166,7 +167,7 @@ describe('analyze: the club picks the thresholds (D19)', () => {
     const driver = run('driver');
     expect(driver.club).toBe('driver');
     expect(driver.checks.map((c) => c.value)).toEqual(iron.checks.map((c) => c.value));
-    expect(byId(iron, 'hands_height_impact').status).toBe('red');
+    expect(byId(iron, 'hands_height_impact').status).toBe('yellow'); // ~11 cm: a watch in both columns
     expect(byId(driver, 'hands_height_impact').status).toBe('yellow');
     expect(byId(iron, 'butt_extension').status).toBe('red');
     expect(byId(driver, 'butt_extension').status).toBe('yellow');
@@ -191,5 +192,13 @@ describe('analyze: where tempo starts the backswing', () => {
     expect(a.checkpoints.address.i).toBe(frame);
     expect(byId(a, 'tempo').value).toBe(ratio(a, frame));
     expect(byId(a, 'tempo').value).toBeGreaterThan(byId(auto, 'tempo').value);
+  });
+});
+
+describe('analyze: no ball seen', () => {
+  test('flags a swing whose ball was never found, so impact and address come from the pose', () => {
+    expect(analyzeReference(byName('tour-woods-iron')).impactFromPose).toBe(true);
+    expect(analyzeReference(byName('tour-rose-iron')).impactFromPose).toBe(true);
+    expect(analyzeReference(byName('tour-scott-iron')).impactFromPose).toBe(false);
   });
 });

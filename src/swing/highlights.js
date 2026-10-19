@@ -225,8 +225,14 @@ export function highlightFor(check, ctx) {
       return n ? [{ t: 'circle', c: n, r: 0.04, dash: true, role: 'target' }, ...text([n[0] + 0.03, n[1] - 0.04], valueText(check))] : [];
     }
     case 'hip_drift': {
-      const a = lm('address', trailHip);
-      const i = lm('impact', trailHip);
+      // the backside: whichever hip is farther from the ball (smaller x for a right-hander)
+      const backside = (k) => {
+        const hips = [lm(k, LM.lHip), lm(k, LM.rHip)];
+        if (!hips[0] || !hips[1]) return null;
+        return (hips[0][0] < hips[1][0]) !== left ? hips[0] : hips[1];
+      };
+      const a = backside('address');
+      const i = backside('impact');
       if (!a || !i) return [];
       return [
         { t: 'line', a: [a[0], a[1] - 0.12], b: [a[0], a[1] + 0.12], dash: true, role: 'target' },

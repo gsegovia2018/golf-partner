@@ -67,7 +67,7 @@ export default {
   'swing.checkText.shaft_angle_impact_up': 'Shaft {deg}° more upright than at address',
   'swing.checkText.shaft_angle_impact_down': 'Shaft {deg}° flatter than at address',
   'swing.checkText.spine_loss': 'Spine tilt {from}° → {to}° ({loss}° lost)',
-  'swing.checkText.hip_drift': 'Trail hip {cm} cm toward the ball',
+  'swing.checkText.hip_drift': 'Hips {cm} cm toward the ball',
   'swing.checkText.head_drift': 'Head moved {cm} cm from address',
   'swing.checkText.tempo': 'Backswing {back} : downswing {down} frames = {ratio}:1 (2.5–3.5 is good)',
   'swing.checkText.finish_balance.both': 'Held the finish, weight over the lead leg',
