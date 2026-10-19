@@ -47,10 +47,12 @@ describe('stakes input and display', () => {
 
   test('formatEuros by hand in both languages', () => {
     expect(formatEuros(2750, {}, 'en')).toBe('€27.50');
-    expect(formatEuros(2750, {}, 'es')).toBe('27,50 €');
-    expect(formatEuros(-350, { sign: true }, 'en')).toBe('−€3.50');
-    expect(formatEuros(4650, { sign: true }, 'es')).toBe('+46,50 €');
+    expect(formatEuros(2750, {}, 'es')).toBe('27,50\u00A0€');
+    expect(formatEuros(-350, { sign: true }, 'en')).toBe('−\u2060€3.50');
+    expect(formatEuros(4650, { sign: true }, 'es')).toBe('+\u206046,50\u00A0€');
     expect(formatEuros(0, { sign: true }, 'en')).toBe('€0.00');
+    // No break opportunity anywhere inside an amount.
+    expect(formatEuros(-1200, { sign: true }, 'es')).not.toMatch(/ /);
   });
 });
 

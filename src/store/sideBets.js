@@ -37,10 +37,15 @@ export function parseEuros(text) {
 }
 
 // Hermes ships partial Intl, so format by hand: "€27.50" / "27,50 €".
+// A word joiner after the sign and a no-break space before "€" keep the
+// amount on one line ("−" and "€12.00" used to wrap apart).
+const NBSP = '\u00A0';
+const WJ = '\u2060';
 export function formatEuros(amount, { sign = false } = {}, lang = getLanguage()) {
   const body = formatNumber(Math.abs(amount) / 100, { decimals: 2 }, lang);
-  const prefix = sign ? (amount > 0 ? '+' : amount < 0 ? '−' : '') : (amount < 0 ? '−' : '');
-  return lang === 'es' ? `${prefix}${body} €` : `${prefix}€${body}`;
+  const mark = sign ? (amount > 0 ? '+' : amount < 0 ? '−' : '') : (amount < 0 ? '−' : '');
+  const prefix = mark ? mark + WJ : '';
+  return lang === 'es' ? `${prefix}${body}${NBSP}€` : `${prefix}€${body}`;
 }
 
 const zeroes = (players) => Object.fromEntries(players.map((p) => [p.id, 0]));

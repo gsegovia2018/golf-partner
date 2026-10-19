@@ -126,6 +126,11 @@ describe('helpers', () => {
   test('rowLabel and grossResult', () => {
     expect(rowLabel({ name: '  ana belén' })).toBe('ANA');
     expect(rowLabel({ name: '' })).toBe('—');
+    // Players sharing the first three letters get told apart.
+    const qa = ['QA Ben', 'QA Carla', 'QA Ana'].map((name, i) => ({ id: `p${i}`, name }));
+    expect(qa.map((p) => rowLabel(p, qa))).toEqual(['BEN', 'CAR', 'ANA']);
+    const twins = [{ id: 'a', name: 'Marcos Ruiz' }, { id: 'b', name: 'Mario Ruiz' }, { id: 'c', name: 'Javier' }];
+    expect(twins.map((p) => rowLabel(p, twins))).toEqual(['MA1', 'MA2', 'JAV']);
     expect(grossResult(4, 3)).toBe('birdie');
     expect(grossResult(4, null)).toBeNull();
   });
