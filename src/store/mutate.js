@@ -26,6 +26,8 @@ export function metaPathFor(m) {
     // the gear Team Settings sheet; each toggle is its own LWW path.
     case 'tournament.setTeamSettings':
       return ['settings.fixedTeams', 'settings.manualTeams'];
+    // Side-bet stakes (store/sideBets.js): one object, replaced whole.
+    case 'tournament.setStakes': return 'settings.stakes';
     case 'handicap.set': return `rounds.${m.roundId}.playerHandicaps.${m.playerId}`;
     // Per-round handicap INDEX override (recomputes the playing handicap for
     // non-manual entries). Scoped to one round, one player.
@@ -177,6 +179,10 @@ export function applyToTournament(t, m) {
         fixedTeams: Boolean(m.fixedTeams),
         manualTeams: Boolean(m.manualTeams),
       };
+      break;
+    }
+    case 'tournament.setStakes': {
+      t.settings = { ...(t.settings ?? {}), stakes: m.stakes ?? null };
       break;
     }
     case 'handicap.set': {

@@ -152,6 +152,13 @@ export async function executeMutation(entry, localTournament) {
       return NO_CONFLICT;
     }
 
+    case 'tournament.setStakes': {
+      // settings merges one level on the server, so stakes is replaced whole
+      // (null clears it).
+      await repo.patchTournament(id, { settings: { stakes: localTournament.settings?.stakes ?? null } });
+      return NO_CONFLICT;
+    }
+
     case 'handicap.set': {
       const round = findRound(localTournament, m.roundId);
       if (!round) return NO_CONFLICT;
