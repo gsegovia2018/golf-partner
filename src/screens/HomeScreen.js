@@ -3099,7 +3099,8 @@ const makeStyles = (t) => StyleSheet.create({
   },
   confirmCard: {
     width: '100%', maxWidth: 360,
-    backgroundColor: t.bg.card,
+    // Opaque in dark: the dark bg.card tint is see-through over the scrim.
+    backgroundColor: t.isDark ? t.bg.primary : t.bg.card,
     borderRadius: 20, padding: 22,
     borderWidth: 1, borderColor: t.border.default,
     ...(t.isDark ? {} : t.shadow.elevated),
@@ -3134,5 +3135,5 @@ const makeStyles = (t) => StyleSheet.create({
     color: t.isDark ? t.accent.primary : t.text.inverse,
   },
   confirmBtnDestructive: { backgroundColor: t.destructive },
-  confirmBtnDestructiveText: { color: '#ffffff' },
+  confirmBtnDestructiveText: { color: t.isDark ? t.text.inverse : '#ffffff' },
 });
