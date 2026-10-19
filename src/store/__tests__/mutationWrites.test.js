@@ -142,6 +142,15 @@ describe('tournament.setTeamSettings', () => {
   });
 });
 
+describe('tournament.setStakes', () => {
+  test('patches settings.stakes whole from local settings', async () => {
+    const stakes = { pot: 1000, perPoint: 50, skin: 0 };
+    const local = baseTournament({ settings: { scoringMode: 'individual', stakes } });
+    await executeMutation(entry({ type: 'tournament.setStakes', stakes }), local);
+    expect(repo.patchTournament).toHaveBeenCalledWith(TID, { settings: { stakes } });
+  });
+});
+
 describe('handicap.set', () => {
   test('patches playerHandicaps AND the manualHandicaps flag for the single player from the local round', async () => {
     const mutation = {

@@ -24,6 +24,8 @@ import PullToRefresh from '../components/PullToRefresh';
 import BottomSheet from '../components/BottomSheet';
 import LiveRoundCard from '../components/LiveRoundCard';
 import PressableScale from '../components/ui/PressableScale';
+import StakesSheet, { stakesSummary } from '../components/StakesSheet';
+import SettleUpCard from '../components/SettleUpCard';
 import {
   loadTournament, loadAllTournaments, loadAllTournamentsWithFallback,
   setActiveTournament,
@@ -202,6 +204,7 @@ export default function HomeScreen({ navigation, route }) {
   const [boardShareBusy, setBoardShareBusy] = useState(false);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
   const [showPointValues, setShowPointValues] = useState(false);
+  const [showStakes, setShowStakes] = useState(false);
   // Strings — BestBallValueFields edits through TextInputs.
   const [pointValuesDraft, setPointValuesDraft] = useState(null);
   // List-view overflow menu — surfaces the Course/Player libraries, which
@@ -897,6 +900,20 @@ export default function HomeScreen({ navigation, route }) {
     }
   }
 
+  // Side-bet stakes (store/sideBets.js), replaced whole; null = no stakes.
+  async function saveStakes(stakes) {
+    if (!tournament) return;
+    try {
+      await mutate(tournament, { type: 'tournament.setStakes', stakes });
+      await reload();
+      setShowStakes(false);
+    } catch (err) {
+      const msg = err?.message ?? tx('stakes.error.save');
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert(tx('home.common.error'), msg);
+    }
+  }
+
   // Persist the gear sheet's team toggles. Tournament-wide by design —
   // fixedTeams/manualTeams shape how EVERY round builds its pairs. No eager
   // pair rebuilds: pairsForNextRound applies fixedTeams lazily at reveal.
@@ -1142,6 +1159,8 @@ export default function HomeScreen({ navigation, route }) {
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
   const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
   const isViewer = tournament?._role === 'viewer';
+  // Side bets: casual games and tournaments with someone to play against.
+  const canHaveStakes = !!tournament && tournament.kind !== 'official' && (tournament.players?.length ?? 0) >= 2;
   const isOwner = tournament?._role === 'owner';
 
   // Quiet themed hold while a reload is in flight AND there's no data to
@@ -1716,6 +1735,16 @@ export default function HomeScreen({ navigation, route }) {
       />
       )}
 
+      {/* Hidden running scores hide the live ledger too: it would give the order away. */}
+      {canHaveStakes && (showRunning || isPast) && (
+        <SettleUpCard
+          tournament={tournament}
+          live={!isPast}
+          onAddStakes={isViewer ? null : () => setShowStakes(true)}
+          cardStyle={s.card}
+        />
+      )}
+
       {/* A finished casual game has one round, and its ROUND SCORES card only
           repeats the leaderboard — show the read-only hole-by-hole card instead. */}
       {isGame && isPast && tournament.rounds[0] && (
@@ -2198,6 +2227,22 @@ export default function HomeScreen({ navigation, route }) {
 
           {tournament.rounds.length === 1 && renderPointValuesMenuItem(() => setShowSettings(false))}
 
+          {!isViewer && canHaveStakes && (
+            <TouchableOpacity
+              style={s.menuItem}
+              onPress={() => { setShowSettings(false); setShowStakes(true); }}
+              activeOpacity={0.7}
+              testID="menu-stakes"
+            >
+              <Feather name="credit-card" size={14} color={theme.text.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.menuItemTitle}>{tx('stakes.menu')}</Text>
+                <Text style={s.modalSubtle}>{stakesSummary(tournament.settings?.stakes, tx)}</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
+
           {!isViewer && teamSettingsMode && (
             <TouchableOpacity
               style={s.menuItem}
@@ -2314,6 +2359,17 @@ export default function HomeScreen({ navigation, route }) {
             </>
           )}
     </BottomSheet>
+
+    {canHaveStakes && (
+      <StakesSheet
+        visible={showStakes}
+        value={tournament.settings?.stakes}
+        playerCount={tournament.players.length}
+        noSkins={tournament.rounds.every((r) => isScrambleMode(roundScoringMode(tournament, r)))}
+        onSave={saveStakes}
+        onClose={() => setShowStakes(false)}
+      />
+    )}
 
     <PostCreateInviteModal
       visible={postCreateInvite.visible}

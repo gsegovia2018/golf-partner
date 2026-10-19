@@ -45,3 +45,17 @@ describe('tournament.setTeamSettings mutation', () => {
     expect(t.settings).toEqual({ fixedTeams: true, manualTeams: false });
   });
 });
+
+describe('tournament.setStakes mutation', () => {
+  test('stamps the stakes path', () => {
+    expect(metaPathFor({ type: 'tournament.setStakes' })).toBe('settings.stakes');
+  });
+
+  test('replaces stakes and keeps other settings; null clears', () => {
+    const t = { settings: { scoringMode: 'individual', stakes: { pot: 500 } } };
+    applyToTournament(t, { type: 'tournament.setStakes', stakes: { perPoint: 50 } });
+    expect(t.settings).toEqual({ scoringMode: 'individual', stakes: { perPoint: 50 } });
+    applyToTournament(t, { type: 'tournament.setStakes', stakes: null });
+    expect(t.settings.stakes).toBeNull();
+  });
+});

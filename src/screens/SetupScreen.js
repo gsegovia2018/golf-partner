@@ -23,7 +23,8 @@ import { useAuth } from '../context/AuthContext';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode, TeamsSettingsFields } from '../components/ScoringModePicker';
 import RoundTeeAssignments from '../components/RoundTeeAssignments';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
-import { getScoringMode, needsManualTeamSetup, scoringModeUsesTeams } from '../components/scoringModes';
+import { getScoringMode, needsManualTeamSetup, scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
+import StakesSheet, { stakesSummary } from '../components/StakesSheet';
 import WizardProgress from '../components/setup/WizardProgress';
 import WizardNav from '../components/setup/WizardNav';
 import {
@@ -124,6 +125,7 @@ export default function SetupScreen({ navigation, route }) {
   const [rounds, setRounds] = useState(() => prefilledRounds ?? [
     { id: newRoundId(), courseName: '', holes: defaultHoles(), tees: [], playerHandicaps: null, playerTees: null },
   ]);
+  const [showStakes, setShowStakes] = useState(false);
   const [settings, setSettings] = useState(() => ({
     ...(isGame ? GAME_DEFAULT_SETTINGS : DEFAULT_SETTINGS),
     ...settingsPatch,
@@ -1200,7 +1202,7 @@ export default function SetupScreen({ navigation, route }) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[s.reviewRow, showTeamsStep && s.reviewRowDivider]}
+            style={[s.reviewRow, (showTeamsStep || players.length >= 2) && s.reviewRowDivider]}
             onPress={() => goToStep('scoring')}
             disabled={!hasScoringStep}
           >
@@ -1216,7 +1218,7 @@ export default function SetupScreen({ navigation, route }) {
 
           {showTeamsStep && (
             <TouchableOpacity
-              style={s.reviewRow}
+              style={[s.reviewRow, players.length >= 2 && s.reviewRowDivider]}
               onPress={() => goToStep('teams')}
             >
               <Feather name="users" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
@@ -1225,6 +1227,17 @@ export default function SetupScreen({ navigation, route }) {
                 <Text style={s.reviewRowSub}>
                   {settings.fixedTeams ? t('setup.screen.sameTeams') : t('setup.screen.randomTeams')}
                 </Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
+
+          {players.length >= 2 && (
+            <TouchableOpacity style={s.reviewRow} onPress={() => setShowStakes(true)} testID="review-stakes">
+              <Feather name="credit-card" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.reviewRowTitle}>{t('stakes.title')}</Text>
+                <Text style={s.reviewRowSub}>{stakesSummary(settings.stakes, t)}</Text>
               </View>
               <Feather name="chevron-right" size={18} color={theme.text.muted} />
             </TouchableOpacity>
@@ -1287,6 +1300,15 @@ export default function SetupScreen({ navigation, route }) {
         nextLabel={nextLabel}
         onBack={handleBack}
         onNext={handleNext}
+      />
+
+      <StakesSheet
+        visible={showStakes}
+        value={settings.stakes}
+        playerCount={players.length}
+        noSkins={rounds.every((r) => isScrambleMode(r.scoringMode ?? settings.scoringMode))}
+        onSave={(stakes) => { setSettings((prev) => ({ ...prev, stakes })); setShowStakes(false); }}
+        onClose={() => setShowStakes(false)}
       />
 
       <PostCreateInviteModal
