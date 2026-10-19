@@ -8,8 +8,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { useT } from '../i18n';
 import { stakeLedger, formatEuros } from '../store/sideBets';
+import { shortName } from './gamestats/ui';
 
-const firstName = (p) => p?.name?.split(' ')[0] ?? '—';
 const initials = (p) => (p?.name ?? '?').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
 export default function SettleUpCard({ tournament, live, onAddStakes, cardStyle }) {
@@ -21,7 +21,10 @@ export default function SettleUpCard({ tournament, live, onAddStakes, cardStyle 
   const ledger = stakeLedger(tournament);
   if (!ledger && !onAddStakes) return null;
 
-  const byId = Object.fromEntries((tournament.players ?? []).map((p) => [p.id, p]));
+  const players = tournament.players ?? [];
+  const byId = Object.fromEntries(players.map((p) => [p.id, p]));
+  // Game Stats' rule: first name, or the full name when two players share it.
+  const nameOf = (p) => (p ? shortName(p, players) : '—');
   const header = (
     <View style={s.head}>
       <Text style={s.title}>{t('settle.title')}</Text>
@@ -45,7 +48,7 @@ export default function SettleUpCard({ tournament, live, onAddStakes, cardStyle 
 
   const share = () => {
     const lines = ledger.transfers.map((x) => t('settle.shareLine', {
-      from: firstName(byId[x.from]), to: firstName(byId[x.to]), amount: formatEuros(x.amount),
+      from: nameOf(byId[x.from]), to: nameOf(byId[x.to]), amount: formatEuros(x.amount),
     }));
     Share.share({ message: [tournament.name, ...lines].join('\n') }).catch(() => {});
   };
@@ -73,7 +76,7 @@ export default function SettleUpCard({ tournament, live, onAddStakes, cardStyle 
             <View style={s.av}><Text style={s.avText}>{initials(from)}</Text></View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={s.who} numberOfLines={open === key ? undefined : 1}>
-                {t('settle.pays', { from: from?.name ?? '—', to: firstName(to) })}
+                {t('settle.pays', { from: nameOf(from), to: nameOf(to) })}
               </Text>
               {open === key && <Text style={s.help}>{parts.join(' · ')}</Text>}
             </View>
@@ -83,11 +86,11 @@ export default function SettleUpCard({ tournament, live, onAddStakes, cardStyle 
         );
       })}
       <View style={s.chips}>
-        {(tournament.players ?? []).map((p) => {
+        {players.map((p) => {
           const net = ledger.byPlayer[p.id].net;
           return (
             <View key={p.id} style={s.chip}>
-              <Text style={s.chipName} numberOfLines={1}>{firstName(p)}</Text>
+              <Text style={s.chipName} numberOfLines={1}>{nameOf(p)}</Text>
               <Text style={[s.chipNet, net > 0 && s.plus, net < 0 && s.minus]}>{formatEuros(net, { sign: true })}</Text>
             </View>
           );

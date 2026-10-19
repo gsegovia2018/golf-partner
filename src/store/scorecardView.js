@@ -37,10 +37,20 @@ export function grossResult(par, strokes) {
   return 'double';
 }
 
-// Three-letter row label, the scorecard convention ("MAR", "JAV").
-export function rowLabel(player) {
+// Three-letter row label, the scorecard convention ("MAR", "JAV"). With the
+// roster, a label two players would share ("QA Ben" / "QA Ana" -> "QA ") takes
+// the last word instead ("BEN" / "ANA"), then a position number if still shared.
+const code3 = (text) => text.trim().slice(0, 3).toUpperCase();
+export function rowLabel(player, players = []) {
   const name = player?.name?.trim() ?? '';
-  return name ? name.slice(0, 3).toUpperCase() : '—';
+  if (!name) return '—';
+  const others = players.filter((p) => p && p.id !== player.id && p.name?.trim());
+  const first = code3(name);
+  if (!others.some((p) => code3(p.name) === first)) return first;
+  const lastOf = (n) => code3(n.trim().split(/\s+/).pop());
+  const last = lastOf(name);
+  if (!others.some((p) => lastOf(p.name) === last)) return last;
+  return `${first.slice(0, 2)}${players.indexOf(player) + 1}`;
 }
 
 const sumOf = (list, key) => {
@@ -114,7 +124,7 @@ export function scorecardModel({ round, players, meId = null, mode = 'stableford
     return {
       id: player.id,
       player,
-      label: rowLabel(player),
+      label: rowLabel(player, players),
       isMe: player.id === meId,
       nines,
       hasShots: cells.some((c) => c.putts != null || c.drive != null || c.penalties > 0),
