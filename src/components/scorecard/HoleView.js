@@ -249,7 +249,7 @@ export function HoleView({ leaguePlayers = '', medalLeague = false, round, round
         roundIndex={roundIndex}
         seenEnabled={!!meId && !official && !isScrambleMode(rawMode) && (editable ? editable(meId) : true)}
         strokes={myHoleStrokes}
-        putts={meId ? shotDetails?.[meId]?.[currentHole]?.putts ?? null : null}
+        detail={meId ? shotDetails?.[meId]?.[currentHole] ?? null : null}
         pickedUp={!!meId && isPickupScore(
           myHoleStrokes, hole?.par, round?.playerHandicaps?.[meId] ?? players.find((p) => p.id === meId)?.handicap,
           hole?.strokeIndex, holeCount,

@@ -8,8 +8,8 @@ export default {
   'shots.detail.holeDistance': 'Hole distance',
   'shots.detail.approach': 'Approach',
   'shots.detail.budgetLeft': {
-    one: '{count} stroke left to assign',
-    other: '{count} strokes left to assign',
+    one: '{count} stroke not in these counts',
+    other: '{count} strokes not in these counts',
   },
   'shots.detail.budgetAll': {
     one: 'All {count} stroke assigned',
@@ -189,12 +189,12 @@ export default {
   'shots.seen.add': 'Add',
   'shots.seen.clubA11y': 'Club: {club}. Tap to change it',
   'shots.seen.missing': {
-    one: '{count} shot missing',
-    other: '{count} shots missing',
+    one: '{count} shot not on the map',
+    other: '{count} shots not on the map',
   },
   'shots.seen.missingBadge': {
-    one: '{count} missing',
-    other: '{count} missing',
+    one: '{count} unmarked',
+    other: '{count} unmarked',
   },
   'shots.seen.plusOne': '+1 from here',
   'shots.seen.plusOneA11y': 'Add another shot played from this same spot',

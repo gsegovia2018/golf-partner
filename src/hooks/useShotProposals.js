@@ -5,7 +5,8 @@ import {
   subscribeShotProposals, getShotProposalsVersion, getRoundStops, loadShotProposals,
   confirmProposals, dismissProposal,
 } from '../store/shotProposalStore';
-import { proposalsForHole, missingShots } from '../store/shotDetection';
+import { proposalsForHole } from '../store/shotDetection';
+import { holeStrokeAccount } from '../store/scoring';
 import { holeRefs, onGreen } from '../lib/gpsTrailStops';
 import {
   subscribeShots, getShotsVersion, getShots, shotsForHole, insertShotAfter,
@@ -18,13 +19,14 @@ const EMPTY = [];
 // The automatically detected shots for one hole of my round, the actions on
 // them, and how many shots the hole's score says are still missing.
 // `enabled` is the caller's gate (my own card, not scramble, not official);
-// the "Record GPS trail (test)" setting gates the rest. `strokes`, `putts` and
-// `pickedUp` are my score and shot detail for the hole (see missingShots).
+// the "Record GPS trail (test)" setting gates the rest. `strokes`, `detail`
+// and `pickedUp` are my score and shot detail for the hole; `missing` is
+// holeStrokeAccount's notOnMap, the same accounting as the shot detail.
 // Each open proposal carries `club`: the shot tracker's distance-based guess
 // (driver only off the tee), which the golfer can change before adding.
 export function useShotProposals({
   roundId, roundIndex, holeNumber, courseName, enabled,
-  strokes = null, putts = null, pickedUp = false,
+  strokes = null, detail = null, pickedUp = false,
 }) {
   const settings = useAppSettings();
   const on = !!enabled && settings.recordGpsTrail === true && roundId != null;
@@ -63,9 +65,9 @@ export function useShotProposals({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on, roundId, roundIndex, holeNumber, course, shots, pv, settings, refs, courseName]);
 
-  const missing = useMemo(() => (on ? missingShots({
-    strokes, putts, pickedUp, spots: shots, isOnGreen: (sh) => !!refs && onGreen([sh.lat, sh.lng], refs),
-  }) : null), [on, strokes, putts, pickedUp, shots, refs]);
+  const missing = useMemo(() => (on ? holeStrokeAccount({
+    strokes, detail, pickedUp, spots: shots, isOnGreen: (sh) => !!refs && onGreen([sh.lat, sh.lng], refs),
+  }).notOnMap : null), [on, strokes, detail, pickedUp, shots, refs]);
 
   // Adds proposals as shots (each with its own `club`); resolves to the shots.
   const confirm = useCallback((list) => confirmProposals({

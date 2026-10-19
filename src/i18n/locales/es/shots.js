@@ -8,8 +8,8 @@ export default {
   'shots.detail.holeDistance': 'Distancia al hoyo',
   'shots.detail.approach': 'Aproximación',
   'shots.detail.budgetLeft': {
-    one: 'Queda {count} golpe por asignar',
-    other: 'Quedan {count} golpes por asignar',
+    one: 'Queda {count} golpe sin contar aquí',
+    other: 'Quedan {count} golpes sin contar aquí',
   },
   'shots.detail.budgetAll': {
     one: 'Asignado {count} golpe',
@@ -189,12 +189,12 @@ export default {
   'shots.seen.add': 'Añadir',
   'shots.seen.clubA11y': 'Palo: {club}. Toca para cambiarlo',
   'shots.seen.missing': {
-    one: 'Falta {count} golpe',
-    other: 'Faltan {count} golpes',
+    one: 'Falta {count} golpe en el mapa',
+    other: 'Faltan {count} golpes en el mapa',
   },
   'shots.seen.missingBadge': {
-    one: 'falta {count}',
-    other: 'faltan {count}',
+    one: '{count} sin marcar',
+    other: '{count} sin marcar',
   },
   'shots.seen.plusOne': '+1 desde aquí',
   'shots.seen.plusOneA11y': 'Añadir otro golpe jugado desde este mismo punto',

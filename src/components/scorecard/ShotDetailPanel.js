@@ -12,7 +12,7 @@ import {
   hydrateSwingProfile, getSwingProfile, subscribeSwings, getSwingsVersion,
 } from '../../store/swingStore';
 import {
-  isGIR, recoveryOutcomeFromState, shotDetailStrokeCount,
+  isGIR, recoveryOutcomeFromState, holeStrokeAccount,
   driveDirectionPatch, teeClubPatch, approachBucketPatch, approachFinishPatch, recoveryOutcomePatch,
 } from '../../store/scoring';
 import { defaultApproachLie } from '../../store/statsEngine';
@@ -336,8 +336,8 @@ export function ShotDetailPanel({
 
   // Stroke budget: every counter is one of the hole's strokes, so the four
   // counters together can never exceed `strokes`. No cap until strokes is set.
-  const assigned = shotDetailStrokeCount(d);
-  const budgetLeft = strokes == null ? Infinity : strokes - assigned;
+  // Same accounting as the hole map's "not on the map" count (holeStrokeAccount).
+  const budgetLeft = holeStrokeAccount({ strokes, detail: d }).leftToAssign ?? Infinity;
   const atBudget = budgetLeft <= 0;
   const budgetCaption = strokes == null
     ? null
