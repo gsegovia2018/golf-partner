@@ -84,7 +84,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const [loading, setLoading] = useState(() => !initialTournament);
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedOnceRef = useRef(!!initialTournament);
-  const [activeTab, setActiveTab] = useState('scorecard');
+  const [activeTab, setActiveTab] = useState(route.params?.tab === 'photos' ? 'photos' : 'scorecard');
   const [sharingRound, setSharingRound] = useState(false);
   // The viewer's career rounds, loaded lazily for the personal-record half of
   // the highlights strip. null until (and unless) that load runs.

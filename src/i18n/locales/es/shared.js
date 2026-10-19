@@ -32,8 +32,6 @@ export default {
   "shared.scoreboard.points": "Puntos",
   "shared.scoreboard.strokes": "Golpes",
   "shared.scoreboard.vsPar": "vs par",
-  "shared.liveRound.thru": "{points} ptos tras {thru}",
-  "shared.liveRound.open": "Abrir tarjeta",
   "shared.grid.strokesFor": "Golpes de {name} en el hoyo {hole}",
   "shared.grid.matchScore": "Marcador del partido",
   "shared.share.tournament": "Torneo",
