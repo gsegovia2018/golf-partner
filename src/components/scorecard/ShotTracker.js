@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import React, {
+  useEffect, useMemo, useRef, useState, useSyncExternalStore,
+} from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from '../ui/PressableScale';
@@ -7,9 +9,9 @@ import { useAppSettings } from '../../hooks/useAppSettings';
 import {
   subscribeShots, getShotsVersion, getShots,
   shotsForHole, logShot, logMeasuredShot, setShotClub, setShotPos,
-  insertShotAfter, deleteShot,
+  insertShotAfter, deleteShot, chainEndNear,
 } from '../../store/shotStore';
-import { haversineMeters, bearingDeg } from '../../lib/geo';
+import { haversineMeters, bearingDeg, pointInPolygon } from '../../lib/geo';
 import { useT } from '../../i18n';
 import { guessClub } from '../../store/clubGuess';
 import { ClubWheel, wheelClubsFor } from './ClubWheel';
@@ -17,6 +19,14 @@ import { ClubWheel, wheelClubsFor } from './ClubWheel';
 // How far from the green centre "On the green" still makes sense. A green is
 // in range of an approach, never of a drive on a par 4 — see canFinishOnGreen.
 const MAX_GREEN_CLOSE_M = 250;
+
+// Whether `pt` ([lat,lng]) is on the green: inside its outline when the map
+// has one, else within 12 m of the green centre.
+export function isOnGreen(pt, green, greenCenter) {
+  if (!pt) return false;
+  if (green) return pointInPolygon(pt, green);
+  return !!greenCenter && haversineMeters(pt, greenCenter) <= 12;
+}
 
 // Shot log overlaid on the hole map (HoleFlyover), reduced to a single club
 // FAB in the bottom-right corner.
@@ -37,10 +47,15 @@ const MAX_GREEN_CLOSE_M = 250;
 //     wheel and change the club, move it, add a shot after it, or delete it.
 //   - "On the green" closes the hole in one tap at the green centre, so the
 //     approach earns its carry without walking up and marking a spot you'd
-//     only ever putt from.
+//     only ever putt from. A spot on the green is where the first putt was
+//     struck, so its sheet offers no club — only Move and Delete.
 export function ShotTracker({
   roundId, roundIndex, holeNumber, courseName = null,
   pos, aimPos, aimRings, targetPos,
+  // The hole's green outline ([[lat,lng],...]), or null — see isOnGreen.
+  greenPolygon = null,
+  // Hide the FABs (a seen-shot card is using the bottom of the map).
+  hideFabs = false,
   tappedShotIndex, onConsumeShotTap, onCollapseTargets,
   // Shots the hole's score says are missing (useShotProposals), or null.
   missing = null,
@@ -64,16 +79,39 @@ export function ShotTracker({
     })?.club ?? null
     : null);
 
+  const onGreen = (pt) => isOnGreen(pt, greenPolygon, targetPos);
+
   // Add a ball spot at `spot` ([lat,lng]): the shot you're about to play from
   // there. Opens the club wheel on it, pre-focused on the club that covers
   // what's left to the green — the driver is only a candidate off the tee
-  // (the hole's first mark).
+  // (the hole's first mark). When the hole's chain already ends in an un-hit
+  // landing at this spot (a measured shot's end, chainEndNear), that spot is
+  // tagged where it is instead of stacking a duplicate on it.
   const addSpot = async (spot) => {
     const hole = shotsForHole(roundId, roundIndex, holeNumber);
     const toGreen = targetPos ? haversineMeters(spot, targetPos) : null;
+    const end = chainEndNear(hole, spot);
+    if (end && !end.club) {
+      const at = [end.lat, end.lng];
+      if (!onGreen(at)) {
+        const club = guess(toGreen, at, targetPos, hole.length === 1);
+        if (club) await setShotClub(end.id, club);
+      }
+      setWheelId(end.id);
+      return;
+    }
     const club = guess(toGreen, spot, targetPos, hole.length === 0);
     const shot = await logShot({ roundId, roundIndex, holeNumber, pos: spot, club });
     setWheelId(shot.id);
+  };
+
+  // One mark at a time: a double tap must not drop two stacked pins while the
+  // first is still being written.
+  const marking = useRef(false);
+  const once = (fn) => async () => {
+    if (marking.current) return;
+    marking.current = true;
+    try { await fn(); } finally { marking.current = false; }
   };
 
   // A pin tapped on the map opens the wheel for that shot.
@@ -103,18 +141,18 @@ export function ShotTracker({
       return;
     }
     const p = pos || aimPos;
-    if (p) addSpot(p);
+    if (p) await addSpot(p);
   };
-  const dropAtAim = () => { const p = aimPos || pos; if (p) addSpot(p); };
+  const dropAtAim = async () => { const p = aimPos || pos; if (p) await addSpot(p); };
 
   // The approach finished on the green: everything after it is a putt, so the
   // chain ends here. Marking the green centre rather than walking to the ball
   // gives the approach an honest carry (a green is ~20-30 m across, and the
   // centre is the number the approach was aimed at anyway) and leaves nothing
   // more to mark on the hole.
-  const finishOnGreen = () => {
+  const finishOnGreen = async () => {
     if (!targetPos) return;
-    logShot({ roundId, roundIndex, holeNumber, pos: targetPos, club: null });
+    await logShot({ roundId, roundIndex, holeNumber, pos: targetPos, club: null });
   };
 
   if (!roundId) return null;
@@ -130,6 +168,8 @@ export function ShotTracker({
   const editIndex = wheelId ? shots.findIndex((sh) => sh.id === wheelId) : -1;
   const editShot = editIndex >= 0 ? shots[editIndex] : null;
   const editCarry = editIndex >= 0 ? carryOf(editIndex) : null;
+  // A spot on the green is the first putt: there's no club to pick for it.
+  const editOnGreen = !!editShot && onGreen([editShot.lat, editShot.lng]);
   const editToPin = editShot && targetPos
     ? haversineMeters([editShot.lat, editShot.lng], targetPos) : null;
   const editValue = editShot
@@ -143,21 +183,20 @@ export function ShotTracker({
     if (wheelId) deleteShot(wheelId);
     closeWheel();
   };
-  // Re-place a spot that was marked in the wrong place — at the aim ring when
-  // one is set (you can put it exactly where the ball was), otherwise at the
-  // live fix (you're standing there now).
-  const movePos = aimPos || pos;
+  // Re-place a spot that was marked in the wrong place — at the live fix when
+  // there is one (you're standing at the ball now), otherwise at the aim ring
+  // (the map always has one, so you can put it exactly where the ball was).
+  const movePos = pos || aimPos;
   const moveShot = () => {
     if (wheelId && movePos) setShotPos(wheelId, movePos);
     closeWheel();
   };
   // A shot played but never marked — a punch-out, a lay-up you walked past.
-  // It lands at the aim ring, else halfway to the next spot, else at the live
-  // fix; either way the pin is draggable once it's down.
-  const insertPos = aimPos
-    ?? (editIndex >= 0 && shots[editIndex + 1]
-      ? [(editShot.lat + shots[editIndex + 1].lat) / 2, (editShot.lng + shots[editIndex + 1].lng) / 2]
-      : pos);
+  // It lands halfway to the next spot when there is one, else at the live fix,
+  // else at the aim ring; either way the pin is draggable once it's down.
+  const insertPos = editIndex >= 0 && shots[editIndex + 1]
+    ? [(editShot.lat + shots[editIndex + 1].lat) / 2, (editShot.lng + shots[editIndex + 1].lng) / 2]
+    : (pos || aimPos);
   const insertShot = async () => {
     if (!wheelId || !insertPos) return;
     closeWheel();
@@ -184,41 +223,45 @@ export function ShotTracker({
 
   return (
     <View style={s.wrap} pointerEvents="box-none">
-      <View style={s.fabCol}>
-        {canFinishOnGreen && (
+      {!hideFabs && (
+        <View style={s.fabCol}>
+          {canFinishOnGreen && (
+            <PressableScale
+              onPress={once(finishOnGreen)}
+              style={s.greenBtn}
+              accessibilityLabel={tl('shots.tracker.onGreenA11y')}
+            >
+              <Feather name="flag" size={16} color={hud.text} />
+              <Text style={s.greenLbl}>{tl('shots.tracker.onGreen')}</Text>
+            </PressableScale>
+          )}
           <PressableScale
-            onPress={finishOnGreen}
-            style={s.greenBtn}
-            accessibilityLabel={tl('shots.tracker.onGreenA11y')}
+            onPress={once(markShot)}
+            onLongPress={once(dropAtAim)}
+            disabled={!canAdd}
+            style={[s.addBtn, !canAdd && s.fabDisabled]}
+            accessibilityLabel={tl('shots.tracker.markA11y')}
           >
-            <Feather name="flag" size={16} color={hud.text} />
-            <Text style={s.greenLbl}>{tl('shots.tracker.onGreen')}</Text>
+            <Feather name="plus" size={20} color={hud.onAccent} />
+            <Text style={s.addLbl}>{tl('shots.tracker.mark')}</Text>
           </PressableScale>
-        )}
-        <PressableScale
-          onPress={markShot}
-          onLongPress={dropAtAim}
-          disabled={!canAdd}
-          style={[s.addBtn, !canAdd && s.fabDisabled]}
-          accessibilityLabel={tl('shots.tracker.markA11y')}
-        >
-          <Feather name="plus" size={20} color={hud.onAccent} />
-          <Text style={s.addLbl}>{tl('shots.tracker.mark')}</Text>
-        </PressableScale>
-      </View>
+        </View>
+      )}
 
       <ClubWheel
         visible={!!editShot}
         clubs={wheelClubs}
         value={editValue}
         units={units}
-        seqLabel={editIndex >= 0 ? tl('shots.tracker.shotN', { n: editIndex + 1 }) : tl('shots.wheel.club')}
+        seqLabel={editOnGreen ? tl('shots.tracker.onGreen')
+          : editIndex >= 0 ? tl('shots.tracker.shotN', { n: editIndex + 1 }) : tl('shots.wheel.club')}
+        pickClub={!editOnGreen}
         carryMeters={editCarry}
         toPinMeters={editToPin}
         onSelect={chooseClub}
         onMove={movePos ? moveShot : undefined}
-        onInsert={insertPos ? insertShot : undefined}
-        onRepeat={missing > 0 ? repeatShot : undefined}
+        onInsert={insertPos && !editOnGreen ? insertShot : undefined}
+        onRepeat={missing > 0 && !editOnGreen ? repeatShot : undefined}
         onDelete={removeShot}
         onClose={closeWheel}
       />

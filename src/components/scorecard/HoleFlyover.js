@@ -7,7 +7,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useT, formatNumber, formatTime } from '../../i18n';
 import {
-  holeFeatures, haversineMeters, pointInPolygon, bearingDeg,
+  holeFeatures, haversineMeters, bearingDeg,
 } from '../../lib/geo';
 import { windText } from '../../lib/playConditions';
 import { useCourseGeometry } from '../../hooks/useCourseGeometry';
@@ -20,7 +20,7 @@ import { subscribeShots, getShotsVersion, shotsForHole, setShotPos, getShots } f
 import { guessClub } from '../../store/clubGuess';
 import { clubLabel } from '../../lib/clubs';
 import { HoleMapView } from './HoleMapView';
-import { ShotTracker } from './ShotTracker';
+import { ShotTracker, isOnGreen } from './ShotTracker';
 import { SeenMapCard, MissingPill } from './ShotProposals';
 import { useShotProposals } from '../../hooks/useShotProposals';
 
@@ -114,9 +114,7 @@ export function HoleFlyover({
     if (!last || seededTeeOnly) return null;
     const pt = [last.lat, last.lng];
     const meters = haversineMeters(pt, feat.greenCenter);
-    const onGreen = feat.green
-      ? pointInPolygon(pt, feat.green)
-      : meters <= 12;
+    const onGreen = isOnGreen(pt, feat.green, feat.greenCenter);
     const gpsOn = appSettings.gpsEnabled !== false;
     const haveFix = anchorInfo?.playerDistance != null; // a real player position exists
     const offCourse = anchorInfo?.source !== 'gps';
@@ -256,6 +254,11 @@ export function HoleFlyover({
                   aimRings={aim?.rings ?? null}
                   courseName={courseName}
                   targetPos={feat?.greenCenter ?? null}
+                  greenPolygon={feat?.green ?? null}
+                  // The seen card spans the bottom of the map; the FABs would
+                  // sit under it, and marking a shot mid-review is a second
+                  // decision on top of the card's.
+                  hideFabs={!!seenSel}
                   tappedShotIndex={tappedShot}
                   onConsumeShotTap={() => setTappedShot(null)}
                   onCollapseTargets={(t) => setTargetsCmd(t)}

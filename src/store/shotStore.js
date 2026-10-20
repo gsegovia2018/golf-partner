@@ -294,17 +294,28 @@ export async function undoLastShot(roundId, roundIndex, holeNumber) {
   } catch { /* server row lingers; harmless, re-hydrate reconciles */ }
 }
 
+// How close a new mark must be to the hole's last spot to count as that same
+// spot — you marked standing over the ball the chain already ends at. GPS
+// wander at the ball is well inside it; a real shot is well outside it.
+export const REUSE_SPOT_M = 30;
+
+// The hole's last spot when it lies within REUSE_SPOT_M of `pos`, else null.
+// `hole` is shotsForHole's ordered list.
+export function chainEndNear(hole, pos) {
+  const last = hole[hole.length - 1] ?? null;
+  return last && pos && haversineMeters([last.lat, last.lng], pos) <= REUSE_SPOT_M ? last : null;
+}
+
 // One GPS-measured shot: `start` is where the player hit from, `end` where the
 // ball finished. The club rides on the START spot — a spot records the shot
 // played FROM it — so the carry it earns is exactly start → end. When the
-// hole's chain already ends at `start` (within 30 m, i.e. you marked standing
+// hole's chain already ends at `start` (chainEndNear, i.e. you marked standing
 // over the ball) that spot is tagged instead of stacking a duplicate;
 // `originCreated` says whether a new origin spot was actually added, so an
 // undo only deletes one it created.
 export async function logMeasuredShot({ roundId, roundIndex, holeNumber, start, end, club }) {
-  const hole = shotsForHole(roundId, roundIndex, holeNumber);
-  const last = hole[hole.length - 1] ?? null;
-  const reuse = !!last && haversineMeters([last.lat, last.lng], start) <= 30;
+  const last = chainEndNear(shotsForHole(roundId, roundIndex, holeNumber), start);
+  const reuse = !!last;
   let originId;
   if (reuse) {
     await setShotClub(last.id, club);

@@ -36,8 +36,10 @@ const PAD = (WHEEL_H - ITEM_H) / 2;
 // how far is left to the target — so you pick against the number that matters.
 //
 // clubs: [{ key, label, distance }] (distance in metres, measured or nominal).
+// pickClub=false drops the wheel and its confirm, leaving the edit buttons and
+// a Close — for a spot that takes no club (the first putt, on the green).
 export function ClubWheel({
-  visible, clubs, value, units,
+  visible, clubs, value, units, pickClub = true,
   seqLabel, carryMeters, toPinMeters,
   onSelect, onMove, onInsert, onRepeat, onDelete, onClose,
 }) {
@@ -78,36 +80,40 @@ export function ClubWheel({
             ].filter(Boolean).join(' · ') || tl('shots.wheel.prompt')}
           </Text>
 
-          <View style={s.wheelWrap}>
-            <View pointerEvents="none" style={s.selBand} />
-            <ScrollView
-              ref={ref}
-              style={s.wheel}
-              showsVerticalScrollIndicator={false}
-              snapToInterval={ITEM_H}
-              decelerationRate="fast"
-              scrollEventThrottle={16}
-              onScroll={onScroll}
-              contentContainerStyle={{ paddingVertical: PAD }}
-            >
-              {clubs.map((c, i) => {
-                const active = i === focus;
-                return (
-                  <Pressable
-                    key={c.key}
-                    style={s.row}
-                    onPress={() => ref.current?.scrollTo({ y: i * ITEM_H, animated: true })}
-                  >
-                    <Text style={[s.rowClub, active && s.rowClubActive]} numberOfLines={1}>{c.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
+          {pickClub && (
+            <>
+              <View style={s.wheelWrap}>
+                <View pointerEvents="none" style={s.selBand} />
+                <ScrollView
+                  ref={ref}
+                  style={s.wheel}
+                  showsVerticalScrollIndicator={false}
+                  snapToInterval={ITEM_H}
+                  decelerationRate="fast"
+                  scrollEventThrottle={16}
+                  onScroll={onScroll}
+                  contentContainerStyle={{ paddingVertical: PAD }}
+                >
+                  {clubs.map((c, i) => {
+                    const active = i === focus;
+                    return (
+                      <Pressable
+                        key={c.key}
+                        style={s.row}
+                        onPress={() => ref.current?.scrollTo({ y: i * ITEM_H, animated: true })}
+                      >
+                        <Text style={[s.rowClub, active && s.rowClubActive]} numberOfLines={1}>{c.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
 
-          <PressableScale style={s.confirm} onPress={confirm}>
-            <Text style={s.confirmText}>{tl('shots.wheel.set', { club: clubs[focus]?.label ?? '' })}</Text>
-          </PressableScale>
+              <PressableScale style={s.confirm} onPress={confirm}>
+                <Text style={s.confirmText}>{tl('shots.wheel.set', { club: clubs[focus]?.label ?? '' })}</Text>
+              </PressableScale>
+            </>
+          )}
 
           {(onMove || onInsert || onRepeat || onDelete) && (
             <View style={s.editRow}>
@@ -136,6 +142,12 @@ export function ClubWheel({
                 </PressableScale>
               )}
             </View>
+          )}
+
+          {!pickClub && (
+            <PressableScale style={[s.editBtn, s.closeBtn]} onPress={onClose} accessibilityLabel={tl('shots.wheel.close')}>
+              <Text style={s.editText}>{tl('shots.wheel.close')}</Text>
+            </PressableScale>
           )}
         </Pressable>
       </Pressable>
@@ -197,4 +209,5 @@ const s = StyleSheet.create({
   },
   editText: { color: hud.textSoft, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
   editTextDanger: { color: hud.danger },
+  closeBtn: { flex: 0, marginTop: 10 },
 });
