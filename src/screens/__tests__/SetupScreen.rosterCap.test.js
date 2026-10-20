@@ -139,3 +139,28 @@ describe('SetupScreen roster cap is kind-aware (Task 3)', () => {
     expect(queryByText('Player 6')).toBeNull();
   });
 });
+
+// A pick reaches the roster at once, without waiting on the players fetch
+// (which hangs on a bad connection); the fetch only refreshes names after.
+describe('SetupScreen adds picked players without waiting on the network', () => {
+  test('picked players show while the library fetch is still in flight', async () => {
+    const libraryStore = require('../../store/libraryStore');
+    const spy = jest.spyOn(libraryStore, 'fetchPlayers').mockReturnValue(new Promise(() => {}));
+    setPendingPlayers([{ id: 'p9', name: 'Offline Pal', handicap: 0 }]);
+    const route = { params: baseParams('tournament') };
+    const { getByText } = render(wrap(<SetupScreen navigation={navigation} route={route} />));
+    await waitFor(() => expect(getByText('Offline Pal')).toBeTruthy());
+    spy.mockRestore();
+  });
+
+  test('a rename that lands later updates the picked player in place', async () => {
+    const libraryStore = require('../../store/libraryStore');
+    const spy = jest.spyOn(libraryStore, 'fetchPlayers')
+      .mockResolvedValue([{ id: 'p9', name: 'Pal Renamed', handicap: 4 }]);
+    setPendingPlayers([{ id: 'p9', name: 'Offline Pal', handicap: 0 }]);
+    const route = { params: baseParams('tournament') };
+    const { getByText } = render(wrap(<SetupScreen navigation={navigation} route={route} />));
+    await waitFor(() => expect(getByText('Pal Renamed')).toBeTruthy());
+    spy.mockRestore();
+  });
+});

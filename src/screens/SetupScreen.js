@@ -15,6 +15,7 @@ import { defaultHoles, fetchPlayers, fetchMyPlayers } from '../store/libraryStor
 import { middleTee } from '../store/tees';
 import { canSaveCourse } from '../lib/courseLibrary';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
+import { isOnline } from '../lib/connectivity';
 import { applyCoursePick, applyLayoutChoice } from '../lib/roundCourse';
 import RoundLayoutSelect from '../components/RoundLayoutSelect';
 import { useTheme } from '../theme/ThemeContext';
@@ -264,38 +265,39 @@ export default function SetupScreen({ navigation, route }) {
 
     const picked = consumePendingPlayers();
     if (picked && picked.length > 0) {
-      (async () => {
-        // Re-fetch from the library to pick up renames / handicap edits that
-        // may have happened between the picker tap and this screen gaining
-        // focus. Fall back to the picker snapshot if the library read fails.
-        let fresh = picked;
-        try {
-          const all = await fetchPlayers();
-          fresh = picked.map((p) => {
-            const latest = all.find((x) => x.id === p.id);
-            return latest ? { ...p, name: latest.name, handicap: latest.handicap } : p;
+      // Add the picks at once from the picker's snapshot: waiting on the
+      // network here left a quick "Next" (or a slow connection) starting the
+      // game without them.
+      setPlayers((prev) => {
+        const next = [...prev];
+        for (const p of picked) {
+          if (next.length >= rosterCap(kind) || next.find((x) => x.id === p.id)) continue;
+          // Carry user_id / avatar_url so the embedded player links back to
+          // a real account (feed attribution, friend stats). Guest players
+          // added via the picker form simply have these undefined.
+          next.push({
+            id: p.id,
+            name: p.name,
+            handicap: p.handicap,
+            user_id: p.user_id ?? null,
+            avatar_url: p.avatar_url ?? null,
+            gender: p.gender ?? null,
           });
-        } catch (_) { /* keep snapshot */ }
-        if (cancelled) return;
-        setPlayers((prev) => {
-          const next = [...prev];
-          for (const p of fresh) {
-            if (next.length >= rosterCap(kind) || next.find((x) => x.id === p.id)) continue;
-            // Carry user_id / avatar_url so the embedded player links back to
-            // a real account (feed attribution, friend stats). Guest players
-            // added via the picker form simply have these undefined.
-            next.push({
-              id: p.id,
-              name: p.name,
-              handicap: p.handicap,
-              user_id: p.user_id ?? null,
-              avatar_url: p.avatar_url ?? null,
-              gender: p.gender ?? null,
-            });
-          }
-          return next;
-        });
-      })();
+        }
+        return next;
+      });
+      // Then pick up renames / handicap edits made since the picker loaded,
+      // in the background. Offline the snapshot simply stays.
+      const pickedIds = new Set(picked.map((p) => p.id));
+      fetchPlayers()
+        .then((all) => {
+          if (cancelled) return;
+          setPlayers((prev) => prev.map((p) => {
+            const latest = pickedIds.has(p.id) && all.find((x) => x.id === p.id);
+            return latest ? { ...p, name: latest.name, handicap: latest.handicap } : p;
+          }));
+        })
+        .catch(() => { /* keep snapshot */ });
     }
 
     const pc = consumePendingCourses();
@@ -660,7 +662,10 @@ export default function SetupScreen({ navigation, route }) {
         }
       }
 
-      if (shouldOfferPostCreateEditorInvite(kind, players, user?.id)) {
+      // Offline the invite link can't be made, and the sheet would spin until
+      // the request fails, at the tee. Skip it: Home and the game's Players
+      // screen offer the invite later.
+      if (isOnline() && shouldOfferPostCreateEditorInvite(kind, players, user?.id)) {
         setPostCreateInvite({
           visible: true,
           loading: true,
@@ -851,7 +856,7 @@ export default function SetupScreen({ navigation, route }) {
                     <TouchableOpacity
                       style={s.courseIdentity}
                       activeOpacity={0.7}
-                      onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+                      onPress={() => navigation.navigate('CoursePicker', { roundIndex: i, rounds: !isGame })}
                     >
                       <View style={s.coursePin}>
                         <Feather name="map-pin" size={15} color={theme.accent.primary} />
@@ -912,14 +917,14 @@ export default function SetupScreen({ navigation, route }) {
                   layouts={r.clubLayouts || []}
                   value={r.layoutId ?? null}
                   onChange={(layoutCourse) => chooseLayout(i, layoutCourse)}
-                  onChangeClub={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+                  onChangeClub={() => navigation.navigate('CoursePicker', { roundIndex: i, rounds: !isGame })}
                 />
               </View>
             ) : (
               <TouchableOpacity
                 style={s.courseEmpty}
                 activeOpacity={0.7}
-                onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+                onPress={() => navigation.navigate('CoursePicker', { roundIndex: i, rounds: !isGame })}
               >
                 <View style={s.courseEmptyPin}>
                   <Feather name="map-pin" size={20} color={theme.accent.primary} />

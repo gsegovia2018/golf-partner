@@ -20,16 +20,9 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 jest.mock('../../store/libraryStore', () => ({
+  getCachedMyPlayers: jest.fn(() => Promise.resolve(null)),
   fetchMyPlayers: jest.fn(() => Promise.resolve([])),
 }));
-
-jest.mock('../../store/tournamentStore', () => {
-  const actual = jest.requireActual('../../store/tournamentStore');
-  return {
-    ...actual,
-    loadAllTournaments: jest.fn(() => Promise.resolve([])),
-  };
-});
 
 jest.mock('../../store/mutate', () => ({ mutate: jest.fn(() => Promise.resolve()) }));
 
