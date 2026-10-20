@@ -316,13 +316,13 @@ export default function OfficialCreateScreen({ navigation }) {
                   layouts={r.clubLayouts || []}
                   value={r.layoutId ?? null}
                   onChange={(layoutCourse) => chooseLayout(i, layoutCourse)}
-                  onChangeClub={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+                  onChangeClub={() => navigation.navigate('CoursePicker', { roundIndex: i, rounds: true })}
                 />
               </View>
             ) : (
               <TouchableOpacity
                 style={s.pickBtn}
-                onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+                onPress={() => navigation.navigate('CoursePicker', { roundIndex: i, rounds: true })}
               >
                 <Feather
                   name={r.courseName ? 'map-pin' : 'plus'}

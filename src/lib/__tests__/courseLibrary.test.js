@@ -1,5 +1,6 @@
 import {
-  normalizeText, buildCourseLibraryItems, filterCourseLibraryItems,
+  normalizeText, buildCourseLibraryItems,
+  regionSummary, regionItems, recentCourses, searchCourses,
   computeSiIssues, computeDupeTeeLabels, canSaveCourse, roundHolesArePersistable,
 } from '../courseLibrary';
 import { setLanguagePref } from '../../i18n';
@@ -55,38 +56,72 @@ describe('buildCourseLibraryItems', () => {
   });
 });
 
-describe('filterCourseLibraryItems', () => {
-  const items = [
-    { kind: 'course', course: course('c1', 'Pine Valley', { city: 'Madrid' }) },
-    {
-      kind: 'club',
-      club: { id: 'm', name: 'La Moraleja', city: null, province: null },
-      layouts: [
-        course('a', 'Moraleja — Campo 1', { clubId: 'm', layoutName: 'Campo 1' }),
-        course('b', 'Moraleja — Campo 2', { clubId: 'm', layoutName: 'Campo 2' }),
-      ],
-    },
+// The picker's views over a federation-sized library (CoursePickerScreen).
+describe('picker views', () => {
+  const clubs = [
+    { id: 'vm', name: 'Real Club de Campo Villa de Madrid', city: 'Madrid', province: 'Madrid' },
+    { id: 'vd', name: 'Real Club Valderrama', city: 'Sotogrande', province: 'Andalusia' },
+    { id: 'empty', name: 'Club Without Courses', city: null, province: 'Galicia' },
+  ];
+  const courses = [
+    course('vm-n', 'Real Club de Campo Villa de Madrid — Negro', { clubId: 'vm', layoutName: 'Negro' }),
+    course('vm-a', 'Real Club de Campo Villa de Madrid — Amarillo', { clubId: 'vm', layoutName: 'Amarillo' }),
+    course('vd-1', 'Real Club Valderrama — Valderrama', { clubId: 'vd', layoutName: 'Valderrama' }),
+    course('cng', 'Centro Nacional de Golf', { city: 'Madrid', province: 'Madrid' }),
+    course('fa', 'La Faisanera', { city: 'Segovia', province: 'Castile and León' }),
+    course('lost', 'Golf Sin Región'),
   ];
 
-  test('empty query → unchanged', () => {
-    expect(filterCourseLibraryItems(items, '')).toBe(items);
+  test('regionSummary counts clubs and club-less courses once each, most first, no-region last', () => {
+    expect(regionSummary(courses, clubs)).toEqual([
+      { region: 'Madrid', count: 2 },
+      { region: 'Andalusia', count: 1 },
+      { region: 'Castile and León', count: 1 },
+      { region: null, count: 1 },
+    ]);
   });
 
-  test('club-name match keeps the club with all layouts', () => {
-    const out = filterCourseLibraryItems(items, 'moraleja');
-    expect(out).toHaveLength(1);
-    expect(out[0].layouts).toHaveLength(2);
+  test('regionItems groups a region by club, in name order', () => {
+    const items = regionItems(courses, clubs, 'Madrid');
+    expect(items.map((it) => (it.kind === 'club' ? it.club.name : it.course.name))).toEqual([
+      'Centro Nacional de Golf', 'Real Club de Campo Villa de Madrid',
+    ]);
+    expect(items[1].layouts).toHaveLength(2);
   });
 
-  test('layout-name match keeps only matching layouts', () => {
-    const out = filterCourseLibraryItems(items, 'campo 1');
-    expect(out).toHaveLength(1);
-    expect(out[0].layouts.map((l) => l.id)).toEqual(['a']);
+  test('recentCourses: newest first, favourites left out, capped', () => {
+    const lastUsed = { 'vm-n': 300, cng: 200, fa: 100, 'vd-1': 400 };
+    expect(recentCourses(courses, lastUsed, new Set(['vd-1']), 2).map((c) => c.id)).toEqual(['vm-n', 'cng']);
   });
 
-  test('standalone course matched by city', () => {
-    const out = filterCourseLibraryItems(items, 'madrid');
-    expect(out.map((i) => i.kind)).toEqual(['course']);
+  test('searchCourses returns layouts grouped under their club, accent-insensitive', () => {
+    const { groups, total } = searchCourses(courses, clubs, 'VILLA');
+    expect(total).toBe(2);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].club.id).toBe('vm');
+    expect(groups[0].courses.map((c) => c.id)).toEqual(['vm-a', 'vm-n']);
+    expect(searchCourses(courses, clubs, 'leon').groups[0].courses[0].id).toBe('fa');
+  });
+
+  test('searchCourses matches the club city and region, and a layout name alone', () => {
+    expect(searchCourses(courses, clubs, 'sotogrande').total).toBe(1);
+    expect(searchCourses(courses, clubs, 'andalusia').total).toBe(1);
+    expect(searchCourses(courses, clubs, 'negro').groups[0].courses.map((c) => c.id)).toEqual(['vm-n']);
+  });
+
+  test('searchCourses puts names that start with the query first and caps the courses', () => {
+    const { groups, total } = searchCourses(courses, clubs, 'madrid', 2);
+    expect(total).toBe(3);
+    // "Real Club de Campo Villa de Madrid" only contains it; "Centro…" is in Madrid
+    // by city. Neither starts with it, so alphabetical: Centro first.
+    expect(groups[0].courses[0].id).toBe('cng');
+    expect(groups.flatMap((g) => g.courses)).toHaveLength(2);
+    expect(searchCourses(courses, clubs, 'la faisanera').groups[0].courses[0].id).toBe('fa');
+    expect(searchCourses(courses, clubs, 'real club v').groups[0].club.id).toBe('vd');
+  });
+
+  test('a blank query finds nothing', () => {
+    expect(searchCourses(courses, clubs, '  ')).toEqual({ groups: [], total: 0 });
   });
 });
 
