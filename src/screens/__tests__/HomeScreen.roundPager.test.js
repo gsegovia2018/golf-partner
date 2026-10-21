@@ -142,6 +142,7 @@ jest.mock('../../components/PostCreateInviteModal', () => {
 jest.mock('../../store/libraryStore', () => ({
   fetchMyPlayers: jest.fn(),
   getCachedMyPlayers: jest.fn(async () => null),
+  getCachedQuickStartCourseList: jest.fn(async () => []),
   loadQuickStartCourses: jest.fn(),
 }));
 

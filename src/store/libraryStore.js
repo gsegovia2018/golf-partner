@@ -299,13 +299,15 @@ export async function updateCourseFromEditor(courseId, holes, tees) {
 
 export const FAVORITE_COURSES_CACHE_KEY = '@golf_fav_courses_cache';
 
-export async function fetchFavoriteCourseIds() {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return new Set();
+// Pass `userId` when the caller already has it (useAuth): getUser is a network
+// round-trip that holds the auth lock, so every other auth call queues behind it.
+export async function fetchFavoriteCourseIds(userId = null) {
+  const uid = userId ?? (await supabase.auth.getUser()).data?.user?.id;
+  if (!uid) return new Set();
   const { data, error } = await supabase
     .from('favorite_courses')
     .select('course_id')
-    .eq('user_id', user.id);
+    .eq('user_id', uid);
   if (error) throw error;
   const ids = new Set((data ?? []).map((r) => r.course_id));
   // Cache as an array — a Set does not survive JSON serialization.
@@ -354,9 +356,22 @@ export async function loadCourseLibrary() {
   }
 }
 
-export async function loadQuickStartCourses() {
+// Last-known quick-start courses for painting Home before the network
+// answers: the list the last load saved, else the favourites found in the
+// course library cache. Never throws.
+export async function getCachedQuickStartCourseList() {
+  const cachedQuickStartCourses = await getCachedQuickStartCourses();
+  if (cachedQuickStartCourses.length > 0) return cachedQuickStartCourses;
+  const [courses, favoriteIds] = await Promise.all([
+    getCachedCourses(),
+    getCachedFavoriteCourseIds(),
+  ]);
+  return courses.filter((course) => favoriteIds.has(course.id));
+}
+
+export async function loadQuickStartCourses({ userId = null } = {}) {
   try {
-    const favoriteIds = await fetchFavoriteCourseIds();
+    const favoriteIds = await fetchFavoriteCourseIds(userId);
     const ids = [...favoriteIds];
     if (ids.length === 0) {
       AsyncStorage.setItem(QUICK_START_COURSES_CACHE_KEY, JSON.stringify([])).catch(() => {});
@@ -366,18 +381,7 @@ export async function loadQuickStartCourses() {
     AsyncStorage.setItem(QUICK_START_COURSES_CACHE_KEY, JSON.stringify(courses)).catch(() => {});
     return { courses, usingCachedData: false };
   } catch {
-    const cachedQuickStartCourses = await getCachedQuickStartCourses();
-    if (cachedQuickStartCourses.length > 0) {
-      return { courses: cachedQuickStartCourses, usingCachedData: true };
-    }
-    const [courses, favoriteIds] = await Promise.all([
-      getCachedCourses(),
-      getCachedFavoriteCourseIds(),
-    ]);
-    return {
-      courses: courses.filter((course) => favoriteIds.has(course.id)),
-      usingCachedData: true,
-    };
+    return { courses: await getCachedQuickStartCourseList(), usingCachedData: true };
   }
 }
 

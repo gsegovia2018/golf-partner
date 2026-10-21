@@ -45,7 +45,9 @@ import {
   lastTeeForPlayerOnCourse,
 } from '../store/tournamentStore';
 import { ensureRealtimeForTournament, stopRealtime } from '../store/realtimeSync';
-import { fetchMyPlayers, getCachedMyPlayers, loadQuickStartCourses as loadQuickStartCourseList } from '../store/libraryStore';
+import {
+  fetchMyPlayers, getCachedMyPlayers, getCachedQuickStartCourseList, loadQuickStartCourses as loadQuickStartCourseList,
+} from '../store/libraryStore';
 import {
   buildQuickStartGameName,
   buildQuickStartRound,
@@ -377,8 +379,15 @@ export default function HomeScreen({ navigation, route }) {
       return;
     }
     setQuickStartCoursesLoading(true);
+    // The device's list first, like the players below: the network load is
+    // two round-trips and painted "Cargando campos favoritos" well after the
+    // rest of Home.
+    const cached = await getCachedQuickStartCourseList();
+    if (cached.length > 0 && quickStartCourseLoadRef.current === requestId && currentUserIdRef.current === userId) {
+      setQuickStartCourses(cached);
+    }
     try {
-      const library = await loadQuickStartCourseList();
+      const library = await loadQuickStartCourseList({ userId });
       if (quickStartCourseLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
       setQuickStartCourses(library?.courses ?? []);
     } catch (_) {

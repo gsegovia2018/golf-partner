@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef, useSyncExternalStore } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, InteractionManager } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedScrollHandler,
@@ -18,15 +18,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useT, t as tNow, formatNumber } from '../i18n';
 import { useAuth } from '../context/AuthContext';
-import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
-import { loadProfile, upsertProfile } from '../store/profileStore';
+import { loadAllTournamentsWithFallback, loadCachedTournamentsList } from '../store/tournamentStore';
+import { loadProfile, loadCachedProfile, upsertProfile } from '../store/profileStore';
 import { getAppSettings, updateAppSettings } from '../store/settingsStore';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { TargetHandicapPicker } from '../components/mystats/TargetHandicapPicker';
 import { collectMyRounds, resolveSelection, computeMyStats } from '../store/personalStats';
 import { pruneShotsToRounds, getShots, subscribeShots, getShotsVersion } from '../store/shotStore';
 import { buildRoundReportCard } from '../store/roundReportCard';
-import RoundReportCard from '../components/RoundReportCard';
+import RoundReportCard, { RoundReportCardSkeleton } from '../components/RoundReportCard';
+import { Skeleton, SkeletonRegion } from '../components/ui/Skeleton';
 import { useRoundDuration } from '../hooks/useRoundDuration';
 import { formatRoundDuration } from '../store/roundDuration';
 import MyStatsRoundSelector from '../components/MyStatsRoundSelector';
@@ -319,27 +320,28 @@ export default function MyStatsScreen({ navigation, route }) {
   useEffect(() => {
     let cancelled = false;
     setError(false);
+    let painted = false;
+    // Rounds and the Report Card's round land in one render: setting the key
+    // in a later effect painted "No round selected" for a frame in between.
+    const applyRounds = (rounds, stored) => {
+      setMyRounds(rounds);
+      setOverrides(stored);
+      if (rounds.length > 0) {
+        setReportRoundKey((prev) => (prev && rounds.some((r) => r.key === prev) ? prev : rounds[rounds.length - 1].key));
+      }
+    };
+    const applyProfile = (profile) => {
+      setTargetHandicap(profile?.targetHandicap ?? null);
+      setProfileHandicap(profile?.handicap ?? null);
+    };
     (async () => {
       try {
-        // The profile display name lets collectMyRounds recognise unlinked
-        // (guest) player slots — e.g. solo games never claimed to an account.
-        const [{ list, stale }, profile] = await Promise.all([
+        // The network list and profile start now; the device's copies paint
+        // first (DESIGN.md "Loading States") and these replace them.
+        const remote = Promise.all([
           loadAllTournamentsWithFallback(),
           loadProfile().catch(() => null),
         ]);
-        if (!cancelled) {
-          setTargetHandicap(profile?.targetHandicap ?? null);
-          setProfileHandicap(profile?.handicap ?? null);
-        }
-        // Drop GPS shots whose round was deleted. Only when the list is
-        // authoritative (fresh server load, not a stale cache) — otherwise a
-        // tournament that simply wasn't loaded offline would look "deleted".
-        if (!stale) {
-          const validRoundIds = new Set();
-          for (const t of list || []) for (const r of t.rounds || []) if (r?.id) validRoundIds.add(r.id);
-          pruneShotsToRounds(validRoundIds, { deleteRemote: true }).catch(() => {});
-        }
-        const rounds = collectMyRounds(list, user?.id, profile?.displayName);
         let stored = {};
         try {
           let raw = await AsyncStorage.getItem(storageKey);
@@ -394,13 +396,38 @@ export default function MyStatsScreen({ navigation, route }) {
         // only consults overrides for rounds that exist, the map is bounded
         // by rounds ever played, and pruning on load permanently loses
         // selections whenever a load is partial (offline / transient failure).
-        if (!cancelled) {
-          setMyRounds(rounds);
-          setOverrides(stored);
+        const [cachedList, cachedProfile] = await Promise.all([
+          loadCachedTournamentsList({ listedOnly: true }).catch(() => []),
+          loadCachedProfile(user?.id),
+        ]);
+        if (cachedList.length > 0 && !cancelled) {
+          // The profile display name lets collectMyRounds recognise unlinked
+          // (guest) player slots — e.g. solo games never claimed to an account.
+          const cachedRounds = collectMyRounds(cachedList, user?.id, cachedProfile?.displayName);
+          // An empty device list is no proof of "no rounds": wait for the network.
+          if (cachedRounds.length > 0) {
+            if (cachedProfile) applyProfile(cachedProfile);
+            applyRounds(cachedRounds, stored);
+            painted = true;
+          }
         }
+        const [{ list, stale }, profile] = await remote;
+        // A failed profile load keeps the device's copy rather than blanking the target.
+        if (!cancelled && (profile || !cachedProfile)) applyProfile(profile);
+        // Drop GPS shots whose round was deleted. Only when the list is
+        // authoritative (fresh server load, not a stale cache) — otherwise a
+        // tournament that simply wasn't loaded offline would look "deleted".
+        if (!stale) {
+          const validRoundIds = new Set();
+          for (const t of list || []) for (const r of t.rounds || []) if (r?.id) validRoundIds.add(r.id);
+          pruneShotsToRounds(validRoundIds, { deleteRemote: true }).catch(() => {});
+        }
+        const rounds = collectMyRounds(list, user?.id, profile?.displayName);
+        if (!cancelled) applyRounds(rounds, stored);
       } catch (e) {
         console.warn('MyStatsScreen: failed to load tournaments', e);
-        if (!cancelled) setError(true);
+        // What the device painted stays; the error replaces only a blank screen.
+        if (!cancelled && !painted) setError(true);
       }
     })();
     return () => { cancelled = true; };
@@ -712,14 +739,21 @@ export default function MyStatsScreen({ navigation, route }) {
     </ScrollView>
   );
 
-  // ── Loading ──
+  // ── Loading: real header and tabs, blocks for the page (DESIGN.md "Loading States") ──
   if (myRounds === null && !error) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
-        <View style={s.center}>
-          <ActivityIndicator color={theme.accent.primary} />
-        </View>
+        {TabBar}
+        <SkeletonRegion style={s.scroll} testID="my-stats-skeleton">
+          {tab === 'reportCard' ? <RoundReportCardSkeleton /> : (
+            <View style={s.skeletonStack}>
+              <Skeleton height={120} radius={theme.radius.lg} />
+              <Skeleton height={64} radius={theme.radius.lg} />
+              <Skeleton height={64} radius={theme.radius.lg} />
+            </View>
+          )}
+        </SkeletonRegion>
       </ScreenContainer>
     );
   }
@@ -964,6 +998,7 @@ function makeStyles(theme) {
     },
     retryText: { ...theme.typography.subhead, color: theme.text.inverse },
     scroll: { padding: theme.spacing.lg, gap: theme.spacing.lg },
+    skeletonStack: { gap: 12 },
     pager: { flex: 1 },
     pagerContent: { alignItems: 'stretch' },
     // Bounds each page to the pager's height so the page's ScrollView has

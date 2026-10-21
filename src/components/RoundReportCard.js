@@ -8,6 +8,7 @@ import ReportVerdictHero from './mystats/ReportVerdictHero';
 import ReportCalloutTiles from './mystats/ReportCalloutTiles';
 import ReportChapter from './mystats/ReportChapter';
 import { buildChapterVM } from './mystats/reportCardView';
+import { Skeleton } from './ui/Skeleton';
 
 const CHAPTER_ICONS = {
   course: 'flag',
@@ -108,6 +109,31 @@ function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound, dur
   );
 }
 
+// The Report Card's shape while My Stats has nothing to show yet: the round
+// line, the verdict hero, the callout tiles and the chapter rows. Shares the
+// card's styles so the two can't drift.
+export function RoundReportCardSkeleton() {
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+  return (
+    <View style={s.wrap}>
+      <View style={s.dropLine}>
+        <View style={{ flex: 1, gap: 5 }}>
+          <Skeleton width="55%" height={14} />
+          <Skeleton width="35%" height={10} />
+        </View>
+        <Skeleton width={78} height={26} radius={999} />
+      </View>
+      <Skeleton height={118} radius={theme.radius.lg + 2} />
+      <View style={s.skeletonTiles}>
+        <Skeleton width={null} height={58} radius={theme.radius.lg} style={{ flex: 1 }} />
+        <Skeleton width={null} height={58} radius={theme.radius.lg} style={{ flex: 1 }} />
+      </View>
+      {[0, 1, 2].map((i) => <Skeleton key={i} height={48} radius={theme.radius.lg} />)}
+    </View>
+  );
+}
+
 function makeStyles(theme) {
   return StyleSheet.create({
     wrap: { padding: 4, gap: 12 },
@@ -115,6 +141,7 @@ function makeStyles(theme) {
     emptyText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 14 },
 
     dropLine: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 2 },
+    skeletonTiles: { flexDirection: 'row', gap: 8 },
     dropTitle: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14, color: theme.text.primary },
     dropSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme.text.muted, marginTop: 1 },
     pickBtn: {

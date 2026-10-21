@@ -26,10 +26,12 @@ jest.mock('../../context/AuthContext', () => ({
 
 jest.mock('../../store/tournamentStore', () => ({
   loadAllTournamentsWithFallback: jest.fn(() => Promise.resolve({ list: [{}] })),
+  loadCachedTournamentsList: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn(() => Promise.resolve({ displayName: 'Marco', targetHandicap: 14, handicap: 12, gender: null })),
+  loadCachedProfile: jest.fn(() => Promise.resolve(null)),
   upsertProfile: jest.fn(() => Promise.resolve()),
 }));
 
@@ -68,19 +70,25 @@ jest.mock('../../store/roundReportCard', () => ({
   buildRoundReportCard: jest.fn(() => ({ title: 'Round 1' })),
 }));
 
-jest.mock('../../components/RoundReportCard', () => function MockRoundReportCard({ selectedKey, onOpenRound }) {
-  const { Text, TouchableOpacity } = require('react-native');
-  return (
-    <>
-      <Text>Report card content</Text>
-      <Text>{`Selected round ${selectedKey}`}</Text>
-      {onOpenRound ? (
-        <TouchableOpacity onPress={onOpenRound}>
-          <Text>Open round stats</Text>
-        </TouchableOpacity>
-      ) : null}
-    </>
-  );
+// Every selectedKey the Report Card was rendered with, to catch a frame with none.
+let mockReportKeys = [];
+jest.mock('../../components/RoundReportCard', () => {
+  const MockRoundReportCard = ({ selectedKey, onOpenRound }) => {
+    const { Text, TouchableOpacity } = require('react-native');
+    mockReportKeys.push(selectedKey);
+    return (
+      <>
+        <Text>Report card content</Text>
+        <Text>{`Selected round ${selectedKey}`}</Text>
+        {onOpenRound ? (
+          <TouchableOpacity onPress={onOpenRound}>
+            <Text>Open round stats</Text>
+          </TouchableOpacity>
+        ) : null}
+      </>
+    );
+  };
+  return { __esModule: true, default: MockRoundReportCard, RoundReportCardSkeleton: () => null };
 });
 
 // Renders one pressable per round when visible, so tests can drive the real
@@ -156,6 +164,7 @@ beforeEach(() => {
   mockSwings = [];
   mockSwingAvailability = { supported: false, reason: 'web' };
   mockCoachProps = null;
+  mockReportKeys = [];
   mockUser = { id: 'user-1' };
   AsyncStorage.getItem.mockResolvedValue(null);
   __resetAppSettingsForTests();
@@ -205,6 +214,36 @@ describe('MyStatsScreen navigation chrome', () => {
 
     expect(getByText('My Stats')).toBeTruthy();
     expect(queryByText('CLUBHOUSE · MEMBER RECORD')).toBeNull();
+  });
+});
+
+describe('MyStatsScreen loading', () => {
+  test('paints the rounds on the device while the network list is pending', async () => {
+    const { loadAllTournamentsWithFallback, loadCachedTournamentsList } = require('../../store/tournamentStore');
+    loadAllTournamentsWithFallback.mockReturnValueOnce(new Promise(() => {}));
+    loadCachedTournamentsList.mockResolvedValueOnce([{}]);
+
+    const { findByText } = renderScreen({ params: {} });
+
+    expect(await findByText('Selected round round-1')).toBeTruthy();
+    expect(loadCachedTournamentsList).toHaveBeenCalledWith({ listedOnly: true });
+  });
+
+  test('draws the skeleton, not a spinner, with nothing on the device', async () => {
+    const { loadAllTournamentsWithFallback } = require('../../store/tournamentStore');
+    loadAllTournamentsWithFallback.mockReturnValueOnce(new Promise(() => {}));
+
+    const { findByTestId, getByTestId } = renderScreen({ params: {} });
+
+    expect(await findByTestId('my-stats-skeleton')).toBeTruthy();
+    expect(getByTestId('my-stats-tab-scroller')).toBeTruthy();
+  });
+
+  test('the Report Card never renders without a round', async () => {
+    const { findByText } = renderScreen({ params: {} });
+
+    expect(await findByText('Selected round round-1')).toBeTruthy();
+    expect(mockReportKeys).not.toContain(null);
   });
 });
 
