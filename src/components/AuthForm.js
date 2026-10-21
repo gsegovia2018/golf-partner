@@ -5,6 +5,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import useAuthSignIn from '../hooks/useAuthSignIn';
+import makeFieldStyles from './auth/fieldStyles';
 import { useT, tr } from '../i18n';
 
 // Email + password fields, "Forgot password?", the submit button and
@@ -141,29 +142,10 @@ export default function AuthForm({ mode = 'signin', onSignedUp }) {
 }
 
 const makeStyles = (theme) => {
-  // Opaque field fill and a border with real contrast on both surfaces; the
-  // disabled button keeps readable text instead of fading to 50%.
-  const fieldBg = theme.isDark ? '#13221b' : '#ffffff';
-  const fieldBorder = theme.isDark ? 'rgba(255,255,255,0.16)' : '#d9d3c4';
-  return StyleSheet.create({
-    label: {
-      fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13,
-      color: theme.text.primary, marginBottom: 6,
-    },
-    labelGap: { marginTop: 14 },
-    input: {
-      height: 50, backgroundColor: fieldBg,
-      color: theme.text.primary, borderRadius: 12, borderWidth: 1,
-      borderColor: fieldBorder, paddingHorizontal: 14, fontSize: 16,
-      fontFamily: 'PlusJakartaSans-Medium',
-    },
-    inputFocused: { borderColor: theme.accent.primary },
-    inputError: { borderColor: theme.destructive },
-    fieldError: {
-      fontFamily: 'PlusJakartaSans-Medium',
-      fontSize: 12, color: theme.destructive,
-      marginTop: 6, marginLeft: 2,
-    },
+  const fields = makeFieldStyles(theme);
+  return {
+    ...fields,
+    ...StyleSheet.create({
     passwordRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 0, paddingLeft: 14 },
     passwordInput: {
       flex: 1, alignSelf: 'stretch', color: theme.text.primary, fontSize: 16,
@@ -175,15 +157,6 @@ const makeStyles = (theme) => {
       fontFamily: 'PlusJakartaSans-SemiBold',
       fontSize: 13, color: theme.accent.primary,
     },
-    btn: {
-      height: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.accent.primary,
-    },
-    btnDisabled: { backgroundColor: theme.isDark ? '#1b3328' : '#dfe8e3' },
-    btnText: {
-      fontFamily: 'PlusJakartaSans-Bold', fontSize: 16, color: theme.text.inverse,
-    },
-    btnTextDisabled: { color: theme.isDark ? '#a9b8b0' : '#3f5a4c' },
     divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, gap: 12 },
     dividerLine: { flex: 1, height: 1, backgroundColor: theme.isDark ? 'rgba(255,255,255,0.12)' : '#e2dccd' },
     dividerText: {
@@ -192,7 +165,7 @@ const makeStyles = (theme) => {
     googleBtn: {
       height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
       backgroundColor: '#ffffff', borderRadius: 12,
-      borderWidth: theme.isDark ? 0 : 1, borderColor: fieldBorder,
+      borderWidth: theme.isDark ? 0 : 1, borderColor: fields.fieldBorderColor.borderColor,
     },
     googleG: {
       fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 18, color: '#4285F4',
@@ -201,5 +174,6 @@ const makeStyles = (theme) => {
     googleBtnText: {
       fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: '#1f1f1f',
     },
-  });
+    }),
+  };
 };

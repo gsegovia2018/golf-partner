@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { validateNewPassword } from '../lib/passwordReset';
+import { validateNewPassword, MIN_LENGTH } from '../lib/passwordReset';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
-import { semantic } from '../theme/tokens';
+import AuthShell from '../components/auth/AuthShell';
+import makeFieldStyles from '../components/auth/fieldStyles';
 import { useT, t as translate, tr } from '../i18n';
 
 // Shown when AuthContext detects a password-recovery link (web query params
 // or the native `golf://reset-password` deep link) — see AuthContext's
 // `passwordRecovery` state and App.js, which renders this screen instead of
-// the normal signed-in/signed-out screens while it's true.
+// the normal signed-in/signed-out screens while it's true. Same hole-plan
+// frame as the login (AuthShell).
 export default function SetNewPasswordScreen() {
   const { theme } = useTheme();
   const t = useT();
@@ -24,6 +25,7 @@ export default function SetNewPasswordScreen() {
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [focused, setFocused] = useState(null);
 
   const { valid, error } = validateNewPassword(password, confirm);
   const fieldError = touched ? error : null;
@@ -61,116 +63,80 @@ export default function SetNewPasswordScreen() {
     }
   }
 
+  const blur = () => {
+    setFocused(null);
+    setTouched(true);
+  };
+  const fieldProps = {
+    placeholderTextColor: theme.text.secondary,
+    secureTextEntry: true,
+    autoCapitalize: 'none',
+    autoCorrect: false,
+    autoComplete: 'new-password',
+    keyboardAppearance: theme.isDark ? 'dark' : 'light',
+    selectionColor: theme.accent.primary,
+    onBlur: blur,
+  };
+
   return (
-    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={s.inner}>
-        <Text style={s.logo}>Golf Partner</Text>
-        <Text style={s.tagline}>{t('auth.setNewPassword.tagline')}</Text>
+    <AuthShell>
+      <Text style={s.heading} accessibilityRole="header">{t('auth.setNewPassword.tagline')}</Text>
 
-        <View style={s.card}>
-          <TextInput
-            style={[s.input, fieldError && s.inputError]}
-            placeholder={t('auth.newPassword')}
-            placeholderTextColor={theme.text.muted}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            selectionColor={theme.accent.primary}
-            value={password}
-            onChangeText={setPassword}
-            onBlur={() => setTouched(true)}
-          />
+      <Text style={s.label}>{t('auth.newPassword')}</Text>
+      <TextInput
+        {...fieldProps}
+        style={[s.input, focused === 'password' && s.inputFocused, fieldError && s.inputError]}
+        accessibilityLabel={t('auth.newPassword')}
+        placeholder={t('auth.newPassword.placeholder', { min: MIN_LENGTH })}
+        value={password}
+        onChangeText={setPassword}
+        onFocus={() => setFocused('password')}
+      />
 
-          <TextInput
-            style={[s.input, fieldError && s.inputError]}
-            placeholder={t('auth.confirmPassword')}
-            placeholderTextColor={theme.text.muted}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            selectionColor={theme.accent.primary}
-            value={confirm}
-            onChangeText={setConfirm}
-            onBlur={() => setTouched(true)}
-            onSubmitEditing={submit}
-          />
-          {fieldError && <Text style={s.fieldError}>{tr(fieldError)}</Text>}
+      <Text style={[s.label, s.labelGap]}>{t('auth.confirmPassword')}</Text>
+      <TextInput
+        {...fieldProps}
+        style={[s.input, focused === 'confirm' && s.inputFocused, fieldError && s.inputError]}
+        accessibilityLabel={t('auth.confirmPassword')}
+        placeholder={t('auth.confirmPassword.placeholder')}
+        value={confirm}
+        onChangeText={setConfirm}
+        onFocus={() => setFocused('confirm')}
+        onSubmitEditing={submit}
+      />
+      {fieldError && <Text style={s.fieldError}>{tr(fieldError)}</Text>}
 
-          <TouchableOpacity
-            style={[s.btn, loading && { opacity: 0.5 }]}
-            onPress={submit}
-            disabled={loading}
-            activeOpacity={0.8}
-          >
-            {loading
-              ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-              : <Text style={s.btnText}>{t('auth.setNewPassword.button')}</Text>}
-          </TouchableOpacity>
+      <TouchableOpacity
+        style={[s.btn, s.btnGap]}
+        onPress={submit}
+        disabled={loading}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: loading, busy: loading }}
+      >
+        {loading
+          ? <ActivityIndicator color={theme.text.inverse} />
+          : <Text style={s.btnText}>{t('auth.setNewPassword.button')}</Text>}
+      </TouchableOpacity>
 
-          <TouchableOpacity
-            style={s.cancelBtn}
-            onPress={cancel}
-            disabled={loading}
-            activeOpacity={0.7}
-          >
-            <Text style={s.cancelText}>{t('auth.backToSignIn')}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+      <TouchableOpacity
+        style={s.cancelBtn}
+        onPress={cancel}
+        disabled={loading}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+      >
+        <Text style={s.cancelText}>{t('auth.backToSignIn')}</Text>
+      </TouchableOpacity>
+    </AuthShell>
   );
 }
 
-const makeStyles = (theme) => StyleSheet.create({
-  screen: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#006747',
-    justifyContent: 'center',
-  },
-  inner: { paddingHorizontal: 24, width: '100%', maxWidth: 460, alignSelf: 'center' },
-  logo: {
-    fontFamily: 'PlayfairDisplay-Black',
-    fontSize: 42, color: semantic.winner.dark,
-    letterSpacing: -1, textAlign: 'center', marginBottom: 4,
-  },
-  tagline: {
-    fontFamily: 'PlusJakartaSans-Regular',
-    fontSize: 14, color: 'rgba(255,255,255,0.6)',
-    textAlign: 'center', marginBottom: 36,
-  },
-  card: {
-    backgroundColor: theme.bg.card,
-    borderRadius: 24, padding: 20,
-    borderWidth: 1, borderColor: theme.border.default,
-  },
-  input: {
-    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.primary,
-    color: theme.text.primary, borderRadius: 12, borderWidth: 1,
-    borderColor: theme.border.default, padding: 14, fontSize: 15,
-    fontFamily: 'PlusJakartaSans-Medium', marginBottom: 12,
-  },
-  inputError: { borderColor: theme.destructive },
-  fieldError: {
-    fontFamily: 'PlusJakartaSans-Medium',
-    fontSize: 12, color: theme.destructive,
-    marginTop: -6, marginBottom: 10, marginLeft: 2,
-  },
-  btn: {
-    backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
-    borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 8,
-    borderWidth: theme.isDark ? 1 : 0,
-    borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
-  },
-  btnText: {
-    fontFamily: 'PlusJakartaSans-ExtraBold',
-    color: theme.isDark ? theme.accent.primary : theme.text.inverse,
-    fontSize: 16,
-  },
-  cancelBtn: { alignItems: 'center', paddingVertical: 14, marginTop: 4 },
-  cancelText: {
-    fontFamily: 'PlusJakartaSans-SemiBold',
-    fontSize: 13, color: theme.text.muted,
-  },
+const makeStyles = (theme) => ({
+  ...makeFieldStyles(theme),
+  ...StyleSheet.create({
+    btnGap: { marginTop: 24 },
+    cancelBtn: { alignItems: 'center', justifyContent: 'center', minHeight: 44, marginTop: 12 },
+    cancelText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.accent.primary },
+  }),
 });

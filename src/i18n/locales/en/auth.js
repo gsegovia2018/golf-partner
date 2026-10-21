@@ -23,6 +23,8 @@ export default {
   "auth.setNewPassword.button": "Set new password",
   "auth.newPassword": "New password",
   "auth.confirmPassword": "Confirm new password",
+  "auth.newPassword.placeholder": "At least {min} characters",
+  "auth.confirmPassword.placeholder": "Type it again",
   "auth.backToSignIn": "Back to sign in",
   "auth.passwordUpdated.title": "Password updated",
   "auth.passwordUpdated.body": "You can now use your new password to sign in.",

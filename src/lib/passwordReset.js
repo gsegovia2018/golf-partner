@@ -2,7 +2,7 @@
 // handling and SetNewPasswordScreen). Kept dependency-free so they're
 // trivially unit-testable without mocking Supabase or RN.
 
-const MIN_LENGTH = 8;
+export const MIN_LENGTH = 8;
 
 // The path segment of the redirect we hand to `resetPasswordForEmail`
 // (native: `golf://reset-password`; web: same root + a `type=recovery`

@@ -42,10 +42,10 @@ describe('SetNewPasswordScreen', () => {
   });
 
   test('blocks submit and shows an inline error for a too-short password', () => {
-    const { getByText, getByPlaceholderText } = render(<SetNewPasswordScreen />);
+    const { getByText, getByLabelText } = render(<SetNewPasswordScreen />);
 
-    fireEvent.changeText(getByPlaceholderText('New password'), 'short');
-    fireEvent.changeText(getByPlaceholderText('Confirm new password'), 'short');
+    fireEvent.changeText(getByLabelText('New password'), 'short');
+    fireEvent.changeText(getByLabelText('Confirm new password'), 'short');
     fireEvent.press(getByText('Set new password'));
 
     expect(getByText('Password must be at least 8 characters')).toBeTruthy();
@@ -53,10 +53,10 @@ describe('SetNewPasswordScreen', () => {
   });
 
   test('blocks submit and shows an inline error on mismatched confirmation', () => {
-    const { getByText, getByPlaceholderText } = render(<SetNewPasswordScreen />);
+    const { getByText, getByLabelText } = render(<SetNewPasswordScreen />);
 
-    fireEvent.changeText(getByPlaceholderText('New password'), 'longenough1');
-    fireEvent.changeText(getByPlaceholderText('Confirm new password'), 'longenough2');
+    fireEvent.changeText(getByLabelText('New password'), 'longenough1');
+    fireEvent.changeText(getByLabelText('Confirm new password'), 'longenough2');
     fireEvent.press(getByText('Set new password'));
 
     expect(getByText('Passwords do not match')).toBeTruthy();
@@ -65,10 +65,10 @@ describe('SetNewPasswordScreen', () => {
 
   test('calls updateUser and clears recovery state on a valid, matching password', async () => {
     supabase.auth.updateUser.mockResolvedValue({ error: null });
-    const { getByText, getByPlaceholderText } = render(<SetNewPasswordScreen />);
+    const { getByText, getByLabelText } = render(<SetNewPasswordScreen />);
 
-    fireEvent.changeText(getByPlaceholderText('New password'), 'longenough1');
-    fireEvent.changeText(getByPlaceholderText('Confirm new password'), 'longenough1');
+    fireEvent.changeText(getByLabelText('New password'), 'longenough1');
+    fireEvent.changeText(getByLabelText('Confirm new password'), 'longenough1');
     fireEvent.press(getByText('Set new password'));
 
     await waitFor(() => {
@@ -79,10 +79,10 @@ describe('SetNewPasswordScreen', () => {
 
   test('shows an alert and does not clear recovery state when updateUser fails', async () => {
     supabase.auth.updateUser.mockResolvedValue({ error: { message: 'Session expired' } });
-    const { getByText, getByPlaceholderText } = render(<SetNewPasswordScreen />);
+    const { getByText, getByLabelText } = render(<SetNewPasswordScreen />);
 
-    fireEvent.changeText(getByPlaceholderText('New password'), 'longenough1');
-    fireEvent.changeText(getByPlaceholderText('Confirm new password'), 'longenough1');
+    fireEvent.changeText(getByLabelText('New password'), 'longenough1');
+    fireEvent.changeText(getByLabelText('Confirm new password'), 'longenough1');
     fireEvent.press(getByText('Set new password'));
 
     await waitFor(() => {
