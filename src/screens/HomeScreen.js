@@ -326,7 +326,7 @@ export default function HomeScreen({ navigation, route }) {
           // Waiting on the remote list held the splash for its round-trip, up
           // to the 6 s failsafe on a weak course signal. The tournament is a
           // local read that refreshes in the background.
-          const cachedList = await loadCachedTournamentsList().catch(() => []);
+          const cachedList = await loadCachedTournamentsList({ listedOnly: true }).catch(() => []);
           if (cachedList.length > 0) {
             applyTournament(await tournamentPromise);
             setAllTournaments(cachedList);
