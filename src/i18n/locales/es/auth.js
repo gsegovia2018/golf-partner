@@ -23,6 +23,8 @@ export default {
   "auth.setNewPassword.button": "Guardar contraseña",
   "auth.newPassword": "Contraseña nueva",
   "auth.confirmPassword": "Repite la contraseña nueva",
+  "auth.newPassword.placeholder": "Mínimo {min} caracteres",
+  "auth.confirmPassword.placeholder": "Escríbela otra vez",
   "auth.backToSignIn": "Volver a iniciar sesión",
   "auth.passwordUpdated.title": "Contraseña actualizada",
   "auth.passwordUpdated.body": "Ya puedes iniciar sesión con tu nueva contraseña.",
