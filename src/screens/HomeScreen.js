@@ -45,7 +45,7 @@ import {
   lastTeeForPlayerOnCourse,
 } from '../store/tournamentStore';
 import { ensureRealtimeForTournament, stopRealtime } from '../store/realtimeSync';
-import { fetchMyPlayers, loadQuickStartCourses as loadQuickStartCourseList } from '../store/libraryStore';
+import { fetchMyPlayers, getCachedMyPlayers, loadQuickStartCourses as loadQuickStartCourseList } from '../store/libraryStore';
 import {
   buildQuickStartGameName,
   buildQuickStartRound,
@@ -385,13 +385,19 @@ export default function HomeScreen({ navigation, route }) {
     }
     setQuickStartPlayersLoading(true);
     setQuickStartPlayersError(null);
+    // The cached list first, so the sheet pre-selects me without waiting on
+    // the network read (late or never on a slow signal).
+    const cached = await getCachedMyPlayers(userId);
+    if (cached && quickStartPlayerLoadRef.current === requestId && currentUserIdRef.current === userId) {
+      setQuickStartPlayers(cached);
+    }
     try {
       const players = await fetchMyPlayers();
       if (quickStartPlayerLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
       setQuickStartPlayers(players);
     } catch (err) {
       if (quickStartPlayerLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
-      setQuickStartPlayersError(err?.message ?? tx('home.error.loadPlayers'));
+      if (!cached) setQuickStartPlayersError(err?.message ?? tx('home.error.loadPlayers'));
     } finally {
       if (quickStartPlayerLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
       setQuickStartPlayersLoading(false);
