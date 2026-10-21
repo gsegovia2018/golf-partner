@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { File as FsFile } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
+import { authUserId } from '../lib/authUser';
 import { takesMonth } from './leagueRules';
 import { leagueErrorDescriptor } from './leagueErrors';
 import { track } from '../lib/telemetry';
@@ -89,8 +90,7 @@ async function selectRows(query) {
 }
 
 async function currentUserId() {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
+  return authUserId();
 }
 
 const num = (v) => (v == null ? null : Number(v));

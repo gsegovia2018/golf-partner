@@ -36,7 +36,7 @@ jest.mock('../../lib/supabase', () => {
   return {
     supabase: {
       from: (...a) => chain.from(...a),
-      auth: { getUser: jest.fn() },
+      auth: { getSession: jest.fn() },
     },
   };
 });
@@ -56,7 +56,7 @@ describe('profileStore — target_handicap', () => {
     chain.update.mockReturnValue(chain);
     chain.insert.mockResolvedValue({ error: null });
 
-    supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'u1', email: 'a@b' } } });
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1', email: 'a@b' } } } });
   });
 
   test('loadProfile exposes target_handicap as targetHandicap', async () => {
@@ -69,22 +69,19 @@ describe('profileStore — target_handicap', () => {
     expect(profile.targetHandicap).toBe(12.5);
   });
 
-  test('loadProfile throws when getUser fails with a network error instead of returning null', async () => {
-    // supabase-js returns { user: null, error } (no throw) when the auth
-    // server is unreachable — a null return here used to send established
+  test('loadProfile throws when the session cannot be read (offline, expired token) instead of returning null', async () => {
+    // supabase-js returns { session: null, error } (no throw) when an expired
+    // token can't refresh — a null return here used to send established
     // users back to the onboarding screen mid-round.
     const netError = Object.assign(new Error('Network request failed'), {
       name: 'AuthRetryableFetchError',
     });
-    supabase.auth.getUser.mockResolvedValueOnce({ data: { user: null }, error: netError });
+    supabase.auth.getSession.mockResolvedValueOnce({ data: { session: null }, error: netError });
     await expect(loadProfile()).rejects.toThrow('Network request failed');
   });
 
-  test('loadProfile returns null when genuinely signed out (AuthSessionMissingError)', async () => {
-    const missing = Object.assign(new Error('Auth session missing!'), {
-      name: 'AuthSessionMissingError',
-    });
-    supabase.auth.getUser.mockResolvedValueOnce({ data: { user: null }, error: missing });
+  test('loadProfile returns null when genuinely signed out (no session on the device)', async () => {
+    supabase.auth.getSession.mockResolvedValueOnce({ data: { session: null }, error: null });
     await expect(loadProfile()).resolves.toBeNull();
   });
 
@@ -419,7 +416,7 @@ describe('profileStore — settings blob', () => {
     chain.update.mockReturnValue(chain);
     chain.insert.mockResolvedValue({ error: null });
 
-    supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'u1', email: 'a@b.c' } } });
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1', email: 'a@b.c' } } } });
   });
 
   it('loadProfile returns settings, defaulting to {}', async () => {
@@ -465,7 +462,7 @@ describe('loadCachedProfile', () => {
     chain.from.mockReturnValue(chain);
     chain.select.mockReturnValue(chain);
     chain.eq.mockReturnValue(chain);
-    supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'u1', email: 'a@b' } } });
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1', email: 'a@b' } } } });
     chain.maybeSingle.mockResolvedValue({
       data: { user_id: 'u1', display_name: 'Marcos', handicap: 18 },
       error: null,
@@ -497,14 +494,14 @@ describe('loadProfile sharing', () => {
     chain.from.mockReturnValue(chain);
     chain.select.mockReturnValue(chain);
     chain.eq.mockReturnValue(chain);
-    supabase.auth.getUser.mockReset();
-    supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'u1', email: 'a@b' } } });
+    supabase.auth.getSession.mockReset();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1', email: 'a@b' } } } });
     chain.maybeSingle.mockResolvedValue({ data: { user_id: 'u1', username: 'marcos' }, error: null });
   });
 
   test('concurrent callers share one fetch and each gets its own copy', async () => {
     const [a, b] = await Promise.all([loadProfile(), loadProfile()]);
-    expect(supabase.auth.getUser).toHaveBeenCalledTimes(1);
+    expect(supabase.auth.getSession).toHaveBeenCalledTimes(1);
     expect(a).toEqual(b);
     expect(a).not.toBe(b);
   });

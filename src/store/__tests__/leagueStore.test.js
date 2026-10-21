@@ -50,7 +50,7 @@ jest.mock('../../lib/supabase', () => {
         if (mockState.rpcThrows) return Promise.reject(mockState.rpcThrows);
         return Promise.resolve(mockState.rpcResult);
       },
-      auth: { getUser: () => Promise.resolve({ data: { user: mockState.user } }) },
+      auth: { getSession: () => Promise.resolve({ data: { session: mockState.user ? { user: mockState.user } : null } }) },
       storage: {
         from: (bucket) => ({
           upload: (path, body, opts) => {

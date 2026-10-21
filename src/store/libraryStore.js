@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { authUser, authUserId } from '../lib/authUser';
 import { listFriends, getCachedFriends } from './friendStore';
 import { parseHandicapIndex } from '../lib/handicap';
 import { t } from '../i18n';
@@ -99,7 +100,7 @@ export async function getCachedMyPlayers(userId) {
 // Players the current user MANAGES in their library: only their own guest
 // players (created_by = me, no app account). Signed-out → [].
 export async function fetchMyGuestPlayers() {
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await authUser();
   if (!user) return [];
   const { data, error } = await supabase
     .from('players')
@@ -299,10 +300,8 @@ export async function updateCourseFromEditor(courseId, holes, tees) {
 
 export const FAVORITE_COURSES_CACHE_KEY = '@golf_fav_courses_cache';
 
-// Pass `userId` when the caller already has it (useAuth): getUser is a network
-// round-trip that holds the auth lock, so every other auth call queues behind it.
 export async function fetchFavoriteCourseIds(userId = null) {
-  const uid = userId ?? (await supabase.auth.getUser()).data?.user?.id;
+  const uid = userId ?? await authUserId();
   if (!uid) return new Set();
   const { data, error } = await supabase
     .from('favorite_courses')
@@ -386,7 +385,7 @@ export async function loadQuickStartCourses({ userId = null } = {}) {
 }
 
 export async function toggleFavoriteCourse(courseId) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await authUser();
   if (!user) return { favorite: false };
   const { data: existing, error: selErr } = await supabase
     .from('favorite_courses')

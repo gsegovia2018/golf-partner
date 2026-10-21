@@ -205,3 +205,45 @@ describe('AuthProvider offline session restore', () => {
     await waitFor(() => expect(getByText('signed-out')).toBeTruthy());
   });
 });
+
+// The stores read the signed-in user from lib/authUser instead of a getUser
+// round-trip that holds the auth lock; AuthProvider is what hands it over.
+describe('AuthProvider hands the session user to lib/authUser', () => {
+  let authStateCallback;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    require('../../lib/authUser').__resetAuthUserForTests();
+    supabase.auth.onAuthStateChange.mockImplementation((cb) => {
+      authStateCallback = cb;
+      return { data: { subscription: { unsubscribe: jest.fn() } } };
+    });
+    Linking.getInitialURL.mockResolvedValue(null);
+  });
+
+  test('the restored session user, then null after sign-out', async () => {
+    const { authUserId } = require('../../lib/authUser');
+    supabase.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1', email: 'a@b.c' } } } });
+
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(async () => expect(await authUserId()).toBe('u1'));
+    const calls = supabase.auth.getSession.mock.calls.length;
+    expect(await authUserId()).toBe('u1');
+    expect(supabase.auth.getSession.mock.calls.length).toBe(calls);
+
+    await act(async () => { authStateCallback('SIGNED_OUT', null); });
+    expect(await authUserId()).toBeNull();
+  });
+
+  test('offline with an expired token: the stored session it keeps', async () => {
+    const { authUserId } = require('../../lib/authUser');
+    const netError = Object.assign(new Error('Network request failed'), { name: 'AuthRetryableFetchError' });
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null }, error: netError });
+    await AsyncStorage.setItem('sb-test-auth-token', JSON.stringify({ user: { id: 'u9' } }));
+
+    render(<AuthProvider><Probe /></AuthProvider>);
+
+    await waitFor(async () => expect(await authUserId()).toBe('u9'));
+    await AsyncStorage.removeItem('sb-test-auth-token');
+  });
+});

@@ -10,7 +10,7 @@ import {
   joinTournamentByCode, setActiveTournament, getTournament, findClaimedSlot,
 } from '../store/tournamentStore';
 import { leagueCodeExists } from '../store/leagueStore';
-import { supabase } from '../lib/supabase';
+import { authUserId } from '../lib/authUser';
 import { useT } from '../i18n';
 
 export default function JoinTournamentScreen({ navigation, route }) {
@@ -41,10 +41,10 @@ export default function JoinTournamentScreen({ navigation, route }) {
       }
       // Editor: if a slot is already bound to this account (a friend the
       // creator added from their friends list), skip the picker.
-      const [tournament, { data: { user } }] = await Promise.all([
-        getTournament(tournamentId), supabase.auth.getUser(),
+      const [tournament, userId] = await Promise.all([
+        getTournament(tournamentId), authUserId(),
       ]);
-      const mine = findClaimedSlot(tournament?.players ?? [], user?.id);
+      const mine = findClaimedSlot(tournament?.players ?? [], userId);
       if (mine) {
         navigation.replace('Tournament', { tournamentId });
       } else {

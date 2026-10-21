@@ -29,7 +29,7 @@ jest.mock('../../lib/supabase', () => {
       }
       return Promise.resolve({ data: { id: row.id }, error: null });
     },
-    auth: { getUser: () => Promise.resolve({ data: { user: mockState.user } }) },
+    auth: { getSession: () => Promise.resolve({ data: { session: mockState.user ? { user: mockState.user } : null } }) },
   };
   return { supabase: client };
 });

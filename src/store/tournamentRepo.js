@@ -11,10 +11,10 @@
 // idempotent rather than swallowing failures).
 
 import { supabase } from '../lib/supabase';
+import { authUserId } from '../lib/authUser';
 
 async function getCurrentUserId() {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
+  return authUserId();
 }
 
 // Keys split off `round` before it becomes game_rounds.body — mirrors the

@@ -1,12 +1,12 @@
 import { supabase } from '../lib/supabase';
+import { authUserId } from '../lib/authUser';
 
 // Client surface for the generic `notifications` table (see
 // supabase/migrations/20260518000001_notifications.sql). Rows are written
 // server-side by triggers; the client only reads them and marks them read.
 
 async function currentUserId() {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
+  return authUserId();
 }
 
 function rowToNotification(row) {

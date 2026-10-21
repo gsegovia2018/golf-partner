@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { authUserId } from '../lib/authUser';
 
 // One active magic token per device. Set when a player opens an invite link.
 const TOKEN_KEY = '@golf_official_token';
@@ -14,8 +15,8 @@ export async function saveToken(token) {
 export async function redeemToken(token) {
   const { data, error } = await supabase.rpc('redeem_token', { p_token: token });
   if (error) throw error;
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user) {
+  const userId = await authUserId();
+  if (userId) {
     await supabase.rpc('link_token_to_user', { p_token: token }).catch(() => {});
   }
   return data; // { roster_id, display_name, handicap, tournament_id, withdrawn }

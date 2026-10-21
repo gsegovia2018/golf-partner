@@ -1,12 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase';
+import { authUser } from '../lib/authUser';
 import { assignRoundRobinMarkers } from './officialScoring';
 import { t } from '../i18n';
 
 // Create an official tournament shell. Reuses the tournaments table; kind
 // flags it official. Returns the new tournament id.
 export async function createOfficialTournament({ name }) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await authUser();
   if (!user) throw new Error(t('shared.error.notSignedIn'));
   // tournaments.id is a non-defaulted text primary key — the client owns id
   // generation here, same as createTournament in tournamentStore.js.

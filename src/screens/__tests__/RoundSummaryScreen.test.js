@@ -34,7 +34,7 @@ jest.mock('../../components/ShareableCard', () => ({
 jest.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
-      getUser: jest.fn(() => Promise.resolve({ data: { user: { id: 'u1' } } })),
+      getSession: jest.fn(() => Promise.resolve({ data: { session: { user: { id: 'u1' } } } })),
     },
     rpc: jest.fn(() => Promise.resolve({ data: null, error: null })),
   },
@@ -302,7 +302,7 @@ describe('RoundSummaryScreen', () => {
 
     test('FAB is hidden for a viewer who did not play in the round', async () => {
       const { supabase } = require('../../lib/supabase');
-      supabase.auth.getUser.mockResolvedValueOnce({ data: { user: { id: 'u3' } } });
+      supabase.auth.getSession.mockResolvedValueOnce({ data: { session: { user: { id: 'u3' } } } });
 
       const { findByText, findByLabelText, queryByLabelText } = render(wrap(
         <RoundSummaryScreen navigation={navigation} route={route} />,
@@ -400,7 +400,7 @@ describe('RoundSummaryScreen', () => {
 
     test('hidden when the viewer did not play the round', async () => {
       const { supabase } = require('../../lib/supabase');
-      supabase.auth.getUser.mockResolvedValueOnce({ data: { user: { id: 'u3' } } });
+      supabase.auth.getSession.mockResolvedValueOnce({ data: { session: { user: { id: 'u3' } } } });
       await saveFocus('u3', FOCUS);
       withShots({ p1: details });
       const { findByText, queryByTestId } = render(wrap(

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase';
+import { authUserId } from '../lib/authUser';
 import { haversineMeters } from '../lib/geo';
 import { track } from '../lib/telemetry';
 
@@ -64,8 +65,7 @@ export async function hydrateShots() {
     if (raw) { SHOTS = JSON.parse(raw); emit(); }
   } catch { /* ignore corrupt cache */ }
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    userId = user?.id ?? null;
+    userId = await authUserId();
     if (!userId) return;
     // Push anything that never reached the server before adopting server truth.
     await flushPending();

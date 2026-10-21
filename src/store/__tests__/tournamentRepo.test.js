@@ -53,8 +53,8 @@ function installMocks() {
         },
         from: (table) => makeBuilder(table),
         auth: {
-          getUser: () => Promise.resolve({
-            data: { user: mockState.userId ? { id: mockState.userId } : null },
+          getSession: () => Promise.resolve({
+            data: { session: mockState.userId ? { user: { id: mockState.userId } } : null },
           }),
         },
       },
@@ -576,7 +576,7 @@ describe('createTournament', () => {
       supabase: {
         rpc: () => Promise.resolve({ data: null, error: { message: 'boom' } }),
         from: () => { throw new Error('createTournament must not write tables directly'); },
-        auth: { getUser: () => Promise.resolve({ data: { user: null } }) },
+        auth: { getSession: () => Promise.resolve({ data: { session: null } }) },
       },
     }));
     const { createTournament } = require('../tournamentRepo');
