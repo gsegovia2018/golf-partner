@@ -772,7 +772,7 @@ export function makeScorecardStyles(theme) {
     mePickerCard: {
       width: '100%',
       maxWidth: 380,
-      backgroundColor: theme.bg.card,
+      backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.card,
       borderRadius: 22,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,

@@ -336,7 +336,8 @@ function makeStyles(theme, gold) {
     },
     confirmCard: {
       width: '100%', maxWidth: 360,
-      backgroundColor: theme.bg.card,
+      // Opaque in dark: the dark bg.card tint is see-through over the scrim.
+      backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.card,
       borderRadius: 20, padding: 22,
       borderWidth: 1, borderColor: theme.border.default,
       ...(theme.isDark ? {} : theme.shadow.elevated),
@@ -371,6 +372,6 @@ function makeStyles(theme, gold) {
       color: theme.isDark ? theme.accent.primary : theme.text.inverse,
     },
     confirmBtnDestructive: { backgroundColor: theme.destructive },
-    confirmBtnDestructiveText: { color: '#ffffff' },
+    confirmBtnDestructiveText: { color: theme.isDark ? theme.text.inverse : '#ffffff' },
   });
 }

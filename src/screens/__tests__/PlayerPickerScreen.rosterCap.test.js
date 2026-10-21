@@ -16,18 +16,11 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 jest.mock('../../store/libraryStore', () => ({
+  getCachedMyPlayers: jest.fn(() => Promise.resolve(null)),
   fetchMyPlayers: jest.fn(() => Promise.resolve([
     { id: 'p5', name: 'Player Five', handicap: 11 },
   ])),
 }));
-
-jest.mock('../../store/tournamentStore', () => {
-  const actual = jest.requireActual('../../store/tournamentStore');
-  return {
-    ...actual,
-    loadAllTournaments: jest.fn(() => Promise.resolve([])),
-  };
-});
 
 const fourAlreadySelected = ['p1', 'p2', 'p3', 'p4'];
 const navigation = { goBack: jest.fn(), navigate: jest.fn() };

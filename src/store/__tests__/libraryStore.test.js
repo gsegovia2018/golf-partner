@@ -5,6 +5,7 @@ import {
   fetchClubs, getCachedClubs, CLUBS_CACHE_KEY,
   fetchFavoriteCourseIds, getCachedFavoriteCourseIds, FAVORITE_COURSES_CACHE_KEY,
   loadCourseLibrary, loadQuickStartCourses, upsertPlayer,
+  getCachedCourseLibrary, getCachedMyPlayers,
 } from '../libraryStore';
 import { listFriends, getCachedFriends } from '../friendStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -452,6 +453,63 @@ describe('loadCourseLibrary', () => {
     const result = await loadCourseLibrary();
     expect(result.usingCachedData).toBe(true);
     expect(result.courses).toEqual([]);
+  });
+});
+
+describe('getCachedCourseLibrary', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    mockState.user = { id: 'u1' };
+    mockState.rowsByTable = null;
+    mockState.calls = {};
+    mockState.orderError = null;
+  });
+
+  test('serves what the last online load cached, without touching the network', async () => {
+    mockState.rows = [
+      { id: 'c1', name: 'Pine', slope: null, rating: null, course_holes: [], course_tees: [] },
+    ];
+    await loadCourseLibrary();
+    mockState.calls = {};
+    const result = await getCachedCourseLibrary();
+    expect(result.courses.map((c) => c.name)).toEqual(['Pine']);
+    expect(result.usingCachedData).toBe(true);
+    expect(mockState.calls.table).toBeUndefined();
+  });
+
+  test('empty cache: no courses', async () => {
+    const result = await getCachedCourseLibrary();
+    expect(result.courses).toEqual([]);
+    expect(result.favorites.size).toBe(0);
+  });
+});
+
+describe('getCachedMyPlayers', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    mockState.user = { id: 'u1' };
+    mockState.rows = [{ id: 'p1', name: 'Ann' }];
+    mockState.rowsByTable = null;
+    mockState.calls = {};
+    mockState.orderError = null;
+    listFriends.mockResolvedValue([]);
+  });
+
+  test("returns the signed-in user's last fetched players", async () => {
+    await fetchMyPlayers();
+    await new Promise((r) => setTimeout(r, 0)); // the cache write is fire-and-forget
+    expect(await getCachedMyPlayers('u1')).toEqual([{ id: 'p1', name: 'Ann' }]);
+  });
+
+  test("never serves another account's cache", async () => {
+    await fetchMyPlayers();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await getCachedMyPlayers('u2')).toBeNull();
+  });
+
+  test('null when nothing is cached or signed out', async () => {
+    expect(await getCachedMyPlayers('u1')).toBeNull();
+    expect(await getCachedMyPlayers(null)).toBeNull();
   });
 });
 

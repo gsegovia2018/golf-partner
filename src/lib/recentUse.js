@@ -1,6 +1,7 @@
-// Derives a per-id "last used" timestamp from the user's visible tournaments.
+// Derives a per-id "last used" timestamp from the local tournaments index
+// (store/tournamentsIndex.js rows: createdAt + playerIds / courseIds).
 // Consumed by the player and course pickers to float recent entries to the
-// top without persisting extra state server-side.
+// top without a network call or extra server-side state.
 
 function parseTime(value) {
   if (!value) return 0;
@@ -8,26 +9,21 @@ function parseTime(value) {
   return Number.isFinite(t) ? t : 0;
 }
 
-export function buildPlayerLastUsed(tournaments) {
+function buildLastUsed(rows, idsOf) {
   const out = {};
-  for (const t of tournaments ?? []) {
-    const ts = parseTime(t.createdAt);
-    for (const p of t.players ?? []) {
-      if (!p?.id) continue;
-      if ((out[p.id] ?? 0) < ts) out[p.id] = ts;
+  for (const row of rows ?? []) {
+    const ts = parseTime(row.createdAt);
+    for (const id of idsOf(row) ?? []) {
+      if ((out[id] ?? 0) < ts) out[id] = ts;
     }
   }
   return out;
 }
 
-export function buildCourseLastUsed(tournaments) {
-  const out = {};
-  for (const t of tournaments ?? []) {
-    const ts = parseTime(t.createdAt);
-    for (const r of t.rounds ?? []) {
-      if (!r?.courseId) continue;
-      if ((out[r.courseId] ?? 0) < ts) out[r.courseId] = ts;
-    }
-  }
-  return out;
+export function buildPlayerLastUsed(indexRows) {
+  return buildLastUsed(indexRows, (row) => row.playerIds);
+}
+
+export function buildCourseLastUsed(indexRows) {
+  return buildLastUsed(indexRows, (row) => row.courseIds);
 }

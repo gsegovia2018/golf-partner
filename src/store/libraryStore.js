@@ -85,6 +85,17 @@ export async function fetchMyPlayers() {
   return data;
 }
 
+// The last fetchMyPlayers result for `userId`, or null when there is none
+// (signed out, another account, nothing cached). The caller passes the id it
+// already holds (AuthContext) rather than asking supabase.auth: offline with
+// an expired token, getSession() waits on a refresh that cannot succeed.
+// Never throws.
+export async function getCachedMyPlayers(userId) {
+  if (!userId) return null;
+  const cached = await readCache(MY_PLAYERS_CACHE_KEY);
+  return cached && cached.userId === userId ? cached.players : null;
+}
+
 // Players the current user MANAGES in their library: only their own guest
 // players (created_by = me, no app account). Signed-out → [].
 export async function fetchMyGuestPlayers() {
@@ -314,25 +325,32 @@ export async function getCachedFavoriteCourseIds() {
   }
 }
 
-// Loads the course library for the picker. Online, each underlying fetch also
-// refreshes its cache. If the course fetch fails (offline), the whole library
-// is served from the last-known cache and usingCachedData is true so the
-// caller can disable course creation. Never throws.
+// The last-known course library, straight from the caches the fetches below
+// write. The picker renders this first, then swaps in loadCourseLibrary().
+// Never throws.
+export async function getCachedCourseLibrary() {
+  const [courses, clubs, favorites] = await Promise.all([
+    getCachedCourses(),
+    getCachedClubs(),
+    getCachedFavoriteCourseIds(),
+  ]);
+  return { courses, clubs, favorites, usingCachedData: true };
+}
+
+// Loads the course library for the picker. Online, the three fetches run
+// together and each refreshes its cache. If the course fetch fails (offline),
+// the whole library is served from the last-known cache and usingCachedData
+// is true. Never throws.
 export async function loadCourseLibrary() {
   try {
-    const courses = await fetchCourses();
-    const [clubs, favorites] = await Promise.all([
+    const [courses, clubs, favorites] = await Promise.all([
+      fetchCourses(),
       fetchClubs().catch(() => getCachedClubs()),
       fetchFavoriteCourseIds().catch(() => getCachedFavoriteCourseIds()),
     ]);
     return { courses, clubs, favorites, usingCachedData: false };
   } catch {
-    const [courses, clubs, favorites] = await Promise.all([
-      getCachedCourses(),
-      getCachedClubs(),
-      getCachedFavoriteCourseIds(),
-    ]);
-    return { courses, clubs, favorites, usingCachedData: true };
+    return getCachedCourseLibrary();
   }
 }
 

@@ -23,6 +23,10 @@ export function createTournamentsIndex({ storage = AsyncStorage, key = INDEX_KEY
       updatedAt: t?.updatedAt ?? null,
       playerNames,
       playerCount: players.length,
+      // Ids only, for the pickers' "recently used" sort (lib/recentUse.js),
+      // so they never have to fetch the whole game list to order a list.
+      playerIds: players.map((p) => p?.id).filter(Boolean),
+      courseIds: [...new Set((t?.rounds ?? []).map((r) => r?.courseId).filter(Boolean))],
     };
   }
 

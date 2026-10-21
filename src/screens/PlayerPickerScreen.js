@@ -11,10 +11,12 @@ import { Feather } from '@expo/vector-icons';
 import { v4 as uuidv4 } from 'uuid';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { useT, formatNumber } from '../i18n';
 import { semantic } from '../theme/tokens';
-import { fetchMyPlayers } from '../store/libraryStore';
-import { loadAllTournaments, rosterCap } from '../store/tournamentStore';
+import { fetchMyPlayers, getCachedMyPlayers } from '../store/libraryStore';
+import { rosterCap } from '../store/tournamentStore';
+import { tournamentsIndex } from '../store/tournamentsIndex';
 import { setPendingPlayers } from '../lib/selectionBridge';
 import { buildPlayerLastUsed } from '../lib/recentUse';
 import { mutate } from '../store/mutate';
@@ -26,6 +28,7 @@ const normalize = (value) =>
 export default function PlayerPickerScreen({ navigation, route }) {
   const { theme } = useTheme();
   const t = useT();
+  const userId = useAuth()?.user?.id ?? null;
   const s = makeStyles(theme);
 
   // `kind` drives the roster cap (Task 3, audit-tier3): a tournament has no
@@ -46,23 +49,38 @@ export default function PlayerPickerScreen({ navigation, route }) {
   const [lastUsed, setLastUsed] = useState({});
   const [reloadKey, setReloadKey] = useState(0);
   const hasLoadedOnceRef = useRef(false);
+  // Players added on this screen. The fresh list can land after an add made
+  // on the cached one, and the add may still be queued offline, so they are
+  // kept on top of whatever list arrives.
+  const addedRef = useRef([]);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
+      let shown = false;
+      const show = (list) => {
+        if (cancelled) return;
+        const ids = new Set(list.map((p) => p.id));
+        setPlayers([...list, ...addedRef.current.filter((p) => !ids.has(p.id))]);
+        setLoading(false);
+        shown = true;
+      };
       if (!hasLoadedOnceRef.current) setLoading(true);
       setLoadError(null);
-      // fetchMyPlayers is fatal (no library to pick from); recent-use data is
-      // best-effort and degrades silently to alphabetical sort.
+      // Recent-use order comes from the local tournaments index: no network,
+      // and best-effort (alphabetical without it).
+      tournamentsIndex.readIndex()
+        .then((rows) => { if (!cancelled) setLastUsed(buildPlayerLastUsed(rows)); })
+        .catch(() => {});
+      // Cache first so the list shows at once, then the fresh list replaces
+      // it. A failed fetch is only an error when nothing is on screen.
+      getCachedMyPlayers(userId)
+        .then((cached) => { if (cached?.length && !shown) show(cached); })
+        .catch(() => {});
       fetchMyPlayers()
-        .then(async (list) => {
-          const tournaments = await loadAllTournaments().catch(() => []);
-          if (cancelled) return;
-          setPlayers(list);
-          setLastUsed(buildPlayerLastUsed(tournaments));
-        })
+        .then(show)
         .catch((err) => {
-          if (!cancelled) setLoadError(err?.message ?? t('players.loadFailed'));
+          if (!cancelled && !shown) setLoadError(err?.message ?? t('players.loadFailed'));
         })
         .finally(() => {
           if (!cancelled) {
@@ -71,7 +89,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
           }
         });
       return () => { cancelled = true; };
-    }, [reloadKey, t]),
+    }, [reloadKey, t, userId]),
   );
 
   const filteredPlayers = useMemo(() => {
@@ -128,6 +146,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
         handicap: hcp,
         gender: 'male',
       });
+      addedRef.current.push(player);
       setPlayers((prev) => [...prev, player]);
       setNewName('');
       setNewHcp('');

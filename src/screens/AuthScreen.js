@@ -63,7 +63,9 @@ const makeStyles = (theme) => StyleSheet.create({
     textAlign: 'center', marginBottom: 36,
   },
   card: {
-    backgroundColor: theme.bg.card,
+    // Dark bg.card is a translucent tint meant for bg.primary; over the brand
+    // green it vanishes and takes the muted text with it, so go opaque.
+    backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.card,
     borderRadius: 24, padding: 20,
     borderWidth: 1, borderColor: theme.border.default,
   },

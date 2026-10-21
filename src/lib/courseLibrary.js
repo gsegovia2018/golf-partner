@@ -78,32 +78,88 @@ export function buildCourseLibraryItems(courses, clubs, favorites = new Set(), l
   return items;
 }
 
-// Filter built items by a search query. Matches club name, layout/course name,
-// city and province. A club whose name matches keeps all layouts; otherwise
-// only its matching layouts are kept. Empty query returns the input unchanged.
-export function filterCourseLibraryItems(items, query) {
-  const q = normalizeText(query);
-  if (!q) return items;
-  const courseMatches = (c) =>
-    normalizeText(c.name).includes(q) ||
-    normalizeText(c.layoutName).includes(q) ||
-    normalizeText(c.city).includes(q) ||
-    normalizeText(c.province).includes(q);
-  const out = [];
-  for (const item of items) {
-    if (item.kind === 'course') {
-      if (courseMatches(item.course)) out.push(item);
-      continue;
-    }
-    const clubHit =
-      normalizeText(item.club.name).includes(q) ||
-      normalizeText(item.club.city).includes(q) ||
-      normalizeText(item.club.province).includes(q);
-    if (clubHit) { out.push(item); continue; }
-    const layouts = item.layouts.filter(courseMatches);
-    if (layouts.length) out.push({ ...item, layouts });
+// ── Picker views (CoursePickerScreen) ───────────────────────────────────────
+// The library is the whole federation list (~600 layouts), so the picker never
+// lists it all: it shows favourites and recent courses, layout-level search
+// results, and one region at a time.
+
+function clubIndex(clubs) {
+  return new Map((clubs ?? []).map((club) => [club.id, club]));
+}
+
+// A course's region: its club's province, else its own. null when neither.
+export function regionOf(course, clubsById) {
+  return clubsById.get(course.clubId)?.province ?? course.province ?? null;
+}
+
+// Regions with how many places (clubs, plus courses with no club) each has,
+// most first. Courses with no region are counted under `null`, listed last.
+export function regionSummary(courses, clubs) {
+  const clubsById = clubIndex(clubs);
+  const places = new Map();
+  for (const course of courses) {
+    const region = regionOf(course, clubsById);
+    const place = clubsById.has(course.clubId) ? `club:${course.clubId}` : `course:${course.id}`;
+    if (!places.has(region)) places.set(region, new Set());
+    places.get(region).add(place);
   }
-  return out;
+  return [...places]
+    .map(([region, set]) => ({ region, count: set.size }))
+    .sort((a, b) => {
+      if ((a.region === null) !== (b.region === null)) return a.region === null ? 1 : -1;
+      return b.count - a.count || normalizeText(a.region).localeCompare(normalizeText(b.region));
+    });
+}
+
+// One region's places in name order: grouped items as buildCourseLibraryItems
+// makes them (a club with 2+ layouts is one item).
+export function regionItems(courses, clubs, region) {
+  const clubsById = clubIndex(clubs);
+  const inRegion = courses.filter((c) => regionOf(c, clubsById) === region);
+  return buildCourseLibraryItems(inRegion, clubs);
+}
+
+// Recently played courses, newest first, leaving out favourites (they have
+// their own section). `lastUsed` maps course id -> timestamp.
+export function recentCourses(courses, lastUsed, favorites = new Set(), limit = 5) {
+  return courses
+    .filter((c) => lastUsed[c.id] && !favorites.has(c.id))
+    .sort((a, b) => lastUsed[b.id] - lastUsed[a.id])
+    .slice(0, limit);
+}
+
+// Layout-level search over course name, layout, city, region and club name.
+// Returns { groups: [{ club, courses }], total } with at most `limit` courses
+// across the groups; `club` is null for a course with no (known) club.
+// Groups keep the order of their best match: a name that starts with the
+// query beats one that only contains it, then alphabetical.
+export function searchCourses(courses, clubs, query, limit = 40) {
+  const q = normalizeText(query).trim();
+  if (!q) return { groups: [], total: 0 };
+  const clubsById = clubIndex(clubs);
+  const hits = [];
+  for (const course of courses) {
+    const club = clubsById.get(course.clubId) ?? null;
+    const fields = [course.name, course.layoutName, course.city, course.province,
+      club?.name, club?.city, club?.province].map(normalizeText);
+    if (!fields.some((f) => f.includes(q))) continue;
+    const name = normalizeText(club?.name ?? course.name);
+    hits.push({ course, club, rank: name.startsWith(q) ? 0 : 1, name });
+  }
+  hits.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name)
+    || normalizeText(a.course.name).localeCompare(normalizeText(b.course.name)));
+  const groups = [];
+  const byKey = new Map();
+  for (const hit of hits.slice(0, limit)) {
+    const key = hit.club ? `club:${hit.club.id}` : `course:${hit.course.id}`;
+    if (!byKey.has(key)) {
+      const group = { club: hit.club, courses: [] };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    byKey.get(key).courses.push(hit.course);
+  }
+  return { groups, total: hits.length };
 }
 
 // ---------------------------------------------------------------------------

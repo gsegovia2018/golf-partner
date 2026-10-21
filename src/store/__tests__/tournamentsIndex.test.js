@@ -49,4 +49,17 @@ describe('tournamentsIndex summarize', () => {
     expect(row.playerNames).toEqual([]);
     expect(row.playerCount).toBe(0);
   });
+
+  test('carries playerIds and de-duplicated courseIds for the pickers recent-use sort', async () => {
+    const index = createTournamentsIndex({ storage: memoryStorage(), key: 'idx3' });
+    await index.writeIndex([{
+      id: 't1',
+      players: [{ id: 'p1', name: 'Marcos' }, { name: 'stub' }],
+      rounds: [{ courseId: 'c1' }, { courseId: 'c1' }, { courseId: 'c2' }, {}],
+    }]);
+
+    const [row] = await index.readIndex();
+    expect(row.playerIds).toEqual(['p1']);
+    expect(row.courseIds).toEqual(['c1', 'c2']);
+  });
 });
