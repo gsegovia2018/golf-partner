@@ -12,10 +12,15 @@
 // Fixed label and total columns with nine equal cells, so it fits a 360 dp
 // phone without scrolling sideways. No legend: every cell has an
 // accessibilityLabel. Data: scorecardModel in store/scorecardView.
+//
+// `tone="deep"` draws it on the deep-green hero (the Home cards): text,
+// accent and fills come from the onDeep set and the score tints from deepHeat.
 import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { onDeep } from '../../theme/tokens';
+import { withAlpha } from '../../theme/alpha';
 import { useT, formatNumber } from '../../i18n';
 import { cellLevel, ledgerBestRun } from '../../store/gameStatsView';
 import { initialExpanded, toggleExpanded } from '../../store/scorecardView';
@@ -28,6 +33,32 @@ const CELL_H = 22;
 const SCORE_H = 24;
 const GLYPH = { fairway: '↑', super: '★', left: '←', right: '→', short: '↓' };
 const GOOD_DRIVE = new Set(['fairway', 'super']);
+
+// On bg.deep: cream text, mint for good, salmon for poor; every pair passes 4.5:1.
+const CREAM = '#f3efe6';
+const DEEP_GOOD = '#9be3c2';
+const DEEP_POOR = '#ffb4a8';
+function onDeepTheme(theme) {
+  return {
+    ...theme,
+    isDark: true,
+    text: { ...theme.text, primary: CREAM, secondary: onDeep.soft, muted: onDeep.faint, inverse: theme.bg.deep },
+    accent: { ...theme.accent, primary: CREAM, light: onDeep.chip },
+    bg: { ...theme.bg, secondary: onDeep.fill },
+    border: { ...theme.border, default: onDeep.borderStrong },
+    destructive: DEEP_POOR,
+    scoreColor: (level) => (level === 'excellent' || level === 'good' ? DEEP_GOOD : level === 'poor' ? DEEP_POOR : CREAM),
+  };
+}
+// heatColors' scale for the deep surface: 0 salmon wash, 1 faint, 2 chip, 3 mint, 4+ gold.
+function deepHeat(level) {
+  if (level == null) return { bg: 'transparent', fg: onDeep.faint };
+  if (level <= 0) return { bg: withAlpha(DEEP_POOR, 0.18), fg: DEEP_POOR };
+  if (level === 1) return { bg: onDeep.fill, fg: onDeep.soft };
+  if (level === 2) return { bg: onDeep.chip, fg: CREAM };
+  if (level === 3) return { bg: DEEP_GOOD, fg: '#00553c' };
+  return { bg: '#ffe08a', fg: '#00553c' };
+}
 
 function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID, labelStyle }) {
   return (
@@ -161,14 +192,14 @@ function NameButton({ row, open, onToggle, s, theme, t }) {
   );
 }
 
-function scoreCells({ row, nine, mode, card, s, theme, t, idp }) {
+function scoreCells({ row, nine, mode, card, s, theme, t, idp, heat }) {
   const isPoints = mode === 'points';
   return nine.cells.map((c) => {
     if (c.strokes == null) {
       return { key: c.number, style: s.empty, a11y: t('stats.game.card.notPlayed') };
     }
     const level = isPoints && !card.pointsTinted ? null : cellLevel(mode, c);
-    const { bg, fg } = level == null ? { bg: 'transparent', fg: theme.text.primary } : heatColors(theme, level);
+    const { bg, fg } = level == null ? { bg: 'transparent', fg: theme.text.primary } : heat(level);
     const value = isPoints ? formatNumber(c.points ?? 0) : c.strokes;
     const base = isPoints
       ? t('stats.game.ledger.a11y.points', { hole: c.number, count: c.points ?? 0 })
@@ -196,13 +227,20 @@ function scoreCells({ row, nine, mode, card, s, theme, t, idp }) {
   });
 }
 
-// Optional, for the Home Live card: `currentHole` rings that hole's column,
+// Optional, for the Home cards: `currentHole` rings that hole's column,
 // `labelOf(row)` and `labelWidth` replace the three-letter row label,
-// `pointsRow` adds a points row under a solo ledger's strokes.
+// `pointsRow` adds a points row under a solo ledger's strokes, `tone="deep"`
+// draws it on the deep-green hero, `summary={false}` drops the totals line
+// and best run under a solo ledger. `groups` puts rows under a header row
+// per pair: [{ key, label, color, holes: { [number]: points | null }, total, ids }].
 export default function ShotScorecard({
   card, mode = 'strokes', currentHole = null, labelOf = null, labelWidth = null, pointsRow = false,
+  tone = null, summary = true, groups = null,
 }) {
-  const { theme } = useTheme();
+  const { theme: base } = useTheme();
+  const deep = tone === 'deep';
+  const theme = useMemo(() => (deep ? onDeepTheme(base) : base), [base, deep]);
+  const heat = useMemo(() => (deep ? deepHeat : (level) => heatColors(theme, level)), [deep, theme]);
   const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [expanded, setExpanded] = useState(() => initialExpanded(card));
@@ -220,7 +258,7 @@ export default function ShotScorecard({
   const ring = (number) => (number === currentHole ? s.current : null);
 
   let totalLine = null;
-  if (soloRow) {
+  if (soloRow && summary) {
     const { total } = soloRow;
     const toPar = total.toPar === 0 ? t('stats.game.standings.even') : signed(total.toPar ?? 0);
     const parts = isPoints
@@ -249,45 +287,79 @@ export default function ShotScorecard({
             total={head.par}
             labelStyle={wide}
           />
-          {card.rows.map((row) => {
-            const nine = row.nines[ni];
-            const idp = card.solo ? 'ledger' : `card-${row.id}`;
-            const open = card.solo ? row.hasShots : row.canExpand && expanded.includes(row.id);
-            const label = card.solo
-              ? t(isPoints ? 'stats.game.ledger.points' : 'stats.game.ledger.strokes')
-              : labelOf
-                ? <Text style={[s.label, s.name, s.nameText, wide, row.isMe && s.meLabel]} numberOfLines={1} testID={`card-name-${row.id}`}>{labelOf(row)}</Text>
-                : <NameButton row={row} open={open} onToggle={onToggle} s={s} theme={theme} t={t} />;
+          {(() => {
+            const renderRow = (row) => {
+              const nine = row.nines[ni];
+              const idp = card.solo ? 'ledger' : `card-${row.id}`;
+              const open = card.solo ? row.hasShots : row.canExpand && expanded.includes(row.id);
+              const label = card.solo
+                ? t(isPoints ? 'stats.game.ledger.points' : 'stats.game.ledger.strokes')
+                : labelOf
+                  ? <Text style={[s.label, s.name, s.nameText, wide, groups && s.memberLabel, row.isMe && s.meLabel]} numberOfLines={1} testID={`card-name-${row.id}`}>{labelOf(row)}</Text>
+                  : <NameButton row={row} open={open} onToggle={onToggle} s={s} theme={theme} t={t} />;
 
-            return (
-              <View key={row.id} style={!card.solo && s.player}>
+              return (
+                <View key={row.id} style={!card.solo && s.player}>
+                  <Row
+                    s={s}
+                    height={SCORE_H}
+                    label={label}
+                    cells={scoreCells({ row, nine, mode, card, s, theme, t, idp, heat }).map((c) => (c.key === currentHole ? { ...c, style: [c.style, s.currentCell] } : c))}
+                    total={totalOf(nine)}
+                    totalTestID={`${idp}-total-${head.key}`}
+                    style={row.isMe && labelOf ? s.meRow : null}
+                    labelStyle={wide}
+                  />
+                  {pointsRow && card.solo && (
+                    <Row
+                      s={s}
+                      label={t('stats.game.ledger.points')}
+                      labelStyle={wide}
+                      cells={nine.cells.map((c) => ({
+                        key: c.number,
+                        a11y: c.points == null ? undefined : t('stats.game.ledger.a11y.points', { hole: c.number, count: c.points }),
+                        child: c.points == null ? null : <Text style={[s.plain, { color: c.points >= 3 ? theme.scoreColor('excellent') : c.points === 0 ? theme.destructive : theme.text.primary }]}>{c.points}</Text>,
+                      }))}
+                      total={nine.points == null ? null : formatNumber(nine.points)}
+                    />
+                  )}
+                  {open && shotRows({ row, nine, s, theme, t, sub: !card.solo, idp })}
+                </View>
+              );
+            };
+            if (!groups) return card.rows.map(renderRow);
+            const byId = new Map(card.rows.map((r) => [r.id, r]));
+            return groups.map((g) => (
+              <View key={g.key} style={s.group} testID={`card-group-${g.key}`}>
                 <Row
                   s={s}
                   height={SCORE_H}
-                  label={label}
-                  cells={scoreCells({ row, nine, mode, card, s, theme, t, idp }).map((c) => (c.key === currentHole ? { ...c, style: [c.style, s.currentCell] } : c))}
-                  total={totalOf(nine)}
-                  totalTestID={`${idp}-total-${head.key}`}
-                  style={row.isMe && labelOf ? s.meRow : null}
+                  style={s.groupRow}
                   labelStyle={wide}
+                  label={(
+                    <View style={[s.groupLabel, wide]}>
+                      <View style={[s.groupDot, { backgroundColor: g.color }]} />
+                      <Text style={s.groupName} numberOfLines={1}>{g.label}</Text>
+                    </View>
+                  )}
+                  cells={head.holes.map((h) => {
+                    const v = g.holes?.[h.number];
+                    const ringed = h.number === currentHole ? s.currentCell : null;
+                    if (v == null) return { key: h.number, style: [s.empty, ringed] };
+                    return {
+                      key: h.number,
+                      style: [{ backgroundColor: v > 0 ? withAlpha(g.color, 0.35) : 'transparent' }, ringed],
+                      a11y: t('stats.game.ledger.a11y.who', { name: g.label, text: t('stats.game.ledger.a11y.points', { hole: h.number, count: v }) }),
+                      child: <Text style={[s.value, { color: v > 0 ? theme.text.primary : theme.text.muted }]}>{formatNumber(v)}</Text>,
+                    };
+                  })}
+                  total={g.nineTotals?.[head.key] != null ? formatNumber(g.nineTotals[head.key]) : null}
+                  totalTestID={`card-group-${g.key}-total-${head.key}`}
                 />
-                {pointsRow && card.solo && (
-                  <Row
-                    s={s}
-                    label={t('stats.game.ledger.points')}
-                    labelStyle={wide}
-                    cells={nine.cells.map((c) => ({
-                      key: c.number,
-                      a11y: c.points == null ? undefined : t('stats.game.ledger.a11y.points', { hole: c.number, count: c.points }),
-                      child: c.points == null ? null : <Text style={[s.plain, { color: c.points >= 3 ? theme.scoreColor('excellent') : c.points === 0 ? theme.destructive : theme.text.primary }]}>{c.points}</Text>,
-                    }))}
-                    total={nine.points == null ? null : formatNumber(nine.points)}
-                  />
-                )}
-                {open && shotRows({ row, nine, s, theme, t, sub: !card.solo, idp })}
+                {g.ids.map((id) => byId.get(id)).filter(Boolean).map(renderRow)}
               </View>
-            );
-          })}
+            ));
+          })()}
         </View>
       ))}
       {totalLine && (
@@ -296,7 +368,7 @@ export default function ShotScorecard({
           <Text style={s.totalValue} testID="ledger-total">{totalLine}</Text>
         </View>
       )}
-      {run && (
+      {run && summary && (
         <Text style={s.run} testID="ledger-run">
           <Text style={[s.runLabel, { color: theme.isDark ? theme.semantic.winner.dark : theme.semantic.winner.light }]}>{t('stats.game.ledger.runLabel')}</Text>
           {': '}
@@ -336,6 +408,12 @@ function makeStyles(theme) {
     currentText: { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-ExtraBold' },
     currentCell: { borderWidth: 1.5, borderColor: theme.accent.primary, borderStyle: 'solid' },
     meRow: { backgroundColor: theme.accent.light, borderRadius: 6 },
+    group: { marginTop: 6 },
+    groupRow: { backgroundColor: theme.bg.secondary, borderRadius: 6 },
+    groupLabel: { width: LABEL_W, flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 4 },
+    groupDot: { width: 7, height: 7, borderRadius: 4 },
+    groupName: { flexShrink: 1, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: theme.text.primary },
+    memberLabel: { paddingLeft: 12 },
     meLabel: { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-ExtraBold' },
     totalText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: theme.text.primary, fontVariant: ['tabular-nums'] },
     // Handicap strokes: up to two tiny dots along the foot of the score cell.

@@ -58,3 +58,25 @@ describe('liveCardKind', () => {
     expect(liveCardKind(solo)).toBe('solo');
   });
 });
+
+describe('liveScorecard with two pairs', () => {
+  it('carries the pair board and lists my pair first, me first in it', () => {
+    const four = [...players, { id: 'p4', name: 'QA Dan', user_id: null }];
+    const tournament = {
+      id: 't', kind: 'game', players: four, settings: { scoringMode: 'bestball' },
+      rounds: [{
+        id: 'r', holes, scoringMode: 'bestball',
+        pairs: [[{ id: 'p2' }, { id: 'p3' }], [{ id: 'p4' }, { id: 'p1' }]],
+        scores: { p1: sc([4]), p2: sc([3]), p3: sc([5]), p4: sc([4]) },
+        playerHandicaps: { p1: 0, p2: 0, p3: 0, p4: 0 },
+      }],
+    };
+    const m = liveScorecard({ tournament, round: tournament.rounds[0], roundIndex: 0 }, 'u1');
+    expect(m.pairs.sides.map((sd) => sd.side)).toEqual([1, 0]);
+    expect(m.card.rows.map((r) => r.id)).toEqual(['p1', 'p4', 'p2', 'p3']);
+  });
+
+  it('has no pair board for an individual game', () => {
+    expect(liveScorecard(entry({ p1: sc([4]) }), 'u1').pairs).toBeNull();
+  });
+});

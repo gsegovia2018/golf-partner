@@ -6,6 +6,7 @@ import { scorecardModel } from './scorecardView';
 import { roundLeaderboard } from './tournamentStore';
 import { roundScoringMode } from './scoring';
 import { myPlayerIn } from './homePhase';
+import { pairBoard } from './homePairs';
 
 // The nine being played: the back once my next hole is 10 or later (or I
 // have finished the front and nothing is left on it). One block on a 9-hole card.
@@ -40,10 +41,15 @@ export function liveScorecard({ tournament, round }, userId) {
   const board = roundLeaderboard(tournament, round).entries ?? [];
   const order = new Map(board.map((e, i) => [e.player?.id, i]));
   const full = scorecardModel({ round, players, meId: me?.id ?? null, mode });
-  // Leaderboard order; the Live card opens the scorecard on tap, so no row expands here.
+  const pairs = pairBoard(tournament, round, me?.id ?? null);
+  // A two-pair game lists my pair first and me first in it;
+  // anything else follows the leaderboard. The Live card opens the scorecard
+  // on tap, so no row expands here.
+  const pairOrder = pairs ? new Map(pairs.sides.flatMap((sd) => sd.ids).map((id, i) => [id, i])) : null;
+  const rank = (id) => (pairOrder ? pairOrder.get(id) : order.get(id)) ?? 99;
   const rows = full.rows
     .map((r) => ({ ...r, canExpand: false }))
-    .sort((a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
+    .sort((a, b) => rank(a.id) - rank(b.id));
   const card = { ...full, rows };
 
   const pointsOf = (id) => board.find((e) => e.player?.id === id)?.points ?? 0;
@@ -81,6 +87,7 @@ export function liveScorecard({ tournament, round }, userId) {
     nineKey,
     standings,
     gap,
+    pairs,
     next: next ? { number: next.number, par: next.par ?? null, strokeIndex: next.strokeIndex ?? null } : null,
     myCard: me ? scorecardModel({ round, players: [me], meId: me.id, mode }) : null,
   };

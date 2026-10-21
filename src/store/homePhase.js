@@ -12,7 +12,9 @@
 import { isTournamentFinished, isRoundComplete, roundLeaderboard } from './tournamentStore';
 import { roundEndedAt, parseFinishedAt } from './finishStamp';
 import { isRoundLive } from './liveRound';
-import { getPlayingHandicap, resolvePairs } from './scoring';
+import { getPlayingHandicap, resolvePairs, calcExtraShots, holeCountOf, roundScoringMode } from './scoring';
+import { pairBoard } from './homePairs';
+import { scorecardModel } from './scorecardView';
 
 export const PHASE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -158,24 +160,40 @@ export function homePhase(tournaments, { userId = null, now = Date.now(), lastAc
   return { phase, live, before, after };
 }
 
-// Before hero: who plays with whom and the strokes each one gets.
+// A tee set the course never named ("Default") says nothing on the card.
+const teeName = (label) => (label && label.trim().toLowerCase() !== 'default' ? label : '');
+
+// Before hero: who plays with whom and the strokes each one gets. Teams come
+// my pair first; `side` keeps the round's own pair (0 = A, 1 = B) for colour.
+// A solo round names the holes where I get my shots, when there are one or two.
 export function beforeModel({ tournament, round, roundIndex }, userId) {
   const players = tournament.players ?? [];
   const me = myPlayerIn(tournament, userId);
   const row = (p) => ({ id: p.id, name: p.name ?? '', strokes: getPlayingHandicap(round, p), me: p.id === me?.id });
   const pairs = resolvePairs(round.pairs, players);
-  const teams = Array.isArray(pairs) && pairs.length === 2 && pairs.every((pr) => Array.isArray(pr) && pr.length > 0)
-    ? pairs.map((pr) => pr.filter((m) => m?.id).map(row))
+  let teams = Array.isArray(pairs) && pairs.length === 2 && pairs.every((pr) => Array.isArray(pr) && pr.length > 0)
+    ? pairs.map((pr, side) => ({ side, members: pr.filter((m) => m?.id).map(row) }))
     : null;
+  if (teams && teams[1].members.some((m) => m.me)) teams = [teams[1], teams[0]];
+  let shotHoles = null;
+  if (players.length === 1 && me) {
+    const strokes = getPlayingHandicap(round, me);
+    const holeCount = holeCountOf(round);
+    const list = (round.holes ?? [])
+      .filter((h) => calcExtraShots(strokes, h.strokeIndex, holeCount) > 0)
+      .map((h) => ({ number: h.number, strokeIndex: h.strokeIndex }));
+    if (list.length > 0 && list.length <= 2) shotHoles = list;
+  }
   return {
     name: tournament.name ?? '',
     kind: tournament.kind ?? 'tournament',
     roundNumber: roundIndex + 1,
     roundCount: (tournament.rounds ?? []).length,
     courseName: round.courseName || round.course?.name || '',
-    tee: (me && round.playerTees?.[me.id]?.label) || '',
+    tee: teeName(me && round.playerTees?.[me.id]?.label),
     teams,
     players: teams ? null : players.map(row),
+    shotHoles,
   };
 }
 
@@ -206,13 +224,20 @@ export function liveModel({ tournament, round, roundIndex }, userId) {
   };
 }
 
-// After hero: my result, place and the winner.
+// After hero: my result, place and the winner; a tie for first names everyone
+// on it. A two-pair game adds the pair result (`pairs`, as the scorecard's
+// match panel scores it); a solo round adds my card (`card`) and its shot totals.
 export function afterModel({ tournament, round, roundIndex, endedAt }, userId) {
   const me = myPlayerIn(tournament, userId);
+  const players = tournament.players ?? [];
   const { unit, entries } = roundLeaderboard(tournament, round);
   const mine = entries.find((e) => e.player?.id === me?.id) ?? null;
   const place = mine ? 1 + entries.filter((e) => e.points > mine.points).length : null;
   const top = entries[0] ?? null;
+  const tiedTop = top ? entries.filter((e) => e.points === top.points) : [];
+  const solo = players.length === 1 && me
+    ? soloCard(tournament, round, me)
+    : null;
   return {
     tournamentId: tournament.id,
     roundId: round.id,
@@ -224,7 +249,31 @@ export function afterModel({ tournament, round, roundIndex, endedAt }, userId) {
     myPoints: mine?.points ?? null,
     place,
     count: entries.length,
-    // null when I won (or tied for first): the card says so instead.
-    winner: top && place !== 1 ? { name: top.player?.name ?? '', points: top.points } : null,
+    // null when I won, or when first place is shared (`tied` says who).
+    winner: top && place !== 1 && tiedTop.length === 1 ? { name: top.player?.name ?? '', points: top.points } : null,
+    tied: tiedTop.length > 1
+      ? { points: top.points, players: tiedTop.map((e) => ({ id: e.player?.id, name: e.player?.name ?? '', me: e.player?.id === me?.id })) }
+      : null,
+    pairs: pairBoard(tournament, round, me?.id ?? null),
+    card: solo?.card ?? null,
+    shots: solo?.shots ?? null,
   };
+}
+
+// My card for a solo round and what my shot detail adds up to: fairways hit
+// of those logged, greens in regulation of those known, tee penalties.
+function soloCard(tournament, round, me) {
+  const card = scorecardModel({ round, players: [me], meId: me.id, mode: roundScoringMode(tournament, round) });
+  const row = card.rows[0];
+  if (!row) return { card, shots: null };
+  const add = (pick) => row.nines.reduce((sum, n) => sum + pick(n), 0);
+  const penalties = row.nines.reduce((sum, n) => sum + n.cells.reduce((s, c) => s + (c.penalties ?? 0), 0), 0);
+  const shots = row.hasShots
+    ? {
+      fairways: { hit: add((n) => n.fairways.hit), of: add((n) => n.fairways.of) },
+      greens: { hit: add((n) => n.gir.hit), of: add((n) => n.gir.of) },
+      penalties,
+    }
+    : null;
+  return { card, shots };
 }

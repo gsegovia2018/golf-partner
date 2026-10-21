@@ -107,14 +107,14 @@ function pairLabel(pair, players) {
 
 // Ports `holeTeamPts`: best/worst-ball points a team scored on one hole.
 // Returns null when the hole is not fully scored (bestWinner === null).
-function holeTeamPts(holeData, team, bbVal, wbVal) {
+export function holeTeamPts(holeData, team, bbVal, wbVal) {
   if (!holeData || holeData.bestWinner === null) return null;
   return (holeData.bestWinner === team ? bbVal : 0)
     + (holeData.worstWinner === team ? wbVal : 0);
 }
 
 // Ports `roundTeamPts`: a team's total best/worst-ball points for the round.
-function roundTeamPts(bbResult, team, bbVal, wbVal) {
+export function roundTeamPts(bbResult, team, bbVal, wbVal) {
   const { bestBall, worstBall } = bbResult;
   return (team === 1 ? bestBall.pair1 : bestBall.pair2) * bbVal
     + (team === 1 ? worstBall.pair1 : worstBall.pair2) * wbVal;
