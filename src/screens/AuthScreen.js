@@ -1,88 +1,181 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions,
 } from 'react-native';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withDelay, withTiming, Easing, useReducedMotion,
+} from 'react-native-reanimated';
 import AuthForm from '../components/AuthForm';
+import HolePlan, { PLAN_WIDTH, PLAN_HEIGHT } from '../components/auth/HolePlan';
 import { useT } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
-import { semantic } from '../theme/tokens';
+import { BREAKPOINTS } from '../theme/responsive';
 
+const EASE = Easing.bezier(0.2, 0.8, 0.2, 1);
+const CREAM = '#f6f3ee';
+const CREAM_SOFT = 'rgba(246,243,238,0.82)';
+// First-frame guess at the sheet's height; onLayout replaces it, and the plan
+// panel takes the rest of the screen. Phones shift the plan right so the pond
+// clears the wordmark.
+const SHEET_HEIGHT = 480;
+const SHEET_OVERLAP = 24;
+const PHONE_PLAN = 'translate(46 -4) scale(.92)';
+
+// Fade + rise once on mount (reduced motion ⇒ in place).
+function useEntrance(delay, distance) {
+  const reduced = useReducedMotion();
+  const progress = useSharedValue(reduced ? 1 : 0);
+  useEffect(() => {
+    if (reduced) return;
+    progress.value = withDelay(delay, withTiming(1, { duration: 700, easing: EASE }));
+  }, [reduced, delay, progress]);
+  return useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ translateY: (1 - progress.value) * distance }],
+  }));
+}
+
+function Wordmark({ wide, s, t }) {
+  const title = useEntrance(150, 10);
+  const caption = useEntrance(300, 10);
+  return (
+    <>
+      <Animated.Text style={[s.wordmark, wide && s.wordmarkLarge, title]} accessibilityRole="header">
+        Golf Partner
+      </Animated.Text>
+      <Animated.Text style={[s.caption, caption]}>{t('auth.plan.caption')}</Animated.Text>
+      {wide && <Animated.Text style={[s.tagline, caption]}>{t('auth.plan.tagline')}</Animated.Text>}
+    </>
+  );
+}
+
+function FormBody({ mode, setMode, s, t }) {
+  const signin = mode === 'signin';
+  return (
+    <>
+      <Text style={s.heading} accessibilityRole="header">
+        {signin ? t('auth.heading.signin') : t('auth.heading.signup')}
+      </Text>
+      <AuthForm mode={mode} onSignedUp={() => setMode('signin')} />
+      <View style={s.switchRow}>
+        <Text style={s.switchLead}>
+          {signin ? t('auth.switch.toSignupLead') : t('auth.switch.toSigninLead')}
+        </Text>
+        <TouchableOpacity
+          onPress={() => setMode(signin ? 'signup' : 'signin')}
+          accessibilityRole="button"
+          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+        >
+          <Text style={s.switchAction}>
+            {signin ? t('auth.switch.toSignup') : t('auth.switch.toSignin')}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+}
+
+// Login: an architect's plan of a hole drawn in on the brand's deep green,
+// the wordmark over it, and the form on an opaque sheet (bg.primary) below.
+// Wide windows split it: plan on the left, form on the right.
 export default function AuthScreen() {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
-
+  const { width, height } = useWindowDimensions();
   const [mode, setMode] = useState('signin');
+  const [sheetH, setSheetH] = useState(SHEET_HEIGHT);
+  const sheet = useEntrance(200, 24);
 
-  return (
-    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={s.inner}>
-        <Text style={s.logo}>Golf Partner</Text>
-        <Text style={s.tagline}>{t('auth.tagline')}</Text>
-
-        <View style={s.card}>
-          <View style={s.modeRow}>
-            <TouchableOpacity
-              style={[s.modeBtn, mode === 'signin' && s.modeBtnActive]}
-              onPress={() => setMode('signin')}
-              activeOpacity={0.7}
-            >
-              <Text style={[s.modeBtnText, mode === 'signin' && s.modeBtnTextActive]}>{t('auth.signIn')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.modeBtn, mode === 'signup' && s.modeBtnActive]}
-              onPress={() => setMode('signup')}
-              activeOpacity={0.7}
-            >
-              <Text style={[s.modeBtnText, mode === 'signup' && s.modeBtnTextActive]}>{t('auth.signUp')}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <AuthForm mode={mode} onSignedUp={() => setMode('signin')} />
+  if (width >= BREAKPOINTS.lg) {
+    const planH = Math.min(height * 0.82, (width * 0.55) * (PLAN_HEIGHT / PLAN_WIDTH));
+    const planW = planH * (PLAN_WIDTH / PLAN_HEIGHT);
+    return (
+      <View style={[s.screen, s.split]}>
+        <View style={s.planSide}>
+          <View style={s.planCentre}><HolePlan width={planW} height={planH} /></View>
+          <View style={s.wordmarkWide}><Wordmark wide s={s} t={t} /></View>
         </View>
+        <ScrollView style={s.formSide} contentContainerStyle={s.formSideContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <Animated.View style={[s.formColumn, sheet]}>
+            <FormBody mode={mode} setMode={setMode} s={s} t={t} />
+          </Animated.View>
+        </ScrollView>
       </View>
-    </KeyboardAvoidingView>
+    );
+  }
+
+  const panelH = Math.max(240, height - sheetH + SHEET_OVERLAP);
+  const planW = Math.min(width, (panelH - SHEET_OVERLAP / 2) * (PLAN_WIDTH / PLAN_HEIGHT));
+  const planH = planW * (PLAN_HEIGHT / PLAN_WIDTH);
+  return (
+    <View style={s.screen}>
+      <ScrollView
+        contentContainerStyle={{ minHeight: height }}
+        keyboardShouldPersistTaps="handled"
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={{ height: panelH }}>
+          <View style={s.planPhone}><HolePlan width={planW} height={planH} transform={PHONE_PLAN} /></View>
+          <View style={s.wordmarkPhone}><Wordmark s={s} t={t} /></View>
+        </View>
+        <Animated.View style={[s.sheet, sheet]}>
+          <View style={s.sheetInner} onLayout={(e) => setSheetH(Math.ceil(e.nativeEvent.layout.height))}>
+            <FormBody mode={mode} setMode={setMode} s={s} t={t} />
+          </View>
+        </Animated.View>
+      </ScrollView>
+    </View>
   );
 }
 
 const makeStyles = (theme) => StyleSheet.create({
   screen: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#006747',
-    justifyContent: 'center',
+    backgroundColor: theme.bg.deep,
   },
-  inner: { paddingHorizontal: 24, width: '100%', maxWidth: 460, alignSelf: 'center' },
-  logo: {
-    fontFamily: 'PlayfairDisplay-Black',
-    fontSize: 42, color: semantic.winner.dark,
-    letterSpacing: -1, textAlign: 'center', marginBottom: 4,
+  planPhone: { position: 'absolute', top: 0, right: 0 },
+  wordmarkPhone: { position: 'absolute', left: 24, top: 44, right: 24 },
+  wordmark: {
+    fontFamily: 'PlayfairDisplay-Bold', fontSize: 38, lineHeight: 44,
+    letterSpacing: -0.5, color: CREAM,
+  },
+  wordmarkLarge: { fontSize: 52, lineHeight: 58 },
+  caption: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, letterSpacing: 1.8,
+    color: CREAM_SOFT, marginTop: 8,
   },
   tagline: {
-    fontFamily: 'PlusJakartaSans-Regular',
-    fontSize: 14, color: 'rgba(255,255,255,0.6)',
-    textAlign: 'center', marginBottom: 36,
+    fontFamily: 'PlusJakartaSans-Regular', fontSize: 16, lineHeight: 24,
+    color: CREAM_SOFT, marginTop: 16, maxWidth: 360,
   },
-  card: {
-    // Dark bg.card is a translucent tint meant for bg.primary; over the brand
-    // green it vanishes and takes the muted text with it, so go opaque.
-    backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.card,
-    borderRadius: 24, padding: 20,
-    borderWidth: 1, borderColor: theme.border.default,
+  sheet: {
+    flexGrow: 1, marginTop: -SHEET_OVERLAP,
+    backgroundColor: theme.bg.primary,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    borderTopWidth: theme.isDark ? StyleSheet.hairlineWidth : 0,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-  modeRow: { flexDirection: 'row', marginBottom: 20, gap: 8 },
-  modeBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 12,
-    borderWidth: 1, borderColor: theme.border.default,
-    alignItems: 'center',
-    backgroundColor: theme.bg.secondary,
+  sheetInner: {
+    width: '100%', maxWidth: 480, alignSelf: 'center',
+    paddingHorizontal: 24, paddingTop: 24, paddingBottom: 28,
   },
-  modeBtnActive: {
-    backgroundColor: theme.accent.primary,
-    borderColor: theme.accent.primary,
+  heading: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 22, lineHeight: 28,
+    color: theme.text.primary, marginBottom: 16,
   },
-  modeBtnText: {
-    fontFamily: 'PlusJakartaSans-SemiBold',
-    fontSize: 14, color: theme.text.secondary,
+  switchRow: {
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center',
+    gap: 6, marginTop: 20,
   },
-  modeBtnTextActive: { color: theme.text.inverse },
+  switchLead: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 14, color: theme.text.secondary },
+  switchAction: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.accent.primary },
+  split: { flexDirection: 'row' },
+  planSide: { flex: 1.2, justifyContent: 'center', alignItems: 'center' },
+  planCentre: { alignItems: 'center', justifyContent: 'center' },
+  wordmarkWide: { position: 'absolute', left: 56, top: 56, right: 56 },
+  formSide: { flex: 1, backgroundColor: theme.bg.primary },
+  formSideContent: { flexGrow: 1, justifyContent: 'center', paddingVertical: 48 },
+  formColumn: { width: '100%', maxWidth: 400, alignSelf: 'center', paddingHorizontal: 24 },
 });
