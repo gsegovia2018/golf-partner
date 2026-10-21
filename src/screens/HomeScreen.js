@@ -22,8 +22,8 @@ import { scoringModeUsesTeams, leaderboardToggleLabels, getScoringMode, isScramb
 import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
 import BottomSheet from '../components/BottomSheet';
-import { BeforeHero, AfterHero, AfterLine, CreatePills, YourGame } from '../components/HomePhase';
-import { beforeModel, liveModel, afterModel } from '../store/homePhase';
+import { BeforeHero, AfterHero, AfterLine, YourGame } from '../components/HomePhase';
+import { beforeModel, liveModel, afterModel, myPlayerIn } from '../store/homePhase';
 import { useHomePhase } from '../hooks/useHomePhase';
 import LiveScorecard from '../components/HomeLiveScorecard';
 import { getSwings } from '../store/swingStore';
@@ -1286,6 +1286,8 @@ export default function HomeScreen({ navigation, route }) {
               <View style={{ marginBottom: 16 }}>
                 <AfterHero
                   model={afterModel(after, currentUserId)}
+                  tournament={after.tournament}
+                  meId={myPlayerIn(after.tournament, currentUserId)?.id ?? null}
                   report={homePhase.report}
                   photos={homePhase.photos}
                   onOpen={() => openPhaseSummary(after)}
@@ -1296,13 +1298,6 @@ export default function HomeScreen({ navigation, route }) {
           }
           return null;
         })()}
-        {homePhase.phase === 'before' ? (
-          <CreatePills
-            onGame={() => navigation.navigate('Setup', { kind: 'game' })}
-            onTournament={() => setShowTournamentKindChoice(true)}
-            onJoin={() => navigation.navigate('JoinTournament')}
-          />
-        ) : (<>
         <Text style={s.startHeading}>{tx('home.list.startPlaying')}</Text>
         <View style={s.startTilesRow}>
           <PressableScale
@@ -1337,22 +1332,18 @@ export default function HomeScreen({ navigation, route }) {
           </PressableScale>
         </View>
 
-        </>)}
-
         <LeagueListSection navigation={navigation} rows={leagueRows} />
 
-        {homePhase.phase !== 'before' && (
-          <YourGame
-            swingLine={(() => {
-              const sw = getSwings().find((x) => x.mainFault && x.status !== 'error');
-              return sw ? tx('home.phase.swingLast', { fault: SWING_STRINGS.fault[sw.mainFault] ?? sw.mainFault }) : null;
-            })()}
-            onSwing={() => navigation.navigate('SwingHome')}
-            onCoach={() => navigation.navigate('MyStats', { tab: 'coach' })}
-          />
-        )}
+        <YourGame
+          swingLine={(() => {
+            const sw = getSwings().find((x) => x.mainFault && x.status !== 'error');
+            return sw ? tx('home.phase.swingLast', { fault: SWING_STRINGS.fault[sw.mainFault] ?? sw.mainFault }) : null;
+          })()}
+          onSwing={() => navigation.navigate('SwingHome')}
+          onCoach={() => navigation.navigate('MyStats', { tab: 'coach' })}
+        />
 
-        {homePhase.phase !== 'before' && <TouchableOpacity
+        <TouchableOpacity
           style={s.joinTile}
           onPress={() => navigation.navigate('JoinTournament')}
           activeOpacity={0.85}
@@ -1363,7 +1354,7 @@ export default function HomeScreen({ navigation, route }) {
             <Text style={s.joinTileSub}>{tx('home.list.joinSub')}</Text>
           </View>
           <Feather name="chevron-right" size={18} color={theme.text.muted} />
-        </TouchableOpacity>}
+        </TouchableOpacity>
 
         <QuickStartCourses
           courses={quickStartCourses}

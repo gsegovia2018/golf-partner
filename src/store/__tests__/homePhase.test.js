@@ -94,8 +94,33 @@ describe('phase models', () => {
     const m = beforeModel({ tournament: t, round: t.rounds[0], roundIndex: 0 }, 'u1');
     expect(m.courseName).toBe('Golf Santander');
     expect(m.tee).toBe('Amarillas');
-    expect(m.teams).toEqual([[{ id: 'p1', name: 'Marcos', strokes: 16, me: true }], [{ id: 'p2', name: 'Noé', strokes: 11, me: false }]]);
+    expect(m.teams).toEqual([
+      { side: 0, members: [{ id: 'p1', name: 'Marcos', strokes: 16, me: true }] },
+      { side: 1, members: [{ id: 'p2', name: 'Noé', strokes: 11, me: false }] },
+    ]);
     expect(m.players).toBeNull();
+  });
+
+  it('beforeModel puts my pair first and keeps its side', () => {
+    const t = game({}, { pairs: [[{ id: 'p2' }], [{ id: 'p1' }]], playerHandicaps: { p1: 16, p2: 11 } });
+    const m = beforeModel({ tournament: t, round: t.rounds[0], roundIndex: 0 }, 'u1');
+    expect(m.teams.map((tm) => [tm.side, tm.members[0].id])).toEqual([[1, 'p1'], [0, 'p2']]);
+  });
+
+  it('beforeModel drops a tee the course never named', () => {
+    const t = game({}, { playerTees: { p1: { label: 'Default' } } });
+    expect(beforeModel({ tournament: t, round: t.rounds[0], roundIndex: 0 }, 'u1').tee).toBe('');
+  });
+
+  it('beforeModel names my shot holes on a solo round, one or two of them', () => {
+    const solo = (hcp) => {
+      const t = game({ players: [players[0]] }, { playerHandicaps: { p1: hcp } });
+      return beforeModel({ tournament: t, round: t.rounds[0], roundIndex: 0 }, 'u1').shotHoles;
+    };
+    expect(solo(1)).toEqual([{ number: 1, strokeIndex: 1 }]);
+    expect(solo(2)).toEqual([{ number: 1, strokeIndex: 1 }, { number: 2, strokeIndex: 2 }]);
+    expect(solo(9)).toBeNull();
+    expect(solo(0)).toBeNull();
   });
 
   it('liveModel gives my points, thru and the next hole', () => {
@@ -115,6 +140,23 @@ describe('phase models', () => {
     const b = afterModel({ tournament: t, round: t.rounds[0], roundIndex: 0, endedAt: NOW - H }, 'u2');
     expect(b.place).toBe(1);
     expect(b.winner).toBeNull();
+    expect(b.tied).toBeNull();
+  });
+
+  it('afterModel names everyone tied for first instead of one winner', () => {
+    const t = game({}, { scores: { p1: scores(18, 4), p2: scores(18, 4) }, playerHandicaps: { p1: 0, p2: 0 }, finishedAt: iso(NOW - H) });
+    const a = afterModel({ tournament: t, round: t.rounds[0], roundIndex: 0, endedAt: NOW - H }, 'u1');
+    expect(a.winner).toBeNull();
+    expect(a.tied.players.map((p) => [p.id, p.me])).toEqual([['p1', true], ['p2', false]]);
+  });
+
+  it('afterModel gives a solo round my card and what my shots add up to', () => {
+    const shotDetails = { p1: { 1: { putts: 2, drive: 'fairway' }, 2: { putts: 1, drive: 'left', teePenalties: 1 }, 3: { putts: 3 } } };
+    const t = game({ players: [players[0]] }, { scores: { p1: { 1: 4, 2: 4, 3: 5 } }, shotDetails, finishedAt: iso(NOW - H) });
+    const a = afterModel({ tournament: t, round: t.rounds[0], roundIndex: 0, endedAt: NOW - H }, 'u1');
+    expect(a.card.solo).toBe(true);
+    expect(a.shots).toEqual({ fairways: { hit: 1, of: 2 }, greens: { hit: 2, of: 3 }, penalties: 1 });
+    expect(a.pairs).toBeNull();
   });
 });
 
