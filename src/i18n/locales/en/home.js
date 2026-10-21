@@ -64,6 +64,7 @@ export default {
   "home.history.emptyAll": "Finished games and tournaments will be archived here.",
   "home.history.emptyFilter": "Nothing in this filter yet.",
   "home.history.emptyTitle": "No history yet",
+  "home.history.loadErrorTitle": "Couldn't load your history",
   "home.history.eraIndex": "off {index}",
   "home.history.eraShots": "off {handicap} shots",
   "home.history.errorTitle": "Error",

@@ -9,6 +9,8 @@ export default {
   'nav.tab.profile': 'Profile',
   'common.cancel': 'Cancel',
   'common.retry': 'Try again',
+  'common.loading': 'Loading…',
+  'common.checkConnection': 'Check your connection and try again.',
   "common.back": "Back",
   "common.error": "Error",
   "common.save": "Save",

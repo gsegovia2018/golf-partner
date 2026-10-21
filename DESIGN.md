@@ -302,6 +302,16 @@ Golf Partner uses a hybrid depth model: light mode uses subtle card and accent s
 - **Score Signals:** Color can support score quality, but labels, icons, rank order, or text must carry the meaning too.
 - **Round Cards:** Keep people, course, round status, and primary actions visible without requiring the user to parse full score tables first.
 
+### Loading States
+
+- **Cache first, skeleton second:** if the device has a copy (saved tournaments, the last profile, the feed snapshot), paint it and refresh quietly. A skeleton is only for "nothing to show yet": first open after sign-in, a new phone, cleared storage.
+- **No full-screen spinners:** a loading screen draws the shape of its content with `Skeleton` blocks (`components/ui/Skeleton`), filled with the `bg.skeleton` token (`#ebe6dd` light, 8% white dark; `bg.secondary` vanishes in dark). Static blocks, no pulse.
+- **Real chrome, blank data (Feed, History, Profile):** everything that doesn't depend on data renders for real (headings, record labels, filter chips, Profile's links, Sign out). Only the values are blocks, and unknown people are dashed frames. Each row's skeleton lives next to the row and shares its styles (`HistoryRowSkeleton`, `FeedRoundCardSkeleton`, `RoundStoriesRailSkeleton`) so the two can't drift. Inputs render disabled until loaded, so typing is never overwritten.
+- **Other screens:** plain blocks in the shape of the content are the default as each spinner screen is next touched.
+- **Never on refocus:** returning to a tab keeps what was there. Pull-to-refresh, pagination and in-button activity keep their own indicators.
+- **Empty is not loading, and offline is not empty:** a finished load with nothing swaps straight to the empty state; a failed load with nothing cached replaces the skeleton with an inline error and Retry, never an alert and never "No history yet".
+- **Accessibility:** `SkeletonRegion` announces "Loading…" once (`common.loading`); blocks are hidden from screen readers; real controls inside stay reachable.
+
 ## 6. Do's and Don'ts
 
 ### Do:

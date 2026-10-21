@@ -9,6 +9,7 @@ import {
   getActiveTournamentSnapshot,
   lastTeeForPlayerOnCourse,
   loadAllTournamentsWithFallback,
+  loadCachedTournamentsList,
   loadTournament,
 } from '../../store/tournamentStore';
 import { mutate } from '../../store/mutate';
@@ -174,6 +175,7 @@ jest.mock('../../store/libraryStore', () => ({
   loadQuickStartCourses: jest.fn(),
 }));
 
+jest.mock('../../store/bootReveal', () => ({ markBootReady: jest.fn() }));
 jest.mock('../../store/tournamentStore', () => ({
   DEFAULT_SETTINGS: { scoringMode: 'stableford', bestBallValue: 1, worstBallValue: 1 },
   GAME_DEFAULT_SETTINGS: { scoringMode: 'individual', bestBallValue: 1, worstBallValue: 1 },
@@ -187,6 +189,7 @@ jest.mock('../../store/tournamentStore', () => ({
   isTournamentFinished: jest.fn(() => false),
   lastTeeForPlayerOnCourse: jest.fn(),
   loadAllTournaments: jest.fn(() => Promise.resolve([])),
+  loadCachedTournamentsList: jest.fn(() => Promise.resolve([])),
   loadAllTournamentsWithFallback: jest.fn(),
   loadTournament: jest.fn(),
   matchPlayRoundTally: jest.fn(),
@@ -461,6 +464,22 @@ async function renderFocusedHome() {
   await waitFor(() => expect(loadAllTournamentsWithFallback).toHaveBeenCalled());
   return screen;
 }
+
+// Cold start paints the games already on the device instead of holding the
+// boot splash until the remote list's round-trip lands.
+test('cold start opens on the games on the device while the remote list is still out', async () => {
+  loadAllTournamentsWithFallback.mockReturnValue(new Promise(() => {}));
+  loadCachedTournamentsList.mockResolvedValueOnce([{
+    id: 'cached-1', kind: 'tournament', name: 'Cached Cup', players: [{ id: 'p1', name: 'Marcos' }],
+    rounds: [{ id: 'r1', holes: [], scores: {} }, { id: 'r2', holes: [], scores: {} }],
+    currentRound: 0, settings: {}, createdAt: '2026-10-01T10:00:00.000Z',
+  }]);
+  const { markBootReady } = require('../../store/bootReveal');
+  await renderFocusedHome();
+  // Home stopped loading (which lifts the boot splash) with the remote list
+  // still pending.
+  await waitFor(() => expect(markBootReady).toHaveBeenCalled());
+});
 
 test('with nothing in play the list shows its empty line', async () => {
   const { findByText } = await renderFocusedHome();

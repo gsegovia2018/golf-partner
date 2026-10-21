@@ -2,7 +2,7 @@ import {
   reTeeRound, createTournament,
   tournamentNoun, tournamentNounCapitalized, formatRoundLabel,
   isRoundInProgress, propagatePlayerToTournaments, propagateCourseToTournaments, readLocal,
-  roundPairLeaderboard, rosterCap,
+  roundPairLeaderboard, rosterCap, loadAllTournaments,
 } from '../tournamentStore';
 import { mutate } from '../mutate';
 import { setLanguagePref } from '../../i18n';
@@ -57,6 +57,29 @@ jest.mock('../../lib/supabase', () => {
       auth: { getUser: () => Promise.resolve({ data: { user: null } }) },
     },
   };
+});
+
+// Home, History and Feed all ask for the list on focus, often in the same
+// tick; they must share one fetch rather than each run the heaviest RPC.
+describe('loadAllTournaments sharing', () => {
+  const { supabase } = require('../../lib/supabase');
+
+  it('concurrent callers share one fetch, each gets its own array', async () => {
+    const rpc = jest.spyOn(supabase, 'rpc');
+    const [a, b] = await Promise.all([loadAllTournaments(), loadAllTournaments()]);
+    expect(rpc.mock.calls.filter(([name]) => name === 'get_my_game_tournaments')).toHaveLength(1);
+    expect(a).toEqual(b);
+    expect(a).not.toBe(b);
+    rpc.mockRestore();
+  });
+
+  it('a call after the fetch settles fetches again', async () => {
+    const rpc = jest.spyOn(supabase, 'rpc');
+    await loadAllTournaments();
+    await loadAllTournaments();
+    expect(rpc.mock.calls.filter(([name]) => name === 'get_my_game_tournaments')).toHaveLength(2);
+    rpc.mockRestore();
+  });
 });
 
 describe('createTournament round ids', () => {

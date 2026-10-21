@@ -20,8 +20,9 @@ import { subscribeTournamentChanges, formatRoundLabel, getTournament } from '../
 import { useAuth } from '../context/AuthContext';
 import CommentsSheet from '../components/CommentsSheet';
 import MemoriesStoriesViewer from '../components/MemoriesStoriesViewer';
-import RoundStoriesRail from '../components/feed/RoundStoriesRail';
-import FeedRoundCard from '../components/feed/FeedRoundCard';
+import RoundStoriesRail, { RoundStoriesRailSkeleton } from '../components/feed/RoundStoriesRail';
+import FeedRoundCard, { FeedRoundCardSkeleton } from '../components/feed/FeedRoundCard';
+import { SkeletonRegion } from '../components/ui/Skeleton';
 import useMediaAttachFlow from '../hooks/useMediaAttachFlow';
 
 const EMPTY_REACTION_COUNTS = {};
@@ -195,19 +196,29 @@ function ReactionBar({
   );
 }
 
-// Placeholder card shown on the very first load instead of a bare spinner.
-function SkeletonCard({ s }) {
+// First load with nothing on the device: the rail, cards and reaction bar in
+// their real places, blocks where the values go (DESIGN.md "Loading states").
+// The reaction chips are shown but inert until there is a round to react to.
+function FeedSkeleton({ s, t, theme }) {
   return (
-    <View style={s.card}>
-      <View style={s.cardHead}>
-        <View style={[s.skelBlock, { width: 38, height: 38, borderRadius: 19 }]} />
-        <View style={{ flex: 1, gap: 6 }}>
-          <View style={[s.skelBlock, { width: '55%', height: 12 }]} />
-          <View style={[s.skelBlock, { width: '75%', height: 10 }]} />
-        </View>
-      </View>
-      <View style={[s.skelBlock, { height: 48, marginTop: 14, borderRadius: 12 }]} />
-    </View>
+    <SkeletonRegion style={{ flex: 1 }} testID="feed-skeleton">
+      <RoundStoriesRailSkeleton />
+      <ScrollView contentContainerStyle={s.list} scrollEnabled={false}>
+        {[0, 1].map((i) => (
+          <FeedRoundCardSkeleton key={i}>
+            <View style={s.reactionRow}>
+              <View style={[s.reactionChip, s.reactionChipInert]}>
+                <Feather name="smile" size={14} color={theme.text.muted} />
+                <Text style={s.reactionActionText}>{t('feed.react')}</Text>
+              </View>
+              <View style={[s.reactionChip, s.reactionChipInert]}>
+                <Feather name="message-circle" size={14} color={theme.text.muted} />
+              </View>
+            </View>
+          </FeedRoundCardSkeleton>
+        ))}
+      </ScrollView>
+    </SkeletonRegion>
   );
 }
 
@@ -701,10 +712,7 @@ export default function FeedScreen({ navigation }) {
       ) : null}
 
       {loading ? (
-        // First-load: show skeleton cards rather than a bare spinner.
-        <ScrollView contentContainerStyle={s.list}>
-          {[0, 1, 2].map((i) => <SkeletonCard key={i} s={s} />)}
-        </ScrollView>
+        <FeedSkeleton s={s} t={t} theme={theme} />
       ) : (
         <Animated.View style={{ flex: 1, opacity: listOpacity }}>
           <FlatList
@@ -779,14 +787,6 @@ function makeStyles(theme) {
     loadingMoreText: {
       fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: theme.text.muted,
     },
-    card: {
-      backgroundColor: theme.bg.card, borderRadius: 18,
-      borderWidth: theme.isDark ? 1 : 0,
-      borderColor: theme.isDark ? theme.glass?.border || theme.border.default : theme.border.default,
-      padding: 14, marginBottom: 12,
-      ...(theme.isDark ? {} : theme.shadow.card),
-    },
-    cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     /* Reactions */
     reactionRow: {
       flexDirection: 'row', gap: 6, marginTop: 12, flexWrap: 'wrap',
@@ -843,9 +843,7 @@ function makeStyles(theme) {
       opacity: 0.45,
     },
     /* Skeleton */
-    skelBlock: {
-      backgroundColor: theme.bg.secondary, borderRadius: 6,
-    },
+    reactionChipInert: { opacity: 0.55 },
     emptyState: { alignItems: 'center', paddingVertical: 80, gap: 12, flex: 1, justifyContent: 'center' },
     emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary },
     emptySub: {

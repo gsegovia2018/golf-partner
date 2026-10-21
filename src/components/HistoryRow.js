@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from './ui/PressableScale';
+import { Skeleton } from './ui/Skeleton';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { useT } from '../i18n';
@@ -143,6 +144,39 @@ export default function HistoryRow({ model, onPress, onLongPress }) {
   );
 }
 
+// The row's loading shape: the same card, date box and result column, with
+// boxes for the values and empty dashed frames for the players. Shares the
+// row's styles so the two can't drift apart.
+export function HistoryRowSkeleton({ titleWidth = '70%' }) {
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme, null, null), [theme]);
+  return (
+    <View style={s.card}>
+      <View style={s.main}>
+        <View style={[s.dateBox, { gap: 5 }]}>
+          <Skeleton width={20} height={15} radius={4} />
+          <Skeleton width={22} height={6} radius={3} />
+        </View>
+        <View style={s.mid}>
+          <Skeleton width={titleWidth} height={14} />
+          <View style={s.subline}>
+            <Skeleton width="44%" height={10} />
+            <View style={s.avatars}>
+              {[0, 1, 2].map((i) => (
+                <View key={i} style={[s.avatar, s.avatarFrame, i > 0 && s.avatarOverlap]} />
+              ))}
+            </View>
+          </View>
+        </View>
+        <View style={s.result}>
+          <Skeleton width={24} height={16} />
+          <Text style={s.resultCaption}>{unitText('pts')}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function makeStyles(theme, gold, goldBg) {
   return StyleSheet.create({
     card: {
@@ -186,6 +220,9 @@ function makeStyles(theme, gold, goldBg) {
       alignItems: 'center', justifyContent: 'center',
     },
     avatarOverlap: { marginLeft: -5 },
+    avatarFrame: {
+      backgroundColor: 'transparent', borderStyle: 'dashed', borderColor: theme.bg.skeleton,
+    },
     avatarMe: { backgroundColor: theme.accent.primary },
     avatarMeRing: { borderColor: theme.accent.primary },
     avatarImg: { width: '100%', height: '100%', borderRadius: 10 },

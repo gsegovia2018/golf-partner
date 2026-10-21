@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import ProfileScreen from '../ProfileScreen';
-import { loadProfile, upsertProfile } from '../../store/profileStore';
+import { loadProfile, loadCachedProfile, upsertProfile } from '../../store/profileStore';
 
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
@@ -37,6 +37,8 @@ jest.mock('expo-image-manipulator', () => ({
 
 jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn(() => new Promise(() => {})),
+  loadCachedProfile: jest.fn(() => Promise.resolve(null)),
+  clearCachedProfile: jest.fn(() => Promise.resolve()),
   upsertProfile: jest.fn(() => Promise.resolve()),
   uploadAvatar: jest.fn(() => Promise.resolve('https://example.com/avatar.jpg')),
   isUsernameAvailable: jest.fn(() => Promise.resolve(true)),
@@ -80,6 +82,39 @@ describe('ProfileScreen navigation chrome', () => {
     const { queryByLabelText } = renderScreen({ params: { presentation: 'tab' } });
 
     expect(queryByLabelText('Back')).toBeNull();
+  });
+});
+
+describe('ProfileScreen loading', () => {
+  test('nothing cached: real links over blocks, fields disabled', async () => {
+    const { findByTestId, getByLabelText, getByText, queryByPlaceholderText } = renderScreen();
+    expect(await findByTestId('profile-skeleton')).toBeTruthy();
+    expect(getByLabelText('Loading…')).toBeTruthy();
+    expect(getByText('Friends')).toBeTruthy();
+    // No editable inputs until the profile is in: typing can't be overwritten.
+    expect(queryByPlaceholderText('—')).toBeNull();
+  });
+
+  test('a cached profile paints at once while the network is still out', async () => {
+    loadCachedProfile.mockResolvedValueOnce({
+      userId: 'u1', email: 'marcos@example.com', username: 'marcos', displayName: 'Marcos Cached',
+    });
+    const { findByText, queryByTestId } = renderScreen();
+    expect(await findByText('Marcos Cached')).toBeTruthy();
+    expect(queryByTestId('profile-skeleton')).toBeNull();
+  });
+
+  test('a failed first load is an inline error with Retry, not an alert', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    loadProfile.mockRejectedValueOnce(new Error('Network request failed'));
+    const { findByText, getByText } = renderScreen();
+    expect(await findByText('Could not load profile')).toBeTruthy();
+    expect(alertSpy).not.toHaveBeenCalled();
+
+    loadProfile.mockResolvedValueOnce({ email: 'marcos@example.com', displayName: 'Marcos' });
+    fireEvent.press(getByText('Try again'));
+    expect(await findByText('Marcos')).toBeTruthy();
+    alertSpy.mockRestore();
   });
 });
 

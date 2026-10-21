@@ -7,15 +7,19 @@ import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import PressableScale from '../components/ui/PressableScale';
 import Reveal from '../components/ui/Reveal';
+import { Skeleton, SkeletonRegion } from '../components/ui/Skeleton';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { semantic } from '../theme/tokens';
 import { supabase } from '../lib/supabase';
-import { loadProfile, upsertProfile, uploadAvatar, isUsernameAvailable } from '../store/profileStore';
+import {
+  loadProfile, loadCachedProfile, clearCachedProfile, upsertProfile, uploadAvatar, isUsernameAvailable,
+} from '../store/profileStore';
 import { clearFeedSnapshot } from '../store/feedStore';
 import { parseHandicapIndex, normalizeHandicapInput } from '../lib/handicap';
 import { haptic } from '../lib/haptics';
@@ -26,8 +30,16 @@ const REVEAL_STEP = 40;
 
 // Text input with a focus-aware border. Inputs sit inset on the warm page
 // tone inside white cards, so the accent border is what signals focus.
-function Field({ theme, s, style, ...rest }) {
+function Field({ theme, s, style, loading = false, skeletonWidth = 60, ...rest }) {
   const [focused, setFocused] = useState(false);
+  if (loading) {
+    // Same box as the input, disabled, with the value as a block.
+    return (
+      <View style={[s.input, s.disabled, style]} accessibilityState={{ disabled: true }}>
+        <Skeleton width={skeletonWidth} height={12} style={{ marginVertical: 3 }} />
+      </View>
+    );
+  }
   return (
     <TextInput
       {...rest}
@@ -46,9 +58,13 @@ export default function ProfileScreen({ navigation, route }) {
   const t = useT();
   const s = makeStyles(theme);
   const isTabPresentation = route?.params?.presentation === 'tab';
+  const { user } = useAuth() ?? {};
+  const userId = user?.id ?? null;
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Nothing to show and the load failed: an inline error with Retry.
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [username, setUsername] = useState('');
@@ -61,25 +77,44 @@ export default function ProfileScreen({ navigation, route }) {
   const [dirty, setDirty] = useState(false);
   const hasLoadedOnceRef = useRef(false);
 
+  // A refresh never overwrites fields the user has started editing.
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+  const applyProfile = useCallback((p) => {
+    setProfile(p);
+    if (dirtyRef.current) return;
+    setUsername(p?.username ?? '');
+    setDisplayName(p?.displayName ?? '');
+    setHandicap(p?.handicap != null ? String(p.handicap) : '');
+    setTargetHandicap(p?.targetHandicap != null ? String(p.targetHandicap) : '');
+    setAvatarUrl(p?.avatarUrl ?? null);
+    setGender(p?.gender ?? null);
+  }, []);
+
   const load = useCallback(async () => {
-    if (!hasLoadedOnceRef.current) setLoading(true);
+    if (!hasLoadedOnceRef.current) {
+      // Paint the last profile this device saw, then refresh behind it.
+      const cached = await loadCachedProfile(userId);
+      if (cached) {
+        applyProfile(cached);
+        hasLoadedOnceRef.current = true;
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+    }
     try {
-      const p = await loadProfile();
-      setProfile(p);
-      setUsername(p?.username ?? '');
-      setDisplayName(p?.displayName ?? '');
-      setHandicap(p?.handicap != null ? String(p.handicap) : '');
-      setTargetHandicap(p?.targetHandicap != null ? String(p.targetHandicap) : '');
-      setAvatarUrl(p?.avatarUrl ?? null);
-      setGender(p?.gender ?? null);
-      setDirty(false);
-    } catch (err) {
-      Alert.alert(translate('common.error'), err.message ?? translate('profile.loadFailed'));
+      applyProfile(await loadProfile());
+      setLoadError(false);
+    } catch {
+      // With a profile on screen a failed refresh stays quiet; with nothing
+      // to show it replaces the loading layout with Retry.
+      if (!hasLoadedOnceRef.current) setLoadError(true);
     } finally {
       hasLoadedOnceRef.current = true;
       setLoading(false);
     }
-  }, []);
+  }, [applyProfile, userId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -165,6 +200,9 @@ export default function ProfileScreen({ navigation, route }) {
         avatarUrl,
         gender,
       });
+      // Saved: the form now matches the server, so the reload may fill it.
+      dirtyRef.current = false;
+      setDirty(false);
       await load();
     } catch (err) {
       const msg = err?.message ?? translate('account.saveFailed');
@@ -233,6 +271,7 @@ export default function ProfileScreen({ navigation, route }) {
     // loadFeedSnapshot already refuses to serve it to anyone else, but there
     // is no reason to keep it around once they sign out.
     await clearFeedSnapshot();
+    await clearCachedProfile();
     await supabase.auth.signOut();
   }
 
@@ -279,22 +318,39 @@ export default function ProfileScreen({ navigation, route }) {
         {isTabPresentation ? <View style={s.backBtn} /> : headerSave}
       </View>
 
-      {loading ? (
-        <View style={s.loadingWrap}>
-          <ActivityIndicator color={theme.accent.primary} />
+      {loadError && !profile ? (
+        <View style={s.errorWrap}>
+          <Feather name="cloud-off" size={44} color={theme.text.muted} />
+          <Text style={s.errorTitle}>{t('profile.loadFailed')}</Text>
+          <Text style={s.errorSub}>{t('common.checkConnection')}</Text>
+          <TouchableOpacity
+            style={s.retryBtn}
+            onPress={() => { setLoadError(false); setLoading(true); load(); }}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+          >
+            <Feather name="refresh-cw" size={14} color={theme.text.inverse} />
+            <Text style={s.retryText}>{t('common.retry')}</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
+          {/* First open with nothing cached: the real page with blocks where
+              the values go (DESIGN.md "Loading states"). Links and Sign out
+              work; fields stay disabled so typing is never overwritten. */}
+          {loading && <SkeletonRegion testID="profile-skeleton" />}
           <Reveal delay={0}>
             <View style={s.heroCard}>
               <TouchableOpacity
-                style={[s.avatar, { backgroundColor: theme.accent.primary, overflow: 'hidden' }]}
+                style={[s.avatar, {
+                  backgroundColor: loading ? theme.bg.skeleton : theme.accent.primary, overflow: 'hidden',
+                }]}
                 onPress={pickAvatar}
                 activeOpacity={0.8}
-                disabled={uploadingAvatar}
+                disabled={uploadingAvatar || loading}
                 accessibilityLabel={t('profile.changePhoto')}
               >
-                {avatarUrl
+                {loading ? null : avatarUrl
                   ? <Image source={{ uri: avatarUrl }} style={{ width: '100%', height: '100%' }} />
                   : <Text style={s.avatarText}>{initials}</Text>}
                 {uploadingAvatar && (
@@ -308,13 +364,20 @@ export default function ProfileScreen({ navigation, route }) {
                   </View>
                 )}
               </TouchableOpacity>
+              {loading ? (
+                <View style={s.heroSkeleton}>
+                  <Skeleton width={130} height={18} />
+                  <Skeleton width={70} height={11} />
+                  <Skeleton width={160} height={11} />
+                </View>
+              ) : null}
               {profile?.displayName ? (
                 <Text style={s.heroName}>{profile.displayName}</Text>
               ) : null}
               {profile?.username ? (
                 <Text style={s.usernameTag}>@{profile.username}</Text>
               ) : null}
-              <Text style={s.email}>{profile?.email}</Text>
+              {loading ? null : <Text style={s.email}>{profile?.email}</Text>}
             </View>
           </Reveal>
 
@@ -380,7 +443,7 @@ export default function ProfileScreen({ navigation, route }) {
               <View style={s.fieldGroup}>
                 <Text style={s.fieldLabel}>{t('account.username')}</Text>
                 <Field
-                  theme={theme} s={s}
+                  theme={theme} s={s} loading={loading} skeletonWidth={70}
                   placeholder={t('account.usernamePlaceholder')}
                   value={username}
                   onChangeText={(v) => { setUsername(v.toLowerCase()); setDirty(true); }}
@@ -395,7 +458,7 @@ export default function ProfileScreen({ navigation, route }) {
               <View style={[s.fieldGroup, s.fieldGroupLast]}>
                 <Text style={s.fieldLabel}>{t('account.displayName')}</Text>
                 <Field
-                  theme={theme} s={s}
+                  theme={theme} s={s} loading={loading} skeletonWidth={96}
                   placeholder={t('profile.displayNamePlaceholder')}
                   value={displayName}
                   onChangeText={(v) => { setDisplayName(v); setDirty(true); }}
@@ -415,7 +478,7 @@ export default function ProfileScreen({ navigation, route }) {
                 <View style={{ flex: 1 }}>
                   <Text style={s.fieldLabel}>{t('account.handicap')}</Text>
                   <Field
-                    theme={theme} s={s}
+                    theme={theme} s={s} loading={loading} skeletonWidth={30}
                     placeholder="—"
                     keyboardType="decimal-pad"
                     inputMode="decimal"
@@ -426,7 +489,7 @@ export default function ProfileScreen({ navigation, route }) {
                 <View style={{ flex: 1 }}>
                   <Text style={s.fieldLabel}>{t('profile.field.targetHandicap')}</Text>
                   <Field
-                    theme={theme} s={s}
+                    theme={theme} s={s} loading={loading} skeletonWidth={22}
                     placeholder="—"
                     keyboardType="decimal-pad"
                     inputMode="decimal"
@@ -443,10 +506,11 @@ export default function ProfileScreen({ navigation, route }) {
                     <PressableScale
                       key={value}
                       onPress={() => { haptic('selection'); setGender(value); setDirty(true); }}
-                      style={[s.genderPill, gender === value && s.genderPillActive]}
+                      disabled={loading}
+                      style={[s.genderPill, gender === value && s.genderPillActive, loading && s.disabled]}
                       accessibilityRole="button"
                       accessibilityLabel={t(label)}
-                      accessibilityState={{ selected: gender === value }}
+                      accessibilityState={{ selected: gender === value, disabled: loading }}
                     >
                       <Text style={[s.genderPillText, gender === value && s.genderPillTextActive]}>{t(label)}</Text>
                     </PressableScale>
@@ -490,7 +554,20 @@ const makeStyles = (theme) => StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  errorWrap: { alignItems: 'center', paddingVertical: 80, gap: 12 },
+  errorTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary },
+  errorSub: {
+    fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, color: theme.text.muted,
+    textAlign: 'center', paddingHorizontal: 40,
+  },
+  retryBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4,
+    backgroundColor: theme.accent.primary, borderRadius: 12,
+    paddingHorizontal: 18, paddingVertical: 12,
+  },
+  retryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.text.inverse },
+  heroSkeleton: { alignItems: 'center', gap: 7, marginTop: 2 },
+  disabled: { opacity: 0.6 },
   scroll: { flex: 1 },
   content: { padding: 20, paddingTop: 4, paddingBottom: 150 },
 

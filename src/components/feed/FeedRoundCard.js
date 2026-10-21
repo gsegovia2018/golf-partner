@@ -9,6 +9,7 @@ import { semantic } from '../../theme/tokens';
 import { getScoringMode } from '../scoringModes';
 import { t, tr, useT } from '../../i18n';
 import { unitText } from '../../lib/pointsText';
+import { Skeleton } from '../ui/Skeleton';
 
 function Avatar({ item, theme }) {
   const initial = (item.actorName || '?').trim().charAt(0).toUpperCase();
@@ -417,7 +418,62 @@ export default function FeedRoundCard({
   );
 }
 
+// The card's loading shape (DESIGN.md "Loading states"): same card, kicker,
+// title, recap and score tiles, with blocks for the values and dashed frames
+// for the people. Built from the card's own styles so the two stay in step.
+// `children` takes the screen's inert reaction bar, as the real card does.
+export function FeedRoundCardSkeleton({ children }) {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
+  return (
+    <View style={s.card}>
+      <View style={s.kickerRow}>
+        <Skeleton width={92} height={20} radius={999} />
+        <Skeleton width={40} height={10} />
+      </View>
+      <View style={s.heroRow}>
+        <View style={[s.heroText, { gap: 7 }]}>
+          <Skeleton width="68%" height={15} />
+          <Skeleton width="42%" height={10} />
+        </View>
+      </View>
+      <View style={s.recapRow}>
+        <View style={[styles.avatar, styles.avatarFrame, { borderColor: theme.bg.skeleton }]} />
+        <View style={[s.recapTextWrap, { gap: 7 }]}>
+          <Skeleton width="80%" height={12} />
+          <Skeleton width="34%" height={18} radius={999} />
+        </View>
+      </View>
+      <View style={s.scorePreview}>
+        <View style={s.scoreStrip}>
+          {[0, 1, 2].map((index) => (
+            <View
+              key={index}
+              style={[s.scoreTile, s.scoreTileFlex, styles.tileFrame, { borderColor: theme.bg.skeleton }]}
+            >
+              <View style={s.tileTopRow}>
+                <View style={s.rankWrap}>
+                  <Text style={s.rank}>{index + 1}</Text>
+                </View>
+                <Skeleton width={28} height={8} radius={3} />
+              </View>
+              <Skeleton width="60%" height={11} style={{ marginTop: 6 }} />
+              <View style={s.pointsLine}>
+                <Skeleton width={22} height={15} />
+                <Text style={s.statLabel}>{unitText('pts')}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
+      {children}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  avatarFrame: { borderWidth: 1.5, borderStyle: 'dashed' },
+  tileFrame: { borderStyle: 'dashed', backgroundColor: 'transparent' },
   avatar: {
     width: 36,
     height: 36,

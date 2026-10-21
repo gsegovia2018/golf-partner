@@ -64,6 +64,7 @@ export default {
   "home.history.emptyAll": "Las partidas y torneos terminados se archivarán aquí.",
   "home.history.emptyFilter": "Todavía no hay nada en este filtro.",
   "home.history.emptyTitle": "Aún no hay historial",
+  "home.history.loadErrorTitle": "No se pudo cargar tu historial",
   "home.history.eraIndex": "con {index}",
   "home.history.eraShots": "con {handicap} golpes",
   "home.history.errorTitle": "Error",

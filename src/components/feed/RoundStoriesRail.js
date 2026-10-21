@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { useT } from '../../i18n';
+import { Skeleton } from '../ui/Skeleton';
 
 function coverForStory(story) {
   return story?.mediaList?.find((m) => m.thumbUrl || m.url) ?? null;
@@ -68,6 +69,23 @@ export default function RoundStoriesRail({ stories = [], onPressStory }) {
         );
       })}
     </ScrollView>
+  );
+}
+
+// Loading shape of the rail: dashed rings where the round stories will be,
+// a block for each label. Same item and ring styles as the real rail.
+export function RoundStoriesRailSkeleton() {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
+  return (
+    <View style={[s.scroller, s.rail, { flexDirection: 'row', overflow: 'hidden' }]}>
+      {[0, 1, 2, 3, 4].map((i) => (
+        <View key={i} style={s.item}>
+          <View style={[s.ring, { borderStyle: 'dashed', borderColor: theme.bg.skeleton }]} />
+          <Skeleton width={46} height={9} radius={3} />
+        </View>
+      ))}
+    </View>
   );
 }
 

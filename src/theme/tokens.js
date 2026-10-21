@@ -39,6 +39,7 @@ const light = {
     card:      '#ffffff',
     secondary: '#ece8e1',
     elevated:  '#ffffff',
+    skeleton:  '#ebe6dd',   // loading placeholders (components/ui/Skeleton)
     deep:      DEEP_GREEN,
     deepInfo:  DEEP_INFO,
   },
@@ -71,6 +72,8 @@ const dark = {
     card:      'rgba(6,103,71,0.08)',
     secondary: 'rgba(255,255,255,0.04)',
     elevated:  'rgba(255,255,255,0.06)',
+    // Not bg.secondary: at 4% white the blocks vanish on the dark canvas.
+    skeleton:  'rgba(255,255,255,0.08)',
     deep:      DEEP_GREEN,
     deepInfo:  DEEP_INFO,
   },

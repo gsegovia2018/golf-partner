@@ -28,7 +28,7 @@ import ErrorBoundary from './src/components/ErrorBoundary';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
-import { loadProfile } from './src/store/profileStore';
+import { loadProfile, loadCachedProfile } from './src/store/profileStore';
 import { isBootRevealed, subscribeBootReveal, markBootReady } from './src/store/bootReveal';
 import SetNewPasswordScreen from './src/screens/SetNewPasswordScreen';
 import JoinTournamentLinkScreen from './src/screens/JoinTournamentLinkScreen';
@@ -342,6 +342,14 @@ function AppNavigator() {
   useEffect(() => {
     if (!userId || isAnonUser) { setOnboarding(userId ? false : null); return undefined; }
     let cancelled = false;
+    // A profile this device already saw with a username has been through
+    // onboarding: open the app on it instead of holding the splash for two
+    // network round-trips (one bar on the course made every start wait).
+    loadCachedProfile(userId)
+      .then((cached) => {
+        if (!cancelled && cached?.username) setOnboarding((cur) => (cur === null ? false : cur));
+      })
+      .catch(() => {});
     loadProfile()
       .then((p) => { if (!cancelled) setOnboarding(p && !p.username ? p : false); })
       .catch(() => { if (!cancelled) setOnboarding(false); });

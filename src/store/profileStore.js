@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { File as FsFile } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
@@ -16,7 +17,53 @@ import { t } from '../i18n';
 // One row per auth.users.id — created by a trigger on signup, edited from
 // ProfileScreen. `username` is a unique lowercase handle; `display_name`
 // is the free-text name shown in UIs.
-export async function loadProfile() {
+// Last profile this device loaded, so start-up, Profile and History can paint
+// at once and refresh behind it. Stored with its owner's id and only served
+// back for that id. Callers pass the signed-in user's id (useAuth's session)
+// rather than this asking supabase.auth: every auth call queues on the auth
+// client's lock, which getUser() holds for its whole network round-trip, so
+// even getSession() waited behind start-up's user checks on a slow signal.
+const PROFILE_CACHE_KEY = 'golf.profileCache.v1';
+let _profileCache = null;
+
+export async function loadCachedProfile(userId) {
+  if (!userId) return null;
+  try {
+    const uid = userId;
+    if (_profileCache?.userId === uid) return _profileCache;
+    const raw = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
+    const cached = raw ? JSON.parse(raw) : null;
+    if (cached?.userId !== uid) return null;
+    _profileCache = cached;
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearCachedProfile() {
+  _profileCache = null;
+  try { await AsyncStorage.removeItem(PROFILE_CACHE_KEY); } catch { /* best-effort */ }
+}
+
+function rememberProfile(profile) {
+  _profileCache = profile;
+  AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile)).catch(() => {});
+}
+
+// Start-up asks for the profile from several places at once (the onboarding
+// gate, settings, locale, Home); concurrent callers share one fetch, and each
+// gets its own copy.
+let _profileInFlight = null;
+
+export function loadProfile() {
+  if (!_profileInFlight) {
+    _profileInFlight = _fetchProfile().finally(() => { _profileInFlight = null; });
+  }
+  return _profileInFlight.then((p) => (p ? { ...p } : p));
+}
+
+async function _fetchProfile() {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   if (!user) {
     // getUser() swallows network failures (AuthRetryableFetchError) into a
@@ -36,7 +83,7 @@ export async function loadProfile() {
     .eq('user_id', user.id)
     .maybeSingle();
   if (error) throw error;
-  return {
+  const profile = {
     userId: user.id,
     email: user.email,
     username: data?.username ?? '',
@@ -49,6 +96,8 @@ export async function loadProfile() {
     settings: data?.settings ?? {},
     updatedAt: data?.updated_at ?? null,
   };
+  rememberProfile(profile);
+  return profile;
 }
 
 // True when nobody else holds `username` (case-insensitive). Goes through
@@ -120,6 +169,8 @@ export async function upsertProfile(fields) {
     const { error } = await supabase.from('profiles').insert(row);
     if (error) throw error;
   }
+  // A load that started before this write must not answer the reload after it.
+  _profileInFlight = null;
 }
 
 // Upload a locally-picked image to the `avatars` bucket under the user's
@@ -159,7 +210,9 @@ export async function uploadAvatar(localUri) {
 // Aggregates: per-user stats computed client-side from tournaments the
 // user can see (own + invited). Keeping this client-side avoids a new
 // server-side aggregation table while the data volume is tiny.
-export async function computePersonalStats({ userId, displayName }) {
+// `tournaments` is optional: a caller that already holds the list (History)
+// passes it instead of paying for a second full fetch.
+export async function computePersonalStats({ userId, displayName }, tournaments = null) {
   if (!userId && !displayName?.trim()) {
     return {
       tournamentsPlayed: 0,
@@ -171,7 +224,7 @@ export async function computePersonalStats({ userId, displayName }) {
       wins: 0,
     };
   }
-  const tournaments = await loadAllTournaments();
+  const list = tournaments ?? await loadAllTournaments();
   let tournamentsPlayed = 0;
   let roundsPlayed = 0;
   // Denominator for Avg pts: the subset of roundsPlayed whose totals are
@@ -181,7 +234,7 @@ export async function computePersonalStats({ userId, displayName }) {
   let bestRound = null;
   let wins = 0;
 
-  for (const t of tournaments) {
+  for (const t of list) {
     const me = findPlayerForIdentity(t.players, { userId, displayName });
     if (!me) continue;
     // Personal record reflects completed play only — consistent with the
