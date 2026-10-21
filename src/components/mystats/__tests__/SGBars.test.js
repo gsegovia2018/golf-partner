@@ -10,6 +10,7 @@ jest.mock('../../../theme/ThemeContext', () => ({
       theme: {
         ...light,
         semantic,
+        destructive: semantic.destructive.light,
         scoreColor: (level) => semantic.score[level].light,
         typography,
         fonts,
@@ -23,8 +24,10 @@ jest.mock('../../../theme/ThemeContext', () => ({
 }));
 
 const { semantic } = jest.requireActual('../../../theme/tokens');
-const GOOD = semantic.score.good.light;
-const POOR = semantic.score.poor.light;
+// The tone rule: the accent green and the destructive red.
+const { light } = jest.requireActual('../../../theme/tokens');
+const GOOD = light.accent.primary;
+const POOR = semantic.destructive.light;
 
 // The bar View sits after the zero-line View inside the track.
 function barStyle(getByTestId) {
@@ -70,10 +73,12 @@ describe('SGBar', () => {
     expect(getByTestId('sg-bar-value').props.children.join('')).toBe('+3.20');
   });
 
-  it('renders a zero value with no visible bar', () => {
+  it('renders a zero value with no visible bar, unsigned and in ink', () => {
     const { getByTestId } = render(<SGBar label="Penalties" value={0} />);
     expect(barStyle(getByTestId).width).toBe('0%');
-    expect(getByTestId('sg-bar-value').props.children.join('')).toBe('+0.00');
+    const v = getByTestId('sg-bar-value');
+    expect(v.props.children.join('')).toBe('0.00');
+    expect(StyleSheet.flatten(v.props.style).color).toBe(light.text.primary);
   });
 
   it('renders an em-dash row for null values', () => {

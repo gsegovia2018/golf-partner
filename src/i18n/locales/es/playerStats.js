@@ -29,7 +29,7 @@ export default {
   'stats.player.summary.chip.steady': 'Estable',
   'stats.player.summary.chip.down': 'Enfriándose',
   'stats.player.summary.diffUnit': 'dif.',
-  'stats.player.summary.formMeta': 'La línea discontinua marca el índice de la app · los puntos dorados igualan o mejoran ese índice',
+  'stats.player.summary.formMeta': 'La línea discontinua marca el índice de la app · los puntos rellenos igualan o mejoran ese índice',
   'stats.player.summary.notEnoughRounds': 'Aún no hay suficientes vueltas.',
   'stats.player.summary.strengthsTitle': 'Puntos fuertes y a vigilar',
   'stats.player.summary.strengths': 'Puntos fuertes',

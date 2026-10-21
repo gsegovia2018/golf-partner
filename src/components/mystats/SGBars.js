@@ -33,8 +33,7 @@ export function SGBarTrack({ value, style }) {
   const clamped = Math.max(-MAX_ABS, Math.min(MAX_ABS, value));
   const positive = clamped >= 0;
   const widthPct = (Math.abs(clamped) / MAX_ABS) * 50;
-  // theme.scoreColor is a function: scoreColor('good') / scoreColor('poor')
-  const fill = positive ? theme.scoreColor('good') : theme.scoreColor('poor');
+  const fill = positive ? theme.accent.primary : theme.destructive;
 
   return (
     <View testID="sg-bar-track" style={[styles.track, { backgroundColor: theme.bg.secondary }, style]}>
@@ -68,7 +67,9 @@ export function SGBar({ label, value }) {
     );
   }
 
-  const fill = value >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor');
+  // The tone rule: positive green, negative red, a printed 0.00 ink.
+  const shown = Number(value.toFixed(2));
+  const fill = shown > 0 ? theme.accent.primary : shown < 0 ? theme.destructive : theme.text.primary;
 
   return (
     <View testID="sg-bar-row" style={styles.row}>
@@ -78,7 +79,7 @@ export function SGBar({ label, value }) {
         testID="sg-bar-value"
         style={[styles.value, { color: fill }]}
       >
-        {value >= 0 ? '+' : ''}{value.toFixed(2)}
+        {shown > 0 ? '+' : ''}{shown === 0 ? (0).toFixed(2) : value.toFixed(2)}
       </Text>
     </View>
   );

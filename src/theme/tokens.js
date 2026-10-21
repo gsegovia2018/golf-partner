@@ -133,6 +133,10 @@ const semantic = {
   destructive: {
     light: MASTERS_RED,
     dark:  '#f87171',
+    // The "bad" wash behind a red value or callout — the red twin of
+    // accent.light (src/theme/tone.js toneFill).
+    washLight: 'rgba(200,16,46,0.07)',
+    washDark:  'rgba(248,113,113,0.12)',
   },
   // Informational — for stats that are neither good nor bad (counts,
   // magnitudes, progress-to-unlock). Green means good, red means bad;

@@ -57,11 +57,11 @@ function TickFade({ style, delay, testID }) {
 }
 
 // Length is "how much", color stays on tone duty (mirrors BreakdownRow):
-// green good, red bad, info blue for neither.
+// green good, red bad, ink-grey for neither.
 function fillToneStyle(theme, tone) {
   if (tone === 'good') return { backgroundColor: theme.accent.primary };
   if (tone === 'bad') return { backgroundColor: theme.destructive, opacity: 0.8 };
-  return { backgroundColor: theme.info, opacity: 0.8 };
+  return { backgroundColor: theme.text.secondary, opacity: 0.8 };
 }
 
 function isNumber(value) {

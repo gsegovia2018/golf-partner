@@ -60,12 +60,13 @@ export const seriesColor = (theme, i) => {
 };
 
 // Scorecard heat: 0 / 1 / 2 / 3 / 4+ Stableford points. Every cell also
-// prints its number, so the tint only supports it.
+// prints its number, so the tint only supports it. 2 points is par, the mid
+// of the tone rule: plain ink, no tint.
 export function heatColors(theme, points) {
   if (points == null) return { bg: 'transparent', fg: theme.text.muted };
   if (points <= 0) return { bg: withAlpha(theme.destructive, 0.16), fg: theme.scoreColor('poor') };
   if (points === 1) return { bg: theme.bg.secondary, fg: theme.text.secondary };
-  if (points === 2) return { bg: theme.accent.light, fg: theme.text.primary };
+  if (points === 2) return { bg: 'transparent', fg: theme.text.primary };
   if (points === 3) return { bg: withAlpha(theme.accent.primary, 0.38), fg: theme.text.primary };
   return { bg: theme.accent.primary, fg: theme.text.inverse };
 }

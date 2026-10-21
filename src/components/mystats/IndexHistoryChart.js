@@ -3,6 +3,7 @@ import { View, Text, Pressable } from 'react-native';
 import Svg, { Path, Line, Circle, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../../theme/ThemeContext';
 import { useT, formatNumber } from '../../i18n';
+import { toneColor, toneOfSeries } from '../../theme/tone';
 
 // Index-history chart for the Handicap tab. Two modes share one frame:
 //  - 'round': a step line, one step per qualifying round (the index is a
@@ -36,7 +37,8 @@ export default function IndexHistoryChart({ data = [], mode = 'round', lowLabel 
 
   const gold = theme.isDark ? theme.semantic.winner.dark : theme.semantic.winner.light;
   const goldText = theme.isDark ? theme.semantic.winner.soft : theme.semantic.winner.light;
-  const stroke = theme.accent.primary;
+  // Green while the index comes down, red while it climbs, ink when flat.
+  const stroke = toneColor(theme, toneOfSeries(data, { lowerIsBetter: true, tolerance: 0.1 }));
 
   const values = data.map((p) => p.value).filter((v) => v != null);
   const geom = useMemo(() => {

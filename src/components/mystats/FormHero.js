@@ -3,16 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useT, t as tNow, formatNumber } from '../../i18n';
-import { semantic } from '../../theme/tokens';
+import { toneOfDirection, toneSurface } from '../../theme/tone';
 import TrendLineChart from './TrendLineChart';
-
-// Clubhouse hero surface — cream-on-green, matches CoachHero/LiveRoundCard.
-const GREEN = '#00553c';
-const CREAM = '#f3efe6';
-const CREAM_70 = 'rgba(243,239,230,0.7)';
-const CREAM_80 = 'rgba(243,239,230,0.8)';
-const CREAM_85 = 'rgba(243,239,230,0.85)';
-const GOLD = semantic.winner.dark;
 
 // Verdict copy mirrors CoachTab's FormTrendCard: both read the
 // avgDifferential entry of stats.form.metrics, whose `direction` is already
@@ -24,8 +16,10 @@ export function formVerdict(direction) {
   return tNow('stats.my.form.steady');
 }
 
-// Form-tab hero: verdict + score-differential headline number in gold, with
-// the differential trend chart drawn on the dark surface itself.
+// Form-tab hero: verdict + score-differential headline number, with the
+// differential trend chart drawn on the surface itself. The surface is the
+// verdict's tone, like the Informe de vuelta hero: green improving, ink
+// steady, red trending down (the tone rule, src/theme/tone.js).
 //
 // The headline used to be points per round. It isn't any more, because
 // points are net of the handicap the round was played off: the same golf is
@@ -42,7 +36,9 @@ export default function FormHero({ form = {}, formSeries = {}, metrics = {}, n, 
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   const diffMetric = form.metrics?.find((m) => m.key === 'avgDifferential');
-  const verdict = formVerdict(diffMetric?.direction ?? 'flat');
+  const direction = diffMetric?.direction ?? 'flat';
+  const verdict = formVerdict(direction);
+  const surface = toneSurface(theme, toneOfDirection(direction));
   const diffValue = diffMetric?.recent ?? metrics.avgDifferential ?? null;
   const delta = diffMetric?.delta;
   const series = formSeries.metrics?.avgDifferential ?? [];
@@ -54,13 +50,13 @@ export default function FormHero({ form = {}, formSeries = {}, metrics = {}, n, 
     : `${delta < 0 ? '▲ ' : '▼ +'}${formatNumber(delta)}`;
   const ptsPart = metrics.avgPoints == null ? null : t('stats.my.form.ptsRnd', { value: formatNumber(metrics.avgPoints) });
   const meta = form.hasHistory
-    ? [t('stats.my.form.metaHistory', { recent: form.recentCount ?? 0, previous: form.historyCount ?? 0 }), deltaPart, ptsPart]
+    ? [t('stats.my.form.metaHistory', { recent: form.recentCount ?? 0, previous: form.historyCount ?? 0 }), ptsPart]
       .filter(Boolean).join(' · ')
     : [t('stats.my.form.metaSelectMore'), ptsPart]
       .filter(Boolean).join(' · ');
 
   return (
-    <View style={s.card} testID="form-hero-surface">
+    <View style={[s.card, { backgroundColor: surface }]} testID="form-hero-surface">
       <View style={s.kickerRow}>
         <Text style={s.kicker}>{t('stats.my.form.kicker', { n })}</Text>
         {onInfo ? (
@@ -70,7 +66,7 @@ export default function FormHero({ form = {}, formSeries = {}, metrics = {}, n, 
             accessibilityRole="button"
             accessibilityLabel={t('stats.my.whatIs', { name: t('stats.my.metric.avgDifferential') })}
           >
-            <Feather name="info" size={14} color={CREAM_70} />
+            <Feather name="info" size={14} color={theme.text.inverse} style={s.faint} />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -83,13 +79,17 @@ export default function FormHero({ form = {}, formSeries = {}, metrics = {}, n, 
       </View>
       <TrendLineChart
         series={series}
-        color={CREAM}
-        labelColor={CREAM_85}
+        color={theme.text.inverse}
+        labelColor={theme.text.inverse}
         variant="compact"
         dropGaps
-        ringColor={GREEN}
-        lastDotColor={GOLD}
+        ringColor={surface}
       />
+      {deltaPart ? (
+        <View style={s.chip}>
+          <Text style={s.chipText} testID="form-hero-delta">{t('stats.my.form.deltaChip', { delta: deltaPart })}</Text>
+        </View>
+      ) : null}
       <Text style={s.meta}>{meta}</Text>
     </View>
   );
@@ -98,14 +98,15 @@ export default function FormHero({ form = {}, formSeries = {}, metrics = {}, n, 
 function makeStyles(theme) {
   return StyleSheet.create({
     card: {
-      backgroundColor: GREEN,
       borderRadius: 16,
       padding: theme.spacing.lg,
       gap: theme.spacing.sm,
     },
     kickerRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    faint: { opacity: 0.75 },
     kicker: {
-      color: CREAM_70,
+      color: theme.text.inverse,
+      opacity: 0.75,
       fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 1.4,
@@ -120,24 +121,36 @@ function makeStyles(theme) {
     verdict: {
       fontFamily: 'PlayfairDisplay-Bold',
       fontSize: 26,
-      color: CREAM,
+      color: theme.text.inverse,
       flexShrink: 1,
     },
     pts: {
       fontFamily: 'PlayfairDisplay-Black',
       fontSize: 32,
-      color: GOLD,
+      color: theme.text.inverse,
       fontVariant: ['tabular-nums'],
     },
     ptsSuffix: {
       fontSize: 13,
       fontFamily: 'PlusJakartaSans-SemiBold',
-      color: CREAM_70,
+      color: theme.text.inverse,
+      opacity: 0.75,
+    },
+    // Same chip as the report hero's chips.
+    chip: {
+      alignSelf: 'flex-start',
+      backgroundColor: theme.isDark ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.14)',
+      borderRadius: 999, paddingVertical: 5, paddingHorizontal: 10,
+    },
+    chipText: {
+      fontSize: 10.5, fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse,
+      fontVariant: ['tabular-nums'],
     },
     meta: {
       fontSize: 11.5,
       fontFamily: 'PlusJakartaSans-SemiBold',
-      color: CREAM_80,
+      color: theme.text.inverse,
+      opacity: 0.8,
     },
   });
 }

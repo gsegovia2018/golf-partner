@@ -5,6 +5,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
 import { useT } from '../../i18n';
+import { scoreBandColors } from '../../theme/tone';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 
@@ -32,11 +33,12 @@ function GrowRow({ style, children }) {
 // stand-alone legend so the two always agree.
 function mixSegments(distribution, theme, t) {
   const d = distribution ?? {};
+  const C = scoreBandColors(theme);
   return [
-    { key: 'birdie', label: t('stats.my.mix.birdiePlus'), count: (d.eagles ?? 0) + (d.birdies ?? 0), color: theme.accent.primary },
-    { key: 'par', label: t('stats.my.mix.par'), count: d.pars ?? 0, color: '#7fb59f' },
-    { key: 'bogey', label: t('stats.my.mix.bogey'), count: d.bogeys ?? 0, color: '#e7d7b4' },
-    { key: 'double', label: t('stats.my.mix.doublePlus'), count: (d.doubles ?? 0) + (d.worse ?? 0), color: theme.isDark ? '#b57070' : '#d9a29a' },
+    { key: 'birdie', label: t('stats.my.mix.birdiePlus'), count: (d.eagles ?? 0) + (d.birdies ?? 0), color: C.birdiePlus },
+    { key: 'par', label: t('stats.my.mix.par'), count: d.pars ?? 0, color: C.par },
+    { key: 'bogey', label: t('stats.my.mix.bogey'), count: d.bogeys ?? 0, color: C.bogey },
+    { key: 'double', label: t('stats.my.mix.doublePlus'), count: (d.doubles ?? 0) + (d.worse ?? 0), color: C.double },
   ];
 }
 

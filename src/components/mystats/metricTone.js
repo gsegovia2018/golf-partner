@@ -1,4 +1,5 @@
 import { t } from '../../i18n';
+import { toneColor, toneFill } from '../../theme/tone';
 
 const DEFAULT_MIN_SAMPLE = 6;
 
@@ -60,18 +61,6 @@ function toneFromRate(value, target, options) {
     tolerance: 0,
     ...options,
   });
-}
-
-function toneColor(theme, tone) {
-  if (tone === 'good') return theme.scoreColor('good');
-  if (tone === 'bad') return theme.destructive;
-  return theme.text.secondary;
-}
-
-function toneFill(theme, tone) {
-  if (tone === 'good') return theme.accent.light;
-  if (tone === 'bad') return theme.isDark ? 'rgba(248,113,113,0.14)' : '#fee2e2';
-  return theme.bg.secondary;
 }
 
 export {

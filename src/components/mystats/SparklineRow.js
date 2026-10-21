@@ -11,19 +11,11 @@ import PressableScale from '../ui/PressableScale';
 import Reveal from '../ui/Reveal';
 import TrendLineChart from './TrendLineChart';
 import { scalePoints, toSegments, dropGaps as dropGapEntries } from './chartGeometry';
+import { toneColor, toneFill, toneOfDirection } from '../../theme/tone';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const STAGGER_MS = 40;
 const SPARK_H = 26;
-
-// ~12% wash of a 6-digit hex theme color, for the delta-chip fill.
-function withAlpha(hex, alpha) {
-  const n = parseInt(hex.slice(1), 16);
-  const r = (n >> 16) & 255;
-  const g = (n >> 8) & 255;
-  const b = n & 255;
-  return `rgba(${r},${g},${b},${alpha})`;
-}
 
 // The sparkline sweeps in from the left (scaleX 0→1, origin left) behind an
 // overflow-hidden wrapper, staggered by row position; the delta chip fades in
@@ -96,7 +88,7 @@ function ChevronFlip({ expanded, color }) {
 //           `expanded` it shows the full per-round TrendLineChart under the
 //           row. The accordion (one row open at a time) lives in the parent.
 export default function SparklineRow({
-  metric, series = [], color, formatValue, infoKey, onInfo, index = 0, dropGaps = false,
+  metric, series = [], formatValue, infoKey, onInfo, index = 0, dropGaps = false,
   expanded = false, onToggle,
 }) {
   const { theme } = useTheme();
@@ -125,9 +117,11 @@ export default function SparklineRow({
 
   const delta = metric.delta;
   const improved = metric.direction === 'up';
-  const chipColor = delta == null || delta === 0
-    ? theme.text.muted
-    : improved ? theme.scoreColor('good') : theme.destructive;
+  // The tone rule: the line and the chip are green when the metric improved,
+  // red when it got worse, ink when level — whichever way the metric counts.
+  const tone = delta == null || delta === 0 ? 'neutral' : toneOfDirection(metric.direction);
+  const color = toneColor(theme, tone);
+  const chipColor = color;
   const chipIcon = delta == null || delta === 0
     ? 'minus'
     : delta > 0 ? 'trending-up' : 'trending-down';
@@ -200,7 +194,7 @@ export default function SparklineRow({
         {delta != null ? (
           <ChipFade delay={delay + 400}>
             <View
-              style={[s.chip, { backgroundColor: delta === 0 ? theme.bg.secondary : withAlpha(chipColor, 0.12) }]}
+              style={[s.chip, { backgroundColor: toneFill(theme, tone) }]}
               testID={`sparkline-chip-${metric.key}`}
               accessible
               accessibilityLabel={chipLabel}

@@ -62,7 +62,8 @@ export function DotRow({ k, n, testID, accessibilityLabel }) {
 export function PuttHistogram({ bars, accessibilityLabel }) {
   const { theme } = useTheme();
   const max = Math.max(1, ...bars.map((b) => b.count));
-  const fill = { good: theme.scoreColor('excellent'), neutral: withAlpha(theme.accent.primary, 0.38), poor: theme.destructive };
+  // The tone rule: a two-putt is mid, so its bar is ink-grey, not pale green.
+  const fill = { good: theme.accent.primary, neutral: theme.text.secondary, poor: theme.destructive };
   return (
     <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }} testID="putt-histogram" accessible accessibilityRole="image" accessibilityLabel={accessibilityLabel}>
       {bars.map((b) => (
@@ -97,7 +98,7 @@ export function DivergingBars({ groups, caption, accessibilityLabel }) {
                 <View style={s.track}>
                   <View style={s.half}>{d < 0 && <View style={[s.bar, { width: w, alignSelf: 'flex-end', backgroundColor: theme.destructive }]} />}</View>
                   <View style={s.mid} />
-                  <View style={s.half}>{d >= 0 && <View style={[s.bar, { width: w, backgroundColor: theme.scoreColor('excellent') }]} />}</View>
+                  <View style={s.half}>{d >= 0 && <View style={[s.bar, { width: w, backgroundColor: d > 0 ? theme.accent.primary : theme.text.primary }]} />}</View>
                 </View>
                 <Text style={s.value}>{it.text}</Text>
               </View>

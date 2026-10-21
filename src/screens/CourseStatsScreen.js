@@ -46,13 +46,27 @@ const COUNT_MS = 500;
 // Visual scales for the shot-detail progress rings. The ring is a gauge, not
 // the number — the tile's CENTER always shows the real value; these only set
 // how much of the ring that value fills (clamped at a full ring).
-// - Putts: 36 = the 2-putt-per-hole benchmark; at/below it the ring is green,
-//   over it the stroke flips to destructive.
+// - Putts: 36 = the 2-putt-per-hole benchmark fills the ring.
 const PUTTS_RING_BENCHMARK = 36;
-// - 3-putts: 6 per 18 fills the ring — any 3-putt shows destructive.
+// - 3-putts: 6 per 18 fills the ring.
 const THREE_PUTT_RING_SCALE = 6;
 // - Penalties: 9 per 18 fills the ring (a penalty every other hole).
 const PENALTY_RING_SCALE = 9;
+// Ring tones per 18 holes (the tone rule): at or better than `good` is green,
+// worse than `bad` is red, in between is ink. Amateur-golf bands, not
+// targets — a ~10 handicap putts about 32 times and hits a third of greens.
+const RING_BANDS = {
+  putts:      { good: 32, bad: 36, lowerIsBetter: true },
+  threePutts: { good: 1, bad: 3, lowerIsBetter: true },
+  gir:        { good: 33, bad: 17 },
+  penalties:  { good: 0.5, bad: 2, lowerIsBetter: true },
+};
+function ringTone(value, { good, bad, lowerIsBetter = false }) {
+  if (value == null) return 'neutral';
+  if (lowerIsBetter ? value <= good : value >= good) return 'good';
+  if (lowerIsBetter ? value > bad : value < bad) return 'bad';
+  return 'neutral';
+}
 
 // The gold cell mirrors the honours-board convention (best value lands in
 // semantic.winner.dark on the green surface). It holds the GROSS record —
@@ -241,8 +255,7 @@ export default function CourseStatsScreen({ navigation, route }) {
           label={t('courses.stats.ringPutts')}
           value={shots.putts.per18}
           fill={shots.putts.per18 != null ? shots.putts.per18 / PUTTS_RING_BENCHMARK : null}
-          color={shots.putts.per18 != null && shots.putts.per18 > PUTTS_RING_BENCHMARK
-            ? theme.destructive : theme.accent.primary}
+          color={toneColor(theme, ringTone(shots.putts.per18, RING_BANDS.putts))}
         />
         <RingStat
           index={1}
@@ -251,7 +264,7 @@ export default function CourseStatsScreen({ navigation, route }) {
           value={shots.putts.threePuttPer18}
           fill={shots.putts.threePuttPer18 != null
             ? shots.putts.threePuttPer18 / THREE_PUTT_RING_SCALE : null}
-          color={shots.putts.threePuttPer18 > 0 ? theme.destructive : theme.accent.primary}
+          color={toneColor(theme, ringTone(shots.putts.threePuttPer18, RING_BANDS.threePutts))}
         />
         <RingStat
           index={2}
@@ -260,7 +273,7 @@ export default function CourseStatsScreen({ navigation, route }) {
           value={shots.gir.eligible > 0 ? shots.gir.pct : null}
           suffix="%"
           fill={shots.gir.eligible > 0 ? shots.gir.pct / 100 : null}
-          color={theme.accent.primary}
+          color={toneColor(theme, ringTone(shots.gir.eligible > 0 ? shots.gir.pct : null, RING_BANDS.gir))}
         />
         <RingStat
           index={3}
@@ -268,7 +281,7 @@ export default function CourseStatsScreen({ navigation, route }) {
           label={t('courses.stats.ringPenalties')}
           value={shots.penalties.per18}
           fill={shots.penalties.per18 != null ? shots.penalties.per18 / PENALTY_RING_SCALE : null}
-          color={theme.destructive}
+          color={toneColor(theme, ringTone(shots.penalties.per18, RING_BANDS.penalties))}
         />
       </View>
       {shots.drives.recorded > 0 ? (

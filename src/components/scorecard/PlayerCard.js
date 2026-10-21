@@ -60,7 +60,7 @@ export const PlayerCard = React.memo(function PlayerCard({
 
   const ptsColor = points == null ? theme.text.muted
     : points >= 3 ? theme.scoreColor('excellent')
-    : points >= 2 ? theme.scoreColor('good')
+    : points === 2 ? theme.text.primary // par is mid: ink, not green
     : points === 1 ? theme.scoreColor('neutral')
     : theme.scoreColor('poor');
 
@@ -71,7 +71,7 @@ export const PlayerCard = React.memo(function PlayerCard({
     : vsPar > 0 ? `+${vsPar}` : String(vsPar);
   const vsParColor = t.parPlayed === 0 ? theme.text.muted
     : vsPar <= -1 ? theme.scoreColor('excellent')
-    : vsPar === 0 ? theme.scoreColor('good')
+    : vsPar === 0 ? theme.text.primary
     : vsPar <= 2 ? theme.scoreColor('neutral')
     : theme.scoreColor('poor');
 

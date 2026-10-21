@@ -9,8 +9,10 @@ import StatTile from '../mystats/StatTile';
 import ScoreMixBar from '../mystats/ScoreMixBar';
 import PressableScale from '../ui/PressableScale';
 import { scalePoints } from '../mystats/chartGeometry';
+import { toneSurface } from '../../theme/tone';
 
-// Deep-green hero surface — same cream-on-green treatment as FormHero/CoachHero.
+// Deep-green hero surface — the player's headline facts. The Form card below
+// is not on it: that card is a verdict, so it takes the verdict's tone.
 const GREEN = '#00553c';
 const CREAM = '#f3efe6';
 const CREAM_70 = 'rgba(243,239,230,0.7)';
@@ -57,7 +59,8 @@ function renderVerdict(msg, t) {
 
 // Sparkline for the last-10 differentials with a dashed line at the current
 // app index and filled dots for rounds at/better than it (lower is better).
-function FormSparkline({ series, index }) {
+// Drawn in `ink` (the text colour of the toned surface it sits on).
+function FormSparkline({ series, index, ink, surface }) {
   const t = useT();
   const [width, setWidth] = React.useState(0);
   const height = 92;
@@ -74,7 +77,7 @@ function FormSparkline({ series, index }) {
   if (!values.some((v) => v != null)) {
     return (
       <View style={sparkStyles.empty}>
-        <Text style={sparkStyles.emptyText}>{t('stats.player.summary.notEnoughRounds')}</Text>
+        <Text style={[sparkStyles.emptyText, { color: ink }]}>{t('stats.player.summary.notEnoughRounds')}</Text>
       </View>
     );
   }
@@ -86,13 +89,13 @@ function FormSparkline({ series, index }) {
           {indexY != null && (
             <SvgLine
               x1={padX / 2} y1={indexY} x2={width - padX / 2} y2={indexY}
-              stroke={CREAM_70} strokeWidth={1.5} strokeDasharray="4,4"
+              stroke={ink} strokeOpacity={0.7} strokeWidth={1.5} strokeDasharray="4,4"
             />
           )}
           <Polyline
             points={points.filter((p) => p.y != null).map((p) => `${p.x},${p.y}`).join(' ')}
             fill="none"
-            stroke={CREAM}
+            stroke={ink}
             strokeWidth={2.4}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -104,8 +107,8 @@ function FormSparkline({ series, index }) {
               <Circle
                 key={`sp-${i}`}
                 cx={p.x} cy={p.y} r={3.4}
-                fill={onOrBetter ? GOLD : GREEN}
-                stroke={onOrBetter ? GOLD : CREAM}
+                fill={onOrBetter ? ink : surface}
+                stroke={ink}
                 strokeWidth={1.5}
               />
             );
@@ -118,7 +121,7 @@ function FormSparkline({ series, index }) {
 
 const sparkStyles = StyleSheet.create({
   empty: { paddingVertical: 20, alignItems: 'center' },
-  emptyText: { color: CREAM_70, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, fontStyle: 'italic' },
+  emptyText: { opacity: 0.7, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, fontStyle: 'italic' },
 });
 
 // Summary tab: hero verdict + headline numbers, form trend, strengths/pain
@@ -132,16 +135,10 @@ export default function SummaryTab({ summary, verdict, h2h, name, onInfo, onGoTo
 
   const move3m = fmtSigned1(summary.index?.move3m, t);
   const chipKey = summary.form?.chip ?? 'steady';
-  // Reuses the app's existing better/worse tokens (accent = improving,
-  // destructive = declining) rather than inventing new hero-surface colors.
-  const chipColor = chipKey === 'hot' ? GOLD
-    : chipKey === 'up' ? theme.accent.primary
-      : chipKey === 'down' ? theme.destructive
-        : CREAM_70;
-  const chip = {
-    label: t(`stats.player.summary.chip.${CHIP_KEYS.includes(chipKey) ? chipKey : 'steady'}`),
-    color: chipColor,
-  };
+  // The tone rule: hot / improving is green, steady ink, declining red.
+  const formTone = chipKey === 'hot' || chipKey === 'up' ? 'good' : chipKey === 'down' ? 'bad' : 'neutral';
+  const formSurface = toneSurface(theme, formTone);
+  const chipLabel = t(`stats.player.summary.chip.${CHIP_KEYS.includes(chipKey) ? chipKey : 'steady'}`);
   const winShare = h2h && h2h.n > 0 ? h2h.wins / h2h.n : 0;
 
   return (
@@ -160,7 +157,7 @@ export default function SummaryTab({ summary, verdict, h2h, name, onInfo, onGoTo
             {move3m ? <Text style={s.heroSub}>{t('stats.player.summary.move3m', { move: move3m })}</Text> : null}
           </PressableScale>
           <PressableScale style={s.heroStat} onPress={() => onInfo?.('scoreDifferential')} disabled={!onInfo}>
-            <Text style={s.heroValue}>{fmt1(summary.bestDiff?.value)}</Text>
+            <Text style={[s.heroValue, s.heroBest]}>{fmt1(summary.bestDiff?.value)}</Text>
             <Text style={s.heroLabel}>{t('stats.player.summary.bestDiff')}</Text>
             {summary.bestDiff?.courseName ? (
               <Text style={s.heroSub} numberOfLines={1}>{summary.bestDiff.courseName}</Text>
@@ -170,18 +167,18 @@ export default function SummaryTab({ summary, verdict, h2h, name, onInfo, onGoTo
       </View>
 
       {/* Form */}
-      <View style={s.formCard}>
+      <View style={[s.formCard, { backgroundColor: formSurface }]} testID="player-form-card">
         <View style={s.formHead}>
           <Text style={s.formKicker}>{t('stats.player.summary.form')}</Text>
-          <View style={[s.chip, { backgroundColor: `${chip.color}26` }]}>
-            <Text style={[s.chipText, { color: chip.color }]}>{chip.label}</Text>
+          <View style={s.chip}>
+            <Text style={s.chipText}>{chipLabel}</Text>
           </View>
         </View>
         <Text style={s.formValue}>
           {fmt1(summary.form?.recent)}
           <Text style={s.formSuffix}>{` ${t('stats.player.summary.diffUnit')}`}</Text>
         </Text>
-        <FormSparkline series={summary.series ?? []} index={summary.index?.value} />
+        <FormSparkline series={summary.series ?? []} index={summary.index?.value} ink={theme.text.inverse} surface={formSurface} />
         <Text style={s.formMeta}>{t('stats.player.summary.formMeta')}</Text>
       </View>
 
@@ -311,22 +308,29 @@ function makeStyles(theme) {
     verdict: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 19, lineHeight: 25, color: CREAM },
     heroRow: { flexDirection: 'row', gap: theme.spacing.sm },
     heroStat: { flex: 1, gap: 2 },
-    heroValue: { fontFamily: 'PlayfairDisplay-Black', fontSize: 26, color: GOLD, fontVariant: ['tabular-nums'] },
+    heroValue: { fontFamily: 'PlayfairDisplay-Black', fontSize: 26, color: CREAM, fontVariant: ['tabular-nums'] },
+    // Gold is ceremony: only the best differential wears it.
+    heroBest: { color: GOLD },
     heroLabel: {
       fontSize: 9.5, fontFamily: 'PlusJakartaSans-Bold', letterSpacing: 1, textTransform: 'uppercase', color: CREAM_70,
     },
     heroSub: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_80 },
 
-    formCard: { backgroundColor: GREEN, borderRadius: 16, padding: theme.spacing.lg, gap: theme.spacing.sm },
+    formCard: { borderRadius: 16, padding: theme.spacing.lg, gap: theme.spacing.sm },
     formHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     formKicker: {
-      fontSize: 10, fontFamily: 'PlusJakartaSans-Bold', letterSpacing: 1.4, textTransform: 'uppercase', color: CREAM_70,
+      fontSize: 10, fontFamily: 'PlusJakartaSans-Bold', letterSpacing: 1.4, textTransform: 'uppercase',
+      color: theme.text.inverse, opacity: 0.75,
     },
-    chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: theme.radius.pill },
-    chipText: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-Bold' },
-    formValue: { fontFamily: 'PlayfairDisplay-Black', fontSize: 32, color: CREAM, fontVariant: ['tabular-nums'] },
-    formSuffix: { fontSize: 13, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_70 },
-    formMeta: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_80 },
+    // Same chip as the Informe de vuelta hero's.
+    chip: {
+      paddingHorizontal: 10, paddingVertical: 4, borderRadius: theme.radius.pill,
+      backgroundColor: theme.isDark ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.14)',
+    },
+    chipText: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse },
+    formValue: { fontFamily: 'PlayfairDisplay-Black', fontSize: 32, color: theme.text.inverse, fontVariant: ['tabular-nums'] },
+    formSuffix: { fontSize: 13, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.inverse, opacity: 0.75 },
+    formMeta: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.inverse, opacity: 0.8 },
 
     swRow: { flexDirection: 'row', gap: theme.spacing.lg },
     swCol: { flex: 1, gap: 6 },

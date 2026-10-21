@@ -422,6 +422,7 @@ export default {
   "stats.my.form.metaSelectMore": "Diferencial de resultado · selecciona más vueltas para comparar tu forma reciente.",
   "stats.my.form.kicker": "Forma actual · Últimas {n}",
   "stats.my.form.diffSuffix": " dif.",
+  "stats.my.form.deltaChip": "{delta} vs anteriores",
   "stats.my.snapshot.title": "Resumen de rendimiento",
   "stats.my.snapshot.noHistory": "Sin historial suficiente",
   "stats.my.snapshot.improving": "Mejorando",

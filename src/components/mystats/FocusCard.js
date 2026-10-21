@@ -33,8 +33,8 @@ export default function FocusCard({ focus, verdict, onEndFocus, onInfo }) {
     ? { icon: 'clock', text: t('stats.my.focus.needMore', { count: verdict.roundsNeeded }), tone: 'neutral' }
     : VERDICT_COPY[state] ?? null;
   const copyText = copy ? (copy.text ?? t(copy.textKey)) : null;
-  const toneColor = copy?.tone === 'good' ? theme.scoreColor('good')
-    : copy?.tone === 'bad' ? theme.destructive : theme.text.secondary;
+  const toneColor = copy?.tone === 'good' ? theme.accent.primary
+    : copy?.tone === 'bad' ? theme.destructive : theme.text.primary;
 
   const unit = verdict?.unit ?? null;
   const before = unit && verdict?.baseline != null ? metricValueText(unit, verdict.baseline) : null;
@@ -141,7 +141,7 @@ function makeStyles(theme) {
     baCell: { gap: 1 },
     baValue: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 20, lineHeight: 24, color: theme.text.primary },
     baLabel: { ...theme.typography.caption, color: theme.text.muted },
-    ready: { ...theme.typography.subhead, color: theme.scoreColor('good'), fontWeight: '800' },
+    ready: { ...theme.typography.subhead, color: theme.accent.primary, fontWeight: '800' },
     note: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
     noteText: { ...theme.typography.caption, color: theme.text.secondary, flex: 1 },
   });

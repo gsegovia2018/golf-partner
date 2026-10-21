@@ -101,17 +101,17 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
 }
 
 // On the white card, tone accents use the normal light/dark semantic colors.
-// On the Masters-red surface a red area label would vanish, so a 'bad' area
-// label renders in winner gold there instead. Fix first always carries a bad
+// On the Masters-red surface the surface already says "worse", so the area
+// label is plain cream there (gold is ceremony, never a tone). Fix first always carries a bad
 // tone, so its area label stays muted — the gold badge already marks it.
 function areaAccentColor(tone, isRedSurface, isFixFirst, theme) {
   if (isRedSurface) {
-    if (tone === 'bad' || tone === 'good') return semantic.winner.dark;
+    if (tone === 'bad' || tone === 'good') return CREAM;
     return CREAM_70;
   }
   if (isFixFirst) return theme.text.muted;
   if (tone === 'bad') return theme.destructive;
-  if (tone === 'good') return theme.scoreColor('good');
+  if (tone === 'good') return theme.accent.primary;
   return theme.text.muted;
 }
 

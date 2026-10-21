@@ -20,8 +20,7 @@ export const HOLES_PER_ROW = 9;
 const WAVE_STEP_MS = 25;
 const WAVE_CAP_MS = 450;
 
-// Fixed scorecard tones (shared with ScoreMixArea's band colors).
-const MID_GREEN = '#7fb59f';
+// The sand bogey cell is the score scale's (scoreBandColors) fixed sand.
 const SAND = '#e7d7b4';
 // Ink for the light sand cell — sand is a fixed color, so its ink is too.
 const SAND_INK = '#3f3a28';
@@ -34,14 +33,14 @@ export function mixHex(a, b, t) {
   return `#${mixed.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
-// Cell fill by avg-vs-par bucket, deep green (scoring hole) → destructive red
-// (blow-up hole). Foreground stays theme-aware for contrast: theme.text.inverse
+// Cell fill by avg-vs-par bucket on the golf result scale: green under par,
+// ink-grey around par (mid, not green), sand bogey, red blow-up holes. Foreground stays theme-aware for contrast: theme.text.inverse
 // is white on the light theme's saturated fills and dark ink on the dark
 // theme's lighter accent/destructive tints; the fixed sand cell always takes
 // fixed ink.
 export function holeCellColors(theme, avgVsPar) {
   if (avgVsPar < 0) return { bg: theme.accent.primary, fg: theme.text.inverse };
-  if (avgVsPar <= 0.75) return { bg: MID_GREEN, fg: theme.isDark ? theme.text.inverse : '#ffffff' };
+  if (avgVsPar <= 0.75) return { bg: theme.text.secondary, fg: theme.text.inverse };
   if (avgVsPar <= 1.5) return { bg: SAND, fg: SAND_INK };
   // "Mixed" bucket between sand and full destructive: destructive blended
   // ~0.6 over sand reads as a clear warning without shouting.

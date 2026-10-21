@@ -52,9 +52,9 @@ describe('holeCellColors buckets', () => {
     expect(holeCellColors(lightTheme, -0.4).bg).toBe(light.accent.primary);
   });
 
-  test('≤ 0.75 ⇒ mid green', () => {
-    expect(holeCellColors(lightTheme, 0.5).bg).toBe('#7fb59f');
-    expect(holeCellColors(lightTheme, 0.75).bg).toBe('#7fb59f');
+  test('≤ 0.75 ⇒ around par is mid: ink-grey, not green', () => {
+    expect(holeCellColors(lightTheme, 0.5).bg).toBe(light.text.secondary);
+    expect(holeCellColors(lightTheme, 0.75).bg).toBe(light.text.secondary);
   });
 
   test('≤ 1.5 ⇒ sand with ink text', () => {

@@ -19,7 +19,9 @@ import { hud } from '../../theme/tokens';
 const ACCENT = '#4fae8a';
 const WHITE = '#ffffff';
 const INK = '#0a0d10';
-const HIGHLIGHT = '#ffd98a';
+// Outside focus mode a highlight is "what this check measures", not a status, so it is
+// white — amber or yellow would read as the mid status.
+const HIGHLIGHT = WHITE;
 const SOFT = '#cfe3d5';
 const DEFAULT_TONE = '#f87171';
 

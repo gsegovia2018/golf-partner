@@ -11,6 +11,7 @@ import FocusCard from '../FocusCard';
 import PlaySmarterCard from '../PlaySmarterCard';
 import SectionCard from '../SectionCard';
 import TrendLineChart from '../TrendLineChart';
+import { toneColor, toneFill } from '../../../theme/tone';
 
 // The one-time notice's text by its kind (store/coachFocus.js loadFocusNotice).
 const NOTICE_KEY = {
@@ -148,7 +149,7 @@ function FormTrendCard({ form = {}, formSeries = {}, metrics = {} }) {
           <Text style={[s.formTitle, { color }]}>{title}</Text>
           <Text style={s.formMeta}>{meta}</Text>
         </View>
-        <View style={[s.formPill, { backgroundColor: toneFill(theme, tone) }]}>
+        <View style={[s.formPill, { backgroundColor: pillFill(theme, tone) }]}>
           <Text style={[s.formPillText, { color }]}>{value}</Text>
         </View>
       </View>
@@ -164,23 +165,15 @@ function FormTrendCard({ form = {}, formSeries = {}, metrics = {} }) {
   );
 }
 
-function toneColor(theme, tone) {
-  if (tone === 'good') return theme.scoreColor('good');
-  if (tone === 'bad') return theme.destructive;
-  return theme.text.muted;
-}
-
 // Surface tint for the whole card: the first thing the Coach tab says should
 // be readable from the card color alone. Neutral stays on the plain card.
 function toneWash(theme, tone) {
-  if (tone === 'good') return theme.accent.light;
-  if (tone === 'bad') return theme.isDark ? 'rgba(248,113,113,0.10)' : '#fbeaec';
-  return null;
+  return tone === 'neutral' ? null : toneFill(theme, tone);
 }
 
 // Pill fill sits on top of the wash, so toned pills use the plain card color
 // (translucent white in dark mode) to stay visible against the tinted surface.
-function toneFill(theme, tone) {
+function pillFill(theme, tone) {
   if (tone === 'neutral') return theme.bg.secondary;
   return theme.isDark ? 'rgba(255,255,255,0.08)' : theme.bg.card;
 }
