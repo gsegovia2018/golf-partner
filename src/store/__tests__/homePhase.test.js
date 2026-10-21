@@ -158,6 +158,12 @@ describe('phase models', () => {
     expect(a.shots).toEqual({ fairways: { hit: 1, of: 2 }, greens: { hit: 2, of: 3 }, penalties: 1 });
     expect(a.pairs).toBeNull();
   });
+
+  it('afterModel gives my own Stableford points for the pairs card', () => {
+    const t = game({}, { scores: { p1: scores(18, 4), p2: scores(18, 4) }, playerHandicaps: { p1: 0, p2: 0 }, finishedAt: iso(NOW - H) });
+    const a = afterModel({ tournament: t, round: t.rounds[0], roundIndex: 0, endedAt: NOW - H }, 'u1');
+    expect(a.myStableford).toBe(36);
+  });
 });
 
 describe('card-engine scores (the stuck "Ready to start" fix)', () => {
