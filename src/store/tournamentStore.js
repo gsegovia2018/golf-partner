@@ -398,10 +398,13 @@ async function _fetchAllTournaments() {
 
 // Full offline list: union of blobs on disk + any index-only entries we
 // haven't locally opened yet. Prefers full blobs so rounds/scores render.
-async function _loadCachedFullList() {
+// `listedOnly` keeps just the games the last server list returned (the
+// index): a blob the server stopped listing (deleted elsewhere, removed from
+// the game) is never refreshed, so it can still look mid-round months later.
+async function _loadCachedFullList({ listedOnly = false } = {}) {
   const [index, blobIds] = await Promise.all([
     tournamentsIndex.readIndex(),
-    tournamentsIndex.getLocalBlobIds(),
+    listedOnly ? [] : tournamentsIndex.getLocalBlobIds(),
   ]);
   const indexById = new Map(index.map((row) => [row.id, row]));
   const allIds = new Set([...indexById.keys(), ...blobIds]);
@@ -432,8 +435,8 @@ async function _loadCachedFullList() {
   return rows.filter(Boolean).sort(byCreatedAtDesc);
 }
 
-export async function loadCachedTournamentsList() {
-  return _loadCachedFullList();
+export async function loadCachedTournamentsList({ listedOnly = false } = {}) {
+  return _loadCachedFullList({ listedOnly });
 }
 
 // A single transient Supabase error shouldn't paint the "Sin conexión"

@@ -100,7 +100,7 @@ export default function HistoryScreen({ navigation }) {
       let cachedProfile = null;
       if (!paintedRef.current) {
         const [cachedList, profile] = await Promise.all([
-          loadCachedTournamentsList().catch(() => []),
+          loadCachedTournamentsList({ listedOnly: true }).catch(() => []),
           loadCachedProfile(userId),
         ]);
         cachedProfile = profile;

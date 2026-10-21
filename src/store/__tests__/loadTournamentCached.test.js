@@ -104,6 +104,33 @@ describe('loadTournament cached reads', () => {
     expect(row.players.map((p) => p.name)).toEqual(['Marcos', 'Guille']);
   });
 
+  // A blob the server list no longer returns (deleted on another phone) is
+  // never refreshed: Home's cold-start paint showed it as a LIVE round until
+  // the remote list replaced it a few seconds later.
+  test('loadCachedTournamentsList listedOnly drops blobs the last server list did not return', async () => {
+    jest.doMock('../../lib/supabase', () => ({
+      supabase: {
+        from: jest.fn(),
+        auth: {
+          getUser: jest.fn(() => Promise.resolve({ data: { user: null } })),
+        },
+      },
+    }));
+
+    const { tournamentsIndex } = require('../tournamentsIndex');
+    const listed = { id: 'listed-1', name: 'Listed', createdAt: '2026-06-02T10:00:00.000Z', players: [], rounds: [] };
+    const store = require('../tournamentStore');
+    await store.saveLocal(listed);
+    await store.saveLocal({
+      id: 'orphan-1', name: 'Deleted elsewhere', createdAt: '2026-05-20T10:00:00.000Z', players: [], rounds: [],
+    });
+    await tournamentsIndex.writeIndex([listed]);
+    const ids = (list) => list.map((t) => t.id).sort();
+
+    expect(ids(await store.loadCachedTournamentsList({ listedOnly: true }))).toEqual(['listed-1']);
+    expect(ids(await store.loadCachedTournamentsList())).toEqual(['listed-1', 'orphan-1']);
+  });
+
   test('does not restore a cached finished tournament as active', async () => {
     jest.doMock('../../lib/connectivity', () => ({
       isOnline: () => true,
