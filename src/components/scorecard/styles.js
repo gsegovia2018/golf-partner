@@ -1196,7 +1196,10 @@ export function makeScorecardStyles(theme) {
       fontSize: 16,
       // Same Android line-box clipping as holeNumber above — the default
       // font padding pushes the digits down and cuts them off ("Hole 2"
-      // loses the bottom of the 2).
+      // loses the bottom of the 2). Without the padding the line box ends at
+      // the baseline-ish metric, so descenders were cut instead ("Hoyo 9"
+      // lost the tail of the y): an explicit line height leaves them room.
+      lineHeight: 22,
       ...(Platform.OS === 'web' ? {} : { includeFontPadding: false }),
     },
     // Official-mode attest button when blocked (discrepancies / in flight).

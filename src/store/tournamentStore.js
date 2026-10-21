@@ -210,6 +210,12 @@ function _unionLocalRoster(target, source) {
   return unionLocalRoster(target, source);
 }
 
+// Lazy for the same reason: telemetry → settingsStore → profileStore imports
+// this module.
+function _track(name, props) {
+  try { require('../lib/telemetry').track(name, props); } catch (_) { /* counts only */ }
+}
+
 // A roster player unionLocalRoster kept is one the server has never seen, so
 // something has to push them there or they stay on this phone forever. Enqueue
 // the add they never got — upsertPlayer/add_tournament_player_if_room are both
@@ -301,6 +307,13 @@ async function _overlayAndSave(id, remote, { makeActive = true } = {}) {
   // because their add never landed. Applied to the fetched base so the
   // pending-mutation overlay below still wins on top of it.
   const rosterSafeRemote = _unionLocalRoster({ ...safeRemote }, local);
+  // A nameless local player the union just dropped is the "—" ghost: count
+  // it, with whether it even had an id, to learn where it comes from.
+  const remoteIds = new Set((safeRemote?.players ?? []).map((p) => p?.id));
+  for (const p of (local?.players ?? [])) {
+    if (p?.name?.trim() || (p?.id && remoteIds.has(p.id))) continue;
+    _track('roster_stub_dropped', { tid: id, hasId: !!p?.id, keys: p ? Object.keys(p).length : 0 });
+  }
   let snapshot = await _pendingEntriesFor(id);
   let merged = rosterSafeRemote;
   for (let pass = 0; pass < 3; pass++) {
@@ -2408,6 +2421,11 @@ export function subscribeSyncFailures(fn) {
 // syncQueue.drop discards it. `entry` is the queue entry (id/mutation/path);
 // `error` is whatever the drain caught.
 export async function recordSyncFailure(tournamentId, { entry, error }) {
+  _track('sync_failed', {
+    tid: tournamentId ?? null,
+    type: entry?.mutation?.type ?? null,
+    code: error?.code ?? error?.status ?? null,
+  });
   await _ensureSyncFailuresLoaded();
   return _runExclusiveFailures(async () => {
     const key = tournamentId ?? LIBRARY_FAILURES_KEY;

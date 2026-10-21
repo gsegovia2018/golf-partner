@@ -445,8 +445,11 @@ export function unionLocalRoster(target, source) {
   if (!Array.isArray(target?.players) || !Array.isArray(source?.players)) return target;
   const known = new Set(target.players.map((p) => p?.id));
   const removed = new Set(target.deletedPlayerIds ?? []);
+  // A nameless local player is a corrupt stub, never a real add (every add
+  // path requires a name): dropping it here is what cleans a blob that
+  // already carries one, and keeps the repair from pushing it to the server.
   const kept = source.players.filter(
-    (p) => p?.id && !known.has(p.id) && !removed.has(p.id),
+    (p) => p?.id && p.name?.trim() && !known.has(p.id) && !removed.has(p.id),
   );
   if (kept.length > 0) target.players = [...target.players, ...kept];
   return target;

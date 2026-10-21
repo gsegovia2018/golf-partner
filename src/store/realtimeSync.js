@@ -16,6 +16,7 @@ import { readLocal, saveLocal } from './tournamentStore';
 import { applyPendingMutations } from './mutate';
 import { syncQueue } from './syncQueue';
 import { runExclusiveForTournament } from './tournamentMutex';
+import { track } from '../lib/telemetry';
 
 function deepClone(x) {
   return x == null ? x : JSON.parse(JSON.stringify(x));
@@ -119,6 +120,7 @@ export function applyNoteRow(t, row, eventType) {
 // round_index, id`), so the existing entry is pulled out and the new one
 // spliced back in at the target position rather than patched in place.
 export function applyRoundRow(t, row, eventType) {
+  if (!row?.id) return t; // a record-less event: never splice in an id-less round
   const next = deepClone(t);
   const rounds = (next.rounds ?? []).slice();
   const existingIdx = rounds.findIndex((r) => r.id === row.id);
@@ -159,6 +161,7 @@ export function applyRoundRow(t, row, eventType) {
 // Upsert it at `pos`, reordering the same way applyRoundRow does for
 // round_index.
 export function applyPlayerRow(t, row, eventType) {
+  if (!row?.player_id) return t; // a record-less event: never add an id-less player
   const next = deepClone(t);
   const players = (next.players ?? []).slice();
   const existingIdx = players.findIndex((p) => p.id === row.player_id);
@@ -359,7 +362,14 @@ function flushBatch(id) {
   }).then(batch.resolve, batch.resolve);
 }
 
-function makeHandler(id, applyFn) {
+// The key a row of each table cannot be patched in without.
+const ROW_KEYS = {
+  game_scores: 'round_id', game_shot_details: 'round_id', game_round_notes: 'round_id',
+  game_rounds: 'id', game_players: 'player_id', tournaments: 'id',
+};
+const _badRowsSeen = new Set();
+
+function makeHandler(id, table, applyFn) {
   return (payload) => {
     const eventType = payload?.eventType;
     // A DELETE delivers only `old` (the PK); INSERT/UPDATE deliver `new`. The
@@ -367,6 +377,25 @@ function makeHandler(id, applyFn) {
     // route through `old` (which for these tables is the primary key alone).
     const row = eventType === 'DELETE' ? payload?.old : (payload?.new ?? payload?.old);
     if (!row) return Promise.resolve();
+    // An error message (e.g. "Error 401: Unauthorized") still arrives as a
+    // change, with `new: {}`. Patched in, such a `{}` would be a nameless
+    // player and an id-less round — the suspected source of the "—" chip and
+    // "equipos" banner in a solo game (2026-10-20). Counted once per game,
+    // table and error, so the next one says whether that is where it comes from.
+    if (payload?.errors?.length || row[ROW_KEYS[table]] == null) {
+      const error = String(payload?.errors?.[0] ?? '').slice(0, 80) || null;
+      const seen = `${id}|${table}|${error}`;
+      if (_badRowsSeen.has(seen)) return Promise.resolve();
+      _badRowsSeen.add(seen);
+      track('realtime_bad_row', {
+        tid: id,
+        table,
+        event: eventType ?? null,
+        error,
+        keys: Object.keys(row).length,
+      });
+      return Promise.resolve();
+    }
 
     let batch = _batches.get(id);
     if (!batch) {
@@ -407,7 +436,7 @@ function buildChannel(id) {
     channel.on(
       'postgres_changes',
       { event: '*', schema: 'public', table, filter },
-      makeHandler(id, applyFn),
+      makeHandler(id, table, applyFn),
     );
   }
   channel.subscribe((status) => {

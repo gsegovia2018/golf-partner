@@ -9,6 +9,7 @@ import { readLocal, saveLocal } from '../tournamentStore';
 import { applyPendingMutations } from '../mutate';
 import { syncQueue } from '../syncQueue';
 import { supabase } from '../../lib/supabase';
+import { track } from '../../lib/telemetry';
 
 jest.mock('../tournamentStore', () => ({
   readLocal: jest.fn(),
@@ -19,6 +20,8 @@ jest.mock('../mutate', () => ({
   applyPendingMutations: jest.fn((t) => t),
   unionLocalRoster: jest.fn((target) => target),
 }));
+
+jest.mock('../../lib/telemetry', () => ({ track: jest.fn() }));
 
 jest.mock('../syncQueue', () => ({
   syncQueue: { all: jest.fn(() => Promise.resolve([])) },
@@ -188,6 +191,11 @@ describe('applyNoteRow', () => {
 });
 
 describe('applyRoundRow', () => {
+  test('a record-less row ({} from an error message) adds no id-less round', () => {
+    const t = { id: 't1', rounds: [{ id: 'r0', pairs: [[{ id: 'p0' }]] }] };
+    expect(applyRoundRow(t, {}, 'UPDATE')).toBe(t);
+  });
+
   test('upserts a new round at its round_index, preserving array order', () => {
     const t = {
       id: 't1',
@@ -272,6 +280,11 @@ describe('applyPlayerRow', () => {
     const t = { id: 't1', players: [{ id: 'p0' }, { id: 'p1' }] };
     const out = applyPlayerRow(t, { player_id: 'p0', pos: 1, body: { id: 'p0' } });
     expect(out.players.map((p) => p.id)).toEqual(['p0', 'p1']);
+  });
+
+  test('a record-less row ({} from an error message) adds no id-less player', () => {
+    const t = { id: 't1', players: [{ id: 'p0', name: 'Marcos' }] };
+    expect(applyPlayerRow(t, {}, 'UPDATE')).toBe(t);
   });
 
   test('a body-less UPDATE on an existing player keeps the cached name', () => {
@@ -538,6 +551,25 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
     expect(saveLocal).toHaveBeenCalledTimes(1);
     const [savedArg] = saveLocal.mock.calls[0];
     expect(savedArg.rounds).toEqual([]);
+  });
+
+  test('an error message ("Error 401: Unauthorized", new: {}) is never patched in', async () => {
+    readLocal.mockResolvedValue({
+      id: 't1', kind: 'game', rounds: [{ id: 'r1', scores: {} }], players: [{ id: 'p0', name: 'Marcos' }],
+    });
+    await ensureRealtimeForTournament('t1');
+    const channel = supabase.channel.mock.results[0].value;
+    const handler = channel.on.mock.calls.find(([, cfg]) => cfg.table === 'game_players')[2];
+
+    await handler({ eventType: 'UPDATE', new: {}, old: {}, errors: ['Error 401: Unauthorized'] });
+    // Without an `errors` list, a row missing its key is dropped all the same.
+    await handler({ eventType: 'INSERT', new: { pos: 1 } });
+
+    expect(saveLocal).not.toHaveBeenCalled();
+    expect(track.mock.calls).toEqual([
+      ['realtime_bad_row', { tid: 't1', table: 'game_players', event: 'UPDATE', error: 'Error 401: Unauthorized', keys: 0 }],
+      ['realtime_bad_row', { tid: 't1', table: 'game_players', event: 'INSERT', error: null, keys: 1 }],
+    ]);
   });
 
   test('row handler no-ops when readLocal returns null (tournament not cached locally)', async () => {

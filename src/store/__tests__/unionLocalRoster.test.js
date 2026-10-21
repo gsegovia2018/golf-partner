@@ -69,4 +69,12 @@ describe('unionLocalRoster', () => {
 
     expect(unionLocalRoster(target, junk).players.map((p) => p.id)).toEqual(['p1']);
   });
+
+  test('drops a nameless local stub, so a fetch cleans a blob that carries one', () => {
+    // The "—" ghost in a solo game: every real add has a name.
+    const target = { players: [{ id: 'p1', name: 'Marcos' }] };
+    const ghosted = { players: [{ id: 'p1', name: 'Marcos' }, { id: 'ghost' }, { id: 'blank', name: ' ' }] };
+
+    expect(unionLocalRoster(target, ghosted).players.map((p) => p.id)).toEqual(['p1']);
+  });
 });
