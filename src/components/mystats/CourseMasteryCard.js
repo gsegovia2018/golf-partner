@@ -10,6 +10,7 @@ import { useT, formatNumber } from '../../i18n';
 import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import { scalePoints } from './chartGeometry';
+import { toneColor, toneOfSeries } from '../../theme/tone';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 
@@ -98,18 +99,19 @@ function Sparkline({ points, theme, s }) {
     width: SPARK_W, height: SPARK_H, padX: SPARK_PAD, padTop: SPARK_PAD, padBottom: SPARK_PAD,
   });
   const last = scaled[scaled.length - 1];
+  const stroke = toneColor(theme, toneOfSeries(values, { lowerIsBetter: true, tolerance: 0.5 }));
   return (
     <SparkReveal style={s.spark} innerStyle={s.sparkInner}>
       <Svg width={SPARK_W} height={SPARK_H} viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}>
         <Polyline
           points={scaled.map((p) => `${p.x},${p.y}`).join(' ')}
           fill="none"
-          stroke={theme.accent.primary}
+          stroke={stroke}
           strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <Circle cx={last.x} cy={last.y} r={3} fill={theme.accent.primary} />
+        <Circle cx={last.x} cy={last.y} r={3} fill={stroke} />
       </Svg>
     </SparkReveal>
   );

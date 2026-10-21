@@ -3,20 +3,21 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { msgText, areaText } from './msg';
+import { toneColor, toneFill } from '../../theme/tone';
 import { useT, t, formatNumber } from '../../i18n';
 
 const TONES = {
   good: {
     icon: 'trending-up',
     labelKey: 'stats.my.coach.tone.good',
-    color: (theme) => theme.scoreColor('good'),
+    color: (theme) => toneColor(theme, 'good'),
     backgroundColor: (theme) => theme.accent.light,
   },
   bad: {
     icon: 'alert-triangle',
     labelKey: 'stats.my.coach.tone.bad',
-    color: (theme) => theme.destructive,
-    backgroundColor: (theme) => (theme.isDark ? 'rgba(248,113,113,0.14)' : '#fee2e2'),
+    color: (theme) => toneColor(theme, 'bad'),
+    backgroundColor: (theme) => toneFill(theme, 'bad'),
   },
   watch: {
     icon: 'eye',

@@ -12,6 +12,7 @@ import { PrimaryButton, SecondaryButton } from '../components/ui/Buttons';
 import { Overline, swingType } from '../components/swing/swingStyles';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
+import { useSwingTone } from '../components/swing/swingTone';
 import { haptic } from '../lib/haptics';
 import {
   subscribeSwings, getSwingsVersion, getSwings, getSwingProfile, hydrateSwings,
@@ -59,12 +60,7 @@ export default function SwingHomeScreen({ navigation }) {
   useT(); // the swing copy reads the language as it renders: re-render when it changes
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const tone = useMemo(() => ({
-    green: theme.accent.primary,
-    yellow: theme.isDark ? semantic.warning.dark : semantic.warning.light,
-    red: theme.isDark ? semantic.destructive.dark : semantic.destructive.light,
-    none: theme.text.muted,
-  }), [theme]);
+  const tone = useSwingTone();
 
   useSyncExternalStore(subscribeSwings, getSwingsVersion);
   const swings = getSwings();
@@ -215,8 +211,8 @@ export default function SwingHomeScreen({ navigation }) {
                 )) : null}
                 {fps != null ? (
                   <View style={s.fpsWarn} testID={`fps-warn-${sw.id}`}>
-                    <Feather name="alert-triangle" size={12} color={tone.yellow} />
-                    <Text style={[s.fpsWarnText, { color: tone.yellow }]}>{T.fpsWarn(fps)}</Text>
+                    <Feather name="alert-triangle" size={12} color={tone.warning} />
+                    <Text style={[s.fpsWarnText, { color: tone.warning }]}>{T.fpsWarn(fps)}</Text>
                   </View>
                 ) : null}
               </View>
@@ -247,7 +243,7 @@ export default function SwingHomeScreen({ navigation }) {
       <ScrollView style={s.scroll} contentContainerStyle={s.content}>
         {!canAnalyse && availability.reason === 'update' ? (
           <View style={s.banner} accessibilityRole="alert">
-            <Feather name="alert-triangle" size={18} color={tone.yellow} />
+            <Feather name="alert-triangle" size={18} color={tone.warning} />
             <View style={s.bannerText}>
               <Text style={s.bannerTitle}>{T.updateTitle}</Text>
               <Text style={s.bannerBody}>{T.updateBody}</Text>

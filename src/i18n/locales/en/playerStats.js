@@ -29,7 +29,7 @@ export default {
   'stats.player.summary.chip.steady': 'Holding steady',
   'stats.player.summary.chip.down': 'Cooling off',
   'stats.player.summary.diffUnit': 'diff',
-  'stats.player.summary.formMeta': 'Dashed line marks the app index · gold dots are at or better than it',
+  'stats.player.summary.formMeta': 'Dashed line marks the app index · filled dots are at or better than it',
   'stats.player.summary.notEnoughRounds': 'Not enough rounds yet.',
   'stats.player.summary.strengthsTitle': 'Strengths & Watch-outs',
   'stats.player.summary.strengths': 'Strengths',

@@ -7,22 +7,17 @@ import Reveal from '../ui/Reveal';
 import CountUpText from './CountUpText';
 import { fmtDelta } from './reportCardView';
 import { verdictKey } from './reportKeys';
+import { toneSurface } from '../../theme/tone';
 
 // Filled verdict hero (hybrid option B): tone-colored card, inverse Playfair
 // verdict, count-up points top-right, chips for per-hole / vs-avg /
 // benchmark / partial-round.
-function heroBg(theme, tone) {
-  if (tone === 'bad') return theme.destructive;
-  if (tone === 'neutral') return theme.text.primary;
-  return theme.accent.primary;
-}
-
 export default function ReportVerdictHero({ headline, round, hasHistory, durationLabel = null }) {
   const { theme } = useTheme();
   const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const reduced = useReducedMotion();
-  const bg = heroBg(theme, headline.tone ?? 'neutral');
+  const bg = toneSurface(theme, headline.tone ?? 'neutral');
 
   const mark = formatNumber(2, { decimals: 1 });
   const chips = [t('stats.my.report.perHole', { value: formatNumber(headline.perHole) })];

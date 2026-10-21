@@ -52,6 +52,6 @@ function makeStyles(theme) {
     title: { ...theme.typography.body, color: theme.text.primary, fontWeight: '700' },
     reason: { ...theme.typography.caption, color: theme.text.secondary },
     evidence: { ...theme.typography.tiny, color: theme.text.muted },
-    payoff: { ...theme.typography.caption, color: theme.scoreColor('good'), fontWeight: '800', maxWidth: 92, textAlign: 'right' },
+    payoff: { ...theme.typography.caption, color: theme.accent.primary, fontWeight: '800', maxWidth: 92, textAlign: 'right' },
   });
 }

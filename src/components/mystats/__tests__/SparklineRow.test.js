@@ -62,7 +62,7 @@ function Expandable(props) {
 describe('SparklineRow', () => {
   test('renders label, comparison sub, and the latest formatted value', () => {
     const { getByText } = render(wrap(
-      <SparklineRow metric={puttsMetric} series={series} color="#f00" formatValue={(v) => `${v}`} />
+      <SparklineRow metric={puttsMetric} series={series} formatValue={(v) => `${v}`} />
     ));
 
     expect(getByText('Putts / round')).toBeTruthy();
@@ -72,14 +72,14 @@ describe('SparklineRow', () => {
 
   test('an improvement on a lower-is-better metric gets a GREEN down-arrow chip', () => {
     const view = render(wrap(
-      <SparklineRow metric={puttsMetric} series={series} color="#f00" />
+      <SparklineRow metric={puttsMetric} series={series} />
     ));
 
     const chip = view.getByTestId('sparkline-chip-puttsPerRound');
     expect(chip.props.accessibilityLabel).toBe('Putts / round: improved 3 vs your history');
     const icon = view.UNSAFE_getAllByType(Feather).find((i) => i.props.name === 'trending-down');
     expect(icon).toBeTruthy();
-    expect(icon.props.color).toBe('#2a7d56'); // scoreColor('good'), not destructive
+    expect(icon.props.color).toBe('#006747'); // the tone rule's green, not destructive
     expect(view.getByText('-3')).toBeTruthy();
   });
 
@@ -89,7 +89,7 @@ describe('SparklineRow', () => {
       recent: 40, history: 45, delta: -5, direction: 'down',
     };
     const view = render(wrap(
-      <SparklineRow metric={girMetric} series={series} color="#0f0" />
+      <SparklineRow metric={girMetric} series={series} />
     ));
 
     const chip = view.getByTestId('sparkline-chip-girPct');
@@ -105,7 +105,7 @@ describe('SparklineRow', () => {
       { label: 'R3', value: 20 },
     ];
     const view = render(wrap(
-      <SparklineRow metric={puttsMetric} series={gapped} color="#f00" />
+      <SparklineRow metric={puttsMetric} series={gapped} />
     ));
     layOut(view, 'puttsPerRound');
 
@@ -120,7 +120,7 @@ describe('SparklineRow', () => {
       { label: 'R3', value: 20 },
     ];
     const view = render(wrap(
-      <SparklineRow metric={puttsMetric} series={gapped} color="#f00" dropGaps />
+      <SparklineRow metric={puttsMetric} series={gapped} dropGaps />
     ));
     layOut(view, 'puttsPerRound');
 
@@ -132,7 +132,7 @@ describe('SparklineRow', () => {
   test('no history → no delta chip, and the sub says so', () => {
     const noHistory = { ...puttsMetric, history: null, delta: null, direction: 'flat' };
     const { queryByTestId, getByText } = render(wrap(
-      <SparklineRow metric={noHistory} series={series} color="#f00" />
+      <SparklineRow metric={noHistory} series={series} />
     ));
 
     expect(queryByTestId('sparkline-chip-puttsPerRound')).toBeNull();
@@ -142,7 +142,7 @@ describe('SparklineRow', () => {
   test('a zero delta renders the muted level chip', () => {
     const flat = { ...puttsMetric, delta: 0, direction: 'flat' };
     const view = render(wrap(
-      <SparklineRow metric={flat} series={series} color="#f00" />
+      <SparklineRow metric={flat} series={series} />
     ));
 
     const chip = view.getByTestId('sparkline-chip-puttsPerRound');
@@ -153,7 +153,7 @@ describe('SparklineRow', () => {
   test('keeps the metric infoKey wired to the row info button', () => {
     const onInfo = jest.fn();
     const { getByLabelText } = render(wrap(
-      <SparklineRow metric={puttsMetric} series={series} color="#f00" infoKey="putts" onInfo={onInfo} />
+      <SparklineRow metric={puttsMetric} series={series} infoKey="putts" onInfo={onInfo} />
     ));
 
     fireEvent.press(getByLabelText('What is Putts / round'));
@@ -162,7 +162,7 @@ describe('SparklineRow', () => {
 
   test('tapping the row expands the full per-round chart with every value labelled', () => {
     const view = render(wrap(
-      <Expandable metric={puttsMetric} series={series} color="#f00" formatValue={(v) => `${v}p`} />
+      <Expandable metric={puttsMetric} series={series} formatValue={(v) => `${v}p`} />
     ));
 
     // Collapsed: announced as a closed disclosure button, no chart mounted.
@@ -201,7 +201,7 @@ describe('SparklineRow', () => {
       { label: 'R3', value: 20 },
     ];
     const view = render(wrap(
-      <Expandable metric={puttsMetric} series={gapped} color="#f00" dropGaps />
+      <Expandable metric={puttsMetric} series={gapped} dropGaps />
     ));
 
     fireEvent.press(view.getByTestId('sparkline-press-puttsPerRound'));
@@ -218,14 +218,14 @@ describe('SparklineRow', () => {
 
   test('a toggleable row shows the disclosure chevron; a plain row does not', () => {
     const view = render(wrap(
-      <Expandable metric={puttsMetric} series={series} color="#f00" />
+      <Expandable metric={puttsMetric} series={series} />
     ));
     const chevron = view.UNSAFE_getAllByType(Feather).find((i) => i.props.name === 'chevron-down');
     expect(chevron).toBeTruthy();
     expect(chevron.props.size).toBe(14);
 
     const plain = render(wrap(
-      <SparklineRow metric={puttsMetric} series={series} color="#f00" />
+      <SparklineRow metric={puttsMetric} series={series} />
     ));
     expect(plain.queryByTestId('sparkline-press-puttsPerRound')).toBeNull();
     expect(plain.UNSAFE_getAllByType(Feather).find((i) => i.props.name === 'chevron-down'))
@@ -235,7 +235,7 @@ describe('SparklineRow', () => {
   test('the info button stays independently tappable, collapsed and expanded', () => {
     const onInfo = jest.fn();
     const view = render(wrap(
-      <Expandable metric={puttsMetric} series={series} color="#f00" infoKey="putts" onInfo={onInfo} />
+      <Expandable metric={puttsMetric} series={series} infoKey="putts" onInfo={onInfo} />
     ));
 
     // Collapsed: info fires without toggling the row open.
@@ -254,7 +254,7 @@ describe('SparklineRow', () => {
   test('reduced motion renders the expanded chart and chevron statically', () => {
     mockReducedMotion = true;
     const view = render(wrap(
-      <Expandable metric={puttsMetric} series={series} color="#f00" />
+      <Expandable metric={puttsMetric} series={series} />
     ));
 
     fireEvent.press(view.getByTestId('sparkline-press-puttsPerRound'));
@@ -271,7 +271,7 @@ describe('SparklineRow', () => {
   test('reduced motion still renders the sparkline and chip statically', () => {
     mockReducedMotion = true;
     const view = render(wrap(
-      <SparklineRow metric={puttsMetric} series={series} color="#f00" />
+      <SparklineRow metric={puttsMetric} series={series} />
     ));
     layOut(view, 'puttsPerRound');
 

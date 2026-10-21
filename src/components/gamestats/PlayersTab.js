@@ -10,6 +10,7 @@ import { useT } from '../../i18n';
 import ScoreMixBar from '../mystats/ScoreMixBar';
 import FairwayFan from '../mystats/FairwayFan';
 import { isLowSample } from '../mystats/metricTone';
+import { toneColor, toneOfSigned } from '../../theme/tone';
 import {
   standingsRows, playerBestRuns, roundCard, scoreMix, scoringSplits, puttBuckets, shotComparePlots,
 } from '../../store/gameStatsView';
@@ -112,7 +113,7 @@ export default function PlayersTab({
         value={ledger.total.strokes == null ? '–' : num(ledger.total.strokes)}
         label={t('stats.game.player.strokesToPar', { vs: toPar === 0 ? t('stats.game.standings.even') : signed(toPar ?? 0) })}
       />
-      <Tile s={s} value={signed(standing.vs)} label={t('stats.game.player.vsHcp')} tone={standing.vs >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor')} />
+      <Tile s={s} value={signed(standing.vs)} label={t('stats.game.player.vsHcp')} tone={toneColor(theme, toneOfSigned(standing.vs))} />
     </View>
   ) : (
     <View style={s.tiles}>
@@ -122,7 +123,7 @@ export default function PlayersTab({
         value={hasFull ? num(data.avgRound, { maxDecimals: 1 }) : '–'}
         label={t('stats.game.player.avgRound', { perHole: num(data.perHole, { decimals: 2 }) })}
       />
-      <Tile s={s} value={signed(standing.vs)} label={t('stats.game.player.vsHcp')} tone={standing.vs >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor')} />
+      <Tile s={s} value={signed(standing.vs)} label={t('stats.game.player.vsHcp')} tone={toneColor(theme, toneOfSigned(standing.vs))} />
     </View>
   );
 

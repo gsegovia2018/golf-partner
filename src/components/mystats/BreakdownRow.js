@@ -54,12 +54,12 @@ function TickFade({ style, delay, testID }) {
 
 // Magnitude is "how much", tone is "is it good" — the fill length shows the
 // row's magnitude on its group's scale (section max for pts/count rows,
-// absolute 0-100 for percentages), while color stays on tone duty: green
-// good, red bad, info blue for rows that are just facts.
+// absolute 0-100 for percentages), while color stays on tone duty (the tone
+// rule): green good, red bad, ink-grey for mid rows and plain facts.
 function barFillStyle(theme, tone) {
   if (tone === 'good') return { backgroundColor: theme.accent.primary };
   if (tone === 'bad') return { backgroundColor: theme.destructive, opacity: 0.75 };
-  return { backgroundColor: theme.info, opacity: 0.8 };
+  return { backgroundColor: theme.text.secondary, opacity: 0.8 };
 }
 
 // Magnitude-bar row: fixed label column (with muted secondary/sample line),

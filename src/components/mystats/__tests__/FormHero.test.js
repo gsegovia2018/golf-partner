@@ -40,7 +40,7 @@ describe('FormHero', () => {
     expect(formVerdict('flat')).toBe('Holding steady');
   });
 
-  test('renders kicker, verdict from stats.form, and the gold differential number', () => {
+  test('renders kicker, verdict from stats.form, and the differential number in surface ink', () => {
     const { getByText, getByTestId } = render(wrap(
       <FormHero form={form} formSeries={formSeries} metrics={{ avgPoints: 33 }} n={5} onInfo={() => {}} />
     ));
@@ -49,14 +49,28 @@ describe('FormHero', () => {
     expect(getByText('Improving lately')).toBeTruthy();
     const pts = getByTestId('form-hero-pts');
     const style = StyleSheet.flatten(pts.props.style);
-    expect(style.color).toBe('#ffd700'); // semantic.winner.dark gold
+    expect(style.color).toBe('#ffffff'); // text.inverse on the toned surface — gold is ceremony only
     expect(style.fontFamily).toBe('PlayfairDisplay-Black');
     // The suffix inside the hero number itself — ' diff' with its leading
     // space, so this doesn't also match the meta line's "Score differential".
     expect(getByText(' diff')).toBeTruthy();
   });
 
-  test('draws the differential chart on the hero surface with a green ring and gold end dot', () => {
+  // The tone rule, as on the Informe de vuelta hero: green improving, ink
+  // steady, red trending down — never green regardless of direction.
+  test.each([
+    ['up', '#006747'],
+    ['flat', '#1a1a1a'],
+    ['down', '#c8102e'],
+  ])('direction %s paints the surface %s', (direction, bg) => {
+    const f = { ...form, metrics: [{ ...form.metrics[0], direction }] };
+    const { getByTestId } = render(wrap(
+      <FormHero form={f} formSeries={formSeries} metrics={{}} n={5} onInfo={() => {}} />
+    ));
+    expect(StyleSheet.flatten(getByTestId('form-hero-surface').props.style).backgroundColor).toBe(bg);
+  });
+
+  test('draws the differential chart in surface ink, ringed in the surface colour', () => {
     const view = render(wrap(
       <FormHero form={form} formSeries={formSeries} metrics={{}} n={5} onInfo={() => {}} />
     ));
@@ -65,27 +79,28 @@ describe('FormHero', () => {
     fireEvent(canvas, 'layout', { nativeEvent: { layout: { width: 300 } } });
     const circles = view.UNSAFE_getAllByType(Circle);
     const last = circles[circles.length - 1];
-    expect(last.props.stroke).toBe('#00553c'); // hero green ring, not white card bg
-    expect(last.props.fill).toBe('#ffd700'); // gold end dot
+    expect(last.props.stroke).toBe('#006747'); // ring = the improving surface
+    expect(last.props.fill).toBe('#ffffff'); // end dot in surface ink
   });
 
-  test('meta line explains the comparison and carries the differential delta', () => {
-    const { getByText } = render(wrap(
+  test('meta line explains the comparison; the delta sits in its own chip', () => {
+    const { getByText, getByTestId } = render(wrap(
       <FormHero form={form} formSeries={formSeries} metrics={{ avgPoints: 33 }} n={5} onInfo={() => {}} />
     ));
 
+    expect(getByText('Score differential · recent 3 vs previous 5 rounds · 33 pts/rnd')).toBeTruthy();
     // A negative differential delta is the IMPROVEMENT, so it takes the up
     // arrow — the inverse of how a points delta would read.
-    expect(getByText('Score differential · recent 3 vs previous 5 rounds · ▲ -3 · 33 pts/rnd')).toBeTruthy();
+    expect(getByTestId('form-hero-delta').props.children).toBe('▲ -3 vs previous');
   });
 
   test('a worse differential takes the down arrow with an explicit plus', () => {
     const worse = { ...form, metrics: [{ ...form.metrics[0], delta: 2.4, direction: 'down' }] };
-    const { getByText } = render(wrap(
+    const { getByTestId } = render(wrap(
       <FormHero form={worse} formSeries={formSeries} metrics={{}} n={5} onInfo={() => {}} />
     ));
 
-    expect(getByText('Score differential · recent 3 vs previous 5 rounds · ▼ +2.4')).toBeTruthy();
+    expect(getByTestId('form-hero-delta').props.children).toBe('▼ +2.4 vs previous');
   });
 
   test('points per round survives in the meta line as the as-played fact', () => {

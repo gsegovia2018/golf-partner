@@ -82,7 +82,7 @@ export default function RoundScoreboard({
   const vsParColor = (r) => {
     if (r.played === 0) return theme.text.muted;
     if (r.vsPar < 0) return theme.scoreColor('excellent');
-    if (r.vsPar === 0) return theme.scoreColor('good');
+    if (r.vsPar === 0) return theme.text.primary; // level par is mid
     return theme.scoreColor('poor');
   };
 

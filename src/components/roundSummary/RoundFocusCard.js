@@ -50,8 +50,8 @@ export default function RoundFocusCard({ target, summary, verdict = null, onOpen
     verdictText = `${base} · ${t('stats.my.coach.ui.fix.level', { level: verdict.level ?? 1, max: 3 })}`;
   }
   const tone = TONE[state] ?? 'neutral';
-  const toneColor = tone === 'good' ? theme.scoreColor('good')
-    : tone === 'bad' ? theme.destructive : theme.text.secondary;
+  const toneColor = tone === 'good' ? theme.accent.primary
+    : tone === 'bad' ? theme.destructive : theme.text.primary;
 
   const bars = [
     { id: 'now', label: t('rounds.summary.focus.thisRound'), text: nowText, pct: summary.nowPct, color: theme.accent.primary },

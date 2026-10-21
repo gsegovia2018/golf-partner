@@ -9,6 +9,7 @@ import { useT, t as tNow } from '../../i18n';
 import CountUpText from './CountUpText';
 import PressableScale from '../ui/PressableScale';
 import Reveal from '../ui/Reveal';
+import { scoreBandColors } from '../../theme/tone';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const STAGGER_MS = 40;
@@ -82,7 +83,7 @@ export function DamageHeader({ damage = [], onInfo }) {
   const { latest, delta } = damageDelta(damage);
   const level = delta != null && Math.abs(delta) < 0.5;
   const lower = delta != null && delta <= -0.5;
-  const chipColor = level ? theme.text.muted : lower ? theme.accent.primary : theme.destructive;
+  const chipColor = level ? theme.text.primary : lower ? theme.accent.primary : theme.destructive;
   const chipText = level
     ? t('stats.my.mix.level')
     : t('stats.my.mix.vsAverage', { arrow: lower ? '▼' : '▲', value: Math.round(Math.abs(delta)) });
@@ -162,13 +163,7 @@ export default function ScoreMixColumns({ rounds = [], damage = [] }) {
   const t = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [selected, setSelected] = useState(null);
-  const C = {
-    birdiePlus: theme.accent.primary,
-    par: '#7fb59f',
-    bogey: '#e7d7b4',
-    double: withAlpha(theme.destructive, 0.45),
-    worse: theme.destructive,
-  };
+  const C = scoreBandColors(theme);
 
   if (rounds.length < 2) {
     return <Text style={s.empty}>{t('stats.my.mix.selectMore')}</Text>;

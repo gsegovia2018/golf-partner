@@ -192,7 +192,7 @@ describe('FormTrendCard status surface', () => {
   test('declining form tints the card with the red wash', () => {
     const r = render(<CoachTab stats={formStats('down', 1.8)} focus={null} focusVerdict={null} onCommitFocus={jest.fn()} onEndFocus={jest.fn()} />);
     expect(r.getByText('Trending down lately')).toBeTruthy();
-    expect(formCardBg(r)).toBe('#fbeaec');
+    expect(formCardBg(r)).toBe('rgba(200,16,46,0.07)');
   });
 
   test('steady form keeps the plain card surface', () => {

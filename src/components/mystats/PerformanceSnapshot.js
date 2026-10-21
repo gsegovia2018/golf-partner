@@ -8,6 +8,7 @@ import SectionCard from './SectionCard';
 import TrendLineChart from './TrendLineChart';
 import { SGBar } from './SGBars';
 import { renderMsg } from './msg';
+import { toneColor, toneOfDirection, toneOfSigned } from '../../theme/tone';
 
 // The headline form metric: score differential, which — unlike points per
 // round — does not move when the handicap does. `direction` is already
@@ -74,12 +75,10 @@ export default function PerformanceSnapshot({
           <Text
             style={[
               s.panelValue,
-              hasStrokesGained && {
-                color: gap >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor'),
-              },
+              hasStrokesGained && { color: toneColor(theme, toneOfSigned(gap)) },
             ]}
           >
-            {hasStrokesGained ? `${gap >= 0 ? '+' : ''}${formatNumber(gap, { decimals: 2 })}` : '-'}
+            {hasStrokesGained ? `${gap > 0 ? '+' : ''}${formatNumber(gap, { decimals: 2 })}` : '-'}
           </Text>
           <View style={s.targetRow}>
             <Text style={s.panelMeta}>
@@ -101,7 +100,7 @@ export default function PerformanceSnapshot({
         </View>
       </View>
 
-      <TrendLineChart series={diffSeries} color={theme.accent.primary} labelColor={theme.text.secondary} dropGaps />
+      <TrendLineChart series={diffSeries} color={toneColor(theme, toneOfDirection(formMetric(form)?.direction))} labelColor={theme.text.secondary} dropGaps />
 
       <View style={s.metricRail}>
         <MetricCell label={t('stats.my.snapshot.rounds')} value={`${metrics.rounds ?? 0}`} s={s} />

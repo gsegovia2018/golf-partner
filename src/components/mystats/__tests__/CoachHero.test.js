@@ -57,10 +57,10 @@ describe('CoachHero surface color', () => {
     expect(surfaceColor(view)).toBe(WHITE);
   });
 
-  test('bad-tone area label uses winner gold on the Masters-red surface', () => {
+  test('bad-tone area label is plain cream on the Masters-red surface — gold is not a tone', () => {
     const view = render(wrap(<CoachHero insight={{ ...insight, group: 'gettingWorse' }} />));
     const area = view.getByText('Putting');
-    expect(StyleSheet.flatten(area.props.style).color).toBe(semantic.winner.dark);
+    expect(StyleSheet.flatten(area.props.style).color).toBe('#f3efe6');
   });
 
   test('fixFirst area label stays neutral muted — never red on the standing card', () => {

@@ -151,7 +151,7 @@ function NineBlock({
 
   const ptsColorFor = (pts) => pts == null ? theme.text.muted
     : pts >= 3 ? theme.scoreColor('excellent')
-    : pts >= 2 ? theme.scoreColor('good')
+    : pts === 2 ? theme.text.primary // par is mid: ink, not green
     : pts === 1 ? theme.scoreColor('neutral')
     : theme.scoreColor('poor');
 

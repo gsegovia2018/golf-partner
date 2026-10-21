@@ -6,6 +6,7 @@ import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import TrendLineChart from './TrendLineChart';
 import { SG_CATEGORIES } from './shotMetrics';
+import { toneColor, toneOfSeries } from '../../theme/tone';
 
 const CHIPS = [{ key: 'total', labelKey: 'stats.my.sgTrend.total' }, ...SG_CATEGORIES.map(({ key, labelKey }) => ({ key, labelKey }))];
 
@@ -47,7 +48,7 @@ export default function SGTrendCard({ strokesGained }) {
       </View>
       <TrendLineChart
         series={series}
-        color={theme.accent.primary}
+        color={toneColor(theme, toneOfSeries(series, { tolerance: 0.1 }))}
         labelColor={theme.text.secondary}
         caption={t('stats.my.sgTrend.caption')}
         formatValue={(v) => `${v >= 0 ? '+' : ''}${formatNumber(v, { decimals: 1 })}`}

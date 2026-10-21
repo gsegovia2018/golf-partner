@@ -67,13 +67,13 @@ describe('ShotDashboard target-gap hero surface', () => {
     expect(heroColor(renderDash({ ...baseSG, total: 0 }))).toBe(PANEL);
     expect(heroColor(renderDash({ ...baseSG, total: null }))).toBe(PANEL);
   });
-  test('headline number is winner gold on both signs', () => {
+  test('headline number follows the tone rule: red losing, green gaining', () => {
     const losing = renderDash({ ...baseSG, total: -1.2 });
     expect(StyleSheet.flatten(losing.getByText('-1.20 / round').props.style).color)
-      .toBe(semantic.winner.light);
+      .toBe(semantic.destructive.light);
     const winning = renderDash({ ...baseSG, total: 0.8 });
     expect(StyleSheet.flatten(winning.getByText('+0.80 / round').props.style).color)
-      .toBe(semantic.winner.light);
+      .toBe('#006747');
   });
 });
 

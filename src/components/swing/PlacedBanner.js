@@ -17,7 +17,7 @@ export default function PlacedBanner({
   const s = useMemo(() => makeStyles(theme), [theme]);
   return (
     <View style={s.banner} accessibilityLiveRegion="polite" testID="results-placed">
-      <Feather name={failed ? 'alert-triangle' : 'check'} size={16} color={failed ? tone.yellow : tone.green} />
+      <Feather name={failed ? 'alert-triangle' : 'check'} size={16} color={failed ? tone.warning : tone.green} />
       <View style={s.flex}>
         {failed ? <Text style={s.title}>{R.placeFailed}</Text> : (
           <>

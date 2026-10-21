@@ -215,6 +215,8 @@ The GPS overlays (hole flyover sheet, shot tracker, club wheel, geo editor) floa
 
 **The Viewfinder Rule.** Map overlays never use themed surfaces. Over satellite imagery, chrome comes from the fixed HUD palette — light cards would glare outdoors and wash out against the map.
 
+**The Tone Rule.** Wherever a value is judged, good is Clubhouse Green (`accent.primary`), mid is Ink (`text.primary`) and bad is Masters Red (`destructive`), exactly as the Informe de vuelta paints them. The direction is folded in before the colour: a falling handicap, fewer putts or a lower differential is green. Exactly zero, level par and 2 Stableford points are mid. A trend line takes the colour of its direction (`toneOfSeries`), and a verdict card fills with its tone (`toneSurface`). Gold never stands for good and amber never stands for mid. Use `src/theme/tone.js`, never a local copy or a hex. Golf's result scale (score mixes, hole heat) keeps its five steps, with par as ink-grey.
+
 **The Amber Means Conflict Rule.** Conflict Amber marks disagreeing scores and nothing else. It is not a warning color (that is the semantic warning amber) and never carries white text.
 
 ## 3. Typography
@@ -298,7 +300,7 @@ Golf Partner uses a hybrid depth model: light mode uses subtle card and accent s
 
 ### Score And Stat Surfaces
 
-- **Stat Tiles:** Title-sized numeric values over compact captions, usually inside a card or green hero card. Positive values use green, destructive trends use red, and neutral values use Ink or white depending on surface.
+- **Stat Tiles:** Title-sized numeric values over compact captions, usually inside a card or green hero card. Values follow The Tone Rule: green good, red bad, Ink mid (or the surface's own text on a toned verdict card).
 - **Score Signals:** Color can support score quality, but labels, icons, rank order, or text must carry the meaning too.
 - **Round Cards:** Keep people, course, round status, and primary actions visible without requiring the user to parse full score tables first.
 

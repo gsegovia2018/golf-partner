@@ -6,7 +6,7 @@ import Animated, {
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useT, t as tNow, formatNumber } from '../../i18n';
-import { semantic } from '../../theme/tokens';
+import { toneColor, toneOfDirection, toneOfSigned } from '../../theme/tone';
 import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import StatTile from './StatTile';
@@ -107,13 +107,11 @@ function BoardRow({ category, strokesGained, footnote, index }) {
 
   const value = strokesGained?.byCategory?.[category.key];
   const tone = value > 0 ? 'good' : value < 0 ? 'bad' : 'neutral';
-  const valueColor = tone === 'good' ? theme.scoreColor('good')
-    : tone === 'bad' ? theme.destructive
-      : theme.text.muted;
+  const valueColor = toneColor(theme, tone);
   const delta = strokesGained?.personalDelta?.[category.key];
   const showDelta = delta?.delta != null && delta.delta !== 0;
   const up = delta?.direction === 'up';
-  const deltaColor = up ? theme.scoreColor('good') : theme.destructive;
+  const deltaColor = toneColor(theme, toneOfDirection(delta?.direction));
 
   return (
     <View style={s.boardRow} testID={`sg-board-row-${category.key}`}>
@@ -194,6 +192,8 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
   const recon = strokesGained?.reconciliation;
   const hasGap = recon?.rounds > 0 && recon.gapAvg != null && recon.residualAvg != null;
   const hasHero = hasGap || hasStrokesGained;
+  // Positive gap = gaining on the target: green; within the 0.0 rounding, ink.
+  const heroColor = toneColor(theme, toneOfSigned(hasGap ? recon.gapAvg : strokesGained?.total, 0.05));
   // The signal titles are built in the active language, so rebuild on a switch.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const signals = useMemo(() => buildShotSignals(stats), [stats, t]);
@@ -223,7 +223,7 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
     >
       <View style={s.hero} testID="sg-hero-surface">
         <Text style={s.heroKicker}>{t('stats.my.snapshot.targetGap')}</Text>
-        <Text style={[s.heroValue, hasHero && { color: theme.isDark ? semantic.winner.dark : semantic.winner.light }]}>
+        <Text style={[s.heroValue, hasHero && { color: heroColor }]}>
           {hasGap
             ? t('stats.my.shots.gapValue', { value: signedGap(recon.gapAvg) })
             : hasStrokesGained ? t('stats.my.shots.perRound', { value: formatSignedFixed(strokesGained.total) }) : '-'}

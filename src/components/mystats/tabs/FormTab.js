@@ -8,6 +8,7 @@ import FormHero from '../FormHero';
 import SparklineRow from '../SparklineRow';
 import ScoreMixColumns, { DamageHeader } from '../ScoreMixColumns';
 import TrendLineChart from '../TrendLineChart';
+import { toneColor, toneOfSeries } from '../../../theme/tone';
 
 // vs-par values print with an explicit sign.
 const fmtVsPar = (v) => (v > 0 ? `+${formatNumber(v)}` : formatNumber(v));
@@ -16,17 +17,17 @@ const fmtNum = (v) => formatNumber(v);
 // Shot metrics are null for an untracked slice — print a dash, not "null%".
 const orDash = (fmt) => (v) => (v == null ? '—' : fmt(v));
 
-// Per-metric formatting + explainer key + chart colour token for the
-// Instruments rows, keyed by FORM_METRICS key. avgDifferential lives in the
+// Per-metric formatting + explainer key for the Instruments rows, keyed by
+// FORM_METRICS key. Each row's colour is its direction (SparklineRow). avgDifferential lives in the
 // hero, so it has no entry here.
 // `drop` connects the sparkline over null rounds (round-total metrics);
 // shot metrics keep their gaps — a gap there means "not tracked that round".
 const META = {
-  avgVsPar:           { colorToken: 'gold',   format: fmtVsPar, info: 'strokesVsPar', drop: true },
-  fairwayPct:         { colorToken: 'accent', format: fmtPct,   info: 'fairwaysHit' },
-  girPct:             { colorToken: 'accent', format: fmtPct,   info: 'greensInReg' },
-  puttsPerRound:      { colorToken: 'red',    format: fmtNum,   info: 'putts' },
-  threePuttsPerRound: { colorToken: 'red',    format: fmtNum,   info: 'threePutts' },
+  avgVsPar:           { format: fmtVsPar, info: 'strokesVsPar', drop: true },
+  fairwayPct:         { format: fmtPct,   info: 'fairwaysHit' },
+  girPct:             { format: fmtPct,   info: 'greensInReg' },
+  puttsPerRound:      { format: fmtNum,   info: 'putts' },
+  threePuttsPerRound: { format: fmtNum,   info: 'threePutts' },
 };
 
 // Form tab: exactly four cards — the current-form hero, the Instruments
@@ -42,8 +43,6 @@ function FormTab({ stats, n, onChangeN, onInfo }) {
   // per-round chart at a time; tapping the open row again collapses it.
   const [expandedKey, setExpandedKey] = useState(null);
   const { form, formSeries } = stats;
-  const GOLD = '#caa53d';
-  const colorFor = (token) => (token === 'gold' ? GOLD : token === 'red' ? theme.destructive : theme.accent.primary);
 
   const periodChips = (
     <View style={s.chips}>
@@ -78,7 +77,6 @@ function FormTab({ stats, n, onChangeN, onInfo }) {
               key={m.key}
               metric={m}
               series={formSeries.metrics[m.key]}
-              color={colorFor(meta.colorToken)}
               formatValue={orDash(meta.format)}
               infoKey={meta.info}
               onInfo={onInfo}
@@ -108,7 +106,7 @@ function FormTab({ stats, n, onChangeN, onInfo }) {
       <SectionCard title={t('stats.tab.form.steadyHoles')} infoKey="steadyHoles" onInfo={onInfo}>
         <TrendLineChart
           series={formSeries.steadyPct}
-          color={theme.accent.primary}
+          color={toneColor(theme, toneOfSeries(formSeries.steadyPct, { tolerance: 1 }))}
           variant="compact"
           formatValue={(v) => `${formatNumber(v)}%`}
           dropGaps
