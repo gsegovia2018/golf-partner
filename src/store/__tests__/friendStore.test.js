@@ -45,7 +45,7 @@ jest.mock('../../lib/supabase', () => {
   const client = {
     from: () => builder(),
     rpc: (name, args) => { mockState.rpcCalls.push({ name, args }); return Promise.resolve({ error: null }); },
-    auth: { getUser: () => Promise.resolve({ data: { user: { id: 'user-1' } } }) },
+    auth: { getSession: () => Promise.resolve({ data: { session: { user: { id: 'user-1' } } } }) },
   };
   return { supabase: client };
 });

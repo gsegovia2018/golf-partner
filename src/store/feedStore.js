@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { authUserId } from '../lib/authUser';
 import { isOnline } from '../lib/connectivity';
 import {
   loadCachedTournamentsList,
@@ -35,8 +36,7 @@ import { listFriends, getCachedFriends } from './friendStore';
 // pretending the feed is genuinely empty.
 
 async function currentUserId() {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
+  return authUserId();
 }
 
 // Real per-round "last touched" timestamp, used purely for feed ordering.

@@ -11,7 +11,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
-import { supabase } from '../lib/supabase';
+import { authUserId } from '../lib/authUser';
 import {
   readLocal, roundLeaderboard, formatRoundLabel,
   getTournamentSnapshot, isTournamentFinished, buildBoardLink,
@@ -98,12 +98,12 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const load = useCallback(async () => {
     if (!hasLoadedOnceRef.current) setLoading(true);
     try {
-      const [{ data: { user } }, t, roundMedia] = await Promise.all([
-        supabase.auth.getUser(),
+      const [userId, t, roundMedia] = await Promise.all([
+        authUserId(),
         fetchTournament(tournamentId),
         loadRoundMedia(tournamentId, roundId).catch(() => []),
       ]);
-      setMe(user?.id ?? null);
+      setMe(userId);
       setTournament(t);
       setMedia(roundMedia);
     } finally {

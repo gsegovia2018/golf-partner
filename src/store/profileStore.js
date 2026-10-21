@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { File as FsFile } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
+import { authUser } from '../lib/authUser';
 import {
   loadAllTournaments,
   roundTotals,
@@ -64,19 +65,13 @@ export function loadProfile() {
 }
 
 async function _fetchProfile() {
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (!user) {
-    // getUser() swallows network failures (AuthRetryableFetchError) into a
-    // null user instead of throwing. Returning null here for anything other
-    // than a real signed-out state made App.js's onboarding gate misread
-    // "auth server unreachable" as "account has no username" and drop a
-    // logged-in user onto the onboarding screen mid-round. Only signed-out
-    // (AuthSessionMissingError — auth-js's own marker, matched by name the
-    // same way its isAuthSessionMissingError helper does) may return null;
-    // everything else must throw so callers hit their offline paths.
-    if (userError && userError.name !== 'AuthSessionMissingError') throw userError;
-    return null;
-  }
+  // Null only when signed out. Returning null for "can't tell" (offline) once
+  // made App.js's onboarding gate misread "auth server unreachable" as
+  // "account has no username" and drop a logged-in user onto the onboarding
+  // screen mid-round; authUser throws in that case instead, so callers hit
+  // their offline paths.
+  const user = await authUser();
+  if (!user) return null;
   const { data, error } = await supabase
     .from('profiles')
     .select('user_id, username, display_name, handicap, target_handicap, avatar_color, avatar_url, gender, settings, updated_at')
@@ -116,7 +111,7 @@ export async function isUsernameAvailable(username) {
 // the rest of the profile. The `avatarUrl` path from ProfileScreen passes
 // nothing else, so it used to wipe display_name / handicap / avatar_color.
 export async function upsertProfile(fields) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await authUser();
   if (!user) throw new Error(t('shared.error.notSignedIn'));
 
   const row = { user_id: user.id, updated_at: new Date().toISOString() };
@@ -177,7 +172,7 @@ export async function upsertProfile(fields) {
 // own folder (RLS enforces this) and return the public URL. Shrinks to
 // 256px first so we're not shipping 4 MB originals around.
 export async function uploadAvatar(localUri) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await authUser();
   if (!user) throw new Error(t('shared.error.notSignedIn'));
 
   const resized = await ImageManipulator.manipulateAsync(

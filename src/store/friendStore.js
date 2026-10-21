@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { authUserId } from '../lib/authUser';
 import { t } from '../i18n';
 
 // Friendships are a mutual request/accept graph (see
@@ -11,8 +12,7 @@ import { t } from '../i18n';
 const FRIENDS_CACHE_KEY = '@golf_friends_cache';
 
 async function currentUserId() {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
+  return authUserId();
 }
 
 // Shared profile shape used everywhere a "person" is rendered.

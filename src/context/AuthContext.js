@@ -3,6 +3,7 @@ import { AppState, Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { setAuthUser } from '../lib/authUser';
 import { subscribeConnectivity } from '../lib/connectivity';
 import { parseRecoveryUrl, isResetPasswordUrl, isRecoveryRedirectType } from '../lib/passwordReset';
 import { stripRecoveryMarker } from '../lib/oauth';
@@ -156,6 +157,11 @@ export function AuthProvider({ children }) {
   // already left a real session in place, so clearing this just returns the
   // user to the normal signed-in app.
   const clearPasswordRecovery = useCallback(() => setPasswordRecovery(false), []);
+
+  // The stores read who is signed in from lib/authUser instead of a getUser
+  // round-trip. Set while rendering, not in an effect: children's effects run
+  // before this provider's, and the screens' first loads would miss it.
+  if (session !== undefined) setAuthUser(session?.user ?? null);
 
   return (
     <AuthContext.Provider

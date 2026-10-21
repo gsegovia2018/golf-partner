@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { supabase } from './supabase';
+import { authUserId } from './authUser';
 
 // Push notification plumbing. Registration is best-effort: a denied
 // permission, a web browser, or a missing EAS project id all just mean no
@@ -25,8 +26,8 @@ export function configureNotificationHandler() {
 export async function registerPushToken() {
   try {
     if (Platform.OS === 'web') return; // Expo push tokens require a device
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const userId = await authUserId();
+    if (!userId) return;
 
     const existing = await Notifications.getPermissionsAsync();
     let status = existing.status;
@@ -47,7 +48,7 @@ export async function registerPushToken() {
 
     await supabase.from('push_tokens').upsert(
       {
-        user_id: user.id,
+        user_id: userId,
         token,
         platform: Platform.OS,
         updated_at: new Date().toISOString(),
