@@ -6,7 +6,7 @@ import { getTileDataUrl } from '../../store/tileCache';
 // Web host: renders the Leaflet map page in an <iframe>. Rebuilds the page only
 // when the hole/mode identity changes (data.holeKey); live player / activeField
 // / marker updates go through postMessage so the map never reloads.
-export function HoleMapView({ data, player, anchor, activeField, shots, seen, lastShot, plays, targets, onShotMove, onAim, onShotTap, onSeenTap, onPoint, style }) {
+export function HoleMapView({ data, player, anchor, activeField, shots, seen, walk, lastShot, plays, targets, onShotMove, onAim, onShotTap, onSeenTap, onPoint, style }) {
   const ref = useRef(null);
   const t = useT(); // re-render when the language changes, so the page is rebuilt in it
   const lang = getLanguage();
@@ -36,6 +36,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, seen, la
   useEffect(() => { send({ type: 'player', pos: player || null, anchor: anchor ?? null }); }, [player, anchor]);
   useEffect(() => { send({ type: 'shots', shots: shots || [] }); }, [shots]);
   useEffect(() => { send({ type: 'seen', seen: seen || [] }); }, [seen]);
+  useEffect(() => { send({ type: 'walk', walk: walk || [] }); }, [walk]);
   useEffect(() => { send({ type: 'last-shot', lastShot: lastShot ?? null }); }, [lastShot]);
   useEffect(() => { send({ type: 'plays', plays: plays ?? null }); }, [plays]);
   useEffect(() => { if (targets) send({ type: 'set-targets', targets }); }, [targets]);

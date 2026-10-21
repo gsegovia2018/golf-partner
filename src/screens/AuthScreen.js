@@ -82,7 +82,7 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   modeBtnText: {
     fontFamily: 'PlusJakartaSans-SemiBold',
-    fontSize: 14, color: theme.text.muted,
+    fontSize: 14, color: theme.text.secondary,
   },
   modeBtnTextActive: { color: theme.text.inverse },
 });

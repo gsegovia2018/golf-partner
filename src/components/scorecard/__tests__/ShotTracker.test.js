@@ -15,6 +15,7 @@ jest.mock('../../../store/shotStore', () => ({
   setShotPos: jest.fn(),
   insertShotAfter: jest.fn(async () => ({ id: 'ins' })),
   deleteShot: jest.fn(),
+  chainEndNear: (...a) => jest.requireActual('../../../store/shotStore').chainEndNear(...a),
 }));
 
 // Keep the wheel trivial: surface whether it's open + its label, and let a
@@ -23,9 +24,12 @@ jest.mock('../ClubWheel', () => {
   const { Text } = require('react-native');
   return {
     wheelClubsFor: jest.requireActual('../ClubWheel').wheelClubsFor,
-    ClubWheel: ({ visible, seqLabel, onDelete, onMove, onInsert, onRepeat }) => (visible ? (
+    ClubWheel: ({
+      visible, seqLabel, pickClub = true, onDelete, onMove, onInsert, onRepeat,
+    }) => (visible ? (
       <>
         <Text onPress={onDelete}>{`wheel:${seqLabel}`}</Text>
+        {!pickClub && <Text>wheel-no-club</Text>}
         {onMove && <Text onPress={onMove}>wheel-move</Text>}
         {onInsert && <Text onPress={onInsert}>wheel-insert</Text>}
         {onRepeat && <Text onPress={onRepeat}>wheel-repeat</Text>}
@@ -39,7 +43,7 @@ jest.mock('../../../hooks/useAppSettings', () => ({
 }));
 
 const {
-  logShot, logMeasuredShot, deleteShot, setShotPos, insertShotAfter,
+  logShot, logMeasuredShot, deleteShot, setShotPos, setShotClub, insertShotAfter,
 } = require('../../../store/shotStore');
 
 const base = {
@@ -52,6 +56,7 @@ const base = {
 beforeEach(() => {
   mockShots = [];
   logShot.mockClear();
+  setShotClub.mockClear();
   deleteShot.mockClear();
   setShotPos.mockClear();
   insertShotAfter.mockClear();
@@ -128,6 +133,25 @@ describe('ShotTracker FAB', () => {
     expect(deleteShot).toHaveBeenCalledTimes(1); // the earlier spot is a real shot, not an orphan
   });
 
+  it('hides the FABs while a seen-shot card holds the bottom of the map', () => {
+    const { queryByLabelText } = render(<ShotTracker {...base} aimPos={[38.554, -0.142]} hideFabs />);
+    expect(queryByLabelText('Mark a shot at your location')).toBeNull();
+  });
+
+  it('ignores a second tap while the first mark is still being written', async () => {
+    let finish;
+    logShot.mockImplementationOnce(() => new Promise((r) => { finish = () => r({ id: 'new' }); }));
+    const { getByLabelText } = render(<ShotTracker {...base} pos={[38.5531, -0.1411]} />);
+    await act(async () => {
+      fireEvent.press(getByLabelText('Mark a shot at your location'));
+      fireEvent.press(getByLabelText('Mark a shot at your location'));
+    });
+    expect(logShot).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(); });
+    await act(async () => { fireEvent.press(getByLabelText('Mark a shot at your location')); });
+    expect(logShot).toHaveBeenCalledTimes(2);
+  });
+
   it('logs a start→end segment when two rings are set', async () => {
     const onCollapseTargets = jest.fn();
     const { getByLabelText } = render(
@@ -139,6 +163,37 @@ describe('ShotTracker FAB', () => {
       start: [38.550, -0.140], end: [38.554, -0.142],
     }));
     expect(onCollapseTargets).toHaveBeenCalledWith([[38.554, -0.142]]);
+  });
+});
+
+// A measured shot leaves the chain ending in an un-hit landing. Marking at the
+// ball then means "I'm playing from that landing", not a second spot on it.
+describe('ShotTracker mark at a measured landing', () => {
+  const tee = { id: 't', lat: 38.55, lng: -0.14, club: 'driver' };
+  const landing = { id: 'l', lat: 38.5530, lng: -0.1420, club: null };
+
+  it('tags the landing instead of stacking a spot within 30 m of it', async () => {
+    mockShots = [tee, landing];
+    const { getByLabelText, getByText } = render(<ShotTracker {...base} pos={[38.5531, -0.1421]} />);
+    await act(async () => { fireEvent.press(getByLabelText('Mark a shot at your location')); });
+    expect(logShot).not.toHaveBeenCalled();
+    expect(setShotClub).toHaveBeenCalledWith('l', expect.any(String));
+    getByText('wheel:Shot 2');
+  });
+
+  it('logs a new spot when the mark is far from the landing', async () => {
+    mockShots = [tee, landing];
+    const { getByLabelText } = render(<ShotTracker {...base} pos={[38.5545, -0.1440]} />);
+    await act(async () => { fireEvent.press(getByLabelText('Mark a shot at your location')); });
+    expect(logShot).toHaveBeenCalledWith(expect.objectContaining({ pos: [38.5545, -0.1440] }));
+  });
+
+  it('logs a new spot when the last spot already carries a club (a re-tee)', async () => {
+    mockShots = [tee];
+    const { getByLabelText } = render(<ShotTracker {...base} pos={[38.5501, -0.1401]} />);
+    await act(async () => { fireEvent.press(getByLabelText('Mark a shot at your location')); });
+    expect(logShot).toHaveBeenCalledTimes(1);
+    expect(setShotClub).not.toHaveBeenCalled();
   });
 });
 
@@ -165,6 +220,35 @@ describe('ShotTracker on-green close', () => {
     expect(queryByLabelText('Ball is on the green — finish the hole here')).toBeNull();
   });
 
+  // The green spot is where the first putt was struck: no club to pick.
+  it('opens the green spot without a club wheel, only Move and Delete', () => {
+    mockShots = [approach, { id: 'g', lat: base.targetPos[0], lng: base.targetPos[1], club: null }];
+    const { getByText, queryByText } = render(
+      <ShotTracker {...base} tappedShotIndex={1} aimPos={[38.5561, -0.1471]} />,
+    );
+    getByText('wheel:On the green');
+    getByText('wheel-no-club');
+    getByText('wheel-move');
+    expect(queryByText('wheel-insert')).toBeNull();
+  });
+
+  it('uses the green outline when the map has one', () => {
+    // ~25 m from the centre, but inside the outline.
+    const green = [[38.5550, -0.1480], [38.5550, -0.1460], [38.5570, -0.1460], [38.5570, -0.1480]];
+    mockShots = [approach, { id: 'g', lat: 38.5558, lng: -0.1469, club: null }];
+    const { getByText } = render(<ShotTracker {...base} tappedShotIndex={1} greenPolygon={green} />);
+    getByText('wheel-no-club');
+  });
+
+  it('a mark on the green after closing it does not give the green spot a club', async () => {
+    mockShots = [approach, { id: 'g', lat: base.targetPos[0], lng: base.targetPos[1], club: null }];
+    const { getByLabelText, getByText } = render(<ShotTracker {...base} pos={[38.5561, -0.1471]} />);
+    await act(async () => { fireEvent.press(getByLabelText('Mark a shot at your location')); });
+    expect(logShot).not.toHaveBeenCalled();
+    expect(setShotClub).not.toHaveBeenCalled();
+    getByText('wheel-no-club');
+  });
+
   it('is not offered once the chain is already closed', () => {
     mockShots = [approach, { id: 's3', lat: 38.556, lng: -0.147, club: null }];
     const { queryByLabelText } = render(<ShotTracker {...base} />);
@@ -178,7 +262,16 @@ describe('ShotTracker shot editing', () => {
     { id: 's2', lat: 38.554, lng: -0.142, club: '7i' },
   ];
 
-  it('moves a tapped shot to the aim ring', () => {
+  it('moves a tapped shot to the live fix when there is one', () => {
+    mockShots = shots;
+    const { getByText } = render(
+      <ShotTracker {...base} tappedShotIndex={1} aimPos={[38.5545, -0.1425]} pos={[38.5542, -0.1422]} />,
+    );
+    fireEvent.press(getByText('wheel-move'));
+    expect(setShotPos).toHaveBeenCalledWith('s2', [38.5542, -0.1422]);
+  });
+
+  it('with no fix, moves a tapped shot to the aim ring', () => {
     mockShots = shots;
     const { getByText } = render(
       <ShotTracker {...base} tappedShotIndex={1} aimPos={[38.5545, -0.1425]} />,
@@ -187,18 +280,29 @@ describe('ShotTracker shot editing', () => {
     expect(setShotPos).toHaveBeenCalledWith('s2', [38.5545, -0.1425]);
   });
 
-  it('inserts a forgotten shot after the tapped one, at the aim ring', async () => {
+  it('after the last spot, an inserted shot lands at the live fix', async () => {
     mockShots = shots;
     const { getByText } = render(
-      <ShotTracker {...base} tappedShotIndex={0} aimPos={[38.552, -0.141]} />,
+      <ShotTracker {...base} tappedShotIndex={1} aimPos={[38.555, -0.143]} pos={[38.5548, -0.1428]} />,
     );
     await act(async () => { fireEvent.press(getByText('wheel-insert')); });
-    expect(insertShotAfter).toHaveBeenCalledWith('t', [38.552, -0.141]);
+    expect(insertShotAfter).toHaveBeenCalledWith('s2', [38.5548, -0.1428]);
   });
 
-  it('with no aim ring, an inserted shot lands halfway to the next spot', async () => {
+  it('after the last spot with no fix, an inserted shot lands at the aim ring', async () => {
     mockShots = shots;
-    const { getByText } = render(<ShotTracker {...base} tappedShotIndex={0} />);
+    const { getByText } = render(
+      <ShotTracker {...base} tappedShotIndex={1} aimPos={[38.555, -0.143]} />,
+    );
+    await act(async () => { fireEvent.press(getByText('wheel-insert')); });
+    expect(insertShotAfter).toHaveBeenCalledWith('s2', [38.555, -0.143]);
+  });
+
+  it('between two spots, an inserted shot lands halfway, over the fix and the aim ring', async () => {
+    mockShots = shots;
+    const { getByText } = render(
+      <ShotTracker {...base} tappedShotIndex={0} aimPos={[38.555, -0.143]} pos={[38.5548, -0.1428]} />,
+    );
     await act(async () => { fireEvent.press(getByText('wheel-insert')); });
     const [id, [lat, lng]] = insertShotAfter.mock.calls[0];
     expect(id).toBe('t');
@@ -216,5 +320,36 @@ describe('ShotTracker shot editing', () => {
     expect(id).toBe(shots[1].id);
     expect(pos).toEqual([shots[1].lat, shots[1].lng]);
     expect(club).toBe(shots[1].club ?? null);
+  });
+});
+
+describe('On the green lands where the ball stopped', () => {
+  const NEAR = [38.55605, -0.14705]; // ~7 m from the green centre
+  const OFF = [38.5552, -0.1462];     // ~110 m short: neither on the green
+  const open = () => { mockShots = [
+    { id: 'a', lat: 38.55, lng: -0.14, club: 'driver' },
+    { id: 'b', lat: 38.5550, lng: -0.1465, club: '9i' },
+  ]; };
+  const press = async (props) => {
+    const { getByLabelText } = render(<ShotTracker {...base} {...props} />);
+    await act(async () => { fireEvent.press(getByLabelText('Ball is on the green — finish the hole here')); });
+  };
+
+  it('at your live fix when you stand on the green', async () => {
+    open();
+    await press({ pos: NEAR, aimPos: OFF });
+    expect(logShot).toHaveBeenCalledWith(expect.objectContaining({ pos: NEAR, club: null }));
+  });
+
+  it('at the aim ring when it is on the green and you are not', async () => {
+    open();
+    await press({ pos: OFF, aimPos: NEAR });
+    expect(logShot).toHaveBeenCalledWith(expect.objectContaining({ pos: NEAR, club: null }));
+  });
+
+  it('at the green centre when neither is on the green', async () => {
+    open();
+    await press({ pos: OFF, aimPos: OFF });
+    expect(logShot).toHaveBeenCalledWith(expect.objectContaining({ pos: base.targetPos, club: null }));
   });
 });

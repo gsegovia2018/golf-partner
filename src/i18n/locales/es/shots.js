@@ -77,7 +77,7 @@ export default {
   'shots.wheel.club': 'Palo',
   'shots.wheel.carried': 'llevó {distance}',
   'shots.wheel.toPin': '{distance} al hoyo',
-  'shots.wheel.prompt': '¿Con qué palo llegó la bola hasta aquí?',
+  'shots.wheel.prompt': '¿Con qué palo juegas desde aquí?',
   'shots.wheel.set': 'Elegir {club}',
   'shots.wheel.moveA11y': 'Mover este golpe',
   'shots.wheel.move': 'Mover',
@@ -85,6 +85,7 @@ export default {
   'shots.wheel.addAfter': 'Añadir después',
   'shots.wheel.deleteA11y': 'Borrar este golpe',
   'shots.wheel.delete': 'Borrar',
+  'shots.wheel.close': 'Cerrar',
 
   'shots.tracker.onGreenA11y': 'La bola está en el green: termina el hoyo aquí',
   'shots.tracker.onGreen': 'En el green',
@@ -105,6 +106,11 @@ export default {
   'shots.measure.atBall': 'Toca cuando estés en la bola',
   'shots.measure.gps': 'GPS ±{meters} m',
   'shots.measure.fabA11y': 'Medir mi golpe',
+  'shots.measure.savedGreen': '{label} · {meters} guardado · en green',
+  'shots.measure.stopped': 'Medición detenida',
+  'shots.measure.splitAsk': 'Estuviste {seconds} s a las {time}, {distance} atrás. ¿Dividir ahí?',
+  'shots.measure.splitYes': 'Dividir',
+  'shots.measure.splitNo': 'No',
 
   'shots.why.chip': '¿Por qué?',
   'shots.why.title.left': '¿Por qué falló a la izquierda?',

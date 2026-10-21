@@ -1,4 +1,4 @@
-import { takeClosedStops, proposalsForHole, seqForProposal } from '../shotDetection';
+import { takeClosedStops, proposalsForHole, seqForProposal, greenLandingStop } from '../shotDetection';
 
 // ~1 m of latitude.
 const M = 1 / 111195;
@@ -68,3 +68,22 @@ test('a confirmed proposal goes before the first marked shot closer to the green
   expect(seqForProposal({ lat: 0, lng: 0 }, [], green)).toBe(1);
 });
 
+
+describe('greenLandingStop', () => {
+  const shot = (north, club) => ({ lat: spot(north)[0], lng: spot(north)[1], club });
+  const open = [shot(0, 'driver'), shot(230, '8i')];
+
+  test('the first stop on the green ends an open hole', () => {
+    const stops = [stop('9', 358), stop('8', 352), stop('7', 230)];
+    expect(greenLandingStop(stops, { holeNumber: 1, course, shots: open })?.id).toBe('8');
+  });
+
+  test('nothing when the hole is closed, untagged, without geometry or the stop was used', () => {
+    const stops = [stop('8', 352)];
+    expect(greenLandingStop(stops, { holeNumber: 1, course, shots: [...open, shot(355, null)] })).toBeNull();
+    expect(greenLandingStop(stops, { holeNumber: 1, course, shots: [shot(0, null)] })).toBeNull();
+    expect(greenLandingStop(stops, { holeNumber: 1, shots: open })).toBeNull();
+    expect(greenLandingStop([stop('8', 352, { status: 'added' })], { holeNumber: 1, course, shots: open })).toBeNull();
+    expect(greenLandingStop([stop('8', 352, { status: 'dismissed' })], { holeNumber: 1, course, shots: open })).toBeNull();
+  });
+});

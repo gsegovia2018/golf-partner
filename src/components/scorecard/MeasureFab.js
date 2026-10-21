@@ -3,32 +3,46 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from '../ui/PressableScale';
 import { useTheme } from '../../theme/ThemeContext';
-import { useT } from '../../i18n';
+import { useT, formatTime } from '../../i18n';
 import { light as lightTokens } from '../../theme/tokens';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { usePlayConditions } from '../../hooks/usePlayConditions';
 import { guessClub, shotBearing } from '../../store/clubGuess';
 import {
-  logMeasuredShot, deleteShot, getShots, subscribeShots, getShotsVersion,
+  logMeasuredShot, deleteShot, setShotClub, getShots, subscribeShots, getShotsVersion,
+  shotsForHole, chainEndNear,
 } from '../../store/shotStore';
-import { haversineMeters } from '../../lib/geo';
+import { getRoundStops, loadShotProposals, markProposalAdded } from '../../store/shotProposalStore';
+import { haversineMeters, holeFeatures } from '../../lib/geo';
 import { clubAverages } from '../../lib/shotStats';
 import { swingClubs, clubLabel, clubNominal } from '../../lib/clubs';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { haptic } from '../../lib/haptics';
 import { ClubIcon } from './ClubIcon';
 import { ClubWheel } from './ClubWheel';
+import { isOnGreen } from './ShotTracker';
 
 const SAVED_TOAST_MS = 8000; // how long the "saved · Undo" confirmation stays up
 const MIN_SAVE_M = 20;   // under this, tap ② is a no-op (mis-tap guard)
 const MAX_PLAIN_M = 350; // over this, require a second confirming tap
 const MAX_ACCURACY_M = 25; // same usable-fix bar as the scorecard header
+// A trail stop counts as a forgotten tap ② when going through it adds at most
+// this much to the straight start → end distance (it lies on the way).
+const SPLIT_DETOUR = 1.25;
 
 // Floating shot-measurer on the scorecard (bottom-right). Idle: a small club
 // FAB with the suggested-club badge. Tap ① stamps the start at the live fix
 // and expands into a live card; tap ② (the whole card) stamps the end and
 // saves via logMeasuredShot. With no usable fix, tap ① opens the hole map —
 // the manual flow. The header distance block never shows this carry.
+//
+// Tap ② also starts the next shot from that same spot — the ball you walked
+// to is where the next shot is played from — with the club guessed for what's
+// left to the green, until a save lands on the green (the rest are putts).
+// × cancels the shot being measured and keeps everything already saved; Undo
+// takes back the last save and puts the card back on that shot. With the GPS
+// trail on, tap ② first checks for a stop on the way (a forgotten tap ②) and
+// offers to split the shot there.
 export function MeasureFab({ roundId, roundIndex, holeNumber, courseName, fix, targetMeters, offTee = false, onOpenMap }) {
   const tl = useT();
   // Tolerate a missing ThemeProvider (render tests mount this bare) — fall
@@ -56,19 +70,23 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, courseName, fix, t
     [targetMeters, appSettings, offTee, shotsVersion, cond, bearing, courseName],
   );
 
-  const [armed, setArmed] = useState(null);   // { start:[lat,lng], club }
-  const [saved, setSaved] = useState(null);   // { label, meters, originId, originCreated, shotId }
+  const [armed, setArmed] = useState(null);   // { start:[lat,lng], club, holeNumber, at, asked? }
+  const [saved, setSaved] = useState(null);   // { label, meters, onGreen, parts: logMeasuredShot results, prev: armed }
+  const [notice, setNotice] = useState(null); // a toast with no Undo ("Measuring stopped")
   const [confirmOver, setConfirmOver] = useState(false);
+  const [split, setSplit] = useState(null);   // the trail stop offered as a forgotten tap ②
   const [wheelOpen, setWheelOpen] = useState(false);
+  const trailOn = appSettings.recordGpsTrail === true;
+  useEffect(() => { if (trailOn && roundId) loadShotProposals(roundId, roundIndex); }, [trailOn, roundId, roundIndex]);
 
   // The confirmation is a toast, not a status line: without this it would sit
   // on the scorecard for the rest of the round, since the only other things
   // that clear it are arming the next measure and Undo itself.
   useEffect(() => {
-    if (!saved) return undefined;
-    const id = setTimeout(() => setSaved(null), SAVED_TOAST_MS);
+    if (!saved && !notice) return undefined;
+    const id = setTimeout(() => { setSaved(null); setNotice(null); }, SAVED_TOAST_MS);
     return () => clearTimeout(id);
-  }, [saved]);
+  }, [saved, notice]);
 
   if (!roundId) return null;
 
@@ -79,39 +97,126 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, courseName, fix, t
 
   const arm = () => {
     setSaved(null);
+    setNotice(null);
     if (!usable) { onOpenMap?.(); return; }
     haptic('selection');
-    setArmed({ start: pos, club: suggestion?.club ?? null, holeNumber });
+    setArmed({ start: pos, club: suggestion?.club ?? null, holeNumber, at: Date.now() });
     setConfirmOver(false);
+  };
+
+  // The club for a shot played from `from` on hole `h`: what covers the
+  // distance left to that hole's green (never the driver — it's not a tee).
+  const clubFrom = (from, h) => {
+    const feat = holeFeatures(courseName, h);
+    if (!feat?.greenCenter) return null;
+    return guessClub({
+      meters: haversineMeters(from, feat.greenCenter), bearing: shotBearing(courseName, h, from),
+      courseName, settings: appSettings, fromTee: false, shots: getShots(),
+    })?.club ?? null;
+  };
+
+  // The open stop the trail saw on the way from `start` to `end` since the
+  // shot was armed: you stood at a ball and walked on without tap ②.
+  const stopOnTheWay = (start, end, since) => {
+    const direct = haversineMeters(start, end);
+    return getRoundStops(roundId, roundIndex).find((st) => {
+      if (st.status !== 'open' || st.start < since) return false;
+      const at = [st.lat, st.lng];
+      const a = haversineMeters(start, at);
+      const b = haversineMeters(at, end);
+      return a >= MIN_SAVE_M && b >= MIN_SAVE_M && a + b <= direct * SPLIT_DETOUR;
+    }) ?? null;
+  };
+
+  // Writes the measured segment(s) and, unless the last one ended on the
+  // green, starts the next shot from where it ended.
+  const save = async (segments, stopId = null) => {
+    const before = armed;
+    const h = armed.holeNumber;
+    setArmed(null);
+    setConfirmOver(false);
+    setSplit(null);
+    const parts = [];
+    for (const sg of segments) {
+      parts.push(await logMeasuredShot({
+        roundId, roundIndex, holeNumber: h, start: sg.start, end: sg.end, club: sg.club,
+      }));
+    }
+    if (stopId) markProposalAdded(roundId, roundIndex, stopId, parts[1]?.originId ?? null);
+    haptic('success');
+    const last = segments[segments.length - 1];
+    const feat = holeFeatures(courseName, h);
+    const ended = !!feat && isOnGreen(last.end, feat.green, feat.greenCenter);
+    setSaved({
+      label: last.club ? clubLabel(last.club) : tl('shots.measure.shot'),
+      meters: haversineMeters(last.start, last.end),
+      onGreen: ended,
+      parts,
+      prev: before,
+    });
+    if (!ended) setArmed({ start: last.end, club: clubFrom(last.end, h), holeNumber: h, at: Date.now() });
   };
 
   const finish = async () => {
     if (!armed || !pos) return;
     if (dist < MIN_SAVE_M) return;
+    if (trailOn && !armed.asked) {
+      const st = stopOnTheWay(armed.start, pos, armed.at);
+      if (st) { setSplit(st); setArmed({ ...armed, asked: true }); return; }
+    }
     // Confirm tap for anything that would pollute the carry averages: an
     // implausibly long measure, or a fix that has degraded past the same
     // accuracy bar that gated arming (tap ① checked it; tap ② must too).
     const poorAcc = fix?.accuracy != null && fix.accuracy > MAX_ACCURACY_M;
     if ((dist > MAX_PLAIN_M || poorAcc) && !confirmOver) { setConfirmOver(true); return; }
-    const { start, club, holeNumber: armedHoleNumber } = armed;
+    await save([{ start: armed.start, end: pos, club: armed.club }]);
+  };
+
+  // The forgotten tap ②: two shots, the second from the trail's stop.
+  const splitAtStop = () => {
+    if (!armed || !split || !pos) return;
+    const at = [split.lat, split.lng];
+    save([
+      { start: armed.start, end: at, club: armed.club },
+      { start: at, end: pos, club: clubFrom(at, armed.holeNumber) },
+    ], split.id);
+  };
+  const noSplit = () => {
+    if (!armed || !pos) return;
+    save([{ start: armed.start, end: pos, club: armed.club }]);
+  };
+
+  // × : this shot isn't measured; everything saved before it stays.
+  const stop = () => {
     setArmed(null);
     setConfirmOver(false);
-    const r = await logMeasuredShot({
-      roundId, roundIndex, holeNumber: armedHoleNumber, start, end: pos, club,
-    });
-    haptic('success');
-    setSaved({ label: club ? clubLabel(club) : tl('shots.measure.shot'), meters: dist, ...r });
+    setSplit(null);
+    setSaved(null);
+    setNotice(tl('shots.measure.stopped'));
   };
 
   const undo = () => {
     if (!saved) return;
-    deleteShot(saved.shotId);
-    // Only drop the origin when the measure created it — a reused spot was
-    // already on the hole before this measure and has to stay.
-    if (saved.originCreated) deleteShot(saved.originId);
+    for (const r of [...saved.parts].reverse()) {
+      deleteShot(r.shotId);
+      // Only drop the origin when the measure created it — a reused spot was
+      // already on the hole before this measure: it stays, with its old club.
+      if (r.originCreated) deleteShot(r.originId);
+      else setShotClub(r.originId, r.prevClub ?? null);
+    }
     haptic('selection');
+    setArmed(saved.prev);
+    setSplit(null);
+    setConfirmOver(false);
     setSaved(null);
   };
+
+  // "Shot N" on the card: the chain's next number on the armed hole.
+  const shotN = (() => {
+    if (!armed) return null;
+    const hole = shotsForHole(roundId, roundIndex, armed.holeNumber);
+    return chainEndNear(hole, armed.start) ? hole.length : hole.length + 1;
+  })();
 
   const averages = clubAverages(getShots());
   const effDist = (k) => {
@@ -125,10 +230,15 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, courseName, fix, t
       {saved && (
         <View style={s.toast}>
           <Feather name="check" size={14} color={theme.accent.primary} />
-          <Text style={s.toastText}>{tl('shots.measure.saved', { label: saved.label, meters: fmt(saved.meters) })}</Text>
+          <Text style={s.toastText}>{tl(saved.onGreen ? 'shots.measure.savedGreen' : 'shots.measure.saved', { label: saved.label, meters: fmt(saved.meters) })}</Text>
           <Pressable onPress={undo} hitSlop={8} accessibilityLabel={tl('shots.measure.undoA11y')}>
             <Text style={s.toastUndo}>{tl('shots.measure.undo')}</Text>
           </Pressable>
+        </View>
+      )}
+      {!saved && notice && (
+        <View style={s.toast} accessibilityLiveRegion="polite">
+          <Text style={s.toastText}>{notice}</Text>
         </View>
       )}
 
@@ -139,14 +249,16 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, courseName, fix, t
           accessibilityLabel={tl('shots.measure.saveA11y')}
         >
           <View style={s.cardTop}>
-            <Pressable onPress={() => setWheelOpen(true)} hitSlop={6}>
-              <Text style={s.cardClub}>
+            <Pressable onPress={() => setWheelOpen(true)} hitSlop={6} style={s.cardClubWrap}>
+              <Text style={s.cardClub} numberOfLines={1}>
+                {armed.holeNumber !== holeNumber ? `${tl('map.hole', { hole: armed.holeNumber }).toUpperCase()} · ` : ''}
+                {`${tl('shots.tracker.shotN', { n: shotN }).toUpperCase()} · `}
                 {armed.club ? clubLabel(armed.club).toUpperCase() : tl('shots.measure.clubUnknown')}
                 <Text style={s.cardChg}>  ⌄</Text>
               </Text>
             </Pressable>
             <Pressable
-              onPress={() => { setArmed(null); setConfirmOver(false); }}
+              onPress={stop}
               hitSlop={8} style={s.cardX} accessibilityLabel={tl('shots.measure.cancelA11y')}
             >
               <Feather name="x" size={14} color="rgba(255,255,255,0.6)" />
@@ -164,6 +276,25 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, courseName, fix, t
               : tl('shots.measure.atBall')}
           </Text>
           {fix?.accuracy != null && <Text style={s.cardAcc}>{tl('shots.measure.gps', { meters: Math.round(fix.accuracy) })}</Text>}
+          {split && (
+            <View style={s.split} accessibilityLiveRegion="polite">
+              <Text style={s.splitText}>
+                {tl('shots.measure.splitAsk', {
+                  seconds: Math.max(1, Math.round((split.end - split.start) / 1000)),
+                  time: formatTime(split.start),
+                  distance: fmt(haversineMeters(armed.start, [split.lat, split.lng])),
+                })}
+              </Text>
+              <View style={s.splitRow}>
+                <Pressable onPress={splitAtStop} style={[s.splitBtn, s.splitBtnPrimary]} accessibilityRole="button">
+                  <Text style={[s.splitBtnText, s.splitBtnTextPrimary]}>{tl('shots.measure.splitYes')}</Text>
+                </Pressable>
+                <Pressable onPress={noSplit} style={s.splitBtn} accessibilityRole="button">
+                  <Text style={s.splitBtnText}>{tl('shots.measure.splitNo')}</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
         </Pressable>
       ) : (
         <View style={s.fabCol}>
@@ -209,6 +340,7 @@ function makeStyles(theme) {
     },
     cardDim: { opacity: 0.92 },
     cardTop: { flexDirection: 'row', alignItems: 'center' },
+    cardClubWrap: { flex: 1, minWidth: 0 },
     cardClub: { color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, letterSpacing: 0.4 },
     cardChg: { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
     cardX: { marginLeft: 'auto' },
@@ -225,6 +357,19 @@ function makeStyles(theme) {
       color: 'rgba(255,255,255,0.75)', fontFamily: 'PlusJakartaSans-SemiBold',
       fontSize: 9.5, marginTop: 5, fontVariant: ['tabular-nums'],
     },
+    split: {
+      marginTop: 8, paddingTop: 8,
+      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.3)',
+    },
+    splitText: { color: '#fff', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11.5, lineHeight: 15 },
+    splitRow: { flexDirection: 'row', gap: 6, marginTop: 6 },
+    splitBtn: {
+      flex: 1, minHeight: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
+      backgroundColor: 'rgba(255,255,255,0.14)',
+    },
+    splitBtnPrimary: { backgroundColor: '#fff' },
+    splitBtnText: { color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
+    splitBtnTextPrimary: { color: theme.bg.deep },
     toast: {
       flexDirection: 'row', alignItems: 'center', gap: 7, width: 212,
       backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.elevated, borderWidth: 1, borderColor: theme.border.default,

@@ -1,10 +1,26 @@
-import { logShot, logMeasuredShot, insertShotAfter, shotsForHole } from '../shotStore';
+import {
+  logShot, logMeasuredShot, insertShotAfter, shotsForHole, chainEndNear,
+} from '../shotStore';
 
 // Unique round ids per test — no cross-test state, no reset needed.
 const A = [38.5500, -0.1400];
 const NEAR_A = [38.5501, -0.1401];   // ~14 m from A
 const B = [38.5520, -0.1420];        // ~280 m from A
 const C = [38.5540, -0.1440];
+
+describe('chainEndNear', () => {
+  const spot = (id, [lat, lng]) => ({ id, lat, lng });
+
+  it("returns the hole's last spot when the mark is within 30 m of it", () => {
+    const hole = [spot('a', B), spot('b', A)];
+    expect(chainEndNear(hole, NEAR_A)?.id).toBe('b');
+  });
+
+  it('returns null when the mark is far from the last spot, or the hole is empty', () => {
+    expect(chainEndNear([spot('a', A), spot('b', B)], NEAR_A)).toBeNull(); // near A, but A is not the end
+    expect(chainEndNear([], A)).toBeNull();
+  });
+});
 
 describe('logMeasuredShot', () => {
   it('seeds the start as the club-carrying origin on an empty hole', async () => {

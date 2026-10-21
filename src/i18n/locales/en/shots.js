@@ -77,7 +77,7 @@ export default {
   'shots.wheel.club': 'Club',
   'shots.wheel.carried': 'carried {distance}',
   'shots.wheel.toPin': '{distance} to pin',
-  'shots.wheel.prompt': 'Which club got the ball here?',
+  'shots.wheel.prompt': 'Which club are you hitting from here?',
   'shots.wheel.set': 'Set {club}',
   'shots.wheel.moveA11y': 'Move this shot',
   'shots.wheel.move': 'Move',
@@ -85,6 +85,7 @@ export default {
   'shots.wheel.addAfter': 'Add after',
   'shots.wheel.deleteA11y': 'Delete this shot',
   'shots.wheel.delete': 'Delete',
+  'shots.wheel.close': 'Close',
 
   'shots.tracker.onGreenA11y': 'Ball is on the green — finish the hole here',
   'shots.tracker.onGreen': 'On the green',
@@ -105,6 +106,11 @@ export default {
   'shots.measure.atBall': "Tap when you're at the ball",
   'shots.measure.gps': 'GPS ±{meters} m',
   'shots.measure.fabA11y': 'Measure my shot',
+  'shots.measure.savedGreen': '{label} · {meters} saved · on the green',
+  'shots.measure.stopped': 'Measuring stopped',
+  'shots.measure.splitAsk': 'You stood {seconds} s at {time}, {distance} back. Split there?',
+  'shots.measure.splitYes': 'Split',
+  'shots.measure.splitNo': 'No',
 
   'shots.why.chip': 'Why?',
   'shots.why.title.left': 'Why did it miss left?',

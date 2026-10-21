@@ -1,5 +1,6 @@
 import {
   cleanTrail, detectStops, mergeStops, assignStopsToHoles, inferHoleDistances, haversine,
+  extendWalk, walkForHole,
 } from '../gpsTrailStops';
 
 // ~1 m of latitude.
@@ -65,4 +66,28 @@ test('maps stops to the nearest hole and infers drive and approach', () => {
   const { drive, approach } = inferHoleDistances(byHole.get(1), hole, 4);
   expect(Math.round(drive)).toBe(200);
   expect(Math.round(approach)).toBe(160);
+});
+
+describe('the walk drawn on the map', () => {
+  const ll = (north, east = 0) => [at(0, north, east).lat, at(0, north, east).lng];
+
+  test('extendWalk keeps a point every 5 m and drops poor fixes', () => {
+    const walk = extendWalk([], [at(0, 0), at(1, 2), at(2, 4), at(3, 6), at(4, 8, 0, 80), at(5, 12)]);
+    expect(walk.map((p) => Math.round(haversine(ll(0), p)))).toEqual([0, 6, 12]);
+    // Appending continues from the last kept point.
+    expect(extendWalk(walk, [at(6, 14), at(7, 18)])).toHaveLength(4);
+  });
+
+  test('walkForHole keeps this hole\'s runs and breaks where you left it', () => {
+    const holes = [
+      { number: 1, start: ll(0), pin: ll(300) },
+      { number: 2, start: ll(300, 200), pin: ll(0, 200) },
+    ];
+    const walk = [ll(0), ll(100), ll(200), ll(300), ll(300, 100), ll(300, 200), ll(150, 200), ll(150, 10), ll(160, 10)];
+    const runs = walkForHole(walk, holes, 1);
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toHaveLength(4);
+    expect(runs[1]).toEqual([ll(150, 10), ll(160, 10)]);
+    expect(walkForHole(walk, holes, 2)).toEqual([[ll(300, 200), ll(150, 200)]]);
+  });
 });

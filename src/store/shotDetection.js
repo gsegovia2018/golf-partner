@@ -69,6 +69,25 @@ export function proposalsForHole(stops, { holeNumber, course = null, shots = [] 
     });
 }
 
+// The stop that ends an open hole on its green: your first stop on the green
+// is where you putted from, right by the ball, so it is the approach's
+// landing. Null unless the hole has geometry with a green, the chain is open
+// (its last shot carries a club and is off the green) and such a stop exists
+// that hasn't been dismissed or used. `stops`, `course`, `shots` as in
+// proposalsForHole.
+export function greenLandingStop(stops, { holeNumber, course = null, shots = [] }) {
+  const geoHoles = course?.holes?.length ? course.holes : null;
+  const geo = geoHoles?.find((h) => h.number === holeNumber);
+  const refs = geo ? holeRefs(geo) : null;
+  const last = shots[shots.length - 1];
+  if (!refs || !last?.club || onGreen([last.lat, last.lng], refs)) return null;
+  const live = (stops ?? []).filter((s) => s.status === 'open');
+  const mine = assignStopsToHoles(live, geoHoles).byHole.get(holeNumber) ?? [];
+  return mine
+    .filter((s) => onGreen([s.lat, s.lng], refs))
+    .sort((a, b) => a.start - b.start)[0] ?? null;
+}
+
 // Where a confirmed proposal goes in the hole's shot chain: before the first
 // marked shot that is closer to the green, else at the end. Without a green
 // (no geometry) it is appended. `shots` are the hole's shots ordered by seq.
