@@ -2,7 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import HomeScreen from '../HomeScreen';
 import { useAuth } from '../../context/AuthContext';
-import { fetchMyPlayers, loadQuickStartCourses } from '../../store/libraryStore';
+import { fetchMyPlayers, getCachedQuickStartCourseList, loadQuickStartCourses } from '../../store/libraryStore';
 import {
   buildJoinLink,
   generateInviteCode,
@@ -173,6 +173,7 @@ jest.mock('../../components/PostCreateInviteModal', () => {
 jest.mock('../../store/libraryStore', () => ({
   fetchMyPlayers: jest.fn(),
   getCachedMyPlayers: jest.fn(async () => null),
+  getCachedQuickStartCourseList: jest.fn(async () => []),
   loadQuickStartCourses: jest.fn(),
 }));
 
@@ -423,6 +424,18 @@ test('passes a loading state while quick-start courses are pending', async () =>
   await waitFor(() => {
     expect(view.getByTestId('quick-start-courses-loading').props.children).toBe('ready');
     expect(view.getByTestId('quick-start-courses').props.children).toBe('Course One');
+  });
+});
+
+test('paints the device copy of the quick-start courses before the network answers', async () => {
+  getCachedQuickStartCourseList.mockResolvedValueOnce([{ id: 'course-cached', name: 'Cached Course' }]);
+  loadQuickStartCourses.mockReturnValue(new Promise(() => {}));
+  fetchMyPlayers.mockResolvedValue([]);
+
+  const view = renderHome();
+
+  await waitFor(() => {
+    expect(view.getByTestId('quick-start-courses').props.children).toBe('Cached Course');
   });
 });
 

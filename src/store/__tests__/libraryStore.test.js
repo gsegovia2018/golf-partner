@@ -5,7 +5,8 @@ import {
   fetchClubs, getCachedClubs, CLUBS_CACHE_KEY,
   fetchFavoriteCourseIds, getCachedFavoriteCourseIds, FAVORITE_COURSES_CACHE_KEY,
   loadCourseLibrary, loadQuickStartCourses, upsertPlayer,
-  getCachedCourseLibrary, getCachedMyPlayers,
+  getCachedCourseLibrary, getCachedMyPlayers, getCachedQuickStartCourseList,
+  QUICK_START_COURSES_CACHE_KEY,
 } from '../libraryStore';
 import { listFriends, getCachedFriends } from '../friendStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -553,5 +554,34 @@ describe('loadQuickStartCourses', () => {
     expect(result).toEqual({ courses: [], usingCachedData: false });
     expect(mockState.calls.tables).toEqual(['favorite_courses']);
     expect(mockState.calls.in).toBeUndefined();
+  });
+
+  // getUser holds the auth lock over a network round-trip; Home already has
+  // the id from useAuth.
+  test('uses the given userId instead of asking auth', async () => {
+    mockState.user = null;
+    mockState.rowsByTable = { favorite_courses: [] };
+
+    await loadQuickStartCourses({ userId: 'u9' });
+
+    expect(mockState.calls.eq).toEqual([['user_id', 'u9']]);
+  });
+});
+
+describe('getCachedQuickStartCourseList', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  test('the saved quick-start list first', async () => {
+    await AsyncStorage.setItem(QUICK_START_COURSES_CACHE_KEY, JSON.stringify([{ id: 'c1', name: 'Pine' }]));
+    expect((await getCachedQuickStartCourseList()).map((c) => c.id)).toEqual(['c1']);
+  });
+
+  test('else the favourites in the course library cache, and [] with nothing saved', async () => {
+    expect(await getCachedQuickStartCourseList()).toEqual([]);
+    await AsyncStorage.setItem(COURSES_CACHE_KEY, JSON.stringify([{ id: 'c1' }, { id: 'c2' }]));
+    await AsyncStorage.setItem(FAVORITE_COURSES_CACHE_KEY, JSON.stringify(['c2']));
+    expect((await getCachedQuickStartCourseList()).map((c) => c.id)).toEqual(['c2']);
   });
 });

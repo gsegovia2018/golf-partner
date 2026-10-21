@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, ScrollView,
-  RefreshControl, TextInput, Alert, Animated, Easing,
+  RefreshControl, TextInput, Alert,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { useFocusEffect } from '@react-navigation/native';
@@ -240,12 +240,6 @@ export default function FeedScreen({ navigation }) {
   const [roundStories, setRoundStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // Crossfades the list container in the first time skeletons give way to
-  // real content. `skeletonShownRef` only latches true while `loading` was
-  // actually true, so a later refocus/pull-to-refresh (which never sets
-  // `loading` again after the first load) never replays it.
-  const listOpacity = useRef(new Animated.Value(1)).current;
-  const skeletonShownRef = useRef(false);
   // 'ok' | 'error' | 'partial' — distinguishes a genuine empty feed from a
   // failed build.
   const [status, setStatus] = useState('ok');
@@ -275,19 +269,6 @@ export default function FeedScreen({ navigation }) {
   // while it was awaiting — so a slow page fetch can't clobber `items`/
   // `hasMore` with stale data after a concurrent rebuild superseded it.
   const loadEpochRef = useRef(0);
-
-  useEffect(() => {
-    if (loading) {
-      skeletonShownRef.current = true;
-      return;
-    }
-    if (!skeletonShownRef.current) return;
-    skeletonShownRef.current = false;
-    listOpacity.setValue(0);
-    Animated.timing(listOpacity, {
-      toValue: 1, duration: 200, easing: Easing.out(Easing.ease), useNativeDriver: true,
-    }).start();
-  }, [loading, listOpacity]);
 
   // `hydrating` marks the instant placeholder paint (disk snapshot, or the
   // cached-blob build) that precedes the remote build on a cold start. Such a
@@ -402,7 +383,9 @@ export default function FeedScreen({ navigation }) {
         const snapshotStart = Date.now();
         const snapshot = await loadFeedSnapshot(userId);
         feedMark('snapshot', snapshotStart);
-        if (snapshot) {
+        // Only a device copy with rounds lifts the skeleton: stories alone
+        // painted "nothing here yet" under the rail until the remote build.
+        if (snapshot?.items?.length > 0) {
           applyFeedResult(snapshot, { hydrating: true });
           setLoading(false);
         } else {
@@ -414,9 +397,7 @@ export default function FeedScreen({ navigation }) {
             limit: FEED_PAGE_SIZE,
           });
           feedMark('cache base', cachedStart);
-          const hasCachedFeed = (cachedResult.items?.length ?? 0) > 0
-            || (cachedResult.roundStories?.length ?? 0) > 0;
-          if (hasCachedFeed) {
+          if ((cachedResult.items?.length ?? 0) > 0) {
             applyFeedResult(cachedResult, { hydrating: true });
             setLoading(false);
           }
@@ -714,7 +695,7 @@ export default function FeedScreen({ navigation }) {
       {loading ? (
         <FeedSkeleton s={s} t={t} theme={theme} />
       ) : (
-        <Animated.View style={{ flex: 1, opacity: listOpacity }}>
+        <View style={{ flex: 1 }}>
           <FlatList
             testID="feed-list"
             data={items}
@@ -737,7 +718,7 @@ export default function FeedScreen({ navigation }) {
               </View>
             ) : null}
           />
-        </Animated.View>
+        </View>
       )}
 
       <CommentsSheet
