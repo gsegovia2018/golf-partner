@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { render, waitFor, fireEvent } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import AuthScreen from '../AuthScreen';
@@ -95,6 +95,20 @@ describe('AuthScreen OAuth callbacks', () => {
     // Give the getInitialURL promise + effects a tick to settle.
     await waitFor(() => expect(Linking.getInitialURL).toHaveBeenCalled());
     expect(supabase.auth.exchangeCodeForSession).not.toHaveBeenCalled();
+  });
+
+  test('the link under the form switches between sign in and sign up', () => {
+    const { getByText, queryByText } = render(wrap(<AuthScreen />));
+
+    expect(getByText('Forgot password?')).toBeTruthy();
+    fireEvent.press(getByText('Create an account'));
+
+    expect(getByText('Create your account')).toBeTruthy();
+    expect(getByText('Create Account')).toBeTruthy();
+    expect(queryByText('Forgot password?')).toBeNull();
+
+    fireEvent.press(getByText('Sign in'));
+    expect(getByText('Forgot password?')).toBeTruthy();
   });
 
   test('shows Google sign-in without Apple sign-in', () => {
