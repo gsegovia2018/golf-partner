@@ -8,6 +8,8 @@ import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { isAdminUser } from '../lib/admin';
 import { useT, formatNumber } from '../i18n';
 import { updateCourseFromEditor } from '../store/libraryStore';
 import TeesEditor from '../components/TeesEditor';
@@ -26,6 +28,9 @@ export default function CourseEditorScreen({ navigation, route }) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
+  // Edits always land on the round (onSave). Only an admin's edits are also
+  // written back to the shared library course; RLS refuses anyone else's.
+  const writesLibrary = isAdminUser(useAuth()?.user?.id);
 
   const {
     roundIndex, courseName,
@@ -191,7 +196,7 @@ export default function CourseEditorScreen({ navigation, route }) {
                 );
                 return;
               }
-              if (courseId) {
+              if (courseId && writesLibrary) {
                 try {
                   await updateCourseFromEditor(courseId, holes, tees);
                 } catch (err) {

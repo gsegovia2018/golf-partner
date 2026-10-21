@@ -10,6 +10,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { isAdminUser } from '../lib/admin';
 import { useT, formatNumber } from '../i18n';
 import {
   deleteCourse, fetchCourses, upsertCourse,
@@ -23,6 +25,9 @@ export default function CoursesLibraryScreen({ navigation }) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
+  // Adding, editing and deleting library courses is admin-only (RLS enforces
+  // the same list, see public.is_geo_admin); everyone can browse and star.
+  const canEdit = isAdminUser(useAuth()?.user?.id);
 
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -147,21 +152,25 @@ export default function CoursesLibraryScreen({ navigation }) {
           ) : null}
         </View>
 
-        <Text style={s.sectionTitle}>{t('courses.library.addSection')}</Text>
-        <View style={s.form}>
-          <TextInput
-            style={[s.input, s.flex]}
-            placeholder={t('courses.library.newNamePlaceholder')}
-            placeholderTextColor={theme.text.muted}
-            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            selectionColor={theme.accent.primary}
-            value={name}
-            onChangeText={setName}
-          />
-          <TouchableOpacity style={s.addBtn} onPress={addCourse} disabled={saving || !name.trim()} activeOpacity={0.7}>
-            <Feather name="plus" size={20} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-          </TouchableOpacity>
-        </View>
+        {canEdit && (
+          <>
+            <Text style={s.sectionTitle}>{t('courses.library.addSection')}</Text>
+            <View style={s.form}>
+              <TextInput
+                style={[s.input, s.flex]}
+                placeholder={t('courses.library.newNamePlaceholder')}
+                placeholderTextColor={theme.text.muted}
+                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                selectionColor={theme.accent.primary}
+                value={name}
+                onChangeText={setName}
+              />
+              <TouchableOpacity style={s.addBtn} onPress={addCourse} disabled={saving || !name.trim()} activeOpacity={0.7}>
+                <Feather name="plus" size={20} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         <Text style={s.sectionTitle}>{t('courses.library.listSection')}</Text>
 
@@ -225,16 +234,20 @@ export default function CoursesLibraryScreen({ navigation }) {
                         <Feather name="star" size={16} color={theme.text.muted} />
                       )}
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={s.editBtn}
-                      onPress={() => navigation.navigate('CourseLibraryDetail', { courseId: c.id, courseName: c.name })}
-                      activeOpacity={0.7}
-                    >
-                      <Feather name="edit-2" size={16} color={theme.accent.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={s.deleteBtn} onPress={() => remove(c)} activeOpacity={0.7}>
-                      <Feather name="trash-2" size={16} color={theme.destructive} />
-                    </TouchableOpacity>
+                    {canEdit && (
+                      <>
+                        <TouchableOpacity
+                          style={s.editBtn}
+                          onPress={() => navigation.navigate('CourseLibraryDetail', { courseId: c.id, courseName: c.name })}
+                          activeOpacity={0.7}
+                        >
+                          <Feather name="edit-2" size={16} color={theme.accent.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={s.deleteBtn} onPress={() => remove(c)} activeOpacity={0.7}>
+                          <Feather name="trash-2" size={16} color={theme.destructive} />
+                        </TouchableOpacity>
+                      </>
+                    )}
                   </View>
                 </View>
               ))}</CardGrid>
