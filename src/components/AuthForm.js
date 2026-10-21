@@ -26,7 +26,7 @@ export default function AuthForm({ mode = 'signin', onSignedUp }) {
       <TextInput
         style={[s.input, emailError && s.inputError]}
         placeholder={t('auth.emailPlaceholder')}
-        placeholderTextColor={theme.text.muted}
+        placeholderTextColor={theme.text.secondary}
         keyboardType="email-address"
         autoCapitalize="none"
         autoCorrect={false}
@@ -42,7 +42,7 @@ export default function AuthForm({ mode = 'signin', onSignedUp }) {
         <TextInput
           style={s.passwordInput}
           placeholder={t('auth.passwordPlaceholder')}
-          placeholderTextColor={theme.text.muted}
+          placeholderTextColor={theme.text.secondary}
           secureTextEntry={!showPassword}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor={theme.accent.primary}

@@ -63,7 +63,9 @@ const makeStyles = (theme) => StyleSheet.create({
     textAlign: 'center', marginBottom: 36,
   },
   card: {
-    backgroundColor: theme.bg.card,
+    // Dark bg.card is a translucent tint meant for bg.primary; over the brand
+    // green it turns see-through and the fields vanish, so paint it solid.
+    backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.card,
     borderRadius: 24, padding: 20,
     borderWidth: 1, borderColor: theme.border.default,
   },
@@ -80,7 +82,7 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   modeBtnText: {
     fontFamily: 'PlusJakartaSans-SemiBold',
-    fontSize: 14, color: theme.text.muted,
+    fontSize: 14, color: theme.text.secondary,
   },
   modeBtnTextActive: { color: theme.text.inverse },
 });
