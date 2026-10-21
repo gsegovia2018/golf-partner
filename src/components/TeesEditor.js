@@ -7,8 +7,10 @@ import { useT } from '../i18n';
 
 // Controlled tee-list editor. `tees` is an array of
 // { id, label, rating, slope } (rating/slope may be '' while editing).
-// `onChange` receives the next array.
-export default function TeesEditor({ tees, onChange, theme }) {
+// `onChange` receives the next array. `readOnly` shows the same table with
+// nothing editable (a library course for a non-admin) and no example
+// placeholders, which would read as real ratings there.
+export default function TeesEditor({ tees, onChange, theme, readOnly = false }) {
   const t = useT();
   const s = makeStyles(theme);
 
@@ -42,44 +44,49 @@ export default function TeesEditor({ tees, onChange, theme }) {
           <View style={s.row}>
             <TextInput
               style={[s.input, s.labelCol]}
-              placeholder={t('setup.tees.labelPlaceholder')}
+              placeholder={readOnly ? undefined : t('setup.tees.labelPlaceholder')}
               placeholderTextColor={theme.text.muted}
               keyboardAppearance={theme.isDark ? 'dark' : 'light'}
               selectionColor={theme.accent.primary}
               value={tee.label ?? ''}
+              editable={!readOnly}
               onChangeText={(v) => update(i, { label: v })}
             />
             <TextInput
               style={[s.input, s.numCol]}
               keyboardType="decimal-pad"
               maxLength={5}
-              placeholder="71.5"
+              placeholder={readOnly ? undefined : "71.5"}
               placeholderTextColor={theme.text.muted}
               keyboardAppearance={theme.isDark ? 'dark' : 'light'}
               selectionColor={theme.accent.primary}
               value={tee.rating != null ? String(tee.rating) : ''}
+              editable={!readOnly}
               onChangeText={(v) => update(i, { rating: v })}
             />
             <TextInput
               style={[s.input, s.numCol]}
               keyboardType="numeric"
               maxLength={3}
-              placeholder="128"
+              placeholder={readOnly ? undefined : "128"}
               placeholderTextColor={theme.text.muted}
               keyboardAppearance={theme.isDark ? 'dark' : 'light'}
               selectionColor={theme.accent.primary}
               value={tee.slope != null ? String(tee.slope) : ''}
+              editable={!readOnly}
               onChangeText={(v) => update(i, { slope: v })}
             />
-            <TouchableOpacity
-              style={s.removeCol}
-              onPress={() => remove(i)}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={tee.label ? t('setup.tees.removeNamed', { name: tee.label }) : t('setup.tees.removeTee')}
-            >
-              <Feather name="x" size={16} color={theme.destructive} />
-            </TouchableOpacity>
+            {readOnly ? <View style={s.removeCol} /> : (
+              <TouchableOpacity
+                style={s.removeCol}
+                onPress={() => remove(i)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={tee.label ? t('setup.tees.removeNamed', { name: tee.label }) : t('setup.tees.removeTee')}
+              >
+                <Feather name="x" size={16} color={theme.destructive} />
+              </TouchableOpacity>
+            )}
           </View>
           <View style={s.womenRow}>
             <Text style={[s.womenLabel, s.labelCol]}>{t('setup.tees.womens')}</Text>
@@ -87,22 +94,24 @@ export default function TeesEditor({ tees, onChange, theme }) {
               style={[s.input, s.numCol]}
               keyboardType="decimal-pad"
               maxLength={5}
-              placeholder="79.3"
+              placeholder={readOnly ? undefined : "79.3"}
               placeholderTextColor={theme.text.muted}
               keyboardAppearance={theme.isDark ? 'dark' : 'light'}
               selectionColor={theme.accent.primary}
               value={tee.ratingWomen != null ? String(tee.ratingWomen) : ''}
+              editable={!readOnly}
               onChangeText={(v) => update(i, { ratingWomen: v })}
             />
             <TextInput
               style={[s.input, s.numCol]}
               keyboardType="numeric"
               maxLength={3}
-              placeholder="151"
+              placeholder={readOnly ? undefined : "151"}
               placeholderTextColor={theme.text.muted}
               keyboardAppearance={theme.isDark ? 'dark' : 'light'}
               selectionColor={theme.accent.primary}
               value={tee.slopeWomen != null ? String(tee.slopeWomen) : ''}
+              editable={!readOnly}
               onChangeText={(v) => update(i, { slopeWomen: v })}
             />
             <View style={s.removeCol} />
@@ -110,16 +119,18 @@ export default function TeesEditor({ tees, onChange, theme }) {
         </React.Fragment>
       ))}
 
-      <TouchableOpacity
-        style={s.addBtn}
-        onPress={add}
-        activeOpacity={0.7}
-        accessibilityRole="button"
-        accessibilityLabel={t('setup.tees.add')}
-      >
-        <Feather name="plus" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-        <Text style={s.addBtnText}>{t('setup.tees.add')}</Text>
-      </TouchableOpacity>
+      {!readOnly && (
+        <TouchableOpacity
+          style={s.addBtn}
+          onPress={add}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={t('setup.tees.add')}
+        >
+          <Feather name="plus" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
+          <Text style={s.addBtnText}>{t('setup.tees.add')}</Text>
+        </TouchableOpacity>
+      )}
 
       {dupes.length > 0 && (
         <Text style={s.warnText}>

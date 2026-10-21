@@ -8,6 +8,8 @@ import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { isAdminUser } from '../lib/admin';
 import { useT, formatNumber } from '../i18n';
 import { fetchCourses, updateCourseFromEditor, upsertCourse } from '../store/libraryStore';
 import { propagateCourseToTournaments } from '../store/tournamentStore';
@@ -30,6 +32,9 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
+  // The library is shared: only admins edit it (RLS enforces the same list,
+  // see public.is_geo_admin). Everyone else sees the course read-only.
+  const canEdit = isAdminUser(useAuth()?.user?.id);
 
   const [name, setName] = useState(initialName ?? '');
   const [tees, setTees] = useState([]);
@@ -191,13 +196,14 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           style={s.nameInput}
           value={name}
           onChangeText={setName}
+          editable={canEdit}
           placeholder={t('courses.namePlaceholder')}
           placeholderTextColor={theme.text.muted}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor={theme.accent.primary}
         />
 
-        <TeesEditor tees={tees} onChange={setTees} theme={theme} />
+        <TeesEditor tees={tees} onChange={setTees} theme={theme} readOnly={!canEdit} />
 
         <View style={s.locationRow}>
           <TextInput
@@ -208,6 +214,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
             selectionColor={theme.accent.primary}
             value={city}
             onChangeText={setCity}
+            editable={canEdit}
           />
           <TextInput
             style={[s.locationInput, { width: 100 }]}
@@ -217,6 +224,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
             selectionColor={theme.accent.primary}
             value={province}
             onChangeText={setProvince}
+            editable={canEdit}
           />
         </View>
 
@@ -240,6 +248,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
                         key={p}
                         style={[s.parBtn, hole.par === p && s.parBtnActive]}
                         onPress={() => setPar(i, p)}
+                        disabled={!canEdit}
                         activeOpacity={0.7}
                       >
                         <Text style={[s.parBtnText, hole.par === p && s.parBtnTextActive]}>{p}</Text>
@@ -254,6 +263,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
                     selectionColor={theme.accent.primary}
                     value={hole.strokeIndex > 0 ? String(hole.strokeIndex) : ''}
                     onChangeText={(v) => setSI(i, v)}
+                    editable={canEdit}
                   />
                 </View>
               </View>
@@ -298,15 +308,17 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           </>
         )}
 
-        <TouchableOpacity
-          style={[s.saveBtn, (saving || !canSave) && s.saveBtnDisabled]}
-          onPress={handleSave}
-          disabled={saving || !canSave}
-          activeOpacity={0.7}
-        >
-          <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
-          <Text style={s.saveBtnText}>{saving ? t('courses.detail.saving') : t('courses.detail.saveCourse')}</Text>
-        </TouchableOpacity>
+        {canEdit && (
+          <TouchableOpacity
+            style={[s.saveBtn, (saving || !canSave) && s.saveBtnDisabled]}
+            onPress={handleSave}
+            disabled={saving || !canSave}
+            activeOpacity={0.7}
+          >
+            <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
+            <Text style={s.saveBtnText}>{saving ? t('courses.detail.saving') : t('courses.detail.saveCourse')}</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </ScreenContainer>
   );
