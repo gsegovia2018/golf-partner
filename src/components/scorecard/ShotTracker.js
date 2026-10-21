@@ -45,9 +45,9 @@ export function isOnGreen(pt, green, greenCenter) {
 //   - Drag a pin on the map to reposition it (handled by the map/host, not
 //     here); tap a pin (relayed here as `tappedShotIndex`) to re-open the
 //     wheel and change the club, move it, add a shot after it, or delete it.
-//   - "On the green" closes the hole in one tap at the green centre, so the
-//     approach earns its carry without walking up and marking a spot you'd
-//     only ever putt from. A spot on the green is where the first putt was
+//   - "On the green" closes the hole in one tap where the ball stopped (see
+//     finishOnGreen), so the approach earns its carry without marking a spot
+//     you'd only ever putt from. A spot on the green is where the first putt was
 //     struck, so its sheet offers no club — only Move and Delete.
 export function ShotTracker({
   roundId, roundIndex, holeNumber, courseName = null,
@@ -146,13 +146,14 @@ export function ShotTracker({
   const dropAtAim = async () => { const p = aimPos || pos; if (p) await addSpot(p); };
 
   // The approach finished on the green: everything after it is a putt, so the
-  // chain ends here. Marking the green centre rather than walking to the ball
-  // gives the approach an honest carry (a green is ~20-30 m across, and the
-  // centre is the number the approach was aimed at anyway) and leaves nothing
-  // more to mark on the hole.
+  // chain ends here, at the best guess of where the ball stopped — your live
+  // fix when you stand on the green (you're by the ball), else the aim ring
+  // when you've put it on the green, else the green centre (drag the pin to
+  // the ball for the real carry).
   const finishOnGreen = async () => {
     if (!targetPos) return;
-    await logShot({ roundId, roundIndex, holeNumber, pos: targetPos, club: null });
+    const at = (onGreen(pos) && pos) || (onGreen(aimPos) && aimPos) || targetPos;
+    await logShot({ roundId, roundIndex, holeNumber, pos: at, club: null });
   };
 
   if (!roundId) return null;

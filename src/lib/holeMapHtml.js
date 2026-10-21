@@ -136,6 +136,7 @@ let anchor = DATA.anchor || { pos: null, source: null, playerDistance: null };
 let activeField = DATA.activeField || 'center';
 let shots = DATA.shots || []; // logged shots for this hole: [{lat,lng,club}]
 let seen = DATA.seen || []; // automatically detected shots to review: [{lat,lng}]
+let walk = DATA.walk || []; // where the golfer walked (GPS trail): [[[lat,lng],...], ...] runs
 let lastShot = DATA.lastShot || null; // { meters, club } for the top-left card, or null to hide
 let plays = DATA.plays || null; // plays-like info from the host, or null (conditions off)
 let whyOpen = false; // the plays-like breakdown card under the HUD box
@@ -203,6 +204,7 @@ function drawNow() {
   if (g.b) add(L.circleMarker(g.b, { radius:3.5, color:'#fff', weight:1.5, fillColor:'#ef8a5b', fillOpacity:1 }));
   if (g.c) add(L.circleMarker(g.c, { radius:5, color:'#3f8f43', weight:2, fillColor:'#fff', fillOpacity:1 }));
   if (hole.tee) add(L.circleMarker(hole.tee, { radius:6, color:'#fff', weight:2, fillColor:'#2f6bff', fillOpacity:1 }));
+  drawWalk();
   drawShots();
   drawSeen();
   renderLast();
@@ -293,6 +295,15 @@ function drawShots(){
     const mid = [(pts[i-1][0]+pts[i][0])/2, (pts[i-1][1]+pts[i][1])/2];
     add(L.marker(mid, { interactive:false, icon: L.divIcon({ className:'', html:'<div class="dchip">'+disp(d)+' '+U+'</div>', iconSize:[0,0] }) }));
   }
+}
+
+// The golfer's walk from the GPS trail: a faint dotted white line under the
+// shot trail, so where you went reads apart from where the ball went.
+function drawWalk(){
+  (walk || []).forEach(run => {
+    const pts = (run || []).filter(valid);
+    if (pts.length > 1) add(L.polyline(pts, { color:'#fff', weight:2, opacity:.6, dashArray:'1 6', lineCap:'round', interactive:false }));
+  });
 }
 
 // Detected shots awaiting an answer: hollow dashed pins, tap posts seen-tap.
@@ -533,6 +544,7 @@ window.addEventListener('message', (ev) => {
   if (m.type === 'hole') { hole = m.hole; draw(); } // redraw markers, keep current pan/zoom
   if (m.type === 'shots') { shots = m.shots || []; draw(); }
   if (m.type === 'seen') { seen = m.seen || []; draw(); }
+  if (m.type === 'walk') { walk = m.walk || []; draw(); }
   if (m.type === 'last-shot') { lastShot = m.lastShot || null; renderLast(); }
   if (m.type === 'plays') { plays = m.plays || null; if (!plays) whyOpen = false; if (hudArgs) hud(hudArgs[0], hudArgs[1]); }
   // host -> page: { type:'set-targets', targets:[[lat,lng],...] } replaces the

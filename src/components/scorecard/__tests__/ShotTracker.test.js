@@ -322,3 +322,34 @@ describe('ShotTracker shot editing', () => {
     expect(club).toBe(shots[1].club ?? null);
   });
 });
+
+describe('On the green lands where the ball stopped', () => {
+  const NEAR = [38.55605, -0.14705]; // ~7 m from the green centre
+  const OFF = [38.5552, -0.1462];     // ~110 m short: neither on the green
+  const open = () => { mockShots = [
+    { id: 'a', lat: 38.55, lng: -0.14, club: 'driver' },
+    { id: 'b', lat: 38.5550, lng: -0.1465, club: '9i' },
+  ]; };
+  const press = async (props) => {
+    const { getByLabelText } = render(<ShotTracker {...base} {...props} />);
+    await act(async () => { fireEvent.press(getByLabelText('Ball is on the green — finish the hole here')); });
+  };
+
+  it('at your live fix when you stand on the green', async () => {
+    open();
+    await press({ pos: NEAR, aimPos: OFF });
+    expect(logShot).toHaveBeenCalledWith(expect.objectContaining({ pos: NEAR, club: null }));
+  });
+
+  it('at the aim ring when it is on the green and you are not', async () => {
+    open();
+    await press({ pos: OFF, aimPos: NEAR });
+    expect(logShot).toHaveBeenCalledWith(expect.objectContaining({ pos: NEAR, club: null }));
+  });
+
+  it('at the green centre when neither is on the green', async () => {
+    open();
+    await press({ pos: OFF, aimPos: OFF });
+    expect(logShot).toHaveBeenCalledWith(expect.objectContaining({ pos: base.targetPos, club: null }));
+  });
+});

@@ -22,6 +22,12 @@ describe('buildHoleMapHtml', () => {
     expect(html).toContain('class="tri"');
     expect(html).not.toContain('class="card front"');
   });
+  it('draws the trail walk as a dotted line and takes live walk updates', () => {
+    const html = buildHoleMapHtml({ ...base, walk: [[[38.5634, -0.1439], [38.562, -0.142]]] });
+    expect(html).toContain('"walk":[[[38.5634,-0.1439],[38.562,-0.142]]]');
+    expect(html).toContain('function drawWalk()');
+    expect(html).toContain("m.type === 'walk'");
+  });
   it('inlines Leaflet — no CDN dependency', () => {
     const html = buildHoleMapHtml(base);
     expect(html).not.toContain('unpkg.com');

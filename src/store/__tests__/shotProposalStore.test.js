@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   feedShotDetection, getRoundStops, loadShotProposals, dismissProposal, confirmProposals,
   setDetectionHole, PROPOSALS_PREFIX, __resetShotProposalsForTests,
+  getRoundWalk, closeHoleOnGreen, markProposalAdded, WALK_PREFIX,
 } from '../shotProposalStore';
 import { shotsForHole, pruneShotsToRounds, logShot } from '../shotStore';
 import { getActiveTrailRound, isTrailRecordingEnabled } from '../gpsTrailStore';
@@ -77,4 +78,31 @@ test('stored proposals load back; confirm writes a shot in order; dismiss', asyn
 
   await dismissProposal('t1-r0', 0, 'a');
   expect(getRoundStops('t1-r0', 0)[0].status).toBe('dismissed');
+});
+
+describe('walk and green landing', () => {
+  test('fixes also build the walk, thinned to one point every 5 m', async () => {
+    await feedShotDetection(standThenWalk());
+    const walk = getRoundWalk('t1-r0', 0);
+    expect(walk.length).toBe(7); // fixes every 2 m: kept at 0, 6, 12 … 36 m
+    expect(JSON.parse(await AsyncStorage.getItem(`${WALK_PREFIX}t1-r0|0`))).toHaveLength(walk.length);
+  });
+
+  test('closeHoleOnGreen adds the landing once and marks the stop used', async () => {
+    await feedShotDetection(standThenWalk());
+    const [stop] = getRoundStops('t1-r0', 0);
+    const args = { roundId: 't1-r0', roundIndex: 0, holeNumber: 4, stop };
+    const [a, b] = await Promise.all([closeHoleOnGreen(args), closeHoleOnGreen(args)]);
+    expect(a).toMatchObject({ club: null });
+    expect(b).toBeNull();
+    expect(shotsForHole('t1-r0', 0, 4)).toHaveLength(1);
+    expect(getRoundStops('t1-r0', 0)[0]).toMatchObject({ status: 'added', shotId: a.id });
+  });
+
+  test('markProposalAdded takes a stop out of the open list', async () => {
+    await feedShotDetection(standThenWalk());
+    const [stop] = getRoundStops('t1-r0', 0);
+    await markProposalAdded('t1-r0', 0, stop.id, 's1');
+    expect(getRoundStops('t1-r0', 0)[0]).toMatchObject({ status: 'added', shotId: 's1' });
+  });
 });

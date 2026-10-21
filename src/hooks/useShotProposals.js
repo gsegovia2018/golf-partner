@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useAppSettings } from './useAppSettings';
 import { useCourseGeometry } from './useCourseGeometry';
 import {
-  subscribeShotProposals, getShotProposalsVersion, getRoundStops, loadShotProposals,
-  confirmProposals, dismissProposal,
+  subscribeShotProposals, getShotProposalsVersion, getRoundStops, getRoundWalk, loadShotProposals,
+  confirmProposals, dismissProposal, closeHoleOnGreen,
 } from '../store/shotProposalStore';
-import { proposalsForHole } from '../store/shotDetection';
+import { proposalsForHole, greenLandingStop } from '../store/shotDetection';
 import { holeStrokeAccount } from '../store/scoring';
-import { holeRefs, onGreen } from '../lib/gpsTrailStops';
+import { holeRefs, onGreen, walkForHole } from '../lib/gpsTrailStops';
 import {
   subscribeShots, getShotsVersion, getShots, shotsForHole, insertShotAfter,
 } from '../store/shotStore';
@@ -24,9 +24,12 @@ const EMPTY = [];
 // holeStrokeAccount's notOnMap, the same accounting as the shot detail.
 // Each open proposal carries `club`: the shot tracker's distance-based guess
 // (driver only off the tee), which the golfer can change before adding.
+// `walk` is this hole's part of the walk the trail recorded ([[[lat,lng],...]],
+// one array per run), for the map's dotted line — computed only `withWalk`. While mounted, an open hole
+// whose trail shows a stop on the green is ended there (greenLandingStop).
 export function useShotProposals({
   roundId, roundIndex, holeNumber, courseName, enabled,
-  strokes = null, detail = null, pickedUp = false,
+  strokes = null, detail = null, pickedUp = false, withWalk = false,
 }) {
   const settings = useAppSettings();
   const on = !!enabled && settings.recordGpsTrail === true && roundId != null;
@@ -65,6 +68,20 @@ export function useShotProposals({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on, roundId, roundIndex, holeNumber, course, shots, pv, settings, refs, courseName]);
 
+  const walk = useMemo(() => (on && withWalk && course?.holes?.length
+    ? walkForHole(getRoundWalk(roundId, roundIndex), course.holes, holeNumber) : EMPTY),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [on, withWalk, roundId, roundIndex, holeNumber, course, pv]);
+
+  // The approach's real landing: the first stop on the green, once the trail
+  // has seen you walk off it. closeHoleOnGreen re-checks the stop, so two
+  // mounted copies of this hook can't add it twice.
+  useEffect(() => {
+    if (!on || !course) return;
+    const stop = greenLandingStop(getRoundStops(roundId, roundIndex), { holeNumber, course, shots });
+    if (stop) closeHoleOnGreen({ roundId, roundIndex, holeNumber, stop });
+  }, [on, roundId, roundIndex, holeNumber, course, shots, pv]);
+
   const missing = useMemo(() => (on ? holeStrokeAccount({
     strokes, detail, pickedUp, spots: shots, isOnGreen: (sh) => !!refs && onGreen([sh.lat, sh.lng], refs),
   }).notOnMap : null), [on, strokes, detail, pickedUp, shots, refs]);
@@ -81,5 +98,5 @@ export function useShotProposals({
     if (shot) await insertShotAfter(shot.id, [p.lat, p.lng], p.club ?? null);
   }, [confirm]);
 
-  return { open, missing, confirm, dismiss, plusOne };
+  return { open, missing, confirm, dismiss, plusOne, walk };
 }

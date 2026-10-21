@@ -145,6 +145,40 @@ export function assignStopsToHoles(stops, holes, { maxM = 60 } = {}) {
   return { byHole, unassigned };
 }
 
+// The walk drawn on the hole map: `walk` ([[lat,lng],...], in time order) with
+// `points` (trail points) appended, keeping one point every `stepM` metres so
+// a round stays a few thousand points. Poor fixes are dropped (cleanTrail).
+export const WALK_STEP_M = 5;
+export function extendWalk(walk, points, stepM = WALK_STEP_M) {
+  const out = walk ? walk.slice() : [];
+  for (const p of cleanTrail(points)) {
+    const last = out[out.length - 1];
+    if (!last || haversine(last, [p.lat, p.lng]) >= stepM) out.push([p.lat, p.lng]);
+  }
+  return out;
+}
+
+// The parts of a round's walk that belong to one hole: each point goes to the
+// hole whose tee→green line is nearest (within `maxM`, as assignStopsToHoles),
+// and a run of this hole's points is one polyline. Returns [[[lat,lng],...]],
+// runs of a single point dropped.
+export function walkForHole(walk, holes, holeNumber, { maxM = 60 } = {}) {
+  const refs = (holes ?? []).map((h) => ({ number: h.number, refs: holeRefs(h) })).filter((h) => h.refs);
+  const runs = [];
+  let run = [];
+  for (const pt of walk ?? []) {
+    let best = null;
+    for (const h of refs) {
+      const d = segmentDistance(pt, h.refs.tee, h.refs.green);
+      if (d <= maxM && (!best || d < best.d)) best = { number: h.number, d };
+    }
+    if (best?.number === holeNumber) run.push(pt);
+    else { if (run.length > 1) runs.push(run); run = []; }
+  }
+  if (run.length > 1) runs.push(run);
+  return runs;
+}
+
 export const onGreen = (pos, refs) => (refs.poly ? pointInPolygon(pos, refs.poly) : haversine(pos, refs.green) <= 15);
 
 // Drive and approach distances from an ordered list of ball spots on one

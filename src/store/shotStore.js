@@ -312,10 +312,12 @@ export function chainEndNear(hole, pos) {
 // hole's chain already ends at `start` (chainEndNear, i.e. you marked standing
 // over the ball) that spot is tagged instead of stacking a duplicate;
 // `originCreated` says whether a new origin spot was actually added, so an
-// undo only deletes one it created.
+// undo only deletes one it created, and `prevClub` is the reused spot's club
+// before the tag, so an undo can put it back.
 export async function logMeasuredShot({ roundId, roundIndex, holeNumber, start, end, club }) {
   const last = chainEndNear(shotsForHole(roundId, roundIndex, holeNumber), start);
   const reuse = !!last;
+  const prevClub = reuse ? last.club ?? null : null;
   let originId;
   if (reuse) {
     await setShotClub(last.id, club);
@@ -324,5 +326,5 @@ export async function logMeasuredShot({ roundId, roundIndex, holeNumber, start, 
     originId = (await logShot({ roundId, roundIndex, holeNumber, pos: start, club })).id;
   }
   const shot = await logShot({ roundId, roundIndex, holeNumber, pos: end, club: null });
-  return { originId, originCreated: !reuse, shotId: shot.id };
+  return { originId, originCreated: !reuse, prevClub, shotId: shot.id };
 }

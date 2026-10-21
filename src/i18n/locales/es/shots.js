@@ -106,6 +106,11 @@ export default {
   'shots.measure.atBall': 'Toca cuando estés en la bola',
   'shots.measure.gps': 'GPS ±{meters} m',
   'shots.measure.fabA11y': 'Medir mi golpe',
+  'shots.measure.savedGreen': '{label} · {meters} guardado · en green',
+  'shots.measure.stopped': 'Medición detenida',
+  'shots.measure.splitAsk': 'Estuviste {seconds} s a las {time}, {distance} atrás. ¿Dividir ahí?',
+  'shots.measure.splitYes': 'Dividir',
+  'shots.measure.splitNo': 'No',
 
   'shots.why.chip': '¿Por qué?',
   'shots.why.title.left': '¿Por qué falló a la izquierda?',

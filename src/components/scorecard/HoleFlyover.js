@@ -54,7 +54,7 @@ export function HoleFlyover({
   // Automatically detected shots as hollow "seen" pins; tapping one opens the
   // "Shot from here?" card. `missing` drives the pill and "+1 from here".
   const seen = useShotProposals({
-    roundId, roundIndex, holeNumber, courseName, enabled: seenEnabled, strokes, detail, pickedUp,
+    roundId, roundIndex, holeNumber, courseName, enabled: seenEnabled, strokes, detail, pickedUp, withWalk: visible,
   });
   const seenPins = useMemo(() => (seen.open.length ? seen.open.map((p) => ({ lat: p.lat, lng: p.lng })) : NO_SEEN), [seen.open]);
   const [seenIdx, setSeenIdx] = useState(null);
@@ -148,10 +148,11 @@ export function HoleFlyover({
     units,
     shots: shotPins, // initial paint; live marks arrive via the shots prop below
     seen: seenPins, // same for detected shots (option A)
+    walk: seen.walk, // and for the trail's dotted walk
     showRec: appSettings.showLastShot, // gates the top-left last-shot-to-green card
     lastShot, // initial paint; live updates arrive via the lastShot prop below
     plays, // initial paint; live updates arrive via the plays prop below
-  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins, seenPins, appSettings.showLastShot, lastShot, plays, tl]);
+  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins, seenPins, seen.walk, appSettings.showLastShot, lastShot, plays, tl]);
 
   // Latest aim state reported by the map: { pos, rings } — pos is the ring
   // nearest the green (for "Add shot" fallback), rings is the full
@@ -232,6 +233,7 @@ export function HoleFlyover({
                 anchor={anchorInfo}
                 shots={shotPins}
                 seen={seenPins}
+                walk={seen.walk}
                 onSeenTap={setSeenIdx}
                 lastShot={lastShot}
                 plays={plays}
