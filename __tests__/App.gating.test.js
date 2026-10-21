@@ -113,9 +113,11 @@ jest.mock('../src/store/deviceId', () => ({
   initDeviceAuthorId: () => Promise.resolve('device-1'),
   getDeviceAuthorId: () => 'device-1',
 }));
-jest.mock('../src/store/profileStore', () => ({
-  loadProfile: () => Promise.resolve({ username: 'marcos' }),
-}));
+const mockProfileStore = {
+  loadProfile: jest.fn(() => Promise.resolve({ username: 'marcos' })),
+  loadCachedProfile: jest.fn(() => Promise.resolve(null)),
+};
+jest.mock('../src/store/profileStore', () => mockProfileStore);
 jest.mock('../src/store/courseGeometryStore', () => ({ hydrateCourseGeometry: jest.fn() }));
 jest.mock('../src/store/shotStore', () => ({ hydrateShots: jest.fn() }));
 jest.mock('../src/store/settingsStore', () => ({ hydrateAppSettings: jest.fn() }));
@@ -408,5 +410,24 @@ describe('App gating: invite links', () => {
     expect(getByTestId('screen-AuthScreen')).toBeTruthy();
     expect(queryByTestId('screen-JoinTournamentLinkScreen')).toBeNull();
     expect(queryByTestId('screen-SharedBoardScreen')).toBeNull();
+  });
+});
+
+// Start-up used to hold the splash until the profile came back from the
+// network (two round-trips) on every launch; one bar on the course meant a
+// long blank start. A saved profile with a username has been through
+// onboarding, so it opens the app while the network check finishes behind.
+describe('App gating: onboarding check', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    Linking.addEventListener.mockReturnValue({ remove: jest.fn() });
+    mockRegisteredScreens.length = 0;
+  });
+
+  test('a saved profile with a username opens the app without waiting on the network', async () => {
+    mockProfileStore.loadProfile.mockReturnValueOnce(new Promise(() => {}));
+    mockProfileStore.loadCachedProfile.mockResolvedValueOnce({ userId: 'u1', username: 'marcos' });
+    await renderAtUrl(null, { session: SESSION });
+    expect(mockRegisteredScreens).toContain('Main');
   });
 });

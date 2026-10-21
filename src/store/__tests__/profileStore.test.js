@@ -1,4 +1,6 @@
-import { loadProfile, upsertProfile, computePersonalStats } from '../profileStore';
+import {
+  loadProfile, loadCachedProfile, clearCachedProfile, upsertProfile, computePersonalStats,
+} from '../profileStore';
 import { supabase } from '../../lib/supabase';
 import * as tournamentStore from '../tournamentStore';
 
@@ -226,6 +228,12 @@ describe('computePersonalStats — scramble win credit', () => {
   // rounds were skipped entirely, so every player's points stayed 0 and the
   // win check (`leaderboard[0]?.points > 0`) never fired for anyone —
   // including the winning captain, who got credit pre-branch.
+  test('a caller that already holds the list is not charged a second fetch', async () => {
+    const stats = await computePersonalStats({ userId: 'u-p1', displayName: 'Ann' }, [scrambleTournament]);
+    expect(stats.wins).toBe(1);
+    expect(tournamentStore.loadAllTournaments).not.toHaveBeenCalled();
+  });
+
   test('winning team captain gets win credit', async () => {
     const stats = await computePersonalStats({ userId: 'u-p1', displayName: 'Ann' });
     expect(stats.wins).toBe(1);
@@ -445,5 +453,59 @@ describe('profileStore — settings blob', () => {
     expect(chain.update).toHaveBeenCalledWith(
       expect.not.objectContaining({ settings: expect.anything() }),
     );
+  });
+});
+
+// Profile and History paint from the last profile this device loaded, and
+// only ever for the user it belongs to.
+describe('loadCachedProfile', () => {
+  beforeEach(async () => {
+    await clearCachedProfile();
+    const chain = getChain();
+    chain.from.mockReturnValue(chain);
+    chain.select.mockReturnValue(chain);
+    chain.eq.mockReturnValue(chain);
+    supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'u1', email: 'a@b' } } });
+    chain.maybeSingle.mockResolvedValue({
+      data: { user_id: 'u1', display_name: 'Marcos', handicap: 18 },
+      error: null,
+    });
+  });
+
+  test('serves the last loaded profile to the same signed-in user', async () => {
+    await loadProfile();
+    const cached = await loadCachedProfile('u1');
+    expect(cached).toEqual(expect.objectContaining({ userId: 'u1', displayName: 'Marcos', handicap: 18 }));
+  });
+
+  test('never serves it to another user or a signed-out device', async () => {
+    await loadProfile();
+    await expect(loadCachedProfile('u2')).resolves.toBeNull();
+    await expect(loadCachedProfile(null)).resolves.toBeNull();
+  });
+
+  test('is empty after sign-out clears it', async () => {
+    await loadProfile();
+    await clearCachedProfile();
+    await expect(loadCachedProfile('u1')).resolves.toBeNull();
+  });
+});
+
+describe('loadProfile sharing', () => {
+  beforeEach(() => {
+    const chain = getChain();
+    chain.from.mockReturnValue(chain);
+    chain.select.mockReturnValue(chain);
+    chain.eq.mockReturnValue(chain);
+    supabase.auth.getUser.mockReset();
+    supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'u1', email: 'a@b' } } });
+    chain.maybeSingle.mockResolvedValue({ data: { user_id: 'u1', username: 'marcos' }, error: null });
+  });
+
+  test('concurrent callers share one fetch and each gets its own copy', async () => {
+    const [a, b] = await Promise.all([loadProfile(), loadProfile()]);
+    expect(supabase.auth.getUser).toHaveBeenCalledTimes(1);
+    expect(a).toEqual(b);
+    expect(a).not.toBe(b);
   });
 });

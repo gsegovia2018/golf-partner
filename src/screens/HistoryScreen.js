@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView,
   Alert, Modal, Pressable,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
-import HistoryRow from '../components/HistoryRow';
+import HistoryRow, { HistoryRowSkeleton } from '../components/HistoryRow';
+import { Skeleton, SkeletonRegion } from '../components/ui/Skeleton';
 import PressableScale from '../components/ui/PressableScale';
 import Reveal from '../components/ui/Reveal';
 import SwipeToDelete from '../components/ui/SwipeToDelete';
@@ -12,11 +13,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import {
-  loadAllTournamentsWithFallback, isTournamentFinished,
+  loadAllTournamentsWithFallback, loadCachedTournamentsList, isTournamentFinished,
   subscribeTournamentChanges, deleteTournament,
 } from '../store/tournamentStore';
-import { loadProfile, computePersonalStats } from '../store/profileStore';
+import { loadProfile, loadCachedProfile, computePersonalStats } from '../store/profileStore';
 import { buildHistorySections } from '../store/historyModel';
 import { semantic } from '../theme/tokens';
 import { useT, formatNumber } from '../i18n';
@@ -46,6 +48,8 @@ const FILTERS = [
 export default function HistoryScreen({ navigation }) {
   const { theme } = useTheme();
   const t = useT();
+  const { user } = useAuth() ?? {};
+  const userId = user?.id ?? null;
   const gold = theme.isDark ? semantic.winner.dark : semantic.winner.light;
   const s = useMemo(() => makeStyles(theme, gold), [theme, gold]);
 
@@ -53,6 +57,9 @@ export default function HistoryScreen({ navigation }) {
   const [identity, setIdentity] = useState({});
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Nothing on the device and the network unreachable: an error with Retry,
+  // never "No history yet", which would claim the archive is empty.
+  const [failed, setFailed] = useState(false);
   const [filter, setFilter] = useState('all');
   const [confirmState, setConfirmState] = useState(null);
   const confirmResolverRef = useRef(null);
@@ -69,22 +76,48 @@ export default function HistoryScreen({ navigation }) {
     if (resolver) resolver(result);
   }, []);
 
+  // The archive and the record strip both come from one list. Stats are
+  // computed from the list in hand, never a second fetch of it.
+  const applyList = useCallback(async (list, profile) => {
+    setFinished(list.filter((t) => isTournamentFinished(t)));
+    if (!profile?.userId && !profile?.displayName) return;
+    const id = { userId: profile?.userId, displayName: profile?.displayName };
+    setIdentity(id);
+    try {
+      setStats(await computePersonalStats(id, list));
+    } catch { /* stats are best-effort */ }
+  }, []);
+
+  const paintedRef = useRef(false);
   const reload = useCallback(async () => {
     try {
-      const { list } = await loadAllTournamentsWithFallback();
-      setFinished(list.filter((t) => isTournamentFinished(t)));
-      try {
-        const profile = await loadProfile();
-        if (profile?.userId || profile?.displayName) {
-          const id = { userId: profile?.userId, displayName: profile?.displayName };
-          setIdentity(id);
-          setStats(await computePersonalStats(id));
+      // First open paints what the device already has (one disk read each)
+      // while the remote list and profile load, then they replace it.
+      const remote = Promise.all([
+        loadAllTournamentsWithFallback(),
+        loadProfile().catch(() => null),
+      ]);
+      let cachedProfile = null;
+      if (!paintedRef.current) {
+        const [cachedList, profile] = await Promise.all([
+          loadCachedTournamentsList().catch(() => []),
+          loadCachedProfile(userId),
+        ]);
+        cachedProfile = profile;
+        if (cachedList.some((t) => isTournamentFinished(t))) {
+          await applyList(cachedList, cachedProfile);
+          paintedRef.current = true;
+          setLoading(false);
         }
-      } catch { /* stats are best-effort */ }
+      }
+      const [{ list, stale }, profile] = await remote;
+      await applyList(list, profile ?? cachedProfile);
+      setFailed(!!stale && list.length === 0);
     } finally {
+      paintedRef.current = true;
       setLoading(false);
     }
-  }, []);
+  }, [applyList, userId]);
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
@@ -151,7 +184,22 @@ export default function HistoryScreen({ navigation }) {
       </View>
 
       {loading ? (
-        <View style={s.center}><ActivityIndicator color={theme.accent.primary} /></View>
+        <HistorySkeleton s={s} t={t} theme={theme} filter={filter} onFilter={setFilter} />
+      ) : failed ? (
+        <View style={s.emptyState}>
+          <Feather name="cloud-off" size={44} color={theme.text.muted} />
+          <Text style={s.emptyTitle}>{t('home.history.loadErrorTitle')}</Text>
+          <Text style={s.emptySub}>{t('common.checkConnection')}</Text>
+          <TouchableOpacity
+            style={s.retryBtn}
+            onPress={() => { setFailed(false); setLoading(true); reload(); }}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+          >
+            <Feather name="refresh-cw" size={14} color={theme.text.inverse} />
+            <Text style={s.retryText}>{t('common.retry')}</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <ScrollView contentContainerStyle={s.content}>
           {stats && stats.roundsPlayed > 0 && (
@@ -176,20 +224,7 @@ export default function HistoryScreen({ navigation }) {
             </PressableScale>
           )}
 
-          <View style={s.chips}>
-            {FILTERS.map((f) => (
-              <TouchableOpacity
-                key={f.key}
-                style={[s.chip, filter === f.key && s.chipOn]}
-                onPress={() => setFilter(f.key)}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityState={{ selected: filter === f.key }}
-              >
-                <Text style={[s.chipText, filter === f.key && s.chipTextOn]}>{t(f.labelKey)}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <FilterChips s={s} t={t} filter={filter} onFilter={setFilter} />
 
           {sections.length === 0 ? (
             <View style={s.emptyState}>
@@ -280,6 +315,54 @@ function ConfirmModal({ state, onResult, s }) {
   );
 }
 
+function FilterChips({ s, t, filter, onFilter }) {
+  return (
+    <View style={s.chips}>
+      {FILTERS.map((f) => (
+        <TouchableOpacity
+          key={f.key}
+          style={[s.chip, filter === f.key && s.chipOn]}
+          onPress={() => onFilter(f.key)}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityState={{ selected: filter === f.key }}
+        >
+          <Text style={[s.chipText, filter === f.key && s.chipTextOn]}>{t(f.labelKey)}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+// First open with nothing on the device: the real record labels and filters,
+// boxes where the numbers and rows will land (DESIGN.md "Loading states").
+const RECORD_LABEL_KEYS = ['home.history.rounds', 'home.history.wins', 'home.history.avgPts', 'home.history.best'];
+const SKELETON_TITLE_WIDTHS = ['70%', '52%', '84%', '64%'];
+
+function HistorySkeleton({ s, t, theme, filter, onFilter }) {
+  return (
+    <SkeletonRegion style={s.content} testID="history-skeleton">
+      <View style={s.recordStrip}>
+        {RECORD_LABEL_KEYS.map((key, i) => (
+          <React.Fragment key={key}>
+            {i > 0 && <View style={s.recordDivider} />}
+            <View style={s.recordCell}>
+              <Skeleton width={26} height={19} style={s.recordValueSkeleton} />
+              <Text style={s.recordLabel}>{t(key)}</Text>
+            </View>
+          </React.Fragment>
+        ))}
+        <Feather name="chevron-right" size={16} color={theme.text.muted} />
+      </View>
+      <FilterChips s={s} t={t} filter={filter} onFilter={onFilter} />
+      <Skeleton width={86} height={8} radius={3} style={s.sectionLabelSkeleton} />
+      {SKELETON_TITLE_WIDTHS.map((w) => (
+        <View key={w} style={s.rowWrap}><HistoryRowSkeleton titleWidth={w} /></View>
+      ))}
+    </SkeletonRegion>
+  );
+}
+
 function makeStyles(theme, gold) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.bg.primary },
@@ -287,7 +370,6 @@ function makeStyles(theme, gold) {
     headerTitle: {
       fontFamily: 'PlayfairDisplay-Black', fontSize: 26, color: theme.text.primary,
     },
-    center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     content: { padding: 20, paddingTop: 4, paddingBottom: 40 },
     sectionLabel: {
       fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 10,
@@ -304,6 +386,8 @@ function makeStyles(theme, gold) {
     recordCell: { alignItems: 'center', flex: 1 },
     recordValue: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 19, color: theme.text.primary },
     recordValueGold: { color: gold },
+    recordValueSkeleton: { marginVertical: 3 },
+    sectionLabelSkeleton: { marginTop: 20, marginBottom: 14 },
     recordLabel: {
       fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 8.5, letterSpacing: 0.8,
       color: theme.text.muted, marginTop: 2, textTransform: 'uppercase',
@@ -324,6 +408,12 @@ function makeStyles(theme, gold) {
     },
     chipTextOn: { color: theme.text.inverse },
     rowWrap: { marginBottom: 10 },
+    retryBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4,
+      backgroundColor: theme.accent.primary, borderRadius: 12,
+      paddingHorizontal: 18, paddingVertical: 12,
+    },
+    retryText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.text.inverse },
     emptyState: { alignItems: 'center', paddingVertical: 80, gap: 12 },
     emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary },
     emptySub: {

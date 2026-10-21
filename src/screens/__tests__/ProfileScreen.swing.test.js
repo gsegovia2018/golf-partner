@@ -29,6 +29,8 @@ jest.mock('expo-image-picker', () => ({
 jest.mock('expo-image-manipulator', () => ({ manipulateAsync: jest.fn(), SaveFormat: { JPEG: 'jpeg' } }));
 jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn(),
+  loadCachedProfile: jest.fn(() => Promise.resolve(null)),
+  clearCachedProfile: jest.fn(() => Promise.resolve()),
   upsertProfile: jest.fn(() => Promise.resolve()),
   uploadAvatar: jest.fn(),
   isUsernameAvailable: jest.fn(() => Promise.resolve(true)),

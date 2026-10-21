@@ -32,7 +32,7 @@ import PressableScale from '../components/ui/PressableScale';
 import StakesSheet, { stakesSummary } from '../components/StakesSheet';
 import SettleUpCard from '../components/SettleUpCard';
 import {
-  loadTournament, loadAllTournaments, loadAllTournamentsWithFallback,
+  loadTournament, loadAllTournaments, loadAllTournamentsWithFallback, loadCachedTournamentsList,
   setActiveTournament,
   deleteTournament,
   tournamentPlayerClinched,
@@ -299,18 +299,9 @@ export default function HomeScreen({ navigation, route }) {
       // Only flash the splash on the first load. Subsequent reloads swap
       // data in place to avoid flicker and perceived slowness.
       if (!hasLoadedOnceRef.current) setLoading(true);
-      try {
-        const [t, listResult] = await Promise.all([
-          routeTournamentId
-            ? getTournament(routeTournamentId, { refreshRemote: remote })
-            : loadTournament({ refreshRemote: remote }),
-          loadAllTournamentsWithFallback(),
-        ]);
+      const applyTournament = (t) => {
         setTournament(t);
         ensureRealtimeForTournament(t?.id ?? null).catch(() => {});
-        setAllTournaments(listResult.list);
-        setListStale(listResult.stale);
-        setOpenableIds(listResult.openableIds);
         if (t) {
           // Snap to the smart default only when the viewed tournament
           // changed or the user hasn't manually picked a round yet. A
@@ -322,6 +313,32 @@ export default function HomeScreen({ navigation, route }) {
           }
           if (!userPickedRoundRef.current) setSelectedRound(chooseInitialRound(t));
         }
+      };
+      try {
+        const tournamentPromise = routeTournamentId
+          ? getTournament(routeTournamentId, { refreshRemote: remote })
+          : loadTournament({ refreshRemote: remote });
+        // Never throws: falls back to the device copy on failure.
+        const listPromise = loadAllTournamentsWithFallback();
+        if (!hasLoadedOnceRef.current) {
+          // Cold start: the list already on the device paints Home (and lifts
+          // the boot splash) at once, and the remote list replaces it below.
+          // Waiting on the remote list held the splash for its round-trip, up
+          // to the 6 s failsafe on a weak course signal. The tournament is a
+          // local read that refreshes in the background.
+          const cachedList = await loadCachedTournamentsList().catch(() => []);
+          if (cachedList.length > 0) {
+            applyTournament(await tournamentPromise);
+            setAllTournaments(cachedList);
+            hasLoadedOnceRef.current = true;
+            setLoading(false);
+          }
+        }
+        const [t, listResult] = await Promise.all([tournamentPromise, listPromise]);
+        applyTournament(t);
+        setAllTournaments(listResult.list);
+        setListStale(listResult.stale);
+        setOpenableIds(listResult.openableIds);
         setReloadError(null);
       } catch (err) {
         // Surface the failure inline (with a Retry) rather than letting the

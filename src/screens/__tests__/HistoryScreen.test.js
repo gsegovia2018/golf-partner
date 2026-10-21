@@ -68,6 +68,7 @@ jest.mock('../../store/tournamentStore', () => {
   return {
     ...actual,
     loadAllTournamentsWithFallback: jest.fn(() => Promise.resolve({ list: [] })),
+    loadCachedTournamentsList: jest.fn(() => Promise.resolve([])),
     isTournamentFinished: jest.fn(() => true),
     subscribeTournamentChanges: jest.fn(() => jest.fn()),
     deleteTournament: jest.fn(() => Promise.resolve()),
@@ -76,6 +77,7 @@ jest.mock('../../store/tournamentStore', () => {
 
 jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn(() => Promise.resolve({ userId: 'u1', displayName: 'Marcos' })),
+  loadCachedProfile: jest.fn(() => Promise.resolve(null)),
   computePersonalStats: jest.fn(() => Promise.resolve({
     tournamentsPlayed: 3, roundsPlayed: 12, fullRounds: 12, totalPoints: 360,
     avgPointsPerRound: 30,
@@ -84,7 +86,7 @@ jest.mock('../../store/profileStore', () => ({
   })),
 }));
 
-const { loadAllTournamentsWithFallback } = require('../../store/tournamentStore');
+const { loadAllTournamentsWithFallback, loadCachedTournamentsList } = require('../../store/tournamentStore');
 const { computePersonalStats } = require('../../store/profileStore');
 
 describe('HistoryScreen', () => {
@@ -107,6 +109,53 @@ describe('HistoryScreen', () => {
     await findByText('MAY 2026');
     await findByText('June Cup');
     await findByText('28 May game');
+  });
+
+  // First open shows what the device already has instead of waiting on the
+  // network, and the stats come from that same list (no second fetch).
+  test('paints the archive from the device while the network is still out', async () => {
+    loadAllTournamentsWithFallback.mockReturnValue(new Promise(() => {}));
+    loadCachedTournamentsList.mockResolvedValueOnce([TOURNAMENT]);
+    const { findByText } = render(wrap(
+      <HistoryScreen navigation={{ navigate: jest.fn() }} />,
+    ));
+    await findByText('June Cup');
+  });
+
+  test('nothing on the device: the real filters and record labels over blocks', async () => {
+    loadAllTournamentsWithFallback.mockReturnValue(new Promise(() => {}));
+    const { findByTestId, getByText, getByLabelText } = render(wrap(
+      <HistoryScreen navigation={{ navigate: jest.fn() }} />,
+    ));
+    expect(await findByTestId('history-skeleton')).toBeTruthy();
+    expect(getByLabelText('Loading…')).toBeTruthy();
+    expect(getByText('Tournaments')).toBeTruthy(); // filter chip
+    expect(getByText('Rounds')).toBeTruthy(); // record label
+  });
+
+  // Offline with nothing cached is not an empty archive.
+  test('unreachable with nothing cached shows an error with Retry, not "No history yet"', async () => {
+    loadAllTournamentsWithFallback.mockResolvedValue({ list: [], stale: true });
+    const { findByText, queryByText, getByText } = render(wrap(
+      <HistoryScreen navigation={{ navigate: jest.fn() }} />,
+    ));
+    expect(await findByText("Couldn't load your history")).toBeTruthy();
+    expect(queryByText('No history yet')).toBeNull();
+
+    loadAllTournamentsWithFallback.mockResolvedValue({ list: [GAME, TOURNAMENT], stale: false });
+    fireEvent.press(getByText('Try again'));
+    expect(await findByText('June Cup')).toBeTruthy();
+  });
+
+  test('record strip stats are computed from the list already loaded', async () => {
+    const { findByText } = render(wrap(
+      <HistoryScreen navigation={{ navigate: jest.fn() }} />,
+    ));
+    await findByText('12');
+    expect(computePersonalStats).toHaveBeenLastCalledWith(
+      { userId: 'u1', displayName: 'Marcos' },
+      [GAME, TOURNAMENT],
+    );
   });
 
   test('record strip shows the condensed stats and opens My Stats', async () => {

@@ -343,7 +343,24 @@ async function _overlayAndSave(id, remote, { makeActive = true } = {}) {
   return merged;
 }
 
-export async function loadAllTournaments() {
+// One list fetch at a time. Home, History, Feed and the stats screens all ask
+// for the full list on focus, often within the same second (tab switch, a
+// change event fanning out to every subscriber), and each fetch is the
+// heaviest RPC in the app plus an overlay-and-save of every tournament.
+// Concurrent callers share the in-flight fetch; the next call after it settles
+// starts a fresh one, so there is no staleness window beyond what a fetch
+// racing a score tap already has (see the overlay note below). Each caller
+// gets its own array so a caller sorting or splicing can't touch another's.
+let _listInFlight = null;
+
+export function loadAllTournaments() {
+  if (!_listInFlight) {
+    _listInFlight = _fetchAllTournaments().finally(() => { _listInFlight = null; });
+  }
+  return _listInFlight.then((list) => [...list]);
+}
+
+async function _fetchAllTournaments() {
   await ensureMigrated();
   // get_my_game_tournaments resolves owner/member/participant role logic
   // server-side (including the anonymous/no-user case), so a single RPC call

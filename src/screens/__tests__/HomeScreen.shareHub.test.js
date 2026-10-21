@@ -132,6 +132,7 @@ jest.mock('../../store/tournamentStore', () => ({
   isTournamentFinished: jest.fn(() => false),
   lastTeeForPlayerOnCourse: jest.fn(),
   loadAllTournaments: jest.fn(() => Promise.resolve([])),
+  loadCachedTournamentsList: jest.fn(() => Promise.resolve([])),
   loadAllTournamentsWithFallback: jest.fn(),
   loadTournament: jest.fn(),
   matchPlayRoundTally: jest.fn(),

@@ -162,6 +162,25 @@ describe('FeedScreen', () => {
     loadFeedSnapshot.mockResolvedValue(null);
   });
 
+  // Nothing on the device yet: the loading layout, not a spinner, until the
+  // remote build lands.
+  test('first open with nothing cached shows the loading layout, then the feed', async () => {
+    let resolveRemote;
+    buildFeed
+      .mockResolvedValueOnce({ ...result, items: [], roundStories: [] })
+      .mockReturnValueOnce(new Promise((resolve) => { resolveRemote = () => resolve(result); }));
+
+    const { findByTestId, findByText, queryByTestId, getByLabelText } = render(wrap(
+      <FeedScreen navigation={navigation} />
+    ));
+
+    expect(await findByTestId('feed-skeleton')).toBeTruthy();
+    expect(getByLabelText('Loading…')).toBeTruthy();
+    resolveRemote();
+    expect(await findByText('Weekend Match')).toBeTruthy();
+    expect(queryByTestId('feed-skeleton')).toBeNull();
+  });
+
   test('the placeholder paint does not claim the feed is incomplete', async () => {
     // The cache-source build is hardcoded stale, so it is ALWAYS flagged
     // partial — mapping that to the banner told every user on every cold open
