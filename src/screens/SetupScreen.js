@@ -11,7 +11,7 @@ import {
   createTournament, buildTeamsForMode, teamShapeOf, DEFAULT_SETTINGS, GAME_DEFAULT_SETTINGS,
   deriveRoundPlayingHandicap, generateInviteCode, buildJoinLink, rosterCap, roundScoringMode,
 } from '../store/tournamentStore';
-import { defaultHoles, fetchPlayers, fetchMyPlayers } from '../store/libraryStore';
+import { defaultHoles, fetchPlayers, fetchMyPlayers, getCachedMyPlayers } from '../store/libraryStore';
 import { middleTee } from '../store/tees';
 import { canSaveCourse } from '../lib/courseLibrary';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
@@ -229,7 +229,9 @@ export default function SetupScreen({ navigation, route }) {
   // Pre-add the signed-in user to the roster — you're setting up an event
   // you'll play in, so you start in the "Who's playing?" list by default.
   // Runs once; the slot stays removable and the PlayerPicker won't add a
-  // duplicate. Offline this no-ops gracefully (the library read fails).
+  // duplicate. My row comes from the device cache first: the network read
+  // waits on a session refresh and the friends list, and on a slow or no
+  // signal it landed late or never, so the game started without me.
   const mePreaddedRef = useRef(false);
   const skipMePreaddRef = useRef(hasPrefilledPlayers);
   useEffect(() => {
@@ -238,8 +240,9 @@ export default function SetupScreen({ navigation, route }) {
     let cancelled = false;
     (async () => {
       try {
-        const mine = await fetchMyPlayers();
-        const me = mine.find((p) => p.user_id === user.id);
+        const isMe = (p) => p.user_id === user.id;
+        const cached = await getCachedMyPlayers(user.id);
+        const me = cached?.find(isMe) ?? (await fetchMyPlayers()).find(isMe);
         if (cancelled || !me) return;
         setPlayers((prev) => {
           if (prev.length >= rosterCap(kind) || prev.some((p) => p.id === me.id)) return prev;
