@@ -6,7 +6,6 @@ import { onDeep } from '../theme/tokens';
 import { useT, formatOrdinal, formatTime, formatNumber } from '../i18n';
 import { verdictKey } from './mystats/reportKeys';
 import { fmtDelta } from './mystats/reportCardView';
-import ShotScorecard from './scorecard/ShotScorecard';
 import { PAIR_COLORS, SoloTotals, useLiveStyles } from './HomeLiveScorecard';
 import { shortName } from './gamestats/ui';
 
@@ -14,7 +13,6 @@ import { shortName } from './gamestats/ui';
 // the deep-green play surface: Before and After, plus the one-line After and
 // the "Your game" pair. Live is HomeLiveScorecard.
 const CREAM = '#f3efe6';
-const INK = '#0c1a14';
 
 function Cta({ icon, label, onPress, a11y, s, half }) {
   return (
@@ -115,87 +113,38 @@ function whenLabel(t, ms) {
     : t('home.phase.after.yesterday', { time });
 }
 
-// Who took the best-ball and the worst-ball point on each hole: A / B / ½.
-function BallStrip({ balls, s, t }) {
-  const nines = balls.length > 9 ? [balls.slice(0, 9), balls.slice(9)] : [balls];
-  const cell = (winner, key) => {
-    if (winner == null) return <View key={key} style={[s.ball, s.ballEmpty]} />;
-    if (winner === 'halved') return <View key={key} style={[s.ball, s.ballHalved]}><Text style={s.ballHalvedText}>½</Text></View>;
-    return (
-      <View key={key} style={[s.ball, { backgroundColor: PAIR_COLORS[winner] }]}>
-        <Text style={s.ballText}>{winner ? 'B' : 'A'}</Text>
-      </View>
-    );
-  };
-  return (
-    <View style={s.strip} testID="home-after-balls">
-      {nines.map((nine, i) => (
-        <View key={i} style={s.stripNine}>
-          <View style={s.stripRow}>
-            <Text style={s.stripLabel}>{t(nines.length > 1 ? (i ? 'stats.game.ledger.in' : 'stats.game.ledger.out') : 'stats.game.ledger.hole')}</Text>
-            {nine.map((b) => <Text key={b.number} style={s.stripNum}>{b.number}</Text>)}
-          </View>
-          <View style={s.stripRow}>
-            <Text style={s.stripLabel}>{t('home.phase.after.best')}</Text>
-            {nine.map((b) => cell(b.best, b.number))}
-          </View>
-          <View style={s.stripRow}>
-            <Text style={s.stripLabel}>{t('home.phase.after.worst')}</Text>
-            {nine.map((b) => cell(b.worst, b.number))}
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function PairResult({ model, tournament, meId, s, t }) {
+// After: a hint of what happened, not the card; "See summary" has the rest.
+// Pairs: who won, the pair score, then my own points and verdict in one line.
+function PairResult({ model, tournament, meId, verdict, s, t }) {
   const { pairs } = model;
   const nameOf = pairNameOf(tournament, t);
   const title = pairs.leader == null
     ? t('home.phase.after.pairLevel')
     : t('home.phase.after.pairWon', { name: nameOf(pairs.sides.find((sd) => sd.side === pairs.leader).ids, meId) });
   const [left, right] = pairs.sides;
-  const side = (sd, alignEnd) => (
-    <View style={[s.side, alignEnd && s.sideEnd]}>
-      <View style={[s.sideHead, alignEnd && s.sideHeadEnd]}>
-        {!alignEnd && <View style={[s.teamDot, { backgroundColor: PAIR_COLORS[sd.side] }]} />}
-        <Text style={s.sideName} numberOfLines={1}>{nameOf(sd.ids, meId)}</Text>
-        {alignEnd && <View style={[s.teamDot, { backgroundColor: PAIR_COLORS[sd.side] }]} />}
-      </View>
-      <Text style={s.bigNum}>{formatNumber(sd.points)}</Text>
-    </View>
-  );
+  const mine = [
+    model.myStableford != null ? t('home.phase.after.yourCard', { points: formatNumber(model.myStableford) }) : null,
+    verdict,
+  ].filter(Boolean).join(' · ');
   return (
     <>
       <Text style={s.afterTitle} testID="home-after-title">{title}</Text>
-      <View style={s.scoreline}>
-        {side(left, false)}
+      <View style={s.scoreRow} testID="home-after-pairs">
+        <View style={[s.teamDot, { backgroundColor: PAIR_COLORS[left.side] }]} />
+        <Text style={[s.sideName, s.sideNameStart]} numberOfLines={1}>{nameOf(left.ids, meId)}</Text>
+        <Text style={s.scoreNum}>{formatNumber(left.points)}</Text>
         <Text style={s.dash}>–</Text>
-        {side(right, true)}
+        <Text style={s.scoreNum}>{formatNumber(right.points)}</Text>
+        <Text style={[s.sideName, s.sideNameEnd]} numberOfLines={1}>{nameOf(right.ids, meId)}</Text>
+        <View style={[s.teamDot, { backgroundColor: PAIR_COLORS[right.side] }]} />
       </View>
-      {pairs.balls ? (
-        <>
-          <BallStrip balls={pairs.balls} s={s} t={t} />
-          <View style={s.legend}>
-            {pairs.sides.map((sd) => (
-              <View key={sd.side} style={s.legendKey}>
-                <View style={[s.legendSwatch, { backgroundColor: PAIR_COLORS[sd.side] }]} />
-                <Text style={s.legendText}>{`${sd.side ? 'B' : 'A'} · ${nameOf(sd.ids, meId)}`}</Text>
-              </View>
-            ))}
-            <View style={s.legendKey}>
-              <View style={[s.legendSwatch, { backgroundColor: onDeep.chip }]} />
-              <Text style={s.legendText}>{t('home.phase.after.halved')}</Text>
-            </View>
-          </View>
-        </>
-      ) : null}
+      {mine ? <Text style={s.cardLine}>{mine}</Text> : null}
     </>
   );
 }
 
-function IndividualResult({ model, s, t, theme }) {
+// Everyone for themselves: who won, my points and place, the verdict.
+function IndividualResult({ model, verdict, s, t, theme }) {
   const gold = theme.semantic.winner.soft;
   const title = model.tied
     ? t('home.phase.after.tied', {
@@ -205,15 +154,13 @@ function IndividualResult({ model, s, t, theme }) {
     : model.winner
       ? t('home.phase.after.winner', { name: model.winner.name, points: formatNumber(model.winner.points) })
       : t('home.phase.after.youWon');
+  const unit = t(model.unit === 'holes' ? 'home.phase.after.holesUnit' : 'home.live.pts');
   return (
     <>
       {model.count > 1 ? <Text style={s.afterTitle} testID="home-after-title">{title}</Text> : null}
       <View style={s.afterTop}>
         {model.myPoints != null ? (
-          <Text style={s.bigNum}>
-            {formatNumber(model.myPoints)}
-            <Text style={s.unit}> {t(model.unit === 'holes' ? 'home.phase.after.holesUnit' : 'home.live.pts')}</Text>
-          </Text>
+          <Text style={s.youPts}>{`${t('home.phase.you')} · ${formatNumber(model.myPoints)} ${unit}`}</Text>
         ) : null}
         {model.place != null && model.count > 1 ? (
           <View style={[s.rank, { backgroundColor: onDeep.goldFill }]}>
@@ -222,24 +169,37 @@ function IndividualResult({ model, s, t, theme }) {
           </View>
         ) : null}
       </View>
+      {verdict ? <Text style={s.cardLine}>{verdict}</Text> : null}
     </>
   );
 }
 
-function SoloResult({ model, s, t }) {
+// Solo: my points and strokes, the verdict, then four numbers from my shots.
+function SoloResult({ model, verdict, s, t }) {
   const { s: ls } = useLiveStyles();
   const total = model.card?.rows[0]?.total;
   const shots = model.shots;
-  const line = shots ? [
-    shots.fairways.of > 0 ? t('home.phase.after.fairways', { hit: shots.fairways.hit, of: shots.fairways.of }) : null,
-    shots.greens.of > 0 ? t('home.phase.after.greens', { count: shots.greens.hit }) : null,
-    shots.penalties > 0 ? t('home.phase.after.penalties', { count: shots.penalties }) : null,
-  ].filter(Boolean).join(' · ') : '';
+  const ratio = (x) => (x.of > 0 ? `${x.hit}/${x.of}` : '–');
+  const tiles = shots ? [
+    { key: 'putts', value: total?.putts != null ? formatNumber(total.putts) : '–' },
+    { key: 'fairways', value: ratio(shots.fairways) },
+    { key: 'greens', value: ratio(shots.greens) },
+    { key: 'penalties', value: formatNumber(shots.penalties) },
+  ] : null;
   return (
     <>
-      {total ? <SoloTotals total={total} s={ls} t={t} /> : null}
-      <ShotScorecard card={model.card} mode="strokes" tone="deep" summary={false} pointsRow />
-      {line ? <Text style={s.cardLine} testID="home-after-shots">{line}</Text> : null}
+      {total ? <SoloTotals total={total} putts={false} s={ls} t={t} /> : null}
+      {verdict ? <Text style={s.verdict}>{verdict}</Text> : null}
+      {tiles ? (
+        <View style={s.tiles} testID="home-after-shots">
+          {tiles.map((tile) => (
+            <View key={tile.key} style={s.tile} accessible accessibilityLabel={`${t(`home.phase.after.tile.${tile.key}`)}: ${tile.value}`}>
+              <Text style={s.tileValue}>{tile.value}</Text>
+              <Text style={s.tileLabel} numberOfLines={1}>{t(`home.phase.after.tile.${tile.key}`)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </>
   );
 }
@@ -248,9 +208,9 @@ export function AfterHero({ model, tournament, meId, report, photos, onOpen, onA
   const { theme, s } = useStyles();
   const t = useT();
   const shown = photos.slice(0, 4);
+  const word = report ? (verdictKey(report.verdict) ? t(verdictKey(report.verdict)) : report.verdict) : null;
   const verdict = report
-    ? [verdictKey(report.verdict) ? t(verdictKey(report.verdict)) : report.verdict,
-      report.vsAvg != null ? t('stats.my.report.vsAvgChip', { delta: fmtDelta(report.vsAvg) }) : null].filter(Boolean).join(' · ')
+    ? [word, report.vsAvg != null ? t('stats.my.report.vsAvgChip', { delta: fmtDelta(report.vsAvg) }) : null].filter(Boolean).join(' · ')
     : null;
   return (
     <View style={s.deep} testID="home-phase-after">
@@ -259,11 +219,10 @@ export function AfterHero({ model, tournament, meId, report, photos, onOpen, onA
         <Text style={s.overline} numberOfLines={1}>{whenLabel(t, model.endedAt)} · {model.courseName || model.name}</Text>
       </View>
       {model.card
-        ? <SoloResult model={model} s={s} t={t} />
+        ? <SoloResult model={model} verdict={verdict} s={s} t={t} />
         : model.pairs
-          ? <PairResult model={model} tournament={tournament} meId={meId} s={s} t={t} />
-          : <IndividualResult model={model} s={s} t={t} theme={theme} />}
-      {verdict ? <Text style={s.verdict}>{verdict}</Text> : null}
+          ? <PairResult model={model} tournament={tournament} meId={meId} verdict={word} s={s} t={t} />
+          : <IndividualResult model={model} verdict={verdict} s={s} t={t} theme={theme} />}
       {shown.length > 0 ? (
         <View style={s.photos}>
           {shown.map((m, i) => (
@@ -361,29 +320,17 @@ const makeStyles = (theme) => StyleSheet.create({
   linkText: { color: onDeep.strong, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
   afterTitle: { color: CREAM, fontFamily: 'PlayfairDisplay-Bold', fontSize: 24, lineHeight: 30 },
   afterTop: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
-  bigNum: { color: CREAM, fontFamily: 'PlayfairDisplay-Black', fontSize: 44, lineHeight: 50, fontVariant: ['tabular-nums'] },
-  unit: { color: onDeep.soft, fontFamily: 'PlusJakartaSans-Bold', fontSize: 15 },
-  scoreline: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  side: { flex: 1, minWidth: 0 },
-  sideEnd: { alignItems: 'flex-end' },
-  sideHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sideHeadEnd: { justifyContent: 'flex-end' },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: onDeep.fill, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
   sideName: { flexShrink: 1, color: onDeep.strong, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
-  dash: { color: onDeep.faint, fontSize: 26, paddingBottom: 8 },
-  strip: { gap: 8, marginTop: 4 },
-  stripNine: { gap: 3 },
-  stripRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  stripLabel: { width: 42, color: onDeep.faint, fontFamily: 'PlusJakartaSans-Bold', fontSize: 10 },
-  stripNum: { flex: 1, textAlign: 'center', color: onDeep.faint, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, fontVariant: ['tabular-nums'] },
-  ball: { flex: 1, height: 20, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
-  ballEmpty: { borderWidth: 1, borderStyle: 'dashed', borderColor: onDeep.borderStrong },
-  ballHalved: { backgroundColor: onDeep.chip },
-  ballText: { color: INK, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10 },
-  ballHalvedText: { color: onDeep.strong, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10 },
-  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 2 },
-  legendKey: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendSwatch: { width: 10, height: 10, borderRadius: 3 },
-  legendText: { color: onDeep.soft, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11 },
+  sideNameStart: { flex: 1 },
+  sideNameEnd: { flex: 1, textAlign: 'right' },
+  scoreNum: { color: CREAM, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 20, fontVariant: ['tabular-nums'] },
+  youPts: { color: CREAM, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 20 },
+  tiles: { flexDirection: 'row', gap: 6, marginTop: 4 },
+  tile: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 10, paddingHorizontal: 2, borderRadius: 10, backgroundColor: onDeep.fill },
+  tileValue: { color: CREAM, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 17, fontVariant: ['tabular-nums'] },
+  tileLabel: { color: onDeep.faint, fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase' },
+  dash: { color: onDeep.faint, fontSize: 16 },
   rank: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
   rankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
   verdict: { color: CREAM, fontFamily: 'PlusJakartaSans-Bold', fontSize: 14 },

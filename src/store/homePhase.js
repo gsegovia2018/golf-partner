@@ -12,7 +12,7 @@
 import { isTournamentFinished, isRoundComplete, roundLeaderboard } from './tournamentStore';
 import { roundEndedAt, parseFinishedAt } from './finishStamp';
 import { isRoundLive } from './liveRound';
-import { getPlayingHandicap, resolvePairs, calcExtraShots, holeCountOf, roundScoringMode } from './scoring';
+import { getPlayingHandicap, resolvePairs, calcExtraShots, holeCountOf, roundScoringMode, roundTotals } from './scoring';
 import { pairBoard } from './homePairs';
 import { scorecardModel } from './scorecardView';
 
@@ -226,7 +226,8 @@ export function liveModel({ tournament, round, roundIndex }, userId) {
 
 // After hero: my result, place and the winner; a tie for first names everyone
 // on it. A two-pair game adds the pair result (`pairs`, as the scorecard's
-// match panel scores it); a solo round adds my card (`card`) and its shot totals.
+// match panel scores it) and my own Stableford points (`myStableford`); a solo
+// round adds my card (`card`, for its totals) and its shot totals.
 export function afterModel({ tournament, round, roundIndex, endedAt }, userId) {
   const me = myPlayerIn(tournament, userId);
   const players = tournament.players ?? [];
@@ -255,6 +256,7 @@ export function afterModel({ tournament, round, roundIndex, endedAt }, userId) {
       ? { points: top.points, players: tiedTop.map((e) => ({ id: e.player?.id, name: e.player?.name ?? '', me: e.player?.id === me?.id })) }
       : null,
     pairs: pairBoard(tournament, round, me?.id ?? null),
+    myStableford: me ? roundTotals(round, [me])[0]?.totalPoints ?? null : null,
     card: solo?.card ?? null,
     shots: solo?.shots ?? null,
   };

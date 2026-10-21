@@ -169,14 +169,15 @@ function LiveCardSolo({ entry, model, userId, onOpen }) {
   );
 }
 
-// "15 pts" big, with "Level par" and "28 strokes · 12 putts" beside it.
-export function SoloTotals({ total, s, t }) {
+// "15 pts" big, with "Level par" and "28 strokes · 12 putts" beside it
+// (`putts={false}` leaves putts to the After card's tiles).
+export function SoloTotals({ total, putts = true, s, t }) {
   const toPar = total.toPar == null ? null
     : total.toPar === 0 ? t('home.live.levelPar')
       : t(total.toPar > 0 ? 'home.live.overPar' : 'home.live.underPar', { count: Math.abs(total.toPar) });
   const counts = [
     total.strokes != null ? t('stats.game.ledger.strokesN', { count: total.strokes }) : null,
-    total.putts != null ? t('stats.game.ledger.puttsN', { count: total.putts }) : null,
+    putts && total.putts != null ? t('stats.game.ledger.puttsN', { count: total.putts }) : null,
   ].filter(Boolean).join(' · ');
   return (
     <View style={s.soloTop} testID="live-solo-totals">
