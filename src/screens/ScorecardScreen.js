@@ -466,6 +466,23 @@ export default function ScorecardScreen({ navigation, route }) {
   // lost is named back from the local player library — see recoverRoundRoster
   // (store/scoring.js). Without it the slot renders with no name at all.
   const players = useRoundRoster(round, tournament?.players ?? EMPTY_PLAYERS);
+  // A nameless roster row is the "—" ghost (2026-10-20 solo round): count
+  // each game it reaches, with what it carries, so its origin shows up.
+  const ghostTrackedRef = useRef(null);
+  useEffect(() => {
+    const tid = tournament?.id;
+    if (!tid || ghostTrackedRef.current === tid) return;
+    const ghosts = players.filter((p) => !p?.name?.trim());
+    if (ghosts.length === 0) return;
+    ghostTrackedRef.current = tid;
+    track('ghost_player_seen', {
+      tid,
+      count: ghosts.length,
+      hasId: ghosts.some((p) => !!p?.id),
+      players: players.length,
+      rounds: tournament?.rounds?.length ?? 0,
+    });
+  }, [players, tournament]);
 
   // ── The card engine: the single source of every casual score on screen ──
   // One card per scorer, my unpublished draft on top, agreements anchored to
