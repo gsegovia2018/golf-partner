@@ -458,7 +458,8 @@ export function voidReasonText(reasonLabel, note) {
 // screen passes a localised one) and `clock(date)` an instant's time of day. Returns [] when there is nothing to offer,
 // so the screen hides the button.
 export function cardActions(card, viewer, league, now = new Date(), { when = (d) => d.toISOString(), clock = (d) => d.toISOString().slice(11, 16) } = {}) {
-  if (!card || card.status === 'void' || league?.archivedAt) return [];
+  // A card held on a spot (a player who hasn't joined) has no actions yet.
+  if (!card || card.spot || card.status === 'void' || league?.archivedAt) return [];
   const { isOwner, isAdmin, otherAdmin } = viewer ?? {};
   const monthKey = String(card.monthKey ?? card.month ?? '').slice(0, 7);
   const closed = monthKey ? isMonthClosed(monthKey, now) : false;

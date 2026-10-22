@@ -17,6 +17,8 @@ import {
 const mockState = {
   rpcCalls: [],
   rpcResult: { data: null, error: null },
+  // Per-function results that win over rpcResult (getLeague calls several RPCs).
+  rpcByFn: {},
   rpcThrows: null,
   tables: {},
   queries: [],
@@ -48,7 +50,7 @@ jest.mock('../../lib/supabase', () => {
       rpc: (fn, args) => {
         mockState.rpcCalls.push([fn, args]);
         if (mockState.rpcThrows) return Promise.reject(mockState.rpcThrows);
-        return Promise.resolve(mockState.rpcResult);
+        return Promise.resolve(mockState.rpcByFn[fn] ?? mockState.rpcResult);
       },
       auth: { getUser: () => Promise.resolve({ data: { user: mockState.user } }) },
       storage: {
@@ -98,6 +100,7 @@ beforeEach(() => {
   mockState.rpcCalls = [];
   mockState.rpcThrows = null;
   mockState.rpcResult = { data: null, error: null };
+  mockState.rpcByFn = {};
   mockState.tables = {};
   mockState.queries = [];
   mockState.upload = { error: null };
@@ -786,6 +789,8 @@ describe('reads and cache', () => {
       user_id: 'me', display_name: 'Marcos', username: 'marcos', avatar_url: null, role: 'admin',
       league_handicap: '18.0', fee_paid: true, joined_at: 'x', left_at: null,
     }]);
+    mockState.rpcByFn.get_league_invitees = { data: [], error: null };
+    mockState.rpcByFn.get_league_spot_cards = { data: [], error: null };
     const res = await getLeague('L1');
     expect(mockState.rpcCalls).toContainEqual(['get_league_members', { p_league: 'L1' }]);
     expect(res.league).toMatchObject({ id: 'L1', inviteCode: 'ABC', entryFeeCents: 1000 });
@@ -799,6 +804,41 @@ describe('reads and cache', () => {
     expect(res.votes[0].ballots).toEqual([{ voteId: 'V1', voter: 'me', yes: true, at: 't' }]);
     expect(res.handicapEvents[0]).toMatchObject({ old: 30, new: 27, reason: 'vote' });
     expect(res.final).toBeNull();
+  });
+
+  test('getLeague lists unclaimed spots as members and their held cards as confirmed cards', async () => {
+    mockState.tables = { leagues: { data: leagueRow, error: null }, league_cards: { data: [cardRow()], error: null } };
+    ok([{ user_id: 'me', display_name: 'Marcos', role: 'admin', league_handicap: '14.0', joined_at: 'x', left_at: null }]);
+    mockState.rpcByFn.get_league_invitees = { data: [{ id: 'I1', name: 'José María Peláez', handicap: '18.0' }], error: null };
+    mockState.rpcByFn.get_league_spot_cards = {
+      data: [{
+        id: 'S1', invitee_id: 'I1', month: '2026-10-01', played_on: '2026-10-02', course: { name: 'Centro Nacional de Golf' },
+        holes: { 1: 6 }, league_handicap: 18, playing_handicap: 17, gross: 89, points: 36, differential: '17.6',
+        net_differential: '-0.4', to_par: null, proof_path: 'L1/S1.jpg', added_by: 'me', added_by_name: 'Marcos', created_at: 't',
+      }],
+      error: null,
+    };
+    const res = await getLeague('L1');
+    expect(mockState.rpcCalls).toContainEqual(['get_league_spot_cards', { p_league: 'L1' }]);
+    expect(res.members.filter((m) => m.spot)).toEqual([expect.objectContaining({
+      userId: 'spot:I1', displayName: 'José María Peláez', leagueHandicap: 18, role: 'member', leftAt: null, spot: true,
+    })]);
+    expect(res.invitees).toHaveLength(1);
+    const held = res.cards.find((c) => c.spot);
+    expect(held).toMatchObject({
+      id: 'S1', leagueId: 'L1', userId: 'spot:I1', monthKey: '2026-10', status: 'confirmed', source: 'offapp',
+      points: 36, gross: 89, playingHandicap: 17, notAnnounced: true, teeVerified: true, confirmation: 'photo',
+      approvedBy: 'me', approvedAt: 't', confirmedByName: 'Marcos', proofPath: 'L1/S1.jpg', netDifferential: -0.4,
+    });
+    expect(res.cardsByMonth['2026-10'].map((c) => c.userId)).toEqual(expect.arrayContaining(['spot:I1']));
+  });
+
+  test('getLeague still loads when the server has no spot cards read', async () => {
+    mockState.tables = { leagues: { data: leagueRow, error: null } };
+    ok([]);
+    mockState.rpcByFn.get_league_spot_cards = { data: null, error: { message: 'function get_league_spot_cards does not exist' } };
+    const res = await getLeague('L1');
+    expect(res.cards.filter((c) => c.spot)).toEqual([]);
   });
 
   test('getLeague writes the cache; getLeagueCached reads it back', async () => {

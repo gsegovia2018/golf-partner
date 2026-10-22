@@ -302,6 +302,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
       name: nameOf(r.userId),
       points: noCardsYet ? '—' : leaguePointsText(r.total),
       sub: noCardsYet ? null : deltaLabel(r.lastMonthDelta, last),
+      detail: members.find((m) => m.userId === r.userId)?.spot ? t('league.membersMisc.notJoined') : undefined,
       isMe: r.userId === meId,
     }));
     const collapsed = collapseSeasonRows(seasonRows, { expanded: showAllSeason });

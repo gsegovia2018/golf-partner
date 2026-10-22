@@ -56,7 +56,8 @@ export default function LeagueCardScreen({ navigation, route }) {
   const card = idx >= 0 ? cards[idx] : null;
   const monthLabel = monthName(month);
   const who = memberName(data?.members, shownUser, meId);
-  const timeline = useCardEvents(card?.id, version);
+  // A spot's card has no server timeline until the player joins.
+  const timeline = useCardEvents(card?.spot ? null : card?.id, version);
 
   const isOwner = !!card && card.userId === meId;
   const isAdmin = !!data?.members.find((m) => m.userId === meId && !m.leftAt && m.role === 'admin');
@@ -276,16 +277,18 @@ export default function LeagueCardScreen({ navigation, route }) {
           now={now}
         />
 
-        <CardTimeline
-          events={timeline.events}
-          loading={timeline.loading}
-          error={timeline.error}
-          onRetry={timeline.reload}
-          meId={meId}
-          members={data?.members}
-          monthKey={card.monthKey}
-          format={format}
-        />
+        {!card.spot && (
+          <CardTimeline
+            events={timeline.events}
+            loading={timeline.loading}
+            error={timeline.error}
+            onRetry={timeline.reload}
+            meId={meId}
+            members={data?.members}
+            monthKey={card.monthKey}
+            format={format}
+          />
+        )}
 
         {scored && !!course?.holes && (
           <View style={l.holeGrid}>
