@@ -30,6 +30,7 @@ import { listFriends, getCachedFriends } from '../store/friendStore';
 import { consumePendingPlayers } from '../lib/selectionBridge';
 import { parseHandicapIndex } from '../lib/handicap';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
+import { leagueLocksForRound } from '../store/leagueSetup';
 
 async function confirmDialog(title, message, confirmLabel = translate('setup.players.remove')) {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
@@ -785,6 +786,7 @@ export default function PlayersScreen({ navigation, route }) {
                     })}
                     theme={theme}
                     onChange={(patch) => handleRoundTeesChange(ri, patch)}
+                    leagueLocks={leagueLocksForRound(tournament, r)}
                   />
                 </View>
               ))}

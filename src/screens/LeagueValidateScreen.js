@@ -344,6 +344,12 @@ export default function LeagueValidateScreen({ navigation, route }) {
   const shownValue = medal ? shownToPar : shownPoints;
   const shownGross = serverScored ? serverCard.gross : card.gross;
   const shownNetDiff = serverScored ? serverCard.netDifferential : netDifferential;
+  // The card counts off the league handicap; a game that gave this player
+  // other strokes (edited before the lock, or on an older build) says so.
+  const leaguePlaying = serverScored && serverCard.playingHandicap != null ? serverCard.playingHandicap : playingHandicap;
+  const gamePlaying = parseInt(round.playerHandicaps?.[player.id], 10);
+  const gameHandicapDiffers = !card.estimate && format !== 'medal_gross' && Number.isFinite(gamePlaying) && leaguePlaying != null
+    && gamePlaying !== leaguePlaying;
   // Not announced in time, or a tee entered by hand: it counts once an admin
   // approves it (needsApproval), not on confirmation.
   const awaitingAdmin = !!serverCard && (!!serverCard.notAnnounced || serverCard.teeVerified === false)
@@ -546,10 +552,15 @@ export default function LeagueValidateScreen({ navigation, route }) {
           mode="stableford"
           strokesOnly={medal}
           meId={player.id}
-          handicapsOverride={{ [player.id]: serverScored && serverCard.playingHandicap != null ? serverCard.playingHandicap : playingHandicap }}
+          handicapsOverride={{ [player.id]: leaguePlaying }}
         />
         {card.estimate && !serverScored && (
           <Text style={s.noteText}>{t('league.validate.estimate')}</Text>
+        )}
+        {gameHandicapDiffers && (
+          <Text style={s.noteText}>
+            {t('league.validate.gameHandicapDiffers', { game: gamePlaying, league: leaguePlaying })}
+          </Text>
         )}
 
         {missing.length > 0 && !result && !alreadySubmitted && (

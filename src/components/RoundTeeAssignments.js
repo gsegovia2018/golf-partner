@@ -72,10 +72,17 @@ export function resolvePlayerTee(existing, lastUsed, tees, gender) {
 //   onChange - (patch) => void, patch = { playerTees, playerHandicaps, manualHandicaps }
 //              playerHandicaps values are numbers.
 //   theme    - theme object
+//   leagueLocks - { [playerId]: { leagueHandicap, teeLocked } } for players
+//              with a league card: they play off the league handicap only (no
+//              index or playing-handicap edits) and, with teeLocked (the card
+//              is announced), keep their tee. Display and editing only — the
+//              host writes the league handicap onto the round.
 //
 // Hosts MUST pass key={round.id} (and, where base indexes can change, fold a
 // base-index signature into the key) so the component remounts and re-resolves.
-export default function RoundTeeAssignments({ round, players = [], onChange, theme }) {
+const NO_LOCKS = {};
+
+export default function RoundTeeAssignments({ round, players = [], onChange, theme, leagueLocks = NO_LOCKS }) {
   const tl = useT();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const tees = round?.tees ?? [];
@@ -142,6 +149,8 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
       const resolved = { ...playerTees };
       for (const p of players) {
         const existing = resolved[p.id];
+        // An announced league card keeps the tee it was announced with.
+        if (existing && leagueLocks[p.id]?.teeLocked) continue;
         // Skip the history lookup when the existing tee already matches a
         // current course tee — only stale/missing tees need re-resolving.
         const existingValid = !!existing
@@ -283,7 +292,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
     return <Text style={s.emptyText}>{tl('shared.tees.addPlayersFirst')}</Text>;
   }
 
-  const anyManual = Object.values(manualHandicaps).some(Boolean);
+  const anyManual = players.some((p) => manualHandicaps[p.id] && !leagueLocks[p.id]);
 
   return (
     <View>
@@ -313,6 +322,16 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
         // so "Pick a tee" only ever shows defensively. A player on an unnamed
         // (legacy synthetic) tee shows no tee line at all.
         const showPickPrompt = !pTee && hasNamedTees;
+        const lock = leagueLocks[p.id] ?? null;
+        const leagueHcp = lock?.leagueHandicap ?? null;
+        const shownValue = lock && leagueHcp != null
+          ? String(calcPlayingHandicap(leagueHcp, pTee?.slope, pTee?.rating, totalPar, holeCount))
+          : valueStr;
+        const indexLine = lock
+          ? (leagueHcp != null
+            ? tl('shared.tees.leagueIndex', { value: formatNumber(leagueHcp, { decimals: 1 }) })
+            : tl('shared.tees.leagueIndexUnknown'))
+          : indexChanged ? tl('shared.tees.indexBase', { value: indexStr, base: p.handicap }) : tl('shared.tees.index', { value: p.handicap });
         return (
           <View key={p.id} style={[s.card, expanded && s.cardExpanded]}>
             <TouchableOpacity
@@ -323,7 +342,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                 setExpandedId(expanded ? null : p.id);
               }}
               accessibilityRole="button"
-              accessibilityLabel={tl(teeLabel ? 'shared.tees.rowA11yTee' : showPickPrompt ? 'shared.tees.rowA11yNoTee' : 'shared.tees.rowA11y', { name: p.name, index: p.handicap, tee: teeLabel, value: valueStr || tl('shared.tees.unset') })}
+              accessibilityLabel={tl(teeLabel ? 'shared.tees.rowA11yTee' : showPickPrompt ? 'shared.tees.rowA11yNoTee' : 'shared.tees.rowA11y', { name: p.name, index: p.handicap, tee: teeLabel, value: shownValue || tl('shared.tees.unset') })}
               accessibilityState={{ expanded }}
             >
               <View style={s.avatar}>
@@ -331,10 +350,8 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.name}>{p.name}</Text>
-                <Text style={s.indexText}>
-                  {indexChanged ? tl('shared.tees.indexBase', { value: indexStr, base: p.handicap }) : tl('shared.tees.index', { value: p.handicap })}
-                </Text>
-                {(teeLabel || showPickPrompt || overridden) && (
+                <Text style={[s.indexText, lock && s.leagueIndexText]}>{indexLine}</Text>
+                {(teeLabel || showPickPrompt || (overridden && !lock)) && (
                   <View style={s.teeSummary}>
                     {teeLabel && (
                       <>
@@ -343,13 +360,13 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                       </>
                     )}
                     {showPickPrompt && <Text style={s.teeSummaryMuted}>{tl('shared.tees.pickTee')}</Text>}
-                    {overridden && <Text style={s.editedTag}>{tl('shared.tees.edited')}</Text>}
+                    {overridden && !lock && <Text style={s.editedTag}>{tl('shared.tees.edited')}</Text>}
                   </View>
                 )}
               </View>
               <View style={s.hcpPill}>
                 <Text style={s.hcpPillLabel}>{tl('shared.tees.play')}</Text>
-                <Text style={s.hcpPillText}>{valueStr || '—'}</Text>
+                <Text style={s.hcpPillText}>{shownValue || '—'}</Text>
               </View>
               <Feather
                 name={expanded ? 'chevron-down' : 'chevron-right'}
@@ -361,7 +378,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
 
             {expanded && (
               <View style={s.editor}>
-                {hasNamedTees && (
+                {hasNamedTees && !lock?.teeLocked && (
                   <>
                     <Text style={s.editorLabel}>{tl('shared.tees.editorTee')}</Text>
                     <View style={s.teePills}>
@@ -388,83 +405,94 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                     </View>
                   </>
                 )}
-                <View style={s.editorLabelRow}>
-                  <Text style={s.editorLabel}>{tl('shared.tees.indexThisRound')}</Text>
-                  {indexChanged && (
-                    <TouchableOpacity onPress={() => resetIndex(p.id)} activeOpacity={0.7}
-                      accessibilityRole="button"
-                      accessibilityLabel={tl('shared.tees.resetA11y', { name: p.name, base: p.handicap })}>
-                      <Text style={s.indexResetText}>{tl('shared.tees.resetTo', { value: p.handicap })}</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                <TextInput
-                  style={s.indexInput}
-                  keyboardType="decimal-pad"
-                  maxLength={5}
-                  returnKeyType="done"
-                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                  selectionColor={theme.accent.primary}
-                  value={indexStr}
-                  placeholder={String(p.handicap)}
-                  placeholderTextColor={theme.text.muted}
-                  onChangeText={(v) => setIndexValue(p.id, v)}
-                  accessibilityLabel={tl('shared.tees.indexA11y', { name: p.name })}
-                />
-                <Text style={s.indexHint}>
-                  {tl('shared.tees.indexHint')}
-                </Text>
-
-                <View style={s.editorLabelRow}>
-                  <Text style={s.editorLabel}>{tl('shared.tees.playingHandicap')}</Text>
-                  <Text style={s.indexRef}>{tl('shared.tees.index', { value: effIndex(p) })}</Text>
-                </View>
-                <View style={s.stepper}>
-                  <TouchableOpacity
-                    style={s.stepBtn}
-                    onPress={() => stepHandicap(p.id, -1)}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityLabel={tl('shared.tees.decrease', { name: p.name })}
-                  >
-                    <Feather name="minus" size={14} color={theme.accent.primary} />
-                  </TouchableOpacity>
-                  {editing ? (
+                {lock ? (
+                  <View style={s.leagueNote}>
+                    <Feather name="lock" size={13} color={theme.text.muted} style={{ marginTop: 1 }} />
+                    <Text style={s.leagueNoteText}>
+                      {tl(lock.teeLocked ? 'shared.tees.leagueLockedCard' : 'shared.tees.leagueLockedSetup')}
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <View style={s.editorLabelRow}>
+                      <Text style={s.editorLabel}>{tl('shared.tees.indexThisRound')}</Text>
+                      {indexChanged && (
+                        <TouchableOpacity onPress={() => resetIndex(p.id)} activeOpacity={0.7}
+                          accessibilityRole="button"
+                          accessibilityLabel={tl('shared.tees.resetA11y', { name: p.name, base: p.handicap })}>
+                          <Text style={s.indexResetText}>{tl('shared.tees.resetTo', { value: p.handicap })}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                     <TextInput
-                      style={s.stepInput}
-                      keyboardType="numeric"
-                      maxLength={4}
-                      autoFocus
+                      style={s.indexInput}
+                      keyboardType="decimal-pad"
+                      maxLength={5}
                       returnKeyType="done"
                       keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                       selectionColor={theme.accent.primary}
-                      value={playerHandicaps[p.id] ?? ''}
-                      onChangeText={(v) => setHandicapValue(p.id, v)}
-                      onSubmitEditing={() => commitHandicapEdit(p.id)}
-                      onBlur={() => commitHandicapEdit(p.id)}
+                      value={indexStr}
+                      placeholder={String(p.handicap)}
+                      placeholderTextColor={theme.text.muted}
+                      onChangeText={(v) => setIndexValue(p.id, v)}
+                      accessibilityLabel={tl('shared.tees.indexA11y', { name: p.name })}
                     />
-                  ) : (
-                    <TouchableOpacity
-                      style={s.stepValueWrap}
-                      onPress={() => setEditingHandicapId(p.id)}
-                      activeOpacity={0.7}
-                      accessibilityRole="button"
-                      accessibilityLabel={tl('shared.tees.editA11y', { name: p.name, value: valueStr || '0' })}
-                    >
-                      <Text style={s.stepValue}>{valueStr || '0'}</Text>
-                      <Feather name="edit-2" size={14} color={theme.text.muted} style={{ marginLeft: 6 }} />
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    style={s.stepBtn}
-                    onPress={() => stepHandicap(p.id, 1)}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityLabel={tl('shared.tees.increase', { name: p.name })}
-                  >
-                    <Feather name="plus" size={14} color={theme.accent.primary} />
-                  </TouchableOpacity>
-                </View>
+                    <Text style={s.indexHint}>
+                      {tl('shared.tees.indexHint')}
+                    </Text>
+
+                    <View style={s.editorLabelRow}>
+                      <Text style={s.editorLabel}>{tl('shared.tees.playingHandicap')}</Text>
+                      <Text style={s.indexRef}>{tl('shared.tees.index', { value: effIndex(p) })}</Text>
+                    </View>
+                    <View style={s.stepper}>
+                      <TouchableOpacity
+                        style={s.stepBtn}
+                        onPress={() => stepHandicap(p.id, -1)}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={tl('shared.tees.decrease', { name: p.name })}
+                      >
+                        <Feather name="minus" size={14} color={theme.accent.primary} />
+                      </TouchableOpacity>
+                      {editing ? (
+                        <TextInput
+                          style={s.stepInput}
+                          keyboardType="numeric"
+                          maxLength={4}
+                          autoFocus
+                          returnKeyType="done"
+                          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                          selectionColor={theme.accent.primary}
+                          value={playerHandicaps[p.id] ?? ''}
+                          onChangeText={(v) => setHandicapValue(p.id, v)}
+                          onSubmitEditing={() => commitHandicapEdit(p.id)}
+                          onBlur={() => commitHandicapEdit(p.id)}
+                        />
+                      ) : (
+                        <TouchableOpacity
+                          style={s.stepValueWrap}
+                          onPress={() => setEditingHandicapId(p.id)}
+                          activeOpacity={0.7}
+                          accessibilityRole="button"
+                          accessibilityLabel={tl('shared.tees.editA11y', { name: p.name, value: valueStr || '0' })}
+                        >
+                          <Text style={s.stepValue}>{valueStr || '0'}</Text>
+                          <Feather name="edit-2" size={14} color={theme.text.muted} style={{ marginLeft: 6 }} />
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        style={s.stepBtn}
+                        onPress={() => stepHandicap(p.id, 1)}
+                        activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityLabel={tl('shared.tees.increase', { name: p.name })}
+                      >
+                        <Feather name="plus" size={14} color={theme.accent.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
               </View>
             )}
           </View>
@@ -502,6 +530,12 @@ const makeStyles = (theme) => StyleSheet.create({
 
   name: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 15 },
   indexText: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 11, marginTop: 1 },
+  leagueIndexText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary },
+  leagueNote: { flexDirection: 'row', gap: 7, marginTop: 12 },
+  leagueNoteText: {
+    flex: 1, fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary,
+    fontSize: 12, lineHeight: 17,
+  },
   teeSummary: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
   teeDot: {
     width: 13, height: 13, borderRadius: 7,

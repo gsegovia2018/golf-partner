@@ -526,4 +526,18 @@ describe('LeagueValidateScreen copy, marker note and scorecard route', () => {
     fireEvent.press(getByText('Edit in scorecard'));
     expect(navigation.navigate).toHaveBeenCalledWith('Scorecard', { tournamentId: 't1', roundIndex: 0 });
   });
+
+  test('says so when the scorecard gave other strokes than the league handicap', async () => {
+    const t = tournament();
+    t.rounds[0].playerHandicaps = { p1: 16, p2: 13 };
+    repo.fetchTournament.mockResolvedValue(t);
+    const { findByText } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+    expect(await findByText('The scorecard gave you playing handicap 16; your league card counts 20, from your league handicap.')).toBeTruthy();
+  });
+
+  test('no handicap notice when the scorecard used the league handicap', async () => {
+    const { findByText, queryByText } = render(wrap(<LeagueValidateScreen navigation={makeNav()} route={route} />));
+    await findByText('Submit');
+    expect(queryByText(/The scorecard gave you playing handicap/)).toBeNull();
+  });
 });
