@@ -20,6 +20,7 @@ import { normalizeRoundNotes, roundNoteText } from '../store/roundNotes';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { parseHandicapIndex } from '../lib/handicap';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
+import { leagueCardsOf } from '../store/leagueSetup';
 import {
   canRemoveRoundFromEditor,
   roundRemovalConfirmation,
@@ -453,6 +454,8 @@ export default function EditTournamentScreen({ navigation, route }) {
           // from history when another round remains in the tournament.
           const finished = isRoundComplete(r, players) || !!tournament?.finishedAt;
           const canRemove = canRemoveRoundFromEditor({ ...tournament, rounds }, ri);
+          // A round with a league card keeps the holes and tees it was announced with.
+          const leagueRound = leagueCardsOf(tournament).some((e) => e.roundId === r.id);
           return (
           <View key={r.id}>
             <View style={s.roundHeader}>
@@ -490,7 +493,10 @@ export default function EditTournamentScreen({ navigation, route }) {
                 value={roundNoteText(r.notes)}
                 onChangeText={(v) => updateNotes(ri, v)}
               />
-              {!finished && (
+              {!finished && leagueRound && (
+                <Text style={s.courseNameHint}>{t('setup.edit.leagueHolesLocked')}</Text>
+              )}
+              {!finished && !leagueRound && (
                 <TouchableOpacity
                   style={s.editHolesBtn}
                   onPress={() =>

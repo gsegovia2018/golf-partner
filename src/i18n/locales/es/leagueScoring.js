@@ -138,6 +138,7 @@ export default {
   'league.validate.confirmedSub': 'Tu tarjeta cuenta. Hemos avisado a la liga.',
   'league.validate.confirmedAwaitingAdmin': 'Confirmada · pendiente de la aprobación de un admin.',
   'league.validate.estimate': 'Los puntos son una estimación con tu hándicap de la partida. La liga puntúa la tarjeta con tu hándicap de liga cuando la envías.',
+  'league.validate.gameHandicapDiffers': 'El marcador te dio hándicap de juego {game}; tu tarjeta de liga cuenta {league}, con tu hándicap de liga.',
   'league.validate.notAsked': 'Tarjeta enviada, pero no se le preguntó a {name}. Toca «Recordar a {name}» para intentarlo de nuevo.',
   'league.validate.waiting': 'Esperando a que {name} confirme',
   'league.validate.countsOnceConfirmed': ' Stableford · cuenta cuando se confirme',

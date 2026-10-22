@@ -1,6 +1,7 @@
 import {
   eligibleLeagues, leagueStrokes, applyLeagueHandicap, leagueCourse, leagueCardOf, isLeagueLength, madridDate,
   isLeagueRated, leagueCardsOf, leagueCardKey, leagueCardsPatch, seasonPhase, preselectedLeagueMissing,
+  leagueLocksForRound,
 } from '../leagueSetup';
 import { getPlayingHandicap } from '../scoring';
 
@@ -155,6 +156,19 @@ describe('several league cards per game (R16, R17)', () => {
   test('leagueCardOf with only the legacy link behaves as before', () => {
     expect(leagueCardOf({ league: legacy, rounds: [{ id: 'r0' }] }, 'p1', 'r0')).toBe(legacy);
     expect(leagueCardOf({ league: legacy, rounds: [{ id: 'r0' }] }, 'p1', 'r1')).toBeNull();
+  });
+
+  test('leagueLocksForRound locks every carded player of that round to the frozen handicap and tee', () => {
+    const r0 = { id: 'r0', playerIndexes: { p1: 14.5, p2: '8.2', p3: 20 } };
+    expect(leagueLocksForRound(t, r0)).toEqual({
+      p1: { leagueHandicap: 14.5, teeLocked: true },
+      p2: { leagueHandicap: 8.2, teeLocked: true },
+    });
+    // A card whose round has no index override yet still locks, with no handicap.
+    expect(leagueLocksForRound(t, { id: 'r1' })).toEqual({ p1: { leagueHandicap: null, teeLocked: true } });
+    expect(leagueLocksForRound(t, { id: 'r9' })).toEqual({});
+    expect(leagueLocksForRound({}, r0)).toEqual({});
+    expect(leagueLocksForRound(t, null)).toEqual({});
   });
 
   test('leagueCardsPatch keys my entry by round and player (merged one level deep)', () => {

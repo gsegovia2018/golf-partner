@@ -188,6 +188,12 @@ export default function SetupScreen({ navigation, route }) {
     && (leagueStatus.loading || showsLeagueList(leagueRows));
   const leagueListBlocked = leagueListMode && leagueStatus.loading;
   const leagueActive = leagueOffered && leagueOn && !pickMissing && leagueEligibleRound && leagueRated && !leagueListBlocked;
+  // A league card plays off the league handicap only: with my card on, my row
+  // on round 1 shows it and offers no index or handicap edits. The tee stays
+  // mine to pick until Start announces the card with it.
+  const leagueLocks = leagueOffered && leagueOn && !pickMissing && leagueEligibleRound && league.leagueHandicap != null
+    ? { [myPlayer.id]: { leagueHandicap: Number(league.leagueHandicap), teeLocked: false } }
+    : undefined;
   // A switch already on (the board's "Play with the app") waits for the list.
   const leagueChecking = leagueCheckingLeagues || (leagueListMode && leagueOn && leagueStatus.loading);
   const startBusyRef = useRef(false);
@@ -1022,6 +1028,7 @@ export default function SetupScreen({ navigation, route }) {
               players={players}
               theme={theme}
               onChange={(patch) => handleRoundTeesChange(i, patch)}
+              leagueLocks={i === 0 ? leagueLocks : undefined}
             />
           </View>
         </View>
@@ -1151,9 +1158,12 @@ export default function SetupScreen({ navigation, route }) {
     const scoringLabel = hasScoringStep
       ? t(getScoringMode(settings.scoringMode)?.labelKey ?? 'setup.screen.soloPlay')
       : t('setup.screen.soloPlay');
-    const playerSummary = players.length === 1
-      ? t('setup.screen.playerSummaryOne', { name: players[0].name, hcp: players[0].handicap })
-      : t('setup.screen.playerSummaryMany', { count: players.length });
+    const soloLeagueHcp = players.length === 1 ? leagueLocks?.[players[0].id]?.leagueHandicap : null;
+    const playerSummary = players.length !== 1
+      ? t('setup.screen.playerSummaryMany', { count: players.length })
+      : soloLeagueHcp != null
+        ? t('setup.screen.playerSummaryOneLeague', { name: players[0].name, hcp: formatNumber(soloLeagueHcp, { decimals: 1 }) })
+        : t('setup.screen.playerSummaryOne', { name: players[0].name, hcp: players[0].handicap });
     const courseSummary = isGame
       ? (rounds[0]?.courseName || t('setup.screen.noCourse'))
       : t('setup.screen.roundsCount', { count: rounds.length });

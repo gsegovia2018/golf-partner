@@ -138,6 +138,7 @@ export default {
   'league.validate.confirmedSub': 'Your card counts. The league has been told.',
   'league.validate.confirmedAwaitingAdmin': "Confirmed · waiting for an admin's approval.",
   'league.validate.estimate': 'Points are an estimate off your game handicap. The league scores the card from your league handicap when you submit it.',
+  'league.validate.gameHandicapDiffers': 'The scorecard gave you playing handicap {game}; your league card counts {league}, from your league handicap.',
   'league.validate.notAsked': "Card submitted, but {name} wasn't asked. Tap “Remind {name}” to try again.",
   'league.validate.waiting': 'Waiting for {name} to confirm',
   'league.validate.countsOnceConfirmed': ' Stableford · counts once confirmed',

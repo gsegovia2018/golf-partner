@@ -104,12 +104,22 @@ describe('SetupScreen league switch', () => {
   });
 
   test('preselected from the board: on, with strokes from the league handicap on my tee', async () => {
-    const { findByText, getByLabelText } = render(wrap(
+    const { findByText, getByLabelText, getByText } = render(wrap(
       <SetupScreen navigation={navigation} route={{ params: params({ leagueId: 'L1' }) }} />,
     ));
     expect(await findByText(/^Your \w+ card · 20 strokes from your league handicap 18\.0 · counts whatever you score$/))
       .toBeTruthy();
     expect(getByLabelText('Counts for El Club del Mulligan').props.value).toBe(true);
+    // One handicap for a league card: the review names the league one, not my index.
+    expect(getByText('Marcos · league HCP 18.0')).toBeTruthy();
+  });
+
+  test('switch off: the review shows my own index', async () => {
+    const { findByLabelText, getByText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: params() }} />,
+    ));
+    await findByLabelText('Counts for El Club del Mulligan');
+    expect(getByText('Marcos · HCP 4')).toBeTruthy();
   });
 
   test('on: Start announces first, then creates the game with the league link and handicap', async () => {

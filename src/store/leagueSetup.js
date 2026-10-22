@@ -166,6 +166,22 @@ export function leagueCardOf(tournament, meId, roundId = null) {
     && (roundId == null || e.roundId === roundId)) ?? null;
 }
 
+// A league card plays off the league handicap only, on the tee it was
+// announced with. The players of `round` holding a league card, as
+// RoundTeeAssignments' leagueLocks: { [playerId]: { leagueHandicap, teeLocked } }.
+// The handicap is the one Start (or the opt-in) froze on the round as the
+// per-round index (applyLeagueHandicap); null if the round lacks it.
+export function leagueLocksForRound(tournament, round) {
+  const locks = {};
+  if (!round?.id) return locks;
+  for (const e of leagueCardsOf(tournament)) {
+    if (e.roundId !== round.id || !e.playerId) continue;
+    const index = parseFloat(round.playerIndexes?.[e.playerId]);
+    locks[e.playerId] = { leagueHandicap: Number.isFinite(index) ? index : null, teeLocked: true };
+  }
+  return locks;
+}
+
 // The patch for tournament.updateProfile that records my card on a round:
 // { leagueCards: { '<roundId>:<playerId>': entry } } (merged, see above).
 export function leagueCardsPatch({ leagueId, cardId, playerId, roundId }) {
