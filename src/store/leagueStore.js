@@ -126,6 +126,53 @@ export function rowToInvitee(r) {
   return { id: r.id, name: r.name, handicap: num(r.handicap), createdAt: r.created_at ?? null };
 }
 
+// Players who haven't joined yet, on the board (temporary, 20261025000000):
+// an unclaimed spot becomes a member with userId 'spot:<invitee id>' and
+// `spot: true`, and the cards an admin holds for it (get_league_spot_cards)
+// become its confirmed cards. Screens that manage real members (Members,
+// Settings) leave them out. Remove these and getLeague's spot lines to go
+// back to members-only boards.
+export const SPOT_PREFIX = 'spot:';
+export const isSpotId = (userId) => typeof userId === 'string' && userId.startsWith(SPOT_PREFIX);
+
+export function spotMember(invitee, leagueId = null) {
+  return {
+    leagueId,
+    userId: `${SPOT_PREFIX}${invitee.id}`,
+    role: 'member',
+    leagueHandicap: invitee.handicap,
+    feePaid: false,
+    joinedAt: null,
+    leftAt: null,
+    username: null,
+    displayName: invitee.name,
+    avatarUrl: null,
+    publicName: null,
+    spot: true,
+  };
+}
+
+export function rowToSpotCard(r, leagueId = null) {
+  return {
+    ...rowToCard({
+      ...r,
+      league_id: leagueId,
+      user_id: `${SPOT_PREFIX}${r.invitee_id}`,
+      source: 'offapp',
+      status: 'confirmed',
+      not_announced: true,
+      tee_verified: true,
+      confirmation: 'photo',
+      confirmed_by_user: r.added_by ?? null,
+      confirmed_by_name: r.added_by_name ?? null,
+      confirmed_at: r.created_at ?? null,
+      approved_by: r.added_by ?? null,
+      approved_at: r.created_at ?? null,
+    }),
+    spot: true,
+  };
+}
+
 // Row from the get_league_members RPC (names come from profiles, server side).
 export function rowToMember(r, leagueId = null) {
   return {
@@ -437,10 +484,11 @@ export async function getLeague(leagueId) {
   if (!leagueRow) throw new LeagueError(LEAGUE_GONE_MESSAGE, { code: 'league_gone' });
   const league = rowToLeague(leagueRow);
 
-  const [memberRows, inviteeRows, cardRows, voteRows, eventRows, finalRow] = await Promise.all([
+  const [memberRows, inviteeRows, spotCardRows, cardRows, voteRows, eventRows, finalRow] = await Promise.all([
     rpc('get_league_members', { p_league: leagueId }),
     // An older server has no invitees yet; the members list still loads.
     rpc('get_league_invitees', { p_league: leagueId }).catch(() => []),
+    rpc('get_league_spot_cards', { p_league: leagueId }).catch(() => []),
     selectRows(
       supabase.from('league_cards').select('*')
         .eq('league_id', leagueId)
@@ -460,7 +508,11 @@ export async function getLeague(leagueId) {
     ? await selectRows(supabase.from('league_handicap_ballots').select('*').in('vote_id', voteIds))
     : [];
 
-  const cards = (cardRows ?? []).map(rowToCard);
+  const invitees = (inviteeRows ?? []).map(rowToInvitee);
+  const cards = [
+    ...(cardRows ?? []).map(rowToCard),
+    ...(spotCardRows ?? []).map((r) => rowToSpotCard(r, leagueId)),
+  ];
   const cardsByMonth = {};
   for (const c of cards) {
     if (c.status === 'void') continue;
@@ -469,8 +521,11 @@ export async function getLeague(leagueId) {
 
   const result = {
     league,
-    members: (memberRows ?? []).map((m) => rowToMember(m, leagueId)),
-    invitees: (inviteeRows ?? []).map(rowToInvitee),
+    members: [
+      ...(memberRows ?? []).map((m) => rowToMember(m, leagueId)),
+      ...invitees.map((i) => spotMember(i, leagueId)),
+    ],
+    invitees,
     cards,
     cardsByMonth,
     votes: (voteRows ?? []).map((v) => rowToVote(v, (ballotRows ?? []).filter((b) => b.vote_id === v.id))),

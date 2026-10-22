@@ -97,7 +97,9 @@ export default function LeagueMembersScreen({ navigation, route }) {
     );
   }
 
-  const { league, members, votes, handicapEvents } = data;
+  const { league, votes, handicapEvents } = data;
+  // Spots are listed under Invited, not as members.
+  const members = data.members.filter((m) => !m.spot);
   const invitees = data.invitees ?? []; // absent in a cache written before invitees existed
   const active = members.filter((m) => !m.leftAt);
   const me = active.find((m) => m.userId === meId);

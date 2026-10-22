@@ -173,7 +173,8 @@ export default function LeagueSettingsScreen({ navigation, route }) {
     );
   }
 
-  const { league, members } = data;
+  const { league } = data;
+  const members = data.members.filter((m) => !m.spot);
   const active = members.filter((m) => !m.leftAt);
   const me = active.find((m) => m.userId === meId);
   const isAdmin = me?.role === 'admin';
