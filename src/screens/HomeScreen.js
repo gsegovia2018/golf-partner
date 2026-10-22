@@ -1366,28 +1366,6 @@ export default function HomeScreen({ navigation, route }) {
 
         <LeagueListSection navigation={navigation} rows={leagueRows} />
 
-        <YourGame
-          swingLine={(() => {
-            const sw = getSwings().find((x) => x.mainFault && x.status !== 'error');
-            return sw ? tx('home.phase.swingLast', { fault: SWING_STRINGS.fault[sw.mainFault] ?? sw.mainFault }) : null;
-          })()}
-          onSwing={() => navigation.navigate('SwingHome')}
-          onCoach={() => navigation.navigate('MyStats', { tab: 'coach' })}
-        />
-
-        <TouchableOpacity
-          style={s.joinTile}
-          onPress={() => navigation.navigate('JoinTournament')}
-          activeOpacity={0.85}
-        >
-          <Feather name="link" size={20} color={theme.accent.primary} />
-          <View style={{ flex: 1 }}>
-            <Text style={s.joinTileTitle}>{tx('home.list.joinTitle')}</Text>
-            <Text style={s.joinTileSub}>{tx('home.list.joinSub')}</Text>
-          </View>
-          <Feather name="chevron-right" size={18} color={theme.text.muted} />
-        </TouchableOpacity>
-
         <QuickStartCourses
           courses={quickStartCourses}
           coursesLoading={quickStartCoursesLoading}
@@ -1400,6 +1378,15 @@ export default function HomeScreen({ navigation, route }) {
           onRetryPlayers={loadQuickStartPlayers}
           onStart={handleQuickStartStart}
           onEditDetails={handleQuickStartEditDetails}
+        />
+
+        <YourGame
+          swingLine={(() => {
+            const sw = getSwings().find((x) => x.mainFault && x.status !== 'error');
+            return sw ? (SWING_STRINGS.fault[sw.mainFault] ?? sw.mainFault) : null;
+          })()}
+          onSwing={() => navigation.navigate('SwingHome')}
+          onCoach={() => navigation.navigate('MyStats', { tab: 'coach' })}
         />
 
         {reloadError && (
@@ -1581,12 +1568,22 @@ export default function HomeScreen({ navigation, route }) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[s.menuItem, { borderBottomWidth: 0 }]}
+            style={s.menuItem}
             onPress={() => { setShowListMenu(false); navigation.navigate('PlayersLibrary'); }}
             activeOpacity={0.7}
           >
             <Feather name="user" size={14} color={theme.text.primary} />
             <Text style={s.menuItemText}>{tx('home.list.menuPlayers')}</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.menuItem, { borderBottomWidth: 0 }]}
+            onPress={() => { setShowListMenu(false); navigation.navigate('JoinTournament'); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="link" size={14} color={theme.text.primary} />
+            <Text style={s.menuItemText}>{tx('home.list.joinTitle')}</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
         </BottomSheet>
@@ -2705,22 +2702,6 @@ const makeStyles = (t) => StyleSheet.create({
   },
   startTileCtaText: {
     fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary, fontSize: 13,
-  },
-
-  // "Join with code" entry point
-  joinTile: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: t.bg.card,
-    borderRadius: 14, borderWidth: 1,
-    borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
-    paddingVertical: 13, paddingHorizontal: 14, marginTop: 10,
-  },
-  joinTileTitle: {
-    fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 15,
-  },
-  joinTileSub: {
-    fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12,
-    marginTop: 1,
   },
 
   // Inline reload error card

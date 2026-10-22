@@ -11,6 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useT, t as translate } from '../i18n';
 import BottomSheet from './BottomSheet';
+import { Skeleton, SkeletonRegion } from './ui/Skeleton';
 import { light, semantic, typography, spacing, radius } from '../theme/tokens';
 
 const DEFAULT_THEME = {
@@ -186,45 +187,45 @@ export default function QuickStartCourses({
         </TouchableOpacity>
       </View>
 
+      {/* One line of course pills, so Home keeps quick start on screen under
+          a league card. Par and tees live in the sheet a pill opens. */}
       {coursesLoading && normalizedCourses.length === 0 ? (
-        <View style={s.emptyState}>
-          <ActivityIndicator color={theme.accent.primary} />
-          <Text style={s.emptyTitle}>{t('setup.quickStart.loadingCourses')}</Text>
-        </View>
+        <SkeletonRegion style={s.skeletonRail}>
+          {[0, 1, 2].map((i) => <Skeleton key={i} width={150} height={44} radius={22} />)}
+        </SkeletonRegion>
       ) : normalizedCourses.length ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={s.rail}
         >
-          {normalizedCourses.map((course) => {
-            const meta = quickStartCourseMeta(course);
-            return (
-              <TouchableOpacity
-                key={course.id || courseTitle(course)}
-                style={s.courseCard}
-                activeOpacity={0.78}
-                onPress={() => openCourse(course)}
-                accessibilityRole="button"
-                accessibilityLabel={t('setup.quickStart.openCourse', { name: courseTitle(course) })}
-              >
-                <View style={s.courseIcon}>
-                  <Feather name="flag" size={18} color={theme.accent.primary} />
-                </View>
-                <Text style={s.courseName} numberOfLines={2}>{courseTitle(course)}</Text>
-                {meta ? <Text style={s.courseMeta}>{meta}</Text> : null}
-              </TouchableOpacity>
-            );
-          })}
+          {normalizedCourses.map((course) => (
+            <TouchableOpacity
+              key={course.id || courseTitle(course)}
+              style={s.coursePill}
+              activeOpacity={0.78}
+              onPress={() => openCourse(course)}
+              accessibilityRole="button"
+              accessibilityLabel={t('setup.quickStart.openCourse', { name: courseTitle(course) })}
+            >
+              <Feather name="flag" size={14} color={theme.accent.primary} />
+              <Text style={s.courseName} numberOfLines={1}>{courseTitle(course)}</Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       ) : (
-        <View style={s.emptyState}>
-          <Feather name="star" size={20} color={theme.accent.primary} />
-          <Text style={s.emptyTitle}>{t('setup.quickStart.emptyTitle')}</Text>
-          <Text style={s.emptySubtitle}>
-            {t('setup.quickStart.emptyHint')}
-          </Text>
-        </View>
+        <TouchableOpacity
+          style={s.emptyState}
+          onPress={onManage}
+          disabled={!onManage}
+          activeOpacity={0.78}
+          accessibilityRole="button"
+          accessibilityLabel={t('setup.quickStart.emptyLine')}
+        >
+          <Feather name="star" size={14} color={theme.accent.primary} />
+          <Text style={s.emptyText} numberOfLines={2}>{t('setup.quickStart.emptyLine')}</Text>
+          <Text style={s.emptyAction}>{t('setup.quickStart.emptyAction')}</Text>
+        </TouchableOpacity>
       )}
 
       <BottomSheet visible={!!selectedCourse} onClose={closeSheet} sheetStyle={s.sheet}>
@@ -394,71 +395,71 @@ export default function QuickStartCourses({
 }
 
 const makeStyles = (t) => StyleSheet.create({
-  section: { marginTop: 18 },
+  section: { marginTop: 6 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   heading: {
     fontFamily: 'PlusJakartaSans-Bold',
-    fontSize: 11,
+    fontSize: 10,
     letterSpacing: 1.4,
-    color: t.text.muted,
+    color: t.text.secondary,
   },
   manageButton: { paddingVertical: 4, paddingLeft: 12 },
   manageButtonDisabled: { opacity: 0.55 },
   manageText: {
     fontFamily: 'PlusJakartaSans-Bold',
-    fontSize: 13,
+    fontSize: 12,
     color: t.accent.primary,
   },
   manageTextDisabled: { color: t.text.muted },
-  rail: { paddingRight: 20, gap: 12, paddingBottom: 2 },
-  courseCard: {
-    width: 156,
-    borderRadius: 14,
-    padding: 14,
+  rail: { paddingRight: 20, gap: 8 },
+  skeletonRail: { flexDirection: 'row', gap: 8 },
+  coursePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 44,
+    maxWidth: 220,
+    borderRadius: 22,
+    paddingLeft: 12,
+    paddingRight: 14,
     backgroundColor: t.bg.card,
     borderWidth: 1,
-    borderColor: t.border.default,
-  },
-  courseIcon: {
-    marginBottom: 8,
+    borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
   },
   courseName: {
+    flexShrink: 1,
     fontFamily: 'PlusJakartaSans-Bold',
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 13,
     color: t.text.primary,
-  },
-  courseMeta: {
-    fontFamily: 'PlusJakartaSans-Medium',
-    fontSize: 12,
-    color: t.text.secondary,
-    marginTop: 5,
   },
   emptyState: {
-    alignItems: 'flex-start',
-    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+    borderRadius: 22,
     borderWidth: 1,
+    borderStyle: 'dashed',
     borderColor: t.border.default,
     backgroundColor: t.bg.card,
-    padding: 14,
-    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
-  emptyTitle: {
-    fontFamily: 'PlusJakartaSans-Bold',
-    fontSize: 14,
-    color: t.text.primary,
-    marginTop: 4,
-  },
-  emptySubtitle: {
-    fontFamily: 'PlusJakartaSans-Regular',
+  emptyText: {
+    flex: 1,
+    fontFamily: 'PlusJakartaSans-SemiBold',
     fontSize: 13,
-    lineHeight: 18,
     color: t.text.secondary,
+  },
+  emptyAction: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 12,
+    color: t.accent.primary,
   },
   sheet: {
     maxHeight: '86%',

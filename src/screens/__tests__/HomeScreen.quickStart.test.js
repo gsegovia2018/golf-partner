@@ -500,6 +500,14 @@ test('with nothing in play the list shows its empty line', async () => {
   expect(await findByText('Nothing here yet')).toBeTruthy();
 });
 
+test('join with code lives in the menu, not on Home', async () => {
+  const { getByLabelText, findByText, queryByText, navigation } = await renderFocusedHome();
+  expect(queryByText('Join with code')).toBeNull();
+  fireEvent.press(getByLabelText('Menu'));
+  fireEvent.press(await findByText('Join with code'));
+  expect(navigation.navigate).toHaveBeenCalledWith('JoinTournament');
+});
+
 test('a league counts as in play: no empty line, the league card instead', async () => {
   mockLeagueRows = [{
     id: 'L1',
@@ -525,7 +533,6 @@ test('a live round shows the scorecard card with the whole normal Home under it,
   expect(getByText('Start playing')).toBeTruthy();
   expect(getByText('Your game')).toBeTruthy();
   expect(getByTestId('home-your-game-swing')).toBeTruthy();
-  expect(getByText('Join with code')).toBeTruthy();
   expect(getByTestId('quick-start')).toBeTruthy();
   expect(queryByText('New game, leagues and more')).toBeNull();
   expect(queryByText('Show less')).toBeNull();

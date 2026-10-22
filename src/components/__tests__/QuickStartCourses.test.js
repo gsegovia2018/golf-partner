@@ -7,6 +7,7 @@ import {
   quickStartCourseMeta,
   initialQuickStartPlayerIds,
 } from '../QuickStartCourses';
+import { ThemeProvider } from '../../theme/ThemeContext';
 
 const courses = [
   {
@@ -30,6 +31,7 @@ function renderQuickStart(props = {}) {
       currentUserId="u-me"
       {...props}
     />,
+    { wrapper: ThemeProvider },
   );
 }
 
@@ -80,23 +82,30 @@ describe('QuickStartCourses helpers', () => {
 });
 
 describe('QuickStartCourses interactions', () => {
-  test('shows an empty quick-start zone when there are no favorite courses', () => {
+  test('shows a one-line empty prompt that opens Courses when there are no favorite courses', () => {
     const onManage = jest.fn();
     const { getByLabelText, getByText } = renderQuickStart({ courses: null, onManage });
 
     expect(getByText('QUICK START')).toBeTruthy();
-    expect(getByText('No favorite courses yet')).toBeTruthy();
-    expect(getByText('Open Courses and tap the star on a course to quick start from here.')).toBeTruthy();
+    expect(getByText('Star courses to see them here')).toBeTruthy();
 
+    fireEvent.press(getByLabelText('Star courses to see them here'));
     fireEvent.press(getByLabelText('Manage quick start courses'));
-    expect(onManage).toHaveBeenCalledTimes(1);
+    expect(onManage).toHaveBeenCalledTimes(2);
   });
 
-  test('shows a course loading state instead of the empty favorite prompt', () => {
-    const { getByText, queryByText } = renderQuickStart({ courses: [], coursesLoading: true });
+  test('shows skeleton pills instead of the empty prompt while courses load', () => {
+    const { getByLabelText, queryByText } = renderQuickStart({ courses: [], coursesLoading: true });
 
-    expect(getByText('Loading favorite courses...')).toBeTruthy();
-    expect(queryByText('No favorite courses yet')).toBeNull();
+    expect(getByLabelText('Loading…')).toBeTruthy();
+    expect(queryByText('Star courses to see them here')).toBeNull();
+  });
+
+  test('shows each favorite as a one-line pill without par or tees', () => {
+    const { getByText, queryByText } = renderQuickStart();
+
+    expect(getByText('Pine Course')).toBeTruthy();
+    expect(queryByText(/^Par \d+/)).toBeNull();
   });
 
   test('opens the sheet and preselects the signed-in player', () => {

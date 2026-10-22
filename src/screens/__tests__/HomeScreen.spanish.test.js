@@ -316,6 +316,6 @@ describe('HomeScreen in Spanish', () => {
   test('renders the start and empty-list text in Spanish', async () => {
     const { findByText, getByText } = renderHome();
     expect(await findByText('Empieza a jugar')).toBeTruthy();
-    expect(getByText('Unirse con código')).toBeTruthy();
+    expect(getByText('Tu juego')).toBeTruthy();
   });
 });
