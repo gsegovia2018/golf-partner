@@ -68,19 +68,23 @@ describe('LeagueStatsScreen', () => {
     store.getLeagueCached.mockResolvedValue(null);
   });
 
-  test('honours: newest scored month first, with its summary and honours', async () => {
-    const { getByText, queryByText } = await open();
+  test('honours: newest scored month first, with its summary and an award card per honour', async () => {
+    const { getByText, queryByText, getByLabelText } = await open();
     expect(getByText('September honours')).toBeTruthy();
     // September has only 2 confirmed cards (Nacho's is submitted): not enough.
     expect(getByText('2 cards · 1 course')).toBeTruthy();
     expect(getByText(/Not enough cards yet/)).toBeTruthy();
-    expect(queryByText('CARD OF THE MONTH')).toBeNull();
+    expect(queryByText('Card of the month')).toBeNull();
 
     fireEvent.press(getByText('Aug'));
     expect(getByText('August honours')).toBeTruthy();
-    expect(getByText('CARD OF THE MONTH')).toBeTruthy();
+    expect(getByText('Card of the month')).toBeTruthy();
     expect(getByText('Nacho, 37 pts at Los Arqueros')).toBeTruthy();
-    expect(getByText('HOLE OF THE MONTH')).toBeTruthy();
+    expect(getByText('Hole of the month')).toBeTruthy();
+    // A member's honour opens the card it came from.
+    navigation.navigate.mockClear();
+    fireEvent.press(getByLabelText('Card of the month. Nacho, 37 pts at Los Arqueros'));
+    expect(navigation.navigate).toHaveBeenCalledWith('LeagueCard', expect.objectContaining({ month: expect.stringMatching(/-08$/), userId: expect.any(String) }));
   });
 
   test('leaders: avg card with the needs-3-cards footnote, and other stats', async () => {

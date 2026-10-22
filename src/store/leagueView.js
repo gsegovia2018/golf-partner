@@ -2,8 +2,9 @@
 // formats live here so the Play tab, board and members screens agree.
 import {
   cardMonth, isMissed, needsApproval, deadlineInfo, takesMonth, canReschedule, canWithdraw, autoWithdrawAt,
-  isMonthClosed, OFFAPP_NOTICE_HOURS, MAX_RESCHEDULES, POST_WINDOW_HOURS, madridDay,
+  isMonthClosed, OFFAPP_NOTICE_HOURS, MAX_RESCHEDULES, POST_WINDOW_HOURS, madridDay, postOpensLater,
 } from './leagueRules';
+import { seasonPhase } from './leagueSetup';
 import {
   seasonTable, monthResults, cardScore, compareScores, isMedalFormat, formatToPar,
 } from './leagueStandings';
@@ -650,7 +651,9 @@ export function leagueSummary(snapshot, meId, now = new Date()) {
   const table = seasonTable((members ?? []).filter((m) => !m.leftAt), cardsByMonth, league.pointsTable,
     { participationPoints: league.participationPoints, format: league.format });
   const position = positionMessage(table, meId, cardsByMonth);
-  return { table, position, month: position ? monthLine(snapshot, meId, now) : null };
+  // The month line shows from the first day, standings or not: the Home
+  // button may ask me to play, and the line says why.
+  return { table, position, month: monthLine(snapshot, meId, now), action: homeAction(snapshot, meId, now) };
 }
 
 // Season table on a long league: the top `top` rows, then a gap and my row
@@ -705,4 +708,70 @@ export function cardBreakdown(card) {
     netDifferential: card?.netDifferential ?? null,
     leagueHandicap: card?.leagueHandicap ?? null,
   };
+}
+
+// "Tu tarjeta" step track: Anunciar · Jugar · Enviar · Confirmar. Returns
+// { step: 0-4, wait } (4 = all four done; `wait` marks the current step as
+// waiting on someone else), or null for a card that left the track (missed,
+// voided). `mine` is yourCardState's result; `stillPlaying` is the board's
+// "an app card with holes still unscored".
+export function yourCardStep(mine, { stillPlaying = false } = {}) {
+  const card = mine?.card;
+  switch (mine?.kind) {
+    case 'none': return { step: 0, wait: false };
+    case 'announced': return isMissed(card) ? null : { step: 1, wait: false };
+    case 'playing':
+      if (isMissed(card)) return null;
+      return mine.offApp || stillPlaying ? { step: 1, wait: false } : { step: 2, wait: false };
+    case 'submitted':
+      // An off-app card still needs its proof: sending isn't done yet.
+      if (mine.offApp && !card?.proofPath) return { step: 2, wait: false };
+      return { step: 3, wait: true };
+    case 'confirmed': return needsApproval(card) ? { step: 3, wait: true } : { step: 4, wait: false };
+    default: return null;
+  }
+}
+
+// Places moved in the season table by the last scored month: userId ->
+// places gained (+) or lost (−), from the table as it stood before that
+// month. Empty when that month is the first one with results.
+export function seasonMoves(members, cardsByMonth, pointsTable, options = {}) {
+  const last = lastScoredMonth(cardsByMonth);
+  if (!last) return new Map();
+  const before = Object.fromEntries(Object.entries(cardsByMonth ?? {}).filter(([m]) => m < last));
+  if (!lastScoredMonth(before)) return new Map();
+  const prev = new Map(seasonTable(members, before, pointsTable, options).map((r) => [r.userId, r.place]));
+  const moves = new Map();
+  seasonTable(members, cardsByMonth, pointsTable, options).forEach((r) => {
+    const was = prev.get(r.userId);
+    if (was != null && r.place != null && was !== r.place) moves.set(r.userId, was - r.place);
+  });
+  return moves;
+}
+
+// The Home league card's button: the next thing my card this month needs.
+//   { kind: 'play' }                        no card yet → Setup with the league on
+//   { kind: 'post', cardId }                announced off the app, posting is open
+//   { kind: 'scorecard', tournamentId, roundId }   an app card being played
+//   { kind: 'proof', cardId }               sent off the app without its proof
+//   { kind: 'validate', cardId, tournamentId, roundId }  an app card sent, not confirmed
+//   { kind: 'open' }                        anything else: the board
+export function homeAction(snapshot, meId, now = new Date()) {
+  const league = snapshot?.league;
+  if (!league || league.archivedAt) return { kind: 'open' };
+  const card = myMonthCard(snapshot.cardsByMonth, snapshot.cards, currentMonthKey(now), meId);
+  if (!card) return seasonPhase(league, now) ? { kind: 'open' } : { kind: 'play' };
+  if (card.status === 'void' || isMissed(card, now) || needsApproval(card)) return { kind: 'open' };
+  const offApp = card.source === 'offapp';
+  if (card.status === 'announced' && offApp) {
+    return postOpensLater(card, now) ? { kind: 'open' } : { kind: 'post', cardId: card.id };
+  }
+  if (card.status === 'playing' && !offApp && card.tournamentId) {
+    return { kind: 'scorecard', tournamentId: card.tournamentId, roundId: card.roundId ?? null };
+  }
+  if (card.status === 'submitted') {
+    if (offApp) return card.proofPath ? { kind: 'open' } : { kind: 'proof', cardId: card.id };
+    if (card.tournamentId) return { kind: 'validate', cardId: card.id, tournamentId: card.tournamentId, roundId: card.roundId ?? null };
+  }
+  return { kind: 'open' };
 }

@@ -28,6 +28,42 @@ describe('LeagueListSection', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('LeagueBoard', { leagueId: 'L1' });
   });
 
+  test("the hero's button does my card's next step; the card itself still opens the board", () => {
+    const base = { id: 'L1', name: 'El Club', position: null, month: null };
+    const cases = [
+      [{ kind: 'play' }, 'Play with the app', ['Setup', { kind: 'game', leagueId: 'L1' }]],
+      [{ kind: 'post', cardId: 'c1' }, 'Add your score', ['LeagueAddScore', { leagueId: 'L1', cardId: 'c1' }]],
+      [{ kind: 'scorecard', tournamentId: 't1', roundId: 'r1' }, 'Open scorecard', ['Scorecard', { tournamentId: 't1', roundIndex: 0 }]],
+      [{ kind: 'proof', cardId: 'c1' }, 'Add proof', ['LeagueAddProof', { leagueId: 'L1', cardId: 'c1', resume: true }]],
+      [{ kind: 'validate', cardId: 'c1', tournamentId: 't1', roundId: 'r1' }, 'Finish card',
+        ['LeagueValidate', { leagueId: 'L1', cardId: 'c1', tournamentId: 't1', roundId: 'r1', submitted: true }]],
+      [{ kind: 'open' }, 'Open league', ['LeagueBoard', { leagueId: 'L1' }]],
+      [undefined, 'Open league', ['LeagueBoard', { leagueId: 'L1' }]],
+    ];
+    cases.forEach(([action, label, call]) => {
+      const navigation = { navigate: jest.fn() };
+      const { getByLabelText, unmount } = render(<LeagueListSection navigation={navigation} rows={[{ ...base, action }]} />);
+      fireEvent.press(getByLabelText(label));
+      expect(navigation.navigate).toHaveBeenCalledWith(...call);
+      unmount();
+    });
+    const navigation = { navigate: jest.fn() };
+    const { getByLabelText } = render(<LeagueListSection navigation={navigation} rows={[{ ...base, action: { kind: 'play' } }]} />);
+    fireEvent.press(getByLabelText(/^El Club league/));
+    expect(navigation.navigate).toHaveBeenCalledWith('LeagueBoard', { leagueId: 'L1' });
+  });
+
+  test('a card step on the button keeps a visible "See the league" link; "Open league" needs none', () => {
+    const base = { id: 'L1', name: 'El Club', position: null, month: null };
+    const navigation = { navigate: jest.fn() };
+    const step = render(<LeagueListSection navigation={navigation} rows={[{ ...base, action: { kind: 'play' } }]} />);
+    fireEvent.press(step.getByText('See the league'));
+    expect(navigation.navigate).toHaveBeenCalledWith('LeagueBoard', { leagueId: 'L1' });
+    step.unmount();
+    const open = render(<LeagueListSection navigation={navigation} rows={[{ ...base, action: { kind: 'open' } }]} />);
+    expect(open.queryByText('See the league')).toBeNull();
+  });
+
   test('the month line follows the card: ranked, last day, in progress', () => {
     const base = { id: 'L1', name: 'El Club', position: { key: 'league.play.position', params: { place: '1st', total: 7, points: '2,340' } } };
     const ranked = render(<LeagueListSection navigation={{}} rows={[{ ...base, month: { key: 'league.play.monthRank', params: { monthKey: '2026-10', points: '36', place: '3rd' } } }]} />);

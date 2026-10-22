@@ -22,7 +22,8 @@ export async function dropLeagueRow(leagueId) {
   }
 }
 
-// Rows for the Play tab's LEAGUES section: `{ id, name, position, month }` (position and month are message descriptors), loaded on
+// Rows for the Play tab's LEAGUES section: `{ id, name, position, month, action }` (position and month are message
+// descriptors, action is leagueView.homeAction's next step), loaded on
 // every focus. Cached rows show first (so the list is there with no signal),
 // then my leagues are read live, then each league's standings fill in
 // `position` ("2nd of 7 · 2,340 league pts") and the open month's line. Any failure keeps what is on screen.
@@ -54,13 +55,16 @@ export function useMyLeagueRows(navigation, meId) {
       return; // offline or failed: keep the cached rows
     }
     const known = new Map(rowsRef.current.map((r) => [r.id, r]));
-    let next = leagues.map((l) => ({ id: l.id, name: l.name, position: known.get(l.id)?.position ?? null, month: known.get(l.id)?.month ?? null }));
+    let next = leagues.map((l) => ({
+      id: l.id, name: l.name, position: known.get(l.id)?.position ?? null, month: known.get(l.id)?.month ?? null,
+      action: known.get(l.id)?.action ?? null,
+    }));
     publish(next);
     await Promise.all(leagues.map(async (l) => {
       try {
         const snapshot = await getLeague(l.id);
-        const { position, month } = leagueSummary(snapshot, meId);
-        next = next.map((r) => (r.id === l.id ? { ...r, position, month } : r));
+        const { position, month, action } = leagueSummary(snapshot, meId);
+        next = next.map((r) => (r.id === l.id ? { ...r, position, month, action } : r));
         publish(next);
       } catch {
         // Keep the cached position for this league.

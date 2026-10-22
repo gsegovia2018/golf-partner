@@ -28,6 +28,8 @@ export default {
   "shared.leaderboard.yourCard": "Your card",
   "shared.leaderboard.morePlayers": "More players",
   "shared.leaderboard.cardOf": "{name}'s card",
+  "shared.leaderboard.movedUp": { one: "Up {count} place", other: "Up {count} places" },
+  "shared.leaderboard.movedDown": { one: "Down {count} place", other: "Down {count} places" },
   "shared.scoreboard.rank": "Rank {rank}: {name}",
   "shared.scoreboard.points": "Points",
   "shared.scoreboard.strokes": "Strokes",

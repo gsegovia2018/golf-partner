@@ -28,6 +28,8 @@ export default {
   "shared.leaderboard.yourCard": "Tu tarjeta",
   "shared.leaderboard.morePlayers": "Más jugadores",
   "shared.leaderboard.cardOf": "Tarjeta de {name}",
+  "shared.leaderboard.movedUp": { one: "Sube {count} puesto", other: "Sube {count} puestos" },
+  "shared.leaderboard.movedDown": { one: "Baja {count} puesto", other: "Baja {count} puestos" },
   "shared.scoreboard.rank": "Puesto {rank}: {name}",
   "shared.scoreboard.points": "Puntos",
   "shared.scoreboard.strokes": "Golpes",
