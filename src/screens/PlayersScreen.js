@@ -31,6 +31,7 @@ import { consumePendingPlayers } from '../lib/selectionBridge';
 import { parseHandicapIndex } from '../lib/handicap';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { leagueLocksForRound } from '../store/leagueSetup';
+import { circleText } from '../theme/circleText';
 
 async function confirmDialog(title, message, confirmLabel = translate('setup.players.remove')) {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
@@ -919,7 +920,7 @@ const makeStyles = (theme) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
   avatarImg: { width: '100%', height: '100%' },
-  avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 15 },
+  avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 15, ...circleText },
   info: { flex: 1 },
   name: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.text.primary },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, flexWrap: 'wrap' },
@@ -966,7 +967,7 @@ const makeStyles = (theme) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   linkFriendAvatarImg: { width: '100%', height: '100%' },
-  linkFriendAvatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 13 },
+  linkFriendAvatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 13, ...circleText },
   linkFriendName: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: theme.text.primary },
   linkFriendMeta: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: theme.text.muted, marginTop: 1 },
   linkFriendUsed: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.accent.primary },

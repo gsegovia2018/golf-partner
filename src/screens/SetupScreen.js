@@ -52,6 +52,7 @@ import { dismissLeagueOptIn } from '../lib/leagueOptIn';
 import LeagueCardsList from '../components/league/LeagueCardsList';
 import { useT, t as translate, t as tNow, formatNumber, formatDate } from '../i18n';
 import { applyFinalStrokes, finalStrokeList, finalStrokesRecord } from '../store/leagueFinal';
+import { circleText } from '../theme/circleText';
 
 // Deep green used for the Review hero band — fixed in both themes so white
 // hero text always has strong contrast.
@@ -1427,6 +1428,7 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-ExtraBold',
       color: semantic.winner.dark,
       fontSize: 15,
+      ...circleText,
     },
     slotName: {
       fontFamily: 'PlusJakartaSans-Bold',

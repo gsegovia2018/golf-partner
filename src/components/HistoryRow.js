@@ -7,6 +7,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { useT } from '../i18n';
 import { pointsText, unitText } from '../lib/pointsText';
+import { circleText } from '../theme/circleText';
 
 // One History timeline row (game or tournament) rendered from a
 // historyEntryModel. Tournaments with a resolved champion grow a footer
@@ -228,6 +229,7 @@ function makeStyles(theme, gold, goldBg) {
     avatarImg: { width: '100%', height: '100%', borderRadius: 10 },
     avatarText: {
       fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 7.5, color: theme.text.secondary,
+      ...circleText,
     },
     avatarTextMe: { color: theme.text.inverse },
     result: { alignItems: 'center', minWidth: 46, gap: 2 },

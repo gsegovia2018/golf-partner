@@ -7,6 +7,7 @@ import { isScrambleMode, scrambleRoundTally } from '../store/scoring';
 import { playersMeFirst } from '../lib/playerOrder';
 import { useT, formatNumber } from '../i18n';
 import { teeDisplayName } from '../lib/teeName';
+import { circleText } from '../theme/circleText';
 
 // Universal round scoreboard — the same player stat cards in every scoring
 // mode. Home shows it unranked (me first, no standings); the round summary
@@ -258,7 +259,7 @@ const makeStyles = (t) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: t.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
   },
-  rankBadgeText: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.secondary, fontSize: 11 },
+  rankBadgeText: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.secondary, fontSize: 11, ...circleText },
   teeBadge: {
     fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11,
     color: t.accent.primary, backgroundColor: t.accent.light,

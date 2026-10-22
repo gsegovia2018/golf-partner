@@ -13,6 +13,7 @@ import { useT, t as translate } from '../i18n';
 import BottomSheet from './BottomSheet';
 import { Skeleton, SkeletonRegion } from './ui/Skeleton';
 import { light, semantic, typography, spacing, radius } from '../theme/tokens';
+import { circleText } from '../theme/circleText';
 
 const DEFAULT_THEME = {
   ...light,
@@ -634,6 +635,7 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: semantic.winner.dark,
     fontSize: 15,
+    ...circleText,
   },
   slotName: {
     maxWidth: '100%',
@@ -701,6 +703,7 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Bold',
     fontSize: 12,
     color: t.accent.primary,
+    ...circleText,
   },
   addPlayerNameRow: {
     flexDirection: 'row',

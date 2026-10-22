@@ -15,6 +15,7 @@ import { highlightFor } from '../../swing/highlights';
 import { homeOf, frameOfKey } from '../../swing/checkpointChecks';
 import { CHECKPOINT_KEYS } from '../../swing/phases';
 import { poseAtFrame } from '../../swing/poseAt';
+import { circleText } from '../../theme/circleText';
 
 const F = SWING_STRINGS.results.fixes;
 
@@ -122,7 +123,7 @@ const makeStyles = (theme) => StyleSheet.create({
   body: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, lineHeight: 20, color: theme.text.primary },
   step: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   stepNum: { width: 24, height: 24, borderRadius: 12, backgroundColor: theme.accent.primary, alignItems: 'center', justifyContent: 'center' },
-  stepNumText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13, color: theme.text.inverse },
+  stepNumText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13, color: theme.text.inverse, ...circleText },
   drill: {
     backgroundColor: theme.bg.card, borderRadius: theme.radius.lg, padding: 14, gap: 4,
     borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,

@@ -18,6 +18,7 @@ import { mutate } from '../store/mutate';
 import { useAuth } from '../context/AuthContext';
 import { parseHandicapIndex } from '../lib/handicap';
 import { useT, t as translate, formatNumber } from '../i18n';
+import { circleText } from '../theme/circleText';
 
 // Shown right after an editor joins via an invite code. They pick which
 // existing player they are (links their account to that player) or add
@@ -328,6 +329,7 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   playerAvatarText: {
     fontFamily: 'PlusJakartaSans-Bold', fontSize: 16, color: theme.text.inverse,
+    ...circleText,
   },
   playerName: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: theme.text.primary },
   playerMeta: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: theme.text.muted, marginTop: 2 },

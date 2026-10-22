@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { semantic } from '../../theme/tokens';
+import { circleText } from '../../theme/circleText';
 
 // Round avatar with an initials fallback — used by FriendsScreen's rows and
 // PlayerStatsScreen's header. `person` needs displayName/username and
@@ -27,5 +28,5 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
   img: { width: '100%', height: '100%' },
-  text: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 14 },
+  text: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 14, ...circleText },
 });

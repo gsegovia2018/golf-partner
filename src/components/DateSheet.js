@@ -8,6 +8,7 @@ import {
   parseIso, todayIso, addDays, nearestSaturday, inBounds, clampIso, addMonths, monthGrid,
   stepTime, formatLabel,
 } from '../lib/calendar';
+import { circleText } from '../theme/circleText';
 
 const STEP_MINUTES = 10;
 
@@ -210,7 +211,7 @@ const makeStyles = (theme) => StyleSheet.create({
   day: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   dayToday: { borderWidth: 1.5, borderColor: theme.accent.primary },
   dayOn: { backgroundColor: theme.accent.primary },
-  dayText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
+  dayText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14, ...circleText },
   dayTextOff: { color: theme.text.muted, opacity: 0.45 },
   dayTextOn: { color: theme.text.inverse, fontFamily: 'PlusJakartaSans-ExtraBold' },
   timeBlock: { alignItems: 'center', marginTop: 10 },

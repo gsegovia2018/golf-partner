@@ -6,6 +6,7 @@ import { holeCountOf } from '../store/scoring';
 import { middleTee, resolveTeeForPlayer } from '../store/tees';
 import { useT, formatNumber } from '../i18n';
 import { teeDisplayName } from '../lib/teeName';
+import { circleText } from '../theme/circleText';
 
 // Common golf tee colours, matched against the tee label by keyword —
 // covers both English ("White") and Spanish ("Blancas") naming, singular
@@ -526,7 +527,7 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.accent.light,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
+  avatarText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13, ...circleText },
 
   name: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 15 },
   indexText: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 11, marginTop: 1 },

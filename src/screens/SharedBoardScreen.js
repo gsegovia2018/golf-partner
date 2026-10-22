@@ -35,6 +35,7 @@ import { buildSharedBoardModel, buildSharedMediaModel } from '../store/sharedBoa
 import FeedRoundCard from '../components/feed/FeedRoundCard';
 import RoundStoriesRail from '../components/feed/RoundStoriesRail';
 import MemoriesStoriesViewer from '../components/MemoriesStoriesViewer';
+import { circleText } from '../theme/circleText';
 
 // Same idea as useOfficialRound's 20s poll (src/hooks/useOfficialRound.js) —
 // the RPC has no `updated_at` to diff against, so a full refetch is the only
@@ -525,7 +526,7 @@ const makeStyles = (theme) => StyleSheet.create({
   rankBadge: {
     width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 10,
   },
-  rankText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
+  rankText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, ...circleText },
   rowName: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, color: theme.text.primary },
   rowNameLeader: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 16 },
   rowPoints: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.text.primary, marginLeft: 8 },

@@ -9,6 +9,7 @@ import { semantic } from '../theme/tokens';
 import { useT } from '../i18n';
 import { stakeLedger, formatEuros } from '../store/sideBets';
 import { shortName } from './gamestats/ui';
+import { circleText } from '../theme/circleText';
 
 const initials = (p) => (p?.name ?? '?').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
@@ -130,7 +131,7 @@ function makeStyles(theme) {
       width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
       backgroundColor: theme.accent.light,
     },
-    avText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: theme.accent.primary },
+    avText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: theme.accent.primary, ...circleText },
     who: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, color: theme.text.primary },
     help: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: theme.text.secondary, marginTop: 4 },
     money: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14, color: theme.text.primary, fontVariant: ['tabular-nums'] },
