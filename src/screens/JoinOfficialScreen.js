@@ -302,7 +302,7 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.accent.primary, borderRadius: 12,
     padding: 14, alignItems: 'center', justifyContent: 'center', marginTop: 4,
   },
-  primaryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse, fontSize: 14 },
+  primaryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse, fontSize: 14, textAlign: 'center' },
   btnDisabled: { opacity: 0.5 },
   roundCard: {
     flexDirection: 'row', alignItems: 'center',
@@ -323,6 +323,7 @@ const makeStyles = (theme) => StyleSheet.create({
   scoreBtn: {
     backgroundColor: theme.accent.primary, borderRadius: 10,
     paddingVertical: 9, paddingHorizontal: 12, marginLeft: 12,
+    alignItems: 'center', justifyContent: 'center',
   },
-  scoreBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse, fontSize: 12 },
+  scoreBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse, fontSize: 12, textAlign: 'center' },
 });

@@ -199,7 +199,7 @@ function makeStyles(theme) {
     },
     noticeText: { ...theme.typography.caption, color: theme.text.primary, flex: 1 },
     noticeBtn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: theme.spacing.sm },
-    noticeBtnText: { ...theme.typography.caption, color: theme.info, fontWeight: '800' },
+    noticeBtnText: { ...theme.typography.caption, color: theme.info, fontWeight: '800', textAlign: 'center' },
     targetText: { ...theme.typography.caption, color: theme.text.secondary, flexShrink: 1 },
     formHead: {
       flexDirection: 'row',

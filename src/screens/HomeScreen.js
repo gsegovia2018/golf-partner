@@ -2653,6 +2653,7 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-SemiBold',
     color: t.isDark ? t.accent.primary : t.text.inverse,
     fontSize: 14,
+    textAlign: 'center',
   },
   secondaryBtn: {
     backgroundColor: t.isDark ? t.bg.secondary : t.bg.primary,
@@ -2663,6 +2664,7 @@ const makeStyles = (t) => StyleSheet.create({
   secondaryBtnText: {
     fontFamily: 'PlusJakartaSans-SemiBold',
     color: t.accent.primary, fontSize: 14,
+    textAlign: 'center',
   },
 
   // Start tiles (Game / Tournament)
@@ -2702,6 +2704,7 @@ const makeStyles = (t) => StyleSheet.create({
   },
   startTileCtaText: {
     fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary, fontSize: 13,
+    textAlign: 'center',
   },
 
   // Inline reload error card

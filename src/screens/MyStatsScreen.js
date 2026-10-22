@@ -957,7 +957,7 @@ function makeStyles(theme) {
       paddingHorizontal: theme.spacing.md, paddingVertical: 6,
       borderRadius: theme.radius.pill, backgroundColor: theme.accent.light,
     },
-    roundsBtnText: { ...theme.typography.caption, color: theme.accent.primary, fontWeight: '700' },
+    roundsBtnText: { ...theme.typography.caption, color: theme.accent.primary, fontWeight: '700', textAlign: 'center' },
     tabScroller: {
       flexGrow: 0,
       flexShrink: 0,
@@ -995,6 +995,7 @@ function makeStyles(theme) {
     retryBtn: {
       paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.sm,
       borderRadius: theme.radius.pill, backgroundColor: theme.accent.primary,
+      alignItems: 'center', justifyContent: 'center',
     },
     retryText: { ...theme.typography.subhead, color: theme.text.inverse },
     scroll: { padding: theme.spacing.lg, gap: theme.spacing.lg },

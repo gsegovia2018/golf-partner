@@ -148,5 +148,6 @@ const makeStyles = (theme) => StyleSheet.create({
     color: theme.isDark ? theme.accent.primary : theme.text.inverse,
     fontFamily: 'PlusJakartaSans-ExtraBold',
     fontSize: 16,
+    textAlign: 'center',
   },
 });

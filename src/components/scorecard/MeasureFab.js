@@ -368,7 +368,7 @@ function makeStyles(theme) {
       backgroundColor: 'rgba(255,255,255,0.14)',
     },
     splitBtnPrimary: { backgroundColor: '#fff' },
-    splitBtnText: { color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
+    splitBtnText: { color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, textAlign: 'center' },
     splitBtnTextPrimary: { color: theme.bg.deep },
     toast: {
       flexDirection: 'row', alignItems: 'center', gap: 7, width: 212,

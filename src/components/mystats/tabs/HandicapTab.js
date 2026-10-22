@@ -644,7 +644,7 @@ function makeStyles(theme) {
       flexDirection: 'row', backgroundColor: theme.bg.secondary,
       borderRadius: theme.radius.full, padding: 3,
     },
-    segBtn: { paddingVertical: 5, paddingHorizontal: 11, borderRadius: theme.radius.full },
+    segBtn: { paddingVertical: 5, paddingHorizontal: 11, borderRadius: theme.radius.full, alignItems: 'center', justifyContent: 'center' },
     segBtnOn: { backgroundColor: theme.accent.primary },
     segText: { fontSize: 11, fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary },
     segTextOn: { color: theme.text.inverse },

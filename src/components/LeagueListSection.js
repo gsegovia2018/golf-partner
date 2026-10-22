@@ -204,7 +204,7 @@ const st = StyleSheet.create({
   monthTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: onDeep.primary },
   monthSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: onDeep.soft, marginTop: 1 },
   btn: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: onDeep.primary, borderRadius: 12, paddingHorizontal: 12, minHeight: 44 },
-  btnText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: DEEP },
+  btnText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: DEEP, textAlign: 'center' },
   standRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 },
   viewLink: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 28, marginBottom: 2 },
   viewLinkText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: onDeep.strong },

@@ -1667,6 +1667,7 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.accent.primary,
       fontSize: 14,
+      textAlign: 'center',
     },
 
     /* Tees step */

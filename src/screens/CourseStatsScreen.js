@@ -516,6 +516,7 @@ function makeStyles(theme) {
     retryBtn: {
       paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.sm,
       borderRadius: theme.radius.pill, backgroundColor: theme.accent.primary,
+      alignItems: 'center', justifyContent: 'center',
     },
     retryText: { ...theme.typography.subhead, color: theme.text.inverse },
     scroll: { padding: theme.spacing.md, gap: theme.spacing.lg, paddingBottom: theme.spacing.lg * 2 },

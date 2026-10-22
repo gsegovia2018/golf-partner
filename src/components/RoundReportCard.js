@@ -149,7 +149,7 @@ function makeStyles(theme) {
       backgroundColor: theme.accent.light, borderRadius: 999,
       paddingVertical: 6, paddingHorizontal: 11,
     },
-    pickBtnText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: theme.accent.primary },
+    pickBtnText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: theme.accent.primary, textAlign: 'center' },
 
     openRoundBtn: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,

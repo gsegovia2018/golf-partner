@@ -838,6 +838,7 @@ function makeStyles(theme) {
     },
     emptyBtnText: {
       fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse, fontSize: 14,
+      textAlign: 'center',
     },
   });
 }

@@ -59,7 +59,7 @@ function makeStyles(theme) {
       alignItems: 'center', justifyContent: 'center', borderRadius: 14, minHeight: 48, paddingVertical: 14, marginTop: 4,
     },
     btnOff: { opacity: 0.6 },
-    btnText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
+    btnText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14, textAlign: 'center' },
     textBtn: { alignItems: 'center', justifyContent: 'center', minHeight: 44 },
     cancelText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
   });

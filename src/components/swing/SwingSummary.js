@@ -141,8 +141,8 @@ const makeStyles = (theme) => {
       flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 10, marginTop: 6, borderRadius: 10, backgroundColor: theme.bg.secondary,
     },
     placeText: { ...t.bodyInk, flex: 1, fontFamily: 'PlusJakartaSans-Bold' },
-    placeBtn: { minHeight: 32, borderRadius: 16, paddingHorizontal: 12, justifyContent: 'center', backgroundColor: theme.accent.primary },
-    placeBtnText: { ...t.label, fontSize: 13, color: theme.text.inverse },
+    placeBtn: { minHeight: 32, borderRadius: 16, paddingHorizontal: 12, justifyContent: 'center', backgroundColor: theme.accent.primary, alignItems: 'center' },
+    placeBtnText: { ...t.label, fontSize: 13, color: theme.text.inverse, textAlign: 'center' },
 
     strip: {
       flexDirection: 'row', padding: 3, backgroundColor: theme.bg.card, borderRadius: theme.radius.lg,

@@ -252,7 +252,7 @@ const makeStyles = (theme) => StyleSheet.create({
     borderRadius: 8, borderWidth: 1, borderColor: theme.border.default,
     paddingHorizontal: 10, paddingVertical: 6,
   },
-  toolBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12 },
+  toolBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12, textAlign: 'center' },
   warnBox: {
     flexDirection: 'row', alignItems: 'flex-start',
     backgroundColor: theme.destructive + '12', borderRadius: 12,
@@ -295,7 +295,7 @@ const makeStyles = (theme) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   parBtnActive: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
-  parBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 13 },
+  parBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 13, textAlign: 'center' },
   parBtnTextActive: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 13 },
   siInput: {
     backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
@@ -316,5 +316,6 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: theme.isDark ? theme.accent.primary : theme.text.inverse,
     fontSize: 16,
+    textAlign: 'center',
   },
 });

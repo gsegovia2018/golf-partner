@@ -221,8 +221,8 @@ const s = StyleSheet.create({
     position: 'absolute', left: 0, right: 0, top: '40%', alignItems: 'center', paddingHorizontal: 24,
   },
   statusText: { color: hud.text, fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  enableBtn: { backgroundColor: hud.accent, borderRadius: 24, paddingVertical: 12, paddingHorizontal: 24 },
-  enableBtnText: { color: hud.onAccent, fontSize: 15, fontWeight: '800' },
+  enableBtn: { backgroundColor: hud.accent, borderRadius: 24, paddingVertical: 12, paddingHorizontal: 24, alignItems: 'center', justifyContent: 'center' },
+  enableBtnText: { color: hud.onAccent, fontSize: 15, fontWeight: '800', textAlign: 'center' },
   marker: { position: 'absolute', alignItems: 'center', width: MARKER_HALF_WIDTH * 2, marginLeft: -MARKER_HALF_WIDTH },
   markerPill: {
     width: 44, height: 44, borderRadius: 22, backgroundColor: hud.scrim,

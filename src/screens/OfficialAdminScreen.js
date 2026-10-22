@@ -488,7 +488,7 @@ const makeStyles = (theme) => StyleSheet.create({
     borderRadius: 8, borderWidth: 1, borderColor: theme.border.default,
     paddingVertical: 5, paddingHorizontal: 9,
   },
-  miniBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 11 },
+  miniBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 11, textAlign: 'center' },
   miniBtnTextDanger: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 11 },
   btnDisabled: { opacity: 0.5 },
   picker: {
@@ -510,13 +510,13 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.accent.primary, borderRadius: 10,
     padding: 10, alignItems: 'center', justifyContent: 'center',
   },
-  confirmBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse, fontSize: 13 },
+  confirmBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse, fontSize: 13, textAlign: 'center' },
   finalizeBtn: {
     borderRadius: 10, borderWidth: 1, borderColor: theme.border.default, borderStyle: 'dashed',
     padding: 10, alignItems: 'center', justifyContent: 'center',
     flexDirection: 'row', marginTop: 12,
   },
-  finalizeBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 12 },
+  finalizeBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 12, textAlign: 'center' },
   notifCard: {
     backgroundColor: theme.bg.card, borderRadius: 12, borderWidth: 1,
     borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
@@ -537,5 +537,5 @@ const makeStyles = (theme) => StyleSheet.create({
     borderRadius: 12, borderWidth: 1, borderColor: theme.border.default,
     padding: 12, alignItems: 'center', justifyContent: 'center',
   },
-  secondaryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
+  secondaryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13, textAlign: 'center' },
 });

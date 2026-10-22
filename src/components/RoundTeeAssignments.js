@@ -511,7 +511,7 @@ const makeStyles = (theme) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.accent.primary + '40',
     paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10,
   },
-  resetBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12 },
+  resetBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12, textAlign: 'center' },
 
   card: {
     backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,

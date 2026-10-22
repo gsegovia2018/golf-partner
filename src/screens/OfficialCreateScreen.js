@@ -583,6 +583,7 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.accent.primary,
       fontSize: 14,
+      textAlign: 'center',
     },
     layoutCard: {
       backgroundColor: theme.bg.card,
@@ -639,6 +640,7 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.accent.primary,
       fontSize: 14,
+      textAlign: 'center',
     },
 
     /* Roster add form */

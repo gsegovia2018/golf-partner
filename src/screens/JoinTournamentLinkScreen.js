@@ -102,9 +102,11 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   primaryBtnText: {
     fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 16,
+    textAlign: 'center',
   },
   secondaryBtn: { padding: 14, alignItems: 'center', width: '100%' },
   secondaryBtnText: {
     fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 15,
+    textAlign: 'center',
   },
 });

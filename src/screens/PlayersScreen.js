@@ -1003,20 +1003,20 @@ const makeStyles = (theme) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.accent.primary + '40',
     paddingHorizontal: 12, paddingVertical: 7,
   },
-  addBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
+  addBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13, textAlign: 'center' },
   inviteBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: theme.accent.light, borderRadius: 12,
     borderWidth: 1, borderColor: theme.accent.primary + '40',
     padding: 14, marginTop: 6,
   },
-  inviteBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+  inviteBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14, textAlign: 'center' },
   leaveBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     padding: 14, marginTop: 24, borderRadius: 12,
     borderWidth: 1, borderColor: theme.border.default,
   },
-  leaveBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 14 },
+  leaveBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 14, textAlign: 'center' },
   // --- tees section (Task 3) ---
   sectionTitle: {
     fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary,
@@ -1042,5 +1042,5 @@ const makeStyles = (theme) => StyleSheet.create({
     borderRadius: 10, borderWidth: 1, borderColor: theme.accent.primary + '40',
     paddingHorizontal: 16, paddingVertical: 10, marginTop: 14,
   },
-  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14, textAlign: 'center' },
 });

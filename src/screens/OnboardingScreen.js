@@ -234,5 +234,6 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: theme.isDark ? theme.accent.primary : theme.text.inverse,
     fontSize: 15,
+    textAlign: 'center',
   },
 });

@@ -88,7 +88,7 @@ function makeStyles(theme) {
     },
     button: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg.secondary },
     buttonOff: { opacity: 0.4 },
-    buttonText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 20 },
+    buttonText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 20, textAlign: 'center' },
     value: {
       minWidth: 64, textAlign: 'center', fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.primary, fontSize: 18,
     },

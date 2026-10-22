@@ -180,7 +180,7 @@ const makeStyles = (theme) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.accent.primary + '40',
     paddingHorizontal: 10, paddingVertical: 6, marginTop: 8,
   },
-  addBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12 },
+  addBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12, textAlign: 'center' },
   warnText: {
     fontFamily: 'PlusJakartaSans-Medium', color: theme.destructive,
     fontSize: 12, marginTop: 8,

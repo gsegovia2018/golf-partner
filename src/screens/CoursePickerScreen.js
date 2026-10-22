@@ -686,6 +686,7 @@ const makeStyles = (theme) => StyleSheet.create({
     color: theme.isDark ? theme.accent.primary : theme.text.inverse,
     fontFamily: 'PlusJakartaSans-ExtraBold',
     fontSize: 16,
+    textAlign: 'center',
   },
   favBtn: { paddingHorizontal: 8, paddingVertical: 10 },
   errorBox: {
@@ -707,5 +708,5 @@ const makeStyles = (theme) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.accent.primary + '40',
     paddingHorizontal: 16, paddingVertical: 10, marginTop: 14,
   },
-  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14, textAlign: 'center' },
 });
