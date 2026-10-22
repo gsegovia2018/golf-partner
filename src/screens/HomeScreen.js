@@ -1374,7 +1374,7 @@ export default function HomeScreen({ navigation, route }) {
           playersLoading={quickStartPlayersLoading}
           playersError={quickStartPlayersError}
           starting={quickStartStarting}
-          onManage={() => navigation.navigate('CoursesLibrary')}
+          onManage={() => navigation.navigate('CoursePicker', { mode: 'favorites' })}
           onRetryPlayers={loadQuickStartPlayers}
           onStart={handleQuickStartStart}
           onEditDetails={handleQuickStartEditDetails}
