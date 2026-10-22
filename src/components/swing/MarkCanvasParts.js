@@ -12,6 +12,7 @@ import { SWING_STRINGS } from '../../swing/strings';
 import { MARKED_KEYS, positionStatus } from '../../swing/markPass';
 import Pictogram, { PICTOGRAM_KEYS } from './Pictogram';
 import { glass } from './swingStyles';
+import { circleText } from '../../theme/circleText';
 
 // The pieces of the marking canvas (D26, laid out per D28 "Frame Then Marks"). Fixed HUD palette:
 // the canvas is a video being annotated, the same case as the capture viewfinder. The cue card and
@@ -365,7 +366,7 @@ const styles = StyleSheet.create({
   help: {
     width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, borderColor: hud.line, alignItems: 'center', justifyContent: 'center',
   },
-  helpText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: hud.textSoft },
+  helpText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: hud.textSoft, ...circleText },
   moreText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11, color: hud.accent },
   cueFull: {
     position: 'absolute', left: 8, right: 8, top: 8, gap: 6, paddingTop: 10, paddingHorizontal: 12, paddingBottom: 12,

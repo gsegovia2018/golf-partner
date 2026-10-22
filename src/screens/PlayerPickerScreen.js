@@ -21,6 +21,7 @@ import { setPendingPlayers } from '../lib/selectionBridge';
 import { buildPlayerLastUsed } from '../lib/recentUse';
 import { mutate } from '../store/mutate';
 import { parseHandicapIndex } from '../lib/handicap';
+import { circleText } from '../theme/circleText';
 
 const normalize = (value) =>
   (value ?? '').toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -399,6 +400,7 @@ const makeStyles = (theme) => StyleSheet.create({
   pickerAvatarImg: { width: '100%', height: '100%' },
   pickerAvatarText: {
     fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 13,
+    ...circleText,
   },
   playerName: {
     color: theme.text.primary,

@@ -7,6 +7,7 @@ import BottomSheet from '../BottomSheet';
 import { useTheme } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
 import { useT, formatNumber } from '../../i18n';
+import { circleText } from '../../theme/circleText';
 
 const CONFLICT = semantic.conflict.base;
 const DEFAULT_STROKES = 4; // par-ish fallback when no candidate carries a value
@@ -403,7 +404,7 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: CONFLICT + '26',
     alignItems: 'center', justifyContent: 'center',
   },
-  bandAvatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15, color: CONFLICT },
+  bandAvatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15, color: CONFLICT, ...circleText },
 
   /* Candidate cards */
   cards: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
@@ -421,7 +422,7 @@ const makeStyles = (theme) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   authorAvatarYou: { backgroundColor: theme?.accent?.primary },
-  authorAvatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, color: theme?.accent?.primary },
+  authorAvatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, color: theme?.accent?.primary, ...circleText },
   authorAvatarTextYou: { color: theme?.text?.inverse },
   authorName: {
     fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme?.text?.primary,

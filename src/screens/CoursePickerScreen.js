@@ -21,6 +21,7 @@ import { buildCourseLastUsed } from '../lib/recentUse';
 import {
   normalizeText, recentCourses, regionItems, regionSummary, searchCourses,
 } from '../lib/courseLibrary';
+import { circleText } from '../theme/circleText';
 
 // Search results stop here; the rest is a "keep typing" count.
 const SEARCH_LIMIT = 40;
@@ -658,6 +659,7 @@ const makeStyles = (theme) => StyleSheet.create({
     color: theme.text.inverse,
     fontSize: 13,
     fontFamily: 'PlusJakartaSans-ExtraBold',
+    ...circleText,
   },
   emptyCircle: {
     width: 26,

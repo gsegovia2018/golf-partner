@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { useT, formatNumber } from '../../i18n';
 import { pointsText, unitText } from '../../lib/pointsText';
+import { circleText } from '../../theme/circleText';
 
 // Round leaderboard for the summary page — same quiet card language as the
 // recap panel (radius-10 card, hairline border), ranked by Stableford
@@ -120,6 +121,7 @@ function makeStyles(theme) {
       color: theme.text.secondary,
       fontFamily: 'PlusJakartaSans-ExtraBold',
       fontSize: 12,
+      ...circleText,
     },
     rankTextLeader: {
       color: theme.accent.primary,

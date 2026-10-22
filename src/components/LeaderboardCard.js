@@ -5,6 +5,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { semantic, onDeep } from '../theme/tokens';
 import { useT } from '../i18n';
 import InitialsAvatar from './league/InitialsAvatar';
+import { circleText } from '../theme/circleText';
 
 // The deep-green leaderboard card: the tournament leaderboard on Play and the
 // season standings on the league board.
@@ -178,7 +179,7 @@ function makeStyles(t) {
       width: undefined, minWidth: 46, overflow: 'hidden', borderRadius: 999, paddingVertical: 3, paddingHorizontal: 7,
       backgroundColor: d.goldFill, textAlign: 'center', fontSize: 11, fontFamily: 'PlusJakartaSans-ExtraBold',
     },
-    mastersRankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
+    mastersRankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, ...circleText },
     mastersRankUnranked: { borderWidth: 1, borderStyle: 'dashed', borderColor: d.borderStrong, backgroundColor: 'transparent' },
     mastersSection: { marginTop: 8 },
     mastersSectionHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },

@@ -10,6 +10,7 @@ import { getScoringMode } from '../scoringModes';
 import { t, tr, useT } from '../../i18n';
 import { unitText } from '../../lib/pointsText';
 import { Skeleton } from '../ui/Skeleton';
+import { circleText } from '../../theme/circleText';
 
 function Avatar({ item, theme }) {
   const initial = (item.actorName || '?').trim().charAt(0).toUpperCase();
@@ -798,6 +799,7 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold',
       color: theme.text.muted,
       fontSize: 11,
+      ...circleText,
     },
     resultName: {
       fontFamily: 'PlusJakartaSans-SemiBold',

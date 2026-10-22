@@ -33,6 +33,7 @@ import { shareOrigin } from '../lib/shareOrigin';
 import { NAME_MAX } from '../components/league/GuestIdentityFields';
 import { leagueErrorText } from '../lib/leagueErrorText';
 import { useConfirmSheet } from '../components/league/ConfirmSheet';
+import { circleText } from '../theme/circleText';
 
 const fmtDate = (iso) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
@@ -682,7 +683,7 @@ function makeStyles(theme) {
       backgroundColor: theme.isDark ? theme.bg.secondary : '#006747', alignItems: 'center', justifyContent: 'center',
     },
     avatarImg: { width: '100%', height: '100%' },
-    avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 13 },
+    avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 13, ...circleText },
     avatarInvitee: {
       backgroundColor: 'transparent', borderWidth: 1.5, borderStyle: 'dashed', borderColor: theme.accent.primary,
     },
