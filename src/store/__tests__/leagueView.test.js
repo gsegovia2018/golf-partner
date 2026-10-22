@@ -534,9 +534,9 @@ describe('ties, the floor and the member standing', () => {
     expect(monthLine({ ...snapshot, league: { ...league, archivedAt: 'x' } }, 'd', NOW)).toBeNull();
   });
 
-  test('leagueSummary carries the month line only once the league has a position', () => {
+  test('leagueSummary carries the month line, with or without standings', () => {
     expect(leagueSummary(snapshot, 'd', NOW).month.key).toBe('league.play.monthRank');
-    expect(leagueSummary({ ...snapshot, cardsByMonth: {} }, 'd', NOW)).toMatchObject({ position: null, month: null });
+    expect(leagueSummary({ ...snapshot, cardsByMonth: {} }, 'd', NOW)).toMatchObject({ position: null, month: { key: 'league.play.monthNone' } });
   });
 });
 

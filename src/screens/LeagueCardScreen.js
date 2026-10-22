@@ -5,7 +5,8 @@ import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import ScreenHeader from '../components/ui/ScreenHeader';
 import { makeOffAppStyles } from '../components/league/offAppStyles';
-import CardHoleGrid from '../components/league/CardHoleGrid';
+import ShotScorecard from '../components/scorecard/ShotScorecard';
+import InitialsAvatar from '../components/league/InitialsAvatar';
 import DeadlineLine from '../components/league/DeadlineLine';
 import LeagueCardActions from '../components/league/LeagueCardActions';
 import LeagueShareSheet from '../components/league/LeagueShareSheet';
@@ -17,7 +18,7 @@ import { useLeague } from '../hooks/useLeague';
 import { useMinuteClock } from '../hooks/useMinuteClock';
 import { useCardEvents } from '../hooks/useCardEvents';
 import { useT, tr, formatNumber } from '../i18n';
-import { semantic } from '../theme/tokens';
+import { semantic, onDeep } from '../theme/tokens';
 import { withAlpha } from '../theme/alpha';
 import { getLeagueProofUrl } from '../store/leagueStore';
 import { dayLabel, timeLabel } from '../store/leagueOffApp';
@@ -28,6 +29,7 @@ import {
   monthCardsView, cardActions, voidedNote, formatToPar,
 } from '../store/leagueView';
 import { isMedalFormat } from '../store/leagueStandings';
+import { leagueScorecardModel } from '../store/leagueScorecard';
 import { memberName } from '../lib/leagueNames';
 
 // A member's card, read-only, with ‹ › to flick through that month's cards
@@ -145,6 +147,8 @@ export default function LeagueCardScreen({ navigation, route }) {
   const diffText = diffValue == null ? t(diffKey('league.card.diffNone'))
     : t(diffKey(diffTone === 'better' ? 'league.card.diffBetter' : diffTone === 'worse' ? 'league.card.diffWorse' : 'league.card.diffLevel'),
       { value: diffValue, handicap: formatNumber(card.leagueHandicap, { decimals: 1 }) || '—' });
+  const member = data?.members?.find((m) => m.userId === card.userId);
+  const scorecard = scored ? leagueScorecardModel(card, who) : null;
   const atStart = idx === 0;
   const atEnd = idx === cards.length - 1;
   const go = flickTo;
@@ -205,38 +209,40 @@ export default function LeagueCardScreen({ navigation, route }) {
             )}
           </View>
         ) : scored ? (
-          <View style={s.card}>
-            <View style={l.headRow}>
-              <View style={l.valueRow}>
-                <Text style={[l.value, { color: theme.text.primary }]}>{valueText}</Text>
-                <Text style={l.valueKey}>{valueKey}</Text>
+          <>
+            <View style={l.hero}>
+              <View style={l.heroWho}>
+                <InitialsAvatar name={member?.displayName ?? who} url={member?.avatarUrl ?? null} size={40} deep style={l.heroAvatar} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={l.heroName} numberOfLines={1}>{who}</Text>
+                  {!!subline && <Text style={l.heroMeta}>{subline}</Text>}
+                </View>
               </View>
-              {handTee
-                ? <View style={l.badgeWarn}><Text style={l.badgeWarnText}>{t('league.card.teeByHand')}</Text></View>
-                : <View style={l.badge}><Text style={l.badgeText}>{badge}</Text></View>}
+              <View style={l.valueRow}>
+                <Text style={l.heroValue}>{valueText}</Text>
+                <Text style={l.heroKey}>{valueKey}</Text>
+              </View>
+              <View style={l.heroChips}>
+                {!!cells && <View style={l.heroChip}><Text style={l.heroChipText}>{tr(cells.placeNote) ? `${cells.place} · ${tr(cells.placeNote)}` : cells.place}</Text></View>}
+                {!!cells && <View style={l.heroChip}><Text style={[l.heroChipText, l.heroGold]}>{`${cells.lp} · ${tr(cells.lpNote)}`}</Text></View>}
+                {handTee
+                  ? <View style={l.heroChip}><Text style={[l.heroChipText, l.heroWarn]}>{t('league.card.teeByHand')}</Text></View>
+                  : <View style={l.heroChip}><Text style={l.heroChipText}>{badge}</Text></View>}
+              </View>
+              <Text style={l.heroMeta}>
+                {[card.playingHandicap != null ? t('league.card.handicaps', { playing: card.playingHandicap }) : null,
+                  card.gross != null ? t('league.card.gross', { gross: card.gross }) : null,
+                  card.confirmedByName ? t('league.cardScreen.confirmedBy', { name: card.confirmedByName }) : null].filter(Boolean).join(' · ')}
+              </Text>
             </View>
-            {!!subline && <Text style={s.text}>{subline}</Text>}
-            <Text style={s.text}>
-              {[card.playingHandicap != null ? t('league.card.handicaps', { playing: card.playingHandicap }) : null,
-                card.gross != null ? t('league.card.gross', { gross: card.gross }) : null].filter(Boolean).join(' · ')}
-            </Text>
-            {!!card.confirmedByName && <Text style={s.text}>{t('league.cardScreen.confirmedBy', { name: card.confirmedByName })}</Text>}
-            {handTee && <Text style={s.text}>{t('league.card.teeByHandNote')}</Text>}
-            {card.notAnnounced && <Text style={s.text}>{t('league.cardScreen.notAnnounced')}</Text>}
-            {awaiting && <Text style={s.text}>{t('league.cardScreen.awaitingNote')}</Text>}
-            {!!cells && (
-              <View style={l.strip}>
-                <View style={l.cell}>
-                  <Text style={l.cellValue}>{cells.place}</Text>
-                  <Text style={l.cellNote}>{tr(cells.placeNote)}</Text>
-                </View>
-                <View style={l.cell}>
-                  <Text style={[l.cellValue, { color: theme.scoreColor('excellent') }]}>{cells.lp}</Text>
-                  <Text style={l.cellNote}>{tr(cells.lpNote)}</Text>
-                </View>
+            {(handTee || card.notAnnounced || awaiting) && (
+              <View style={s.card}>
+                {handTee && <Text style={s.text}>{t('league.card.teeByHandNote')}</Text>}
+                {card.notAnnounced && <Text style={s.text}>{t('league.cardScreen.notAnnounced')}</Text>}
+                {awaiting && <Text style={s.text}>{t('league.cardScreen.awaitingNote')}</Text>}
               </View>
             )}
-          </View>
+          </>
         ) : (
           <View style={s.card}>
             <View style={l.headRow}>
@@ -277,6 +283,11 @@ export default function LeagueCardScreen({ navigation, route }) {
           now={now}
         />
 
+        {!!scorecard && (
+          <View style={[s.card, l.holeGrid]}>
+            <ShotScorecard card={scorecard} mode="strokes" pointsRow={!medal} />
+          </View>
+        )}
         {!card.spot && (
           <CardTimeline
             events={timeline.events}
@@ -290,16 +301,20 @@ export default function LeagueCardScreen({ navigation, route }) {
           />
         )}
 
-        {scored && !!course?.holes && (
-          <View style={l.holeGrid}>
-            <CardHoleGrid perHole={breakdown.perHole} medal={medal} />
-          </View>
-        )}
 
         {scored && (
           <View style={[s.card, { marginTop: 14 }]}>
             <Text style={s.cardTitle}>{t('league.card.diffTitle')}</Text>
             <Text style={s.text}>{diffText}</Text>
+            {!medal && breakdown.capped.length > 0 && (
+              <Text style={s.text}>
+                {t('league.card.capped', {
+                  count: breakdown.capped.length,
+                  holes: breakdown.capped.map((h) => h.n).join(', '),
+                  counted: breakdown.capped[0].counted,
+                })}
+              </Text>
+            )}
           </View>
         )}
 
@@ -359,7 +374,20 @@ function ProofPhoto({ path, official, theme }) {
 function makeStyles(theme) {
   const warn = theme.isDark ? semantic.warning.dark : semantic.warning.light;
   return StyleSheet.create({
-    holeGrid: { marginTop: 14 },
+    holeGrid: { marginTop: 14, padding: 12 },
+    // The scored card's deep-green hero (the board's surface).
+    hero: { backgroundColor: theme.bg.deep, borderRadius: 20, padding: 16, gap: 12 },
+    heroWho: { flexDirection: 'row', alignItems: 'center' },
+    heroAvatar: { marginRight: 10 },
+    heroName: { fontFamily: 'PlayfairDisplay-Bold', color: onDeep.primary, fontSize: 20 },
+    heroMeta: { fontFamily: 'PlusJakartaSans-SemiBold', color: onDeep.soft, fontSize: 12, lineHeight: 17, marginTop: 2 },
+    heroValue: { fontFamily: 'PlusJakartaSans-ExtraBold', color: onDeep.primary, fontSize: 44, lineHeight: 48 },
+    heroKey: { fontFamily: 'PlusJakartaSans-Bold', color: onDeep.soft, fontSize: 14 },
+    heroChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    heroChip: { backgroundColor: onDeep.chip, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+    heroChipText: { fontFamily: 'PlusJakartaSans-Bold', color: onDeep.primary, fontSize: 12 },
+    heroGold: { color: semantic.winner.dark },
+    heroWarn: { color: semantic.warning.dark },
     flick: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 },
     arrow: { width: 44, height: 44 },
     arrowOff: { opacity: 0.3 },

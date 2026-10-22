@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic, onDeep } from '../theme/tokens';
 import { useT } from '../i18n';
+import InitialsAvatar from './league/InitialsAvatar';
 
 // The deep-green leaderboard card: the tournament leaderboard on Play and the
 // season standings on the league board.
@@ -31,6 +32,9 @@ import { useT } from '../i18n';
 //                  unranked  dashed place badge
 //                  warn      amber points and sub (a deadline under 2 hours away)
 //                  countdown a time left as points ("10 h 59 m"): smaller figure and a narrower sub column, so the name and course keep their room
+//                  avatar    { name, url } — a face before the name (league board)
+//                  subPill   the sub as a gold pill ("+100" league points)
+//                  move      places moved since last month (+2 → ▲2, −1 → ▼1)
 //                A row may set compact (shorter, no sub), or be { key, gap: true }: a "⋯" spacer
 //                for rows left out.
 //   more         optional { label, onPress }: a text button under the rows (Show all 18)
@@ -64,12 +68,28 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
         <View style={[s.mastersRankBadge, { backgroundColor: rankBg }, row.unranked && s.mastersRankUnranked]}>
           <Text style={[s.mastersRankText, { color: rankColor }]}>{rankLabel}</Text>
         </View>
+        {!!row.avatar && (
+          <InitialsAvatar
+            name={row.avatar.name}
+            url={row.avatar.url}
+            size={30}
+            deep
+            ring={row.isMe ? semantic.winner.dark : null}
+            style={s.mastersAvatar}
+          />
+        )}
         <View style={s.mastersNameCol}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={[s.mastersName, (isFirstPlace || row.isMe) && { fontFamily: 'PlusJakartaSans-Bold' }]} numberOfLines={1}>
+            <Text style={[s.mastersName, (isFirstPlace || row.isMe) && { fontFamily: 'PlusJakartaSans-Bold' }, { flexShrink: 1 }]} numberOfLines={1}>
               {row.name}
             </Text>
             {row.mark && <Feather name="award" size={14} color={semantic.winner.dark} />}
+            {!!row.move && (
+              <Text
+                style={[s.mastersMove, row.move < 0 && s.mastersMoveDown]}
+                accessibilityLabel={t(row.move > 0 ? 'shared.leaderboard.movedUp' : 'shared.leaderboard.movedDown', { count: Math.abs(row.move) })}
+              >{`${row.move > 0 ? '▲' : '▼'}${Math.abs(row.move)}`}</Text>
+            )}
           </View>
           {!!row.detail && <Text style={s.mastersDetail} numberOfLines={2}>{row.detail}</Text>}
         </View>
@@ -79,7 +99,7 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
         >{row.points}</Text>
         {row.sub != null && (
           <Text
-            style={[s.mastersSub, row.subGold && s.mastersSubGold, row.countdown && s.mastersSubCountdown, row.warn && s.mastersWarn]}
+            style={[s.mastersSub, row.subGold && s.mastersSubGold, row.subPill && s.mastersSubPill, row.countdown && s.mastersSubCountdown, row.warn && s.mastersWarn]}
             {...(row.subLabel ? { accessibilityLabel: row.subLabel } : {})}
           >{row.compact ? '' : row.sub}</Text>
         )}
@@ -97,16 +117,18 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
       {subheader}
       {sections ? sections.map((sec) => (
         <View key={sec.key} style={s.mastersSection}>
-          <View style={s.mastersSectionHead}>
-            <Feather name={sec.icon} size={12} color={sec.gold ? semantic.winner.dark : d.faint} />
-            <Text style={[s.mastersSectionLabel, sec.gold && { color: semantic.winner.dark }]}>{sec.label}</Text>
-            {!!sec.cols && (
-              <View style={[s.mastersColHeads, sec.rows?.some((r) => r.onPress) && { marginRight: 20 }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                <Text style={[s.mastersColHead, s.mastersColHeadPoints]}>{sec.cols[0]}</Text>
-                <Text style={[s.mastersColHead, s.mastersColHeadSub]}>{sec.cols[1]}</Text>
-              </View>
-            )}
-          </View>
+          {!!sec.label && (
+            <View style={s.mastersSectionHead}>
+              <Feather name={sec.icon} size={12} color={sec.gold ? semantic.winner.dark : d.faint} />
+              <Text style={[s.mastersSectionLabel, sec.gold && { color: semantic.winner.dark }]}>{sec.label}</Text>
+              {!!sec.cols && (
+                <View style={[s.mastersColHeads, sec.rows?.some((r) => r.onPress) && { marginRight: 20 }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                  <Text style={[s.mastersColHead, s.mastersColHeadPoints]}>{sec.cols[0]}</Text>
+                  <Text style={[s.mastersColHead, s.mastersColHeadSub]}>{sec.cols[1]}</Text>
+                </View>
+              )}
+            </View>
+          )}
           {sec.rows ? sec.rows.map((row, i, list) => renderRow(row, i, list, !!sec.cols)) : sec.body}
         </View>
       )) : rows.map(renderRow)}
@@ -147,6 +169,15 @@ function makeStyles(t) {
     // The signed-in member's own row (league board); the tournament view never sets it.
     mastersRowMe: { backgroundColor: d.fill, borderRadius: 10, paddingHorizontal: 8, marginHorizontal: -8 },
     mastersRankBadge: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+    mastersAvatar: { marginRight: 10 },
+    // The arrow carries the direction; no colour of its own on the deep green.
+    mastersMove: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, color: d.strong },
+    mastersMoveDown: { color: d.soft },
+    // The league points as a gold pill.
+    mastersSubPill: {
+      width: undefined, minWidth: 46, overflow: 'hidden', borderRadius: 999, paddingVertical: 3, paddingHorizontal: 7,
+      backgroundColor: d.goldFill, textAlign: 'center', fontSize: 11, fontFamily: 'PlusJakartaSans-ExtraBold',
+    },
     mastersRankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
     mastersRankUnranked: { borderWidth: 1, borderStyle: 'dashed', borderColor: d.borderStrong, backgroundColor: 'transparent' },
     mastersSection: { marginTop: 8 },

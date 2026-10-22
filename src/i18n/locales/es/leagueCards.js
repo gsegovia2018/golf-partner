@@ -9,6 +9,7 @@ export default {
   'league.card.ifEndedToday': 'ptos de liga si acabara hoy',
   'league.card.forPlaying': 'puntos por jugar',
   'league.card.diffTitle': 'Diferencial neto',
+  'league.card.capped': { one: 'El hoyo {holes} cuenta como doble bogey neto ({counted}) para el diferencial.', other: 'Los hoyos {holes} cuentan como doble bogey neto para el diferencial.' },
   'league.card.diffBetter': '{value} mejor que el hándicap de liga {handicap}. Se guarda como referencia; la clasificación usa puntos.',
   'league.card.diffWorse': '{value} peor que el hándicap de liga {handicap}. Se guarda como referencia; la clasificación usa puntos.',
   'league.card.diffLevel': 'Igual que el hándicap de liga {handicap}. Se guarda como referencia; la clasificación usa puntos.',

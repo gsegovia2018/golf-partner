@@ -76,7 +76,7 @@ describe('LeagueCardScreen', () => {
     expect(getByLabelText('Next card').props.accessibilityState.disabled).toBe(true);
   });
 
-  test('shows the summary and the read-only grid, and flicks between cards', async () => {
+  test('shows the score hero and the scorecard, and flicks between cards', async () => {
     store.getLeague.mockResolvedValue(snapshot([
       card('javi', 'confirmed', 38, { confirmedByName: 'Nacho' }),
       card('nacho', 'submitted', 30),
@@ -86,19 +86,17 @@ describe('LeagueCardScreen', () => {
     expect(getByText('1 of 2 October league cards')).toBeTruthy();
     expect(getByText('Confirmed')).toBeTruthy();
     expect(getByText('Golf Olivar · Yellow tees, slope 125 · CR 72')).toBeTruthy();
-    expect(getByText('Playing handicap 18 · Gross 90')).toBeTruthy();
-    expect(getByText('Confirmed by Nacho')).toBeTruthy();
-    // Stableford points are the headline; place and league points sit in the strip.
+    expect(getByText('Playing handicap 18 · Gross 90 · Confirmed by Nacho')).toBeTruthy();
+    // Stableford points are the headline; place and league points are its chips.
     expect(getByText('38')).toBeTruthy();
     expect(getByText('Stableford pts')).toBeTruthy();
-    expect(getByText('1st')).toBeTruthy();
-    expect(getByText('of 1 card')).toBeTruthy();
-    expect(getByText('+500')).toBeTruthy();
-    expect(getByText('league pts')).toBeTruthy();
+    expect(getByText('1st · of 1 card')).toBeTruthy();
+    expect(getByText('+500 · league pts')).toBeTruthy();
+    expect(getByText('Javi')).toBeTruthy();
     // The differential lives in its own card, marked as secondary.
     expect(getByText('Net differential')).toBeTruthy();
     expect(getByText('2.4 better than league handicap 18.0. Stored for reference; the ranking uses points.')).toBeTruthy();
-    // The grid reads the real DB hole shape: numbers and strokes render.
+    // The scorecard reads the real DB hole shape: numbers and strokes render.
     expect(getAllByText('18').length).toBeGreaterThan(0);
     expect(getAllByText('5').length).toBeGreaterThan(0);
     expect(queryByText('You')).toBeNull();
@@ -108,7 +106,7 @@ describe('LeagueCardScreen', () => {
     expect(getByText('Nacho · October card')).toBeTruthy();
     expect(getByText('2 of 2 October league cards')).toBeTruthy();
     expect(getByText('Submitted')).toBeTruthy();
-    expect(queryByText('Confirmed by Nacho')).toBeNull();
+    expect(queryByText(/Confirmed by Nacho/)).toBeNull();
     expect(getByLabelText('Next card').props.accessibilityState.disabled).toBe(true);
 
     fireEvent.press(getByLabelText('Previous card'));
@@ -126,12 +124,12 @@ describe('LeagueCardScreen', () => {
     expect(getByText('−2')).toBeTruthy();
     expect(getByText('Net to par')).toBeTruthy();
     expect(queryByText('Stableford pts')).toBeNull();
-    expect(getByText('1st')).toBeTruthy();
-    expect(getByText('+500')).toBeTruthy();
-    // Gross stays on the card; the grid has the strokes but no points legend.
+    expect(getByText('1st · of 2 cards')).toBeTruthy();
+    expect(getByText('+500 · league pts')).toBeTruthy();
+    // Gross stays on the card; the scorecard has the strokes and no points row.
     expect(getByText('Playing handicap 18 · Gross 90')).toBeTruthy();
     expect(getAllByText('5').length).toBeGreaterThan(0);
-    expect(queryByText(/small number = points/)).toBeNull();
+    expect(queryByText('Pts')).toBeNull();
     expect(getByText(/the ranking uses strokes to par\.$/)).toBeTruthy();
   });
 
@@ -153,16 +151,16 @@ describe('LeagueCardScreen', () => {
     await waitFor(() => getByText('You · October card'));
   });
 
-  test('the differential card sits below the hole grid and the capped hole is still marked', async () => {
+  test('the differential card names the capped hole', async () => {
     // 18 par-4 holes, playing handicap 18 (1 extra shot each): the cap is 7. Hole 12 is a 9.
     const cappedHoles = { ...strokes, 12: 9 };
     store.getLeague.mockResolvedValue(snapshot([
       card('javi', 'confirmed', 36, { holes: cappedHoles, gross: 94, differential: 11.8, netDifferential: -6.2 }),
     ]));
-    const { getByText, getAllByLabelText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
+    const { getByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('javi')} />));
     await waitFor(() => getByText('Net differential'));
     expect(getByText('6.2 better than league handicap 18.0. Stored for reference; the ranking uses points.')).toBeTruthy();
-    expect(getAllByLabelText(/^Hole 12, 9 strokes, \d points, counts as 7$/).length).toBe(1);
+    expect(getByText('Hole 12 counts as net double bogey (7) for the differential.')).toBeTruthy();
   });
 
   test('an unrated card says so and is not ranked', async () => {
@@ -186,9 +184,8 @@ describe('LeagueCardScreen', () => {
     snap.members.push(member('x', 'Xavi'));
     store.getLeague.mockResolvedValue(snap);
     const { getByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('x')} />));
-    await waitFor(() => getByText('4th'));
-    expect(getByText('+10')).toBeTruthy();
-    expect(getByText('points for playing')).toBeTruthy();
+    await waitFor(() => getByText('4th · of 4 cards'));
+    expect(getByText('+10 · points for playing')).toBeTruthy();
   });
 
   test('the open month words the strip as "so far" and "if it ended today"', async () => {
@@ -200,8 +197,8 @@ describe('LeagueCardScreen', () => {
       cardsByMonth: { [month]: [card('javi', 'confirmed', 38)] },
     });
     const { getByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={{ params: { leagueId: 'L1', month, userId: 'javi' } }} />));
-    await waitFor(() => getByText('league pts if it ended today'));
-    expect(getByText(/^so far in /)).toBeTruthy();
+    await waitFor(() => getByText(/^\+\d+ · league pts if it ended today$/));
+    expect(getByText(/^1st · so far in /)).toBeTruthy();
   });
 
   test('a hand-entered tee is badged and explained', async () => {
@@ -597,8 +594,7 @@ describe('LeagueCardScreen in Spanish', () => {
     await waitFor(() => getByText('Javi · tarjeta de octubre'));
     expect(getByText('1 de 2 tarjetas de liga de octubre')).toBeTruthy();
     expect(getByText('Hándicap de juego 18 · Bruto 90')).toBeTruthy();
-    expect(getByText('1.º')).toBeTruthy();
-    expect(getByText('de 1 tarjeta')).toBeTruthy();
+    expect(getByText('1.º · de 1 tarjeta')).toBeTruthy();
     expect(getByText('2,4 mejor que el hándicap de liga 18,0. Se guarda como referencia; la clasificación usa puntos.')).toBeTruthy();
   });
 
@@ -612,8 +608,7 @@ describe('LeagueCardScreen in Spanish', () => {
     store.getLeague.mockResolvedValue(snap);
     const { getByText } = render(wrap(<LeagueCardScreen navigation={makeNav()} route={route('me')} />));
     await waitFor(() => getByText('Tú · tarjeta de octubre'));
-    expect(getByText('4.º')).toBeTruthy();
-    expect(getByText('+10')).toBeTruthy();
-    expect(getByText('puntos por jugar')).toBeTruthy();
+    expect(getByText('4.º · de 4 tarjetas')).toBeTruthy();
+    expect(getByText('+10 · puntos por jugar')).toBeTruthy();
   });
 });

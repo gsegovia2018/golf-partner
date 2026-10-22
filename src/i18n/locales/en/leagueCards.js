@@ -9,6 +9,7 @@ export default {
   'league.card.ifEndedToday': 'league pts if it ended today',
   'league.card.forPlaying': 'points for playing',
   'league.card.diffTitle': 'Net differential',
+  'league.card.capped': { one: 'Hole {holes} counts as net double bogey ({counted}) for the differential.', other: 'Holes {holes} count as net double bogey for the differential.' },
   'league.card.diffBetter': '{value} better than league handicap {handicap}. Stored for reference; the ranking uses points.',
   'league.card.diffWorse': '{value} worse than league handicap {handicap}. Stored for reference; the ranking uses points.',
   'league.card.diffLevel': 'Level with league handicap {handicap}. Stored for reference; the ranking uses points.',

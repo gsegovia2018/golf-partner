@@ -9,12 +9,15 @@ import IconButton from '../components/ui/IconButton';
 import ScreenHeader from '../components/ui/ScreenHeader';
 import PullToRefresh from '../components/PullToRefresh';
 import LeaderboardCard from '../components/LeaderboardCard';
-import DeadlineLine, { countdownText } from '../components/league/DeadlineLine';
+import DeadlineLine, { countdownText, clockWithDay } from '../components/league/DeadlineLine';
 import LeagueShareSheet from '../components/league/LeagueShareSheet';
 import MonthClosingBanner from '../components/league/MonthClosingBanner';
+import CardSteps from '../components/league/CardSteps';
+import InitialsAvatar from '../components/league/InitialsAvatar';
 import { ghostSection, closeInfo } from '../components/league/graceText';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic, onDeep } from '../theme/tokens';
+import { withAlpha } from '../theme/alpha';
 import { useAuth } from '../context/AuthContext';
 import { useLeague } from '../hooks/useLeague';
 import { useMinuteClock } from '../hooks/useMinuteClock';
@@ -24,9 +27,10 @@ import { seasonPhase } from '../store/leagueSetup';
 import { seasonTable, monthResults, isMedalFormat } from '../store/leagueStandings';
 import { graceMonth } from '../store/leagueGrace';
 import {
-  formatEuros, potCents, lastScoredMonth, deltaLabel, monthBoard, rankNotes, placeLabel,
+  formatEuros, potCents, lastScoredMonth, monthBoard, rankNotes, placeLabel,
   leaguePointsText, monthStanding, formatScore, formatToPar, formatKey,
   daysLeftInMonth, collapseSeasonRows, currentMonthKey, yourCardState, myMonthCard, voidedNote, myRoundScored, viewableCards, monthRows,
+  cardValueText, seasonMoves, yourCardStep,
 } from '../store/leagueView';
 import { memberName } from '../lib/leagueNames';
 import { useT, tr, formatNumber, formatDate } from '../i18n';
@@ -127,6 +131,9 @@ export default function LeagueBoardScreen({ navigation, route }) {
     if (medal) return formatToPar(card.toPar);
     return card.points != null ? String(card.points) : '—';
   };
+  const valueText = (card) => cardValueText(card, format, t);
+  // A face for a row: the member's photo, else their initials.
+  const avatarOf = (member) => ({ name: member?.displayName ?? member?.username ?? '', url: member?.avatarUrl ?? null });
   const curKey = currentMonthKey(now);
   const curMonth = monthLong(curKey);
   const archived = !!league.archivedAt;
@@ -140,9 +147,15 @@ export default function LeagueBoardScreen({ navigation, route }) {
   // ---- Standings card ------------------------------------------------------
 
   let boardTitle;
+  let boardMeta = null;
+  let boardProgress = null;
+  let boardEmpty = null;
   let boardSections;
   let boardFooter = null;
   let boardMore = null;
+  // The month's cards that don't count (yet), and who has none: under the board.
+  let pendingRows = [];
+  let noCardMembers = [];
   // Confirmed cards on a tee with no slope/rating are listed, not ranked.
   const unratedNote = (userIds) => {
     if (userIds.length !== 1) return t('league.home.unratedMany', { count: userIds.length });
@@ -150,170 +163,99 @@ export default function LeagueBoardScreen({ navigation, route }) {
   };
   if (monthScope) {
     const left = daysLeftInMonth(now);
-    boardTitle = left === 0
-      ? t('league.home.titleLastDay', { month: curMonth.toUpperCase() })
-      : t('league.home.titleDaysLeft', { month: curMonth.toUpperCase(), count: left });
     const board = monthBoard(members, cardsByMonth, curKey, league.pointsTable, now, { participationPoints: league.participationPoints, voidCards: data?.cards, format: league.format });
+    boardTitle = curMonth.toUpperCase();
+    boardMeta = t(left === 0 ? 'league.home.metaLastDay' : 'league.home.metaDaysLeft', {
+      count: left, cards: board.confirmed.length, total: active.length,
+    });
+    boardProgress = active.length > 0 ? board.confirmed.length / active.length : 0;
     // Any card this month opens: live, missed and voided ones show their status.
     const canOpen = new Set([
       ...monthRows(members, cardsByMonth, curKey, now, league.format).filter((r) => r.card).map((r) => r.member.userId),
       ...board.voided.map((r) => r.member.userId),
     ]);
-    const rowOf = (member) => ({
-      key: member.userId,
-      name: nameOf(member.userId),
-      isMe: member.userId === meId,
-      onPress: canOpen.has(member.userId) ? () => openCard(curKey, member.userId) : undefined,
-    });
+    const open = (member) => (canOpen.has(member.userId) ? () => openCard(curKey, member.userId) : undefined);
     const detailOf = (card, ...parts) => {
       const text = [...parts, card.notAnnounced ? t('league.home.notAnnounced') : null].filter(Boolean).join(' · ');
       return text.charAt(0).toUpperCase() + text.slice(1);
     };
-    const noCard = [...board.noCard].sort((a, b) => (b.userId === meId) - (a.userId === meId));
-    boardSections = [
-      board.confirmed.length > 0 && {
-        key: 'confirmed',
-        label: t('league.home.secConfirmed', { count: board.confirmed.length }),
-        icon: 'check',
-        gold: true,
-        cols: [t(formatKey('league.board.colPts', format)), t('league.board.colLeague')],
-        rows: board.confirmed.map((r) => ({
-          ...rowOf(r.member),
-          place: r.place,
-          isTie: r.isTie,
-          unranked: r.unrated,
-          muted: r.unrated,
-          white: !r.unrated,
-          points: r.unrated ? t('league.home.unrated') : medal ? formatToPar(r.cardScore) : formatNumber(r.cardPoints),
-          pointsLabel: r.unrated ? undefined : medal ? formatScore(r.cardScore, format, t) : t('league.board.stablefordPoints', { count: r.cardPoints }),
-          sub: r.unrated ? t('league.home.notRanked') : r.seasonPoints > 0 ? `+${leaguePointsText(r.seasonPoints)}` : null,
-          subLabel: r.unrated || !(r.seasonPoints > 0) ? undefined : t('league.board.leaguePoints', { count: r.seasonPoints }),
-          subGold: !r.unrated,
-          // A tie says who it shares with instead of how it was confirmed.
-          detail: detailOf(r.card, r.card.course?.name, r.isTie ? null : tr(r.howMsg), ...rankNotes(r).map(tr)),
-        })),
-      },
-      board.waiting.length > 0 && {
-        key: 'waiting',
-        label: t('league.home.secWaiting', { count: board.waiting.length }),
-        icon: 'clock',
-        rows: board.waiting.map((r) => ({
-          ...rowOf(r.member),
-          place: null,
-          unranked: true,
-          muted: true,
-          points: cellValue(r.card),
-          sub: t('league.home.pending'),
-          detail: detailOf(r.card, r.card.course?.name, tr(r.reasonMsg)),
-        })),
-      },
-      board.onCourse.length > 0 && {
-        key: 'oncourse',
-        label: t('league.home.secOnCourse', { count: board.onCourse.length }),
-        icon: 'flag',
-        rows: board.onCourse.map((r) => {
-          const dl = deadlineInfo(r.card, now);
-          return {
-          ...rowOf(r.member),
-          place: null,
-          unranked: true,
-          muted: true,
-          points: dl ? countdownText(dl.msLeft) : '—',
-          countdown: !!dl,
-          sub: dl ? t(dl.urgent ? 'league.home.left' : 'league.home.toPost') : null,
-          warn: !!dl?.urgent,
-          detail: detailOf(
-            r.card,
-            ...(r.card.status === 'playing'
-              ? [t('league.home.playingNow'), r.card.course?.name]
-              : [t('league.home.announced'), [dayLabel(r.card.teeTime), timeLabel(r.card.teeTime)].filter(Boolean).join(' '), r.card.course?.name]),
-          ),
-          };
-        }),
-      },
-      board.awaiting.length > 0 && {
-        key: 'awaiting',
-        label: t('league.home.secAwaiting', { count: board.awaiting.length }),
-        icon: 'user-check',
-        rows: board.awaiting.map((r) => ({
-          ...rowOf(r.member),
-          place: null,
-          unranked: true,
-          muted: true,
-          points: cellValue(r.card),
-          sub: t('league.home.notCounted'),
-          detail: detailOf(r.card, r.card.course?.name, t('league.home.needsApproval')),
-        })),
-      },
-      board.missed.length > 0 && {
-        key: 'missed',
-        label: t('league.home.secMissed', { count: board.missed.length }),
-        icon: 'slash',
-        rows: board.missed.map((r) => ({
-          ...rowOf(r.member),
-          place: null,
-          unranked: true,
-          muted: true,
-          points: '—',
-          detail: detailOf(r.card, t('league.home.notPostedInTime'), r.card.course?.name),
-        })),
-      },
-      board.voided.length > 0 && {
-        key: 'voided',
-        label: t('league.home.secVoided', { count: board.voided.length }),
-        icon: 'slash',
-        rows: board.voided.map((r) => {
-          const { reason } = splitVoidReason(r.card.voidedReason);
-          const why = reason ?? (r.card.voidKind === 'withdrawn_after_play' ? t('league.home.playedAfterWithdrawing') : null);
-          return {
-            ...rowOf(r.member),
-            place: null,
-            unranked: true,
-            muted: true,
-            points: '—',
-            detail: why ? t('league.home.voidedWhy', { why }) : t('league.home.voided'),
-          };
-        }),
-      },
-      noCard.length > 0 && {
-        key: 'nocard',
-        label: t('league.home.secNoCard', { count: noCard.length }),
-        icon: 'user-x',
-        body: (
-          <Text style={s.noCardText}>
-            {noCard.map((m, i) => (
-              <Text key={m.userId} style={m.userId === meId ? s.noCardMe : null}>
-                {`${i > 0 ? ', ' : ''}${nameOf(m.userId)}`}
-              </Text>
-            ))}
-          </Text>
-        ),
-      },
-    ].filter(Boolean);
+    boardSections = board.confirmed.length > 0 ? [{
+      key: 'confirmed',
+      rows: board.confirmed.map((r) => ({
+        key: r.member.userId,
+        name: nameOf(r.member.userId),
+        avatar: avatarOf(r.member),
+        isMe: r.member.userId === meId,
+        onPress: open(r.member),
+        place: r.place,
+        isTie: r.isTie,
+        unranked: r.unrated,
+        muted: r.unrated,
+        white: !r.unrated,
+        points: r.unrated ? t('league.home.unrated') : medal ? formatToPar(r.cardScore) : formatNumber(r.cardPoints),
+        pointsLabel: r.unrated ? undefined : medal ? formatScore(r.cardScore, format, t) : t('league.board.stablefordPoints', { count: r.cardPoints }),
+        sub: r.unrated ? t('league.home.notRanked') : r.seasonPoints > 0 ? `+${leaguePointsText(r.seasonPoints)}` : null,
+        subLabel: r.unrated || !(r.seasonPoints > 0) ? undefined : t('league.board.leaguePoints', { count: r.seasonPoints }),
+        subGold: !r.unrated,
+        subPill: !r.unrated,
+        // A tie says who it shares with.
+        detail: detailOf(r.card, r.card.course?.name, ...rankNotes(r).map(tr)),
+      })),
+    }] : [];
+    if (board.confirmed.length === 0) boardEmpty = t('league.home.emptyMonth', { month: curMonth });
+    // Everyone with a card that doesn't count (yet): one list, a status each.
+    const pending = (r, chip, tone, ...parts) => ({
+      key: r.member.userId, member: r.member, chip, tone, onPress: open(r.member), detail: detailOf(r.card, ...parts),
+    });
+    pendingRows = [
+      ...board.waiting.map((r) => pending(r, t('league.home.chipWaiting'), 'warn',
+        r.card.course?.name, cellValue(r.card) !== '—' ? valueText(r.card) : null, tr(r.reasonMsg))),
+      ...board.onCourse.map((r) => {
+        const dl = deadlineInfo(r.card, now);
+        const playing = r.card.status === 'playing';
+        return pending(r,
+          dl ? t('league.home.chipToPost', { time: countdownText(dl.msLeft) }) : t(playing ? 'league.home.playingNow' : 'league.home.announced'),
+          dl?.urgent ? 'warn' : playing ? 'accent' : 'grey',
+          playing ? t('league.home.playingNow') : [t('league.home.announced'), dayLabel(r.card.teeTime), timeLabel(r.card.teeTime)].filter(Boolean).join(' '),
+          r.card.course?.name);
+      }),
+      ...board.awaiting.map((r) => pending(r, t('league.home.chipApproval'), 'warn',
+        r.card.course?.name, valueText(r.card), t('league.home.needsApproval'))),
+      ...board.missed.map((r) => pending(r, t('league.home.badgeNotPosted'), 'grey', r.card.course?.name)),
+      ...board.voided.map((r) => {
+        const { reason } = splitVoidReason(r.card.voidedReason);
+        const why = reason ?? (r.card.voidKind === 'withdrawn_after_play' ? t('league.home.playedAfterWithdrawing') : null);
+        return pending(r, t('league.home.voided'), 'bad', why);
+      }),
+    ];
+    noCardMembers = [...board.noCard].sort((a, b) => (b.userId === meId) - (a.userId === meId));
     const unratedNow = board.confirmed.filter((r) => r.unrated).map((r) => r.member.userId);
-    boardFooter = tr({ key: formatKey('league.board.footMonth', format), params: { monthKey: curKey } })
-      + (unratedNow.length > 0 ? ` ${unratedNote(unratedNow)}` : '');
+    boardFooter = board.confirmed.length === 0 ? null
+      : tr({ key: formatKey('league.board.footMonth', format), params: { monthKey: curKey } })
+        + (unratedNow.length > 0 ? ` ${unratedNote(unratedNow)}` : '');
   } else if (activeScope === 'season' || !pastScopes.includes(activeScope)) {
     boardTitle = last ? t('league.home.titleSeasonAfter', { month: monthLong(last).toUpperCase() }) : t('league.home.titleSeason');
-    const seasonRows = table.map((r) => ({
-      key: r.userId,
-      place: noCardsYet ? null : r.place,
-      isTie: r.isTie,
-      name: nameOf(r.userId),
-      points: noCardsYet ? '—' : leaguePointsText(r.total),
-      sub: noCardsYet ? null : deltaLabel(r.lastMonthDelta, last),
-      detail: members.find((m) => m.userId === r.userId)?.spot ? t('league.membersMisc.notJoined') : undefined,
-      isMe: r.userId === meId,
-    }));
+    const moves = seasonMoves(active, cardsByMonth, league.pointsTable, { participationPoints: league.participationPoints, format: league.format });
+    const seasonRows = table.map((r) => {
+      const member = members.find((m) => m.userId === r.userId);
+      return {
+        key: r.userId,
+        place: noCardsYet ? null : r.place,
+        isTie: r.isTie,
+        name: nameOf(r.userId),
+        avatar: avatarOf(member),
+        move: noCardsYet ? null : moves.get(r.userId) ?? null,
+        white: true,
+        points: noCardsYet ? '—' : leaguePointsText(r.total),
+        sub: null,
+        detail: member?.spot ? t('league.membersMisc.notJoined')
+          : !noCardsYet && r.lastMonthDelta > 0 ? t('league.home.seasonDelta', { points: leaguePointsText(r.lastMonthDelta), month: monthWord(last) })
+            : undefined,
+        isMe: r.userId === meId,
+      };
+    });
     const collapsed = collapseSeasonRows(seasonRows, { expanded: showAllSeason });
-    boardSections = [{
-      key: 'season',
-      label: t('league.board.seasonSection'),
-      icon: 'award',
-      gold: true,
-      cols: [t('league.board.colTotal'), t('league.board.colLast')],
-      rows: collapsed.rows,
-    }];
+    boardSections = [{ key: 'season', rows: collapsed.rows }];
     if (collapsed.hidden > 0) boardMore = { label: t('league.home.showAll', { count: seasonRows.length }), onPress: () => setShowAllSeason(true) };
     else if (collapseSeasonRows(seasonRows).hidden > 0) boardMore = { label: t('league.home.showTop'), onPress: () => setShowAllSeason(false) };
     const pot = potCents(members, league.entryFeeCents);
@@ -324,6 +266,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
     ].filter(Boolean).join(' ') || null;
   } else {
     boardTitle = t('league.home.titleResults', { month: monthLong(activeScope).toUpperCase() });
+    boardMeta = t('league.home.metaResults', { cards: monthResults(cardsByMonth[activeScope], active, league.pointsTable, { participationPoints: league.participationPoints, format: league.format }).filter((r) => r.place != null).length, total: active.length });
     const canOpen = viewable(activeScope);
     const results = monthResults(cardsByMonth[activeScope], active, league.pointsTable, { participationPoints: league.participationPoints, format: league.format });
     const ranked = results.filter((r) => r.place != null || r.unrated);
@@ -333,15 +276,13 @@ export default function LeagueBoardScreen({ navigation, route }) {
     boardSections = [
       ranked.length > 0 && {
         key: 'results',
-        label: t('league.board.cards', { count: ranked.length }),
-        icon: 'check',
-        gold: true,
-        cols: [t(formatKey('league.board.colPts', format)), t('league.board.colLeague')],
         rows: ranked.map((r) => ({
           key: r.userId,
           place: r.place,
           isTie: r.isTie,
           name: nameOf(r.userId),
+          avatar: avatarOf(members.find((m) => m.userId === r.userId)),
+          subPill: !r.unrated,
           points: r.unrated ? t('league.home.unrated') : medal ? formatToPar(r.cardScore) : formatNumber(r.cardPoints),
           pointsLabel: r.unrated ? undefined : medal ? formatScore(r.cardScore, format, t) : t('league.board.stablefordPoints', { count: r.cardPoints }),
           white: !r.unrated,
@@ -358,7 +299,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
         key: 'noplay',
         label: t('league.board.noPlay', { count: absent.length }),
         icon: 'user-x',
-        body: <Text style={s.noCardText}>{t('league.board.noPlayNames', { names: absent.map((r) => nameOf(r.userId)).join(', ') })}</Text>,
+        body: <Text style={s.noPlayText}>{t('league.board.noPlayNames', { names: absent.map((r) => nameOf(r.userId)).join(', ') })}</Text>,
       },
     ].filter(Boolean);
     const unrated = results.filter((r) => r.unrated).map((r) => r.userId);
@@ -450,7 +391,12 @@ export default function LeagueBoardScreen({ navigation, route }) {
 
   const postOpens = postOpensLater(mine.card, now);
 
+  // The card's path through the month (Anunciar · Jugar · Enviar · Confirmar);
+  // null once it left it (missed, voided) or outside the season.
+  const step = seasonPhase(league, now) && mine.kind === 'none' ? null : yourCardStep(mine, { stillPlaying });
+
   const renderYourCard = () => {
+    let headline = null;
     let body;
     let badge = null;
     // Outside the season there is nothing to play for yet (or any more).
@@ -464,11 +410,10 @@ export default function LeagueBoardScreen({ navigation, route }) {
         </Text>
       );
     } else if (mine.kind === 'none') {
+      headline = t('league.home.announceTitle', { month: monthWord(curKey) });
       body = (
         <>
-          <Text style={s.cardText}>
-            {t('league.home.announceFirst', { month: monthWord(curKey) })}
-          </Text>
+          <Text style={s.cardText}>{t('league.home.announceRule')}</Text>
           <TouchableOpacity
             style={s.primaryBtn}
             // Setup preselects this league's "Counts for" switch, on.
@@ -484,7 +429,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
               onPress={() => navigation.navigate('LeagueAnnounce', { leagueId })}
               activeOpacity={0.7}
             >
-              <Text style={s.secondaryText}>{t('league.home.playWithoutApp')}</Text>
+              <Text style={s.secondaryText}>{t('league.home.playWithoutAppCta')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={s.splitBtn}
@@ -519,7 +464,10 @@ export default function LeagueBoardScreen({ navigation, route }) {
         </Text>
       );
     } else if (mine.kind === 'announced' || mine.kind === 'playing') {
-      badge = t(mine.kind === 'playing' ? 'league.home.badgePlaying' : 'league.home.badgeAnnounced');
+      const when = [dayLabel(mine.card.teeTime), timeLabel(mine.card.teeTime)].filter(Boolean).join(' ');
+      headline = mine.offApp
+        ? [mine.course, when].filter(Boolean).join(' · ')
+        : t('league.home.playingAt', { course: mine.course ?? '' });
       body = (
         <>
           {/* An app card: the line opens the game's scorecard on the
@@ -534,14 +482,10 @@ export default function LeagueBoardScreen({ navigation, route }) {
               accessibilityRole: 'link',
             } : {})}
           >
-            {mine.offApp && mine.kind === 'announced'
-              ? t('league.home.announcedOffLine', {
-                parts: [t('league.home.announcedAt', { time: timeLabel(mine.card.announcedAt) }), mine.course,
-                  [dayLabel(mine.card.teeTime), timeLabel(mine.card.teeTime)].filter(Boolean).join(' ')]
-                  .filter(Boolean).join(' · '),
-              })
-              : [t(mine.offApp ? 'league.home.playWithoutApp' : 'league.home.playingWithApp'), mine.course,
-                !mine.offApp && mine.card.tournamentId ? t('league.home.openScorecard') : null].filter(Boolean).join(' · ')}
+            {mine.offApp
+              ? [mine.card.announcedAt ? t('league.home.announcedAt', { time: timeLabel(mine.card.announcedAt) }) : null,
+                t('league.home.playWithoutApp')].filter(Boolean).join(' · ')
+              : [t('league.home.playingWithApp'), mine.card.tournamentId ? t('league.home.openScorecard') : null].filter(Boolean).join(' · ')}
           </Text>
           {mine.kind === 'announced' && mine.offApp && (
             // R8: an off-app card can be posted from tee time + 3 h.
@@ -554,7 +498,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
               accessibilityState={{ disabled: !!postOpens }}
             >
               <Text style={s.primaryText}>
-                {postOpens ? t('league.home.postFrom', { time: timeLabel(postOpens) }) : t('league.home.addScore')}
+                {postOpens ? t('league.home.postFrom', { time: clockWithDay(postOpens, now) }) : t('league.home.addScore')}
               </Text>
             </TouchableOpacity>
           )}
@@ -563,20 +507,30 @@ export default function LeagueBoardScreen({ navigation, route }) {
         </>
       );
     } else {
-      badge = needsApproval(mine.card) ? t('league.home.badgeAwaiting') : mine.kind === 'confirmed' ? t('league.home.badgeConfirmed')
-        : mine.waitingFor ? t('league.home.badgeWaitingFor', { name: mine.waitingFor }) : t('league.home.badgeSubmitted');
+      const awaiting = needsApproval(mine.card);
+      headline = mine.pts ? tr(mine.pts) : null;
       const proofText = mine.card.proofPath
         ? t(mine.card.confirmation === 'official' ? 'league.home.officialAttached' : 'league.home.photoAttached')
         : null;
+      // What the card is waiting for, said once (the track shows where).
+      const waitLine = awaiting ? t('league.home.waitApproval')
+        : mine.kind !== 'submitted' ? null
+          : mine.offApp && !mine.card.proofPath ? t('league.home.waitProof')
+            : mine.waitingFor ? t('league.home.waitMarker', { name: mine.waitingFor }) : t('league.home.waitAnyMarker');
       body = (
         <>
+          {!!waitLine && <Text style={s.waitText}>{waitLine}</Text>}
           <Text style={s.cardText}>
-            {!!mine.pts && <Text style={s.netLead}>{tr(mine.pts)}</Text>}
-            {!!mine.pts && ' · '}
             {mine.unrated && `${t('league.home.unratedTee')} · `}
+            {standing && (
+              <>
+                <Text style={s.netLead}>{t('league.board.placeSoFar', { place: placeLabel(standing.place, standing.isTie) })}</Text>
+                {' · '}
+                <Text style={s.goldLead}>{t('league.board.leaguePts', { points: leaguePointsText(standing.seasonPoints) })}</Text>
+                {' · '}
+              </>
+            )}
             {[
-              standing ? t('league.board.placeSoFar', { place: placeLabel(standing.place, standing.isTie) }) : null,
-              standing ? t('league.board.leaguePts', { points: leaguePointsText(standing.seasonPoints) }) : null,
               mine.course, mine.offApp ? t('league.home.addedAfter') : null, proofText,
               mine.card.confirmedByName ? t('league.home.confirmedBy', { name: mine.card.confirmedByName }) : null,
             ].filter(Boolean).join(' · ')}
@@ -584,7 +538,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
           {mine.kind === 'submitted' && !!mine.card.markerNote && (
             <Text style={s.cardText}>{t('league.home.markerSentBack', { note: mine.card.markerNote })}</Text>
           )}
-          {mine.kind === 'submitted' && mine.offApp && (
+          {mine.kind === 'submitted' && mine.offApp && !mine.card.proofPath && (
             <TouchableOpacity
               style={s.primaryBtn}
               onPress={() => navigation.navigate('LeagueAddProof', { leagueId, cardId: mine.card.id, resume: true })}
@@ -603,10 +557,66 @@ export default function LeagueBoardScreen({ navigation, route }) {
           <Text style={s.cardTitle}>{t('league.home.yourCard', { month: monthWord(curKey) })}</Text>
           {badge && <View style={s.badge}><Text style={s.badgeText}>{badge}</Text></View>}
         </View>
+        {!!step && <CardSteps step={step.step} wait={step.wait} />}
+        {!!headline && <Text style={s.headline}>{headline}</Text>}
         {body}
       </View>
     );
   };
+
+  // The month's cards that don't count yet, one status chip each.
+  const chipTone = {
+    warn: [s.chipWarn, s.chipWarnText], accent: [s.chipAccent, s.chipAccentText],
+    bad: [s.chipGrey, s.chipBadText], grey: [s.chipGrey, s.chipGreyText],
+  };
+  const renderPending = () => (
+    <View style={s.card}>
+      <Text style={s.secTitle}>{t('league.home.secNotCounting', { count: pendingRows.length })}</Text>
+      {pendingRows.map((r, i) => {
+        const Row = r.onPress ? TouchableOpacity : View;
+        const [chipBox, chipText] = chipTone[r.tone] ?? chipTone.grey;
+        return (
+          <Row
+            key={r.key}
+            style={[s.listRow, i > 0 && s.listDivider]}
+            {...(r.onPress ? {
+              onPress: r.onPress,
+              activeOpacity: 0.7,
+              accessibilityRole: 'button',
+              accessibilityLabel: r.member.userId === meId ? t('shared.leaderboard.yourCard') : t('shared.leaderboard.cardOf', { name: nameOf(r.member.userId) }),
+              accessibilityHint: [r.chip, r.detail].filter(Boolean).join('. '),
+            } : {})}
+          >
+            <InitialsAvatar {...avatarOf(r.member)} size={32} style={s.listAvatar} />
+            <View style={s.listName}>
+              <Text style={[s.listTitle, r.member.userId === meId && s.bold]} numberOfLines={1}>{nameOf(r.member.userId)}</Text>
+              {!!r.detail && <Text style={s.listSub} numberOfLines={2}>{r.detail}</Text>}
+            </View>
+            <View style={[s.statusChip, chipBox]}><Text style={[s.statusChipText, chipText]} numberOfLines={1}>{r.chip}</Text></View>
+          </Row>
+        );
+      })}
+    </View>
+  );
+  const renderNoCard = () => (
+    <View style={s.card}>
+      <Text style={s.secTitle}>{t('league.home.secNoCard', { count: noCardMembers.length })}</Text>
+      <View style={s.noCardRow}>
+        <View style={s.stack}>
+          {noCardMembers.slice(0, 5).map((m, i) => (
+            <InitialsAvatar key={m.userId} {...avatarOf(m)} size={28} style={[s.stackItem, i === 0 && { marginLeft: 0 }]} />
+          ))}
+        </View>
+        <Text style={s.noCardText}>
+          {noCardMembers.map((m, i) => (
+            <Text key={m.userId} style={m.userId === meId ? s.bold : null}>
+              {`${i > 0 ? ', ' : ''}${nameOf(m.userId)}`}
+            </Text>
+          ))}
+        </Text>
+      </View>
+    </View>
+  );
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -668,11 +678,25 @@ export default function LeagueBoardScreen({ navigation, route }) {
 
         <LeaderboardCard
           title={boardTitle}
-          subheader={chips}
+          headerRight={boardMeta ? <Text style={s.boardMeta} numberOfLines={1}>{boardMeta}</Text> : null}
+          subheader={(
+            <>
+              {boardProgress != null && (
+                <View style={s.progress} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                  <View style={[s.progressFill, { width: `${Math.round(boardProgress * 100)}%` }]} />
+                </View>
+              )}
+              {chips}
+              {!!boardEmpty && <Text style={s.boardEmpty}>{boardEmpty}</Text>}
+            </>
+          )}
           sections={boardSections}
           footer={boardFooter}
           more={boardMore}
         />
+
+        {pendingRows.length > 0 && renderPending()}
+        {noCardMembers.length > 0 && renderNoCard()}
 
         {noCardsYet && !monthScope && (
           <Text style={s.emptyNote}>
@@ -703,6 +727,8 @@ const monthShort = (key) => cap(formatDate(`${key}-01`, 'day').split(' ')[1] ?? 
 function makeStyles(theme) {
   const cardBorder = theme.isDark ? theme.glass?.border : theme.border.default;
   const btn = buttonStyles(theme);
+  const warn = theme.isDark ? semantic.warning.dark : semantic.warning.light;
+  const gold = semantic.winner[theme.isDark ? 'soft' : 'light'];
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
@@ -742,6 +768,9 @@ function makeStyles(theme) {
     cardText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 12 },
     badge: { backgroundColor: theme.accent.light, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 },
     netLead: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary },
+    goldLead: { fontFamily: 'PlusJakartaSans-Bold', color: gold },
+    headline: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.primary, fontSize: 17, lineHeight: 22, marginBottom: 4 },
+    waitText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 13, lineHeight: 19, marginBottom: 6 },
     badgeText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 11 },
 
     primaryBtn: btn.primaryBtn,
@@ -763,7 +792,37 @@ function makeStyles(theme) {
     finalTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15 },
     finalSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, marginTop: 2 },
 
-    noCardText: { fontFamily: 'PlusJakartaSans-Medium', color: onDeep.soft, fontSize: 13, lineHeight: 20, paddingVertical: 6 },
-    noCardMe: { fontFamily: 'PlusJakartaSans-Bold', color: onDeep.primary },
+    // The board's header line, cards-in bar and empty month (on bg.deep).
+    boardMeta: { fontFamily: 'PlusJakartaSans-SemiBold', color: onDeep.soft, fontSize: 12, flexShrink: 1 },
+    progress: { height: 4, borderRadius: 2, backgroundColor: onDeep.fill, overflow: 'hidden', marginBottom: 12 },
+    progressFill: { height: 4, borderRadius: 2, backgroundColor: onDeep.strong },
+    boardEmpty: { fontFamily: 'PlusJakartaSans-Medium', color: onDeep.soft, fontSize: 13, lineHeight: 19, textAlign: 'center', paddingVertical: 12 },
+
+    // Cards that don't count yet, and who has none.
+    secTitle: {
+      fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase',
+      color: theme.text.secondary, marginBottom: 4,
+    },
+    listRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingVertical: 8 },
+    listDivider: { borderTopWidth: 1, borderTopColor: theme.border.subtle },
+    listAvatar: { marginRight: 0 },
+    listName: { flex: 1, minWidth: 0 },
+    listTitle: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
+    listSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 16, marginTop: 1 },
+    bold: { fontFamily: 'PlusJakartaSans-Bold' },
+    statusChip: { borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, maxWidth: 140 },
+    statusChipText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11 },
+    chipWarn: { backgroundColor: withAlpha(warn, theme.isDark ? 0.18 : 0.14) },
+    chipWarnText: { color: warn },
+    chipAccent: { backgroundColor: theme.accent.light },
+    chipAccentText: { color: theme.accent.primary },
+    chipGrey: { backgroundColor: theme.bg.secondary },
+    chipGreyText: { color: theme.text.secondary },
+    chipBadText: { color: theme.destructive },
+    noCardRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
+    stack: { flexDirection: 'row' },
+    stackItem: { marginRight: 0, marginLeft: -8, borderWidth: 2, borderColor: theme.isDark ? theme.bg.primary : theme.bg.card },
+    noCardText: { flex: 1, minWidth: 0, fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13, lineHeight: 19 },
+    noPlayText: { fontFamily: 'PlusJakartaSans-Medium', color: onDeep.soft, fontSize: 13, lineHeight: 20, paddingVertical: 6 },
   });
 }

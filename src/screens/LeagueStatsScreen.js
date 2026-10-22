@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import { buttonStyles } from '../components/ui/Buttons';
 import ScreenHeader from '../components/ui/ScreenHeader';
+import { Chip } from '../components/gamestats/ui';
 import PullToRefresh from '../components/PullToRefresh';
 import { useT, formatDate } from '../i18n';
 import { useTheme } from '../theme/ThemeContext';
@@ -106,6 +107,7 @@ export default function LeagueStatsScreen({ navigation, route }) {
       key={key}
       style={[s.chip, on && s.chipOn]}
       onPress={onPress}
+      hitSlop={4}
       activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityState={{ selected: on }}
@@ -134,27 +136,45 @@ export default function LeagueStatsScreen({ navigation, route }) {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipRow} contentContainerStyle={{ gap: 6 }}>
           {months.map((m) => chip(m, m === curKey ? t('league.stats.monthSoFarChip', { month: monthShort(m) }) : monthShort(m), m === picked, () => setMonth(m)))}
         </ScrollView>
-        <View style={s.card}>
-          <View style={s.cardHeadRow}>
-            <Text style={s.cardTitle}>{t(live ? 'league.stats.monthSoFar' : 'league.stats.monthHonours', { month: monthLong(picked) })}</Text>
-            <Text style={s.cardMeta}>{meta}</Text>
-          </View>
-          {honours.length === 0 ? (
+        <View style={s.honoursHead}>
+          <Text style={s.honoursTitle}>{t(live ? 'league.stats.monthSoFar' : 'league.stats.monthHonours', { month: monthLong(picked) })}</Text>
+          <Text style={s.honoursMeta}>{meta}</Text>
+        </View>
+        {honours.length === 0 ? (
+          <View style={s.card}>
             <Text style={s.cardText}>
               {t('league.stats.honoursFew', { count: MIN_HONOUR_CARDS })}
             </Text>
-          ) : honours.map((h, i) => (
-            <View key={h.key} style={[s.honourRow, i < honours.length - 1 && s.rowDivider]}>
-              <View style={s.honourIcon}>
-                <Feather name={HONOUR_ICON[h.key]} size={16} color={theme.accent.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.honourLabel}>{renderMsg(t, h.title).toUpperCase()}</Text>
-                <Text style={s.honourText}>{renderMsg(t, h.text)}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
+          </View>
+        ) : (
+          // One award card per honour, the Game Stats look, two to a row;
+          // a member's honour opens the card it came from.
+          <View style={s.honourGrid}>
+            {honours.map((h) => {
+              const title = renderMsg(t, h.title);
+              const text = renderMsg(t, h.text);
+              const Card = h.userId ? TouchableOpacity : View;
+              return (
+                <Card
+                  key={h.key}
+                  style={s.honourCard}
+                  {...(h.userId ? {
+                    onPress: () => navigation.navigate('LeagueCard', { leagueId, month: picked, userId: h.userId }),
+                    activeOpacity: 0.7,
+                    accessibilityRole: 'button',
+                  } : {})}
+                  accessibilityLabel={`${title}. ${text}`}
+                >
+                  <View style={s.honourIcon}>
+                    <Feather name={HONOUR_ICON[h.key]} size={16} color={theme.accent.primary} />
+                  </View>
+                  <Text style={s.honourLabel} numberOfLines={1}>{title}</Text>
+                  <Text style={s.honourText} numberOfLines={4}>{text}</Text>
+                </Card>
+              );
+            })}
+          </View>
+        )}
       </>
     );
   };
@@ -312,20 +332,12 @@ export default function LeagueStatsScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {header}
-      <View style={s.tabs}>
+      {/* Game Stats' tab row. */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabs} contentContainerStyle={s.tabsContent}>
         {tabs.map((tb) => (
-          <TouchableOpacity
-            key={tb}
-            style={[s.tab, tab === tb && s.tabOn]}
-            onPress={() => setTab(tb)}
-            activeOpacity={0.7}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: tab === tb }}
-          >
-            <Text style={[s.tabText, tab === tb && s.tabTextOn]}>{t(`league.stats.tab.${tb}`)}</Text>
-          </TouchableOpacity>
+          <Chip key={tb} label={t(`league.stats.tab.${tb}`)} active={tab === tb} onPress={() => setTab(tb)} />
         ))}
-      </View>
+      </ScrollView>
       <PullToRefresh
         style={{ flex: 1 }}
         contentContainerStyle={s.content}
@@ -366,18 +378,13 @@ function makeStyles(theme) {
     secondaryBtn: { ...btn.secondaryBtn, paddingHorizontal: 28 },
     secondaryText: btn.secondaryText,
 
-    tabs: {
-      flexDirection: 'row', marginHorizontal: 16, marginTop: 4, padding: 3, borderRadius: 14,
-      backgroundColor: theme.bg.secondary,
-    },
-    tab: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
-    tabOn: { backgroundColor: theme.accent.primary },
-    tabText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 13 },
-    tabTextOn: { color: theme.text.inverse },
+    tabs: { flexGrow: 0, marginTop: 4 },
+    tabsContent: { gap: 8, paddingHorizontal: 16, paddingBottom: 4 },
 
     chipRow: { flexGrow: 0, marginBottom: 12 },
+    // The tab chips' size (gamestats Chip): 36 tall, 4 px hit slop.
     chip: {
-      minHeight: 44, paddingHorizontal: 14, justifyContent: 'center', borderRadius: 999,
+      minHeight: 36, paddingHorizontal: 14, justifyContent: 'center', borderRadius: 999,
       backgroundColor: theme.bg.secondary,
     },
     chipOn: { backgroundColor: theme.accent.primary },
@@ -401,13 +408,22 @@ function makeStyles(theme) {
     rowDivider: { borderBottomWidth: 1, borderBottomColor: theme.border.subtle },
     footnote: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, lineHeight: 17 },
 
-    honourRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
-    honourIcon: {
-      width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.accent.light,
+    honoursHead: { marginBottom: 10 },
+    honoursTitle: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 16 },
+    honoursMeta: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
+    honourGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 },
+    honourCard: {
+      width: '48%', flexGrow: 1, minHeight: 140, backgroundColor: theme.bg.card, borderRadius: 14, padding: 12, gap: 4,
+      borderWidth: 1, borderColor: cardBorder,
     },
-    honourLabel: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 10, letterSpacing: 1 },
-    honourText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.primary, fontSize: 13, lineHeight: 18, marginTop: 1 },
+    honourIcon: {
+      width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
+      backgroundColor: theme.accent.light, marginBottom: 4,
+    },
+    honourLabel: {
+      fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase',
+    },
+    honourText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 13, lineHeight: 18 },
 
     leaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 4 },
     meRow: { backgroundColor: theme.accent.light, borderRadius: 10 },
