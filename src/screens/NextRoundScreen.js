@@ -608,12 +608,14 @@ function makeStyles(theme) {
       paddingVertical: 20,
       paddingHorizontal: 48,
       ...theme.shadow.accent,
+      alignItems: 'center', justifyContent: 'center',
     },
     revealBtnText: {
       color: theme.isDark ? theme.accent.primary : theme.text.inverse,
       fontSize: 20,
       fontFamily: 'PlusJakartaSans-ExtraBold',
       letterSpacing: 1,
+      textAlign: 'center',
     },
 
     /* Countdown */
@@ -677,6 +679,7 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-ExtraBold',
       color: theme.text.inverse,
       fontSize: 14,
+      textAlign: 'center',
     },
 
     /* Skip control on the initial phase */
@@ -684,6 +687,7 @@ function makeStyles(theme) {
       marginTop: 20,
       paddingVertical: 12,
       paddingHorizontal: 28,
+      alignItems: 'center', justifyContent: 'center',
     },
     skipBtnText: {
       fontFamily: 'PlusJakartaSans-Bold',
@@ -691,6 +695,7 @@ function makeStyles(theme) {
       color: theme.text.muted,
       letterSpacing: 1,
       textTransform: 'uppercase',
+      textAlign: 'center',
     },
 
     /* VS divider */

@@ -462,7 +462,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: hud.accent,
   },
   hudBtnGhost: { backgroundColor: hud.fill, borderWidth: 1, borderColor: hud.line },
-  hudBtnText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14, color: hud.onAccent },
+  hudBtnText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14, color: hud.onAccent, textAlign: 'center' },
   hudBtnGhostText: { color: hud.text, fontFamily: 'PlusJakartaSans-Bold' },
   btnRow: { flexDirection: 'row', gap: 10 },
   flex1: { flex: 1 },

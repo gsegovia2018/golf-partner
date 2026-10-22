@@ -215,7 +215,7 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 50,
     backgroundColor: CREAM, borderRadius: 12,
   },
-  ctaText: { color: theme.bg.deep, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15 },
+  ctaText: { color: theme.bg.deep, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15, textAlign: 'center' },
   gap: { color: CREAM, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15 },
   soloTop: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
   bigNum: { color: CREAM, fontFamily: 'PlayfairDisplay-Black', fontSize: 44, lineHeight: 50 },

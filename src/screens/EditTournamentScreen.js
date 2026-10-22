@@ -569,7 +569,7 @@ const makeStyles = (theme) => StyleSheet.create({
     marginTop: 24, marginBottom: 8,
   },
   removeBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 10 },
-  removeBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.destructive, fontSize: 13 },
+  removeBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.destructive, fontSize: 13, textAlign: 'center' },
   roundCard: {
     backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
     borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
@@ -591,7 +591,7 @@ const makeStyles = (theme) => StyleSheet.create({
     padding: 12, alignItems: 'center', marginTop: 10,
     flexDirection: 'row', justifyContent: 'center',
   },
-  editHolesBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+  editHolesBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14, textAlign: 'center' },
   parBadge: {
     backgroundColor: theme.accent.light, borderRadius: 8,
     paddingHorizontal: 8, paddingVertical: 3, marginLeft: 8,
@@ -603,7 +603,7 @@ const makeStyles = (theme) => StyleSheet.create({
     padding: 14, alignItems: 'center', marginTop: 8, marginBottom: 4,
     flexDirection: 'row', justifyContent: 'center',
   },
-  addRoundBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+  addRoundBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14, textAlign: 'center' },
   modeRow: { gap: 8 },
   modeBtn: {
     backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.primary,
@@ -617,7 +617,7 @@ const makeStyles = (theme) => StyleSheet.create({
     borderWidth: theme.isDark ? 1 : 0,
     borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
   },
-  modeBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 14 },
+  modeBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 14, textAlign: 'center' },
   modeBtnTextActive: {
     fontFamily: 'PlusJakartaSans-Bold',
     color: theme.isDark ? theme.accent.primary : theme.text.inverse,

@@ -366,6 +366,7 @@ const makeStyles = (theme) => StyleSheet.create({
     color: theme.isDark ? theme.accent.primary : theme.text.inverse,
     fontSize: 14,
     fontFamily: 'PlusJakartaSans-Bold',
+    textAlign: 'center',
   },
   empty: {
     color: theme.text.muted,
@@ -461,6 +462,7 @@ const makeStyles = (theme) => StyleSheet.create({
     color: theme.isDark ? theme.accent.primary : theme.text.inverse,
     fontFamily: 'PlusJakartaSans-ExtraBold',
     fontSize: 16,
+    textAlign: 'center',
   },
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
@@ -486,6 +488,7 @@ const makeStyles = (theme) => StyleSheet.create({
   createCtaText: {
     fontFamily: 'PlusJakartaSans-SemiBold',
     color: theme.accent.primary, fontSize: 14,
+    textAlign: 'center',
   },
   errorBox: {
     alignItems: 'center', padding: 24, marginTop: 12,
@@ -506,5 +509,5 @@ const makeStyles = (theme) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.accent.primary + '40',
     paddingHorizontal: 16, paddingVertical: 10, marginTop: 14,
   },
-  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14, textAlign: 'center' },
 });

@@ -78,10 +78,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingVertical: 13,
     borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
   },
   buttonText: {
     fontSize: 15,
     fontWeight: '700',
     color: '#006747',
+    textAlign: 'center',
   },
 });

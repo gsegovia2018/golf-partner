@@ -978,7 +978,7 @@ const s = StyleSheet.create({
   btnPlain: { backgroundColor: 'transparent' },
   btnSide: { flex: 1 },
   btnMain: { flex: 2 },
-  btnText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14, color: hud.onAccent, flexShrink: 1 },
+  btnText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14, color: hud.onAccent, flexShrink: 1, textAlign: 'center' },
   btnGhostText: { fontFamily: 'PlusJakartaSans-Bold', color: hud.text },
 
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: hud.scrim },

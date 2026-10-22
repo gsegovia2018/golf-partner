@@ -188,7 +188,7 @@ function makeStyles(theme) {
       marginTop: theme.spacing.xs,
     },
     focusBtnRed: { backgroundColor: CREAM },
-    focusBtnText: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse },
+    focusBtnText: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, textAlign: 'center' },
     focusBtnTextRed: { color: RED },
   });
 }

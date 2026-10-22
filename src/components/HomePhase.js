@@ -317,7 +317,7 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: CREAM, borderRadius: 12, paddingHorizontal: 14,
   },
   half: { flex: 1, marginTop: 0 },
-  ctaText: { color: '#00553c', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14 },
+  ctaText: { color: '#00553c', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14, textAlign: 'center' },
   link: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 12, minHeight: 44, justifyContent: 'center' },
   linkText: { color: onDeep.strong, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
   afterTitle: { color: CREAM, fontFamily: 'PlayfairDisplay-Bold', fontSize: 24, lineHeight: 30 },

@@ -574,6 +574,7 @@ const makeStyles = (t) => StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: t.accent.primary,
+    alignItems: 'center', justifyContent: 'center',
   },
   retryText: {
     fontFamily: 'PlusJakartaSans-Bold',

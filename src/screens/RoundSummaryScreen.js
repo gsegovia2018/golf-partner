@@ -513,6 +513,7 @@ function makeStyles(theme) {
     },
     openBtnText: {
       fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 15,
+      textAlign: 'center',
     },
     fab: {
       position: 'absolute',

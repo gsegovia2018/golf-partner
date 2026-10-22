@@ -267,11 +267,11 @@ function makeStyles(theme) {
     swingKey: { ...theme.typography.overline, color: theme.text.muted },
     plainLine: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
     linkBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
-    linkBtnText: { ...theme.typography.subhead, color: theme.info, fontWeight: '800' },
+    linkBtnText: { ...theme.typography.subhead, color: theme.info, fontWeight: '800', textAlign: 'center' },
     recordBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', minHeight: 44,
       paddingHorizontal: 14, borderRadius: 999, backgroundColor: theme.accent.primary,
     },
-    recordBtnText: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse },
+    recordBtnText: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, textAlign: 'center' },
   });
 }

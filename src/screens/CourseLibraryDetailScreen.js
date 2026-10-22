@@ -380,7 +380,7 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
     borderColor: theme.accent.primary,
   },
-  parBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 13 },
+  parBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 13, textAlign: 'center' },
   parBtnTextActive: {
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: theme.isDark ? theme.accent.primary : theme.text.inverse, fontSize: 13,
@@ -413,9 +413,10 @@ const makeStyles = (theme) => StyleSheet.create({
   offlineMapDownloadBtnText: {
     fontFamily: 'PlusJakartaSans-Bold',
     color: theme.isDark ? theme.accent.primary : theme.text.inverse, fontSize: 13,
+    textAlign: 'center',
   },
   offlineMapDeleteBtn: { paddingVertical: 9, paddingHorizontal: 6 },
-  offlineMapDeleteBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 13 },
+  offlineMapDeleteBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 13, textAlign: 'center' },
   saveBtn: {
     backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
     borderRadius: 14, padding: 17, alignItems: 'center', marginTop: 24,
@@ -426,6 +427,7 @@ const makeStyles = (theme) => StyleSheet.create({
   saveBtnText: {
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: theme.isDark ? theme.accent.primary : theme.text.inverse, fontSize: 16,
+    textAlign: 'center',
   },
   errorBox: {
     alignItems: 'center', padding: 24, marginTop: 12,
@@ -446,5 +448,5 @@ const makeStyles = (theme) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.accent.primary + '40',
     paddingHorizontal: 16, paddingVertical: 10, marginTop: 14,
   },
-  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14, textAlign: 'center' },
 });

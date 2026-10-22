@@ -36,6 +36,7 @@ export default function makeFieldStyles(theme) {
     btnDisabled: { backgroundColor: theme.isDark ? '#1b3328' : '#dfe8e3' },
     btnText: {
       fontFamily: 'PlusJakartaSans-Bold', fontSize: 16, color: theme.text.inverse,
+      textAlign: 'center',
     },
     btnTextDisabled: { color: theme.isDark ? '#a9b8b0' : '#3f5a4c' },
     fieldBorderColor: { borderColor: fieldBorder },

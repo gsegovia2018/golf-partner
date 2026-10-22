@@ -222,9 +222,10 @@ const makeStyles = (theme) => StyleSheet.create({
   headerBtn: {
     minHeight: 36, paddingHorizontal: 12, borderRadius: 999, justifyContent: 'center',
     backgroundColor: theme.accent.light,
+    alignItems: 'center',
   },
   headerBtnOn: { backgroundColor: theme.accent.primary },
-  headerBtnText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.accent.primary },
+  headerBtnText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.accent.primary, textAlign: 'center' },
   headerBtnTextOn: { color: theme.text.inverse },
   scroll: { flex: 1 },
   content: { paddingHorizontal: 20, paddingBottom: 40, gap: 4 },
@@ -265,12 +266,13 @@ const makeStyles = (theme) => StyleSheet.create({
   addBtn: {
     backgroundColor: theme.accent.primary, borderRadius: 14, paddingHorizontal: 20, minHeight: 44,
     justifyContent: 'center', marginTop: 6,
+    alignItems: 'center',
   },
-  addBtnText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
+  addBtnText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14, textAlign: 'center' },
 
   resetBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     alignSelf: 'center', minHeight: 44, paddingHorizontal: 12, marginTop: 28,
   },
-  resetBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.destructive, fontSize: 13 },
+  resetBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.destructive, fontSize: 13, textAlign: 'center' },
 });

@@ -395,7 +395,7 @@ function makeStyles(t) {
       paddingVertical: 13,
       ...(t.isDark ? {} : t.shadow.card),
     },
-    shuffleBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: t.accent.primary, fontSize: 14 },
+    shuffleBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: t.accent.primary, fontSize: 14, textAlign: 'center' },
 
     swapBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -403,7 +403,7 @@ function makeStyles(t) {
       borderRadius: 9, borderWidth: 1, borderColor: t.border.default,
       paddingVertical: 6, paddingHorizontal: 10,
     },
-    swapBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.accent.primary, fontSize: 12 },
+    swapBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.accent.primary, fontSize: 12, textAlign: 'center' },
     duelActions: { flexDirection: 'row', gap: 8 },
     duel: {
       flexDirection: 'row', alignItems: 'center',
@@ -436,6 +436,7 @@ function makeStyles(t) {
       fontFamily: 'PlusJakartaSans-Bold',
       color: t.isDark ? t.accent.primary : t.text.inverse,
       fontSize: 15,
+      textAlign: 'center',
     },
   });
 }

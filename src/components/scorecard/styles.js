@@ -198,6 +198,7 @@ export function makeScorecardStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold',
       color: theme.accent.primary,
       fontSize: 12,
+      textAlign: 'center',
     },
 
     // Hole view header — sits directly on bg.primary, no card chrome.
@@ -328,6 +329,7 @@ export function makeScorecardStyles(theme) {
       color: theme.accent.primary,
       fontFamily: 'PlusJakartaSans-Bold',
       fontSize: 13,
+      textAlign: 'center',
     },
     holeNavBtnTextDisabled: { color: theme.text.muted },
 
@@ -526,6 +528,7 @@ export function makeScorecardStyles(theme) {
       color: theme.text.muted,
       fontSize: 12,
       fontFamily: 'PlusJakartaSans-SemiBold',
+      textAlign: 'center',
     },
     notesPillBtnTextActive: { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' },
     quickFinishBtn: {
@@ -546,6 +549,7 @@ export function makeScorecardStyles(theme) {
       color: '#ffffff',
       fontSize: 12,
       fontFamily: 'PlusJakartaSans-Bold',
+      textAlign: 'center',
     },
 
     // Notes modal (bottom sheet)
@@ -668,6 +672,7 @@ export function makeScorecardStyles(theme) {
       color: theme.text.primary,
       fontSize: 16,
       fontFamily: 'PlusJakartaSans-Bold',
+      textAlign: 'center',
     },
     holePickerBtnTextActive: {
       color: theme.text.inverse,
@@ -1201,6 +1206,7 @@ export function makeScorecardStyles(theme) {
       // lost the tail of the y): an explicit line height leaves them room.
       lineHeight: 22,
       ...(Platform.OS === 'web' ? {} : { includeFontPadding: false }),
+      textAlign: 'center',
     },
     // Official-mode attest button when blocked (discrepancies / in flight).
     saveBtnDisabled: { opacity: 0.4 },
@@ -1451,6 +1457,7 @@ export function makeScorecardStyles(theme) {
       paddingVertical: 6,
       paddingHorizontal: 20,
       borderRadius: 8,
+      alignItems: 'center', justifyContent: 'center',
     },
     soloModeToggleBtnActive: {
       backgroundColor: theme.accent.primary,

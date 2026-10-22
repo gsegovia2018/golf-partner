@@ -263,7 +263,7 @@ function makeStyles(theme) {
       paddingHorizontal: 14, borderRadius: 999, backgroundColor: theme.accent.primary,
     },
     focusBtnOutline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: theme.accent.primary },
-    focusBtnText: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse },
+    focusBtnText: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, textAlign: 'center' },
     focusBtnTextOutline: { color: theme.accent.primary },
   });
 }

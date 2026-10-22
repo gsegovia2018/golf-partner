@@ -215,7 +215,7 @@ function makeStyles(theme) {
     },
     btnDanger: { backgroundColor: theme.destructive },
     btnOff: { opacity: 0.4 },
-    btnText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
+    btnText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14, textAlign: 'center' },
     textBtn: { alignItems: 'center', justifyContent: 'center', minHeight: 44 },
     cancelText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
   });

@@ -80,6 +80,7 @@ const makeStyles = (theme) => StyleSheet.create({
   cta: {
     minHeight: 36, minWidth: 44, borderRadius: 18, paddingHorizontal: 12, justifyContent: 'center',
     backgroundColor: theme.accent.primary,
+    alignItems: 'center',
   },
-  ctaText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.text.inverse },
+  ctaText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.text.inverse, textAlign: 'center' },
 });

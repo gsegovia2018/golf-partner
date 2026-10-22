@@ -428,6 +428,7 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   segmentBtnText: {
     fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 13,
+    textAlign: 'center',
   },
   segmentBtnTextActive: {
     color: theme.isDark ? theme.text.primary : theme.text.inverse,

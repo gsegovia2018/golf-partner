@@ -332,5 +332,5 @@ const makeStyles = (theme) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.accent.primary + '40',
     paddingHorizontal: 16, paddingVertical: 10, marginTop: 14,
   },
-  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14, textAlign: 'center' },
 });

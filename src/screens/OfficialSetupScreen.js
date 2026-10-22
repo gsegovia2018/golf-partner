@@ -461,13 +461,13 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.accent.primary, borderRadius: 12,
     padding: 14, alignItems: 'center', justifyContent: 'center', marginTop: 4,
   },
-  primaryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse, fontSize: 14 },
+  primaryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse, fontSize: 14, textAlign: 'center' },
   btnDisabled: { opacity: 0.5 },
   secondaryBtn: {
     borderRadius: 10, borderWidth: 1, borderColor: theme.border.default,
     paddingVertical: 10, paddingHorizontal: 24, alignItems: 'center',
   },
-  secondaryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
+  secondaryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13, textAlign: 'center' },
   playerCard: {
     backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
     borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
@@ -484,7 +484,7 @@ const makeStyles = (theme) => StyleSheet.create({
     borderRadius: 10, borderWidth: 1, borderColor: theme.border.default,
     paddingVertical: 6, paddingHorizontal: 10,
   },
-  actionBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12 },
+  actionBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12, textAlign: 'center' },
   actionBtnTextDanger: { color: theme.destructive },
   linkBlock: {
     marginTop: 12, paddingTop: 12,
@@ -516,5 +516,5 @@ const makeStyles = (theme) => StyleSheet.create({
     padding: 14, alignItems: 'center', marginTop: 4,
     flexDirection: 'row', justifyContent: 'center',
   },
-  addRoundBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+  addRoundBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14, textAlign: 'center' },
 });

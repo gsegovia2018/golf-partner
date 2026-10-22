@@ -19,13 +19,13 @@ export function buttonStyles(theme) {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
       backgroundColor: theme.accent.primary, borderRadius: 14, paddingVertical: 14, minHeight: 48,
     },
-    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14 },
+    primaryText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 14, textAlign: 'center' },
     secondaryBtn: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 14,
       borderWidth: 1, borderColor: theme.border.default, paddingVertical: 14, paddingHorizontal: 16, minHeight: 48,
     },
-    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14 },
-    secondaryTextAccent: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+    secondaryText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 14, textAlign: 'center' },
+    secondaryTextAccent: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14, textAlign: 'center' },
   };
 }
 

@@ -363,6 +363,7 @@ function makeStyles(theme) {
     },
     primaryBtnText: {
       fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse, fontSize: 13,
+      textAlign: 'center',
     },
     ghostBtn: {
       borderRadius: 10, borderWidth: 1, borderColor: theme.border.default,
@@ -370,6 +371,7 @@ function makeStyles(theme) {
     },
     ghostBtnText: {
       fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 13,
+      textAlign: 'center',
     },
     actionPair: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     pendingTag: {
