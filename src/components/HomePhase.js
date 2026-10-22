@@ -272,8 +272,10 @@ export function YourGame({ swingLine, onSwing, onCoach }) {
   const tile = (icon, title, sub, onPress, testID) => (
     <TouchableOpacity style={[s.card, s.gameTile]} onPress={onPress} accessibilityRole="button" activeOpacity={0.85} testID={testID}>
       <View style={s.gameIcon}><Feather name={icon} size={14} color={theme.accent.primary} /></View>
-      <Text style={s.gameTitle}>{title}</Text>
-      <Text style={s.cardMeta} numberOfLines={2}>{sub}</Text>
+      <View style={s.flex}>
+        <Text style={s.gameTitle}>{title}</Text>
+        <Text style={s.gameSub} numberOfLines={1}>{sub}</Text>
+      </View>
     </TouchableOpacity>
   );
   return (
@@ -363,7 +365,8 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   gameSection: { marginTop: 16 },
   gameRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  gameTile: { flex: 1, padding: 12 },
+  gameTile: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingVertical: 8, paddingHorizontal: 10 },
+  gameSub: { color: theme.text.secondary, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11 },
   gameIcon: { width: 28, height: 28, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.accent.light },
   gameTitle: { color: theme.text.primary, fontFamily: 'PlusJakartaSans-Bold', fontSize: 14 },
 });
