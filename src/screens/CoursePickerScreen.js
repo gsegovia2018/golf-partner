@@ -30,15 +30,18 @@ const SEARCH_LIMIT = 40;
 // it never renders all of it: favourites and recent courses, layout-level
 // search results, or one region at a time. Picks are layouts (courses), in
 // round order. A tournament (`route.params.rounds`) shows the rounds tray.
+// `mode: 'favorites'` (Home's quick start) picks nothing: tapping a course
+// stars or unstars it, and the starred courses are the quick-start list.
 export default function CoursePickerScreen({ navigation, route }) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
 
-  const { roundIndex } = route.params;
+  const { roundIndex } = route.params ?? {};
+  const favoritesMode = route.params?.mode === 'favorites';
   // Optional cap on how many courses can be picked at once.
   const maxSelectable = route.params?.maxSelectable ?? null;
-  const showRounds = !!route.params?.rounds && maxSelectable !== 1;
+  const showRounds = !favoritesMode && !!route.params?.rounds && maxSelectable !== 1;
 
   const [courses, setCourses] = useState([]);
   const [clubs, setClubs] = useState([]);
@@ -47,6 +50,9 @@ export default function CoursePickerScreen({ navigation, route }) {
   const [selected, setSelected] = useState([]);
   const [query, setQuery] = useState('');
   const [favorites, setFavorites] = useState(() => new Set());
+  // Favourites mode: courses starred or unstarred on this visit stay in the
+  // starred section, so a mistaken tap can be undone in place.
+  const [touchedFavorites, setTouchedFavorites] = useState(() => new Set());
   const [lastUsed, setLastUsed] = useState({});
   const [reloadKey, setReloadKey] = useState(0);
   // null on the main view; { region } while browsing one region (region may
@@ -124,12 +130,19 @@ export default function CoursePickerScreen({ navigation, route }) {
     return counts;
   }, [courses]);
 
-  const favoriteCourses = useMemo(
-    () => courses.filter((c) => favorites.has(c.id))
-      .sort((a, b) => normalizeText(a.name).localeCompare(normalizeText(b.name))),
-    [courses, favorites],
+  const listedFavorites = useMemo(
+    () => (favoritesMode ? new Set([...favorites, ...touchedFavorites]) : favorites),
+    [favoritesMode, favorites, touchedFavorites],
   );
-  const recent = useMemo(() => recentCourses(courses, lastUsed, favorites), [courses, lastUsed, favorites]);
+  const favoriteCourses = useMemo(
+    () => courses.filter((c) => listedFavorites.has(c.id))
+      .sort((a, b) => normalizeText(a.name).localeCompare(normalizeText(b.name))),
+    [courses, listedFavorites],
+  );
+  const recent = useMemo(
+    () => recentCourses(courses, lastUsed, listedFavorites),
+    [courses, lastUsed, listedFavorites],
+  );
   const regions = useMemo(() => regionSummary(courses, clubs), [courses, clubs]);
   const results = useMemo(() => searchCourses(courses, clubs, query, SEARCH_LIMIT), [courses, clubs, query]);
   const browseItems = useMemo(
@@ -190,6 +203,7 @@ export default function CoursePickerScreen({ navigation, route }) {
     if (next.has(courseId)) next.delete(courseId); else next.add(courseId);
     favoriteEditsRef.current.set(courseId, next.has(courseId));
     setFavorites(next);
+    if (favoritesMode) setTouchedFavorites((prevTouched) => new Set(prevTouched).add(courseId));
     try {
       await toggleFavoriteCourse(courseId);
     } catch (err) {
@@ -213,6 +227,35 @@ export default function CoursePickerScreen({ navigation, route }) {
     const picked = selIdx !== -1;
     const isFavorite = favorites.has(c.id);
     const name = label ?? c.name;
+    if (favoritesMode) {
+      return (
+        <TouchableOpacity
+          key={`course-${c.id}`}
+          style={[s.row, nested && s.rowNested, isFavorite && s.rowPicked]}
+          onPress={() => handleToggleFavorite(c.id)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={t('courses.picker.quickStartToggle', { name })}
+          accessibilityState={{ checked: isFavorite }}
+          aria-pressed={isFavorite}
+        >
+          <View style={s.rowLeft}>
+            <Highlight text={name} query={highlight} style={nested ? s.layoutName : s.courseName} markStyle={s.mark} />
+            <Text style={s.courseMeta}>
+              {played ? <Text style={s.played}>{t('courses.picker.playedOn', { date: formatDate(played, 'day') })}  ·  </Text> : null}
+              {courseMeta(c)}
+            </Text>
+          </View>
+          <View style={s.favMark}>
+            {isFavorite ? (
+              <FontAwesome name="star" size={18} color={theme.accent.primary} />
+            ) : (
+              <Feather name="star" size={16} color={theme.text.secondary} />
+            )}
+          </View>
+        </TouchableOpacity>
+      );
+    }
     return (
       <View key={`course-${c.id}`} style={[s.row, nested && s.rowNested, picked && s.rowPicked]}>
         <TouchableOpacity
@@ -300,7 +343,7 @@ export default function CoursePickerScreen({ navigation, route }) {
       <>
         {favoriteCourses.length > 0 && (
           <>
-            <SectionTitle text={t('courses.picker.favorites')} s={s} />
+            <SectionTitle text={t(favoritesMode ? 'courses.picker.inQuickStart' : 'courses.picker.favorites')} s={s} />
             <Group s={s}>
               {favoriteCourses.map((c) => renderCourseRow(c, { played: lastUsed[c.id] }))}
             </Group>
@@ -314,7 +357,7 @@ export default function CoursePickerScreen({ navigation, route }) {
             </Group>
           </>
         )}
-        {favoriteCourses.length === 0 && recent.length === 0 && (
+        {!favoritesMode && favoriteCourses.length === 0 && recent.length === 0 && (
           <Text style={s.hint}>{t('courses.picker.firstVisit')}</Text>
         )}
         <SectionTitle text={t('courses.picker.browse')} s={s} />
@@ -413,7 +456,9 @@ export default function CoursePickerScreen({ navigation, route }) {
           accessibilityLabel={browsing ? t('courses.picker.backToSearch') : t('courses.back')}
         />
         <Text style={s.headerTitle} numberOfLines={1}>
-          {browsing ? regionLabel(browsing.region) : t('courses.picker.title')}
+          {browsing
+            ? regionLabel(browsing.region)
+            : t(favoritesMode ? 'courses.picker.quickStartTitle' : 'courses.picker.title')}
         </Text>
         <View style={{ width: 36 }} />
       </View>
@@ -439,6 +484,9 @@ export default function CoursePickerScreen({ navigation, route }) {
             ) : null}
           </View>
         )}
+        {favoritesMode && !browsing && !query.trim() ? (
+          <Text style={s.hint}>{t('courses.picker.quickStartHint')}</Text>
+        ) : null}
         {browsing && regions.length > 0 ? (
           <Text style={s.hint}>
             {t('courses.picker.clubCount', {
@@ -691,6 +739,7 @@ const makeStyles = (theme) => StyleSheet.create({
     textAlign: 'center',
   },
   favBtn: { paddingHorizontal: 8, paddingVertical: 10 },
+  favMark: { width: 26, alignItems: 'center' },
   errorBox: {
     alignItems: 'center', padding: 24, marginTop: 12,
     backgroundColor: theme.bg.card, borderRadius: 16,

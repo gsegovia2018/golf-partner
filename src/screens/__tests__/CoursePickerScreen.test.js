@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import CoursePickerScreen from '../CoursePickerScreen';
-import { loadCourseLibrary } from '../../store/libraryStore';
+import { loadCourseLibrary, toggleFavoriteCourse } from '../../store/libraryStore';
 import { tournamentsIndex } from '../../store/tournamentsIndex';
 import { consumePendingCourses } from '../../lib/selectionBridge';
 
@@ -162,4 +162,27 @@ test('a tray slot leads with the layout, so two rounds at one club stay apart', 
   fireEvent.press(getByText('Amarillo'));
   expect(getByText('Negro · Real Club de Campo Villa de Madrid')).toBeTruthy();
   expect(getByText('Amarillo · Real Club de Campo Villa de Madrid')).toBeTruthy();
+});
+
+test('quick start mode: a tap stars or unstars a course, nothing is picked', async () => {
+  const { getByText, getByLabelText, getByPlaceholderText, queryByText, navigation } = renderPicker({ mode: 'favorites' });
+  await waitFor(() => expect(getByText('La Faisanera')).toBeTruthy());
+  expect(getByText('Quick start')).toBeTruthy();
+  expect(getByText('In quick start')).toBeTruthy();
+  expect(getByLabelText('Quick start: La Faisanera').props.accessibilityState.checked).toBe(true);
+
+  // Unstarring keeps the course listed, so a mistaken tap can be undone.
+  fireEvent.press(getByText('La Faisanera'));
+  expect(toggleFavoriteCourse).toHaveBeenLastCalledWith('fa');
+  expect(getByLabelText('Quick start: La Faisanera').props.accessibilityState.checked).toBe(false);
+
+  fireEvent.changeText(getByPlaceholderText('Search name, city or region'), 'villa');
+  fireEvent.press(getByText('Negro'));
+  expect(toggleFavoriteCourse).toHaveBeenLastCalledWith('vm-n');
+  expect(getByLabelText('Quick start: Negro').props.accessibilityState.checked).toBe(true);
+
+  expect(queryByText(/Add \d Round/)).toBeNull();
+  expect(queryByText('Rounds')).toBeNull();
+  navigation.goBack();
+  expect(consumePendingCourses()).toBeNull();
 });
