@@ -15,8 +15,13 @@ const useAnimatedScrollHandler = (handlers) => {
   return (event) => onScroll(event?.nativeEvent ?? event);
 };
 
+// The upstream mock leaves useFrameCallback out ("ADD ME IF NEEDED"). Frames never tick
+// in Jest, so components render their first frame from the shared values they start with.
+const useFrameCallback = () => ({ setActive: () => {}, isActive: false, callbackId: -1 });
+
 module.exports = {
   ...Reanimated,
   useReducedMotion: () => false,
   useAnimatedScrollHandler,
+  useFrameCallback,
 };
