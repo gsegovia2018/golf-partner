@@ -161,6 +161,12 @@ function roundSlice(tournament, roundIndex) {
   return { ...tournament, rounds: [round] };
 }
 
+// Players with at least one score in the round — the group the claims are about.
+function scoredPlayerCount(round) {
+  return Object.values(round?.scores ?? {})
+    .filter((s) => s && Object.keys(s).length > 0).length;
+}
+
 // ── Tier A: this round only ───────────────────────────────────────
 
 // Every run worth naming, from one gross pass per player: the par streak that
@@ -393,8 +399,10 @@ function skinsCandidate(slice) {
 }
 
 // The two holes the whole group agreed about. collectiveExtremes only counts
-// a hole every single participant scored, so both claims cover everyone.
+// a hole every single participant scored, so both claims cover everyone — and
+// with one player there is no group: "all 1 of you" is just any scoring hole.
 function collectiveCandidates(slice) {
+  if (scoredPlayerCount(slice.rounds[0]) < 2) return [];
   const { disasters, gimmes } = collectiveExtremes(slice);
   const out = [];
   if (disasters.length > 0) {
@@ -803,7 +811,9 @@ const MAX_PER_PLAYER = 2;
 //   - one guaranteed seat for a 'fun' card, so the strip is not four earnest
 //     scoring facts in a row;
 //   - at most one roast, and never as the leading card.
-export function selectAchievements(candidates, { limit = 6 } = {}) {
+// `maxPerPlayer` is lifted for a round one player played alone: there is no
+// group to make room for, and capping would leave their own feats out.
+export function selectAchievements(candidates, { limit = 6, maxPerPlayer = MAX_PER_PLAYER } = {}) {
   const bestPerId = new Map();
   (candidates ?? []).forEach((c) => {
     const prev = bestPerId.get(c.id);
@@ -815,7 +825,7 @@ export function selectAchievements(candidates, { limit = 6 } = {}) {
   [...bestPerId.values()].sort((a, b) => b.rarity - a.rarity).forEach((c) => {
     if (c.playerId == null) { ranked.push(c); return; }
     const used = perPlayer.get(c.playerId) ?? 0;
-    if (used >= MAX_PER_PLAYER) return;
+    if (used >= maxPerPlayer) return;
     perPlayer.set(c.playerId, used + 1);
     ranked.push(c);
   });
@@ -844,13 +854,18 @@ export function selectAchievements(candidates, { limit = 6 } = {}) {
 // One call for the screen: highlights from the round in memory, plus career
 // records when the viewer's history has been loaded (pass `myRounds`/`roundKey`
 // only when the viewer actually played — a friend's round has no records of
-// yours to beat).
+// yours to beat). A round played alone drops the per-player cap and the name:
+// every card is about the one player, and "Ana — " on each row says nothing.
 export function buildRoundAchievements({
   tournament, roundIndex, myRounds = null, roundKey = null, limit = 6,
 } = {}) {
+  const solo = scoredPlayerCount(tournament?.rounds?.[roundIndex]) === 1;
   const highlights = buildRoundHighlights(tournament, roundIndex);
   const records = (myRounds && roundKey ? buildPersonalRecords(myRounds, roundKey) : [])
     .sort((a, b) => b.rarity - a.rarity)
     .slice(0, MAX_RECORDS);
-  return selectAchievements([...records, ...highlights], { limit });
+  const picked = selectAchievements([...records, ...highlights], {
+    limit, maxPerPlayer: solo ? Infinity : MAX_PER_PLAYER,
+  });
+  return solo ? picked.map((c) => ({ ...c, playerName: null })) : picked;
 }
