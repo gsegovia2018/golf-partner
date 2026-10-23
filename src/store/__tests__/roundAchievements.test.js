@@ -598,6 +598,16 @@ describe('buildRoundHighlights — the wider set', () => {
     expect(card.playerId).toBeNull();
   });
 
+  test('a round played alone has no group to agree, so no group holes', () => {
+    const holes = mkHoles();
+    // A blank hole 7 and plenty of scoring ones: alone, neither is a group fact.
+    const t = mkTournament({ players: solo, holes, scores: { p1: scoresOf(holes, 4, { 7: 8 }) } });
+
+    const ids = idsOf(buildRoundHighlights(t, 0));
+    expect(ids).not.toContain('everyoneBlanked');
+    expect(ids).not.toContain('everyoneScored');
+  });
+
   test('a round of nothing but pars is a metronome', () => {
     const holes = mkHoles();
     const t = mkTournament({ players: solo, holes, scores: { p1: scoresOf(holes, 4) } });
@@ -781,6 +791,32 @@ describe('buildRoundAchievements', () => {
     const picked = buildRoundAchievements({ tournament: t, roundIndex: 0 });
     expect(picked.length).toBeGreaterThan(0);
     expect(idsOf(picked)).not.toContain('bestRoundEver');
+  });
+
+  // Pars on 1-4, birdies on 5 and 6, bogeys after: a par streak, a birdie
+  // streak and a birdie haul — three cards about one player.
+  const hotStart = (holes) => scoresOf(holes, 5, { 1: 4, 2: 4, 3: 4, 4: 4, 5: 3, 6: 3 });
+
+  test('a round played alone keeps all of its own feats, without the name', () => {
+    const holes = mkHoles();
+    const t = mkTournament({ players: solo, holes, scores: { p1: hotStart(holes) } });
+
+    const picked = buildRoundAchievements({ tournament: t, roundIndex: 0 });
+    expect(idsOf(picked)).toEqual(expect.arrayContaining(['parStreak', 'birdieStreak', 'birdies']));
+    expect(picked.every((c) => c.playerName == null)).toBe(true);
+  });
+
+  test('a group round still caps one player at two cards and names them', () => {
+    const holes = mkHoles();
+    const t = mkTournament({
+      players: [{ id: 'p1', name: 'Ana' }, { id: 'p2', name: 'Bo' }],
+      holes,
+      scores: { p1: hotStart(holes), p2: scoresOf(holes, 6) },
+    });
+
+    const ana = buildRoundAchievements({ tournament: t, roundIndex: 0 }).filter((c) => c.playerId === 'p1');
+    expect(ana).toHaveLength(2);
+    expect(ana.every((c) => c.playerName === 'Ana')).toBe(true);
   });
 });
 
