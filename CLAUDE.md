@@ -218,7 +218,9 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   WebCodecs or seeks a `<video>` (HEVC on iOS), `analyzePose.js` / `checkpoints.js` are pass 1 / 2,
   `core/*` are line-for-line ports of the Kotlin (keep them in step when the Kotlin changes).
   MediaPipe 1.1.0 and LiteRT.js (club model on wasm: its WebGPU path returns garbage) load from
-  `public/swing-web/`, copied by `scripts/copySwingWebAssets.mjs` on postinstall (git ignored).
+  `public/swing-web/` (it ignores itself), copied by `scripts/copySwingWebAssets.mjs` from
+  `metro.config.js`. Not from an npm script: `package.json` scripts and `.gitignore` are runtime
+  fingerprint inputs, and editing them strands OTA updates.
   Files live in IndexedDB behind `src/swing/fs.web.js` (`fs.js` on Android); a stored URI goes
   through `storableUri` / `displayUri`. Web wording ("in this browser") is `WEB_KEYS` in `strings.js`.
 - Swing checks v2 screens (spec/plan `2026-10-18-swing-checks-v2`, polished per the 2026-10-18 UI review):

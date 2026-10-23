@@ -6,8 +6,11 @@
 //   mediapipe/   @mediapipe/tasks-vision: its ESM bundle and wasm (SIMD + no-SIMD)
 //   litert/      @litertjs/core wasm (single-threaded + compat; the threaded build needs COOP/COEP)
 //
-// Runs from postinstall; `node scripts/copySwingWebAssets.mjs` refreshes it by hand.
-import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
+// Runs whenever Metro loads its config (metro.config.js: `expo start`, `expo export`); the folder
+// ignores itself, so the root .gitignore (a fingerprint input) stays as it is.
+import {
+  copyFileSync, existsSync, mkdirSync, statSync, writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,6 +31,9 @@ const files = [
   ...['litert_wasm_internal.js', 'litert_wasm_internal.wasm', 'litert_wasm_compat_internal.js', 'litert_wasm_compat_internal.wasm']
     .map((f) => [join(litert, f), join(out, 'litert', f)]),
 ];
+
+mkdirSync(out, { recursive: true });
+if (!existsSync(join(out, '.gitignore'))) writeFileSync(join(out, '.gitignore'), '# copied by scripts/copySwingWebAssets.mjs\n*\n');
 
 let copied = 0;
 for (const [from, to] of files) {
