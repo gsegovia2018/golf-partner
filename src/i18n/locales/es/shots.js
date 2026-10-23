@@ -91,6 +91,9 @@ export default {
   'shots.tracker.onGreen': 'En el green',
   'shots.tracker.markA11y': 'Marcar un golpe en tu posición',
   'shots.tracker.mark': 'Marcar golpe',
+  'shots.tracker.placeHint': 'Toca el mapa donde lo jugaste',
+  'shots.tracker.placeCancel': 'Cancelar',
+  'shots.tracker.markGapA11y': 'Añadir un golpe que olvidaste marcar en este hoyo',
   'shots.tracker.shotN': 'Golpe {n}',
 
   'shots.measure.shot': 'Golpe',

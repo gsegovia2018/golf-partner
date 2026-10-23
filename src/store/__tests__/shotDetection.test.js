@@ -1,4 +1,6 @@
-import { takeClosedStops, proposalsForHole, seqForProposal, greenLandingStop } from '../shotDetection';
+import {
+  takeClosedStops, proposalsForHole, seqForProposal, greenLandingStop, holeStops,
+} from '../shotDetection';
 
 // ~1 m of latitude.
 const M = 1 / 111195;
@@ -35,7 +37,7 @@ const hole = {
 };
 const course = { holes: [hole, { number: 2, par: 3, start: [41, -3.7], pin: [41.001, -3.7] }] };
 const stop = (id, north, extra = {}) => ({
-  id, start: Number(id), end: Number(id) + 20, lat: spot(north)[0], lng: spot(north)[1], hole: 9, status: 'open', ...extra,
+  id, start: Number(id), end: Number(id) + 60000, lat: spot(north)[0], lng: spot(north)[1], hole: 9, status: 'open', ...extra,
 });
 
 test('proposals on a hole: green, dismissed and already-marked spots are left out', () => {
@@ -68,6 +70,47 @@ test('a confirmed proposal goes before the first marked shot closer to the green
   expect(seqForProposal({ lat: 0, lng: 0 }, [], green)).toBe(1);
 });
 
+
+test('stops under 30 s are kept but not proposed (waiting on the tee, round the green)', () => {
+  const stops = [stop('1', 0), { ...stop('2', 200), end: 2 + 20000 }];
+  expect(proposalsForHole(stops, { holeNumber: 1, course }).map((p) => p.id)).toEqual(['1']);
+  expect(holeStops(stops, { holeNumber: 1, course }).map((p) => p.id)).toEqual(['1', '2']);
+});
+
+describe('stops go to the hole being played when they were made', () => {
+  const MIN = 60000;
+  // Hole 2 runs back alongside hole 1, 40 m east of it.
+  const east = 40 / (111195 * Math.cos((40 * Math.PI) / 180));
+  const side = {
+    holes: [hole, { number: 2, par: 4, start: [spot(360)[0], -3.7 + east], pin: [spot(0)[0], -3.7 + east] }],
+  };
+  const at = (id, min, north, lng = -3.7) => ({
+    id, start: min * MIN, end: min * MIN + MIN, lat: spot(north)[0], lng, status: 'open',
+  });
+  const holeOne = [at('a', 0, 0), at('b', 4, 200), at('c', 8, 330)];
+
+  test('a second shot from the neighbouring fairway belongs to the hole being played', () => {
+    const stops = [
+      ...holeOne,
+      at('d', 15, 360, -3.7 + east), at('e', 20, 250, -3.7 + east), // hole 2's tee, then its fairway
+      at('f', 24, 150, -3.70005), // hole 2's third shot, from hole 1's fairway
+    ];
+    expect(holeStops(stops, { holeNumber: 1, course: side }).map((s) => s.id)).toEqual(['a', 'b', 'c']);
+    expect(holeStops(stops, { holeNumber: 2, course: side }).map((s) => s.id).sort()).toEqual(['d', 'e', 'f']);
+  });
+
+  test('a stray far from the hole being played is dropped', () => {
+    const far = { holes: [hole, { number: 2, par: 3, start: [41, -3.7], pin: [41.001, -3.7] }] };
+    const stray = at('x', 60, 100); // an hour later on hole 1's line
+    // With no other hole started since, it stays on hole 1 …
+    expect(holeStops([...holeOne, stray], { holeNumber: 1, course: far }).map((s) => s.id))
+      .toEqual(['a', 'b', 'c', 'x']);
+    // … but once hole 2 (far away) is being played, it is nobody's.
+    const teeTwo = { ...at('t2', 50, 0), lat: 41 };
+    const got = holeStops([...holeOne, teeTwo, stray], { holeNumber: 1, course: far });
+    expect(got.map((s) => s.id)).toEqual(['a', 'b', 'c']);
+  });
+});
 
 describe('greenLandingStop', () => {
   const shot = (north, club) => ({ lat: spot(north)[0], lng: spot(north)[1], club });

@@ -20,7 +20,7 @@ import { subscribeShots, getShotsVersion, shotsForHole, setShotPos, getShots } f
 import { guessClub } from '../../store/clubGuess';
 import { clubLabel } from '../../lib/clubs';
 import { HoleMapView } from './HoleMapView';
-import { ShotTracker, isOnGreen } from './ShotTracker';
+import { ShotTracker, isOnGreen, isHoleBehind } from './ShotTracker';
 import { SeenMapCard, MissingPill } from './ShotProposals';
 import { useShotProposals } from '../../hooks/useShotProposals';
 
@@ -61,6 +61,17 @@ export function HoleFlyover({
   // A card left open must not greet the next opening (or another hole).
   useEffect(() => { setSeenIdx(null); }, [visible, holeNumber]);
   const seenSel = seenIdx != null ? seen.open[seenIdx] ?? null : null;
+
+  // Moved on from this hole? Then Mark shot asks where instead of using your
+  // fix. The next hole in playing order wraps to 1 after the last.
+  const nextHole = holeFeatures(courseName, holeNumber + 1) ? holeNumber + 1 : 1;
+  const holeDone = roundId != null && isHoleBehind({
+    strokes,
+    pickedUp,
+    pos: position ?? null,
+    nextTee: nextHole !== holeNumber ? holeFeatures(courseName, nextHole)?.start ?? null : null,
+    nextHoleShots: nextHole !== holeNumber ? shotsForHole(roundId, roundIndex, nextHole).length : 0,
+  });
 
   const anchorInfo = useMemo(() => {
     if (!feat) return null;
@@ -158,6 +169,9 @@ export function HoleFlyover({
   // nearest the green (for "Add shot" fallback), rings is the full
   // chain-ordered ring list (1 or 2 entries) for two-ring segment logging.
   const [aim, setAim] = useState(null);
+  // The latest tap on the map itself, for the shot tracker's tap-to-place.
+  const [mapTap, setMapTap] = useState(null);
+  const [placing, setPlacing] = useState(false);
   // Pending set-targets command sent down to the map (e.g. to collapse the
   // rings to the landing after a segment is logged).
   const [targetsCmd, setTargetsCmd] = useState(null);
@@ -238,11 +252,13 @@ export function HoleFlyover({
                 lastShot={lastShot}
                 plays={plays}
                 targets={targetsCmd}
+                placing={placing}
                 onShotMove={(i, p) => {
                   const sh = shotsForHole(roundId, roundIndex, holeNumber)[i];
                   if (sh) setShotPos(sh.id, p);
                 }}
                 onAim={(pos, rings) => setAim({ pos, rings })}
+                onMapTap={(pos) => setMapTap({ pos, at: Date.now() })}
                 onShotTap={setTappedShot}
                 style={s.map}
               />
@@ -264,6 +280,9 @@ export function HoleFlyover({
                   tappedShotIndex={tappedShot}
                   onConsumeShotTap={() => setTappedShot(null)}
                   onCollapseTargets={(t) => setTargetsCmd(t)}
+                  mapTap={mapTap}
+                  onPlacing={setPlacing}
+                  holeDone={holeDone}
                   missing={seen.missing}
                 />
               )}

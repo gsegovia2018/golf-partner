@@ -9,8 +9,9 @@ import { useAppSettings } from '../../hooks/useAppSettings';
 import {
   subscribeShots, getShotsVersion, getShots,
   shotsForHole, logShot, logMeasuredShot, setShotClub, setShotPos,
-  insertShotAfter, deleteShot, chainEndNear,
+  insertShotAfter, insertShotAt, deleteShot, chainEndNear,
 } from '../../store/shotStore';
+import { seqForProposal } from '../../store/shotDetection';
 import { haversineMeters, bearingDeg, pointInPolygon } from '../../lib/geo';
 import { useT } from '../../i18n';
 import { guessClub } from '../../store/clubGuess';
@@ -28,6 +29,17 @@ export function isOnGreen(pt, green, greenCenter) {
   return !!greenCenter && haversineMeters(pt, greenCenter) <= 12;
 }
 
+// Whether you've moved on from a hole, so a mark on it can't be at your feet:
+// its score is in (or picked up), you stand at the next hole's tee, or the
+// next hole already has a shot marked. `nextTee` / `nextHoleShots` are the
+// next hole in playing order (18 -> 1 for a round started on the 10th).
+export const NEXT_TEE_M = 25;
+export function isHoleBehind({ strokes = null, pickedUp = false, pos = null, nextTee = null, nextHoleShots = 0 }) {
+  if (pickedUp || (Number.isFinite(strokes) && strokes > 0)) return true;
+  if (nextHoleShots > 0) return true;
+  return !!(pos && nextTee && haversineMeters(pos, nextTee) <= NEXT_TEE_M);
+}
+
 // Shot log overlaid on the hole map (HoleFlyover), reduced to a single club
 // FAB in the bottom-right corner.
 //
@@ -42,9 +54,15 @@ export function isOnGreen(pt, green, greenCenter) {
 //     fallback when there's no fix); the club wheel opens on it, pre-focused
 //     on the club for the distance left to the green.
 //   - Long-press the FAB to drop the spot at the white aim ring instead.
+//   - Once you're on the green, the hole's spots already reach it, or you've
+//     moved on (`holeDone`, isHoleBehind), you can't be at a ball you forgot
+//     to mark: the FAB asks you to tap the map where you played it, and the
+//     spot goes into the hole's playing order (by distance to the green,
+//     seqForProposal).
 //   - Drag a pin on the map to reposition it (handled by the map/host, not
 //     here); tap a pin (relayed here as `tappedShotIndex`) to re-open the
-//     wheel and change the club, move it, add a shot after it, or delete it.
+//     wheel and change the club, move it, add a shot after it (tap the map
+//     where you played it), or delete it.
 //   - "On the green" closes the hole in one tap where the ball stopped (see
 //     finishOnGreen), so the approach earns its carry without marking a spot
 //     you'd only ever putt from. A spot on the green is where the first putt was
@@ -59,6 +77,11 @@ export function ShotTracker({
   tappedShotIndex, onConsumeShotTap, onCollapseTargets,
   // Shots the hole's score says are missing (useShotProposals), or null.
   missing = null,
+  // Tap-to-place: `onPlacing(true)` asks the map for the next tap, which
+  // comes back as `mapTap` `{ pos, at }`.
+  mapTap = null, onPlacing,
+  // You've moved on from this hole (isHoleBehind).
+  holeDone = false,
 }) {
   const appSettings = useAppSettings();
   const tl = useT();
@@ -69,6 +92,9 @@ export function ShotTracker({
   const shots = useMemo(() => shotsForHole(roundId, roundIndex, holeNumber), [roundId, roundIndex, holeNumber, shotsVersion]);
 
   const [wheelId, setWheelId] = useState(null); // shot id whose club wheel is open
+  // Waiting for a tap on the map: `{ since, afterId? }` — after a given spot
+  // (Add after), else in playing order.
+  const [placing, setPlacing] = useState(null);
 
   const overrides = appSettings.clubDistances;
   // Every guess here goes through guessClub, so the picker preselects the
@@ -80,6 +106,11 @@ export function ShotTracker({
     : null);
 
   const onGreen = (pt) => isOnGreen(pt, greenPolygon, targetPos);
+  // Past every ball still to mark: you've moved on from the hole, stand on its
+  // green, or its spots already reach it. Mark shot then asks where, instead
+  // of using your fix.
+  const pastTheBalls = holeDone
+    || (shots.length > 0 && (onGreen(pos) || shots.some((sh) => onGreen([sh.lat, sh.lng]))));
 
   // Add a ball spot at `spot` ([lat,lng]): the shot you're about to play from
   // there. Opens the club wheel on it, pre-focused on the club that covers
@@ -140,10 +171,43 @@ export function ShotTracker({
       onCollapseTargets?.([end]);
       return;
     }
+    if (pastTheBalls) { setPlacing({ since: Date.now() }); return; }
     const p = pos || aimPos;
     if (p) await addSpot(p);
   };
-  const dropAtAim = async () => { const p = aimPos || pos; if (p) await addSpot(p); };
+  const dropAtAim = async () => {
+    const p = aimPos || pos;
+    if (!p) return;
+    if (pastTheBalls) await placeInOrder(p);
+    else await addSpot(p);
+  };
+
+  // A shot you forgot to mark, placed on a finished hole: slotted into the
+  // playing order by distance to the green, with the club for what was left.
+  const placeInOrder = async (p) => {
+    const hole = shotsForHole(roundId, roundIndex, holeNumber);
+    const toGreen = targetPos ? haversineMeters(p, targetPos) : null;
+    const shot = await insertShotAt({
+      roundId, roundIndex, holeNumber, seq: seqForProposal({ lat: p[0], lng: p[1] }, hole, targetPos), pos: p,
+      club: guess(toGreen, p, targetPos, hole.length === 0),
+    });
+    if (shot) setWheelId(shot.id);
+  };
+
+  useEffect(() => { onPlacing?.(!!placing); }, [placing, onPlacing]);
+  // Tap-to-place: the first tap on the map after Mark shot / Add after asked
+  // for one is where that shot was played.
+  useEffect(() => {
+    if (!placing || !mapTap?.pos || mapTap.at < placing.since) return;
+    const { afterId } = placing;
+    setPlacing(null);
+    (async () => {
+      if (!afterId) { await placeInOrder(mapTap.pos); return; }
+      const added = await insertShotAfter(afterId, mapTap.pos);
+      if (added) setWheelId(added.id);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapTap]);
 
   // The approach finished on the green: everything after it is a putt, so the
   // chain ends here, at the best guess of where the ball stopped — your live
@@ -192,17 +256,13 @@ export function ShotTracker({
     if (wheelId && movePos) setShotPos(wheelId, movePos);
     closeWheel();
   };
-  // A shot played but never marked — a punch-out, a lay-up you walked past.
-  // It lands halfway to the next spot when there is one, else at the live fix,
-  // else at the aim ring; either way the pin is draggable once it's down.
-  const insertPos = editIndex >= 0 && shots[editIndex + 1]
-    ? [(editShot.lat + shots[editIndex + 1].lat) / 2, (editShot.lng + shots[editIndex + 1].lng) / 2]
-    : (pos || aimPos);
-  const insertShot = async () => {
-    if (!wheelId || !insertPos) return;
+  // A shot played but never marked — a punch-out, a lay-up you walked past:
+  // tap the map where you played it, and it goes in right after this spot.
+  const insertShot = () => {
+    if (!wheelId) return;
+    const afterId = wheelId;
     closeWheel();
-    const added = await insertShotAfter(wheelId, insertPos);
-    if (added) setWheelId(added.id);
+    setPlacing({ since: Date.now(), afterId });
   };
 
   // The score says shots are missing (a duff, a re-tee, a drop): play
@@ -213,7 +273,7 @@ export function ShotTracker({
     await insertShotAfter(editShot.id, [editShot.lat, editShot.lng], editShot.club);
   };
 
-  const canAdd = !!(aimPos || pos);
+  const canAdd = !!(aimPos || pos) || pastTheBalls;
   // Offered only while the hole's chain is still open — the last spot carries
   // a club, so its landing hasn't been marked yet — and only from somewhere the
   // green is actually reachable, so a mis-tap on the tee of a par 4 can't
@@ -224,7 +284,16 @@ export function ShotTracker({
 
   return (
     <View style={s.wrap} pointerEvents="box-none">
-      {!hideFabs && (
+      {placing && !hideFabs && (
+        <View style={s.placeCard} testID="place-hint">
+          <Feather name="crosshair" size={16} color={hud.text} />
+          <Text style={s.placeTxt}>{tl('shots.tracker.placeHint')}</Text>
+          <PressableScale onPress={() => setPlacing(null)} style={s.placeCancel} accessibilityRole="button">
+            <Text style={s.placeCancelTxt}>{tl('shots.tracker.placeCancel')}</Text>
+          </PressableScale>
+        </View>
+      )}
+      {!hideFabs && !placing && (
         <View style={s.fabCol}>
           {canFinishOnGreen && (
             <PressableScale
@@ -241,7 +310,7 @@ export function ShotTracker({
             onLongPress={once(dropAtAim)}
             disabled={!canAdd}
             style={[s.addBtn, !canAdd && s.fabDisabled]}
-            accessibilityLabel={tl('shots.tracker.markA11y')}
+            accessibilityLabel={tl(pastTheBalls ? 'shots.tracker.markGapA11y' : 'shots.tracker.markA11y')}
           >
             <Feather name="plus" size={20} color={hud.onAccent} />
             <Text style={s.addLbl}>{tl('shots.tracker.mark')}</Text>
@@ -261,7 +330,7 @@ export function ShotTracker({
         toPinMeters={editToPin}
         onSelect={chooseClub}
         onMove={movePos ? moveShot : undefined}
-        onInsert={insertPos && !editOnGreen ? insertShot : undefined}
+        onInsert={!editOnGreen ? insertShot : undefined}
         onRepeat={missing > 0 && !editOnGreen ? repeatShot : undefined}
         onDelete={removeShot}
         onClose={closeWheel}
@@ -293,4 +362,17 @@ const s = StyleSheet.create({
   },
   greenLbl: { color: hud.text, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
   fabDisabled: { opacity: 0.5 },
+  placeCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingLeft: 14, paddingRight: 6, minHeight: 48, borderRadius: 24,
+    backgroundColor: hud.card, borderWidth: StyleSheet.hairlineWidth, borderColor: hud.line,
+    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }, elevation: 4,
+  },
+  placeTxt: { color: hud.text, fontFamily: 'PlusJakartaSans-Bold', fontSize: 14 },
+  placeCancel: {
+    minHeight: 36, paddingHorizontal: 12, borderRadius: 18, justifyContent: 'center',
+    backgroundColor: hud.fill,
+  },
+  placeCancelTxt: { color: hud.textSoft, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
 });

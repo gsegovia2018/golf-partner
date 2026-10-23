@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
-import { ShotTracker } from '../ShotTracker';
+import { ShotTracker, isHoleBehind } from '../ShotTracker';
 
 // Controllable shot list for shotsForHole / getShots.
 let mockShots = [];
@@ -14,6 +14,7 @@ jest.mock('../../../store/shotStore', () => ({
   setShotClub: jest.fn(),
   setShotPos: jest.fn(),
   insertShotAfter: jest.fn(async () => ({ id: 'ins' })),
+  insertShotAt: jest.fn(async () => ({ id: 'gap' })),
   deleteShot: jest.fn(),
   chainEndNear: (...a) => jest.requireActual('../../../store/shotStore').chainEndNear(...a),
 }));
@@ -25,10 +26,11 @@ jest.mock('../ClubWheel', () => {
   return {
     wheelClubsFor: jest.requireActual('../ClubWheel').wheelClubsFor,
     ClubWheel: ({
-      visible, seqLabel, pickClub = true, onDelete, onMove, onInsert, onRepeat,
+      visible, seqLabel, pickClub = true, note, onDelete, onMove, onInsert, onRepeat,
     }) => (visible ? (
       <>
         <Text onPress={onDelete}>{`wheel:${seqLabel}`}</Text>
+        {note ? <Text>{`note:${note}`}</Text> : null}
         {!pickClub && <Text>wheel-no-club</Text>}
         {onMove && <Text onPress={onMove}>wheel-move</Text>}
         {onInsert && <Text onPress={onInsert}>wheel-insert</Text>}
@@ -43,7 +45,7 @@ jest.mock('../../../hooks/useAppSettings', () => ({
 }));
 
 const {
-  logShot, logMeasuredShot, deleteShot, setShotPos, setShotClub, insertShotAfter,
+  logShot, logMeasuredShot, deleteShot, setShotPos, setShotClub, insertShotAfter, insertShotAt,
 } = require('../../../store/shotStore');
 
 const base = {
@@ -60,6 +62,7 @@ beforeEach(() => {
   deleteShot.mockClear();
   setShotPos.mockClear();
   insertShotAfter.mockClear();
+  insertShotAt.mockClear();
 });
 
 describe('ShotTracker FAB', () => {
@@ -240,13 +243,12 @@ describe('ShotTracker on-green close', () => {
     getByText('wheel-no-club');
   });
 
-  it('a mark on the green after closing it does not give the green spot a club', async () => {
-    mockShots = [approach, { id: 'g', lat: base.targetPos[0], lng: base.targetPos[1], club: null }];
+  it('a mark after closing the hole asks where the missed shot was, not at your feet', async () => {
+    mockShots = [{ ...approach, seq: 1 }, { id: 'g', seq: 2, lat: base.targetPos[0], lng: base.targetPos[1], club: null }];
     const { getByLabelText, getByText } = render(<ShotTracker {...base} pos={[38.5561, -0.1471]} />);
-    await act(async () => { fireEvent.press(getByLabelText('Mark a shot at your location')); });
+    await act(async () => { fireEvent.press(getByLabelText('Add a shot you forgot to mark on this hole')); });
     expect(logShot).not.toHaveBeenCalled();
-    expect(setShotClub).not.toHaveBeenCalled();
-    getByText('wheel-no-club');
+    getByText('Tap the map where you played it');
   });
 
   it('is not offered once the chain is already closed', () => {
@@ -280,34 +282,15 @@ describe('ShotTracker shot editing', () => {
     expect(setShotPos).toHaveBeenCalledWith('s2', [38.5545, -0.1425]);
   });
 
-  it('after the last spot, an inserted shot lands at the live fix', async () => {
+  it('Add after waits for a tap and puts the shot there, right after that spot', async () => {
     mockShots = shots;
-    const { getByText } = render(
-      <ShotTracker {...base} tappedShotIndex={1} aimPos={[38.555, -0.143]} pos={[38.5548, -0.1428]} />,
-    );
+    const props = { ...base, tappedShotIndex: 0, aimPos: [38.555, -0.143], pos: [38.5548, -0.1428] };
+    const { getByText, rerender } = render(<ShotTracker {...props} />);
     await act(async () => { fireEvent.press(getByText('wheel-insert')); });
-    expect(insertShotAfter).toHaveBeenCalledWith('s2', [38.5548, -0.1428]);
-  });
-
-  it('after the last spot with no fix, an inserted shot lands at the aim ring', async () => {
-    mockShots = shots;
-    const { getByText } = render(
-      <ShotTracker {...base} tappedShotIndex={1} aimPos={[38.555, -0.143]} />,
-    );
-    await act(async () => { fireEvent.press(getByText('wheel-insert')); });
-    expect(insertShotAfter).toHaveBeenCalledWith('s2', [38.555, -0.143]);
-  });
-
-  it('between two spots, an inserted shot lands halfway, over the fix and the aim ring', async () => {
-    mockShots = shots;
-    const { getByText } = render(
-      <ShotTracker {...base} tappedShotIndex={0} aimPos={[38.555, -0.143]} pos={[38.5548, -0.1428]} />,
-    );
-    await act(async () => { fireEvent.press(getByText('wheel-insert')); });
-    const [id, [lat, lng]] = insertShotAfter.mock.calls[0];
-    expect(id).toBe('t');
-    expect(lat).toBeCloseTo(38.552, 6);
-    expect(lng).toBeCloseTo(-0.141, 6);
+    getByText('Tap the map where you played it');
+    expect(insertShotAfter).not.toHaveBeenCalled(); // not at your fix, nor the aim ring
+    await act(async () => { rerender(<ShotTracker {...props} mapTap={{ pos: [38.552, -0.141], at: Date.now() + 1000 }} />); });
+    expect(insertShotAfter).toHaveBeenCalledWith('t', [38.552, -0.141]);
   });
 
   it('offers +1 from here only while the score says shots are missing', async () => {
@@ -351,5 +334,101 @@ describe('On the green lands where the ball stopped', () => {
     open();
     await press({ pos: OFF, aimPos: OFF });
     expect(logShot).toHaveBeenCalledWith(expect.objectContaining({ pos: base.targetPos, club: null }));
+  });
+});
+
+describe('A shot you forgot to mark, added from the green', () => {
+  const tee = { id: 't', seq: 1, lat: 38.55, lng: -0.14, club: 'driver' };
+  const wedge = { id: 'w', seq: 2, lat: 38.5555, lng: -0.1465, club: 'sw' };
+  const onTheGreen = [38.55605, -0.14705]; // ~6 m from the green centre
+  const tapAt = (pos, at = Date.now() + 1000) => ({ pos, at });
+
+  it('mid-hole at your ball, Mark shot still drops the pin where you stand', async () => {
+    mockShots = [tee];
+    const { getByLabelText, queryByTestId } = render(<ShotTracker {...base} pos={[38.553, -0.143]} />);
+    await act(async () => { fireEvent.press(getByLabelText('Mark a shot at your location')); });
+    expect(logShot).toHaveBeenCalledWith(expect.objectContaining({ pos: [38.553, -0.143] }));
+    expect(queryByTestId('place-hint')).toBeNull();
+  });
+
+  it('on the green, Mark shot asks for a tap and places nothing until then', async () => {
+    mockShots = [tee];
+    const { getByLabelText, getByText, queryByLabelText } = render(<ShotTracker {...base} pos={onTheGreen} />);
+    await act(async () => { fireEvent.press(getByLabelText('Add a shot you forgot to mark on this hole')); });
+    getByText('Tap the map where you played it');
+    expect(queryByLabelText('Add a shot you forgot to mark on this hole')).toBeNull(); // FAB gives way
+    expect(logShot).not.toHaveBeenCalled();
+    expect(insertShotAt).not.toHaveBeenCalled();
+  });
+
+  it('the tap is where shot 2 goes, between the tee and the wedge', async () => {
+    mockShots = [tee, wedge];
+    const { getByLabelText, rerender, queryByTestId } = render(<ShotTracker {...base} pos={onTheGreen} />);
+    await act(async () => { fireEvent.press(getByLabelText('Add a shot you forgot to mark on this hole')); });
+    await act(async () => { rerender(<ShotTracker {...base} pos={onTheGreen} mapTap={tapAt([38.553, -0.143])} />); });
+    expect(insertShotAt).toHaveBeenCalledWith(expect.objectContaining({ seq: 2, pos: [38.553, -0.143] }));
+    expect(queryByTestId('place-hint')).toBeNull();
+  });
+
+  it('a tap from before Mark shot asked does not place anything', async () => {
+    mockShots = [tee];
+    const old = tapAt([38.553, -0.143], 1);
+    const { getByLabelText, rerender } = render(<ShotTracker {...base} pos={onTheGreen} mapTap={old} />);
+    await act(async () => { fireEvent.press(getByLabelText('Add a shot you forgot to mark on this hole')); });
+    await act(async () => { rerender(<ShotTracker {...base} pos={onTheGreen} mapTap={old} />); });
+    expect(insertShotAt).not.toHaveBeenCalled();
+  });
+
+  it('Cancel brings the button back without adding a shot', async () => {
+    mockShots = [tee];
+    const { getByLabelText, getByText, rerender } = render(<ShotTracker {...base} pos={onTheGreen} />);
+    await act(async () => { fireEvent.press(getByLabelText('Add a shot you forgot to mark on this hole')); });
+    fireEvent.press(getByText('Cancel'));
+    await act(async () => { rerender(<ShotTracker {...base} pos={onTheGreen} mapTap={tapAt([38.553, -0.143])} />); });
+    getByLabelText('Add a shot you forgot to mark on this hole');
+    expect(insertShotAt).not.toHaveBeenCalled();
+  });
+
+  it('a long-press drop at the aim ring on a finished hole also goes in playing order', async () => {
+    mockShots = [tee, wedge];
+    const { getByLabelText } = render(<ShotTracker {...base} pos={onTheGreen} aimPos={[38.553, -0.143]} />);
+    await act(async () => { fireEvent(getByLabelText('Add a shot you forgot to mark on this hole'), 'longPress'); });
+    expect(insertShotAt).toHaveBeenCalledWith(expect.objectContaining({ seq: 2, pos: [38.553, -0.143] }));
+  });
+});
+
+describe('Once you have moved on from the hole, Mark shot asks where', () => {
+  const nextTee = [38.557, -0.148];
+  const tee = { id: 't', seq: 1, lat: 38.55, lng: -0.14, club: 'driver' };
+
+  it('the hole is behind you once its score is in, picked up, at the next tee or the next hole has a shot', () => {
+    expect(isHoleBehind({})).toBe(false);
+    expect(isHoleBehind({ strokes: 5 })).toBe(true);
+    expect(isHoleBehind({ strokes: 0 })).toBe(false);
+    expect(isHoleBehind({ pickedUp: true })).toBe(true);
+    expect(isHoleBehind({ nextHoleShots: 1 })).toBe(true);
+    expect(isHoleBehind({ pos: [38.5571, -0.1481], nextTee })).toBe(true); // ~14 m from the next tee
+    expect(isHoleBehind({ pos: [38.5555, -0.1465], nextTee })).toBe(false); // still out on this hole
+  });
+
+  it('mid-fairway, with the hole done, a mark is placed by tap in playing order', async () => {
+    mockShots = [tee];
+    const { getByLabelText, rerender } = render(<ShotTracker {...base} pos={[38.553, -0.143]} holeDone />);
+    await act(async () => { fireEvent.press(getByLabelText('Add a shot you forgot to mark on this hole')); });
+    expect(logShot).not.toHaveBeenCalled();
+    await act(async () => {
+      rerender(<ShotTracker {...base} pos={[38.553, -0.143]} holeDone mapTap={{ pos: [38.554, -0.144], at: Date.now() + 1000 }} />);
+    });
+    expect(insertShotAt).toHaveBeenCalledWith(expect.objectContaining({ seq: 2, pos: [38.554, -0.144] }));
+  });
+
+  it('even the tee shot, when nothing was marked on the hole', async () => {
+    mockShots = [];
+    const { getByLabelText, rerender } = render(<ShotTracker {...base} pos={[38.557, -0.148]} holeDone />);
+    await act(async () => { fireEvent.press(getByLabelText('Add a shot you forgot to mark on this hole')); });
+    await act(async () => {
+      rerender(<ShotTracker {...base} pos={[38.557, -0.148]} holeDone mapTap={{ pos: [38.55, -0.14], at: Date.now() + 1000 }} />);
+    });
+    expect(insertShotAt).toHaveBeenCalledWith(expect.objectContaining({ seq: 1, pos: [38.55, -0.14] }));
   });
 });

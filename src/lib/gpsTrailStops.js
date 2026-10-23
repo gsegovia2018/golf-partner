@@ -145,6 +145,46 @@ export function assignStopsToHoles(stops, holes, { maxM = 60 } = {}) {
   return { byHole, unassigned };
 }
 
+// assignStopsToHoles with time: holes are played one after another, so a stop
+// on a hole's line hours apart from the rest of that hole's stops was made
+// while playing another hole (a drive into the next fairway). Each hole's
+// play is its largest run of stops with no gap over `gapMs`; a stop outside
+// its hole's play (or near no hole line) goes to the hole being played at
+// that moment — the latest play started before it — when that hole's line
+// is within `strayM`, else it is dropped.
+export const PLAY_GAP_MS = 10 * 60000;
+export function assignStopsByPlay(stops, holes, { maxM = 60, strayM = 150, gapMs = PLAY_GAP_MS } = {}) {
+  const { byHole: geo, unassigned } = assignStopsToHoles(stops, holes, { maxM });
+  const refs = new Map((holes ?? []).map((h) => [h.number, holeRefs(h)]).filter(([, r]) => r));
+  const byHole = new Map();
+  const add = (n, s) => { if (!byHole.has(n)) byHole.set(n, []); byHole.get(n).push(s); };
+  const plays = [];
+  const strays = [...unassigned];
+  for (const [n, list] of geo) {
+    const sorted = [...list].sort((a, b) => a.start - b.start);
+    const runs = [];
+    for (const s of sorted) {
+      const run = runs[runs.length - 1];
+      if (run && s.start - run[run.length - 1].end <= gapMs) run.push(s);
+      else runs.push([s]);
+    }
+    const main = runs.reduce((a, b) => (b.length > a.length ? b : a));
+    main.forEach((s) => add(n, s));
+    plays.push({ number: n, start: main[0].start });
+    runs.filter((r) => r !== main).forEach((r) => strays.push(...r.map((s) => ({ s, own: n }))));
+  }
+  plays.sort((a, b) => a.start - b.start);
+  for (const item of strays) {
+    const s = item.s ?? item;
+    const playing = plays.filter((p) => p.start <= s.start).pop();
+    if (!playing) continue;
+    if (playing.number === item.own) { add(playing.number, s); continue; } // no other hole since
+    const r = refs.get(playing.number);
+    if (r && segmentDistance([s.lat, s.lng], r.tee, r.green) <= strayM) add(playing.number, s);
+  }
+  return byHole;
+}
+
 // The walk drawn on the hole map: `walk` ([[lat,lng],...], in time order) with
 // `points` (trail points) appended, keeping one point every `stepM` metres so
 // a round stays a few thousand points. Poor fixes are dropped (cleanTrail).

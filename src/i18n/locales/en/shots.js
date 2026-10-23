@@ -91,6 +91,9 @@ export default {
   'shots.tracker.onGreen': 'On the green',
   'shots.tracker.markA11y': 'Mark a shot at your location',
   'shots.tracker.mark': 'Mark shot',
+  'shots.tracker.placeHint': 'Tap the map where you played it',
+  'shots.tracker.placeCancel': 'Cancel',
+  'shots.tracker.markGapA11y': 'Add a shot you forgot to mark on this hole',
   'shots.tracker.shotN': 'Shot {n}',
 
   'shots.measure.shot': 'Shot',
