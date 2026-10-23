@@ -13,7 +13,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { CONTENT_MAX_WIDTH } from '../theme/responsive';
 import { getTabBarItem, isCenterTab } from './tabBarModel';
 import {
-  BAR_COLLAPSED, BAR_HEIGHT, BAR_SIDE, STRIP_GAP, STRIP_HEIGHT, barBottom, setTabBarCollapsed, useTabBarCollapsed,
+  BAR_COLLAPSED, BAR_HEIGHT, BAR_SIDE, STRIP_GAP, STRIP_HEIGHT, barBottom, setTabBarCollapsed, shrunkLayout, useTabBarCollapsed,
 } from './tabBarChrome';
 import TabBarSurface from './TabBarSurface';
 import LiveRoundStrip from './LiveRoundStrip';
@@ -66,6 +66,7 @@ export default function FloatingTabBar({ state, navigation }) {
   const active = state.index;
   const centerIndex = state.routes.findIndex((r) => isCenterTab(r.name));
   const activeItem = getTabBarItem(state.routes[active]?.name);
+  const shrunk = shrunkLayout({ windowWidth, left, barWidth, hasLive: !!live });
   const menuHeight = playMenuHeight({ hasLive: !!live, hasQuickStart: quickStart.length > 0 });
 
   // A new tab starts with the bar open.
@@ -125,6 +126,7 @@ export default function FloatingTabBar({ state, navigation }) {
   };
 
   const pillStyle = useAnimatedStyle(() => ({
+    left: interpolate(collapse.value, [0, 1], [left, shrunk.tab]),
     width: interpolate(collapse.value, [0, 1], [barWidth, BAR_COLLAPSED], Extrapolation.EXTEND),
     height: interpolate(collapse.value, [0, 1], [BAR_HEIGHT, BAR_COLLAPSED], Extrapolation.EXTEND),
     bottom: interpolate(collapse.value, [0, 1], [bottom, bottom + (BAR_HEIGHT - BAR_COLLAPSED) / 2]),
@@ -145,14 +147,14 @@ export default function FloatingTabBar({ state, navigation }) {
     bottom: interpolate(collapse.value, [0, 1], [bottom + BAR_HEIGHT + STRIP_GAP, bottom + (BAR_HEIGHT - BAR_COLLAPSED) / 2]),
     opacity: 1 - Math.min(open.value * 2, 1),
   }));
-  // Play's disc: in the bar's middle, on the right when shrunk, and the
-  // whole menu card when held open.
+  // Play's disc: in the bar's middle, beside the tab circle when shrunk
+  // (shrunkLayout), and the whole menu card when held open.
   const discStyle = useAnimatedStyle(() => {
     const c = collapse.value;
     // The card never overshoots its frame; the spring only shows near rest.
     const k = Math.min(Math.max(open.value, 0), 1);
     const size = interpolate(c, [0, 1], [DISC, BAR_COLLAPSED]);
-    const x = interpolate(c, [0, 1], [left + barWidth / 2 - DISC / 2, left + barWidth - BAR_COLLAPSED]);
+    const x = interpolate(c, [0, 1], [left + barWidth / 2 - DISC / 2, shrunk.play]);
     const y = interpolate(c, [0, 1], [bottom + (BAR_HEIGHT - DISC) / 2, bottom + (BAR_HEIGHT - BAR_COLLAPSED) / 2]);
     return {
       left: x + (left - x) * k,
@@ -185,7 +187,7 @@ export default function FloatingTabBar({ state, navigation }) {
         <LiveRoundStrip live={live} collapse={collapse} reduced={reduced} theme={theme} onPress={resume} style={stripStyle} />
       ) : null}
 
-      <Animated.View style={[s.pill, { left }, pillStyle]} pointerEvents={menuOpen ? 'none' : 'box-none'}>
+      <Animated.View style={[s.pill, pillStyle]} pointerEvents={menuOpen ? 'none' : 'box-none'}>
         <TabBarSurface theme={theme} />
         <Animated.View style={[s.track, { width: trackWidth }, trackStyle]} pointerEvents={collapsed ? 'none' : 'box-none'}>
           <Animated.View pointerEvents="none" style={[s.drop, indicator.dropStyle]} />

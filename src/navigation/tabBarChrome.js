@@ -27,6 +27,16 @@ export function tabBarClearance(insetBottom, hasLive) {
   return barBottom(insetBottom) + BAR_HEIGHT + (hasLive ? STRIP_GAP + STRIP_HEIGHT : 0) + CONTENT_GAP;
 }
 
+// Where the shrunk bar's two circles sit (left edges). With a live round
+// they bracket the strip at the bar's ends; without one they pair up in the
+// middle, so no empty stretch opens between them.
+export const SHRUNK_GAP = 8;
+export function shrunkLayout({ windowWidth, left, barWidth, hasLive }) {
+  if (hasLive) return { tab: left, play: left + barWidth - BAR_COLLAPSED };
+  const mid = windowWidth / 2;
+  return { tab: mid - BAR_COLLAPSED - SHRUNK_GAP / 2, play: mid + SHRUNK_GAP / 2 };
+}
+
 // Scrolling down past COLLAPSE_AFTER collapses the bar, scrolling up (or
 // back near the top) expands it.
 export function nextCollapsed(collapsed, y, dy) {
