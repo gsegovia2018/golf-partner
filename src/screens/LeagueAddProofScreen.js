@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Switch, Image, Platform,
+  View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image, Platform,
 } from 'react-native';
+import Switch from '../components/ui/Switch';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ui/ScreenHeader';

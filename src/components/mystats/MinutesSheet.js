@@ -1,5 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withSpring, useReducedMotion,
+} from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
 import { useT } from '../../i18n';
 import { PRACTICE_MINUTES_OPTIONS } from '../../store/settingsStore';
@@ -7,6 +10,19 @@ import BottomSheet from '../BottomSheet';
 import IconButton from '../ui/IconButton';
 import PressableScale from '../ui/PressableScale';
 import SheetHandle from '../ui/SheetHandle';
+import { haptic } from '../../lib/haptics';
+import { duration, spring } from '../../theme/motion';
+
+// The selected dot springs in from nothing; the one it leaves shrinks away.
+function RadioDot({ on, style }) {
+  const reduced = useReducedMotion();
+  const p = useSharedValue(on ? 1 : 0);
+  useEffect(() => {
+    p.value = reduced ? (on ? 1 : 0) : withSpring(on ? 1 : 0, spring.snappy);
+  }, [on, reduced, p]);
+  const a = useAnimatedStyle(() => ({ transform: [{ scale: p.value }], opacity: Math.min(1, p.value * 2) }));
+  return <Animated.View style={[style, a]} />;
+}
 
 // The weekly practice time: four radio rows. Picking one reports it and closes.
 export default function MinutesSheet({ visible, onClose, minutes, onSelect }) {
@@ -28,7 +44,12 @@ export default function MinutesSheet({ visible, onClose, minutes, onSelect }) {
           return (
             <PressableScale
               key={m}
-              onPress={() => { onSelect(m); onClose(); }}
+              onPress={() => {
+                if (!on) haptic('selection');
+                onSelect(m);
+                // Let the dot land before the sheet goes.
+                setTimeout(onClose, duration.state);
+              }}
               accessibilityRole="radio"
               accessibilityState={{ checked: on }}
               aria-checked={on}
@@ -36,7 +57,7 @@ export default function MinutesSheet({ visible, onClose, minutes, onSelect }) {
               style={s.row}
               testID={`minutes-${m}`}
             >
-              <View style={[s.radio, on && s.radioOn]}>{on ? <View style={s.dot} /> : null}</View>
+              <View style={[s.radio, on && s.radioOn]}><RadioDot on={on} style={s.dot} /></View>
               <Text style={s.rowText}>{label}</Text>
             </PressableScale>
           );

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, startTransition } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share } from 'react-native';
+import Switch from '../components/ui/Switch';
 import ScreenContainer from '../components/ScreenContainer';
 import { markBootReady } from '../store/bootReveal';
 import IconButton from '../components/ui/IconButton';
@@ -1837,6 +1838,7 @@ export default function HomeScreen({ navigation, route }) {
         }))}
         footer={settings.scoringMode === 'matchplay' && matchPlayStandings && showRunning && !tournamentHasMixedModes(tournament)
           ? tr(matchPlayStandings.status) : null}
+        scope={`${leaderboardOverall}-${selectedRound}-${leaderboardAlt}`}
       />
       )}
 

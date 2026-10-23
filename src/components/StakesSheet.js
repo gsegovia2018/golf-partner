@@ -2,7 +2,9 @@
 // with amount chips; "Other" takes a typed amount. Saves { pot, perPoint, skin }
 // in cents, or null when every bet is off. Money logic lives in store/sideBets.
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Switch, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import Switch from './ui/Switch';
+import Collapse from './ui/Collapse';
 import BottomSheet from './BottomSheet';
 import SheetHandle from './ui/SheetHandle';
 import { PrimaryButton } from './ui/Buttons';
@@ -91,47 +93,45 @@ export default function StakesSheet({ visible, value, playerCount = 0, noSkins =
                 testID={`stakes-switch-${key}`}
               />
             </View>
-            {b.on && !blocked && (
-              <>
-                <View style={s.chips}>
-                  {presets.map((p) => {
-                    const on = !b.other && b.amount === p;
-                    return (
-                      <TouchableOpacity
-                        key={p}
-                        style={[s.chip, on && s.chipOn]}
-                        onPress={() => set(key, { amount: p, other: false })}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: on }}
-                      >
-                        <Text style={[s.chipText, on && s.chipTextOn]}>{formatEuros(p)}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                  <TouchableOpacity
-                    style={[s.chip, b.other && s.chipOn]}
-                    onPress={() => set(key, { other: true })}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: b.other }}
-                  >
-                    <Text style={[s.chipText, b.other && s.chipTextOn]}>{t('stakes.other')}</Text>
-                  </TouchableOpacity>
-                </View>
-                {b.other && (
-                  <TextInput
-                    style={[s.input, invalid(key) && b.text !== '' && s.inputErr]}
-                    value={b.text}
-                    onChangeText={(text) => set(key, { text })}
-                    keyboardType="decimal-pad"
-                    placeholder="0.50"
-                    placeholderTextColor={theme.text.muted}
-                    accessibilityLabel={t('stakes.otherA11y')}
-                    testID={`stakes-input-${key}`}
-                  />
-                )}
-                {invalid(key) && b.text !== '' && <Text style={s.err}>{t('stakes.error.amount')}</Text>}
-              </>
-            )}
+            <Collapse open={b.on && !blocked}>
+              <View style={s.chips}>
+                {presets.map((p) => {
+                  const on = !b.other && b.amount === p;
+                  return (
+                    <TouchableOpacity
+                      key={p}
+                      style={[s.chip, on && s.chipOn]}
+                      onPress={() => set(key, { amount: p, other: false })}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: on }}
+                    >
+                      <Text style={[s.chipText, on && s.chipTextOn]}>{formatEuros(p)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                <TouchableOpacity
+                  style={[s.chip, b.other && s.chipOn]}
+                  onPress={() => set(key, { other: true })}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: b.other }}
+                >
+                  <Text style={[s.chipText, b.other && s.chipTextOn]}>{t('stakes.other')}</Text>
+                </TouchableOpacity>
+              </View>
+              {b.other && (
+                <TextInput
+                  style={[s.input, invalid(key) && b.text !== '' && s.inputErr]}
+                  value={b.text}
+                  onChangeText={(text) => set(key, { text })}
+                  keyboardType="decimal-pad"
+                  placeholder="0.50"
+                  placeholderTextColor={theme.text.muted}
+                  accessibilityLabel={t('stakes.otherA11y')}
+                  testID={`stakes-input-${key}`}
+                />
+              )}
+              {invalid(key) && b.text !== '' && <Text style={s.err}>{t('stakes.error.amount')}</Text>}
+            </Collapse>
           </View>
         );
       })}

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Image,
-  StyleSheet, ScrollView, Alert, Platform, Share, Switch,
+  StyleSheet, ScrollView, Alert, Platform, Share,
 } from 'react-native';
+import Switch from '../components/ui/Switch';
 import ScreenContainer from '../components/ScreenContainer';
 
 import { Feather } from '@expo/vector-icons';

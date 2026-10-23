@@ -130,7 +130,7 @@ describe('LeagueAddProofScreen', () => {
 
     test('official result: the toggle starts on and attaches as "official"', async () => {
       const utils = render(wrap(<LeagueAddProofScreen navigation={nav()} route={appRoute('official')} />));
-      expect(utils.getByLabelText('It was an official tournament').props.value).toBe(true);
+      expect(utils.getByLabelText('It was an official tournament').props.accessibilityState.checked).toBe(true);
       expect(utils.queryByLabelText("Marker's name")).toBeNull();
       await choosePhoto(utils);
       fireEvent.press(utils.getByText('Submit card'));

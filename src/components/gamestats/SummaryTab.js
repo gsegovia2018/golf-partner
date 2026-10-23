@@ -118,6 +118,7 @@ export default function SummaryTab({
         subheader={result ? <View style={{ alignSelf: 'flex-start', marginBottom: 8 }}>{segmented}</View> : null}
         rows={rows}
         footer={footer}
+        scope={metric}
       />
 
       {multiRound && prog.series.length > 0 && (

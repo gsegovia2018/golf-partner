@@ -1017,6 +1017,8 @@ export function makeScorecardStyles(theme) {
       alignItems: 'center',
       justifyContent: 'center',
     },
+    // Holds the rolling number and, behind it, the under-par ring.
+    soloScoreNumWrap: { alignItems: 'center', justifyContent: 'center', minWidth: 72, minHeight: 64 },
     soloScoreNum: {
       color: theme.text.primary,
       fontSize: 48,
@@ -1460,6 +1462,11 @@ export function makeScorecardStyles(theme) {
       alignItems: 'center', justifyContent: 'center',
     },
     soloModeToggleBtnActive: {
+      backgroundColor: theme.accent.primary,
+    },
+    // The sliding fill behind the active side (top/bottom = the row's padding).
+    soloModeTogglePill: {
+      position: 'absolute', left: 0, top: 3, bottom: 3, borderRadius: 8,
       backgroundColor: theme.accent.primary,
     },
     soloModeToggleText: {

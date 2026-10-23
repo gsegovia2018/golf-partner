@@ -94,7 +94,7 @@ describe('SetupScreen league switch', () => {
       <SetupScreen navigation={navigation} route={{ params: params() }} />,
     ));
     const sw = await findByLabelText('Counts for El Club del Mulligan');
-    expect(sw.props.value).toBe(false);
+    expect(sw.props.accessibilityState.checked).toBe(false);
     expect(queryByText(/strokes from your league handicap/)).toBeNull();
 
     fireEvent.press(getByText('Start Game'));
@@ -109,7 +109,7 @@ describe('SetupScreen league switch', () => {
     ));
     expect(await findByText(/^Your \w+ card · 20 strokes from your league handicap 18\.0 · counts whatever you score$/))
       .toBeTruthy();
-    expect(getByLabelText('Counts for El Club del Mulligan').props.value).toBe(true);
+    expect(getByLabelText('Counts for El Club del Mulligan').props.accessibilityState.checked).toBe(true);
     // One handicap for a league card: the review names the league one, not my index.
     expect(getByText('Marcos · league HCP 18.0')).toBeTruthy();
   });
@@ -164,8 +164,8 @@ describe('SetupScreen league switch', () => {
       <SetupScreen navigation={navigation} route={{ params: { ...params({ leagueId: 'L1' }), prefill } }} />,
     ));
     const sw = await findByLabelText('Counts for El Club del Mulligan');
-    expect(sw.props.value).toBe(false);
-    expect(sw.props.disabled).toBe(true);
+    expect(sw.props.accessibilityState.checked).toBe(false);
+    expect(sw.props.accessibilityState.disabled).toBe(true);
     expect(getByText(/Your Red tees aren't rated, so this round can't be your \w+ card yet\./)).toBeTruthy();
     expect(queryByText(/strokes from your league handicap/)).toBeNull();
 
@@ -200,7 +200,7 @@ describe('SetupScreen league switch', () => {
     const { findByLabelText, getByText } = render(wrap(
       <SetupScreen navigation={navigation} route={{ params: params({ kind: 'tournament', leagueId: 'L1' }) }} />,
     ));
-    expect((await findByLabelText('Counts for El Club del Mulligan')).props.value).toBe(true);
+    expect((await findByLabelText('Counts for El Club del Mulligan')).props.accessibilityState.checked).toBe(true);
     fireEvent.press(getByText('Start Tournament'));
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     const t = createdTournament();
@@ -215,7 +215,7 @@ describe('SetupScreen league switch', () => {
       <SetupScreen navigation={navigation} route={{ params: params({ leagueId: 'L1' }) }} />,
     ));
     const sw = await findByLabelText('Counts for Otra Liga');
-    await waitFor(() => expect(sw.props.value).toBe(false));
+    await waitFor(() => expect(sw.props.accessibilityState.checked).toBe(false));
     fireEvent.press(getByText('Start Game'));
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(store.announceLeagueCard).not.toHaveBeenCalled();

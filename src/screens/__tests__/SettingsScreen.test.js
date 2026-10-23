@@ -71,9 +71,8 @@ test('no-spoilers mode disables the running-score switch and forces it off', asy
   await updateAppSettings({ noSpoilers: true });
   renderScreen();
   const sw = await screen.findByTestId('setting-showRunningScore');
-  expect(sw.props.disabled).toBe(true);
-  expect(sw.props.accessibilityState?.disabled ?? sw.props.disabled).toBe(true);
-  expect(sw.props.value).toBe(false);
+  expect(sw.props.accessibilityState.disabled).toBe(true);
+  expect(sw.props.accessibilityState.checked).toBe(false);
 });
 
 test('replays the app tour from the DISPLAY section', async () => {
@@ -111,7 +110,7 @@ test('usage stats switch is on by default and turns off', async () => {
   renderScreen();
   expect(await screen.findByText('PRIVACY')).toBeTruthy();
   expect(screen.getByText('Share usage stats')).toBeTruthy();
-  expect(screen.getByTestId('setting-usageStats').props.value).toBe(true);
+  expect(screen.getByTestId('setting-usageStats').props.accessibilityState.checked).toBe(true);
   fireEvent(screen.getByTestId('setting-usageStats'), 'valueChange', false);
   await waitFor(() => expect(getAppSettings().usageStats).toBe(false));
 });

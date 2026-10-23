@@ -4,7 +4,9 @@
 // horizontally-scrolling grid for 4-player Best Ball.
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, useWindowDimensions } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
+import useSlidingPill from '../ui/useSlidingPill';
 import { useT, t as tNow, formatNumber } from '../../i18n';
 import { unitText } from '../../lib/pointsText';
 import { playersMeFirst } from '../../lib/playerOrder';
@@ -26,6 +28,8 @@ import { resolvePairs } from '../../store/scoring';
 // neutral, double+ poor). The rare eagle gets a solid fill (with an inverse
 // digit — see digitOnSolid in the cell renderer) so it can't be mistaken for
 // a birdie.
+const DISPLAY_MODES = ['strokes', 'points'];
+
 function shapeColor(result, theme) {
   switch (result) {
     case 'eagle': return theme.scoreColor('excellent');
@@ -404,19 +408,22 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
     return { player: p, str, pts, vsPar, vsParLabel };
   });
   const leader = [...playerTotals].sort((a, b) => b.pts - a.pts)[0];
+  const modePill = useSlidingPill(DISPLAY_MODES.indexOf(displayMode));
 
   return (
     <View style={s.soloBoard}>
       {/* Strokes / Points toggle — sits above both nines in either layout. */}
       {!strokesOnly && (
       <View style={s.soloModeToggleRow}>
-        {['strokes', 'points'].map((m) => {
+        {modePill.measured && <Animated.View pointerEvents="none" style={[s.soloModeTogglePill, modePill.pillStyle]} />}
+        {DISPLAY_MODES.map((m, i) => {
           const active = displayMode === m;
           return (
             <Pressable
               key={m}
               onPress={() => setDisplayMode(m)}
-              style={[s.soloModeToggleBtn, active && s.soloModeToggleBtnActive]}
+              onLayout={modePill.onItemLayout(i)}
+              style={[s.soloModeToggleBtn, active && !modePill.measured && s.soloModeToggleBtnActive]}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
             >

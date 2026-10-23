@@ -678,6 +678,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
 
         <LeaderboardCard
           title={boardTitle}
+          scope={boardTitle}
           headerRight={boardMeta ? <Text style={s.boardMeta} numberOfLines={1}>{boardMeta}</Text> : null}
           subheader={(
             <>

@@ -5,8 +5,9 @@
 // built by store/leagueShare in the sharer's language.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, Switch, ScrollView, ActivityIndicator, StyleSheet,
+  View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet,
 } from 'react-native';
+import Switch from '../ui/Switch';
 import { Feather } from '@expo/vector-icons';
 import BottomSheet from '../BottomSheet';
 import SheetHandle from '../ui/SheetHandle';

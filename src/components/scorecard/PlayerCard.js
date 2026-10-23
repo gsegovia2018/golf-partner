@@ -9,6 +9,8 @@ import { makeScorecardStyles } from './styles';
 import { teamColor } from './teamModel';
 import { ShotDetailSection } from './ShotDetailSection';
 import PressableScale from '../ui/PressableScale';
+import RollingNumber from '../ui/RollingNumber';
+import UnderParRing from './UnderParRing';
 import { haptic } from '../../lib/haptics';
 import { useT, formatNumber } from '../../i18n';
 import { teeDisplayName } from '../../lib/teeName';
@@ -63,6 +65,9 @@ export const PlayerCard = React.memo(function PlayerCard({
     : points === 2 ? theme.text.primary // par is mid: ink, not green
     : points === 1 ? theme.scoreColor('neutral')
     : theme.scoreColor('poor');
+
+  // Birdie or better (gross): the gold ring around the number.
+  const underPar = strokes != null && hole?.par != null && strokes < hole.par;
 
   const t = totals ?? { pts: 0, str: 0, parPlayed: 0 };
   const vsPar = t.parPlayed > 0 ? t.str - t.parPlayed : 0;
@@ -235,14 +240,18 @@ export const PlayerCard = React.memo(function PlayerCard({
           }
         >
           <Animated.View style={[s.soloScoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
-            <Text style={[
-              s.soloScoreNum,
-              strokes == null && s.scoreDisplayNumEmpty,
-              ghostVisible && s.ghostScoreNum,
-              conflicted && { color: semantic.conflict.base },
-            ]}>
-              {strokes ?? (ghostVisible ? ghost.value : '—')}
-            </Text>
+            <View style={s.soloScoreNumWrap}>
+              <UnderParRing show={underPar} />
+              <RollingNumber
+                value={strokes ?? (ghostVisible ? ghost.value : '—')}
+                style={[
+                  s.soloScoreNum,
+                  strokes == null && s.scoreDisplayNumEmpty,
+                  ghostVisible && s.ghostScoreNum,
+                  conflicted && { color: semantic.conflict.base },
+                ]}
+              />
+            </View>
             <Text style={[s.soloScoreLabel, conflicted && { color: semantic.conflict.base }]}>
               {conflicted
                 ? tx('scorecard.player.tapResolve')

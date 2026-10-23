@@ -5,6 +5,8 @@ import { useTheme } from '../../theme/ThemeContext';
 import { useT, formatDate } from '../../i18n';
 import { progression } from '../../swing/drills';
 import PressableScale from '../ui/PressableScale';
+import Reveal from '../ui/Reveal';
+import { duration } from '../../theme/motion';
 import SectionCard from './SectionCard';
 import MinutesSheet from './MinutesSheet';
 import { DrillLine } from './CoachBits';
@@ -41,29 +43,32 @@ export default function WeeklyPlanCard({ week, focus, verdict, onChangeMinutes, 
       onInfo={onInfo}
       testID="weekly-plan-card"
     >
-      {plan.sessions.map((session) => (
-        <View
-          key={session.id}
-          style={s.tile}
-          testID={session.part > 1 ? `session-${session.kind}-${session.part}` : `session-${session.kind}`}
-        >
-          <View style={s.tileIcon}><Feather name={KIND_ICON[session.kind]} size={16} color={theme.accent.primary} /></View>
-          <View style={s.tileBody}>
-            <View style={s.tileHead}>
-              <Text style={s.tileKind}>
-                {session.parts > 1
-                  ? t('stats.my.coach.ui.kind.part', { kind: t(`stats.my.coach.ui.kind.${session.kind}`), part: session.part })
-                  : t(`stats.my.coach.ui.kind.${session.kind}`)}
-              </Text>
-              <Text style={s.tileMin}>{t('stats.my.coach.ui.fix.minutes', { minutes: session.minutes })}</Text>
+      {/* Re-plays when the weekly minutes change, so the re-packed sessions
+          visibly settle in one after another. */}
+      {plan.sessions.map((session, i) => (
+        <Reveal key={session.id} replay={plan.minutes} delay={i * 45} duration={duration.place}>
+          <View
+            style={s.tile}
+            testID={session.part > 1 ? `session-${session.kind}-${session.part}` : `session-${session.kind}`}
+          >
+            <View style={s.tileIcon}><Feather name={KIND_ICON[session.kind]} size={16} color={theme.accent.primary} /></View>
+            <View style={s.tileBody}>
+              <View style={s.tileHead}>
+                <Text style={s.tileKind}>
+                  {session.parts > 1
+                    ? t('stats.my.coach.ui.kind.part', { kind: t(`stats.my.coach.ui.kind.${session.kind}`), part: session.part })
+                    : t(`stats.my.coach.ui.kind.${session.kind}`)}
+                </Text>
+                <Text style={s.tileMin}>{t('stats.my.coach.ui.fix.minutes', { minutes: session.minutes })}</Text>
+              </View>
+              <Text style={s.why}>{renderMsg(session.why)}</Text>
+              {session.drills.map((d) => (
+                <View key={`${d.drillId}-${d.role}`} style={s.drillRow}><DrillLine drill={d} showLocation={false} /></View>
+              ))}
+              {session.drills.some((d) => d.source === 'swing') ? <Text style={s.why}>{progression()}</Text> : null}
             </View>
-            <Text style={s.why}>{renderMsg(session.why)}</Text>
-            {session.drills.map((d) => (
-              <View key={`${d.drillId}-${d.role}`} style={s.drillRow}><DrillLine drill={d} showLocation={false} /></View>
-            ))}
-            {session.drills.some((d) => d.source === 'swing') ? <Text style={s.why}>{progression()}</Text> : null}
           </View>
-        </View>
+        </Reveal>
       ))}
 
       <View style={s.tile} testID="session-course-task">

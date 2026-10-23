@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Platform, Linking } from 'react-native';
+import Switch from '../components/ui/Switch';
 import { Feather } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import ScreenContainer from '../components/ScreenContainer';
