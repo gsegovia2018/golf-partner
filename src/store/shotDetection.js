@@ -1,5 +1,5 @@
 import {
-  cleanTrail, detectStops, mergeStops, assignStopsToHoles, holeRefs, onGreen, haversine,
+  cleanTrail, detectStops, mergeStops, assignStopsByPlay, holeRefs, onGreen, haversine,
   MERGE_DIST_M,
 } from '../lib/gpsTrailStops';
 
@@ -8,15 +8,20 @@ import {
 // store/shotProposalStore feeds it and keeps the answers; the scorecard asks
 // the golfer to confirm each proposal before it becomes a shot.
 //
-// A proposal is a stop (gpsTrailStops: within STOP_RADIUS_M for STOP_MIN_MS)
+// A proposal is a stop (gpsTrailStops: within STOP_RADIUS_M, for PROPOSE_MIN_MS)
 // that the golfer has since walked more than MOVE_AWAY_M away from. Stops on
 // the green (putts), next to a shot already marked, or away from every hole
 // are not proposed.
 //
-// shortcut: thresholds (STOP_RADIUS_M 6 m, STOP_MIN_MS 15 s, MOVE_AWAY_M 20 m)
-// are uncalibrated guesses — golf_gps_trail had no recorded rounds when this
-// shipped. Recalibrate with scripts/analyzeGpsTrail.mjs once test rounds exist.
+// Only stops of PROPOSE_MIN_MS or more are proposed: on the first two recorded
+// rounds (Oct 2026) the stops the golfer added lasted a median ~80 s and only
+// 3 of 40 were under 30 s, while 61 of the 94 never added were under 30 s
+// (waiting on the tee, walking round the green). Shorter stops are still kept:
+// they are where a missed shot is placed (store/shotGap).
+//
+// shortcut: STOP_RADIUS_M 6 m and MOVE_AWAY_M 20 m are still uncalibrated.
 export const MOVE_AWAY_M = 20;
+export const PROPOSE_MIN_MS = 30000;
 // How far from the tee a first proposal still counts as the tee shot.
 export const TEE_RADIUS_M = 25;
 
@@ -37,23 +42,29 @@ export function takeClosedStops(buffer) {
   return { stops: closed, rest: pts.filter((p) => p.t >= cut) };
 }
 
-// The proposals to show on one hole, in the order they were played.
-// `stops`: the round's stored stops `{ id, start, end, lat, lng, hole, status, shotId? }`
-// (`hole` = the scorecard's hole when the stop ended). `course`: the course's
-// geometry entry (assembleCourses shape) or null; with holes, stops go to the
-// nearest hole line, else to `hole`. `shots`: the hole's marked shots.
-// Each result adds `toGreen` (m, or null without geometry) and `fromTee`.
-export function proposalsForHole(stops, { holeNumber, course = null, shots = [] }) {
+// One hole's stops, every status. `stops`: the round's stored stops
+// `{ id, start, end, lat, lng, hole, status, shotId? }` (`hole` = the
+// scorecard's hole when the stop ended). `course`: the course's geometry entry
+// (assembleCourses shape) or null; with holes, stops go to the hole being
+// played there and then (assignStopsByPlay), else to `hole`.
+export function holeStops(stops, { holeNumber, course = null }) {
   const geoHoles = course?.holes?.length ? course.holes : null;
-  const live = (stops ?? []).filter((s) => s.status !== 'dismissed');
-  const mine = geoHoles
-    ? (assignStopsToHoles(live, geoHoles).byHole.get(holeNumber) ?? [])
-    : live.filter((s) => s.hole === holeNumber);
-  const geo = geoHoles?.find((h) => h.number === holeNumber);
+  return geoHoles
+    ? (assignStopsByPlay(stops ?? [], geoHoles).get(holeNumber) ?? [])
+    : (stops ?? []).filter((s) => s.hole === holeNumber);
+}
+
+// The proposals to show on one hole, in the order they were played. `stops`
+// and `course` as in holeStops; `shots`: the hole's marked shots. Each result
+// adds `toGreen` (m, or null without geometry) and `fromTee`.
+export function proposalsForHole(stops, { holeNumber, course = null, shots = [] }) {
+  const geo = course?.holes?.find((h) => h.number === holeNumber);
   const refs = geo ? holeRefs(geo) : null;
-  return mine
+  return holeStops(stops, { holeNumber, course })
+    .filter((s) => s.status !== 'dismissed')
     .filter((s) => {
       if (s.status === 'added') return true;
+      if (s.end - s.start < PROPOSE_MIN_MS) return false;
       const pos = [s.lat, s.lng];
       if (refs && onGreen(pos, refs)) return false;
       return !shots.some((sh) => haversine(pos, [sh.lat, sh.lng]) < MERGE_DIST_M);
@@ -81,10 +92,8 @@ export function greenLandingStop(stops, { holeNumber, course = null, shots = [] 
   const refs = geo ? holeRefs(geo) : null;
   const last = shots[shots.length - 1];
   if (!refs || !last?.club || onGreen([last.lat, last.lng], refs)) return null;
-  const live = (stops ?? []).filter((s) => s.status === 'open');
-  const mine = assignStopsToHoles(live, geoHoles).byHole.get(holeNumber) ?? [];
-  return mine
-    .filter((s) => onGreen([s.lat, s.lng], refs))
+  return holeStops(stops, { holeNumber, course })
+    .filter((s) => s.status === 'open' && onGreen([s.lat, s.lng], refs))
     .sort((a, b) => a.start - b.start)[0] ?? null;
 }
 

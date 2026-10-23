@@ -9,6 +9,9 @@
 //                  { type:'tile', z, x, y, id }               (tile request)
 //   host -> page:  { type:'tile-data', id, dataUrl|null }     (tile answer)
 //   page -> host:  { type:'aim', pos:[lat,lng], rings:[[lat,lng],...] }
+//                  { type:'map-tap', pos:[lat,lng] }  (a tap while placing)
+//   host -> page:  { type:'placing', on }  (the next tap places a shot: it
+//                  posts map-tap instead of moving the aim ring)
 //   host -> page:  { type:'set-targets', targets:[[lat,lng],...] } (replaces rings)
 //   host -> page:  { type:'plays', plays:{ air, wind, approx, arrowDeg, windLine,
 //                    labels:{ plays, measured, windRow, air, total, foot } }|null }
@@ -138,6 +141,7 @@ let shots = DATA.shots || []; // logged shots for this hole: [{lat,lng,club}]
 let seen = DATA.seen || []; // automatically detected shots to review: [{lat,lng}]
 let walk = DATA.walk || []; // where the golfer walked (GPS trail): [[[lat,lng],...], ...] runs
 let lastShot = DATA.lastShot || null; // { meters, club } for the top-left card, or null to hide
+let placing = false; // the host is waiting for a tap to place a shot
 let plays = DATA.plays || null; // plays-like info from the host, or null (conditions off)
 let whyOpen = false; // the plays-like breakdown card under the HUD box
 let whyTimer = null;
@@ -234,6 +238,9 @@ function drawNow() {
   map.on('click', (e) => {
     if (lpFired) { lpFired = false; return; } // this click ended a long-press
     const p = [e.latlng.lat, e.latlng.lng];
+    // Placing a shot: the tap is the shot's spot, and the ring stays put so it
+    // doesn't sit on the new pin.
+    if (placing) { post({ type:'map-tap', pos: p }); return; }
     const i = (targets.length > 1 && dist(p, targets[1]) < dist(p, targets[0])) ? 1 : 0;
     targets[i] = p;
     drawTargets(from, g, cc);
@@ -545,6 +552,7 @@ window.addEventListener('message', (ev) => {
   if (m.type === 'shots') { shots = m.shots || []; draw(); }
   if (m.type === 'seen') { seen = m.seen || []; draw(); }
   if (m.type === 'walk') { walk = m.walk || []; draw(); }
+  if (m.type === 'placing') placing = !!m.on;
   if (m.type === 'last-shot') { lastShot = m.lastShot || null; renderLast(); }
   if (m.type === 'plays') { plays = m.plays || null; if (!plays) whyOpen = false; if (hudArgs) hud(hudArgs[0], hudArgs[1]); }
   // host -> page: { type:'set-targets', targets:[[lat,lng],...] } replaces the

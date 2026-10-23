@@ -7,7 +7,7 @@ import { getTileDataUrl } from '../../store/tileCache';
 // Native host: renders the Leaflet map page in a WebView. Same contract as the
 // web host — rebuilds only on hole/mode identity change; live updates are
 // injected as postMessage into the page so it never reloads.
-export function HoleMapView({ data, player, anchor, activeField, shots, seen, walk, lastShot, plays, targets, onShotMove, onAim, onShotTap, onSeenTap, onPoint, style }) {
+export function HoleMapView({ data, player, anchor, activeField, shots, seen, walk, lastShot, plays, targets, placing = false, onShotMove, onAim, onMapTap, onShotTap, onSeenTap, onPoint, style }) {
   const ref = useRef(null);
   useT(); // re-render when the language changes, so the page is rebuilt in it
   const lang = getLanguage();
@@ -26,6 +26,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, seen, wa
   useEffect(() => { send({ type: 'last-shot', lastShot: lastShot ?? null }); }, [lastShot]);
   useEffect(() => { send({ type: 'plays', plays: plays ?? null }); }, [plays]);
   useEffect(() => { if (targets) send({ type: 'set-targets', targets }); }, [targets]);
+  useEffect(() => { send({ type: 'placing', on: placing }); }, [placing]);
   useEffect(() => { if (activeField) send({ type: 'activeField', field: activeField }); }, [activeField]);
   useEffect(() => { if (data.updateHole) send({ type: 'hole', hole: data }); }, [data]);
 
@@ -41,6 +42,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, seen, wa
         if (m.type === 'point') onPoint?.(m.field, m.pos, m.drag);
         if (m.type === 'shot-move') onShotMove?.(m.index, m.pos);
         if (m.type === 'aim') onAim?.(m.pos, m.rings);
+        if (m.type === 'map-tap') onMapTap?.(m.pos);
         if (m.type === 'shot-tap') onShotTap?.(m.index);
         if (m.type === 'seen-tap') onSeenTap?.(m.index);
       if (m.type === 'seen-tap') onSeenTap?.(m.index);

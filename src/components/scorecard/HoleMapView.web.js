@@ -6,7 +6,7 @@ import { getTileDataUrl } from '../../store/tileCache';
 // Web host: renders the Leaflet map page in an <iframe>. Rebuilds the page only
 // when the hole/mode identity changes (data.holeKey); live player / activeField
 // / marker updates go through postMessage so the map never reloads.
-export function HoleMapView({ data, player, anchor, activeField, shots, seen, walk, lastShot, plays, targets, onShotMove, onAim, onShotTap, onSeenTap, onPoint, style }) {
+export function HoleMapView({ data, player, anchor, activeField, shots, seen, walk, lastShot, plays, targets, placing = false, onShotMove, onAim, onMapTap, onShotTap, onSeenTap, onPoint, style }) {
   const ref = useRef(null);
   const t = useT(); // re-render when the language changes, so the page is rebuilt in it
   const lang = getLanguage();
@@ -22,6 +22,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, seen, wa
       if (m.type === 'point') onPoint?.(m.field, m.pos, m.drag);
       if (m.type === 'shot-move') onShotMove?.(m.index, m.pos);
       if (m.type === 'aim') onAim?.(m.pos, m.rings);
+        if (m.type === 'map-tap') onMapTap?.(m.pos);
       if (m.type === 'shot-tap') onShotTap?.(m.index);
       if (m.type === 'seen-tap') onSeenTap?.(m.index);
       if (m.type === 'tile') {
@@ -31,7 +32,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, seen, wa
     };
     window.addEventListener('message', h);
     return () => window.removeEventListener('message', h);
-  }, [onPoint, onShotMove, onAim, onShotTap, onSeenTap, bucket]);
+  }, [onPoint, onShotMove, onAim, onMapTap, onShotTap, onSeenTap, bucket]);
 
   useEffect(() => { send({ type: 'player', pos: player || null, anchor: anchor ?? null }); }, [player, anchor]);
   useEffect(() => { send({ type: 'shots', shots: shots || [] }); }, [shots]);
@@ -40,6 +41,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, seen, wa
   useEffect(() => { send({ type: 'last-shot', lastShot: lastShot ?? null }); }, [lastShot]);
   useEffect(() => { send({ type: 'plays', plays: plays ?? null }); }, [plays]);
   useEffect(() => { if (targets) send({ type: 'set-targets', targets }); }, [targets]);
+  useEffect(() => { send({ type: 'placing', on: placing }); }, [placing]);
   useEffect(() => { if (activeField) send({ type: 'activeField', field: activeField }); }, [activeField]);
   useEffect(() => { if (data.updateHole) send({ type: 'hole', hole: data }); }, [data]);
 
