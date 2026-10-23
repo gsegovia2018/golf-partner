@@ -1,5 +1,5 @@
 import {
-  BAR_HEIGHT, COLLAPSE_AFTER, STRIP_GAP, STRIP_HEIGHT, barBottom, nextCollapsed, tabBarClearance,
+  BAR_COLLAPSED, BAR_HEIGHT, COLLAPSE_AFTER, SHRUNK_GAP, STRIP_GAP, STRIP_HEIGHT, barBottom, nextCollapsed, shrunkLayout, tabBarClearance,
 } from '../tabBarChrome';
 
 describe('nextCollapsed', () => {
@@ -29,5 +29,19 @@ describe('tabBarClearance', () => {
   test('follows the gesture-bar inset once it is taller than the minimum gap', () => {
     expect(barBottom(0)).toBe(barBottom(12));
     expect(barBottom(34)).toBe(barBottom(12) + 22);
+  });
+});
+
+describe('shrunkLayout', () => {
+  const frame = { windowWidth: 390, left: 16, barWidth: 358 };
+
+  test('without a live round the two circles pair up in the middle', () => {
+    const { tab, play } = shrunkLayout({ ...frame, hasLive: false });
+    expect(play - (tab + BAR_COLLAPSED)).toBe(SHRUNK_GAP);
+    expect((tab + play + BAR_COLLAPSED) / 2).toBe(195);
+  });
+
+  test('with a live round they sit at the bar ends around the strip', () => {
+    expect(shrunkLayout({ ...frame, hasLive: true })).toEqual({ tab: 16, play: 16 + 358 - BAR_COLLAPSED });
   });
 });
