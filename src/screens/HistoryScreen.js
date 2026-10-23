@@ -22,6 +22,7 @@ import { loadProfile, loadCachedProfile, computePersonalStats } from '../store/p
 import { buildHistorySections } from '../store/historyModel';
 import { semantic } from '../theme/tokens';
 import { useT, formatNumber } from '../i18n';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 
 // The era a net points record belongs to. Stableford points are net of the
 // handicap the round was played off, so a career best is not comparable with
@@ -47,6 +48,8 @@ const FILTERS = [
 // finished games and tournaments as one month-grouped timeline.
 export default function HistoryScreen({ navigation }) {
   const { theme } = useTheme();
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const t = useT();
   const { user } = useAuth() ?? {};
   const userId = user?.id ?? null;
@@ -201,7 +204,7 @@ export default function HistoryScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={s.content}>
+        <ScrollView contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]} {...tabBarScroll}>
           {stats && stats.roundsPlayed > 0 && (
             <PressableScale
               style={s.recordStrip}

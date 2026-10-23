@@ -40,6 +40,9 @@ const light = {
     secondary: '#ece8e1',
     elevated:  '#ffffff',
     skeleton:  '#ebe6dd',   // loading placeholders (components/ui/Skeleton)
+    // Tint over the tab bar's blur (navigation/TabBarSurface); strong = the Play menu.
+    frosted:       'rgba(255,255,255,0.55)',
+    frostedStrong: 'rgba(255,255,255,0.94)',
     deep:      DEEP_GREEN,
     deepInfo:  DEEP_INFO,
   },
@@ -74,6 +77,8 @@ const dark = {
     elevated:  'rgba(255,255,255,0.06)',
     // Not bg.secondary: at 4% white the blocks vanish on the dark canvas.
     skeleton:  'rgba(255,255,255,0.08)',
+    frosted:       'rgba(27,40,34,0.55)',
+    frostedStrong: 'rgba(21,38,30,0.9)',
     deep:      DEEP_GREEN,
     deepInfo:  DEEP_INFO,
   },

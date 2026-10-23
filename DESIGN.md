@@ -254,7 +254,7 @@ Golf Partner uses a hybrid depth model: light mode uses subtle card and accent s
 - **Card Shadow** (`shadowOpacity: 0.04`, offset 0x1, radius 6, elevation 2): Light-mode cards and list rows that need separation from Warm Canvas.
 - **Elevated Shadow** (`shadowOpacity: 0.08`, offset 0x2, radius 12, elevation 4): Modal-like panels, prominent overlays, or stronger surface separation.
 - **Accent Shadow** (`shadowColor: Clubhouse Green`, `shadowOpacity: 0.2`, offset 0x2, radius 8, elevation 3): Primary action buttons in light mode.
-- **Floating Tab Shadow** (`shadowOpacity: 0.16`, offset 0x8, radius 18, elevation 14): Reserved for the persistent bottom tab bar.
+- **Floating Tab Shadow** (`shadowOpacity: 0.14`, offset 0x8, radius 18; 0.4 in dark): Reserved for the floating tab bar, its live strip and the Play menu. No `elevation`: on Android it shows through the frosted surface as a grey smudge.
 - **Dark Surface Layering**: Dark mode prefers translucent green cards, white-alpha elevated surfaces, and green-tinted borders over heavy shadows.
 
 ### Named Rules
@@ -294,7 +294,8 @@ Golf Partner uses a hybrid depth model: light mode uses subtle card and accent s
 
 ### Navigation
 
-- **Bottom Tabs:** The persistent nav is a centered floating pill bar, 62px high, with three task tabs: Feed, Play, History. The active tab expands into a green pill with label text; inactive tabs are icon-only with muted color.
+- **Bottom Tabs:** `navigation/FloatingTabBar`. A frosted pill (66px) floats over the content: Feed, Stats, a green Play disc in the middle, History, Profile, each labelled except Play, inactive labels in Slate (Olive Muted fails AA at 10px). A Fairway Mint drop slides behind the selected tab (leading edge first) and a green ball hops to it, dropping into the Play disc on Play. Scrolling a tab screen down shrinks the bar to two circles, the current tab (tap to reopen; "⋯" on Play) and Play; scrolling up reopens it. While a round is live a strip above the bar (hole, course, my points) opens that scorecard directly, and folds between the two circles when the bar shrinks. Holding Play grows the disc into a menu: resume, new game, quick-start courses, open Play. Tab screens pad their scroll content with `useTabBarClearance()` and report scrolling with `useTabBarScroll()` (`navigation/tabBarChrome.js`); the live round and quick-start courses reach the bar through `store/playCue.js`, published by Home.
+- **Frosted surfaces:** the one place translucency is allowed: the tab bar, its strip and the Play menu (`navigation/TabBarSurface`: `expo-blur` under the `bg.frosted` / `bg.frostedStrong` tint). Nothing else in the app is glass.
 - **Headers:** Screen headers use 17px Bold Plus Jakarta Sans, simple icon buttons, and a primary-background surface. Avoid large marketing-style headers inside task screens.
 - **Sheets:** Bottom sheets slide from the bottom with a dark backdrop, rounded top corners, and a small drag handle. They should be used for focused choices or sharing flows, not as the first answer for every edit.
 
@@ -335,4 +336,4 @@ Golf Partner uses a hybrid depth model: light mode uses subtle card and accent s
 - **Don't** use gold for everyday CTAs, tabs, search fields, or filters.
 - **Don't** put Playfair Display inside buttons, chips, dense rows, or score inputs.
 - **Don't** rely on color alone for rankings, selected filters, score quality, or errors.
-- **Don't** use side-stripe card borders, gradient text, glassmorphism, or repeated identical marketing card grids.
+- **Don't** use side-stripe card borders, gradient text, glassmorphism (the frosted tab bar is the one exception), or repeated identical marketing card grids.
