@@ -12,7 +12,7 @@
     "test:watch": "jest --watch",
     "lint": "eslint .",
     "build:vendor": "node scripts/build-leaflet-vendor.js",
-    "postinstall": "patch-package && node scripts/copySwingWebAssets.mjs"
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@expo-google-fonts/playfair-display": "^0.4.2",
