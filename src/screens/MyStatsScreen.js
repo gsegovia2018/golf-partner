@@ -17,6 +17,7 @@ import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useT, t as tNow, formatNumber } from '../i18n';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import { useAuth } from '../context/AuthContext';
 import { loadAllTournamentsWithFallback, loadCachedTournamentsList } from '../store/tournamentStore';
 import { loadProfile, loadCachedProfile, upsertProfile } from '../store/profileStore';
@@ -174,6 +175,8 @@ export default function MyStatsScreen({ navigation, route }) {
     return () => { cancelled = true; };
   }, [user?.id]);
   const isTabPresentation = route?.params?.presentation === 'tab';
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const tabScrollRef = useRef(null);
   const tabLayoutsRef = useRef({});
   const tabViewportWidthRef = useRef(0);
@@ -866,8 +869,9 @@ export default function MyStatsScreen({ navigation, route }) {
     return (
       <ScrollView
         style={[s.page, { width: pageWidth }]}
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={[s.scroll, isTabPresentation && { paddingBottom: tabBarClearance }]}
         showsVerticalScrollIndicator={false}
+        {...(isTabPresentation ? tabBarScroll : null)}
       >
         {body}
       </ScrollView>

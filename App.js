@@ -140,10 +140,10 @@ const TAB_SCREENS = {
   Profile: { component: ProfileScreen, initialParams: { presentation: 'tab' } },
 };
 
-// Primary navigation: Feed, personal Stats, the raised Play action, History,
+// Primary navigation: Feed, personal Stats, the Play disc, History,
 // and Profile. The center route keeps the name "Home" so existing
-// navigate('Home') targets still resolve; it always lands on Home — the
-// live-round banner there is the way back into an in-progress scorecard.
+// navigate('Home') targets still resolve; a tap always lands on Home — the
+// live strip above the bar and Home's live card lead back into a scorecard.
 function MainTabs() {
   return (
     <Tab.Navigator

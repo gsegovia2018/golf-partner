@@ -24,6 +24,7 @@ import { clearFeedSnapshot } from '../store/feedStore';
 import { parseHandicapIndex, normalizeHandicapInput } from '../lib/handicap';
 import { haptic } from '../lib/haptics';
 import { useT, t as translate } from '../i18n';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 
 // Stagger step between section reveals on mount.
 const REVEAL_STEP = 40;
@@ -58,6 +59,8 @@ export default function ProfileScreen({ navigation, route }) {
   const t = useT();
   const s = makeStyles(theme);
   const isTabPresentation = route?.params?.presentation === 'tab';
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const { user } = useAuth() ?? {};
   const userId = user?.id ?? null;
 
@@ -334,7 +337,13 @@ export default function ProfileScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={s.scroll}
+          contentContainerStyle={[s.content, isTabPresentation && { paddingBottom: tabBarClearance }]}
+          automaticallyAdjustKeyboardInsets
+          keyboardShouldPersistTaps="handled"
+          {...(isTabPresentation ? tabBarScroll : null)}
+        >
           {/* First open with nothing cached: the real page with blocks where
               the values go (DESIGN.md "Loading states"). Links and Sign out
               work; fields stay disabled so typing is never overwritten. */}
