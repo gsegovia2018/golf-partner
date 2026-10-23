@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions,
-  Switch, Platform,
+  Platform,
 } from 'react-native';
+import Switch from './ui/Switch';
 import { Feather } from '@expo/vector-icons';
 
 import { useT } from '../i18n';

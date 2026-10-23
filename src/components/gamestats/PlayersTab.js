@@ -20,6 +20,8 @@ import {
 } from '../../store/statsEngine';
 import { roundSheet, bounceSheet, nemesisSheet, roundTag } from './sheets';
 import ShotScorecard from '../scorecard/ShotScorecard';
+import Reveal from '../ui/Reveal';
+import { duration } from '../../theme/motion';
 import { Ring, DotRow, PuttHistogram, DivergingBars, ComparePlot } from './charts';
 import { Chip, ModeToggle, SectionTitle, firstName, num, signed, shortName, useStatStyles } from './ui';
 
@@ -203,7 +205,9 @@ export default function PlayersTab({
           <View style={{ paddingHorizontal: 4 }}>
             <SectionTitle right={modeToggle('ledger-mode')}>{t('stats.game.ledger.title')}</SectionTitle>
           </View>
-          <ShotScorecard key={pid} card={card} mode={mode} />
+          <Reveal replay={mode} dy={4} duration={duration.state}>
+            <ShotScorecard key={pid} card={card} mode={mode} />
+          </Reveal>
         </View>
       )}
 

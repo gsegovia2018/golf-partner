@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import MinutesSheet from '../MinutesSheet';
 import WeeklyPlanCard from '../WeeklyPlanCard';
@@ -45,11 +45,18 @@ describe('MinutesSheet', () => {
     expect(r.getByText('The plan is sized to this time and re-packs when you change it.')).toBeTruthy();
   });
 
-  test('picking a row reports it and closes the sheet', () => {
-    const { r, onSelect, onClose } = setup();
-    fireEvent.press(r.getByLabelText('30 min a week'));
-    expect(onSelect).toHaveBeenCalledWith(30);
-    expect(onClose).toHaveBeenCalledTimes(1);
+  test('picking a row reports it and closes the sheet once the dot has landed', () => {
+    jest.useFakeTimers();
+    try {
+      const { r, onSelect, onClose } = setup();
+      fireEvent.press(r.getByLabelText('30 min a week'));
+      expect(onSelect).toHaveBeenCalledWith(30);
+      expect(onClose).not.toHaveBeenCalled();
+      act(() => { jest.advanceTimersByTime(300); });
+      expect(onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('the close button closes without choosing', () => {

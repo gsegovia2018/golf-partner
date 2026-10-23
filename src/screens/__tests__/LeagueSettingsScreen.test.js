@@ -250,6 +250,8 @@ describe('LeagueSettingsScreen', () => {
     await waitFor(() => getByText('MEMBERS'));
     fireEvent(getByLabelText('Javi paid'), 'valueChange', true);
     await waitFor(() => expect(store.setLeagueFeePaid).toHaveBeenCalledWith('L1', 'javi', true));
+    // The switches are disabled while the fee saves.
+    await waitFor(() => expect(getByLabelText('Javi admin').props.accessibilityState.disabled).toBe(false));
     fireEvent(getByLabelText('Javi admin'), 'valueChange', true);
     await waitFor(() => expect(store.setLeagueRole).toHaveBeenCalledWith('L1', 'javi', 'admin'));
   });

@@ -1,11 +1,11 @@
 import React from 'react';
 import { Pressable } from 'react-native';
 import Animated, {
-  useSharedValue, useAnimatedStyle, withTiming, Easing, useReducedMotion,
+  useSharedValue, useAnimatedStyle, withTiming, useReducedMotion,
 } from 'react-native-reanimated';
+import { duration, ease } from '../../theme/motion';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 
 export default function PressableScale({
   children, style, activeScale = 0.97, disabled, ...rest
@@ -18,7 +18,7 @@ export default function PressableScale({
   }));
 
   const to = (v) => {
-    scale.value = withTiming(v, { duration: 160, easing: EASE_OUT });
+    scale.value = withTiming(v, { duration: duration.touch, easing: ease.out });
   };
 
   return (

@@ -5,8 +5,9 @@
 // Start Round N.
 import React from 'react';
 import {
-  View, Text, Switch, TouchableOpacity, ActivityIndicator, StyleSheet,
+  View, Text, TouchableOpacity, ActivityIndicator, StyleSheet,
 } from 'react-native';
+import Switch from '../ui/Switch';
 import { useTheme } from '../../theme/ThemeContext';
 import { useT, formatDate } from '../../i18n';
 import InitialsAvatar from './InitialsAvatar';

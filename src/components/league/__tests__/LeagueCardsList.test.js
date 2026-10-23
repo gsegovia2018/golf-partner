@@ -65,8 +65,8 @@ describe('LeagueCardsList', () => {
     ));
     expect(getByText('Not counted: no connection.')).toBeTruthy();
     const sw = getByLabelText('Counts for Mulligan');
-    expect(sw.props.value).toBe(false);
-    expect(sw.props.disabled).toBe(true);
+    expect(sw.props.accessibilityState.checked).toBe(false);
+    expect(sw.props.accessibilityState.disabled).toBe(true);
     fireEvent.press(getByText('Try again'));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });

@@ -2,7 +2,10 @@
 // (tokens only), the common card/section/chip styles and two tiny controls.
 import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
+import useSlidingPill from '../ui/useSlidingPill';
+import { haptic } from '../../lib/haptics';
 import { semantic, onDeep } from '../../theme/tokens';
 import { withAlpha } from '../../theme/alpha';
 import { t, tr, formatNumber, useT } from '../../i18n';
@@ -100,18 +103,22 @@ export function Chip({ label, active, onPress, disabled, testID, accessibilityLa
 // Segmented control. `deep` styles it for the deep-green standings card.
 export function Segmented({ options, value, onChange, deep }) {
   const { s } = useStatStyles();
+  const active = options.findIndex((o) => o.key === value);
+  const { pillStyle, onItemLayout, measured } = useSlidingPill(active);
   return (
     <View style={[s.seg, deep && s.segDeep]} accessibilityRole="tablist">
-      {options.map((o) => {
+      {measured && <Animated.View pointerEvents="none" style={[s.pill, deep ? s.segItemOnDeep : s.segItemOn, pillStyle]} />}
+      {options.map((o, i) => {
         const on = o.key === value;
         return (
           <TouchableOpacity
             key={o.key}
-            onPress={() => onChange(o.key)}
+            onPress={() => { if (!on) haptic('selection'); onChange(o.key); }}
+            onLayout={onItemLayout(i)}
             hitSlop={{ top: 8, bottom: 8 }}
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
-            style={[s.segItem, on && (deep ? s.segItemOnDeep : s.segItemOn)]}
+            style={[s.segItem, on && !measured && (deep ? s.segItemOnDeep : s.segItemOn)]}
           >
             <Text style={[s.segText, deep && s.segTextDeep, on && (deep ? s.segTextOnDeep : s.segTextOn)]}>{o.label}</Text>
           </TouchableOpacity>
@@ -126,19 +133,23 @@ export function Segmented({ options, value, onChange, deep }) {
 export function ModeToggle({ value, onChange, testID }) {
   const { s } = useStatStyles();
   const tt = useT();
+  const modes = ['strokes', 'points'];
+  const { pillStyle, onItemLayout, measured } = useSlidingPill(modes.indexOf(value));
   return (
     <View style={s.mode} testID={testID}>
-      {['strokes', 'points'].map((m) => {
+      {measured && <Animated.View pointerEvents="none" style={[s.pill, s.pillInset2, s.modeItemOn, pillStyle]} />}
+      {modes.map((m, i) => {
         const on = m === value;
         return (
           <TouchableOpacity
             key={m}
             testID={testID ? `${testID}-${m}` : undefined}
-            onPress={() => onChange(m)}
+            onPress={() => { if (!on) haptic('selection'); onChange(m); }}
+            onLayout={onItemLayout(i)}
             hitSlop={{ top: 8, bottom: 8, left: 2, right: 2 }}
             accessibilityRole="button"
             accessibilityState={{ selected: on }}
-            style={[s.modeItem, on && s.modeItemOn]}
+            style={[s.modeItem, on && !measured && s.modeItemOn]}
           >
             <Text style={[s.modeText, on && s.modeTextOn]}>{tt(m === 'strokes' ? 'scorecard.grid.strokes' : 'scorecard.grid.points')}</Text>
           </TouchableOpacity>
@@ -201,6 +212,10 @@ function makeStyles(theme) {
     seg: { flexDirection: 'row', backgroundColor: theme.bg.secondary, borderRadius: 999, padding: 3, gap: 2 },
     segDeep: { backgroundColor: onDeep.fill },
     segItem: { minHeight: 28, justifyContent: 'center', paddingHorizontal: 10, borderRadius: 999 },
+    // The sliding fill behind the active item; `top`/`bottom` match the
+    // container padding (3 for seg, 2 for mode).
+    pill: { position: 'absolute', left: 0, top: 3, bottom: 3, borderRadius: 999 },
+    pillInset2: { top: 2, bottom: 2 },
     segItemOn: { backgroundColor: theme.bg.card },
     segItemOnDeep: { backgroundColor: onDeep.strong },
     segText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.text.secondary },

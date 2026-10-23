@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet } from 'react-native';
+import { curves, duration as motionDuration } from './src/theme/motion';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -112,6 +113,18 @@ import { startLeagueFinalPending } from './src/lib/leagueFinalPending';
 import { startProfileLocaleSync } from './src/lib/profileLocale';
 
 const Stack = createStackNavigator();
+
+// Stack transitions on the motion tokens (src/theme/motion.js): a push for
+// drill-down, a rise from the bottom for create / pick flows.
+const PUSH_EASING = Easing.bezier(...curves.push);
+const PUSH_SPEC = {
+  open: { animation: 'timing', config: { duration: motionDuration.place, easing: PUSH_EASING } },
+  close: { animation: 'timing', config: { duration: motionDuration.place - 60, easing: PUSH_EASING } },
+};
+const RISE_OPTIONS = {
+  cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
+  gestureDirection: 'vertical',
+};
 const Tab = createBottomTabNavigator();
 
 const navigationRef = createNavigationContainerRef();
@@ -427,27 +440,29 @@ function AppNavigator() {
         screenOptions={{
           headerShown: false,
           cardStyle: { flex: 1, backgroundColor: theme.bg.primary },
-          cardStyleInterpolator: CardStyleInterpolators.forFadeFromBottomAndroid,
-          transitionSpec: {
-            open: { animation: 'timing', config: { duration: 250 } },
-            close: { animation: 'timing', config: { duration: 200 } },
-          },
+          // Going deeper slides in from the right over a receding, dimmed screen
+          // (forHorizontalIOS); create flows rise from the bottom (RISE_OPTIONS).
+          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+          transitionSpec: PUSH_SPEC,
+          // The stack leaves the web without transitions unless asked; the PWA
+          // (iPhone players) gets the same push and rise as Android.
+          animation: 'default',
         }}
       >
         <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen name="ResetPassword" component={SetNewPasswordScreen} />{/* also short-circuited to directly above AppNavigator's session gate — registered here too so an in-app navigate('ResetPassword') still resolves */}
         <Stack.Screen name="Tournament" component={HomeScreen} initialParams={{ viewMode: 'tournament' }} />
-        <Stack.Screen name="Setup" component={SetupScreen} />
-        <Stack.Screen name="Scorecard" component={ScorecardScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
+        <Stack.Screen name="Setup" component={SetupScreen} options={RISE_OPTIONS} />
+        <Stack.Screen name="Scorecard" component={ScorecardScreen} />
         <Stack.Screen name="NextRound" component={NextRoundScreen} options={{ transitionSpec: { open: { animation: 'timing', config: { duration: 400 } }, close: { animation: 'timing', config: { duration: 300 } } } }} />
         <Stack.Screen name="CourseEditor" component={CourseEditorScreen} />
-        <Stack.Screen name="EditTournament" component={EditTournamentScreen} />
-        <Stack.Screen name="OfficialCreate" component={OfficialCreateScreen} />{/* stepped wizard — creates an official tournament, then navigates to OfficialSetup */}
+        <Stack.Screen name="EditTournament" component={EditTournamentScreen} options={RISE_OPTIONS} />
+        <Stack.Screen name="OfficialCreate" component={OfficialCreateScreen} options={RISE_OPTIONS} />{/* stepped wizard — creates an official tournament, then navigates to OfficialSetup */}
         <Stack.Screen name="OfficialSetup" component={OfficialSetupScreen} />{/* management screen — reached with { tournamentId } param after wizard creates */}
         <Stack.Screen name="PartyBoard" component={PartyBoardScreen} />
         <Stack.Screen name="OfficialAdmin" component={OfficialAdminScreen} />
         <Stack.Screen name="JoinOfficial" component={JoinOfficialScreen} />
-        <Stack.Screen name="LeagueCreate" component={LeagueCreateScreen} />{/* stepped wizard — creates a league, then offers the invite code, link and QR */}
+        <Stack.Screen name="LeagueCreate" component={LeagueCreateScreen} options={RISE_OPTIONS} />{/* stepped wizard — creates a league, then offers the invite code, link and QR */}
         <Stack.Screen name="JoinLeague" component={JoinLeagueScreen} />{/* /league/:code */}
         <Stack.Screen name="LeagueBoard" component={LeagueBoardScreen} />{/* reached with { leagueId } */}
         <Stack.Screen name="LeagueStats" component={LeagueStatsScreen} />{/* honours, leaders, season grid, rivals — { leagueId } */}
@@ -460,18 +475,18 @@ function AppNavigator() {
         <Stack.Screen name="MarkerCard" component={MarkerCardScreen} />{/* /m/:token opened by a signed-in visitor */}
         <Stack.Screen name="LeagueAnnounce" component={LeagueAnnounceScreen} />{/* off-app card: announce before playing */}
         <Stack.Screen name="LeagueCard" component={LeagueCardScreen} />{/* read-only member card, flick through the month: { leagueId, month, userId } */}
-        <Stack.Screen name="LeagueAddScore" component={LeagueAddScoreScreen} />{/* type the 18 holes after the round */}
-        <Stack.Screen name="LeagueAddProof" component={LeagueAddProofScreen} />{/* signed card photo or official result */}
+        <Stack.Screen name="LeagueAddScore" component={LeagueAddScoreScreen} options={RISE_OPTIONS} />{/* type the 18 holes after the round */}
+        <Stack.Screen name="LeagueAddProof" component={LeagueAddProofScreen} options={RISE_OPTIONS} />{/* signed card photo or official result */}
         <Stack.Screen name="PlayersLibrary" component={PlayersLibraryScreen} />
         <Stack.Screen name="CoursesLibrary" component={CoursesLibraryScreen} />
         <Stack.Screen name="CourseLibraryDetail" component={CourseLibraryDetailScreen} />
-        <Stack.Screen name="PlayerPicker" component={PlayerPickerScreen} />
-        <Stack.Screen name="CoursePicker" component={CoursePickerScreen} />
+        <Stack.Screen name="PlayerPicker" component={PlayerPickerScreen} options={RISE_OPTIONS} />
+        <Stack.Screen name="CoursePicker" component={CoursePickerScreen} options={RISE_OPTIONS} />
         <Stack.Screen name="Stats" component={StatsScreen} />
         <Stack.Screen name="MyStats" component={MyStatsScreen} />
         <Stack.Screen name="PlayerStats" component={PlayerStatsScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
         <Stack.Screen name="CourseStats" component={CourseStatsScreen} />
-        <Stack.Screen name="EditTeams" component={EditTeamsScreen} />
+        <Stack.Screen name="EditTeams" component={EditTeamsScreen} options={RISE_OPTIONS} />
         <Stack.Screen name="Gallery" component={GalleryScreen} />
         <Stack.Screen name="JoinTournament" component={JoinTournamentScreen} />
         <Stack.Screen name="ClaimPlayer" component={ClaimPlayerScreen} />
@@ -479,7 +494,7 @@ function AppNavigator() {
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="Bag" component={BagScreen} />
         <Stack.Screen name="SwingHome" component={SwingHomeScreen} />
-        <Stack.Screen name="SwingCapture" component={SwingCaptureScreen} />
+        <Stack.Screen name="SwingCapture" component={SwingCaptureScreen} options={RISE_OPTIONS} />
         <Stack.Screen name="SwingResults" component={SwingResultsScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
         <Stack.Screen name="SwingEditMarks" component={SwingEditMarksScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
         <Stack.Screen name="SwingCompare" component={SwingCompareScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />

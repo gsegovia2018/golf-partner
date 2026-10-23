@@ -1,11 +1,54 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, withDelay, withSequence, useReducedMotion,
+} from 'react-native-reanimated';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic, onDeep } from '../theme/tokens';
 import { useT } from '../i18n';
 import InitialsAvatar from './league/InitialsAvatar';
 import { circleText } from '../theme/circleText';
+import { duration, ease } from '../theme/motion';
+import CountUpText from './ui/CountUpText';
+
+// A row that slides from where it was to where it now is when the standings
+// re-order (the key is the player, so the same row moves), and brightens for
+// a moment when its place improved. Measured with onLayout and driven by
+// shared values: layout animations are unreliable on react-native-web.
+function MovingRow({ place, children }) {
+  const reduced = useReducedMotion();
+  const lastY = useRef(null);
+  const lastPlace = useRef(place);
+  const dy = useSharedValue(0);
+  const glow = useSharedValue(0);
+
+  const onLayout = (e) => {
+    const y = e.nativeEvent.layout.y;
+    const prev = lastY.current;
+    lastY.current = y;
+    const prevPlace = lastPlace.current;
+    lastPlace.current = place;
+    if (reduced || prev == null || Math.abs(prev - y) < 1) return;
+    dy.value = prev - y;
+    dy.value = withTiming(0, { duration: duration.place + 140, easing: ease.push });
+    if (prevPlace != null && place != null && place < prevPlace) {
+      glow.value = withSequence(
+        withDelay(duration.state, withTiming(1, { duration: duration.state })),
+        withTiming(0, { duration: duration.moment * 2 }),
+      );
+    }
+  };
+
+  const moveStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dy.value }] }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value }));
+  return (
+    <Animated.View style={moveStyle} onLayout={onLayout}>
+      {children}
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.glow, glowStyle]} />
+    </Animated.View>
+  );
+}
 
 // The deep-green leaderboard card: the tournament leaderboard on Play and the
 // season standings on the league board.
@@ -39,7 +82,9 @@ import { circleText } from '../theme/circleText';
 //                A row may set compact (shorter, no sub), or be { key, gap: true }: a "⋯" spacer
 //                for rows left out.
 //   more         optional { label, onPress }: a text button under the rows (Show all 18)
-export default function LeaderboardCard({ title, headerRight, subheader, rows = [], sections, footer, more }) {
+//   scope        optional, what the points measure (metric / round / month): points count up
+//                to a new value only while it stays the same; rows slide to new places always
+export default function LeaderboardCard({ title, headerRight, subheader, rows = [], sections, footer, more, scope }) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
@@ -61,51 +106,53 @@ export default function LeaderboardCard({ title, headerRight, subheader, rows = 
     const rankLabel = row.place == null ? '–' : row.isTie ? `T${row.place}` : row.place;
     const Row = row.onPress ? TouchableOpacity : View;
     return (
-      <Row
-        key={row.key ?? `${row.place}-${row.name}-${i}`}
-        {...(row.onPress ? { onPress: row.onPress, activeOpacity: 0.7, accessibilityRole: 'button', accessibilityLabel: row.isMe ? t('shared.leaderboard.yourCard') : t('shared.leaderboard.cardOf', { name: row.name }) } : {})}
-        style={[s.mastersRow, row.compact && s.mastersRowCompact, isFirstPlace && s.mastersRowFirst, row.isMe && s.mastersRowMe, i === list.length - 1 && { borderBottomWidth: 0 }]}
-      >
-        <View style={[s.mastersRankBadge, { backgroundColor: rankBg }, row.unranked && s.mastersRankUnranked]}>
-          <Text style={[s.mastersRankText, { color: rankColor }]}>{rankLabel}</Text>
-        </View>
-        {!!row.avatar && (
-          <InitialsAvatar
-            name={row.avatar.name}
-            url={row.avatar.url}
-            size={30}
-            deep
-            ring={row.isMe ? semantic.winner.dark : null}
-            style={s.mastersAvatar}
-          />
-        )}
-        <View style={s.mastersNameCol}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={[s.mastersName, (isFirstPlace || row.isMe) && { fontFamily: 'PlusJakartaSans-Bold' }, { flexShrink: 1 }]} numberOfLines={1}>
-              {row.name}
-            </Text>
-            {row.mark && <Feather name="award" size={14} color={semantic.winner.dark} />}
-            {!!row.move && (
-              <Text
-                style={[s.mastersMove, row.move < 0 && s.mastersMoveDown]}
-                accessibilityLabel={t(row.move > 0 ? 'shared.leaderboard.movedUp' : 'shared.leaderboard.movedDown', { count: Math.abs(row.move) })}
-              >{`${row.move > 0 ? '▲' : '▼'}${Math.abs(row.move)}`}</Text>
-            )}
+      <MovingRow key={row.key ?? `${row.place}-${row.name}-${i}`} place={row.place}>
+        <Row
+          {...(row.onPress ? { onPress: row.onPress, activeOpacity: 0.7, accessibilityRole: 'button', accessibilityLabel: row.isMe ? t('shared.leaderboard.yourCard') : t('shared.leaderboard.cardOf', { name: row.name }) } : {})}
+          style={[s.mastersRow, row.compact && s.mastersRowCompact, isFirstPlace && s.mastersRowFirst, row.isMe && s.mastersRowMe, i === list.length - 1 && { borderBottomWidth: 0 }]}
+        >
+          <View style={[s.mastersRankBadge, { backgroundColor: rankBg }, row.unranked && s.mastersRankUnranked]}>
+            <Text style={[s.mastersRankText, { color: rankColor }]}>{rankLabel}</Text>
           </View>
-          {!!row.detail && <Text style={s.mastersDetail} numberOfLines={2}>{row.detail}</Text>}
-        </View>
-        <Text
-          style={[s.mastersPoints, isFirstPlace && { fontSize: 18 }, cols && s.mastersPointsCol, row.white && s.mastersPointsWhite, row.muted && s.mastersPointsMuted, row.countdown && s.mastersPointsCountdown, row.warn && s.mastersWarn]}
-          {...(row.pointsLabel ? { accessibilityLabel: row.pointsLabel } : {})}
-        >{row.points}</Text>
-        {row.sub != null && (
-          <Text
-            style={[s.mastersSub, row.subGold && s.mastersSubGold, row.subPill && s.mastersSubPill, row.countdown && s.mastersSubCountdown, row.warn && s.mastersWarn]}
-            {...(row.subLabel ? { accessibilityLabel: row.subLabel } : {})}
-          >{row.compact ? '' : row.sub}</Text>
-        )}
-        {!!row.onPress && <Feather name="chevron-right" size={16} color={d.dim} style={{ marginLeft: 4 }} />}
-      </Row>
+          {!!row.avatar && (
+            <InitialsAvatar
+              name={row.avatar.name}
+              url={row.avatar.url}
+              size={30}
+              deep
+              ring={row.isMe ? semantic.winner.dark : null}
+              style={s.mastersAvatar}
+            />
+          )}
+          <View style={s.mastersNameCol}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={[s.mastersName, (isFirstPlace || row.isMe) && { fontFamily: 'PlusJakartaSans-Bold' }, { flexShrink: 1 }]} numberOfLines={1}>
+                {row.name}
+              </Text>
+              {row.mark && <Feather name="award" size={14} color={semantic.winner.dark} />}
+              {!!row.move && (
+                <Text
+                  style={[s.mastersMove, row.move < 0 && s.mastersMoveDown]}
+                  accessibilityLabel={t(row.move > 0 ? 'shared.leaderboard.movedUp' : 'shared.leaderboard.movedDown', { count: Math.abs(row.move) })}
+                >{`${row.move > 0 ? '▲' : '▼'}${Math.abs(row.move)}`}</Text>
+              )}
+            </View>
+            {!!row.detail && <Text style={s.mastersDetail} numberOfLines={2}>{row.detail}</Text>}
+          </View>
+          <CountUpText
+            scope={scope}
+            style={[s.mastersPoints, isFirstPlace && { fontSize: 18 }, cols && s.mastersPointsCol, row.white && s.mastersPointsWhite, row.muted && s.mastersPointsMuted, row.countdown && s.mastersPointsCountdown, row.warn && s.mastersWarn]}
+            {...(row.pointsLabel ? { accessibilityLabel: row.pointsLabel } : {})}
+          >{row.points}</CountUpText>
+          {row.sub != null && (
+            <Text
+              style={[s.mastersSub, row.subGold && s.mastersSubGold, row.subPill && s.mastersSubPill, row.countdown && s.mastersSubCountdown, row.warn && s.mastersWarn]}
+              {...(row.subLabel ? { accessibilityLabel: row.subLabel } : {})}
+            >{row.compact ? '' : row.sub}</Text>
+          )}
+          {!!row.onPress && <Feather name="chevron-right" size={16} color={d.dim} style={{ marginLeft: 4 }} />}
+        </Row>
+      </MovingRow>
     );
   };
 
@@ -211,3 +258,7 @@ function makeStyles(t) {
     },
   });
 }
+
+const styles = StyleSheet.create({
+  glow: { backgroundColor: onDeep.chip, borderRadius: 10 },
+});

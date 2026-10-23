@@ -223,6 +223,7 @@ export default function LeagueBoardPublicScreen(props) {
           title={season ? t('league.public.season').toUpperCase() : monthWord(active).toUpperCase()}
           subheader={chips}
           sections={sections}
+          scope={season ? 'season' : active}
         />
       </>
     );
