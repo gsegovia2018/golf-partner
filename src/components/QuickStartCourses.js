@@ -84,6 +84,8 @@ export default function QuickStartCourses({
   onRetryPlayers,
   onStart,
   onEditDetails,
+  openCourseId = null,
+  onCourseOpened,
 }) {
   const t = useT();
   const themeContext = useTheme() || {};
@@ -136,6 +138,17 @@ export default function QuickStartCourses({
         .slice(0, MAX_QUICK_START_PLAYERS),
     );
   };
+
+  // A course picked in the tab bar's Play menu opens its sheet here, once
+  // the list holding it has loaded.
+  useEffect(() => {
+    if (!openCourseId) return;
+    const course = normalizedCourses.find((c) => c.id === openCourseId);
+    if (!course) return;
+    openCourse(course);
+    onCourseOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openCourseId, normalizedCourses]);
 
   const closeSheet = () => {
     setSelectedCourse(null);

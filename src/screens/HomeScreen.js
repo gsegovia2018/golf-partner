@@ -6,7 +6,9 @@ import IconButton from '../components/ui/IconButton';
 import RoundScoreboard from '../components/RoundScoreboard';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
-import { CommonActions } from '@react-navigation/native';
+import { pushTournamentScorecard, openLiveScorecard } from '../navigation/openScorecard';
+import { setPlayCue, liveCue, quickStartCue } from '../store/playCue';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
@@ -177,6 +179,8 @@ export default function HomeScreen({ navigation, route }) {
   const [listStale, setListStale] = useState(false);
   // The tournament detail view (same component) has no phase hero.
   const homePhase = useHomePhase(viewMode === 'tournament' ? NO_TOURNAMENTS : allTournaments, currentUserId);
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   // During a round everything but the live hero folds behind one row.
   const [openableIds, setOpenableIds] = useState(null); // null = all openable
   const [loading, setLoading] = useState(() => !initialTournament);
@@ -627,30 +631,23 @@ export default function HomeScreen({ navigation, route }) {
     return me ? [me] : [];
   }
 
-  // Push Tournament + Scorecard together so backing out of the scorecard
-  // lands on the tournament view, not Home. Omitting scorecardParams lets
-  // ScorecardScreen default to the tournament's current round.
-  const pushTournamentScorecard = useCallback((scorecardParams) => {
-    const targetNavigation = navigation.getState?.().routeNames?.includes('Tournament')
-      ? navigation
-      : navigation.getParent?.() ?? navigation;
-    targetNavigation.dispatch((state) => {
-      const index = state.index ?? state.routes.length - 1;
-      const baseRoutes = state.routes.slice(0, index + 1);
-      const routes = [
-        ...baseRoutes,
-        { name: 'Tournament' },
-        scorecardParams ? { name: 'Scorecard', params: scorecardParams } : { name: 'Scorecard' },
-      ];
-      return CommonActions.reset({ ...state, routes, index: routes.length - 1 });
+  // The tab bar's live strip and Play hold menu (store/playCue.js) come
+  // from the Play tab itself, the one Home instance that is always mounted.
+  const publishesPlayCue = viewMode === 'list';
+  const cueLive = homePhase.phase === 'live' ? homePhase.live : null;
+  useEffect(() => {
+    if (!publishesPlayCue) return;
+    setPlayCue({
+      live: cueLive ? liveCue(cueLive, liveModel(cueLive, currentUserId)) : null,
+      quickStart: quickStartCue(quickStartCourses),
     });
-  }, [navigation]);
+  }, [publishesPlayCue, cueLive, currentUserId, quickStartCourses]);
+  useEffect(() => (publishesPlayCue ? () => setPlayCue(null) : undefined), [publishesPlayCue]);
 
   // Phase hero actions (store/homePhase.js): the scorecard, NextRound and
   // EditTeams read the active tournament, so the phase's one becomes active.
-  async function openPhaseScorecard({ tournament: t, roundIndex }) {
-    await setActiveTournament(t.id);
-    pushTournamentScorecard({ roundIndex, tournamentId: t.id });
+  function openPhaseScorecard({ tournament: t, roundIndex }) {
+    return openLiveScorecard(navigation, { tournamentId: t.id, roundIndex });
   }
   async function startPhaseRound(entry) {
     if (!entry.next) return openPhaseScorecard(entry);
@@ -662,8 +659,8 @@ export default function HomeScreen({ navigation, route }) {
   }
 
   const navigateToCreatedGame = useCallback(() => {
-    pushTournamentScorecard({ roundIndex: 0 });
-  }, [pushTournamentScorecard]);
+    pushTournamentScorecard(navigation, { roundIndex: 0 });
+  }, [navigation]);
 
   function closePostCreateInvite() {
     const created = postCreateInvite.tournament;
@@ -1266,9 +1263,10 @@ export default function HomeScreen({ navigation, route }) {
 
         <PullToRefresh
           style={s.scrollView}
-          contentContainerStyle={s.content}
+          contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]}
           refreshing={refreshing}
           onRefresh={onRefresh}
+          {...tabBarScroll}
         >
         {needsGender && (
           <TouchableOpacity
@@ -1378,6 +1376,8 @@ export default function HomeScreen({ navigation, route }) {
           onRetryPlayers={loadQuickStartPlayers}
           onStart={handleQuickStartStart}
           onEditDetails={handleQuickStartEditDetails}
+          openCourseId={route?.params?.quickStartCourseId ?? null}
+          onCourseOpened={() => navigation.setParams({ quickStartCourseId: undefined })}
         />
 
         <YourGame

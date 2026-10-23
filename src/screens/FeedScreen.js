@@ -18,6 +18,7 @@ import {
 import { notifyFeedActivity } from '../store/notificationStore';
 import { subscribeTournamentChanges, formatRoundLabel, getTournament } from '../store/tournamentStore';
 import { useAuth } from '../context/AuthContext';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import CommentsSheet from '../components/CommentsSheet';
 import MemoriesStoriesViewer from '../components/MemoriesStoriesViewer';
 import RoundStoriesRail, { RoundStoriesRailSkeleton } from '../components/feed/RoundStoriesRail';
@@ -230,6 +231,8 @@ function feedMark(label, startedAt) {
 
 export default function FeedScreen({ navigation }) {
   const { theme } = useTheme();
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const { user } = useAuth() ?? {};
   const userId = user?.id ?? null;
   const t = useT();
@@ -701,7 +704,8 @@ export default function FeedScreen({ navigation }) {
             data={items}
             keyExtractor={(it) => it.key}
             renderItem={({ item }) => renderRound(item)}
-            contentContainerStyle={s.list}
+            contentContainerStyle={[s.list, { paddingBottom: tabBarClearance }]}
+            {...tabBarScroll}
             refreshControl={(
               <RefreshControl
                 refreshing={refreshing}
