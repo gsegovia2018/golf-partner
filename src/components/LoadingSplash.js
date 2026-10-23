@@ -1,91 +1,56 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 import { semantic } from '../theme/tokens';
+import PuttScene from './splash/PuttScene';
+import GreenScene from './splash/GreenScene';
+import SwingScene from './splash/SwingScene';
+import WaterScene from './splash/WaterScene';
+import useSplashClock from './splash/useSplashClock';
+import {
+  pickScene, PUTT_STILL, GREEN_STILL, SWING_STILL, WATER_STILL,
+} from './splash/splashMath';
 
-// One shared cycle keeps the breath and the ring cadence in sync; rings run
-// on a seamless 1/3-cycle stagger so the pulse never goes still.
-const CYCLE = 2800;
-const RING_EASE = Easing.bezier(0.23, 1, 0.32, 1);
+const SCENE = {
+  putt: { Component: PuttScene, still: PUTT_STILL },
+  green: { Component: GreenScene, still: GREEN_STILL },
+  swing: { Component: SwingScene, still: SWING_STILL },
+  water: { Component: WaterScene, still: WATER_STILL },
+};
 
 // Boot passes through several gates that each mount this splash back to back
-// (fonts/device → auth → onboarding). The wordmark entrance should read once
-// per cold start, not replay at every hand-off.
+// (fonts/device → auth → onboarding). The scene is picked once per launch and the
+// wordmark entrance reads once per cold start, so a hand-off never swaps or replays them.
+let launchScene = null;
 let wordmarkPlayed = false;
 
-function Ring({ delay }) {
-  const v = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const run = Animated.sequence([
-      Animated.delay(delay),
-      Animated.loop(
-        Animated.timing(v, {
-          toValue: 1,
-          duration: CYCLE,
-          useNativeDriver: true,
-          easing: RING_EASE,
-        }),
-      ),
-    ]);
-    run.start();
-    return () => run.stop();
-  }, [delay, v]);
-
-  return (
-    <Animated.View
-      style={[
-        styles.ring,
-        {
-          transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.92, 2.35] }) }],
-          opacity: v.interpolate({ inputRange: [0, 0.14, 1], outputRange: [0, 0.5, 0] }),
-        },
-      ]}
-    />
-  );
-}
-
-export default function LoadingSplash() {
-  const breathe = useRef(new Animated.Value(0)).current;
-  const wordmark = useRef(new Animated.Value(wordmarkPlayed ? 1 : 0)).current;
+// `scene` pins one scene ('putt' | 'green' | 'swing' | 'water'); otherwise one is drawn at random.
+export default function LoadingSplash({ scene }) {
+  const [name] = useState(() => {
+    if (scene) return scene;
+    if (!launchScene) launchScene = pickScene();
+    return launchScene;
+  });
+  const { Component, still } = SCENE[name] ?? SCENE.putt;
+  const clock = useSplashClock(still);
+  const reduced = useReducedMotion();
+  const wordmark = useRef(new Animated.Value(wordmarkPlayed || reduced ? 1 : 0)).current;
 
   useEffect(() => {
-    const breatheLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breathe, {
-          toValue: 1, duration: CYCLE / 2, useNativeDriver: true,
-          easing: Easing.inOut(Easing.sin),
-        }),
-        Animated.timing(breathe, {
-          toValue: 0, duration: CYCLE / 2, useNativeDriver: true,
-          easing: Easing.inOut(Easing.sin),
-        }),
-      ]),
-    );
-    breatheLoop.start();
-    if (!wordmarkPlayed) {
-      wordmarkPlayed = true;
-      Animated.timing(wordmark, {
-        toValue: 1, duration: 800, delay: 200, useNativeDriver: true,
-        easing: RING_EASE,
-      }).start();
-    }
-    return () => breatheLoop.stop();
-  }, [breathe, wordmark]);
+    if (wordmarkPlayed) return;
+    wordmarkPlayed = true;
+    if (reduced) return;
+    Animated.timing(wordmark, {
+      toValue: 1, duration: 800, delay: 200, useNativeDriver: true,
+      easing: Easing.bezier(0.23, 1, 0.32, 1),
+    }).start();
+  }, [wordmark, reduced]);
 
-  const ballScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.04] });
   const wordmarkRise = wordmark.interpolate({ inputRange: [0, 1], outputRange: [8, 0] });
 
   return (
     <View style={styles.container}>
-      <View style={styles.stack}>
-        <Ring delay={0} />
-        <Ring delay={CYCLE / 3} />
-        <Ring delay={(CYCLE / 3) * 2} />
-        <Animated.View style={[styles.ball, { transform: [{ scale: ballScale }] }]}>
-          <View style={[styles.dimple, styles.d1]} />
-          <View style={[styles.dimple, styles.d2]} />
-          <View style={[styles.dimple, styles.d3]} />
-        </Animated.View>
-      </View>
+      <Component clock={clock} />
       <Animated.Text
         style={[styles.wordmark, { opacity: wordmark, transform: [{ translateY: wordmarkRise }] }]}
       >
@@ -102,37 +67,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#0f3d2c',
   },
-  stack: {
-    width: 130, height: 130,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  ring: {
-    position: 'absolute',
-    width: 52, height: 52, borderRadius: 26,
-    borderWidth: 1.5, borderColor: semantic.winner.dark,
-  },
-  ball: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#fefefe',
-    shadowColor: semantic.winner.dark,
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
-  },
-  dimple: {
-    position: 'absolute',
-    width: 3, height: 3, borderRadius: 1.5,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-  },
-  d1: { top: 10, left: 13 },
-  d2: { top: 13, right: 11 },
-  d3: { bottom: 11, left: 18 },
+  // System font on purpose: the first splash renders before the app's fonts have loaded.
   wordmark: {
-    marginTop: 36,
-    color: semantic.winner.dark,
+    marginTop: 24,
+    paddingLeft: 6,
+    color: semantic.winner.soft,
     fontSize: 12,
-    letterSpacing: 5,
-    fontWeight: '700',
+    letterSpacing: 6,
+    fontWeight: '600',
   },
 });
