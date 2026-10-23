@@ -5,6 +5,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { onDeep } from '../theme/tokens';
+import { toneSurfaceFixed } from '../theme/tone';
 import { useT, formatOrdinal, formatTime, formatNumber } from '../i18n';
 import { verdictKey } from './mystats/reportKeys';
 import { fmtDelta } from './mystats/reportCardView';
@@ -215,7 +216,16 @@ export function AfterHero({ model, tournament, meId, report, photos, onOpen, onA
     ? [word, report.vsAvg != null ? t('stats.my.report.vsAvgChip', { delta: fmtDelta(report.vsAvg) }) : null].filter(Boolean).join(' · ')
     : null;
   return (
-    <View style={s.deep} testID="home-phase-after">
+    <View
+      style={[
+        s.deep,
+        // The card is the verdict: green / ink / red, like the report hero.
+        report?.tone && { backgroundColor: toneSurfaceFixed(report.tone) },
+        // Ink on the dark theme's near-black page needs an edge.
+        report?.tone === 'neutral' && theme.isDark && s.inkEdge,
+      ]}
+      testID="home-phase-after"
+    >
       <View style={s.head}>
         <View style={[s.headDot, { backgroundColor: onDeep.faint }]} />
         <Text style={s.overline} numberOfLines={1}>{whenLabel(t, model.endedAt)} · {model.courseName || model.name}</Text>
@@ -294,6 +304,7 @@ export function YourGame({ swingLine, onSwing, onCoach }) {
 const makeStyles = (theme) => StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   bold: { fontFamily: 'PlusJakartaSans-ExtraBold' },
+  inkEdge: { borderWidth: StyleSheet.hairlineWidth, borderColor: onDeep.borderStrong },
   deep: {
     backgroundColor: theme.bg.deep, borderRadius: 14, paddingTop: 15, paddingBottom: 14, paddingHorizontal: 14,
     marginBottom: 16, gap: 6,
