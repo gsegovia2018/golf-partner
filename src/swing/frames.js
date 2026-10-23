@@ -45,7 +45,9 @@
 // They go with the swing folder. A swing analysed by an older binary has none: getProxy()
 // returns null and the canvas keeps the last full-resolution still while scrubbing.
 
-import { Paths, File, Directory } from 'expo-file-system';
+import {
+  Paths, File, Directory, displayUri,
+} from './fs';
 import { getSwingAvailability } from './availability';
 import { swingVideoUri } from '../store/swingStore';
 
@@ -302,5 +304,6 @@ export function proxyFrame(frame, proxies) {
 /** URI of the scrub proxy nearest to a frame, or null (none for this swing or this frame). Synchronous, no I/O. */
 export function getProxy(swingId, frame, proxies) {
   const f = proxyFrame(frame, proxies);
-  return f == null ? null : `${proxyDir(swingId).uri.replace(/\/$/, '')}/${f}.jpg`;
+  // displayUri: the web serves a stored file from a blob: URL (fs.web.js); a phone's path is already one
+  return f == null ? null : displayUri(`${proxyDir(swingId).uri.replace(/\/$/, '')}/${f}.jpg`);
 }

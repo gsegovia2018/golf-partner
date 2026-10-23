@@ -180,6 +180,7 @@ export default {
   "home.phase.live.thru": "tras {count}",
   "home.phase.swing": "Swing",
   "home.phase.swingEmpty": "Graba uno",
+  "home.phase.swingEmptyWeb": "Analiza uno",
   "home.phase.you": "Tú",
   "home.phase.yourGame": "Tu juego",
   "home.pointValues.save": "Guardar",

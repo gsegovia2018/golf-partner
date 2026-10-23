@@ -5,6 +5,7 @@
 // such leaf into a getter, so the value follows the active language at the moment it is
 // read (never cache it in a module constant). Parameterised entries stay functions and
 // call t() themselves; their keys sit under the same path convention.
+import { Platform } from 'react-native';
 import { t, getLanguage } from '../i18n';
 import { formatNumber } from '../i18n/format';
 
@@ -13,12 +14,26 @@ const n0 = (v) => formatNumber(r0(v));
 
 const L = Symbol('swing.leaf');
 
+// The web build keeps swings in the browser, not "on this phone": these leaves read their web
+// wording there (plan 2026-10-23-swing-analyzer-web). Keys are the leaves' own paths.
+const WEB_KEYS = {
+  'swing.privacy': 'swing.web.privacy',
+  'swing.home.storedHere': 'swing.web.storedHere',
+  'swing.home.emptyTitle': 'swing.web.emptyTitle',
+  'swing.home.emptyHint': 'swing.web.emptyHint',
+  'swing.home.deleteBody': 'swing.web.deleteBody',
+  'swing.profileSheet.body': 'swing.web.profileSheetBody',
+  'swing.mark.saveFailedBody': 'swing.web.saveFailedBody',
+  'swing.results.errorBody.cancelled': 'swing.web.cancelledBody',
+};
+const leaf = (key) => t(Platform.OS === 'web' && WEB_KEYS[key] ? WEB_KEYS[key] : key);
+
 const hasLeaf = (node) => node === L
   || (Array.isArray(node) && node.some(hasLeaf))
   || (node && typeof node === 'object' && !Array.isArray(node) && Object.values(node).some(hasLeaf));
 
 function resolve(node, path) {
-  if (node === L) return t(`swing.${path.join('.')}`);
+  if (node === L) return leaf(`swing.${path.join('.')}`);
   if (Array.isArray(node)) return node.map((x, i) => resolve(x, [...path, i]));
   if (node && typeof node === 'object') {
     return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, resolve(v, [...path, k])]));
@@ -31,7 +46,7 @@ function build(node, path = []) {
   Object.entries(node).forEach(([key, value]) => {
     const p = [...path, key];
     if (value === L) {
-      Object.defineProperty(out, key, { enumerable: true, get: () => t(`swing.${p.join('.')}`) });
+      Object.defineProperty(out, key, { enumerable: true, get: () => leaf(`swing.${p.join('.')}`) });
     } else if (Array.isArray(value) && hasLeaf(value)) {
       let cached = null;
       Object.defineProperty(out, key, {
@@ -104,6 +119,9 @@ export const SWING_STRINGS = build({
     deleteA11y: (name) => t('swing.home.deleteA11y', { name }),
     fpsWarn: (fps) => t('swing.home.fpsWarn', { fps }),
     fpsWarnA11y: (fps) => t('swing.home.fpsWarnA11y', { fps }),
+    // The web build (plan 2026-10-23): a browser that can't run the analyzer.
+    webUnsupportedTitle: () => t('swing.web.unsupportedTitle'),
+    webUnsupportedBody: () => t('swing.web.unsupportedBody'),
   },
 
   // First-run sheet (D5, D6).

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, Alert, Image, Pressable,
+  View, Text, StyleSheet, ScrollView, TextInput, Alert, Image, Pressable, Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
@@ -20,6 +20,7 @@ import {
 } from '../store/swingStore';
 import { getSwingAvailability } from '../swing/availability';
 import { pickSwingVideo } from '../swing/importVideo';
+import { displayUri } from '../swing/fs';
 import { defaultHeightCm } from '../swing/scale';
 import { normClub } from '../swing/checks';
 import { passDone, MARK_TOTAL } from '../swing/markPass';
@@ -67,6 +68,8 @@ export default function SwingHomeScreen({ navigation }) {
   const profile = getSwingProfile();
   const availability = useMemo(() => getSwingAvailability(), []);
   const canAnalyse = availability.supported;
+  // The web build analyses imported clips only: no browser records high-speed video.
+  const isWeb = Platform.OS === 'web';
 
   useEffect(() => { hydrateSwings(); }, []);
 
@@ -187,7 +190,7 @@ export default function SwingHomeScreen({ navigation }) {
             </View>
           ) : null}
           <View style={s.thumb}>
-            {sw.thumb ? <Image source={{ uri: sw.thumb }} style={s.thumbImg} resizeMode="cover" /> : <Feather name="activity" size={22} color={theme.text.muted} />}
+            {displayUri(sw.thumb) ? <Image source={{ uri: displayUri(sw.thumb) }} style={s.thumbImg} resizeMode="cover" /> : <Feather name="activity" size={22} color={theme.text.muted} />}
           </View>
           <View style={s.rowText}>
             <Text style={s.fault} numberOfLines={1}>{headline}</Text>
@@ -241,12 +244,12 @@ export default function SwingHomeScreen({ navigation }) {
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content}>
-        {!canAnalyse && availability.reason === 'update' ? (
+        {!canAnalyse && (availability.reason === 'update' || isWeb) ? (
           <View style={s.banner} accessibilityRole="alert">
             <Feather name="alert-triangle" size={18} color={tone.warning} />
             <View style={s.bannerText}>
-              <Text style={s.bannerTitle}>{T.updateTitle}</Text>
-              <Text style={s.bannerBody}>{T.updateBody}</Text>
+              <Text style={s.bannerTitle}>{isWeb ? T.webUnsupportedTitle() : T.updateTitle}</Text>
+              <Text style={s.bannerBody}>{isWeb ? T.webUnsupportedBody() : T.updateBody}</Text>
             </View>
           </View>
         ) : null}
@@ -304,6 +307,17 @@ export default function SwingHomeScreen({ navigation }) {
             />
             <SecondaryButton style={s.btn} label={T.cancel} onPress={endSelect} accessibilityLabel={T.cancel} />
           </View>
+        ) : isWeb ? (
+          <View style={s.btnRow}>
+            <PrimaryButton
+              style={[s.btn, s.btnFlex]}
+              icon="download"
+              label={T.import}
+              disabled={!canAnalyse || busy}
+              onPress={() => gate(doImport)}
+              accessibilityLabel={T.import}
+            />
+          </View>
         ) : (
           <View style={s.btnRow}>
             <PrimaryButton
@@ -355,7 +369,7 @@ export default function SwingHomeScreen({ navigation }) {
         </View>
         <View style={s.aboutLine}>
           <Feather name="hard-drive" size={16} color={theme.text.secondary} style={s.aboutIcon} />
-          <Text style={s.aboutText}>{T.storage(swings.length, formatBytes(storageBytes()))}</Text>
+          <Text style={s.aboutText}>{isWeb ? T.footer(swings.length, formatBytes(storageBytes())) : T.storage(swings.length, formatBytes(storageBytes()))}</Text>
         </View>
         <View style={s.aboutLine}>
           <Feather name="move" size={16} color={theme.text.secondary} style={s.aboutIcon} />

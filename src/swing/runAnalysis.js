@@ -12,7 +12,7 @@
 //   { error: 'no_pose' | 'partial_pose' | 'too_long' | 'update' | 'failed' }   (D12)
 //   { cancelled: true }
 
-import { Paths, Directory } from 'expo-file-system';
+import { Paths, Directory } from './fs';
 import { analyze, CLUB_KEYS } from './analyze';
 import {
   nativeApi, getStill, proxyDir, proxyWindow, proxyEveryFor,

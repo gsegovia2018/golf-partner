@@ -5,13 +5,16 @@
 // module, and on web.
 //
 // Returns { supported: true } or { supported: false, reason }:
-//   'web'    this platform never has the module (web, iOS)
+//   'web'    this platform has no analyzer: iOS, or a browser that lacks what the web
+//            build needs (native.web.js decides; plan 2026-10-23-swing-analyzer-web)
 //   'update' Android, but the installed binary lacks the module or speaks an
 //            older apiVersion: the user needs a new build (plan R8)
 
 import { Platform } from 'react-native';
+import { browserCanAnalyse } from './web/support';
 
 export function getSwingAvailability() {
+  if (Platform.OS === 'web') return browserCanAnalyse() ? { supported: true } : { supported: false, reason: 'web' };
   if (Platform.OS !== 'android') return { supported: false, reason: 'web' };
   let native = null;
   try {

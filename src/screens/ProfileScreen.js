@@ -407,8 +407,8 @@ export default function ProfileScreen({ navigation, route }) {
                 <Text style={s.linkRowText}>{t('profile.link.bag')}</Text>
                 <Feather name="chevron-right" size={18} color={theme.text.muted} />
               </PressableScale>
-              {/* Swing analyzer needs the Android-only native module: no row on web or iOS. */}
-              {Platform.OS === 'android' && (
+              {/* Swing analyzer: the Android module, or the browser build (native.web.js). No iOS app build has it. */}
+              {(Platform.OS === 'android' || Platform.OS === 'web') && (
                 <PressableScale
                   style={[s.linkRow, s.linkRowDivider]}
                   onPress={() => navigation.navigate('SwingHome')}

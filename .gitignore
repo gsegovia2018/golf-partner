@@ -57,3 +57,6 @@ yarn-error.*
 # local Expo module build output, EAS credentials
 modules/*/android/build/
 /credentials.json
+
+# web swing analyzer runtime (scripts/copySwingWebAssets.mjs)
+public/swing-web/
