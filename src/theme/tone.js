@@ -1,3 +1,5 @@
+import { light, semantic } from './tokens';
+
 // The tone rule (DESIGN.md "The Tone Rule"): wherever a value is judged,
 // good is green, mid is ink and bad is red — the Informe de vuelta's colours.
 // A tone is 'good' | 'neutral' | 'bad'; polarity (lower handicap is better,
@@ -24,6 +26,15 @@ export function toneSurface(theme, tone) {
   if (tone === 'bad') return theme.destructive;
   if (tone === 'good') return theme.accent.primary;
   return theme.text.primary;
+}
+
+// toneSurface in the light theme's colours whatever the theme, for a verdict
+// card that keeps light text in both (the Play tab's After card): in dark mode
+// toneSurface's mid is near-white.
+export function toneSurfaceFixed(tone) {
+  if (tone === 'bad') return semantic.destructive.light;
+  if (tone === 'good') return light.accent.primary;
+  return light.text.primary;
 }
 
 // 'up' / 'down' / 'flat' as the stats engines report it — already

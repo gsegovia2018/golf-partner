@@ -1,5 +1,5 @@
 import {
-  toneColor, toneFill, toneSurface, toneOfDirection, toneOfSigned, toneOfSeries, scoreBandColors,
+  toneColor, toneFill, toneSurface, toneSurfaceFixed, toneOfDirection, toneOfSigned, toneOfSeries, scoreBandColors,
 } from '../tone';
 import { light, dark, semantic } from '../tokens';
 
@@ -61,5 +61,15 @@ describe('the tone rule', () => {
     expect(bands.birdiePlus).toBe('#006747');
     expect(bands.par).toBe(L.text.secondary);
     expect(bands.worse).toBe('#c8102e');
+  });
+});
+
+describe('toneSurfaceFixed', () => {
+  it('is the light theme\'s green / ink / red in either theme', () => {
+    expect(toneSurfaceFixed('good')).toBe(toneSurface(L, 'good'));
+    expect(toneSurfaceFixed('neutral')).toBe(toneSurface(L, 'neutral'));
+    expect(toneSurfaceFixed('bad')).toBe(toneSurface(L, 'bad'));
+    // Dark mode's toneSurface mid is near-white; the fixed one stays ink.
+    expect(toneSurfaceFixed('neutral')).not.toBe(toneSurface(D, 'neutral'));
   });
 });
