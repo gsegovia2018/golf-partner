@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
-import { Paths, Directory, File } from 'expo-file-system';
+import {
+  Paths, Directory, File, fsReady, storableUri,
+} from '../swing/fs';
 import { emptyMarks, parseMarks } from '../swing/labels';
 import { makeZip, utf8 } from '../swing/zip';
 import { t, formatDate } from '../i18n';
@@ -52,6 +54,7 @@ const sortNewest = (rows) => [...rows].sort((a, b) => (b.createdAt || '').locale
 
 // Call once at app boot (or on first Swing home focus). Never throws.
 export async function hydrateSwings() {
+  await fsReady(); // the web keeps the swing files in IndexedDB: index them before anything reads one
   try {
     const raw = await AsyncStorage.getItem(INDEX_KEY);
     if (raw) { const rows = JSON.parse(raw); if (Array.isArray(rows)) SWINGS = sortNewest(rows.map((r) => ({ ...r, club: normClub(r.club) }))); } // rows saved before D19 have no club: they read as iron
@@ -215,7 +218,7 @@ export async function createSwing({ videoUri, source = 'import', createdAt = new
   const dir = swingDir(id);
   dir.create({ intermediates: true, idempotent: true });
   try {
-    new File(videoUri).copy(swingFile(id, 'video.mp4'));
+    await new File(videoUri).copy(swingFile(id, 'video.mp4')); // async on the web (the picked file is a Blob)
   } catch (e) {
     try { dir.delete(); } catch { /* nothing to clean */ }
     throw e;
@@ -269,7 +272,7 @@ export async function saveAnalysis(id, analysis, {
     consequences: analysis.main?.consequences ?? [], // coach v2 swing link; rows saved earlier have neither field
     handedness: analysis.handedness ?? PROFILE.handedness,
     counts: analysis.counts ? { green: analysis.counts.green, yellow: analysis.counts.yellow, red: analysis.counts.red } : null,
-    thumb: thumb ?? row.thumb,
+    thumb: storableUri(thumb) ?? row.thumb,
     bytes: dirBytes(id),
   });
   emit();
@@ -362,7 +365,7 @@ export const EXPORT_SCHEMA = 'swing-export/1';
  * the clip's size). It is a "stored" zip written in JS (src/swing/zip.js), so no native
  * module is needed and `expo-sharing` can hand over exactly one file, which is all its
  * share sheet takes. tools/swing-lab/import_export.py unpacks it.
- * Returns { dir, zipUri, bytes }.
+ * Returns { dir, zipUri, bytes, name }.
  */
 export async function exportSwing(id) {
   const row = getSwing(id);
@@ -400,7 +403,9 @@ export async function exportSwing(id) {
   const file = new File(out, `${slug}.swing.zip`);
   file.create({ intermediates: true });
   file.write(zip);
-  return { dir: out.uri, zipUri: file.uri, bytes: zip.length };
+  return {
+    dir: out.uri, zipUri: file.uri, bytes: zip.length, name: file.name,
+  };
 }
 
 export function _resetForTests() {

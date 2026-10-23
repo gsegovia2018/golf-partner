@@ -12,12 +12,14 @@
     "test:watch": "jest --watch",
     "lint": "eslint .",
     "build:vendor": "node scripts/build-leaflet-vendor.js",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package && node scripts/copySwingWebAssets.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/playfair-display": "^0.4.2",
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
     "@expo/metro-runtime": "~6.1.2",
+    "@litertjs/core": "2.5.3",
+    "@mediapipe/tasks-vision": "1.1.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "11.4.1",
     "@react-navigation/bottom-tabs": "^7.15.9",

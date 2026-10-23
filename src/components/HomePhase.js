@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import {
+  View, Text, TouchableOpacity, Image, StyleSheet, Platform,
+} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { onDeep } from '../theme/tokens';
@@ -282,7 +284,7 @@ export function YourGame({ swingLine, onSwing, onCoach }) {
     <View style={s.gameSection}>
       <Text style={s.sectionLabel}>{t('home.phase.yourGame')}</Text>
       <View style={s.gameRow}>
-        {tile('video', t('home.phase.swing'), swingLine || t('home.phase.swingEmpty'), onSwing, 'home-your-game-swing')}
+        {tile('video', t('home.phase.swing'), swingLine || t(Platform.OS === 'web' ? 'home.phase.swingEmptyWeb' : 'home.phase.swingEmpty'), onSwing, 'home-your-game-swing')}
         {tile('target', t('home.phase.coach'), t('home.phase.coachSub'), onCoach, 'home-your-game-coach')}
       </View>
     </View>

@@ -180,6 +180,7 @@ export default {
   "home.phase.live.thru": "thru {count}",
   "home.phase.swing": "Swing",
   "home.phase.swingEmpty": "Film one",
+  "home.phase.swingEmptyWeb": "Analyse one",
   "home.phase.you": "You",
   "home.phase.yourGame": "Your game",
   "home.pointValues.save": "Save",

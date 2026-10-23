@@ -66,8 +66,16 @@ describe('Profile "My swing" quick link', () => {
     expect(navigate).toHaveBeenCalledWith('SwingHome');
   });
 
-  test('web has no row', async () => {
+  test('web shows the row too (the browser analyzer, plan 2026-10-23)', async () => {
     Platform.OS = 'web';
+    const navigate = jest.fn();
+    const { findByLabelText } = renderScreen(navigate);
+    fireEvent.press(await findByLabelText('My swing'));
+    expect(navigate).toHaveBeenCalledWith('SwingHome');
+  });
+
+  test('iOS has no row', async () => {
+    Platform.OS = 'ios';
     const { findByText, queryByLabelText } = renderScreen();
     await findByText('ACCOUNT');
     await waitFor(() => expect(queryByLabelText('Your bag')).toBeTruthy());

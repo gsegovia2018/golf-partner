@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import SwingHomeScreen, { groupByMonth, formatBytes } from '../SwingHomeScreen';
@@ -315,5 +315,27 @@ describe('SwingHomeScreen', () => {
     expect(store.deleteSwing).not.toHaveBeenCalled();
     buttons.find((b) => b.style === 'destructive').onPress();
     expect(store.deleteSwing).toHaveBeenCalledWith('b');
+  });
+  describe('the web build (plan 2026-10-23): import only, kept in the browser', () => {
+    const realOS = Platform.OS;
+    beforeEach(() => { Platform.OS = 'web'; });
+    afterEach(() => { Platform.OS = realOS; });
+
+    test('no Record button; Import picks a clip and opens results', async () => {
+      pickSwingVideo.mockResolvedValue({ uri: 'blob:http://localhost/clip' });
+      store.createSwing.mockResolvedValue({ id: 'w1' });
+      const { getByLabelText, queryByLabelText, getByText, navigation } = setup();
+      expect(queryByLabelText('Record')).toBeNull();
+      expect(getByText('Stored in this browser')).toBeTruthy();
+      fireEvent.press(getByLabelText('Import'));
+      await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('SwingResults', { swingId: 'w1' }));
+    });
+
+    test('a browser that cannot analyse says so and keeps Import disabled', () => {
+      const { getByText, getByLabelText } = setup({ availability: { supported: false, reason: 'web' } });
+      expect(getByText(SWING_STRINGS.home.webUnsupportedTitle())).toBeTruthy();
+      fireEvent.press(getByLabelText('Import'));
+      expect(pickSwingVideo).not.toHaveBeenCalled();
+    });
   });
 });

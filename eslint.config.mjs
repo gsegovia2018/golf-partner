@@ -17,6 +17,8 @@ export default [
       'src/lib/vendor/**',
       // Deno runtime — not part of the React Native lint scope.
       'supabase/functions/*',
+      // The web swing analyzer's runtime, copied from node_modules (scripts/copySwingWebAssets.mjs).
+      'public/swing-web/**',
     ],
   },
   {

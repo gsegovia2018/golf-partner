@@ -212,6 +212,15 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   never set for `eas build`/`eas update` (see "Shipping to Android").
 - Swing videos and analysis never leave the phone; the only planned exit is
   the explicit training-data export (plan §7.3).
+- Swing analyzer on the web (plan `2026-10-23-swing-analyzer-web.md`; iPhone users on the PWA):
+  `src/swing/native.web.js` implements the native contract in the browser at apiVersion 6, import
+  only (no capture). `src/swing/web/`: `mp4.js` reads the sample table, `source.js` decodes with
+  WebCodecs or seeks a `<video>` (HEVC on iOS), `analyzePose.js` / `checkpoints.js` are pass 1 / 2,
+  `core/*` are line-for-line ports of the Kotlin (keep them in step when the Kotlin changes).
+  MediaPipe 1.1.0 and LiteRT.js (club model on wasm: its WebGPU path returns garbage) load from
+  `public/swing-web/`, copied by `scripts/copySwingWebAssets.mjs` on postinstall (git ignored).
+  Files live in IndexedDB behind `src/swing/fs.web.js` (`fs.js` on Android); a stored URI goes
+  through `storableUri` / `displayUri`. Web wording ("in this browser") is `WEB_KEYS` in `strings.js`.
 - Swing checks v2 screens (spec/plan `2026-10-18-swing-checks-v2`, polished per the 2026-10-18 UI review):
   Results is "verdict + strip + one position" (`SwingSummary`: "Work on first" over the fault's name,
   "Downswing · starts at Top ›", then seven position dots + Extras, the main fault's dot ringed in red;
