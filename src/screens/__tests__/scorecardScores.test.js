@@ -7,6 +7,7 @@ import {
   clampEnteredScore,
   resumeVerifiedUpTo,
   resumeHole,
+  unscoredHoles,
 } from '../../store/scorecardFlow';
 
 describe('clampEnteredScore (screen-level score entry clamp)', () => {
@@ -107,6 +108,14 @@ describe('buildScorecardTournamentBackState', () => {
 });
 
 describe('scorecard finish behavior', () => {
+  test('unscoredHoles lists holes any player still lacks, in order', () => {
+    const holes = [{ number: 1 }, { number: 2 }, { number: 3 }];
+    const players = [{ id: 'a' }, { id: 'b' }];
+    expect(unscoredHoles(holes, players, { a: { 1: 4, 2: 5, 3: 3 }, b: { 1: 4, 3: 6 } })).toEqual([2]);
+    expect(unscoredHoles(holes, players, { a: { 1: 4, 2: 5, 3: 3 }, b: { 1: 4, 2: 5, 3: 6 } })).toEqual([]);
+    expect(unscoredHoles(holes, players, null)).toEqual([1, 2, 3]);
+  });
+
   test('partial single-round games are explicitly marked finished from the scorecard', () => {
     expect(shouldMarkTournamentFinishedFromScorecard({
       tournament: { kind: 'game', rounds: [{}] },

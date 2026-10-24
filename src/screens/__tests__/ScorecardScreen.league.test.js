@@ -314,10 +314,11 @@ describe('ScorecardScreen on a league round', () => {
   });
 
   test('Finish goes on to LeagueValidate with the card and round', async () => {
-    const { findByLabelText } = render(wrap(
+    const { findByLabelText, findByText } = render(wrap(
       <ScorecardScreen navigation={navigation} route={route} />,
     ));
     fireEvent.press(await findByLabelText('Finish round'));
+    fireEvent.press(await findByText('Finish anyway'));
     await waitFor(() => {
       const reset = navigation.dispatch.mock.calls.map(([a]) => a).find((a) => a?.routes);
       expect(reset?.routes?.[1]).toEqual({
@@ -334,10 +335,11 @@ describe('ScorecardScreen on a league round', () => {
     ts.isTournamentFinished.mockReturnValue(true);
     const alert = jest.spyOn(require('react-native').Alert, 'alert').mockImplementation(() => {});
     try {
-      const { findByLabelText } = render(wrap(
+      const { findByLabelText, findByText } = render(wrap(
         <ScorecardScreen navigation={navigation} route={route} />,
       ));
       fireEvent.press(await findByLabelText('Finish round'));
+      fireEvent.press(await findByText('Finish anyway'));
       await waitFor(() => {
         const reset = navigation.dispatch.mock.calls.map(([a]) => a).find((a) => a?.routes);
         expect(reset?.routes?.[1]?.name).toBe('LeagueValidate');
