@@ -7,6 +7,8 @@ import {
   clampEnteredScore,
   resumeVerifiedUpTo,
   resumeHole,
+  unscoredHoles,
+  holeRunsLabel,
 } from '../../store/scorecardFlow';
 
 describe('clampEnteredScore (screen-level score entry clamp)', () => {
@@ -107,6 +109,20 @@ describe('buildScorecardTournamentBackState', () => {
 });
 
 describe('scorecard finish behavior', () => {
+  test('unscoredHoles lists holes any player still lacks, in order', () => {
+    const holes = [{ number: 1 }, { number: 2 }, { number: 3 }];
+    const players = [{ id: 'a' }, { id: 'b' }];
+    expect(unscoredHoles(holes, players, { a: { 1: 4, 2: 5, 3: 3 }, b: { 1: 4, 3: 6 } })).toEqual([2]);
+    expect(unscoredHoles(holes, players, { a: { 1: 4, 2: 5, 3: 3 }, b: { 1: 4, 2: 5, 3: 6 } })).toEqual([]);
+    expect(unscoredHoles(holes, players, null)).toEqual([1, 2, 3]);
+  });
+
+  test('holeRunsLabel collapses runs of three or more holes', () => {
+    expect(holeRunsLabel([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])).toBe('2–18');
+    expect(holeRunsLabel([3, 4, 9, 11, 12, 13])).toBe('3, 4, 9, 11–13');
+    expect(holeRunsLabel([7])).toBe('7');
+  });
+
   test('partial single-round games are explicitly marked finished from the scorecard', () => {
     expect(shouldMarkTournamentFinishedFromScorecard({
       tournament: { kind: 'game', rounds: [{}] },

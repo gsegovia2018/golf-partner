@@ -4,9 +4,6 @@ import { fetchRoundActivity } from '../store/tournamentRepo';
 import { loadRound, getRoundState } from '../engine/store';
 import { shownScores } from '../engine/cards';
 import { roundSpan } from '../store/roundDuration';
-import { loadRoundMedia } from '../store/mediaStore';
-import { collectMyRounds } from '../store/personalStats';
-import { buildRoundReportCard } from '../store/roundReportCard';
 import { isOnline } from '../lib/connectivity';
 
 // What the card engine knows about each candidate round (homePhase.js
@@ -48,9 +45,8 @@ async function loadCardState(tournaments, userId) {
   return { activity, scores, shots };
 }
 
-// The Play tab's phase plus the async extras its After card shows: photos
-// of the round and the report card's verdict.
-export function useHomePhase(tournaments, userId, displayName = null) {
+// The Play tab's phase, read with the card engine's scores and activity.
+export function useHomePhase(tournaments, userId) {
   const [cards, setCards] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -64,28 +60,6 @@ export function useHomePhase(tournaments, userId, displayName = null) {
     [merged, userId, cards],
   );
 
-  const after = phase.after;
-  const afterKey = after ? `${after.tournament.id}:${after.round.id}` : null;
-  const [photos, setPhotos] = useState({ key: null, items: [] });
-  useEffect(() => {
-    if (!afterKey || phase.phase !== 'after') return undefined;
-    let alive = true;
-    loadRoundMedia(after.tournament.id, after.round.id)
-      .then((items) => { if (alive) setPhotos({ key: afterKey, items: items.filter((m) => m.kind !== 'video') }); })
-      .catch(() => {});
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [afterKey, phase.phase]);
 
-  const report = useMemo(() => {
-    if (!after || phase.phase !== 'after') return null;
-    try {
-      const mine = collectMyRounds(merged, userId, displayName);
-      return buildRoundReportCard(mine, `${after.tournament.id}:${after.roundIndex}`)?.headline ?? null;
-    } catch {
-      return null;
-    }
-  }, [after, phase.phase, merged, userId, displayName]);
-
-  return { ...phase, photos: photos.key === afterKey ? photos.items : [], report };
+  return phase;
 }

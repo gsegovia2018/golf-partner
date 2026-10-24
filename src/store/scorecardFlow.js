@@ -80,6 +80,27 @@ export function shouldMarkTournamentFinishedFromScorecard({ tournament }) {
   return tournament.kind === 'game';
 }
 
+// Holes still missing a score for any player on the card this phone shows:
+// what the Finish confirmation warns about before the round closes.
+export function unscoredHoles(holes, players, scores) {
+  return (holes ?? [])
+    .filter((h) => (players ?? []).some((p) => scores?.[p.id]?.[h.number] == null))
+    .map((h) => h.number);
+}
+
+// "2–18" for a run of three or more holes, "2, 5" otherwise.
+export function holeRunsLabel(numbers) {
+  const out = [];
+  for (let i = 0; i < numbers.length;) {
+    let j = i;
+    while (j + 1 < numbers.length && numbers[j + 1] === numbers[j] + 1) j += 1;
+    if (j - i >= 2) out.push(`${numbers[i]}–${numbers[j]}`);
+    else for (let k = i; k <= j; k += 1) out.push(String(numbers[k]));
+    i = j + 1;
+  }
+  return out.join(', ');
+}
+
 export function canShowQuickFinish({ tournament, official, viewOnly }) {
   return !official && !viewOnly && tournament?.kind === 'game';
 }
