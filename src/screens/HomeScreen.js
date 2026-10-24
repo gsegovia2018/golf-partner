@@ -25,8 +25,8 @@ import { scoringModeUsesTeams, leaderboardToggleLabels, getScoringMode, isScramb
 import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
 import BottomSheet from '../components/BottomSheet';
-import { BeforeHero, AfterHero, AfterLine, YourGame } from '../components/HomePhase';
-import { beforeModel, liveModel, afterModel, myPlayerIn } from '../store/homePhase';
+import { BeforeHero, YourGame } from '../components/HomePhase';
+import { beforeModel, liveModel } from '../store/homePhase';
 import { useHomePhase } from '../hooks/useHomePhase';
 import LiveScorecard from '../components/HomeLiveScorecard';
 import { getSwings } from '../store/swingStore';
@@ -654,9 +654,6 @@ export default function HomeScreen({ navigation, route }) {
     if (!entry.next) return openPhaseScorecard(entry);
     await setActiveTournament(entry.tournament.id);
     navigation.navigate('NextRound');
-  }
-  function openPhaseSummary({ tournament: t, round }, tab) {
-    navigation.navigate('RoundSummary', { tournamentId: t.id, roundId: round.id, ...(tab ? { tab } : {}) });
   }
 
   const navigateToCreatedGame = useCallback(() => {
@@ -1287,7 +1284,7 @@ export default function HomeScreen({ navigation, route }) {
           </TouchableOpacity>
         )}
         {(() => {
-          const { phase, live, before, after } = homePhase;
+          const { phase, live, before } = homePhase;
           if (phase === 'live') {
             return (
               <>
@@ -1308,23 +1305,7 @@ export default function HomeScreen({ navigation, route }) {
                     navigation.navigate('EditTeams', { roundIndex: before.roundIndex, tournamentId: before.tournament.id });
                   }}
                 />
-                {after ? <AfterLine model={afterModel(after, currentUserId)} onOpen={() => openPhaseSummary(after)} /> : null}
               </>
-            );
-          }
-          if (phase === 'after') {
-            return (
-              <View style={{ marginBottom: 16 }}>
-                <AfterHero
-                  model={afterModel(after, currentUserId)}
-                  tournament={after.tournament}
-                  meId={myPlayerIn(after.tournament, currentUserId)?.id ?? null}
-                  report={homePhase.report}
-                  photos={homePhase.photos}
-                  onOpen={() => openPhaseSummary(after)}
-                  onAddPhotos={() => openPhaseSummary(after, 'photos')}
-                />
-              </View>
             );
           }
           return null;
