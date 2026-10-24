@@ -433,11 +433,12 @@ describe('ScorecardScreen publication on leaving the hole', () => {
   });
 
   test('Finish publishes the hole in hand and reconnects once (R9)', async () => {
-    const { findByLabelText } = render(wrap(
+    const { findByLabelText, findByText } = render(wrap(
       <ScorecardScreen navigation={navigation} route={route} />
     ));
 
     fireEvent.press(await findByLabelText('Finish round'));
+    fireEvent.press(await findByText('Finish anyway'));
 
     await waitFor(() => {
       expect(mockCardActions.publishHole).toHaveBeenCalledWith(1);
@@ -445,13 +446,29 @@ describe('ScorecardScreen publication on leaving the hole', () => {
     expect(reconnect).toHaveBeenCalled();
   });
 
-  test('Finish stays blocked while two cards disagree', async () => {
-    mockCardState = DISAGREEING_CARDS;
-    const { findByLabelText, getByText } = render(wrap(
+  test('Finish with holes unscored asks first; Keep playing changes nothing', async () => {
+    const { findByLabelText, findByText } = render(wrap(
       <ScorecardScreen navigation={navigation} route={route} />
     ));
 
     fireEvent.press(await findByLabelText('Finish round'));
+    expect(await findByText('Holes without a score')).toBeTruthy();
+    fireEvent.press(await findByText('Keep playing'));
+
+    await act(async () => {});
+    expect(mockCardActions.publishHole).not.toHaveBeenCalled();
+    expect(navigation.dispatch).not.toHaveBeenCalled();
+  });
+
+  test('Finish stays blocked while two cards disagree', async () => {
+    mockCardState = DISAGREEING_CARDS;
+    const { findByLabelText, getByText, findByText } = render(wrap(
+      <ScorecardScreen navigation={navigation} route={route} />
+    ));
+
+    fireEvent.press(await findByLabelText('Finish round'));
+
+    fireEvent.press(await findByText('Finish anyway'));
 
     await waitFor(() => expect(getByText(/^Hole 1 ·/)).toBeTruthy());
     await flush();
@@ -519,11 +536,13 @@ describe('ScorecardScreen publication on leaving the hole', () => {
   });
 
   test('Finish is not double-intercepted by the back listener', async () => {
-    const { findByLabelText } = render(wrap(
+    const { findByLabelText, findByText } = render(wrap(
       <ScorecardScreen navigation={navigation} route={route} />
     ));
 
     fireEvent.press(await findByLabelText('Finish round'));
+
+    fireEvent.press(await findByText('Finish anyway'));
 
     await waitFor(() => {
       expect(mockCardActions.publishHole).toHaveBeenCalledWith(1);

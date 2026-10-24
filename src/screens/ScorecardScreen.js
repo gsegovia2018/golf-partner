@@ -83,8 +83,9 @@ import { getSwingProfile } from '../store/swingStore';
 import {
   resumeVerifiedUpTo, resumeHole, clampEnteredScore, getScorecardBackTarget,
   buildScorecardTournamentBackState, shouldMarkTournamentFinishedFromScorecard,
-  canShowQuickFinish, buildConflictRows, roundDecisionNoticeForPair,
+  canShowQuickFinish, buildConflictRows, roundDecisionNoticeForPair, unscoredHoles,
 } from '../store/scorecardFlow';
+import { useConfirmSheet } from '../components/league/ConfirmSheet';
 import { track } from '../lib/telemetry';
 
 // Stable empty roster so the useRoundRoster memo below does not see a new
@@ -177,6 +178,7 @@ export default function ScorecardScreen({ navigation, route }) {
   // Round-complete celebration overlay before navigating to the summary.
   const [roundCompleteVisible, setRoundCompleteVisible] = useState(false);
   const [finishBusy, setFinishBusy] = useState(false);
+  const { ask: askFinish, sheet: finishSheet } = useConfirmSheet();
   // The finish gate sets this to { hole, playerId } to send the user to a
   // conflicted hole; HoleView consumes it to open the resolve sheet.
   const [conflictFocus, setConflictFocus] = useState(null);
@@ -1389,11 +1391,32 @@ export default function ScorecardScreen({ navigation, route }) {
   // Finish flow: invoked from the last-hole "Finish" button or the game-level
   // header flag. Shows a brief celebration, then routes to the round report.
   // Single-round games are explicitly archived so partial rounds count as done.
-  const handleFinish = useCallback(async () => {
+  const handleFinish = useCallback(async (opts) => {
     if (finishBusy) return;
     const t = tournamentRef.current;
     const r = t?.rounds?.[roundIndex];
     if (!t || !r) { goBack(); return; }
+
+    // Ask before anything is published or stamped, naming the holes still
+    // without a score. The conflict sheet re-enters with `confirmed` set.
+    if (!official && opts?.confirmed !== true) {
+      const missing = unscoredHoles(r.holes, t.players, scores);
+      const ok = await askFinish(missing.length > 0
+        ? {
+          title: tl('scorecard.screen.finishMissingTitle'),
+          message: tl('scorecard.screen.finishMissingBody', { count: missing.length, holes: missing.join(', ') }),
+          confirmLabel: tl('scorecard.screen.finishAnyway'),
+          cancelLabel: tl('scorecard.screen.keepPlaying'),
+          destructive: true,
+        }
+        : {
+          title: tl('scorecard.screen.finishConfirmTitle'),
+          message: tl('scorecard.screen.finishConfirmBody'),
+          confirmLabel: tl('scorecard.screen.finishRound'),
+          cancelLabel: tl('scorecard.screen.keepPlaying'),
+        });
+      if (!ok) return;
+    }
 
     // Mark the finish as owning whatever navigation follows, so the
     // beforeRemove listener (hardware back / swipe-back) steps aside instead
@@ -1571,7 +1594,7 @@ export default function ScorecardScreen({ navigation, route }) {
       else Alert.alert(tl('scorecard.screen.finishFailed'), message);
     }
   }, [roundIndex, navigation, goBack, official, finishBusy, enqueueSave, queueDraft, actions,
-    tid, names, playerIds, holeNumbers, scores, tl]);
+    tid, names, playerIds, holeNumbers, scores, tl, askFinish]);
 
   // The finish sheet closes itself the moment the last dispute is agreed (on
   // this phone or a peer's) and carries on with the finish — no "all agreed"
@@ -1579,7 +1602,7 @@ export default function ScorecardScreen({ navigation, route }) {
   useEffect(() => {
     if (!finishConflictsOpen || conflictRows.length > 0) return;
     setFinishConflictsOpen(false);
-    handleFinish();
+    handleFinish({ confirmed: true });
   }, [finishConflictsOpen, conflictRows, handleFinish]);
 
   // Official mode (Task 16): attest the token holder's own card. Replaces the
@@ -1834,6 +1857,7 @@ export default function ScorecardScreen({ navigation, route }) {
         holeNumber={currentHole}
         onClose={() => setFlagFinderOpen(false)}
       />
+      {finishSheet}
       <ConflictWizardSheet
         visible={finishConflictsOpen}
         onClose={() => setFinishConflictsOpen(false)}
@@ -1843,7 +1867,7 @@ export default function ScorecardScreen({ navigation, route }) {
         primaryLabel={tl('scorecard.screen.finishRound')}
         onPrimary={() => {
           setFinishConflictsOpen(false);
-          handleFinish();
+          handleFinish({ confirmed: true });
         }}
       />
       {holeConflictPrompt && (() => {

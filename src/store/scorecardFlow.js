@@ -80,6 +80,14 @@ export function shouldMarkTournamentFinishedFromScorecard({ tournament }) {
   return tournament.kind === 'game';
 }
 
+// Holes still missing a score for any player on the card this phone shows:
+// what the Finish confirmation warns about before the round closes.
+export function unscoredHoles(holes, players, scores) {
+  return (holes ?? [])
+    .filter((h) => (players ?? []).some((p) => scores?.[p.id]?.[h.number] == null))
+    .map((h) => h.number);
+}
+
 export function canShowQuickFinish({ tournament, official, viewOnly }) {
   return !official && !viewOnly && tournament?.kind === 'game';
 }
