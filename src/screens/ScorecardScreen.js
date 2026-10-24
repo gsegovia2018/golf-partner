@@ -83,7 +83,7 @@ import { getSwingProfile } from '../store/swingStore';
 import {
   resumeVerifiedUpTo, resumeHole, clampEnteredScore, getScorecardBackTarget,
   buildScorecardTournamentBackState, shouldMarkTournamentFinishedFromScorecard,
-  canShowQuickFinish, buildConflictRows, roundDecisionNoticeForPair, unscoredHoles,
+  canShowQuickFinish, buildConflictRows, roundDecisionNoticeForPair, unscoredHoles, holeRunsLabel,
 } from '../store/scorecardFlow';
 import { useConfirmSheet } from '../components/league/ConfirmSheet';
 import { track } from '../lib/telemetry';
@@ -1404,7 +1404,7 @@ export default function ScorecardScreen({ navigation, route }) {
       const ok = await askFinish(missing.length > 0
         ? {
           title: tl('scorecard.screen.finishMissingTitle'),
-          message: tl('scorecard.screen.finishMissingBody', { count: missing.length, holes: missing.join(', ') }),
+          message: tl('scorecard.screen.finishMissingBody', { count: missing.length, holes: holeRunsLabel(missing) }),
           confirmLabel: tl('scorecard.screen.finishAnyway'),
           cancelLabel: tl('scorecard.screen.keepPlaying'),
           destructive: true,
