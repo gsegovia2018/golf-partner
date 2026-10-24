@@ -1,25 +1,21 @@
 import React, { useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, Image, StyleSheet, Platform,
+  View, Text, TouchableOpacity, StyleSheet, Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { onDeep } from '../theme/tokens';
-import { toneSurfaceFixed } from '../theme/tone';
-import { useT, formatOrdinal, formatTime, formatNumber } from '../i18n';
-import { verdictKey } from './mystats/reportKeys';
-import { fmtDelta } from './mystats/reportCardView';
-import { PAIR_COLORS, SoloTotals, useLiveStyles } from './HomeLiveScorecard';
-import { shortName } from './gamestats/ui';
+import { useT, formatOrdinal } from '../i18n';
+import { PAIR_COLORS } from './HomeLiveScorecard';
 
 // The Play tab's phase heroes (store/homePhase.js picks the phase), all on
-// the deep-green play surface: Before and After, plus the one-line After and
-// the "Your game" pair. Live is HomeLiveScorecard.
+// the deep-green play surface: Before and the "Your game" pair. Live is
+// HomeLiveScorecard.
 const CREAM = '#f3efe6';
 
-function Cta({ icon, label, onPress, a11y, s, half }) {
+function Cta({ icon, label, onPress, a11y, s }) {
   return (
-    <TouchableOpacity style={[s.cta, half && s.half]} onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y ?? label} activeOpacity={0.85}>
+    <TouchableOpacity style={s.cta} onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y ?? label} activeOpacity={0.85}>
       {icon ? <Feather name={icon} size={16} color="#00553c" /> : null}
       <Text style={s.ctaText}>{label}</Text>
     </TouchableOpacity>
@@ -29,16 +25,6 @@ function Cta({ icon, label, onPress, a11y, s, half }) {
 function useStyles() {
   const { theme } = useTheme();
   return { theme, s: useMemo(() => makeStyles(theme), [theme]) };
-}
-
-// "You & Javier": me first, short names for the rest.
-function pairNameOf(tournament, t) {
-  const players = tournament?.players ?? [];
-  const byId = new Map(players.map((p) => [p.id, p]));
-  return (ids, meId) => {
-    const order = [...ids].sort((a, b) => (b === meId) - (a === meId));
-    return order.map((id) => (id === meId ? t('home.phase.you') : shortName(byId.get(id) ?? { name: '?' }, players))).join(' & ');
-  };
 }
 
 export function BeforeHero({ model, modeLabel, onStart, onEditTeams }) {
@@ -107,177 +93,6 @@ export function BeforeHero({ model, modeLabel, onStart, onEditTeams }) {
   );
 }
 
-function whenLabel(t, ms) {
-  const d = new Date(ms);
-  const today = new Date();
-  const time = formatTime(d);
-  return d.toDateString() === today.toDateString()
-    ? t('home.phase.after.today', { time })
-    : t('home.phase.after.yesterday', { time });
-}
-
-// After: a hint of what happened, not the card; "See summary" has the rest.
-// Pairs: who won, the pair score, then my own points and verdict in one line.
-function PairResult({ model, tournament, meId, verdict, s, t }) {
-  const { pairs } = model;
-  const nameOf = pairNameOf(tournament, t);
-  const title = pairs.leader == null
-    ? t('home.phase.after.pairLevel')
-    : t('home.phase.after.pairWon', { name: nameOf(pairs.sides.find((sd) => sd.side === pairs.leader).ids, meId) });
-  const [left, right] = pairs.sides;
-  const mine = [
-    model.myStableford != null ? t('home.phase.after.yourCard', { points: formatNumber(model.myStableford) }) : null,
-    verdict,
-  ].filter(Boolean).join(' · ');
-  return (
-    <>
-      <Text style={s.afterTitle} testID="home-after-title">{title}</Text>
-      <View style={s.scoreRow} testID="home-after-pairs">
-        <View style={[s.teamDot, { backgroundColor: PAIR_COLORS[left.side] }]} />
-        <Text style={[s.sideName, s.sideNameStart]} numberOfLines={1}>{nameOf(left.ids, meId)}</Text>
-        <Text style={s.scoreNum}>{formatNumber(left.points)}</Text>
-        <Text style={s.dash}>–</Text>
-        <Text style={s.scoreNum}>{formatNumber(right.points)}</Text>
-        <Text style={[s.sideName, s.sideNameEnd]} numberOfLines={1}>{nameOf(right.ids, meId)}</Text>
-        <View style={[s.teamDot, { backgroundColor: PAIR_COLORS[right.side] }]} />
-      </View>
-      {mine ? <Text style={s.cardLine}>{mine}</Text> : null}
-    </>
-  );
-}
-
-// Everyone for themselves: who won, my points and place, the verdict.
-function IndividualResult({ model, verdict, s, t, theme }) {
-  const gold = theme.semantic.winner.soft;
-  const title = model.tied
-    ? t('home.phase.after.tied', {
-      names: model.tied.players.map((p) => (p.me ? t('home.phase.you') : p.name)).join(' & '),
-      points: formatNumber(model.tied.points),
-    })
-    : model.winner
-      ? t('home.phase.after.winner', { name: model.winner.name, points: formatNumber(model.winner.points) })
-      : t('home.phase.after.youWon');
-  const unit = t(model.unit === 'holes' ? 'home.phase.after.holesUnit' : 'home.live.pts');
-  return (
-    <>
-      {model.count > 1 ? <Text style={s.afterTitle} testID="home-after-title">{title}</Text> : null}
-      <View style={s.afterTop}>
-        {model.myPoints != null ? (
-          <Text style={s.youPts}>{`${t('home.phase.you')} · ${formatNumber(model.myPoints)} ${unit}`}</Text>
-        ) : null}
-        {model.place != null && model.count > 1 ? (
-          <View style={[s.rank, { backgroundColor: onDeep.goldFill }]}>
-            <Feather name="award" size={12} color={gold} />
-            <Text style={[s.rankText, { color: gold }]}>{t('home.phase.after.place', { place: formatOrdinal(model.place), count: model.count })}</Text>
-          </View>
-        ) : null}
-      </View>
-      {verdict ? <Text style={s.cardLine}>{verdict}</Text> : null}
-    </>
-  );
-}
-
-// Solo: my points and strokes, the verdict, then four numbers from my shots.
-function SoloResult({ model, verdict, s, t }) {
-  const { s: ls } = useLiveStyles();
-  const total = model.card?.rows[0]?.total;
-  const shots = model.shots;
-  const ratio = (x) => (x.of > 0 ? `${x.hit}/${x.of}` : '–');
-  const tiles = shots ? [
-    { key: 'putts', value: total?.putts != null ? formatNumber(total.putts) : '–' },
-    { key: 'fairways', value: ratio(shots.fairways) },
-    { key: 'greens', value: ratio(shots.greens) },
-    { key: 'penalties', value: formatNumber(shots.penalties) },
-  ] : null;
-  return (
-    <>
-      {total ? <SoloTotals total={total} putts={false} s={ls} t={t} /> : null}
-      {verdict ? <Text style={s.verdict}>{verdict}</Text> : null}
-      {tiles ? (
-        <View style={s.tiles} testID="home-after-shots">
-          {tiles.map((tile) => (
-            <View key={tile.key} style={s.tile} accessible accessibilityLabel={`${t(`home.phase.after.tile.${tile.key}`)}: ${tile.value}`}>
-              <Text style={s.tileValue}>{tile.value}</Text>
-              <Text style={s.tileLabel} numberOfLines={1}>{t(`home.phase.after.tile.${tile.key}`)}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-    </>
-  );
-}
-
-export function AfterHero({ model, tournament, meId, report, photos, onOpen, onAddPhotos }) {
-  const { theme, s } = useStyles();
-  const t = useT();
-  const shown = photos.slice(0, 4);
-  const word = report ? (verdictKey(report.verdict) ? t(verdictKey(report.verdict)) : report.verdict) : null;
-  const verdict = report
-    ? [word, report.vsAvg != null ? t('stats.my.report.vsAvgChip', { delta: fmtDelta(report.vsAvg) }) : null].filter(Boolean).join(' · ')
-    : null;
-  return (
-    <View
-      style={[
-        s.deep,
-        // The card is the verdict: green / ink / red, like the report hero.
-        report?.tone && { backgroundColor: toneSurfaceFixed(report.tone) },
-        // Ink on the dark theme's near-black page needs an edge.
-        report?.tone === 'neutral' && theme.isDark && s.inkEdge,
-      ]}
-      testID="home-phase-after"
-    >
-      <View style={s.head}>
-        <View style={[s.headDot, { backgroundColor: onDeep.faint }]} />
-        <Text style={s.overline} numberOfLines={1}>{whenLabel(t, model.endedAt)} · {model.courseName || model.name}</Text>
-      </View>
-      {model.card
-        ? <SoloResult model={model} verdict={verdict} s={s} t={t} />
-        : model.pairs
-          ? <PairResult model={model} tournament={tournament} meId={meId} verdict={word} s={s} t={t} />
-          : <IndividualResult model={model} verdict={verdict} s={s} t={t} theme={theme} />}
-      {shown.length > 0 ? (
-        <View style={s.photos}>
-          {shown.map((m, i) => (
-            <View key={m.id} style={s.photo}>
-              {m.thumbUrl ? <Image source={{ uri: m.thumbUrl }} style={StyleSheet.absoluteFillObject} accessibilityIgnoresInvertColors /> : null}
-              {i === 3 && photos.length > 4 ? (
-                <View style={s.photoMore}><Text style={s.photoMoreText}>+{photos.length - 3}</Text></View>
-              ) : null}
-            </View>
-          ))}
-        </View>
-      ) : null}
-      <View style={s.btns}>
-        <Cta s={s} half label={t('home.phase.after.summary')} onPress={onOpen} />
-        <TouchableOpacity style={s.ghost} onPress={onAddPhotos} accessibilityRole="button" activeOpacity={0.85}>
-          <Feather name="camera" size={14} color={onDeep.strong} />
-          <Text style={s.ghostText}>{t('home.phase.after.addPhotos')}</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-// After, shrunk to one row when a Before hero leads.
-export function AfterLine({ model, onOpen }) {
-  const { theme, s } = useStyles();
-  const t = useT();
-  const pts = model.myPoints != null
-    ? t(model.unit === 'holes' ? 'home.phase.after.holes' : 'home.phase.after.points', { count: model.myPoints })
-    : null;
-  return (
-    <TouchableOpacity style={s.lineRow} onPress={onOpen} accessibilityRole="button" activeOpacity={0.8} testID="home-phase-after-line">
-      <Feather name="award" size={16} color={theme.accent.primary} />
-      <View style={s.flex}>
-        <Text style={s.lineTitle} numberOfLines={1}>{[pts, model.courseName].filter(Boolean).join(' · ')}</Text>
-        <Text style={s.cardMeta} numberOfLines={1}>{whenLabel(t, model.endedAt)}</Text>
-      </View>
-      <Text style={s.lineCta}>{t('home.phase.after.summary')}</Text>
-      <Feather name="chevron-right" size={16} color={theme.text.muted} />
-    </TouchableOpacity>
-  );
-}
-
 export function YourGame({ swingLine, onSwing, onCoach }) {
   const { theme, s } = useStyles();
   const t = useT();
@@ -304,7 +119,6 @@ export function YourGame({ swingLine, onSwing, onCoach }) {
 const makeStyles = (theme) => StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   bold: { fontFamily: 'PlusJakartaSans-ExtraBold' },
-  inkEdge: { borderWidth: StyleSheet.hairlineWidth, borderColor: onDeep.borderStrong },
   deep: {
     backgroundColor: theme.bg.deep, borderRadius: 14, paddingTop: 15, paddingBottom: 14, paddingHorizontal: 14,
     marginBottom: 16, gap: 6,
@@ -329,49 +143,14 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48, marginTop: 8,
     backgroundColor: CREAM, borderRadius: 12, paddingHorizontal: 14,
   },
-  half: { flex: 1, marginTop: 0 },
   ctaText: { color: '#00553c', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14, textAlign: 'center' },
   link: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 12, minHeight: 44, justifyContent: 'center' },
   linkText: { color: onDeep.strong, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
-  afterTitle: { color: CREAM, fontFamily: 'PlayfairDisplay-Bold', fontSize: 24, lineHeight: 30 },
-  afterTop: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: onDeep.fill, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
-  sideName: { flexShrink: 1, color: onDeep.strong, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
-  sideNameStart: { flex: 1 },
-  sideNameEnd: { flex: 1, textAlign: 'right' },
-  scoreNum: { color: CREAM, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 20, fontVariant: ['tabular-nums'] },
-  youPts: { color: CREAM, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 20 },
-  tiles: { flexDirection: 'row', gap: 6, marginTop: 4 },
-  tile: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 10, paddingHorizontal: 2, borderRadius: 10, backgroundColor: onDeep.fill },
-  tileValue: { color: CREAM, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 17, fontVariant: ['tabular-nums'] },
-  tileLabel: { color: onDeep.faint, fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase' },
-  dash: { color: onDeep.faint, fontSize: 16 },
-  rank: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-  rankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
-  verdict: { color: CREAM, fontFamily: 'PlusJakartaSans-Bold', fontSize: 14 },
-  cardLine: { color: onDeep.soft, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13 },
-  photos: { flexDirection: 'row', gap: 6, marginTop: 4 },
-  photo: { flex: 1, aspectRatio: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: onDeep.fill },
-  photoMore: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
-  photoMoreText: { color: '#ffffff', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14 },
-  btns: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  ghost: {
-    flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: onDeep.borderStrong,
-    flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center',
-  },
-  ghostText: { color: onDeep.strong, fontFamily: 'PlusJakartaSans-Bold', fontSize: 14 },
   card: {
     backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1,
     borderColor: theme.isDark ? theme.glass?.border || theme.border.default : theme.border.default,
     padding: 16, gap: 6,
   },
-  cardMeta: { color: theme.text.secondary, fontFamily: 'PlusJakartaSans-Medium', fontSize: 12 },
-  lineRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, marginBottom: 12,
-    backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1, borderColor: theme.border.default, paddingHorizontal: 14, paddingVertical: 10,
-  },
-  lineTitle: { color: theme.text.primary, fontFamily: 'PlusJakartaSans-Bold', fontSize: 14 },
-  lineCta: { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
   sectionLabel: {
     fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 10, letterSpacing: 1.4,
     marginBottom: 10, marginTop: 6, textTransform: 'uppercase',

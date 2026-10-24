@@ -2,19 +2,16 @@
 // Pure: no I/O, no language. Spec: the "Home round focus" design, option B.
 //
 // homePhase(tournaments, { userId, now, lastActivityByKey }) → {
-//   phase:  'live' | 'before' | 'after' | 'idle'   first match wins, in that order
+//   phase:  'live' | 'before' | 'idle'   first match wins, in that order
 //   live:   { tournament, round, roundIndex } | null
 //   before: { tournament, round, roundIndex, next } | null   next: the round after a finished one
-//   after:  { tournament, round, roundIndex, endedAt } | null  kept when Before wins (one line)
 // }
 // `lastActivityByKey` maps `${tournamentId}:${roundId}` → ms of the last hole
 // published; a missing entry is "unknown", which isRoundLive does not demote.
 import { isTournamentFinished, isRoundComplete, roundLeaderboard } from './tournamentStore';
 import { roundEndedAt, parseFinishedAt } from './finishStamp';
 import { isRoundLive } from './liveRound';
-import { getPlayingHandicap, resolvePairs, calcExtraShots, holeCountOf, roundScoringMode, roundTotals } from './scoring';
-import { pairBoard } from './homePairs';
-import { scorecardModel } from './scorecardView';
+import { getPlayingHandicap, resolvePairs, calcExtraShots, holeCountOf } from './scoring';
 
 export const PHASE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -108,7 +105,6 @@ export function cardShotDetails(state) {
 export function homePhase(tournaments, { userId = null, now = Date.now(), lastActivityByKey = null } = {}) {
   const lives = [];
   const befores = [];
-  const afters = [];
   for (const t of tournaments ?? []) {
     // Official tournaments have their own model and screens; viewers don't play.
     if (!t || t.kind === 'official' || t._role === 'viewer') continue;
@@ -118,11 +114,6 @@ export function homePhase(tournaments, { userId = null, now = Date.now(), lastAc
     const rounds = t.rounds ?? [];
     const finished = isTournamentFinished(t);
 
-    rounds.forEach((round, roundIndex) => {
-      const endedAt = roundEndedAt(t, round);
-      const mine = Object.values(round?.scores?.[me.id] ?? {}).some((v) => v != null);
-      if (mine && within(endedAt, now)) afters.push({ tournament: t, round, roundIndex, endedAt });
-    });
     if (finished) continue;
 
     const c = Math.min(Math.max(Number(t.currentRound) || 0, 0), Math.max(rounds.length - 1, 0));
@@ -154,10 +145,8 @@ export function homePhase(tournaments, { userId = null, now = Date.now(), lastAc
   const strip = (x) => (x ? { tournament: x.tournament, round: x.round, roundIndex: x.roundIndex, ...(x.next != null ? { next: x.next } : {}) } : null);
   const live = strip(latest(lives, 'at'));
   const before = strip(latest(befores, 'at'));
-  const afterPick = latest(afters, 'endedAt');
-  const after = afterPick ? { ...strip(afterPick), endedAt: afterPick.endedAt } : null;
-  const phase = live ? 'live' : before ? 'before' : after ? 'after' : 'idle';
-  return { phase, live, before, after };
+  const phase = live ? 'live' : before ? 'before' : 'idle';
+  return { phase, live, before };
 }
 
 // A tee set the course never named ("Default") says nothing on the card.
@@ -222,60 +211,4 @@ export function liveModel({ tournament, round, roundIndex }, userId) {
     next: nextHole ? { number: nextHole.number, par: nextHole.par ?? null, strokeIndex: nextHole.strokeIndex ?? null, distance: nextHole.distance ?? null } : null,
     board,
   };
-}
-
-// After hero: my result, place and the winner; a tie for first names everyone
-// on it. A two-pair game adds the pair result (`pairs`, as the scorecard's
-// match panel scores it) and my own Stableford points (`myStableford`); a solo
-// round adds my card (`card`, for its totals) and its shot totals.
-export function afterModel({ tournament, round, roundIndex, endedAt }, userId) {
-  const me = myPlayerIn(tournament, userId);
-  const players = tournament.players ?? [];
-  const { unit, entries } = roundLeaderboard(tournament, round);
-  const mine = entries.find((e) => e.player?.id === me?.id) ?? null;
-  const place = mine ? 1 + entries.filter((e) => e.points > mine.points).length : null;
-  const top = entries[0] ?? null;
-  const tiedTop = top ? entries.filter((e) => e.points === top.points) : [];
-  const solo = players.length === 1 && me
-    ? soloCard(tournament, round, me)
-    : null;
-  return {
-    tournamentId: tournament.id,
-    roundId: round.id,
-    roundKey: `${tournament.id}:${roundIndex}`,
-    name: tournament.name ?? '',
-    courseName: round.courseName || round.course?.name || '',
-    endedAt,
-    unit,
-    myPoints: mine?.points ?? null,
-    place,
-    count: entries.length,
-    // null when I won, or when first place is shared (`tied` says who).
-    winner: top && place !== 1 && tiedTop.length === 1 ? { name: top.player?.name ?? '', points: top.points } : null,
-    tied: tiedTop.length > 1
-      ? { points: top.points, players: tiedTop.map((e) => ({ id: e.player?.id, name: e.player?.name ?? '', me: e.player?.id === me?.id })) }
-      : null,
-    pairs: pairBoard(tournament, round, me?.id ?? null),
-    myStableford: me ? roundTotals(round, [me])[0]?.totalPoints ?? null : null,
-    card: solo?.card ?? null,
-    shots: solo?.shots ?? null,
-  };
-}
-
-// My card for a solo round and what my shot detail adds up to: fairways hit
-// of those logged, greens in regulation of those known, tee penalties.
-function soloCard(tournament, round, me) {
-  const card = scorecardModel({ round, players: [me], meId: me.id, mode: roundScoringMode(tournament, round) });
-  const row = card.rows[0];
-  if (!row) return { card, shots: null };
-  const add = (pick) => row.nines.reduce((sum, n) => sum + pick(n), 0);
-  const penalties = row.nines.reduce((sum, n) => sum + n.cells.reduce((s, c) => s + (c.penalties ?? 0), 0), 0);
-  const shots = row.hasShots
-    ? {
-      fairways: { hit: add((n) => n.fairways.hit), of: add((n) => n.fairways.of) },
-      greens: { hit: add((n) => n.gir.hit), of: add((n) => n.gir.of) },
-      penalties,
-    }
-    : null;
-  return { card, shots };
 }

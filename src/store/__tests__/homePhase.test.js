@@ -1,5 +1,5 @@
 import {
-  homePhase, beforeModel, liveModel, afterModel, PHASE_WINDOW_MS, withCardScores, cardCandidates, cardShotDetails,
+  homePhase, beforeModel, liveModel, PHASE_WINDOW_MS, withCardScores, cardCandidates, cardShotDetails,
 } from '../homePhase';
 
 const NOW = Date.parse('2026-10-19T12:00:00Z');
@@ -53,19 +53,9 @@ describe('homePhase', () => {
     expect(phaseOf([t]).phase).toBe('live');
   });
 
-  it('a round finished in the last 24 h is After; older is idle', () => {
-    const done = (ms) => game({ createdAt: iso(NOW - 30 * H) }, { scores: { p1: scores(18), p2: scores(18) }, finishedAt: iso(ms) });
-    const r = phaseOf([done(NOW - 3 * H)]);
-    expect(r.phase).toBe('after');
-    expect(r.after.endedAt).toBe(NOW - 3 * H);
-    expect(phaseOf([done(NOW - 25 * H)]).phase).toBe('idle');
-  });
-
-  it('Before wins over After, and After is kept for its one line', () => {
-    const yesterday = game({ id: 'g0', createdAt: iso(NOW - 30 * H) }, { id: 'r0', scores: { p1: scores(18) }, finishedAt: iso(NOW - 20 * H) });
-    const r = phaseOf([yesterday, game()]);
-    expect(r.phase).toBe('before');
-    expect(r.after.tournament.id).toBe('g0');
+  it('a finished round leaves Home idle: no post-game card', () => {
+    const done = game({ createdAt: iso(NOW - 30 * H) }, { scores: { p1: scores(18), p2: scores(18) }, finishedAt: iso(NOW - 3 * H) });
+    expect(phaseOf([done])).toEqual({ phase: 'idle', live: null, before: null });
   });
 
   it('the next round of a tournament whose round just ended is Before (next)', () => {
@@ -79,7 +69,6 @@ describe('homePhase', () => {
     const r = phaseOf([t]);
     expect(r.phase).toBe('before');
     expect(r.before).toMatchObject({ roundIndex: 1, next: true });
-    expect(r.after.roundIndex).toBe(0);
   });
 
   it('skips official tournaments and viewer roles', () => {
@@ -130,39 +119,6 @@ describe('phase models', () => {
     expect(m.next).toMatchObject({ number: 7, par: 4, strokeIndex: 7 });
     expect(m.board.find((b) => b.me).thru).toBe(6);
     expect(typeof m.myPoints).toBe('number');
-  });
-
-  it('afterModel gives place and the winner, or no winner when I won', () => {
-    const t = game({}, { scores: { p1: scores(18, 5), p2: scores(18, 4) }, finishedAt: iso(NOW - H) });
-    const a = afterModel({ tournament: t, round: t.rounds[0], roundIndex: 0, endedAt: NOW - H }, 'u1');
-    expect(a).toMatchObject({ place: 2, count: 2, roundKey: 'g1:0' });
-    expect(a.winner.name).toBe('Noé');
-    const b = afterModel({ tournament: t, round: t.rounds[0], roundIndex: 0, endedAt: NOW - H }, 'u2');
-    expect(b.place).toBe(1);
-    expect(b.winner).toBeNull();
-    expect(b.tied).toBeNull();
-  });
-
-  it('afterModel names everyone tied for first instead of one winner', () => {
-    const t = game({}, { scores: { p1: scores(18, 4), p2: scores(18, 4) }, playerHandicaps: { p1: 0, p2: 0 }, finishedAt: iso(NOW - H) });
-    const a = afterModel({ tournament: t, round: t.rounds[0], roundIndex: 0, endedAt: NOW - H }, 'u1');
-    expect(a.winner).toBeNull();
-    expect(a.tied.players.map((p) => [p.id, p.me])).toEqual([['p1', true], ['p2', false]]);
-  });
-
-  it('afterModel gives a solo round my card and what my shots add up to', () => {
-    const shotDetails = { p1: { 1: { putts: 2, drive: 'fairway' }, 2: { putts: 1, drive: 'left', teePenalties: 1 }, 3: { putts: 3 } } };
-    const t = game({ players: [players[0]] }, { scores: { p1: { 1: 4, 2: 4, 3: 5 } }, shotDetails, finishedAt: iso(NOW - H) });
-    const a = afterModel({ tournament: t, round: t.rounds[0], roundIndex: 0, endedAt: NOW - H }, 'u1');
-    expect(a.card.solo).toBe(true);
-    expect(a.shots).toEqual({ fairways: { hit: 1, of: 2 }, greens: { hit: 2, of: 3 }, penalties: 1 });
-    expect(a.pairs).toBeNull();
-  });
-
-  it('afterModel gives my own Stableford points for the pairs card', () => {
-    const t = game({}, { scores: { p1: scores(18, 4), p2: scores(18, 4) }, playerHandicaps: { p1: 0, p2: 0 }, finishedAt: iso(NOW - H) });
-    const a = afterModel({ tournament: t, round: t.rounds[0], roundIndex: 0, endedAt: NOW - H }, 'u1');
-    expect(a.myStableford).toBe(36);
   });
 });
 
