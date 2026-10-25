@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -78,14 +78,24 @@ describe('FloatingTabBar', () => {
     expect(getByLabelText('Profile')).toBeTruthy();
   });
 
-  test('routes secondary tabs by their tab route names', () => {
+  test('routes secondary tabs by their tab route names', async () => {
     const { getByLabelText, navigation } = renderTabBar();
 
     fireEvent.press(getByLabelText('Stats'));
     fireEvent.press(getByLabelText('Profile'));
 
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('Profile'));
     expect(navigation.navigate).toHaveBeenCalledWith('MyStats');
-    expect(navigation.navigate).toHaveBeenCalledWith('Profile');
+  });
+
+  test('selects the tapped tab before the navigator catches up', async () => {
+    const { getByLabelText, getByText, navigation } = renderTabBar({ index: 0 });
+
+    fireEvent.press(getByLabelText('Stats'));
+
+    expect(navigation.navigate).not.toHaveBeenCalled();
+    expect(StyleSheet.flatten(getByText('Stats').props.style).color).toBe(light.accent.primary);
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('MyStats'));
   });
 
   test('always shows labels under every secondary tab, tinting the selected one', () => {
@@ -109,13 +119,13 @@ describe('FloatingTabBar', () => {
     expect(flag.props.color).toBe(light.text.inverse);
   });
 
-  test('a tap on Play routes to Home, even while a round is live', () => {
+  test('a tap on Play routes to Home, even while a round is live', async () => {
     act(() => setPlayCue({ live: LIVE, quickStart: [] }));
     const { getByLabelText, navigation } = renderTabBar({ index: 0 });
 
     fireEvent.press(getByLabelText('Play'));
 
-    expect(navigation.navigate).toHaveBeenCalledWith('Home');
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('Home'));
   });
 });
 
