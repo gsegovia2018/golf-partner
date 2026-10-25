@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, Pressable, Animated,
+  View, Text, TouchableOpacity, Pressable, Animated, StyleSheet,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
@@ -11,6 +11,7 @@ import { ShotDetailSection } from './ShotDetailSection';
 import PressableScale from '../ui/PressableScale';
 import RollingNumber from '../ui/RollingNumber';
 import UnderParRing from './UnderParRing';
+import { figureLift } from '../../theme/figureLift';
 import { haptic } from '../../lib/haptics';
 import { useT, formatNumber } from '../../i18n';
 import { teeDisplayName } from '../../lib/teeName';
@@ -106,6 +107,7 @@ export const PlayerCard = React.memo(function PlayerCard({
   // defensively too — the ghost must never show alongside a real entry, even
   // if a caller ever passed both.
   const ghostVisible = !!ghost && strokes == null && !conflicted;
+  const shownStrokes = strokes ?? (ghostVisible ? ghost.value : '—');
   // A ghosted cell is a peer's entry this scorer never marked. Tapping it
   // accepts that value as this scorer's OWN mark — exactly the write typing
   // the number in would make, so the two cards then record that they agree
@@ -243,7 +245,8 @@ export const PlayerCard = React.memo(function PlayerCard({
             <View style={s.soloScoreNumWrap}>
               <UnderParRing show={underPar} />
               <RollingNumber
-                value={strokes ?? (ghostVisible ? ghost.value : '—')}
+                value={shownStrokes}
+                containerStyle={{ transform: [{ translateY: -figureLift(shownStrokes, StyleSheet.flatten(s.soloScoreNum).fontSize) }] }}
                 style={[
                   s.soloScoreNum,
                   strokes == null && s.scoreDisplayNumEmpty,
