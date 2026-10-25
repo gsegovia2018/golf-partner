@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useT, t as tNow, formatNumber } from '../i18n';
 import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
+import { afterTabSettles } from '../navigation/tabSettle';
 import { useAuth } from '../context/AuthContext';
 import { loadAllTournamentsWithFallback, loadCachedTournamentsList } from '../store/tournamentStore';
 import { loadProfile, loadCachedProfile, upsertProfile } from '../store/profileStore';
@@ -441,14 +442,14 @@ export default function MyStatsScreen({ navigation, route }) {
   // Strokes Gained and Coach recompute against the current target.
   useEffect(() => {
     if (!navigation?.addListener) return undefined;
-    return navigation.addListener('focus', () => (
+    return navigation.addListener('focus', () => afterTabSettles(() => (
       loadProfile()
         .then((profile) => {
           setTargetHandicap(profile?.targetHandicap ?? null);
           setProfileHandicap(profile?.handicap ?? null);
         })
         .catch(() => {})
-    ));
+    )));
   }, [navigation]);
 
   // Default the Report Card to the most recent round once rounds are loaded.

@@ -4,7 +4,6 @@ import {
   RefreshControl, TextInput, Alert,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
-import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from '../components/ui/PressableScale';
 import IconButton from '../components/ui/IconButton';
@@ -19,6 +18,7 @@ import { notifyFeedActivity } from '../store/notificationStore';
 import { subscribeTournamentChanges, formatRoundLabel, getTournament } from '../store/tournamentStore';
 import { useAuth } from '../context/AuthContext';
 import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
+import { useSettledFocusEffect } from '../navigation/useSettledFocusEffect';
 import CommentsSheet from '../components/CommentsSheet';
 import MemoriesStoriesViewer from '../components/MemoriesStoriesViewer';
 import RoundStoriesRail, { RoundStoriesRailSkeleton } from '../components/feed/RoundStoriesRail';
@@ -68,7 +68,7 @@ function useNow(intervalMs = 60000) {
     return () => clearInterval(id);
   }, [intervalMs]);
   // Recompute on focus too — covers the app being backgrounded for a while.
-  useFocusEffect(useCallback(() => { setNow(Date.now()); }, []));
+  useSettledFocusEffect(useCallback(() => { setNow(Date.now()); }, []));
   return now;
 }
 
@@ -486,7 +486,7 @@ export default function FeedScreen({ navigation }) {
     }
   }, [openCaptureMenu, t]);
 
-  useFocusEffect(useCallback(() => {
+  useSettledFocusEffect(useCallback(() => {
     let cancelled = false;
     let debounceTimer = null;
     // Only show the full spinner on the very first load; later focus-driven

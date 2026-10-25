@@ -9,7 +9,6 @@ import { Skeleton, SkeletonRegion } from '../components/ui/Skeleton';
 import PressableScale from '../components/ui/PressableScale';
 import Reveal from '../components/ui/Reveal';
 import SwipeToDelete from '../components/ui/SwipeToDelete';
-import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -23,6 +22,7 @@ import { buildHistorySections } from '../store/historyModel';
 import { semantic } from '../theme/tokens';
 import { useT, formatNumber } from '../i18n';
 import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
+import { useSettledFocusEffect } from '../navigation/useSettledFocusEffect';
 
 // The era a net points record belongs to. Stableford points are net of the
 // handicap the round was played off, so a career best is not comparable with
@@ -122,7 +122,7 @@ export default function HistoryScreen({ navigation }) {
     }
   }, [applyList, userId]);
 
-  useFocusEffect(useCallback(() => {
+  useSettledFocusEffect(useCallback(() => {
     let cancelled = false;
     reload();
     const unsub = subscribeTournamentChanges(() => { if (!cancelled) reload(); });
