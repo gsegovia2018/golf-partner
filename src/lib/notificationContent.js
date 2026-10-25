@@ -459,8 +459,14 @@ export function notificationLink(type, data = {}) {
       const m = /^\d{4}-\d{2}/.exec(String(data.month ?? ''));
       return { screen: 'LeagueBoard', params: { leagueId: data.league_id, ...(m ? { finalMonth: m[0] } : {}) } };
     }
+    // A card played with the app opens its round, live: any league member can
+    // follow it. Off-app cards have no round, so they open the board.
     case 'league_card_announced':
     case 'league_tee_off':
+      if (data.tournament_id && data.round_id) {
+        return { screen: 'RoundSummary', params: { tournamentId: data.tournament_id, roundId: data.round_id } };
+      }
+      return { screen: 'LeagueBoard', params: { leagueId: data.league_id } };
     case 'league_card_confirmed':
     case 'league_marker_confirmed':
     case 'league_month_reminder':

@@ -37,7 +37,7 @@ import {
   setupPrefillState,
 } from './setupWizard';
 import { mutate } from '../store/mutate';
-import { announceLeagueCard, recordLeagueFinal } from '../store/leagueStore';
+import { announceLeagueCard, announceLeagueCardFor, recordLeagueFinal } from '../store/leagueStore';
 import { enqueueLeagueFinal, isRetryableFinalError } from '../lib/leagueFinalPending';
 import { cardMonth } from '../store/leagueRules';
 import { monthName } from '../store/leagueView';
@@ -196,6 +196,18 @@ export default function SetupScreen({ navigation, route }) {
   const leagueLocks = leagueOffered && leagueOn && !pickMissing && leagueEligibleRound && league.leagueHandicap != null
     ? { [myPlayer.id]: { leagueHandicap: Number(league.leagueHandicap), teeLocked: false } }
     : undefined;
+  // As the game's creator I can also count another member's card (the
+  // server's announce_league_card_for): a switch on each "asked" row. The card
+  // is theirs; they validate and submit it from their own phone.
+  const [othersOn, setOthersOn] = useState(() => new Set());
+  const toggleOther = (playerId, on) => setOthersOn((prev) => {
+    const next = new Set(prev);
+    if (on) next.add(playerId); else next.delete(playerId);
+    return next;
+  });
+  const othersToCount = leagueListMode && !leagueListBlocked && !pickMissing && leagueEligibleRound
+    ? leagueRows.filter((r) => r.kind === 'asked' && othersOn.has(r.playerId))
+    : [];
   // A switch already on (the board's "Play with the app") waits for the list.
   const leagueChecking = leagueCheckingLeagues || (leagueListMode && leagueOn && leagueStatus.loading);
   const startBusyRef = useRef(false);
@@ -531,6 +543,43 @@ export default function SetupScreen({ navigation, route }) {
     }
   }
 
+  // Announces the other members' cards I switched on, once mine is through.
+  // A refusal (their month is taken, they already scored…) doesn't stop the
+  // game: it starts with the cards that went through and says which didn't.
+  async function withOthersLeagueCards(tournament, rows) {
+    const r0 = tournament.rounds[0];
+    let next = tournament;
+    const failed = [];
+    for (const row of rows) {
+      try {
+        const card = await announceLeagueCardFor({
+          leagueId: league.id,
+          userId: row.userId,
+          course: leagueCourse(r0, row.playerId),
+          tournamentId: tournament.id,
+          roundId: r0.id,
+          playerId: row.playerId,
+          scoringMode: roundScoringMode(tournament, r0),
+        });
+        const patch = leagueCardsPatch({ leagueId: league.id, cardId: card.id, playerId: row.playerId, roundId: r0.id });
+        next = {
+          ...next,
+          leagueCards: { ...(next.leagueCards ?? {}), ...patch.leagueCards },
+          rounds: next.rounds.map((r, i) => (
+            i === 0 && card.leagueHandicap != null ? applyLeagueHandicap(r, row.playerId, card.leagueHandicap) : r)),
+        };
+      } catch (err) {
+        failed.push(`${row.name}: ${leagueErrorText(err) || t('league.setup.unreachable')}`);
+      }
+    }
+    if (failed.length > 0) {
+      const msg = t('league.cards.othersFailed', { list: failed.join('\n') });
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert(t('league.cards.othersFailedTitle'), msg);
+    }
+    return next;
+  }
+
   async function startGame() {
     if (players.length < 1) {
       Alert.alert(t('setup.screen.missingInfo'), t('setup.screen.needPlayer'));
@@ -647,6 +696,7 @@ export default function SetupScreen({ navigation, route }) {
       tournament = await withLeagueCard(tournament, meId);
       if (!tournament) return;
     }
+    if (othersToCount.length > 0) tournament = await withOthersLeagueCards(tournament, othersToCount);
 
     try {
       await mutate(tournament, { type: 'tournament.create', tournament });
@@ -1112,6 +1162,11 @@ export default function SetupScreen({ navigation, route }) {
           label: t('league.cards.switchLabel', { league: league.name }),
           extra: leagueEligibleRound && !leagueRated ? renderAddRatingLink(unratedTee) : null,
         }}
+        others={leagueEligibleRound ? {
+          isOn: (row) => othersOn.has(row.playerId),
+          onChange: (row, on) => toggleOther(row.playerId, on),
+          label: (row) => t('league.cards.otherSwitchLabel', { name: row.name, league: league.name }),
+        } : null}
       >
         {renderLeaguePicker()}
       </LeagueCardsList>

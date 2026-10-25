@@ -813,6 +813,33 @@ export async function announceLeagueCard({
   };
 }
 
+// The game's creator announces another member's app card for the game about
+// to start (Setup's Start). The card is that member's (userId): they validate
+// and submit it from their own phone. Server hints add 'not_creator' and
+// 'not_member' to announceLeagueCard's. Same return shape.
+export async function announceLeagueCardFor({
+  leagueId, userId, course, tournamentId, roundId, playerId, scoringMode = null,
+}) {
+  const d = await rpc('announce_league_card_for', {
+    p_league: leagueId,
+    p_user: userId,
+    p_course: course,
+    p_tournament_id: tournamentId,
+    p_round_id: roundId,
+    p_player_id: playerId,
+    p_scoring_mode: scoringMode,
+  });
+  return {
+    id: d.id,
+    month: d.month,
+    announcedAt: d.announced_at,
+    leagueHandicap: num(d.league_handicap),
+    postBy: d.post_by ?? null,
+    status: d.status ?? null,
+    existing: !!d.existing,
+  };
+}
+
 export async function notifyLeagueTeeOff(cardId) {
   await rpc('notify_league_tee_off', { p_card: cardId });
 }

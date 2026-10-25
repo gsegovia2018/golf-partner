@@ -32,6 +32,7 @@ jest.mock('../../store/leagueStore', () => ({
   getMyLeagues: jest.fn(),
   getMyCardsForMonth: jest.fn(),
   announceLeagueCard: jest.fn(),
+  announceLeagueCardFor: jest.fn(),
   getLeagueMonthMembers: jest.fn(),
 }));
 
@@ -368,5 +369,43 @@ describe('SetupScreen league cards list (D5 B)', () => {
     fireEvent.press(getByText('Start Game'));
     await waitFor(() => expect(dismissLeagueOptIn).toHaveBeenCalled());
     expect(store.announceLeagueCard).not.toHaveBeenCalled();
+  });
+
+  test("as the game's creator I switch on another member's card: Start announces it for them", async () => {
+    store.getLeagueMonthMembers.mockResolvedValue({
+      members: [{ userId: 'user-1' }, { userId: 'user-2' }], cards: [],
+    });
+    store.announceLeagueCardFor.mockResolvedValue({ id: 'card-2', month: '2026-10-01', announcedAt: 'x', leagueHandicap: 11 });
+    const { findByLabelText, getByText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: withFriend() }} />,
+    ));
+    const sw = await findByLabelText("Count Javier's round for El Club del Mulligan");
+    fireEvent(sw, 'valueChange', true);
+    expect(getByText('Counts as their card: they post it from their phone')).toBeTruthy();
+
+    fireEvent.press(getByText('Start Game'));
+    await waitFor(() => expect(createdTournament()).toBeTruthy());
+    expect(store.announceLeagueCardFor).toHaveBeenCalledWith(expect.objectContaining({
+      leagueId: 'L1', userId: 'user-2', playerId: 'p2',
+    }));
+    expect(store.announceLeagueCard).not.toHaveBeenCalled();
+    const created = createdTournament();
+    expect(Object.values(created.leagueCards)).toEqual([
+      expect.objectContaining({ leagueId: 'L1', cardId: 'card-2', playerId: 'p2' }),
+    ]);
+  });
+
+  test('a refused card for another member still starts the game and says which', async () => {
+    store.getLeagueMonthMembers.mockResolvedValue({
+      members: [{ userId: 'user-1' }, { userId: 'user-2' }], cards: [],
+    });
+    store.announceLeagueCardFor.mockRejectedValue(new Error('That player already has their October card.'));
+    const { findByLabelText, getByText } = render(wrap(
+      <SetupScreen navigation={navigation} route={{ params: withFriend() }} />,
+    ));
+    fireEvent(await findByLabelText("Count Javier's round for El Club del Mulligan"), 'valueChange', true);
+    fireEvent.press(getByText('Start Game'));
+    await waitFor(() => expect(createdTournament()).toBeTruthy());
+    expect(Alert.alert).toHaveBeenCalledWith("Some cards didn't count", expect.stringContaining('Javier: That player already has their October card.'));
   });
 });

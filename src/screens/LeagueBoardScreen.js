@@ -213,11 +213,16 @@ export default function LeagueBoardScreen({ navigation, route }) {
       ...board.onCourse.map((r) => {
         const dl = deadlineInfo(r.card, now);
         const playing = r.card.status === 'playing';
-        return pending(r,
+        // A member playing with the app: the row follows their round live.
+        const follow = playing && r.card.tournamentId && r.card.roundId && r.member.userId !== meId
+          ? () => navigation.navigate('RoundSummary', { tournamentId: r.card.tournamentId, roundId: r.card.roundId })
+          : null;
+        const row = pending(r,
           dl ? t('league.home.chipToPost', { time: countdownText(dl.msLeft) }) : t(playing ? 'league.home.playingNow' : 'league.home.announced'),
           dl?.urgent ? 'warn' : playing ? 'accent' : 'grey',
           playing ? t('league.home.playingNow') : [t('league.home.announced'), dayLabel(r.card.teeTime), timeLabel(r.card.teeTime)].filter(Boolean).join(' '),
           r.card.course?.name);
+        return follow ? { ...row, onPress: follow } : row;
       }),
       ...board.awaiting.map((r) => pending(r, t('league.home.chipApproval'), 'warn',
         r.card.course?.name, valueText(r.card), t('league.home.needsApproval'))),
