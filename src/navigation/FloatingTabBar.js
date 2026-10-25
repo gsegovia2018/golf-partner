@@ -32,11 +32,16 @@ const TOUR_TARGET_KEYS = {
 const DISC = 48;
 const TRACK_PAD = 6;
 const DROP_INSET = 2;
+const DROP_TOP = 8;
+const DROP_H = BAR_HEIGHT - DROP_TOP * 2;
 const BALL = 8;
+// Every spring names its mass: Reanimated 4 defaults it to 4, which halves
+// the damping ratio these were tuned with (the drop's trailing edge whipped
+// past the leading one and the bar wobbled for a second).
 const COLLAPSE_SPRING = { damping: 17, stiffness: 190, mass: 0.9 };
-const MENU_SPRING = { damping: 19, stiffness: 210 };
+const MENU_SPRING = { damping: 19, stiffness: 210, mass: 1 };
 const DROP_LEAD = { damping: 14, stiffness: 320, mass: 0.6 };
-const DROP_TRAIL = { damping: 16, stiffness: 170 };
+const DROP_TRAIL = { damping: 16, stiffness: 170, mass: 1 };
 const HOP_MS = 460;
 
 // The floating tab bar (DESIGN.md, Navigation): a frosted pill over the
@@ -55,6 +60,8 @@ export default function FloatingTabBar({ state, navigation }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
   const [keyboard, setKeyboard] = useState(false);
+  // The tab just tapped, until the navigator catches up (see pressTab).
+  const [pressed, setPressed] = useState(null);
   const s = React.useMemo(() => makeStyles(theme), [theme]);
 
   const barWidth = Math.min(windowWidth - BAR_SIDE * 2, CONTENT_MAX_WIDTH);
@@ -63,7 +70,7 @@ export default function FloatingTabBar({ state, navigation }) {
   const trackWidth = barWidth - TRACK_PAD * 2;
   const count = state.routes.length;
   const slot = trackWidth / count;
-  const active = state.index;
+  const active = pressed ?? state.index;
   const centerIndex = state.routes.findIndex((r) => isCenterTab(r.name));
   const activeItem = getTabBarItem(state.routes[active]?.name);
   const shrunk = shrunkLayout({ windowWidth, left, barWidth, hasLive: !!live });
@@ -107,7 +114,14 @@ export default function FloatingTabBar({ state, navigation }) {
     const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
     if (!event.defaultPrevented && index !== active) {
       haptic('selection');
-      navigation.navigate(item.targetRouteName);
+      // The bar moves on this frame and the screen follows on the next: a
+      // tab's first visit mounts its whole screen, and the drop and ball
+      // used to wait for that render before they set off.
+      setPressed(index);
+      requestAnimationFrame(() => {
+        navigation.navigate(item.targetRouteName);
+        setPressed(null);
+      });
     }
   };
   const goHome = (params) => {
@@ -190,7 +204,11 @@ export default function FloatingTabBar({ state, navigation }) {
       <Animated.View style={[s.pill, pillStyle]} pointerEvents={menuOpen ? 'none' : 'box-none'}>
         <TabBarSurface theme={theme} />
         <Animated.View style={[s.track, { width: trackWidth }, trackStyle]} pointerEvents={collapsed ? 'none' : 'box-none'}>
-          <Animated.View pointerEvents="none" style={[s.drop, indicator.dropStyle]} />
+          <View pointerEvents="none" style={s.dropLayer} needsOffscreenAlphaCompositing>
+            <Animated.View style={[s.dropPart, { width: indicator.bodyWidth }, indicator.bodyStyle]} />
+            <Animated.View style={[s.dropPart, s.dropCap, indicator.capLStyle]} />
+            <Animated.View style={[s.dropPart, s.dropCap, indicator.capRStyle]} />
+          </View>
           {state.routes.map((route, index) => (isCenterTab(route.name) ? (
             <View key={route.key} style={s.tab} pointerEvents="none" />
           ) : (
@@ -317,7 +335,10 @@ function TabItem({ route, item, focused, reduced, onPress, theme, s }) {
 
 // The drop behind the selected tab (its leading edge springs ahead, the
 // trailing one follows) and the ball that hops to it, squashing as it lands
-// and vanishing into the Play disc.
+// and vanishing into the Play disc. Both move by transforms only: on Android
+// a left / width animation re-lays out every frame and stalls while the
+// new tab's screen commits, which made the slide stutter. The drop is two
+// round caps and a body stretched between them, so its ends stay round.
 function useIndicator({ active, count, slot, centerIndex, reduced, fadeWith }) {
   const place = (i) => ({
     left: i * slot + DROP_INSET,
@@ -360,7 +381,16 @@ function useIndicator({ active, count, slot, centerIndex, reduced, fadeWith }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, count, slot, centerIndex, reduced]);
 
-  const dropStyle = useAnimatedStyle(() => ({ left: dropL.value, right: dropR.value }));
+  const trackWidth = count * slot;
+  const bodyWidth = Math.max(slot - DROP_INSET * 2 - DROP_H, 1);
+  const capLStyle = useAnimatedStyle(() => ({ transform: [{ translateX: dropL.value }] }));
+  const capRStyle = useAnimatedStyle(() => ({ transform: [{ translateX: trackWidth - dropR.value - DROP_H }] }));
+  const bodyStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: dropL.value + DROP_H / 2 },
+      { scaleX: Math.max(trackWidth - dropR.value - dropL.value - DROP_H, 0) / bodyWidth },
+    ],
+  }));
   const [collapse, open] = fadeWith;
   const ballStyle = useAnimatedStyle(() => ({
     opacity: ballO.value
@@ -373,7 +403,7 @@ function useIndicator({ active, count, slot, centerIndex, reduced, fadeWith }) {
       { scaleY: squashY.value },
     ],
   }));
-  return { dropStyle, ballStyle };
+  return { capLStyle, capRStyle, bodyStyle, bodyWidth, ballStyle };
 }
 
 // The icon of a tab dips as the ball lands on it.
@@ -384,7 +414,7 @@ function useLandOnFocus(focused, reduced) {
     if (focused && !was.current && !reduced) {
       scale.value = withDelay(HOP_MS - 60, withSequence(
         withTiming(0.86, { duration: 90 }),
-        withSpring(1, { damping: 9, stiffness: 260 }),
+        withSpring(1, { damping: 9, stiffness: 260, mass: 1 }),
       ));
     }
     was.current = focused;
@@ -400,7 +430,7 @@ function useCupOnFocus(focused, reduced) {
     if (focused && !was.current && !reduced) {
       scale.value = withDelay(HOP_MS - 30, withSequence(
         withTiming(0.86, { duration: 110 }),
-        withSpring(1, { damping: 8, stiffness: 240 }),
+        withSpring(1, { damping: 8, stiffness: 240, mass: 1 }),
       ));
     }
     was.current = focused;
@@ -408,7 +438,15 @@ function useCupOnFocus(focused, reduced) {
   return scale;
 }
 
+// The drop's pieces overlap, so they paint opaque and the layer carries the
+// colour's alpha once (dark theme's accent.light is translucent).
+function splitAlpha(color) {
+  const m = /^rgba\(([^,]+),([^,]+),([^,]+),([^)]+)\)$/.exec(String(color).replace(/\s/g, ''));
+  return m ? { color: `rgb(${m[1]},${m[2]},${m[3]})`, alpha: Number(m[4]) } : { color, alpha: 1 };
+}
+
 function makeStyles(theme) {
+  const drop = splitAlpha(theme.accent.light);
   const border = theme.isDark ? theme.glass?.border ?? theme.border.default : 'rgba(0,0,0,0.06)';
   const shadow = {
     shadowColor: '#000',
@@ -434,12 +472,21 @@ function makeStyles(theme) {
       flexDirection: 'row',
       transformOrigin: 'left',
     },
-    drop: {
+    dropLayer: {
+      ...StyleSheet.absoluteFillObject,
+      opacity: drop.alpha,
+    },
+    dropPart: {
       position: 'absolute',
-      top: 8,
-      bottom: 8,
-      borderRadius: 999,
-      backgroundColor: theme.accent.light,
+      top: DROP_TOP,
+      left: 0,
+      height: DROP_H,
+      transformOrigin: 'left',
+      backgroundColor: drop.color,
+    },
+    dropCap: {
+      width: DROP_H,
+      borderRadius: DROP_H / 2,
     },
     ball: {
       position: 'absolute',
