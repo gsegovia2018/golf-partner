@@ -16,7 +16,6 @@ import {
   BAR_COLLAPSED, BAR_HEIGHT, BAR_SIDE, STRIP_GAP, STRIP_HEIGHT, barBottom, setTabBarCollapsed, shrunkLayout, useTabBarCollapsed,
 } from './tabBarChrome';
 import { markTabSwitch } from './tabSettle';
-import { usePreloadTabs } from './preloadTabs';
 import TabBarSurface from './TabBarSurface';
 import LiveRoundStrip from './LiveRoundStrip';
 import PlayQuickMenu, { playMenuHeight } from './PlayQuickMenu';
@@ -77,8 +76,6 @@ export default function FloatingTabBar({ state, navigation }) {
   const activeItem = getTabBarItem(state.routes[active]?.name);
   const shrunk = shrunkLayout({ windowWidth, left, barWidth, hasLive: !!live });
   const menuHeight = playMenuHeight({ hasLive: !!live, hasQuickStart: quickStart.length > 0 });
-
-  usePreloadTabs(state, navigation);
 
   // A new tab starts with the bar open.
   useEffect(() => { setTabBarCollapsed(false); }, [active]);
