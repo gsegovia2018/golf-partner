@@ -124,12 +124,9 @@ export default {
   'scorecard.dist.locating': 'Locating GPS…',
   'scorecard.dist.locationOff': 'Location off',
   'scorecard.dist.locationOffA11y': 'Location off — open settings',
-  'scorecard.dist.bunker': 'Bunker {range}',
-  'scorecard.dist.water': 'Water {range}',
   'scorecard.dist.holeMap': 'Hole map',
   'scorecard.dist.openMap': 'Open hole map',
   'scorecard.dist.frontBack': 'F {front}  B {back}',
-  'scorecard.dist.tapForMap': 'TAP FOR MAP',
   'scorecard.dist.nearestGreen': 'NEAREST GREEN',
   'scorecard.dist.gettingFix': 'Getting GPS fix',
 
