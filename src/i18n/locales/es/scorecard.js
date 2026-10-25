@@ -124,12 +124,9 @@ export default {
   'scorecard.dist.locating': 'Localizando GPS…',
   'scorecard.dist.locationOff': 'Ubicación desactivada',
   'scorecard.dist.locationOffA11y': 'Ubicación desactivada: abrir ajustes',
-  'scorecard.dist.bunker': 'Bunker {range}',
-  'scorecard.dist.water': 'Agua {range}',
   'scorecard.dist.holeMap': 'Mapa del hoyo',
   'scorecard.dist.openMap': 'Abrir mapa del hoyo',
   'scorecard.dist.frontBack': 'D {front}  F {back}',
-  'scorecard.dist.tapForMap': 'TOCA PARA EL MAPA',
   'scorecard.dist.nearestGreen': 'GREEN MÁS CERCANO',
   'scorecard.dist.gettingFix': 'Obteniendo señal GPS',
 

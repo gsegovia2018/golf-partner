@@ -84,20 +84,14 @@ describe('HoleDistanceBlock', () => {
     expect(queryByText('Driver')).toBeNull();
   });
 
-  it('shows one joined hazard line when both kinds are ahead', () => {
+  it('leaves hazards to the map: the box keeps to three lines', () => {
     const gps = gpsBase({}, { hazards: [
       { kind: 'bunker', reach: 96.2, carry: 118.4 },
       { kind: 'water', reach: 120.7, carry: 139.2 },
     ] });
-    const { getByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
-    getByText('Bunker 96–118 · Water 121–139');
-  });
-
-  it('shows only the nearest hazard of each kind', () => {
-    const gps = gpsBase({}, { hazards: [{ kind: 'bunker', reach: 96, carry: 118 }, { kind: 'bunker', reach: 140, carry: 160 }] });
-    const { getByText, queryByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
-    getByText('Bunker 96–118');
-    expect(queryByText(/140/)).toBeNull();
+    const { queryByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
+    expect(queryByText(/Bunker|Water/)).toBeNull();
+    expect(queryByText(/TAP FOR MAP/i)).toBeNull();
   });
 
   it('shows the NEAREST GREEN overline for nearest-mode courses', () => {
@@ -105,9 +99,9 @@ describe('HoleDistanceBlock', () => {
     getByText('NEAREST GREEN');
   });
 
-  it('shows accuracy caption on a poor fix', () => {
+  it('adds the accuracy to the front/back line on a poor fix', () => {
     const { getByText } = render(<HoleDistanceBlock gps={gpsBase({ accuracy: 31 })} onPress={() => {}} />);
-    getByText('±31m');
+    getByText(/F 312\s+B 339 · ±31m/);
   });
 
   it('renders nothing for a far off-course GPS reading (never a giant distance)', () => {
@@ -173,13 +167,13 @@ describe('HoleDistanceBlock', () => {
     expect(queryByText('Getting GPS fix')).toBeNull();
   });
 
-  it('tee-sourced block shows hazards but never an off-course line', () => {
+  it('tee-sourced block shows the hole length but never an off-course line', () => {
     const gps = gpsBase(
       { source: 'tee', accuracy: null, position: null },
       { center: 4620, hazards: [{ kind: 'water', reach: 180.2, carry: 210.6 }] },
     );
     const { getByText, queryByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
-    getByText('Water 180–211');
+    expect(queryByText(/Water/)).toBeNull();
     getByText('4620');
     expect(queryByText(/Off course/)).toBeNull();
   });
@@ -192,17 +186,18 @@ describe('HoleDistanceBlock', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  describe('GPS status line', () => {
+  describe('GPS status (a dot by the number; a line only for "Location off")', () => {
     const teeGps = (fixState) => gpsBase({ source: 'tee', accuracy: null, position: null, fixState });
 
-    it('shows "GPS OK · far away" when a fix is held but the player is off the hole', () => {
-      const { getByText } = render(<HoleDistanceBlock gps={teeGps('ok')} onPress={() => {}} />);
-      getByText('GPS OK · far away');
+    it('labels the dot "GPS OK · far away" when a fix is held but the player is off the hole', () => {
+      const { getByLabelText, queryByText } = render(<HoleDistanceBlock gps={teeGps('ok')} onPress={() => {}} />);
+      getByLabelText('GPS OK · far away');
+      expect(queryByText('GPS OK · far away')).toBeNull();
     });
 
-    it('shows "Locating GPS…" while a fix is still being acquired', () => {
-      const { getByText } = render(<HoleDistanceBlock gps={teeGps('acquiring')} onPress={() => {}} />);
-      getByText('Locating GPS…');
+    it('labels the dot "Locating GPS…" while a fix is still being acquired', () => {
+      const { getByLabelText } = render(<HoleDistanceBlock gps={teeGps('acquiring')} onPress={() => {}} />);
+      getByLabelText('Locating GPS…');
     });
 
     it('shows "Location off" when permission is denied', () => {
@@ -210,8 +205,9 @@ describe('HoleDistanceBlock', () => {
       getByText('Location off');
     });
 
-    it('shows no status line when GPS is disabled in settings', () => {
-      const { queryByText } = render(<HoleDistanceBlock gps={teeGps('disabled')} onPress={() => {}} />);
+    it('shows no status when GPS is disabled in settings', () => {
+      const { queryByText, queryByLabelText } = render(<HoleDistanceBlock gps={teeGps('disabled')} onPress={() => {}} />);
+      expect(queryByLabelText('GPS OK · far away')).toBeNull();
       expect(queryByText('GPS OK · far away')).toBeNull();
       expect(queryByText('Locating GPS…')).toBeNull();
       expect(queryByText('Location off')).toBeNull();
@@ -246,11 +242,11 @@ describe('HoleDistanceBlock', () => {
       getByText('yd');
     });
 
-    it('shows the accuracy caption converted to yards, not raw meters', async () => {
+    it('shows the accuracy converted to yards, not raw meters', async () => {
       await updateAppSettings({ units: 'yards' });
       const { getByText, queryByText } = render(<HoleDistanceBlock gps={gpsBase({ accuracy: 31 })} onPress={() => {}} />);
-      getByText('±34yd'); // 31m * 1.09361 rounded
-      expect(queryByText('±31m')).toBeNull();
+      getByText(/±34yd/); // 31m * 1.09361 rounded
+      expect(queryByText(/±31m/)).toBeNull();
     });
   });
 
@@ -280,15 +276,15 @@ describe('HoleDistanceBlock', () => {
       const { getByText, getByLabelText } = render(<HoleDistanceBlock gps={gps} courseName="Test Course" holeNumber={1} onPress={() => {}} />);
       getByText('PLAYS');
       getByText('165');
-      getByText('16 km/h');
-      getByLabelText('Plays like 165 m. 16 km/h · into');
+      getByText('16');
+      getByLabelText(/^Plays like 165 m\. 16 km\/h · into/);
     });
 
-    it('without a forecast falls back to the estimate, marked ≈ and "No wind data"', async () => {
+    it('without a forecast falls back to the estimate, marked ≈, "No wind data" in its label', async () => {
       await updateAppSettings({ conditionsEnabled: true });
-      const { getByText } = render(<HoleDistanceBlock gps={gpsBase()} courseName="Test Course" holeNumber={1} onPress={() => {}} />);
+      const { getByText, getByLabelText } = render(<HoleDistanceBlock gps={gpsBase()} courseName="Test Course" holeNumber={1} onPress={() => {}} />);
       getByText(/^≈\d+$/);
-      getByText('No wind data');
+      getByLabelText(/No wind data/);
     });
   });
 });
