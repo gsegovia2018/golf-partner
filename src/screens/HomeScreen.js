@@ -21,7 +21,7 @@ import LeagueListSection from '../components/LeagueListSection';
 import LeaderboardCard from '../components/LeaderboardCard';
 import TourOverlay from '../components/tour/TourOverlay';
 import { HOME_TOUR_STEPS } from '../components/tour/tourSteps';
-import { scoringModeUsesTeams, leaderboardToggleLabels, getScoringMode, isScrambleMode } from '../components/scoringModes';
+import { scoringModeUsesTeams, leaderboardToggleLabels, isScrambleMode } from '../components/scoringModes';
 import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
 import BottomSheet from '../components/BottomSheet';
@@ -32,7 +32,7 @@ import LiveScorecard from '../components/HomeLiveScorecard';
 import { getSwings } from '../store/swingStore';
 import { SWING_STRINGS } from '../swing/strings';
 import PressableScale from '../components/ui/PressableScale';
-import StakesSheet, { stakesSummary } from '../components/StakesSheet';
+import StakesSheet from '../components/StakesSheet';
 import SettleUpCard from '../components/SettleUpCard';
 import {
   loadTournament, loadAllTournaments, loadAllTournamentsWithFallback, loadCachedTournamentsList,
@@ -232,6 +232,17 @@ export default function HomeScreen({ navigation, route }) {
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [showTournamentKindChoice, setShowTournamentKindChoice] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
+  // Gear menu: every entry closes the menu and runs once it has gone, so
+  // pages, sheets and actions all open the same way, never under the menu.
+  const settingsActionRef = useRef(null);
+  const fromSettings = (fn) => { settingsActionRef.current = fn; setShowSettings(false); };
+  const runSettingsAction = () => {
+    const fn = settingsActionRef.current;
+    settingsActionRef.current = null;
+    fn?.();
+  };
+  // The Round N sheet closes and runs its entry at once (it is a plain fade).
+  const fromRoundSheet = (fn) => { setShowRoundEdit(false); fn(); };
   // Per-round "Scoring Mode" picker, opened from the Round N sheet.
   const [showRoundModeSheet, setShowRoundModeSheet] = useState(false);
   const [leaderboardAlt, setLeaderboardAlt] = useState(false);
@@ -1143,7 +1154,7 @@ export default function HomeScreen({ navigation, route }) {
   // tournament-settings sheet so the two stay in lockstep. Returns null for
   // individual / match-play modes, where every "pair" is a single player and
   // there is nothing to team up. `onClose` dismisses the host sheet.
-  function renderTeamsMenuItem(onClose) {
+  function renderTeamsMenuItem(run) {
     const r = tournament.rounds[selectedRound];
     // Teams exist only in a team scoring mode that the current roster can
     // actually support — so an unknown/legacy mode, or a game stuck on a
@@ -1160,7 +1171,7 @@ export default function HomeScreen({ navigation, route }) {
     return alreadyRevealed ? (
       <TouchableOpacity
         style={s.menuItem}
-        onPress={() => { onClose(); navigation.navigate('EditTeams', { roundIndex: selectedRound, tournamentId: tournament.id }); }}
+        onPress={() => run(() => navigation.navigate('EditTeams', { roundIndex: selectedRound, tournamentId: tournament.id }))}
         activeOpacity={0.7}
       >
         <Feather name="users" size={14} color={theme.text.primary} />
@@ -1170,7 +1181,7 @@ export default function HomeScreen({ navigation, route }) {
     ) : (
       <TouchableOpacity
         style={s.menuItem}
-        onPress={() => { onClose(); navigation.navigate('NextRound', { revealOnly: true, roundIndex: selectedRound }); }}
+        onPress={() => run(() => navigation.navigate('NextRound', { revealOnly: true, roundIndex: selectedRound }))}
         activeOpacity={0.7}
       >
         <Feather name="eye" size={14} color={theme.text.primary} />
@@ -1182,28 +1193,24 @@ export default function HomeScreen({ navigation, route }) {
 
   // Point values are only meaningful for a Best Ball round. Rendered in the
   // per-round sheet (multi-round) and the gear sheet (single-round).
-  function renderPointValuesMenuItem(onClose) {
+  function renderPointValuesMenuItem(run) {
     const r = tournament.rounds[selectedRound];
     if (isViewer || roundScoringMode(tournament, r) !== 'bestball') return null;
     const vals = roundBestBallValues(tournament, r);
     return (
       <TouchableOpacity
         style={s.menuItem}
-        onPress={() => {
-          onClose();
+        onPress={() => run(() => {
           setPointValuesDraft({
             bestBallValue: String(vals.bestBallValue),
             worstBallValue: String(vals.worstBallValue),
           });
           setShowPointValues(true);
-        }}
+        })}
         activeOpacity={0.7}
       >
         <Feather name="hash" size={14} color={theme.text.primary} />
-        <View style={{ flex: 1 }}>
-          <Text style={s.menuItemTitle}>{tx('home.menu.pointValues')}</Text>
-          <Text style={s.modalSubtle}>{tx('home.menu.pointValuesSummary', { best: vals.bestBallValue, worst: vals.worstBallValue })}</Text>
-        </View>
+        <Text style={s.menuItemText}>{tx('home.menu.pointValues')}</Text>
         <Feather name="chevron-right" size={16} color={theme.text.muted} />
       </TouchableOpacity>
     );
@@ -2235,17 +2242,12 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => setShowRoundModeSheet(true)}
             activeOpacity={0.7}
           >
-            <Feather name="flag" size={14} color={theme.text.primary} />
-            <View style={{ flex: 1 }}>
-              <Text style={s.menuItemTitle}>{tx('home.round.scoringMode')}</Text>
-              <Text style={s.modalSubtle}>
-                {tx(getScoringMode(roundScoringMode(tournament, tournament.rounds[selectedRound])).labelKey)}
-              </Text>
-            </View>
+            <Feather name="target" size={14} color={theme.text.primary} />
+            <Text style={s.menuItemText}>{tx('home.round.scoringMode')}</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
-          {renderPointValuesMenuItem(() => setShowRoundEdit(false))}
-          {renderTeamsMenuItem(() => setShowRoundEdit(false))}
+          {renderPointValuesMenuItem(fromRoundSheet)}
+          {renderTeamsMenuItem(fromRoundSheet)}
         </Pressable>
       </Pressable>
     </Modal>
@@ -2258,7 +2260,7 @@ export default function HomeScreen({ navigation, route }) {
       onClose={() => setShowRoundModeSheet(false)}
     />
 
-    <BottomSheet visible={showSettings} onClose={() => setShowSettings(false)} sheetStyle={s.modalSheet}>
+    <BottomSheet visible={showSettings} onClose={() => setShowSettings(false)} onClosed={runSettingsAction} rise sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
           <Text style={s.modalTitle}>{tx(tournament.kind === 'game' ? 'home.settings.titleGame' : 'home.settings.titleTournament')}</Text>
 
@@ -2266,11 +2268,11 @@ export default function HomeScreen({ navigation, route }) {
               per-round sheet, so teams surface here; multi-round keeps them in
               the per-round (•••) sheet instead. */}
           {!isViewer && tournament.rounds.length === 1
-            && renderTeamsMenuItem(() => setShowSettings(false))}
+            && renderTeamsMenuItem(fromSettings)}
 
           <TouchableOpacity
             style={s.menuItem}
-            onPress={() => { setShowSettings(false); navigation.navigate('Stats', { tournamentId: tournament.id }); }}
+            onPress={() => fromSettings(() => navigation.navigate('Stats', { tournamentId: tournament.id }))}
             activeOpacity={0.7}
           >
             <Feather name="bar-chart-2" size={14} color={theme.text.primary} />
@@ -2280,13 +2282,10 @@ export default function HomeScreen({ navigation, route }) {
 
           <TouchableOpacity
             style={s.menuItem}
-            onPress={() => {
-              setShowSettings(false);
-              navigation.navigate('Players', {
-                tournamentId: tournament.id,
-                tournamentName: tournament.name,
-              });
-            }}
+            onPress={() => fromSettings(() => navigation.navigate('Players', {
+              tournamentId: tournament.id,
+              tournamentName: tournament.name,
+            }))}
             activeOpacity={0.7}
           >
             <Feather name="users" size={14} color={theme.text.primary} />
@@ -2300,34 +2299,26 @@ export default function HomeScreen({ navigation, route }) {
           {!isViewer && tournament.rounds.length === 1 && (
             <TouchableOpacity
               style={s.menuItem}
-              onPress={() => { setShowSettings(false); setShowRoundModeSheet(true); }}
+              onPress={() => fromSettings(() => setShowRoundModeSheet(true))}
               activeOpacity={0.7}
             >
-              <Feather name="flag" size={14} color={theme.text.primary} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.menuItemTitle}>{tx('home.round.scoringMode')}</Text>
-                <Text style={s.modalSubtle}>
-                  {tx(getScoringMode(roundScoringMode(tournament, tournament.rounds[0])).labelKey)}
-                </Text>
-              </View>
+              <Feather name="target" size={14} color={theme.text.primary} />
+              <Text style={s.menuItemText}>{tx('home.round.scoringMode')}</Text>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
 
-          {tournament.rounds.length === 1 && renderPointValuesMenuItem(() => setShowSettings(false))}
+          {tournament.rounds.length === 1 && renderPointValuesMenuItem(fromSettings)}
 
           {!isViewer && canHaveStakes && (
             <TouchableOpacity
               style={s.menuItem}
-              onPress={() => { setShowSettings(false); setShowStakes(true); }}
+              onPress={() => fromSettings(() => setShowStakes(true))}
               activeOpacity={0.7}
               testID="menu-stakes"
             >
               <Feather name="credit-card" size={14} color={theme.text.primary} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.menuItemTitle}>{tx('stakes.menu')}</Text>
-                <Text style={s.modalSubtle}>{stakesSummary(tournament.settings?.stakes, tx)}</Text>
-              </View>
+              <Text style={s.menuItemText}>{tx('stakes.menu')}</Text>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
@@ -2335,7 +2326,7 @@ export default function HomeScreen({ navigation, route }) {
           {!isViewer && teamSettingsMode && (
             <TouchableOpacity
               style={s.menuItem}
-              onPress={() => { setShowSettings(false); setShowTeamSettings(true); }}
+              onPress={() => fromSettings(() => setShowTeamSettings(true))}
               activeOpacity={0.7}
             >
               <Feather name="users" size={14} color={theme.text.primary} />
@@ -2347,13 +2338,10 @@ export default function HomeScreen({ navigation, route }) {
           {!isViewer && (
             <TouchableOpacity
               style={s.menuItem}
-              onPress={() => {
-                setShowSettings(false);
-                navigation.navigate('EditTournament', {
-                  tournamentId: tournament.id,
-                  tournamentName: tournament.name,
-                });
-              }}
+              onPress={() => fromSettings(() => navigation.navigate('EditTournament', {
+                tournamentId: tournament.id,
+                tournamentName: tournament.name,
+              }))}
               activeOpacity={0.7}
             >
               <Feather name="edit-3" size={14} color={theme.text.primary} />
@@ -2369,7 +2357,7 @@ export default function HomeScreen({ navigation, route }) {
               return (
                 <TouchableOpacity
                   style={s.menuItem}
-                  onPress={() => { setShowSettings(false); setTournamentFinished(tournament, false); }}
+                  onPress={() => fromSettings(() => setTournamentFinished(tournament, false))}
                   activeOpacity={0.7}
                 >
                   <Feather name="rotate-ccw" size={14} color={theme.text.primary} />
@@ -2381,7 +2369,7 @@ export default function HomeScreen({ navigation, route }) {
             return (
               <TouchableOpacity
                 style={s.menuItem}
-                onPress={() => { setShowSettings(false); setTournamentFinished(tournament, true); }}
+                onPress={() => fromSettings(() => setTournamentFinished(tournament, true))}
                 activeOpacity={0.7}
               >
                 <Feather name="flag" size={14} color={theme.text.primary} />
@@ -2394,7 +2382,7 @@ export default function HomeScreen({ navigation, route }) {
           {isOwner && (
             <TouchableOpacity
               style={[s.menuItem, s.menuItemDestructive]}
-              onPress={() => { setShowSettings(false); confirmDelete(tournament); }}
+              onPress={() => fromSettings(() => confirmDelete(tournament))}
               activeOpacity={0.7}
             >
               <Feather name="trash-2" size={14} color={theme.destructive} />

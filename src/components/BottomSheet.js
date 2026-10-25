@@ -16,6 +16,11 @@
 //   sheetStyle  - style(s) applied to the sliding sheet container (bg, radius,
 //                 padding). Defaults to a rounded card on theme.bg.primary.
 //   backdropOpacity - max scrim opacity (default 0.5)
+//   rise        - the sheet fades in over a short rise instead of sliding its
+//                 full height, so every row shows at once (menus)
+//   onClosed    - called once the exit animation has finished and the sheet
+//                 is gone; a menu runs the chosen entry from here, so the next
+//                 page or sheet never opens under the closing one
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal, Animated, Easing, Pressable, StyleSheet, KeyboardAvoidingView, Platform,
@@ -30,6 +35,8 @@ const ENTER_DURATION = 320;
 const ENTER_EASING = Easing.bezier(0.32, 0.72, 0, 1);
 const EXIT_DURATION = 200;
 const EXIT_EASING = Easing.bezier(0.23, 1, 0.32, 1);
+// How far a `rise` sheet travels while it fades.
+const RISE_DISTANCE = 24;
 
 export default function BottomSheet({
   visible,
@@ -37,6 +44,8 @@ export default function BottomSheet({
   children,
   sheetStyle,
   backdropOpacity = 0.5,
+  rise = false,
+  onClosed,
 }) {
   // Tolerate a missing ThemeProvider (some render tests mount sheets without
   // one) — fall back to no explicit background, matching the app's other
@@ -52,17 +61,22 @@ export default function BottomSheet({
   // Mirrors `visible` but stays true through the exit animation, so the sheet
   // can slide/fade out before unmounting instead of vanishing instantly.
   const [mounted, setMounted] = useState(visible);
+  // Mirrors `mounted` for the exit callback, which must report a close once.
+  const shownRef = useRef(visible);
   const exitTimerRef = useRef(null);
   // Guards the exit animation's completion callback (and its fallback timer)
   // against firing setState after the component itself has really unmounted
   // — both run on a real timer, well after a test's synchronous assertions
   // (or a fast prop flip elsewhere) may have already torn the tree down.
   const isMountedRef = useRef(true);
+  const onClosedRef = useRef(onClosed);
+  onClosedRef.current = onClosed;
   useEffect(() => () => { isMountedRef.current = false; }, []);
 
   useEffect(() => {
     if (exitTimerRef.current) { clearTimeout(exitTimerRef.current); exitTimerRef.current = null; }
     if (visible) {
+      shownRef.current = true;
       setMounted(true);
       progress.setValue(0);
       Animated.timing(progress, {
@@ -77,7 +91,13 @@ export default function BottomSheet({
     // finished === false means the exit tween was interrupted (e.g. reopened
     // mid-exit) — unmounting then would wedge the sheet at mounted=false.
     const finish = ({ finished } = {}) => {
-      if (finished !== false && isMountedRef.current) setMounted(false);
+      if (finished === false || !isMountedRef.current) return;
+      // The native completion and the fallback timer can both land: report once.
+      if (exitTimerRef.current) { clearTimeout(exitTimerRef.current); exitTimerRef.current = null; }
+      if (!shownRef.current) return;
+      shownRef.current = false;
+      setMounted(false);
+      onClosedRef.current?.();
     };
     Animated.timing(progress, {
       toValue: 0,
@@ -110,7 +130,9 @@ export default function BottomSheet({
   // 0 when open. Driven off the Animated height so a post-layout measurement
   // reactively corrects the slide distance. Reduced motion suppresses the
   // slide (pinned at rest) while the backdrop's opacity fade still plays.
-  const translateY = reduced ? 0 : Animated.multiply(sheetH, Animated.subtract(1, progress));
+  const translateY = reduced ? 0
+    : rise ? progress.interpolate({ inputRange: [0, 1], outputRange: [RISE_DISTANCE, 0] })
+      : Animated.multiply(sheetH, Animated.subtract(1, progress));
 
   return (
     <Modal
@@ -138,6 +160,7 @@ export default function BottomSheet({
             { backgroundColor: theme?.bg?.primary },
             sheetStyle,
             { transform: [{ translateY }] },
+            rise && { opacity: progress },
           ]}
           onLayout={(e) => {
             const h = e.nativeEvent.layout.height;

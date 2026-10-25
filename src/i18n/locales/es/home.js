@@ -138,7 +138,6 @@ export default {
   "home.live.youLead": "Vas primero por {gap}",
   "home.menu.editTeams": "Editar equipos",
   "home.menu.pointValues": "Valores de puntos",
-  "home.menu.pointValuesSummary": "Mejor {best} · Peor {worst} ptos / hoyo",
   "home.menu.revealTeams": "Revelar equipos",
   "home.noActive.goHome": "Ir al inicio",
   "home.noActive.startGame": "Empezar una partida",
