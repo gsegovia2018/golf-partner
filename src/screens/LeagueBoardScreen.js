@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import { buttonStyles } from '../components/ui/Buttons';
 import IconButton from '../components/ui/IconButton';
 import ScreenHeader from '../components/ui/ScreenHeader';
@@ -45,6 +46,8 @@ export default function LeagueBoardScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
   const s = makeStyles(theme);
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const meId = user?.id ?? null;
   const leagueId = route?.params?.leagueId;
   const { data, stale, loading, refreshing, error, reload, refresh } = useLeague(navigation, leagueId);
@@ -101,7 +104,7 @@ export default function LeagueBoardScreen({ navigation, route }) {
 
   if (!view) {
     return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top']}>
         {header}
         <View style={s.center}>
           {loading ? <ActivityIndicator color={theme.accent.primary} /> : (
@@ -624,13 +627,14 @@ export default function LeagueBoardScreen({ navigation, route }) {
   );
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       {header}
       <PullToRefresh
         style={{ flex: 1 }}
-        contentContainerStyle={s.content}
+        contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]}
         refreshing={refreshing}
         onRefresh={refresh}
+        {...tabBarScroll}
       >
         {stale && (
           <View style={s.staleBanner}>

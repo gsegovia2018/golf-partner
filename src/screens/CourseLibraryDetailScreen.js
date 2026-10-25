@@ -22,6 +22,7 @@ import {
 } from '../store/tileCache';
 import { useCourseGeometry } from '../hooks/useCourseGeometry';
 import { holeBbox, tilesForBbox } from '../lib/tileMath';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
@@ -30,6 +31,8 @@ function defaultHoles() {
 export default function CourseLibraryDetailScreen({ navigation, route }) {
   const { courseId, courseName: initialName } = route.params;
   const { theme } = useTheme();
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const t = useT();
   const s = makeStyles(theme);
   // The library is shared: only admins edit it (RLS enforces the same list,
@@ -155,7 +158,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
 
   if (loading) {
     return (
-      <ScreenContainer style={s.centered} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.centered} edges={['top']}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={theme.accent.primary} />
         </View>
@@ -165,7 +168,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
 
   if (loadError) {
     return (
-      <ScreenContainer style={s.centered} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.centered} edges={['top']}>
         <View style={s.errorBox}>
           <Feather name="wifi-off" size={44} color={theme.destructive} />
           <Text style={s.errorTitle}>{t('courses.detail.loadFailedTitle')}</Text>
@@ -184,14 +187,14 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
   }
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>{t('courses.detail.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
-      <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
+      <ScrollView style={s.scroll} contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]} automaticallyAdjustKeyboardInsets {...tabBarScroll}>
         <TextInput
           style={s.nameInput}
           value={name}

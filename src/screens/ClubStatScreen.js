@@ -15,6 +15,7 @@ import { clubDetail } from '../lib/shotStats';
 import { clubLabel, isClubKey } from '../lib/clubs';
 import { useT } from '../i18n';
 import { formatDistance, unitSuffix, M_TO_YD } from '../lib/units';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 
 // Full per-club breakdown: measured carry, consistency, range and a per-round
 // trend. Reached from the Bag screen's club-distance list. Read-only — the
@@ -22,6 +23,8 @@ import { formatDistance, unitSuffix, M_TO_YD } from '../lib/units';
 export default function ClubStatScreen({ route, navigation }) {
   const { club } = route.params || {};
   const { theme } = useTheme();
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { units } = useAppSettings();
   const t = useT();
@@ -55,7 +58,7 @@ export default function ClubStatScreen({ route, navigation }) {
   })), [detail, units, t]);
 
   return (
-    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.screen} edges={['top']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" accessibilityLabel={t('common.back')} onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>{clubName}</Text>
@@ -70,7 +73,7 @@ export default function ClubStatScreen({ route, navigation }) {
           </Text>
         </View>
       ) : (
-        <ScrollView style={s.scroll} contentContainerStyle={s.content}>
+        <ScrollView style={s.scroll} contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]} {...tabBarScroll}>
           <Reveal delay={0}>
             <View style={s.hero}>
               <Text style={s.heroValue}>

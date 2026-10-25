@@ -3,6 +3,7 @@ import {
   TAB_ROUTE_NAMES,
   getTabBarItem,
   isCenterTab,
+  showsTabBar,
 } from '../tabBarModel';
 
 describe('tabBarModel', () => {
@@ -61,5 +62,16 @@ describe('tabBarModel', () => {
       icon: 'flag',
       center: true,
     });
+  });
+
+  test('the bar shows on the tabs and the browse screens over them', () => {
+    ['Main', 'Stats', 'PlayerStats', 'CoursesLibrary', 'Tournament', 'LeagueBoard', 'Settings', 'SwingHome']
+      .forEach((name) => expect(showsTabBar(name)).toBe(true));
+  });
+
+  test('the bar stays out of focused tasks', () => {
+    ['Scorecard', 'SwingCapture', 'SwingEditMarks', 'SwingResults', 'CourseEditor', 'Setup',
+      'OfficialCreate', 'CoursePicker', 'LeagueAddScore', 'JoinLeague', 'ResetPassword', 'LeagueBoardPublic']
+      .forEach((name) => expect(showsTabBar(name)).toBe(false));
   });
 });

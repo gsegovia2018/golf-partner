@@ -50,7 +50,9 @@ const HOP_MS = 460;
 // selected tab and a ball hops to it, dropping into the disc on Play.
 // Scrolling down shrinks the bar to the current tab's circle and Play's,
 // with the live round's strip between them. Holding Play opens its menu.
-export default function FloatingTabBar({ state, navigation }) {
+// overScreen: a browse screen is open over the tabs (TabBarHost); a tab
+// press then closes it first (leaveScreen) and lands on the tab's own page.
+export default function FloatingTabBar({ state, navigation, overScreen = false, leaveScreen }) {
   const t = useT(); // also re-renders on a language change; labels resolve in getTabBarItem
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -113,7 +115,9 @@ export default function FloatingTabBar({ state, navigation }) {
   const pressTab = (route, index) => {
     const item = getTabBarItem(route.name);
     const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-    if (!event.defaultPrevented && index !== active) {
+    if (event.defaultPrevented) return;
+    if (overScreen) leaveScreen?.();
+    if (index !== active) {
       haptic('selection');
       // The bar moves on this frame and the screen follows on the next: a
       // tab's first visit mounts its whole screen, and the drop and ball
@@ -128,6 +132,7 @@ export default function FloatingTabBar({ state, navigation }) {
   };
   const goHome = (params) => {
     setMenuOpen(false);
+    if (overScreen) leaveScreen?.();
     navigation.navigate('Home', params);
   };
   const resume = () => {

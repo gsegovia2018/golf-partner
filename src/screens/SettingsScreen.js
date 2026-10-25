@@ -15,6 +15,7 @@ import { isShotSenseSupported, requestShotSensePermission } from '../lib/shotSen
 import { shotSoundExportSummary, shareShotSoundExport } from '../store/shotSoundExport';
 import { haptic } from '../lib/haptics';
 import { useT, useLanguagePref, setLanguagePref, formatNumber } from '../i18n';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 
 // label and loss are catalogue keys, resolved at render (see docs/i18n.md).
 const STAT_GROUP_ROWS = [
@@ -69,6 +70,8 @@ export default function SettingsScreen({ navigation }) {
   const { theme, themePref, setThemeMode } = useTheme();
   const t = useT();
   const languagePref = useLanguagePref();
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const s = makeStyles(theme);
   const appSettings = useAppSettings();
   const setKey = useCallback((patch) => {
@@ -130,7 +133,7 @@ export default function SettingsScreen({ navigation }) {
   }
 
   return (
-    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.screen} edges={['top']}>
       <View style={s.header}>
         <IconButton
           icon="chevron-left"
@@ -140,7 +143,7 @@ export default function SettingsScreen({ navigation }) {
         <Text style={s.headerTitle}>{t('settings.title')}</Text>
         <View style={s.backBtn} />
       </View>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: tabBarClearance }} {...tabBarScroll}>
         <Section title={t('settings.section.course')} delay={0} s={s}>
           <SwitchRow testID="setting-gpsEnabled" label={t('settings.gps.label')} first
             hint={t('settings.gps.hint')}

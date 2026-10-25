@@ -27,6 +27,7 @@ import { passDone, MARK_TOTAL } from '../swing/markPass';
 import { SWING_STRINGS } from '../swing/strings';
 import { useT } from '../i18n';
 import { formatDate, formatNumber } from '../i18n/format';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 
 const T = SWING_STRINGS.home;
 const P = SWING_STRINGS.profileSheet;
@@ -62,6 +63,8 @@ export default function SwingHomeScreen({ navigation }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const tone = useSwingTone();
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
 
   useSyncExternalStore(subscribeSwings, getSwingsVersion);
   const swings = getSwings();
@@ -230,7 +233,7 @@ export default function SwingHomeScreen({ navigation }) {
   };
 
   return (
-    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.screen} edges={['top']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" accessibilityLabel={T.back} onPress={() => navigation.goBack()} />
         <View style={s.headerMid}>
@@ -243,7 +246,7 @@ export default function SwingHomeScreen({ navigation }) {
         <IconButton icon="more-horizontal" accessibilityLabel={T.more} onPress={() => setAbout(true)} testID="home-more" />
       </View>
 
-      <ScrollView style={s.scroll} contentContainerStyle={s.content}>
+      <ScrollView style={s.scroll} contentContainerStyle={s.content} {...tabBarScroll}>
         {!canAnalyse && (availability.reason === 'update' || isWeb) ? (
           <View style={s.banner} accessibilityRole="alert">
             <Feather name="alert-triangle" size={18} color={tone.warning} />
@@ -293,7 +296,7 @@ export default function SwingHomeScreen({ navigation }) {
         )}
       </ScrollView>
 
-      <View style={s.bottomBar}>
+      <View style={[s.bottomBar, { paddingBottom: tabBarClearance - 4 }]}>
         {selecting ? (
           <View style={s.btnRow}>
             <PrimaryButton

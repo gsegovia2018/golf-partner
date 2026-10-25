@@ -18,6 +18,7 @@ import TogetherTab from '../components/playerstats/TogetherTab';
 import FormTab from '../components/mystats/tabs/FormTab';
 import BreakdownTab from '../components/mystats/tabs/BreakdownTab';
 import HandicapTab from '../components/mystats/tabs/HandicapTab';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 
 const TABS = [
   { key: 'summary', labelKey: 'stats.player.tab.summary' },
@@ -33,6 +34,8 @@ const TABS = [
 // store/personalStats.js — this screen only wires data to components.
 export default function PlayerStatsScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const t = useT();
   const paramFriend = route?.params?.friend;
@@ -109,7 +112,7 @@ export default function PlayerStatsScreen({ navigation, route }) {
 
   if (!friend) {
     return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top']}>
         {Header}
         <View style={s.center}>
           <Text style={s.emptyText}>{t('stats.player.noneSelected')}</Text>
@@ -145,7 +148,7 @@ export default function PlayerStatsScreen({ navigation, route }) {
   // ── Loading ──
   if (data === null && !error) {
     return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top']}>
         {Header}
         <View style={s.center}>
           <ActivityIndicator color={theme.accent.primary} />
@@ -157,7 +160,7 @@ export default function PlayerStatsScreen({ navigation, route }) {
   // ── Error ──
   if (error) {
     return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top']}>
         {Header}
         <View style={s.center}>
           <Feather name="wifi-off" size={44} color={theme.text.muted} />
@@ -176,7 +179,7 @@ export default function PlayerStatsScreen({ navigation, route }) {
   // ── Empty: friend has no rounds at all ──
   if (!data.friendRounds || data.friendRounds.length === 0) {
     return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top']}>
         {Header}
         <View style={s.center}>
           <Feather name="bar-chart-2" size={44} color={theme.text.muted} />
@@ -224,10 +227,10 @@ export default function PlayerStatsScreen({ navigation, route }) {
   }
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       {Header}
       {TabBar}
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[s.scroll, { paddingBottom: tabBarClearance }]} showsVerticalScrollIndicator={false} {...tabBarScroll}>
         {body}
         {footer}
       </ScrollView>

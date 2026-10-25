@@ -4,6 +4,7 @@ import {
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import IconButton from '../components/ui/IconButton';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
@@ -22,6 +23,8 @@ export default function PlayersLibraryScreen() {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
 
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -127,14 +130,14 @@ export default function PlayersLibraryScreen() {
   }
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>{t('players.library.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
-      <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
+      <ScrollView style={s.scroll} contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]} automaticallyAdjustKeyboardInsets {...tabBarScroll}>
         <Text style={s.sectionTitle}>{editingId ? t('players.library.editSection') : t('players.library.newSection')}</Text>
         <View style={s.form}>
           <TextInput

@@ -14,11 +14,14 @@ import {
 } from '../store/tournamentStore';
 import { reopenGame } from '../store/reopenGame';
 import { useT } from '../i18n';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 
 export default function FinishedScreen({ navigation }) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
 
   const [finished, setFinished] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -150,14 +153,14 @@ export default function FinishedScreen({ navigation }) {
   const tournaments = finished.filter((t) => t.kind !== 'game');
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>{t('rounds.finished.title')}</Text>
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView style={s.scroll} contentContainerStyle={s.content}>
+      <ScrollView style={s.scroll} contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]} {...tabBarScroll}>
         {!loading && finished.length === 0 && (
           <View style={s.emptyState}>
             <Feather name="archive" size={44} color={theme.text.muted} />

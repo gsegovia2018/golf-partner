@@ -13,6 +13,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { isAdminUser } from '../lib/admin';
 import { useT, formatNumber } from '../i18n';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import {
   deleteCourse, fetchCourses, upsertCourse,
   fetchFavoriteCourseIds, toggleFavoriteCourse,
@@ -23,6 +24,8 @@ const normalize = (value) =>
 
 export default function CoursesLibraryScreen({ navigation }) {
   const { theme } = useTheme();
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const t = useT();
   const s = makeStyles(theme);
   // Adding, editing and deleting library courses is admin-only (RLS enforces
@@ -120,14 +123,14 @@ export default function CoursesLibraryScreen({ navigation }) {
   }
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>{t('courses.library.title')}</Text>
         <View style={{ width: 22 }} />
       </View>
 
-      <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
+      <ScrollView style={s.scroll} contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]} automaticallyAdjustKeyboardInsets {...tabBarScroll}>
         <Text style={s.sectionTitle}>
           {query && filteredCourses.length !== courses.length
             ? t('courses.library.countOf', { count: filteredCourses.length, total: courses.length })

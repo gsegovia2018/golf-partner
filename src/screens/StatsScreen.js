@@ -26,10 +26,13 @@ import PlayersTab from '../components/gamestats/PlayersTab';
 import RivalsTab from '../components/gamestats/RivalsTab';
 import { Chip } from '../components/gamestats/ui';
 import { useT } from '../i18n';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 
 export default function StatsScreen({ navigation, route }) {
   const t = useT();
   const { theme } = useTheme();
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const { user } = useAuth();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const routeTournamentId = route?.params?.tournamentId ?? null;
@@ -109,7 +112,7 @@ export default function StatsScreen({ navigation, route }) {
 
   if (!tournament) {
     return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top']}>
         {header}
         {loadFailed ? (
           <View style={s.notice}>
@@ -126,7 +129,7 @@ export default function StatsScreen({ navigation, route }) {
   const modes = (tournament.rounds ?? []).map((r) => roundScoringMode(tournament, r));
   if (modes.length > 0 && modes.every((m) => isScrambleMode(m))) {
     return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top']}>
         {header}
         <View style={s.notice}>
           <View style={s.noticeIcon}>
@@ -154,7 +157,7 @@ export default function StatsScreen({ navigation, route }) {
   const activeTab = tabs.some((x) => x.key === wanted) ? wanted : 'summary';
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       {header}
       {!hasScores ? (
         <View style={s.notice}>
@@ -164,7 +167,7 @@ export default function StatsScreen({ navigation, route }) {
       ) : solo ? (
         // One player: no rivals, no comparison, no standings — the
         // player's page is the whole screen.
-        <ScrollView style={s.scroll} contentContainerStyle={s.content} testID="solo-stats">
+        <ScrollView style={s.scroll} contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]} testID="solo-stats" {...tabBarScroll}>
           <PlayersTab
             tournament={statsTournament}
             selectedId={players[0].id}
@@ -183,7 +186,7 @@ export default function StatsScreen({ navigation, route }) {
               <Chip key={x.key} testID={`tab-${x.key}`} label={x.label} active={activeTab === x.key} onPress={() => setTab(x.key)} />
             ))}
           </View>
-          <ScrollView key={activeTab} style={s.scroll} contentContainerStyle={s.content}>
+          <ScrollView key={activeTab} style={s.scroll} contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]} {...tabBarScroll}>
             {activeTab === 'summary' && (
               <SummaryTab
                 tournament={statsTournament}

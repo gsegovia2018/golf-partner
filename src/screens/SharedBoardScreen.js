@@ -30,6 +30,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useT, formatNumber, formatDate } from '../i18n';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import { supabase } from '../lib/supabase';
 import { buildSharedBoardModel, buildSharedMediaModel } from '../store/sharedBoard';
 import FeedRoundCard from '../components/feed/FeedRoundCard';
@@ -105,6 +106,8 @@ export default function SharedBoardScreen(props) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
 
   const [model, setModel] = useState(null);
   const [createdAt, setCreatedAt] = useState(null);
@@ -258,7 +261,8 @@ export default function SharedBoardScreen(props) {
   return (
     <View style={s.screen}>
       <ScrollView
-        contentContainerStyle={s.scrollContent}
+        contentContainerStyle={[s.scrollContent, { paddingBottom: tabBarClearance }]}
+        {...tabBarScroll}
         refreshControl={(
           <RefreshControl
             refreshing={refreshing}

@@ -8,6 +8,7 @@ import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useT } from '../i18n';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import { useTournamentMedia } from '../hooks/useTournamentMedia';
 import { getTournament, getTournamentSnapshot } from '../store/tournamentStore';
 import MediaLightbox from '../components/MediaLightbox';
@@ -28,6 +29,8 @@ import {
 
 export default function GalleryScreen({ route, navigation }) {
   const { tournamentId, mediaId } = route.params ?? {};
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
@@ -148,7 +151,7 @@ export default function GalleryScreen({ route, navigation }) {
       );
     }
     return (
-      <ScrollView contentContainerStyle={s.scroll}>
+      <ScrollView contentContainerStyle={[s.scroll, { paddingBottom: tabBarClearance + 64 }]} {...tabBarScroll}>
         {/* A game is a single round — only multi-round tournaments need a
             round selector here. */}
         {rounds?.length > 1 ? (
@@ -219,7 +222,7 @@ export default function GalleryScreen({ route, navigation }) {
   };
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.title}>{t('gallery.title')}</Text>
@@ -243,7 +246,7 @@ export default function GalleryScreen({ route, navigation }) {
         onClose={() => setStories({ visible: false, items: [], startIndex: 0 })}
       />
 
-      <TouchableOpacity style={s.fab} onPress={openCaptureMenu} accessibilityLabel={t('gallery.addA11y')} activeOpacity={0.85}>
+      <TouchableOpacity style={[s.fab, { bottom: tabBarClearance - 8 }]} onPress={openCaptureMenu} accessibilityLabel={t('gallery.addA11y')} activeOpacity={0.85}>
         <Feather name="plus" size={26} color={theme.text.inverse} />
       </TouchableOpacity>
 
