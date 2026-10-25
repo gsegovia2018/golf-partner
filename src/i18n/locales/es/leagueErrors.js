@@ -15,6 +15,11 @@ export default {
   'league.error.formatLocked': 'El formato no se puede cambiar cuando la liga ya tiene una tarjeta.',
   'league.error.beforeTeeTime': 'Podrás enviar esta tarjeta cuando haya pasado tu hora de salida.',
   'league.error.cardExists': 'Ya tienes tu tarjeta de {month}.',
+  'league.error.otherCardExists': 'Ese jugador ya tiene su tarjeta de {month}.',
+  'league.error.playerIsSomeoneElse': 'Ese jugador de la partida es otra persona.',
+  'league.error.notCreator': 'Solo quien creó la partida puede contar la tarjeta de otro jugador.',
+  'league.error.announceForSelf': 'Tu propia tarjeta se anuncia con tu interruptor.',
+  'league.error.roundStartedOther': 'Ese jugador ya ha empezado la vuelta. Una tarjeta de liga se anuncia antes de su primer golpe.',
   'league.error.holesMismatch': {
     one: 'Esta tarjeta no coincide con tus resultados de la partida en el hoyo {holes}. Espera a que se sincronicen todos los hoyos o corrígelo en la tarjeta de la partida.',
     other: 'Esta tarjeta no coincide con tus resultados de la partida en los hoyos {holes}. Espera a que se sincronicen todos los hoyos o corrígelo en la tarjeta de la partida.',

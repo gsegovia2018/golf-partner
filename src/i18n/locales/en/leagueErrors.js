@@ -16,6 +16,11 @@ export default {
   'league.error.formatLocked': "The format can't change once the league has a card.",
   'league.error.beforeTeeTime': 'You can post this card once your tee time has passed.',
   'league.error.cardExists': 'You already have your {month} card.',
+  'league.error.otherCardExists': 'That player already has their {month} card.',
+  'league.error.playerIsSomeoneElse': 'That player in the game is someone else.',
+  'league.error.notCreator': "Only the game's creator can count another player's card.",
+  'league.error.announceForSelf': 'Use announce_league_card for your own card.',
+  'league.error.roundStartedOther': 'This round has started for that player. A league card has to be announced before their first shot.',
   'league.error.holesMismatch': {
     one: "This card doesn't match your scores in the game on hole: {holes}. Wait for every hole to sync, or fix it in the scorecard.",
     other: "This card doesn't match your scores in the game on holes: {holes}. Wait for every hole to sync, or fix it in the scorecard.",

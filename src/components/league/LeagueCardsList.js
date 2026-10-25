@@ -26,7 +26,7 @@ function hasCardText(t, monthKey) {
 
 export default function LeagueCardsList({
   title, state = 'ready', rows = [], monthKey, short = false,
-  me = null, onRetry, footer = null, children = null,
+  me = null, others = null, onRetry, footer = null, children = null,
 }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -50,6 +50,18 @@ export default function LeagueCardsList({
     } else if (row.kind === 'counts') {
       sub = t('league.cards.countsSub');
       right = <Text style={[s.pill, s.badgeOn]}>{t('league.cards.counts')}</Text>;
+    } else if (row.kind === 'asked' && others) {
+      // The game's creator can count it for them (Setup).
+      const on = others.isOn(row);
+      sub = t(on ? 'league.cards.otherOnSub' : 'league.cards.otherOffSub');
+      right = (
+        <Switch
+          value={on}
+          onValueChange={(v) => others.onChange(row, v)}
+          accessibilityLabel={others.label(row)}
+          trackColor={{ true: theme.accent.primary }}
+        />
+      );
     } else if (row.kind === 'asked') {
       sub = t(short ? 'league.cards.askedShort' : 'league.cards.asked');
       right = <Text style={s.pill}>{t(short ? 'league.cards.askedPillShort' : 'league.cards.askedPill')}</Text>;
