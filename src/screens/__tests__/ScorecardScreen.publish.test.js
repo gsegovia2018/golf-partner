@@ -19,6 +19,7 @@ jest.mock('@react-navigation/native', () => ({
     ReactModule.useEffect(() => cb(), [cb]);
   },
   useIsFocused: () => true,
+  CommonActions: { reset: (state) => ({ type: 'RESET', payload: state }) },
 }));
 
 let mockOfficialRoundState;
@@ -444,6 +445,36 @@ describe('ScorecardScreen publication on leaving the hole', () => {
       expect(mockCardActions.publishHole).toHaveBeenCalledWith(1);
     });
     expect(reconnect).toHaveBeenCalled();
+  });
+
+  test('Finish with two account players ends only my round, not the game', async () => {
+    const { mutate, applyToTournament } = require('../../store/mutate');
+    mutate.mockImplementation(async (t, m) => {
+      const next = JSON.parse(JSON.stringify(t));
+      applyToTournament(next, m);
+      return next;
+    });
+    mockPlayers[0].user_id = 'u1';
+    mockPlayers[1].user_id = 'u2';
+    try {
+      const { findByLabelText, findByText } = render(wrap(
+        <ScorecardScreen navigation={navigation} route={route} />
+      ));
+      fireEvent.press(await findByLabelText('Finish round'));
+      fireEvent.press(await findByText('Finish anyway'));
+
+      await waitFor(() => expect(mutate.mock.calls.some(([, m]) => m.type === 'round.setPlayerFinished')).toBe(true));
+      await waitFor(() => expect(navigation.dispatch).toHaveBeenCalled(), { timeout: 3000 });
+      const types = mutate.mock.calls.map(([, m]) => m.type);
+      expect(types).toContain('round.setPlayerFinished');
+      expect(mutate.mock.calls.find(([, m]) => m.type === 'round.setPlayerFinished')[1].playerIds).toEqual(['p1']);
+      expect(types).not.toContain('round.setFinished');
+      expect(types).not.toContain('tournament.setFinished');
+    } finally {
+      mutate.mockImplementation(jest.requireActual('../../store/mutate').mutate);
+      delete mockPlayers[0].user_id;
+      delete mockPlayers[1].user_id;
+    }
   });
 
   test('Finish with holes unscored asks first; Keep playing changes nothing', async () => {

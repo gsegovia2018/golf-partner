@@ -86,6 +86,7 @@ import {
   canShowQuickFinish, buildConflictRows, roundDecisionNoticeForPair, unscoredHoles, holeRunsLabel,
 } from '../store/scorecardFlow';
 import { useConfirmSheet } from '../components/league/ConfirmSheet';
+import { everyoneFinishedAt, playerFinishedAt, roundEndedAt } from '../store/finishStamp';
 import { track } from '../lib/telemetry';
 
 // Stable empty roster so the useRoundRoster memo below does not see a new
@@ -596,9 +597,10 @@ export default function ScorecardScreen({ navigation, route }) {
     if (!round || !players.length || !cardState.loaded) return;
     if (viewOnlyInitRoundIdRef.current === round.id) return;
     viewOnlyInitRoundIdRef.current = round.id;
-    const finished = isRoundComplete({ ...round, scores }, players) || !!tournament?.finishedAt;
+    const finished = isRoundComplete({ ...round, scores }, players) || !!tournament?.finishedAt
+      || roundEndedAt(tournament, round) != null || playerFinishedAt(round, meId) != null;
     setViewOnly(finished);
-  }, [official, round, players, scores, cardState.loaded, tournament?.finishedAt]);
+  }, [official, round, players, scores, cardState.loaded, tournament, meId]);
 
   // Where a re-opened round lands: the first hole MY card has not marked.
   // Runs once per round, and only once the cards are off disk — before that
@@ -1489,11 +1491,36 @@ export default function ScorecardScreen({ navigation, route }) {
 
     setFinishBusy(true);
     try {
+      // Finish is mine: it ends MY round and leaves the others playing. The
+      // round (and a game) only ends once every account player has finished,
+      // or every hole is scored; the phone that sees that stamps it below.
+      // A scorer who is not on the card finishes for everyone, as before.
+      const myFinishAt = new Date().toISOString();
+      const casual = !official && freshT.kind !== 'official';
+      if (casual && meId && !liveRound.finishedBy?.[meId]) {
+        await enqueueSave(async () => {
+          const base = tournamentRef.current ?? liveTournament;
+          if (!base) return null;
+          const updated = await mutate(base, {
+            type: 'round.setPlayerFinished',
+            roundId: liveRound.id,
+            playerIds: [meId],
+            finishedAt: myFinishAt,
+          });
+          tournamentRef.current = updated;
+          setTournament(updated);
+          setViewOnly(true);
+          return updated;
+        });
+      }
+      const withMine = meId ? { ...liveRound, finishedBy: { ...(liveRound.finishedBy ?? {}), [meId]: liveRound.finishedBy?.[meId] ?? myFinishAt } } : liveRound;
+      const everyoneDone = !meId || roundDone || everyoneFinishedAt(freshT, withMine) != null;
+
       // Stamp WHEN this round was finished. The feed orders on it, so it is
       // written once — a later edit by anyone (score fix, note, handicap)
       // must not resurface the round at the top of the feed. Official rounds
       // finish through attestation, not here.
-      if (!official && freshT.kind !== 'official' && !liveRound.finishedAt) {
+      if (casual && everyoneDone && !liveRound.finishedAt) {
         const roundFinishedAt = new Date().toISOString();
         await enqueueSave(async () => {
           const base = tournamentRef.current ?? liveTournament;
@@ -1509,7 +1536,7 @@ export default function ScorecardScreen({ navigation, route }) {
         });
       }
 
-      if (shouldMarkFinished && !freshT.finishedAt) {
+      if (shouldMarkFinished && everyoneDone && !freshT.finishedAt) {
         const finishedAt = new Date().toISOString();
         await enqueueSave(async () => {
           const base = tournamentRef.current ?? liveTournament;
@@ -1594,7 +1621,7 @@ export default function ScorecardScreen({ navigation, route }) {
       else Alert.alert(tl('scorecard.screen.finishFailed'), message);
     }
   }, [roundIndex, navigation, goBack, official, finishBusy, enqueueSave, queueDraft, actions,
-    tid, names, playerIds, holeNumbers, scores, tl, askFinish]);
+    tid, names, playerIds, holeNumbers, scores, tl, askFinish, meId]);
 
   // The finish sheet closes itself the moment the last dispute is agreed (on
   // this phone or a peer's) and carries on with the finish — no "all agreed"

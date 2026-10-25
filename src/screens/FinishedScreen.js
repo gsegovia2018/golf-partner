@@ -12,7 +12,7 @@ import {
   loadAllTournamentsWithFallback, isTournamentFinished,
   deleteTournament, subscribeTournamentChanges,
 } from '../store/tournamentStore';
-import { mutate } from '../store/mutate';
+import { reopenGame } from '../store/reopenGame';
 import { useT } from '../i18n';
 
 export default function FinishedScreen({ navigation }) {
@@ -68,7 +68,7 @@ export default function FinishedScreen({ navigation }) {
         ));
     if (!confirmed) return;
     try {
-      await mutate(item, { type: 'tournament.setFinished', finishedAt: null });
+      await reopenGame(item);
       await reload();
     } catch (err) {
       const msg = err?.message ?? t('rounds.finished.reopenError');
