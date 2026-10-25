@@ -29,6 +29,7 @@ import CountUpText from '../components/mystats/CountUpText';
 import { toneColor, toneFill } from '../components/mystats/metricTone';
 import { resolveStatExplainer } from '../components/mystats/statExplainers';
 import StatDetailSheet from '../components/StatDetailSheet';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 
 // Clubhouse dark-green hero surface — same constants as CoachHero.js /
 // ShotDashboard.js / CareerMilestonesCard.js, copied locally by convention
@@ -87,6 +88,8 @@ const HERO_CELLS = [
 // See docs/superpowers/specs/2026-07-15-course-breakdown-design.md
 export default function CourseStatsScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const t = useT();
   const { user } = useAuth();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -151,7 +154,7 @@ export default function CourseStatsScreen({ navigation, route }) {
 
   if (breakdown === undefined && !error) {
     return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top']}>
         {Header}
         <View style={s.center}><ActivityIndicator color={theme.accent.primary} /></View>
       </ScreenContainer>
@@ -160,7 +163,7 @@ export default function CourseStatsScreen({ navigation, route }) {
 
   if (error) {
     return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top']}>
         {Header}
         <View style={s.center}>
           <Feather name="wifi-off" size={44} color={theme.text.muted} />
@@ -179,7 +182,7 @@ export default function CourseStatsScreen({ navigation, route }) {
 
   if (breakdown === null) {
     return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top']}>
         {Header}
         <View style={s.center}>
           <Feather name="map" size={44} color={theme.text.muted} />
@@ -314,9 +317,9 @@ export default function CourseStatsScreen({ navigation, route }) {
   }
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       {Header}
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[s.scroll, { paddingBottom: tabBarClearance }]} showsVerticalScrollIndicator={false} {...tabBarScroll}>
         {cards}
       </ScrollView>
       {replay ? (

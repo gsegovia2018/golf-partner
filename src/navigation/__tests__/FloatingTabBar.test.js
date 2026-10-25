@@ -48,12 +48,12 @@ function makeNavigation() {
   };
 }
 
-function renderTabBar({ index = 2, navigation = makeNavigation() } = {}) {
+function renderTabBar({ index = 2, navigation = makeNavigation(), ...props } = {}) {
   const state = makeState(index);
   const result = render(
     <SafeAreaProvider>
       <ThemeProvider>
-        <FloatingTabBar state={state} navigation={navigation} />
+        <FloatingTabBar state={state} navigation={navigation} {...props} />
       </ThemeProvider>
     </SafeAreaProvider>
   );
@@ -126,6 +126,50 @@ describe('FloatingTabBar', () => {
     fireEvent.press(getByLabelText('Play'));
 
     await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('Home'));
+  });
+});
+
+describe('over an opened screen', () => {
+  test('another tab closes the screen, then switches', async () => {
+    const leaveScreen = jest.fn();
+    const { getByLabelText, navigation } = renderTabBar({ index: 0, overScreen: true, leaveScreen });
+
+    fireEvent.press(getByLabelText('Profile'));
+
+    expect(leaveScreen).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(navigation.navigate).toHaveBeenCalledWith('Profile'));
+  });
+
+  test("the current tab closes the screen back to the tab's own page", () => {
+    const leaveScreen = jest.fn();
+    const { getByLabelText, navigation } = renderTabBar({ index: 1, overScreen: true, leaveScreen });
+
+    fireEvent.press(getByLabelText('Stats'));
+
+    expect(leaveScreen).toHaveBeenCalledTimes(1);
+    expect(navigation.navigate).not.toHaveBeenCalled();
+  });
+
+  test('a quick start from the Play menu closes the screen for Home', () => {
+    const leaveScreen = jest.fn();
+    act(() => setPlayCue({ live: null, quickStart: [{ id: 'c1', name: 'Club de Campo' }] }));
+    const utils = renderTabBar({ index: 0, overScreen: true, leaveScreen });
+
+    act(() => { fireEvent(utils.getByLabelText('Play'), 'longPress'); });
+    fireEvent.press(utils.getByText('Club de Campo'));
+
+    expect(leaveScreen).toHaveBeenCalledTimes(1);
+    expect(utils.navigation.navigate).toHaveBeenCalledWith('Home', { quickStartCourseId: 'c1' });
+  });
+
+  test('on the tabs themselves nothing is closed', () => {
+    const leaveScreen = jest.fn();
+    const { getByLabelText } = renderTabBar({ index: 0, leaveScreen });
+
+    fireEvent.press(getByLabelText('Profile'));
+    fireEvent.press(getByLabelText('Feed'));
+
+    expect(leaveScreen).not.toHaveBeenCalled();
   });
 });
 

@@ -10,6 +10,22 @@ export const TAB_ROUTE_NAMES = [
   'Profile',
 ];
 
+// Screens opened over the tabs that keep the bar: places you browse, where
+// jumping to another tab is natural. Everything else (the scorecard, swing
+// capture and marking, create / setup flows, pickers, joins) is a task the
+// bar would only interrupt, so it fades out there.
+export const BAR_ROUTE_NAMES = new Set([
+  'Stats', 'MyStats', 'PlayerStats', 'CourseStats', 'ClubStat', 'LeagueStats',
+  'CoursesLibrary', 'CourseLibraryDetail', 'PlayersLibrary', 'Players', 'Friends', 'Bag',
+  'Tournament', 'LeagueBoard', 'LeagueMembers', 'PartyBoard', 'SharedBoard', 'RoundSummary', 'Finished',
+  'Profile', 'Settings', 'Notifications', 'Gallery', 'SwingHome',
+]);
+
+// rootRouteName: the route on top of the root stack ('Main' is the tabs).
+export function showsTabBar(rootRouteName) {
+  return rootRouteName === 'Main' || BAR_ROUTE_NAMES.has(rootRouteName);
+}
+
 const TAB_BAR_ITEMS = {
   Feed: {
     labelKey: 'nav.tab.feed',

@@ -55,7 +55,7 @@ import LeagueCardScreen from './src/screens/LeagueCardScreen';
 import LeagueAddScoreScreen from './src/screens/LeagueAddScoreScreen';
 import LeagueAddProofScreen from './src/screens/LeagueAddProofScreen';
 
-import FloatingTabBar from './src/navigation/FloatingTabBar';
+import TabBarHost, { TabBarPublisher } from './src/navigation/TabBarHost';
 import { TAB_ROUTE_NAMES } from './src/navigation/tabBarModel';
 import HomeScreen from './src/screens/HomeScreen';
 import FeedScreen from './src/screens/FeedScreen';
@@ -144,13 +144,14 @@ const TAB_SCREENS = {
 // and Profile. The center route keeps the name "Home" so existing
 // navigate('Home') targets still resolve; a tap always lands on Home — the
 // live strip above the bar and Home's live card lead back into a scorecard.
+// The bar itself is drawn by TabBarHost, over the whole stack.
 function MainTabs() {
   return (
     <Tab.Navigator
       initialRouteName="Home"
       screenOptions={{ headerShown: false }}
       screenListeners={({ route }) => ({ focus: () => track('tab_viewed', { tab: route.name }) })}
-      tabBar={(props) => <FloatingTabBar {...props} />}
+      tabBar={(props) => <TabBarPublisher {...props} />}
     >
       {TAB_ROUTE_NAMES.map((routeName) => {
         const screen = TAB_SCREENS[routeName];
@@ -507,6 +508,7 @@ function AppNavigator() {
         <Stack.Screen name="LeagueBoardPublic" component={LeagueBoardPublicScreen} />{/* /league-board/:token opened by a signed-in visitor */}
         <Stack.Screen name="SharedBoard" component={SharedBoardScreen} />{/* public board opened by an already-signed-in visitor — same screen the signed-out branch renders bare, here with a back stack */}
       </Stack.Navigator>
+      <TabBarHost navigationRef={navigationRef} />
       <BootSplashOverlay />
     </>
   );

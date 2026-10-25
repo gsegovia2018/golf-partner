@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Image, Alert, Platform, Share,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import IconButton from '../components/ui/IconButton';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
@@ -77,6 +78,8 @@ export default function PlayersScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
   const s = makeStyles(theme);
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const initialTournament = useMemo(() => getTournamentSnapshot(tournamentId), [tournamentId]);
 
   const [tournament, setTournament] = useState(() => initialTournament);
@@ -580,7 +583,7 @@ export default function PlayersScreen({ navigation, route }) {
   const players = tournament?.players ?? [];
 
   return (
-    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.screen} edges={['top']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <View style={s.headerCenter}>
@@ -621,7 +624,7 @@ export default function PlayersScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView style={s.scroll} contentContainerStyle={s.content}>
+        <ScrollView style={s.scroll} contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]} {...tabBarScroll}>
           <View style={s.topRow}>
             <Text style={s.sectionLabel}>{tx('setup.players.count', { count: editPlayers.length })}</Text>
             {!isViewer && editPlayers.length < rosterCap(tournament?.kind) && (

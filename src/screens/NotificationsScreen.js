@@ -8,6 +8,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import { useTheme } from '../theme/ThemeContext';
 import { useT } from '../i18n';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import { listNotifications, markAllRead } from '../store/notificationStore';
 import { renderNotification, notificationLink } from '../lib/notificationContent';
 
@@ -29,6 +30,8 @@ export default function NotificationsScreen({ navigation }) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +61,7 @@ export default function NotificationsScreen({ navigation }) {
   };
 
   return (
-    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.screen} edges={['top']}>
       <View style={s.header}>
         <IconButton
           icon="chevron-left"
@@ -79,7 +82,7 @@ export default function NotificationsScreen({ navigation }) {
           <Text style={s.emptyText}>{t('notifications.empty')}</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={s.list}>
+        <ScrollView contentContainerStyle={[s.list, { paddingBottom: tabBarClearance }]} {...tabBarScroll}>
           {items.map((item) => {
             const { icon, title, body } = renderNotification(item.type, item.data);
             const unread = !item.readAt;

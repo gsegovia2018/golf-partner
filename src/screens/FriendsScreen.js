@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import IconButton from '../components/ui/IconButton';
 import PersonAvatar from '../components/ui/PersonAvatar';
 import { useFocusEffect } from '@react-navigation/native';
@@ -29,6 +30,8 @@ export default function FriendsScreen({ navigation }) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -205,7 +208,7 @@ export default function FriendsScreen({ navigation }) {
   };
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>{t('players.friends.title')}</Text>
@@ -215,8 +218,9 @@ export default function FriendsScreen({ navigation }) {
       <PullToRefresh
         refreshing={refreshing}
         onRefresh={onRefresh}
-        contentContainerStyle={s.content}
+        contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]}
         automaticallyAdjustKeyboardInsets
+        {...tabBarScroll}
       >
         <View style={s.searchRow}>
           <Feather name="search" size={16} color={theme.text.muted} />

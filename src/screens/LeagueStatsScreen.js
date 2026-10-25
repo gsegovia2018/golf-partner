@@ -16,6 +16,7 @@ import { seasonTable, isMedalFormat, compareScores } from '../store/leagueStandi
 import { needsApproval } from '../store/leagueRules';
 import { currentMonthKey, formatScore, formatToPar } from '../store/leagueView';
 import { memberName } from '../lib/leagueNames';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import {
   MIN_HONOUR_CARDS, MIN_STAT_CARDS, monthHonours, monthSummary, statLeaders, seasonGrid, pointsBand, rivals, rivalMonths,
 } from '../store/leagueStats';
@@ -44,6 +45,8 @@ const monthShort = (key) => cap(formatDate(`${key}-01`, 'day').split(' ')[1] ?? 
 // confirmed cards the league snapshot already carries. Cache first, then live.
 export default function LeagueStatsScreen({ navigation, route }) {
   const { theme } = useTheme();
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const t = useT();
   const { user } = useAuth();
   const s = makeStyles(theme);
@@ -79,7 +82,7 @@ export default function LeagueStatsScreen({ navigation, route }) {
 
   if (!view) {
     return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top']}>
         {header}
         <View style={s.center}>
           {loading ? <ActivityIndicator color={theme.accent.primary} /> : (
@@ -330,7 +333,7 @@ export default function LeagueStatsScreen({ navigation, route }) {
   };
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       {header}
       {/* Game Stats' tab row. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabs} contentContainerStyle={s.tabsContent}>
@@ -340,9 +343,10 @@ export default function LeagueStatsScreen({ navigation, route }) {
       </ScrollView>
       <PullToRefresh
         style={{ flex: 1 }}
-        contentContainerStyle={s.content}
+        contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]}
         refreshing={refreshing}
         onRefresh={refresh}
+        {...tabBarScroll}
       >
         {stale && (
           <View style={s.staleBanner}>

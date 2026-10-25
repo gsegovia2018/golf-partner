@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import { buttonStyles } from '../components/ui/Buttons';
 import ScreenHeader from '../components/ui/ScreenHeader';
 import SheetHandle from '../components/ui/SheetHandle';
@@ -38,6 +39,8 @@ export default function LeagueMembersScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
   const s = makeStyles(theme);
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const meId = user?.id ?? null;
   const leagueId = route?.params?.leagueId;
   const { data, loading, refreshing, error, reload, refresh } = useLeague(navigation, leagueId);
@@ -82,7 +85,7 @@ export default function LeagueMembersScreen({ navigation, route }) {
 
   if (!data) {
     return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top']}>
         {header}
         <View style={s.center}>
           {loading ? <ActivityIndicator color={theme.accent.primary} /> : (
@@ -263,9 +266,9 @@ export default function LeagueMembersScreen({ navigation, route }) {
   }
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       {header}
-      <PullToRefresh style={{ flex: 1 }} contentContainerStyle={s.content} refreshing={refreshing} onRefresh={refresh}>
+      <PullToRefresh style={{ flex: 1 }} contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]} refreshing={refreshing} onRefresh={refresh} {...tabBarScroll}>
         {!!notice && (
           <TouchableOpacity style={s.notice} onPress={() => setNotice(null)} accessibilityRole="alert">
             <Feather name="check-circle" size={16} color={theme.accent.primary} />

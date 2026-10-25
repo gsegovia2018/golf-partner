@@ -339,10 +339,10 @@ export default function ProfileScreen({ navigation, route }) {
       ) : (
         <ScrollView
           style={s.scroll}
-          contentContainerStyle={[s.content, isTabPresentation && { paddingBottom: tabBarClearance }]}
+          contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]}
           automaticallyAdjustKeyboardInsets
           keyboardShouldPersistTaps="handled"
-          {...(isTabPresentation ? tabBarScroll : null)}
+          {...tabBarScroll}
         >
           {/* First open with nothing cached: the real page with blocks where
               the values go (DESIGN.md "Loading states"). Links and Sign out

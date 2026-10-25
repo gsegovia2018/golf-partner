@@ -4,6 +4,7 @@ import {
   StyleSheet, ScrollView, ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
@@ -28,6 +29,8 @@ export default function PartyBoardScreen({ route, navigation }) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
 
   function showError(message) {
     const msg = message || t('partyBoard.error.generic');
@@ -301,7 +304,7 @@ export default function PartyBoardScreen({ route, navigation }) {
   }
 
   return (
-    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.screen} edges={['top']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>{t('partyBoard.title')}</Text>
@@ -320,7 +323,7 @@ export default function PartyBoardScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView style={s.container} contentContainerStyle={s.content}>
+        <ScrollView style={s.container} contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]} {...tabBarScroll}>
           <Text style={s.subtitle}>
             {t('partyBoard.subtitle', { format: t(`misc.partyBoard.format.${roundFormat}`), count: roster.length })}
             {roundStatus !== 'setup' ? `  •  ${t(`misc.partyBoard.status.${roundStatus}`)}` : ''}

@@ -72,6 +72,13 @@ jest.mock('@react-navigation/stack', () => ({
   },
 }));
 
+// The tab bar host listens to the real navigation ref; the shell is enough here.
+jest.mock('../src/navigation/TabBarHost', () => ({
+  __esModule: true,
+  default: () => null,
+  TabBarPublisher: () => null,
+}));
+
 jest.mock('@react-navigation/bottom-tabs', () => ({
   createBottomTabNavigator: () => ({
     Navigator: ({ children }) => children,

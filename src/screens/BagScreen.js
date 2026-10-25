@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import IconButton from '../components/ui/IconButton';
 import PressableScale from '../components/ui/PressableScale';
 import Reveal from '../components/ui/Reveal';
@@ -35,6 +36,8 @@ export default function BagScreen({ navigation }) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const appSettings = useAppSettings();
   const {
     units, clubDistances,
@@ -117,7 +120,7 @@ export default function BagScreen({ navigation }) {
   };
 
   return (
-    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.screen} edges={['top']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" accessibilityLabel={t('courses.back')} onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>{editingClubs ? t('courses.bag.editClubs') : t('courses.bag.title')}</Text>
@@ -133,7 +136,7 @@ export default function BagScreen({ navigation }) {
         </PressableScale>
       </View>
 
-      <ScrollView style={s.scroll} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+      <ScrollView style={s.scroll} contentContainerStyle={[s.content, { paddingBottom: tabBarClearance }]} keyboardShouldPersistTaps="handled" {...tabBarScroll}>
         {editingClubs ? (
           <Reveal delay={0}>
             <Text style={s.sectionHint}>{t('courses.bag.clubsHint')}</Text>

@@ -1725,8 +1725,12 @@ export default function HomeScreen({ navigation, route }) {
 
   const toggleLabels = leaderboardToggleLabels(resolvedBoard.mode);
 
+  // The round actions sit in a bar above the tab bar; without them (a viewer,
+  // no rounds) the scroll itself clears the tab bar.
+  const hasRoundBar = tournament.rounds.length > 0 && !isViewer;
+
   return (
-    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.screen} edges={['top']}>
       <View style={s.tournamentHeader}>
         <View style={s.headerLeft}>
           <IconButton icon="chevron-left" onPress={goToList} />
@@ -1764,9 +1768,10 @@ export default function HomeScreen({ navigation, route }) {
 
       <PullToRefresh
         style={s.scrollView}
-        contentContainerStyle={s.content}
+        contentContainerStyle={[s.content, !hasRoundBar && { paddingBottom: tabBarClearance }]}
         refreshing={refreshing}
         onRefresh={onRefresh}
+        {...tabBarScroll}
       >
 
       {tournament.players.length >= 2 && (
@@ -2035,7 +2040,7 @@ export default function HomeScreen({ navigation, route }) {
       const nextRevealed = nextRound?.revealed;
       if (isViewer) return null;
       return (
-        <View style={s.tournamentBottomBar}>
+        <View style={[s.tournamentBottomBar, { paddingBottom: tabBarClearance - 4 }]}>
           <TouchableOpacity
             style={[s.primaryBtn, s.roundActionBtn]}
             onPress={() => navigation.navigate('Scorecard', { roundIndex: selectedRound, tournamentId: tournament.id })}

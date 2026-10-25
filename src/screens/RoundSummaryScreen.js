@@ -43,6 +43,7 @@ import { focusTarget } from '../store/focusTarget';
 import { roundFocusSummary } from '../store/roundFocus';
 import { loadProfile } from '../store/profileStore';
 import { useT } from '../i18n';
+import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
 import { ShareableRoundCard, shareRoundSummary } from '../components/ShareableCard';
 
 // Stable empty roster so the useRoundRoster memo below does not see a new
@@ -76,6 +77,8 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const t = useT();
   const s = makeStyles(theme);
   const { tournamentId, roundId } = route.params ?? {};
+  const tabBarScroll = useTabBarScroll();
+  const tabBarClearance = useTabBarClearance();
   const initialTournament = getTournamentSnapshot(tournamentId);
 
   const [tournament, setTournament] = useState(() => initialTournament);
@@ -283,7 +286,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
   }, [recap, ranked, unit, courseName, roundLabel, tournament?.name, boardUrl, theme]);
 
   return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle} numberOfLines={1}>{roundLabel}</Text>
@@ -318,7 +321,8 @@ export default function RoundSummaryScreen({ navigation, route }) {
         </View>
       ) : (
         <PullToRefresh
-          contentContainerStyle={s.content}
+          contentContainerStyle={[s.content, { paddingBottom: tabBarClearance + 60 }]}
+          {...tabBarScroll}
           refreshing={refreshing}
           onRefresh={onRefresh}
         >
@@ -427,7 +431,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
       )}
       {!loading && round && iAmPlaying && activeTab === 'photos' ? (
         <TouchableOpacity
-          style={s.fab}
+          style={[s.fab, { bottom: tabBarClearance - 8 }]}
           onPress={openCaptureMenu}
           accessibilityLabel={t('rounds.summary.addPhotoLabel')}
           activeOpacity={0.85}

@@ -870,9 +870,9 @@ export default function MyStatsScreen({ navigation, route }) {
     return (
       <ScrollView
         style={[s.page, { width: pageWidth }]}
-        contentContainerStyle={[s.scroll, isTabPresentation && { paddingBottom: tabBarClearance }]}
+        contentContainerStyle={[s.scroll, { paddingBottom: tabBarClearance }]}
         showsVerticalScrollIndicator={false}
-        {...(isTabPresentation ? tabBarScroll : null)}
+        {...tabBarScroll}
       >
         {body}
       </ScrollView>
