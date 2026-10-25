@@ -179,18 +179,31 @@ export function HoleFlyover({
   // club wheel for that shot.
   const [tappedShot, setTappedShot] = useState(null);
 
-  // Swipe-down on the grabber/header dismisses; the map owns its own gestures.
+  // The map opens over the lower part of the scorecard, the hole header still
+  // in view above it, so it reads as part of the card and not a new page.
+  // Expand (button, or drag the grabber up) takes it to full height.
+  const [expanded, setExpanded] = useState(false);
+  const expandedRef = useRef(expanded);
+  expandedRef.current = expanded;
+  useEffect(() => { if (!visible) setExpanded(false); }, [visible]);
+
+  // Drag on the grabber/header: up expands, down shrinks a full-height map,
+  // then dismisses. The map owns its own gestures.
   const dragY = useRef(new Animated.Value(0)).current;
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const pan = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx),
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 8 && Math.abs(g.dy) > Math.abs(g.dx),
     onPanResponderMove: (_, g) => { if (g.dy > 0) dragY.setValue(g.dy); },
     onPanResponderRelease: (_, g) => {
-      if (g.dy > 120 || g.vy > 0.8) {
+      if (g.dy < -40 || g.vy < -0.8) {
         dragY.setValue(0);
-        onCloseRef.current?.();
+        setExpanded(true);
+      } else if (g.dy > 120 || g.vy > 0.8) {
+        dragY.setValue(0);
+        if (expandedRef.current) setExpanded(false);
+        else onCloseRef.current?.();
       } else {
         Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
       }
@@ -209,7 +222,7 @@ export function HoleFlyover({
           accessibilityRole="button"
           accessibilityLabel={tl('map.close')}
         />
-        <Animated.View style={[s.sheet, { transform: [{ translateY: dragY }] }]}>
+        <Animated.View style={[s.sheet, expanded && s.sheetFull, { transform: [{ translateY: dragY }] }]}>
           <View {...pan.panHandlers}>
             <View style={s.grabber} testID="flyover-grabber" />
             <View style={s.header}>
@@ -226,6 +239,16 @@ export function HoleFlyover({
                     <Text style={s.editTxt}>{tl('map.edit')}</Text>
                   </Pressable>
                 )}
+                <Pressable
+                  onPress={() => setExpanded((v) => !v)}
+                  style={s.closeBtn}
+                  hitSlop={10}
+                  testID="flyover-expand"
+                  accessibilityRole="button"
+                  accessibilityLabel={tl(expanded ? 'map.shrink' : 'map.expand')}
+                >
+                  <Feather name={expanded ? 'minimize-2' : 'maximize-2'} size={19} color={hud.text} />
+                </Pressable>
                 <Pressable
                   onPress={onClose}
                   style={s.closeBtn}
@@ -307,16 +330,17 @@ export function HoleFlyover({
 
 const s = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(12,26,20,0.38)', justifyContent: 'flex-end' },
-  // 48dp dismiss band (Android touch-target minimum). The sheet renders
-  // after it, so any overlap on short screens stays owned by the sheet.
-  backdropTouch: { position: 'absolute', top: 0, left: 0, right: 0, height: 48 },
+  // The scorecard showing above the sheet closes it. The sheet renders after
+  // it, so the part it covers stays the sheet's.
+  backdropTouch: { ...StyleSheet.absoluteFillObject },
   sheet: {
-    height: '96%',
+    height: '68%',
     backgroundColor: hud.bg,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     overflow: 'hidden',
   },
+  sheetFull: { height: '96%' },
   grabber: {
     alignSelf: 'center', width: 36, height: 4, borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.35)', marginTop: 8,
