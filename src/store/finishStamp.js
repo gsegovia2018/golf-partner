@@ -10,6 +10,32 @@ export function parseFinishedAt(value) {
   return Number.isFinite(ms) ? ms : null;
 }
 
+// Finish is per player: each one's tap lands in `round.finishedBy`
+// ({ [playerId]: ISO }, mutation `round.setPlayerFinished`). A player's own
+// round is over from that instant, while the others play on.
+export function playerFinishedAt(round, playerId) {
+  return playerId == null ? null : parseFinishedAt(round?.finishedBy?.[playerId]);
+}
+
+// The players whose Finish the round waits for: those with an account.
+// Guests have no phone of their own; their scorer's card covers them.
+export function finishersOf(tournament) {
+  return (tournament?.players ?? []).filter((p) => p?.user_id);
+}
+
+// When the last of the finishers tapped Finish, or null while one is still
+// playing. The phone that finishes last stamps the round, but two phones
+// finishing at once can each miss the other's tap: this keeps such a round
+// ended anyway. With no account players, any Finish ends it.
+export function everyoneFinishedAt(tournament, round) {
+  const stamps = Object.values(round?.finishedBy ?? {}).map(parseFinishedAt).filter((ms) => ms != null);
+  if (stamps.length === 0) return null;
+  const finishers = finishersOf(tournament);
+  if (finishers.length === 0) return Math.max(...stamps);
+  const mine = finishers.map((p) => playerFinishedAt(round, p.id));
+  return mine.every((ms) => ms != null) ? Math.max(...mine) : null;
+}
+
 // A round's finalization instant, in ms — or null when nothing stamped it.
 //   1. round.finishedAt — stamped once by the Scorecard's finish action
 //      (mutation `round.setFinished`, first-write-wins).
@@ -19,6 +45,8 @@ export function parseFinishedAt(value) {
 export function roundFinalizedAt(tournament, round, roundIndex = 0) {
   const roundFinished = parseFinishedAt(round?.finishedAt);
   if (roundFinished != null) return roundFinished;
+  const everyone = everyoneFinishedAt(tournament, round);
+  if (everyone != null) return everyone;
   const tournamentFinished = parseFinishedAt(tournament?.finishedAt);
   if (tournamentFinished != null) return tournamentFinished + roundIndex;
   return null;
@@ -50,6 +78,8 @@ export function roundStartedAt(round) {
 export function roundEndedAt(tournament, round) {
   const roundFinished = parseFinishedAt(round?.finishedAt);
   if (roundFinished != null) return roundFinished;
+  const everyone = everyoneFinishedAt(tournament, round);
+  if (everyone != null) return everyone;
   if (tournament?.kind === 'game') return parseFinishedAt(tournament.finishedAt);
   return null;
 }
