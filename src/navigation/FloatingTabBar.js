@@ -15,6 +15,8 @@ import { getTabBarItem, isCenterTab } from './tabBarModel';
 import {
   BAR_COLLAPSED, BAR_HEIGHT, BAR_SIDE, STRIP_GAP, STRIP_HEIGHT, barBottom, setTabBarCollapsed, shrunkLayout, useTabBarCollapsed,
 } from './tabBarChrome';
+import { markTabSwitch } from './tabSettle';
+import { usePreloadTabs } from './preloadTabs';
 import TabBarSurface from './TabBarSurface';
 import LiveRoundStrip from './LiveRoundStrip';
 import PlayQuickMenu, { playMenuHeight } from './PlayQuickMenu';
@@ -76,6 +78,8 @@ export default function FloatingTabBar({ state, navigation }) {
   const shrunk = shrunkLayout({ windowWidth, left, barWidth, hasLive: !!live });
   const menuHeight = playMenuHeight({ hasLive: !!live, hasQuickStart: quickStart.length > 0 });
 
+  usePreloadTabs(state, navigation);
+
   // A new tab starts with the bar open.
   useEffect(() => { setTabBarCollapsed(false); }, [active]);
 
@@ -118,6 +122,7 @@ export default function FloatingTabBar({ state, navigation }) {
       // tab's first visit mounts its whole screen, and the drop and ball
       // used to wait for that render before they set off.
       setPressed(index);
+      markTabSwitch();
       requestAnimationFrame(() => {
         navigation.navigate(item.targetRouteName);
         setPressed(null);

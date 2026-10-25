@@ -10,6 +10,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { pushTournamentScorecard, openLiveScorecard } from '../navigation/openScorecard';
 import { setPlayCue, liveCue, quickStartCue } from '../store/playCue';
 import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
+import { afterTabSettles } from '../navigation/tabSettle';
 
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
@@ -170,7 +171,7 @@ export default function HomeScreen({ navigation, route }) {
         .catch(() => {});
     };
     refreshGender();
-    const unsubFocus = navigation.addListener('focus', refreshGender);
+    const unsubFocus = navigation.addListener('focus', () => afterTabSettles(refreshGender));
     return () => { alive = false; unsubFocus(); };
   }, [navigation]);
   const initialTournament = useMemo(
@@ -451,10 +452,10 @@ export default function HomeScreen({ navigation, route }) {
   useEffect(() => {
     loadQuickStartCourses();
     loadQuickStartPlayers();
-    const unsubscribe = navigation.addListener('focus', () => {
+    const unsubscribe = navigation.addListener('focus', () => afterTabSettles(() => {
       loadQuickStartCourses();
       loadQuickStartPlayers();
-    });
+    }));
     return unsubscribe;
   }, [loadQuickStartCourses, loadQuickStartPlayers, navigation]);
 
@@ -464,12 +465,12 @@ export default function HomeScreen({ navigation, route }) {
       unreadCount().then(setUnreadNotifs).catch(() => {});
     };
     refresh();
-    const unsubFocus = navigation.addListener('focus', refresh);
+    const unsubFocus = navigation.addListener('focus', () => afterTabSettles(refresh));
     return unsubFocus;
   }, [navigation]);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', reload);
+    const unsubscribe = navigation.addListener('focus', () => afterTabSettles(reload));
     const unsubStore = subscribeTournamentChanges(() => {
       if (shouldHandleStoreChange(navigation)) reload({ remote: false });
     });

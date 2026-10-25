@@ -8,7 +8,6 @@ import IconButton from '../components/ui/IconButton';
 import PressableScale from '../components/ui/PressableScale';
 import Reveal from '../components/ui/Reveal';
 import { Skeleton, SkeletonRegion } from '../components/ui/Skeleton';
-import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -25,6 +24,7 @@ import { parseHandicapIndex, normalizeHandicapInput } from '../lib/handicap';
 import { haptic } from '../lib/haptics';
 import { useT, t as translate } from '../i18n';
 import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
+import { useSettledFocusEffect } from '../navigation/useSettledFocusEffect';
 
 // Stagger step between section reveals on mount.
 const REVEAL_STEP = 40;
@@ -119,7 +119,7 @@ export default function ProfileScreen({ navigation, route }) {
     }
   }, [applyProfile, userId]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useSettledFocusEffect(useCallback(() => { load(); }, [load]));
 
   // Intercept hardware-back / swipe-back gestures so unsaved edits aren't
   // silently lost. The header back button is handled separately by handleBack.
