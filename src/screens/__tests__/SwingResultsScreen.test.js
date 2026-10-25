@@ -942,6 +942,28 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
     expect(getByLabelText(SWING_STRINGS.errors[code])).toBeTruthy();
   });
 
+  test('a native failure shows its code and message and sends them through the share sheet', async () => {
+    const { Share } = require('react-native');
+    const share = jest.spyOn(Share, 'share').mockResolvedValue({});
+    runAnalysis.mockResolvedValue({
+      error: 'failed',
+      detail: { code: 'ERR_ANALYZE', message: 'GPU delegate failed', stage: 'pose', at: '2026-10-25T10:00:00Z' },
+    });
+    const { findByText, getByLabelText } = setup({ row: PENDING });
+    expect(await findByText('ERR_ANALYZE · GPU delegate failed')).toBeTruthy();
+    fireEvent.press(getByLabelText(T.sendDetails));
+    expect(share).toHaveBeenCalledWith({ message: expect.stringContaining('Error: ERR_ANALYZE (while pose)') });
+    share.mockRestore();
+  });
+
+  test('a stored failure keeps its detail; an unreadable clip says so', async () => {
+    const { findByText, getByText } = setup({
+      row: { ...ROW, status: 'error', error: 'video', errorDetail: { code: 'ERR_UNSUPPORTED_VIDEO', message: 'no readable image', stage: 'pose' } },
+    });
+    expect(await findByText('Video not readable')).toBeTruthy();
+    expect(getByText('ERR_UNSUPPORTED_VIDEO · no readable image')).toBeTruthy();
+  });
+
   test('a swing that already failed shows its error without running again', async () => {
     const { findByText } = setup({ row: { ...ROW, status: 'error', error: 'too_long' } });
     expect(await findByText('Clip too long')).toBeTruthy();

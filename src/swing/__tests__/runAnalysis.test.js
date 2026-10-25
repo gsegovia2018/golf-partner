@@ -251,8 +251,8 @@ describe('runAnalysis', () => {
   test('D12: no golfer found marks the swing failed and saves nothing', async () => {
     frames.nativeApi.mockReturnValue(makeApi({ analyzePose: jest.fn(async () => ({ ...fixtureNative(), frames: [] })) }));
     const res = await runAnalysis('s1');
-    expect(res).toEqual({ error: 'no_pose' });
-    expect(store.markSwingFailed).toHaveBeenCalledWith('s1', 'no_pose');
+    expect(res).toEqual({ error: 'no_pose', detail: null });
+    expect(store.markSwingFailed).toHaveBeenCalledWith('s1', 'no_pose', null);
     expect(store.saveAnalysis).not.toHaveBeenCalled();
   });
 
@@ -311,10 +311,20 @@ describe('runAnalysis', () => {
     expect(api.analyzePose).not.toHaveBeenCalled();
   });
 
-  test('a native failure is reported as failed', async () => {
+  test('a native failure is reported as failed, with its cause kept', async () => {
     frames.nativeApi.mockReturnValue(makeApi({ probeVideo: jest.fn(async () => { throw new Error('boom'); }) }));
-    expect(await runAnalysis('s1')).toEqual({ error: 'failed' });
-    expect(store.markSwingFailed).toHaveBeenCalledWith('s1', 'failed');
+    const res = await runAnalysis('s1');
+    expect(res.error).toBe('failed');
+    expect(res.detail).toMatchObject({ code: null, message: 'boom', stage: 'reading' });
+    expect(store.markSwingFailed).toHaveBeenCalledWith('s1', 'failed', res.detail);
+  });
+
+  test('a clip the phone cannot decode says so, with the native code and stage', async () => {
+    const err = Object.assign(new Error('no readable image from the decoder'), { code: 'ERR_UNSUPPORTED_VIDEO' });
+    frames.nativeApi.mockReturnValue(makeApi({ analyzePose: jest.fn(async () => { throw err; }) }));
+    const res = await runAnalysis('s1');
+    expect(res.error).toBe('video');
+    expect(res.detail).toMatchObject({ code: 'ERR_UNSUPPORTED_VIDEO', stage: 'pose' });
   });
 
   test('without the native module (older binary) there is nothing to run', async () => {

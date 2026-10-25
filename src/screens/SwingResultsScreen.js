@@ -2,8 +2,9 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore,
 } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TextInput, Modal, Alert, ActivityIndicator, useWindowDimensions,
+  View, Text, StyleSheet, ScrollView, TextInput, Modal, Alert, ActivityIndicator, useWindowDimensions, Share, Platform,
 } from 'react-native';
+import Constants from 'expo-constants';
 import { Feather } from '@expo/vector-icons';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import ScreenContainer from '../components/ScreenContainer';
@@ -31,6 +32,8 @@ import { normClub } from '../swing/checks';
 import { runAnalysis } from '../swing/runAnalysis';
 import { MARK_TOTAL, markedFromMarks, passDone } from '../swing/markPass';
 import { shareSwingExport } from '../swing/shareExport';
+import { failureReport } from '../swing/failureReport';
+import { apiVersion } from '../swing/native';
 import { nativeApi, getStill, ensureStills } from '../swing/frames';
 import { poseAtFrame } from '../swing/poseAt';
 import { highlightFor, keyLinesAt } from '../swing/highlights';
@@ -87,7 +90,7 @@ function DeleteLink({ s, onPress }) {
   );
 }
 
-function ErrorSlot({ s, error, onPrimary, primaryLabel, onSecondary, secondaryLabel }) {
+function ErrorSlot({ s, error, detail, onSend, onPrimary, primaryLabel, onSecondary, secondaryLabel }) {
   const tone = useSwingTone();
   return (
     <>
@@ -95,7 +98,18 @@ function ErrorSlot({ s, error, onPrimary, primaryLabel, onSecondary, secondaryLa
         <Feather name="alert-circle" size={26} color={tone.red} />
         <Text style={s.errorTitle}>{T.errorTitle[error] ?? T.errorTitle.failed}</Text>
         <Text style={s.errorBody}>{T.errorBody[error] ?? T.errorBody.failed}</Text>
+        {detail?.code || detail?.message ? (
+          <Text style={s.errorDetail} selectable numberOfLines={4}>
+            {[detail.code, detail.message].filter(Boolean).join(' · ')}
+          </Text>
+        ) : null}
       </View>
+      {detail && onSend ? (
+        <PressableScale style={s.sendLink} onPress={onSend} accessibilityRole="button" accessibilityLabel={T.sendDetails}>
+          <Feather name="send" size={14} color={tone.red} />
+          <Text style={s.sendLinkText}>{T.sendDetails}</Text>
+        </PressableScale>
+      ) : null}
       <View style={s.btnRow}>
         {onPrimary ? (
           <PrimaryButton style={[s.btn, s.flex]} label={primaryLabel} onPress={onPrimary} accessibilityLabel={primaryLabel} />
@@ -151,8 +165,8 @@ function NavRow({
 }
 
 export function SwingResultsView({
-  row, phase, analysis, pose, progress, error, stillTick = 0, stillFor, placed = null,
-  onBack, onCancel, onDelete, onRetry, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport,
+  row, phase, analysis, pose, progress, error, errorDetail = null, stillTick = 0, stillFor, placed = null,
+  onBack, onCancel, onDelete, onRetry, onSendDetails, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport,
   onPlaceHead, onUndoPlace,
 }) {
   const { theme } = useTheme();
@@ -287,7 +301,10 @@ export function SwingResultsView({
             <ErrorSlot
               s={s}
               error={error}
-              onPrimary={error === 'cancelled' || error === 'failed' ? onRetry : error === 'update' ? null : onRecord}
+              detail={errorDetail}
+              onSend={onSendDetails}
+              // The browser imports only: no "Record again" there.
+              onPrimary={error === 'cancelled' || error === 'failed' ? onRetry : error === 'update' || Platform.OS === 'web' ? null : onRecord}
               primaryLabel={error === 'cancelled' || error === 'failed' ? T.retry : T.recordAgain}
               onSecondary={onBack}
               secondaryLabel={T.backToSwings}
@@ -556,6 +573,8 @@ export default function SwingResultsScreen({ navigation, route }) {
   const [data, setData] = useState({ analysis: null, pose: null, marks: null });
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
+  // Why it failed ({ code, message, stage, at }), when the run kept it: shown and sendable.
+  const [errorDetail, setErrorDetail] = useState(null);
   const [stillTick, setStillTick] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [placed, setPlaced] = useState(null); // the last head placed here: { cp, mainBefore, mainAfter, prev } | { failed }
@@ -594,7 +613,7 @@ export default function SwingResultsScreen({ navigation, route }) {
       await markSwingFailed(swingId, 'cancelled');
       if (alive.current) { setError('cancelled'); setPhase('error'); }
     } else if (res.error) {
-      if (alive.current) { setError(res.error); setPhase('error'); }
+      if (alive.current) { setError(res.error); setErrorDetail(res.detail ?? null); setPhase('error'); }
     } else if (alive.current) {
       toMarking(); // the stills and the address / impact seeds are in: the golfer marks next
     }
@@ -611,6 +630,7 @@ export default function SwingResultsScreen({ navigation, route }) {
         if (await load()) { if (alive.current) setPhase('ready'); } else { setError('failed'); setPhase('error'); }
       } else if (r.status === 'error') {
         setError(r.error || 'failed');
+        setErrorDetail(r.errorDetail ?? null);
         setPhase('error');
       } else {
         start();
@@ -693,7 +713,18 @@ export default function SwingResultsScreen({ navigation, route }) {
     try { nativeApi()?.cancelAnalysis?.(); } catch { /* best effort */ }
     navigation.goBack();
   };
-  const onRetry = () => { started.current = false; start(); };
+  const onRetry = () => { started.current = false; setErrorDetail(null); start(); };
+  // A plain-text report through the share sheet: the golfer picks where it goes (WhatsApp, mail).
+  const onSendDetails = () => {
+    const message = failureReport({
+      swingId,
+      detail: errorDetail,
+      apiVersion: apiVersion(),
+      appVersion: Constants.expoConfig?.version ?? null,
+      source: getSwing(swingId)?.source ?? null,
+    });
+    Share.share({ message }).catch(() => {});
+  };
   // Same confirm as the swings list. A run in flight is stopped (JS and pass 2) before the files go.
   const onDelete = () => {
     Alert.alert(H.deleteTitle, H.deleteBody, [
@@ -728,6 +759,7 @@ export default function SwingResultsScreen({ navigation, route }) {
         pose={data.pose}
         progress={progress}
         error={error}
+        errorDetail={errorDetail}
         stillTick={stillTick}
         placed={placed}
         onPlaceHead={onPlaceHead}
@@ -736,6 +768,7 @@ export default function SwingResultsScreen({ navigation, route }) {
         onCancel={onCancel}
         onDelete={onDelete}
         onRetry={onRetry}
+        onSendDetails={onSendDetails}
         onRecord={() => navigation.navigate('SwingCapture')}
         onEditMarks={(checkpoint, opts) => { setPlaced(null); navigation.navigate('SwingEditMarks', { swingId, checkpoint, ...opts }); }}
         onRename={(name) => renameSwing(swingId, name)}
@@ -815,6 +848,9 @@ const makeStyles = (theme) => StyleSheet.create({
   errorSlot: { gap: 8, paddingTop: 12, paddingBottom: 8 },
   errorTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 26, lineHeight: 32, color: theme.text.primary },
   errorBody: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, lineHeight: 20, color: theme.text.secondary },
+  errorDetail: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, lineHeight: 16, color: theme.text.muted, textAlign: 'center', marginTop: 4 },
+  sendLink: { minHeight: 44, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  sendLinkText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: theme.text.primary },
 
   sheet: { backgroundColor: theme.bg.primary, padding: 20, paddingBottom: 32, borderTopLeftRadius: 24, borderTopRightRadius: 24, gap: 8 },
   sheetTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary, marginBottom: 6 },
