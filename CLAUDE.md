@@ -184,6 +184,13 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   with a persistent notification driven by `hooks/useRoundTracking.js`;
   `useGpsDistances` seeds from its feed. Native change — needs an APK
   build. Spec: `docs/superpowers/specs/2026-09-11-background-gps-tracking-design.md`.
+- Shot listening (plan `2026-10-25-shot-sound-confidence.md`): local module `modules/golf-shot-sense`
+  (Kotlin microphone foreground service: strike onsets + gyro/accel swings, a 1 s WAV per strike,
+  `filesDir/shot-sense/<round>/events.jsonl`; native ⇒ APK). `lib/shotSense.js` drives it from
+  `useRoundTracking` (settings `recordGpsTrail` + `listenForShots`); `store/shotSound.js` (pure)
+  grades each seen proposal `shot`/`heard`/`quiet`/null, drawn as graded pins on the hole map.
+  Nothing leaves the phone except Settings → Export (`store/shotSoundExport.js`), which
+  `scripts/analyzeShotSound.mjs` reads to tune the thresholds.
 - Swing analyzer: local Expo module `modules/golf-swing` (Kotlin: MediaCodec
   decode, MediaPipe pose in `PoseAnalyzer.kt`, pass-2 `extractCheckpoints` in
   `Checkpoints.kt`, Camera2 high-speed capture in `camera/`); pure JS analysis

@@ -57,7 +57,7 @@ export function HoleFlyover({
   const seen = useShotProposals({
     roundId, roundIndex, holeNumber, courseName, enabled: seenEnabled, strokes, detail, pickedUp, withWalk: visible,
   });
-  const seenPins = useMemo(() => (seen.open.length ? seen.open.map((p) => ({ lat: p.lat, lng: p.lng })) : NO_SEEN), [seen.open]);
+  const seenPins = useMemo(() => (seen.open.length ? seen.open.map((p) => ({ lat: p.lat, lng: p.lng, level: p.sound ?? null })) : NO_SEEN), [seen.open]);
   const [seenIdx, setSeenIdx] = useState(null);
   // A card left open must not greet the next opening (or another hole).
   useEffect(() => { setSeenIdx(null); }, [visible, holeNumber]);

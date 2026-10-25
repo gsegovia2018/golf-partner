@@ -53,9 +53,33 @@ export function MissingPill({ missing }) {
   );
 }
 
+// What the phone heard and felt at a seen pin (useShotProposals' `sound`):
+// "Strike heard" + "Your swing" / "No swing from you", or "No strike heard".
+// Nothing without sound data.
+export function SoundEvidence({ level }) {
+  const tl = useT();
+  if (!level) return null;
+  const chips = level === 'quiet'
+    ? [{ key: 'noStrike', on: false, icon: 'activity' }]
+    : [
+      { key: 'strike', on: true, icon: 'activity' },
+      level === 'shot' ? { key: 'swing', on: true, icon: 'rotate-cw' } : { key: 'noSwing', on: false, icon: 'rotate-cw' },
+    ];
+  return (
+    <View style={s.ev} testID={`seen-sound-${level}`}>
+      {chips.map((c) => (
+        <View key={c.key} style={[s.evChip, c.on ? s.evOn : s.evOff]}>
+          <Feather name={c.icon} size={13} color={c.on ? hud.textSoft : hud.textMuted} />
+          <Text style={[s.evTxt, { color: c.on ? hud.textSoft : hud.textMuted }]}>{tl(`shots.seen.sound.${c.key}`)}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 // The card for one tapped "seen" pin: where it is, a club button that opens
-// the shot tracker's club wheel, then Not a shot / Add · club, and "+1 from
-// here" while the score says shots are missing.
+// the shot tracker's club wheel, what the phone heard there, then Not a shot /
+// Add · club, and "+1 from here" while the score says shots are missing.
 export function SeenMapCard({ proposal, onAdd, onDismiss, onPlusOne, missing }) {
   const tl = useT();
   const settings = useAppSettings();
@@ -89,6 +113,7 @@ export function SeenMapCard({ proposal, onAdd, onDismiss, onPlusOne, missing }) 
         </Pressable>
       </View>
       <Text style={s.when}>{tl('shots.seen.mapWhen', { seconds, time: formatTime(proposal.start) })}</Text>
+      <SoundEvidence level={proposal.sound} />
       <View style={s.btns}>
         <Pressable style={s.btn2} onPress={onDismiss} accessibilityRole="button">
           <Text style={s.btn2Txt}>{tl('shots.seen.notAShot')}</Text>
@@ -147,6 +172,15 @@ const s = StyleSheet.create({
   },
   clubTxt: { color: hud.text, fontSize: 14, fontFamily: 'PlusJakartaSans-Bold' },
   when: { color: hud.textSoft, fontSize: 13, fontFamily: 'PlusJakartaSans-Medium', marginTop: 2 },
+  ev: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  evChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, borderWidth: 1,
+    paddingHorizontal: 9, paddingVertical: 4,
+  },
+  // hud.accent at 16% / 55%: the evidence that backs the pin.
+  evOn: { backgroundColor: 'rgba(79,174,138,0.16)', borderColor: 'rgba(79,174,138,0.55)' },
+  evOff: { backgroundColor: hud.inset, borderColor: hud.border, borderStyle: 'dashed' },
+  evTxt: { fontSize: 12, fontFamily: 'PlusJakartaSans-Bold' },
   btns: { flexDirection: 'row', gap: 10, marginTop: 12 },
   btn2: {
     flex: 1, minHeight: 46, borderRadius: 14, borderWidth: 1, borderColor: hud.border,

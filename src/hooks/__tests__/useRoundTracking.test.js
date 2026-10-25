@@ -3,8 +3,12 @@ import { render } from '@testing-library/react-native';
 import { useRoundTracking, roundTrackingText, NOTIFICATION_MIN_DELTA_M } from '../useRoundTracking';
 import { setRoundTracking } from '../../lib/roundTracking';
 import { setActiveTrailRound, flushTrails } from '../../store/gpsTrailStore';
+import { setShotListening } from '../../lib/shotSense';
+import { useAppSettings } from '../useAppSettings';
 
 jest.mock('../../lib/roundTracking', () => ({ setRoundTracking: jest.fn() }));
+jest.mock('../../lib/shotSense', () => ({ setShotListening: jest.fn() }));
+jest.mock('../useAppSettings', () => ({ useAppSettings: jest.fn(() => ({})) }));
 jest.mock('../../store/gpsTrailStore', () => ({
   setActiveTrailRound: jest.fn().mockResolvedValue(),
   flushTrails: jest.fn().mockResolvedValue({ uploaded: 0, failed: false }),
@@ -25,6 +29,8 @@ const base = {
 };
 
 beforeEach(() => {
+  setShotListening.mockClear();
+  useAppSettings.mockReturnValue({});
   setRoundTracking.mockClear();
   setActiveTrailRound.mockClear();
   flushTrails.mockClear();
@@ -122,5 +128,32 @@ describe('GPS trail round', () => {
     render(<Probe {...base} trail={null} />);
     render(<Probe {...base} active={false} trail={trail} />);
     expect(setActiveTrailRound).not.toHaveBeenCalled();
+  });
+});
+
+describe('shot listening', () => {
+  const trail = { userId: 'u1', tournamentId: 't-1', roundId: 'r0', roundIndex: 0 };
+  const on = { recordGpsTrail: true, listenForShots: true };
+
+  test('listens under the round proposal key while the trail records, stops on unmount', () => {
+    useAppSettings.mockReturnValue(on);
+    const view = render(<Probe {...base} trail={trail} />);
+    expect(setShotListening).toHaveBeenCalledTimes(1);
+    expect(setShotListening).toHaveBeenLastCalledWith('r0|0', 'Listening for shots');
+    view.rerender(<Probe {...base} trail={{ ...trail }} />);
+    expect(setShotListening).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(setShotListening).toHaveBeenLastCalledWith(null);
+  });
+
+  test('needs both settings, a trail and an active round', () => {
+    useAppSettings.mockReturnValue({ recordGpsTrail: true });
+    render(<Probe {...base} trail={trail} />);
+    useAppSettings.mockReturnValue({ listenForShots: true });
+    render(<Probe {...base} trail={trail} />);
+    useAppSettings.mockReturnValue(on);
+    render(<Probe {...base} trail={null} />);
+    render(<Probe {...base} active={false} trail={trail} />);
+    expect(setShotListening).not.toHaveBeenCalled();
   });
 });

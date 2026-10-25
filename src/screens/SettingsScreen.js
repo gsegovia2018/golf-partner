@@ -11,6 +11,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings, MISS_REASONS_MODES } from '../store/settingsStore';
 import { resetTour } from '../store/tourStore';
+import { isShotSenseSupported, requestShotSensePermission } from '../lib/shotSense';
+import { shotSoundExportSummary, shareShotSoundExport } from '../store/shotSoundExport';
 import { haptic } from '../lib/haptics';
 import { useT, useLanguagePref, setLanguagePref, formatNumber } from '../i18n';
 
@@ -90,6 +92,39 @@ export default function SettingsScreen({ navigation }) {
     return () => { mounted = false; };
   }, []);
 
+  // Shot listening experiment (Android build with the shot-sense module).
+  const canListen = Platform.OS === 'android' && isShotSenseSupported();
+  const [micDenied, setMicDenied] = useState(false);
+  const [soundExport, setSoundExport] = useState(null); // { count, bytes } | null
+  const [exportState, setExportState] = useState(null); // null | 'busy' | 'failed'
+  useEffect(() => {
+    if (!canListen) return undefined;
+    let mounted = true;
+    shotSoundExportSummary().then((sum) => { if (mounted) setSoundExport(sum); }).catch(() => {});
+    return () => { mounted = false; };
+  }, [canListen, appSettings.listenForShots]);
+
+  async function onListenForShots(v) {
+    if (v && !(await requestShotSensePermission())) {
+      setMicDenied(true);
+      return;
+    }
+    setMicDenied(false);
+    setKey({ listenForShots: v });
+  }
+
+  async function onExportSound() {
+    if (exportState === 'busy' || !soundExport?.count) return;
+    haptic('selection');
+    setExportState('busy');
+    try {
+      await shareShotSoundExport(t('settings.shotSoundExport.label'));
+      setExportState(null);
+    } catch {
+      setExportState('failed');
+    }
+  }
+
   function handleBack() {
     navigation.goBack();
   }
@@ -115,6 +150,40 @@ export default function SettingsScreen({ navigation }) {
             <SwitchRow testID="setting-recordGpsTrail" label={t('settings.recordGpsTrail.label')}
               hint={t('settings.recordGpsTrail.hint')}
               value={appSettings.recordGpsTrail} onChange={(v) => setKey({ recordGpsTrail: v })} theme={theme} s={s} />
+          ) : null}
+          {canListen ? (
+            <>
+              <SwitchRow testID="setting-listenForShots" label={t('settings.listenForShots.label')}
+                hint={t('settings.listenForShots.hint')}
+                note={micDenied ? t('settings.listenForShots.denied') : null}
+                disabled={!appSettings.recordGpsTrail}
+                value={appSettings.listenForShots && appSettings.recordGpsTrail}
+                onChange={onListenForShots} theme={theme} s={s} />
+              <PressableScale
+                testID="setting-shotSoundExport"
+                style={[s.prefRow, s.prefRowDivider]}
+                onPress={onExportSound}
+                disabled={!soundExport?.count || exportState === 'busy'}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.shotSoundExport.label')}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.prefLabel, { color: soundExport?.count ? theme.accent.primary : theme.text.muted }]}>
+                    {t('settings.shotSoundExport.label')}
+                  </Text>
+                  <Text style={s.fieldHint}>
+                    {exportState === 'failed' ? t('settings.shotSoundExport.failed')
+                      : soundExport?.count
+                        ? t('settings.shotSoundExport.hint', {
+                          count: soundExport.count,
+                          size: `${formatNumber(Math.max(1, Math.round(soundExport.bytes / 1048576)))} MB`,
+                        })
+                        : t('settings.shotSoundExport.empty')}
+                  </Text>
+                </View>
+                <Feather name="share" size={18} color={soundExport?.count ? theme.accent.primary : theme.text.muted} />
+              </PressableScale>
+            </>
           ) : null}
           <SwitchRow testID="setting-shotMeasuring" label={t('settings.shotMeasuring.label')}
             hint={t('settings.shotMeasuring.hint')}
