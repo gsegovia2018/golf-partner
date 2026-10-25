@@ -280,9 +280,10 @@ export async function saveAnalysis(id, analysis, {
   return next;
 }
 
-/** Mark a swing whose analysis failed (D12 error code) so the list can say so. */
-export async function markSwingFailed(id, error) {
-  const next = patchRow(id, { status: 'error', error });
+/** Mark a swing whose analysis failed (D12 error code) so the list can say so. `detail`
+ *  ({ code, message, stage, at }, swing/failureReport.js) is what the error screen shows and sends. */
+export async function markSwingFailed(id, error, detail = null) {
+  const next = patchRow(id, { status: 'error', error, errorDetail: detail });
   if (!next) return null;
   emit();
   await persistIndex();
