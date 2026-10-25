@@ -207,4 +207,9 @@ export default {
   },
   'shots.seen.plusOne': '+1 from here',
   'shots.seen.plusOneA11y': 'Add another shot played from this same spot',
+  'shots.seen.sound.strike': 'Strike heard',
+  'shots.seen.sound.noStrike': 'No strike heard',
+  'shots.seen.sound.swing': 'Your swing',
+  'shots.seen.sound.noSwing': 'No swing from you',
+  'shots.sense.notification': 'Listening for shots',
 };

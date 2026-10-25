@@ -64,6 +64,10 @@ export const DEFAULT_APP_SETTINGS = {
   // during live rounds to golf_gps_trail so automatic shot detection can be
   // evaluated offline (store/gpsTrailStore.js). Boolean, off by default.
   recordGpsTrail: false,
+  // Shot listening experiment (owner-only): with the GPS trail on, the phone
+  // listens for strikes and feels for its swing during live rounds, on the
+  // phone only (lib/shotSense.js). Boolean, off by default; Android only.
+  listenForShots: false,
   // Usage counts (lib/telemetry.js → app_events): which app
   // features get used. Boolean, on by default; off records and sends nothing.
   usageStats: true,
@@ -93,7 +97,7 @@ export function mergeAppSettings(base, patch) {
       out[k] = MISS_REASONS_MODES.includes(v) ? v : base[k];
       continue;
     }
-    if (k === 'aimTips' || k === 'recordGpsTrail' || k === 'usageStats') {
+    if (k === 'aimTips' || k === 'recordGpsTrail' || k === 'listenForShots' || k === 'usageStats') {
       out[k] = typeof v === 'boolean' ? v : base[k];
       continue;
     }

@@ -71,6 +71,12 @@ export function buildHoleMapHtml(data) {
   .dchip{background:rgba(14,22,28,.88);color:#fff;font-weight:800;font-size:13px;padding:4px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;border:1px solid rgba(255,255,255,.25);transform:translate(-50%,-50%);display:inline-block}
   .seenpin{width:26px;height:26px;border-radius:50%;border:2.5px dashed #fff;background:rgba(10,13,16,.35);display:flex;align-items:center;justify-content:center;box-sizing:border-box}
   .seenpin i{width:8px;height:8px;border-radius:50%;background:#fff;display:block}
+  .seenhit{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+  .seenpin.shot{width:30px;height:30px;border:2.5px solid #fff;background:#4fae8a;box-shadow:0 1px 4px rgba(0,0,0,.55)}
+  .seenpin.shot i{width:9px;height:9px;background:#0a0d10}
+  .seenpin.heard{border-style:solid;background:rgba(10,13,16,.55)}
+  .seenpin.quiet{width:20px;height:20px;border:2px dashed rgba(255,255,255,.6);background:rgba(10,13,16,.3)}
+  .seenpin.quiet i{width:5px;height:5px;background:rgba(255,255,255,.6)}
   .shotpin{width:22px;height:22px;border-radius:50%;background:#f4c04a;border:2px solid #0a0d10;color:#0a0d10;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.5);font-variant-numeric:tabular-nums}
   #recenter{position:absolute;left:12px;bottom:14px;width:40px;height:40px;border-radius:999px;background:rgba(14,22,28,.85);border:1px solid rgba(255,255,255,.25);color:#fff;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;z-index:600;opacity:0;pointer-events:none;transform:scale(.9);transition:opacity .15s,transform .15s}
   #recenter.show{opacity:1;pointer-events:auto;transform:scale(1)}
@@ -138,7 +144,7 @@ let player = DATA.player || null;
 let anchor = DATA.anchor || { pos: null, source: null, playerDistance: null };
 let activeField = DATA.activeField || 'center';
 let shots = DATA.shots || []; // logged shots for this hole: [{lat,lng,club}]
-let seen = DATA.seen || []; // automatically detected shots to review: [{lat,lng}]
+let seen = DATA.seen || []; // automatically detected shots to review: [{lat,lng,level}]
 let walk = DATA.walk || []; // where the golfer walked (GPS trail): [[[lat,lng],...], ...] runs
 let lastShot = DATA.lastShot || null; // { meters, club } for the top-left card, or null to hide
 let placing = false; // the host is waiting for a tap to place a shot
@@ -314,10 +320,16 @@ function drawWalk(){
 }
 
 // Detected shots awaiting an answer: hollow dashed pins, tap posts seen-tap.
+// The level (store/shotSound) grades them: 'shot' a filled green pin on top,
+// 'heard' a solid ring, 'quiet' a small faded one; none, as before.
+const SEEN_LEVEL = { shot:{ size:30, z:30 }, heard:{ size:26, z:20 }, quiet:{ size:26, z:0 } };
 function drawSeen(){
   (seen || []).forEach((p, i) => {
     if (!valid([p.lat, p.lng])) return;
-    const mk = L.marker([p.lat, p.lng], { zIndexOffset:400, icon: L.divIcon({ className:'', iconSize:[26,26], iconAnchor:[13,13], html:'<div class="seenpin"><i></i></div>' }) });
+    const lv = SEEN_LEVEL[p.level] ? p.level : null;
+    const size = lv ? SEEN_LEVEL[lv].size : 26;
+    const html = '<div class="seenhit"><div class="seenpin' + (lv ? ' ' + lv : '') + '"><i></i></div></div>';
+    const mk = L.marker([p.lat, p.lng], { zIndexOffset:400 + (lv ? SEEN_LEVEL[lv].z : 10), icon: L.divIcon({ className:'', iconSize:[size,size], iconAnchor:[size/2,size/2], html }) });
     mk.on('click', (e) => { L.DomEvent.stopPropagation(e); post({ type:'seen-tap', index:i }); });
     add(mk);
   });

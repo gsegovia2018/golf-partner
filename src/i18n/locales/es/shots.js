@@ -207,4 +207,9 @@ export default {
   },
   'shots.seen.plusOne': '+1 desde aquí',
   'shots.seen.plusOneA11y': 'Añadir otro golpe jugado desde este mismo punto',
+  'shots.seen.sound.strike': 'Impacto oído',
+  'shots.seen.sound.noStrike': 'No se oyó ningún impacto',
+  'shots.seen.sound.swing': 'Tu swing',
+  'shots.seen.sound.noSwing': 'Sin swing tuyo',
+  'shots.sense.notification': 'Escuchando los golpes',
 };

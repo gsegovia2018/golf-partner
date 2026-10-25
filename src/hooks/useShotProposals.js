@@ -3,8 +3,10 @@ import { useAppSettings } from './useAppSettings';
 import { useCourseGeometry } from './useCourseGeometry';
 import {
   subscribeShotProposals, getShotProposalsVersion, getRoundStops, getRoundWalk, loadShotProposals,
-  confirmProposals, dismissProposal, closeHoleOnGreen,
+  confirmProposals, dismissProposal, closeHoleOnGreen, proposalRoundKey,
 } from '../store/shotProposalStore';
+import { subscribeShotSound, getShotSoundVersion, getShotSoundIndex, refreshShotSound } from '../store/shotSoundStore';
+import { soundLevel } from '../store/shotSound';
 import { proposalsForHole, greenLandingStop } from '../store/shotDetection';
 import { holeStrokeAccount } from '../store/scoring';
 import { holeRefs, onGreen, walkForHole } from '../lib/gpsTrailStops';
@@ -23,7 +25,9 @@ const EMPTY = [];
 // and `pickedUp` are my score and shot detail for the hole; `missing` is
 // holeStrokeAccount's notOnMap, the same accounting as the shot detail.
 // Each open proposal carries `club`: the shot tracker's distance-based guess
-// (driver only off the tee), which the golfer can change before adding.
+// (driver only off the tee), which the golfer can change before adding; and
+// `sound`: what the phone heard and felt there ('shot' | 'heard' | 'quiet' |
+// null, store/shotSound), which only ranks it on the map.
 // `walk` is this hole's part of the walk the trail recorded ([[[lat,lng],...]],
 // one array per run), for the map's dotted line — computed only `withWalk`. While mounted, an open hole
 // whose trail shows a stop on the green is ended there (greenLandingStop).
@@ -36,6 +40,10 @@ export function useShotProposals({
   useEffect(() => { if (on) loadShotProposals(roundId, roundIndex); }, [on, roundId, roundIndex]);
   const pv = useSyncExternalStore(subscribeShotProposals, getShotProposalsVersion, getShotProposalsVersion);
   const sv = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
+  const sndv = useSyncExternalStore(subscribeShotSound, getShotSoundVersion, getShotSoundVersion);
+  const session = on ? proposalRoundKey(roundId, roundIndex) : null;
+  // The sound log grows during the round; new stops (pv) are when it matters.
+  useEffect(() => { if (session) refreshShotSound(session); }, [session, pv]);
   const course = useCourseGeometry(on ? courseName : null);
 
   const refs = useMemo(() => {
@@ -50,10 +58,12 @@ export function useShotProposals({
     if (!on) return EMPTY;
     const all = getRoundStops(roundId, roundIndex);
     if (!all.length) return EMPTY;
+    const sound = getShotSoundIndex(session);
     return proposalsForHole(all, { holeNumber, course, shots })
       .filter((p) => p.status === 'open')
       .map((p) => ({
         ...p,
+        sound: soundLevel(p, sound),
         club: p.toGreen != null
           ? guessClub({
             meters: p.toGreen,
@@ -66,7 +76,7 @@ export function useShotProposals({
           : null,
       }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [on, roundId, roundIndex, holeNumber, course, shots, pv, settings, refs, courseName]);
+  }, [on, roundId, roundIndex, holeNumber, course, shots, pv, settings, refs, courseName, session, sndv]);
 
   const walk = useMemo(() => (on && withWalk && course?.holes?.length
     ? walkForHole(getRoundWalk(roundId, roundIndex), course.holes, holeNumber) : EMPTY),

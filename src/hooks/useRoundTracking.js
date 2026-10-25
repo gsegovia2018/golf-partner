@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { setRoundTracking } from '../lib/roundTracking';
 import { setActiveTrailRound, flushTrails } from '../store/gpsTrailStore';
-import { setDetectionHole } from '../store/shotProposalStore';
+import { setDetectionHole, proposalRoundKey } from '../store/shotProposalStore';
+import { setShotListening } from '../lib/shotSense';
+import { useAppSettings } from './useAppSettings';
 import { formatDistance, unitSuffix } from '../lib/units';
 import { t, useT, getLanguage, formatNumber } from '../i18n';
 
@@ -46,6 +48,7 @@ export function roundTrackingText({ courseName, holeNumber, distances, source, u
 // store/gpsTrailStore.
 export function useRoundTracking({ active, courseName, holeNumber, distances, source, units, trail }) {
   const last = useRef(null); // { holeNumber, source, center, lang } of the last update sent
+  const settings = useAppSettings();
   useT(); // re-render (and re-send the text) when the language changes
   const lang = getLanguage();
 
@@ -89,4 +92,15 @@ export function useRoundTracking({ active, courseName, holeNumber, distances, so
       setActiveTrailRound(null).then(() => flushTrails());
     };
   }, [trailKey]);
+
+  // Shot listening experiment: while the trail records, the phone also listens
+  // for strikes under the same round (the shot proposals' key), when the
+  // `listenForShots` setting is on. No-op without the native module.
+  const listenKey = trailKey && settings.recordGpsTrail === true && settings.listenForShots === true ? trailKey : null;
+  useEffect(() => {
+    if (!listenKey) return undefined;
+    const [, , roundId, roundIndex] = JSON.parse(listenKey);
+    setShotListening(proposalRoundKey(roundId, roundIndex), t('shots.sense.notification'));
+    return () => setShotListening(null);
+  }, [listenKey]);
 }
