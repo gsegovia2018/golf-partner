@@ -1063,18 +1063,22 @@ export function makeScorecardStyles(theme) {
       fontFamily: 'PlusJakartaSans-ExtraBold',
       letterSpacing: 0.3,
     },
+    // Round running totals under the stepper: one line, each label beside
+    // its number, so it reads as a footnote to the hole's score above.
     soloStatsRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-around',
       borderTopWidth: 1,
       borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      paddingTop: 10,
+      paddingTop: 8,
     },
     soloStatItem: {
       flex: 1,
-      alignItems: 'center',
-      gap: 4,
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      justifyContent: 'center',
+      gap: 6,
     },
     soloStatDivider: {
       width: 1,
@@ -1089,7 +1093,7 @@ export function makeScorecardStyles(theme) {
     },
     soloStatValue: {
       color: theme.text.primary,
-      fontSize: 22,
+      fontSize: 16,
       fontFamily: 'PlusJakartaSans-ExtraBold',
     },
 
