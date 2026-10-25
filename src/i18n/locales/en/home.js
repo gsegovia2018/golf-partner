@@ -138,7 +138,6 @@ export default {
   "home.live.youLead": "You lead by {gap}",
   "home.menu.editTeams": "Edit Teams",
   "home.menu.pointValues": "Point Values",
-  "home.menu.pointValuesSummary": "Best {best} · Worst {worst} pts / hole",
   "home.menu.revealTeams": "Reveal Teams",
   "home.noActive.goHome": "Go to Home",
   "home.noActive.startGame": "Start a Game",
