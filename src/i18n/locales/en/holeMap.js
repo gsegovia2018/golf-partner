@@ -3,8 +3,6 @@ export default {
   'map.hole': 'Hole {hole}',
   'map.noData': 'No map data',
   'map.close': 'Close hole map',
-  'map.expand': 'Expand hole map',
-  'map.shrink': 'Shrink hole map',
   'map.noGeometry': 'This course has no green geometry yet.',
   'map.par': 'Par {par}',
   'map.si': 'SI {si}',
