@@ -108,6 +108,8 @@ export function metaPathFor(m) {
     case 'round.setFinished': return `rounds.${m.roundId}.finishedAt`;
     // When the round was started — the first score tap. Stamped once.
     case 'round.setStarted': return `rounds.${m.roundId}.startedAt`;
+    // Which players have tapped Finish on this round (per player, null reopens).
+    case 'round.setPlayerFinished': return `rounds.${m.roundId}.finishedBy`;
     // Tournament profile edit (name/kind/settings/etc.) — mirrors
     // patch_game_tournament's one-level-deep merge. Single LWW path: the
     // whole patch lands together.
@@ -316,8 +318,21 @@ export function applyToTournament(t, m) {
       const round = t.rounds?.find((r) => r.id === m.roundId);
       if (!round) return;
       // First write wins: re-finishing a round (or replaying a queued
-      // mutation) must not move the timestamp the feed sorts on.
-      if (!round.finishedAt) round.finishedAt = m.finishedAt;
+      // mutation) must not move the timestamp the feed sorts on. Null reopens.
+      if (m.finishedAt == null) round.finishedAt = null;
+      else if (!round.finishedAt) round.finishedAt = m.finishedAt;
+      break;
+    }
+    case 'round.setPlayerFinished': {
+      const round = t.rounds?.find((r) => r.id === m.roundId);
+      if (!round) return;
+      // Per player, first write wins like the round stamp; null reopens.
+      const by = { ...(round.finishedBy ?? {}) };
+      for (const playerId of m.playerIds ?? []) {
+        if (m.finishedAt == null) delete by[playerId];
+        else if (!by[playerId]) by[playerId] = m.finishedAt;
+      }
+      round.finishedBy = by;
       break;
     }
     case 'round.setStarted': {

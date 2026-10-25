@@ -8,6 +8,7 @@ import { runExclusiveForTournament } from './tournamentMutex';
 import { isOnline } from '../lib/connectivity';
 import { t } from '../i18n';
 import { teeByLabel, resolveTeeForPlayer } from './tees';
+import { everyoneFinishedAt } from './finishStamp';
 import { prefetchWeatherForRounds } from './weatherStore';
 // Pure scoring & handicap math lives in ./scoring. Imported here for this
 // module's own use and re-exported below so existing call sites that do
@@ -2290,6 +2291,8 @@ export function isRoundComplete(round, players) {
 export function isTournamentFinished(tournament) {
   if (!tournament) return false;
   if (tournament.finishedAt) return true;
+  // A game ends with its one round: every account player tapped Finish.
+  if (tournament.kind === 'game' && everyoneFinishedAt(tournament, tournament.rounds?.[0]) != null) return true;
   const rounds = tournament.rounds ?? [];
   const players = tournament.players ?? [];
   if (rounds.length === 0 || players.length === 0) return false;

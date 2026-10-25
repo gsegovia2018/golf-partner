@@ -9,7 +9,7 @@
 // `lastActivityByKey` maps `${tournamentId}:${roundId}` → ms of the last hole
 // published; a missing entry is "unknown", which isRoundLive does not demote.
 import { isTournamentFinished, isRoundComplete, roundLeaderboard } from './tournamentStore';
-import { roundEndedAt, parseFinishedAt } from './finishStamp';
+import { roundEndedAt, parseFinishedAt, playerFinishedAt } from './finishStamp';
 import { isRoundLive } from './liveRound';
 import { getPlayingHandicap, resolvePairs, calcExtraShots, holeCountOf } from './scoring';
 
@@ -122,6 +122,8 @@ export function homePhase(tournaments, { userId = null, now = Date.now(), lastAc
     const played = holesPlayed(round, players);
     const endedAt = roundEndedAt(t, round);
     const lastAt = lastActivityByKey?.get?.(`${t.id}:${round.id}`) ?? null;
+    // My own Finish ends the round for me while the others play on.
+    if (playerFinishedAt(round, me.id) != null) continue;
     if (isRoundLive({
       finished: endedAt != null, holesPlayed: played, totalHoles: round.holes?.length ?? 18, lastActivityAt: lastAt, now,
     })) {

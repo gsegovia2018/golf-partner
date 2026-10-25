@@ -299,7 +299,15 @@ export async function executeMutation(entry, localTournament) {
     }
 
     case 'round.setFinished': {
-      await repo.patchRound(id, m.roundId, { finishedAt: m.finishedAt });
+      await repo.patchRound(id, m.roundId, { finishedAt: m.finishedAt ?? null });
+      return NO_CONFLICT;
+    }
+
+    case 'round.setPlayerFinished': {
+      // An object merges key by key on the server (patch_game_round), so two
+      // phones finishing never overwrite each other. Null values reopen.
+      const by = Object.fromEntries((m.playerIds ?? []).map((pid) => [pid, m.finishedAt ?? null]));
+      await repo.patchRound(id, m.roundId, { finishedBy: by });
       return NO_CONFLICT;
     }
 

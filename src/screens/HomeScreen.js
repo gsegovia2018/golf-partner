@@ -58,6 +58,8 @@ import {
   resolveQuickStartPlayerTees,
 } from '../lib/quickStartGame';
 import { mutate } from '../store/mutate';
+import { reopenGame } from '../store/reopenGame';
+import { roundEndedAt } from '../store/finishStamp';
 import { roundScoringMode, tournamentHasMixedModes, tournamentStablefordLeaderboard, buildTeamsForMode, roundBestBallValues } from '../store/scoring';
 import { assignPlacements, comparatorForBoardMode } from '../store/leaderboardPlacement';
 import { subscribeConnectivity, isOnline } from '../lib/connectivity';
@@ -990,10 +992,9 @@ export default function HomeScreen({ navigation, route }) {
   async function setTournamentFinished(t, finished) {
     if (!t) return;
     try {
-      const updated = await mutate(t, {
-        type: 'tournament.setFinished',
-        finishedAt: finished ? new Date().toISOString() : null,
-      });
+      const updated = finished
+        ? await mutate(t, { type: 'tournament.setFinished', finishedAt: new Date().toISOString() })
+        : await reopenGame(t);
       setTournament(updated);
       if (finished) {
         if (viewMode === 'tournament' && navigation.canGoBack()) navigation.goBack();
@@ -2363,7 +2364,8 @@ export default function HomeScreen({ navigation, route }) {
 
           {!isViewer && (() => {
             const isGameKind = tournament.kind === 'game';
-            if (tournament.finishedAt) {
+            // A game also ends when every player tapped Finish (no archive stamp).
+            if (tournament.finishedAt || (isGameKind && roundEndedAt(tournament, tournament.rounds?.[0]) != null)) {
               return (
                 <TouchableOpacity
                   style={s.menuItem}
