@@ -3,8 +3,6 @@ export default {
   'map.hole': 'Hoyo {hole}',
   'map.noData': 'Sin datos del mapa',
   'map.close': 'Cerrar mapa del hoyo',
-  'map.expand': 'Ampliar mapa del hoyo',
-  'map.shrink': 'Reducir mapa del hoyo',
   'map.noGeometry': 'Este campo aún no tiene la geometría de los greens.',
   'map.par': 'Par {par}',
   'map.si': 'HCP {si}',

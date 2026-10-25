@@ -36,19 +36,15 @@ describe('HoleFlyover sheet chrome', () => {
     expect(queryByText(/\d+ m$/)).toBeNull();
   });
 
-  it('renders a grabber and fires onClose from the close button', () => {
-    const { getByTestId } = render(<HoleFlyover {...props} />);
-    getByTestId('flyover-grabber');
+  it('opens as a full page that only the close button dismisses', () => {
+    props.onClose.mockClear();
+    const { getByTestId, queryByTestId, getAllByLabelText, UNSAFE_getByType } = render(<HoleFlyover {...props} />);
+    const { Modal } = require('react-native');
+    expect(UNSAFE_getByType(Modal).props.transparent).toBeFalsy();
+    expect(queryByTestId('flyover-grabber')).toBeNull();
+    expect(getAllByLabelText('Close hole map')).toHaveLength(1);
     fireEvent.press(getByTestId('flyover-close'));
     expect(props.onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('opens over part of the scorecard and expands to full height and back', () => {
-    const { getByTestId, getByLabelText } = render(<HoleFlyover {...props} />);
-    fireEvent.press(getByLabelText('Expand hole map'));
-    getByLabelText('Shrink hole map');
-    fireEvent.press(getByTestId('flyover-expand'));
-    getByLabelText('Expand hole map');
   });
 
   it('omits meta it was not given', () => {

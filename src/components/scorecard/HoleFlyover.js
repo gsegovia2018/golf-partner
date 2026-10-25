@@ -1,9 +1,10 @@
 import React, {
-  useEffect, useMemo, useRef, useState, useSyncExternalStore,
+  useContext, useEffect, useMemo, useState, useSyncExternalStore,
 } from 'react';
 import {
-  View, Text, StyleSheet, Modal, Pressable, Animated, PanResponder,
+  View, Text, StyleSheet, Modal, Pressable,
 } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useT, formatNumber, formatTime } from '../../i18n';
 import {
@@ -179,175 +180,110 @@ export function HoleFlyover({
   // club wheel for that shot.
   const [tappedShot, setTappedShot] = useState(null);
 
-  // The map opens over the lower part of the scorecard, the hole header still
-  // in view above it, so it reads as part of the card and not a new page.
-  // Expand (button, or drag the grabber up) takes it to full height.
-  const [expanded, setExpanded] = useState(false);
-  const expandedRef = useRef(expanded);
-  expandedRef.current = expanded;
-  useEffect(() => { if (!visible) setExpanded(false); }, [visible]);
-
-  // Drag on the grabber/header: up expands, down shrinks a full-height map,
-  // then dismisses. The map owns its own gestures.
-  const dragY = useRef(new Animated.Value(0)).current;
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  const pan = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 8 && Math.abs(g.dy) > Math.abs(g.dx),
-    onPanResponderMove: (_, g) => { if (g.dy > 0) dragY.setValue(g.dy); },
-    onPanResponderRelease: (_, g) => {
-      if (g.dy < -40 || g.vy < -0.8) {
-        dragY.setValue(0);
-        setExpanded(true);
-      } else if (g.dy > 120 || g.vy > 0.8) {
-        dragY.setValue(0);
-        if (expandedRef.current) setExpanded(false);
-        else onCloseRef.current?.();
-      } else {
-        Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
-      }
-    },
-    onPanResponderTerminate: () => { dragY.setValue(0); },
-  })).current;
+  // The map is its own full page: no sheet to drag, closed with the X or Back.
+  const insets = useContext(SafeAreaInsetsContext);
 
   if (!visible) return null;
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={s.backdrop}>
-        <Pressable
-          style={s.backdropTouch}
-          onPress={onClose}
-          accessibilityRole="button"
-          accessibilityLabel={tl('map.close')}
-        />
-        <Animated.View style={[s.sheet, expanded && s.sheetFull, { transform: [{ translateY: dragY }] }]}>
-          <View {...pan.panHandlers}>
-            <View style={s.grabber} testID="flyover-grabber" />
-            <View style={s.header}>
-              <View style={s.titleWrap}>
-                <Text style={s.title} numberOfLines={1}>{feat ? tl('map.hole', { hole: formatNumber(holeNumber) }) : tl('map.noData')}</Text>
-                {par != null && strokeIndex != null && (
-                  <Text style={s.subtitle}>{tl('map.parSi', { par: formatNumber(par), si: formatNumber(strokeIndex) })}</Text>
-                )}
-              </View>
-              <View style={s.hbtns}>
-                {onEdit && feat && (
-                  <Pressable onPress={onEdit} style={s.editBtn} hitSlop={8}>
-                    <Feather name="edit-2" size={14} color={hud.onAccent} />
-                    <Text style={s.editTxt}>{tl('map.edit')}</Text>
-                  </Pressable>
-                )}
-                <Pressable
-                  onPress={() => setExpanded((v) => !v)}
-                  style={s.closeBtn}
-                  hitSlop={10}
-                  testID="flyover-expand"
-                  accessibilityRole="button"
-                  accessibilityLabel={tl(expanded ? 'map.shrink' : 'map.expand')}
-                >
-                  <Feather name={expanded ? 'minimize-2' : 'maximize-2'} size={19} color={hud.text} />
-                </Pressable>
-                <Pressable
-                  onPress={onClose}
-                  style={s.closeBtn}
-                  hitSlop={10}
-                  testID="flyover-close"
-                  accessibilityRole="button"
-                  accessibilityLabel={tl('map.close')}
-                >
-                  <Feather name="x" size={22} color={hud.text} />
-                </Pressable>
-              </View>
-            </View>
+    <Modal visible statusBarTranslucent hardwareAccelerated animationType="fade" onRequestClose={onClose}>
+      <View style={[s.page, { paddingTop: insets?.top ?? 0, paddingBottom: insets?.bottom ?? 0 }]}>
+        <View style={s.header}>
+          <View style={s.titleWrap}>
+            <Text style={s.title} numberOfLines={1}>{feat ? tl('map.hole', { hole: formatNumber(holeNumber) }) : tl('map.noData')}</Text>
+            {par != null && strokeIndex != null && (
+              <Text style={s.subtitle}>{tl('map.parSi', { par: formatNumber(par), si: formatNumber(strokeIndex) })}</Text>
+            )}
           </View>
-          {data ? (
-            <View style={s.map}>
-              <HoleMapView
-                data={data}
-                player={position}
-                anchor={anchorInfo}
-                shots={shotPins}
-                seen={seenPins}
-                walk={seen.walk}
-                onSeenTap={setSeenIdx}
-                lastShot={lastShot}
-                plays={plays}
-                targets={targetsCmd}
-                placing={placing}
-                onShotMove={(i, p) => {
-                  const sh = shotsForHole(roundId, roundIndex, holeNumber)[i];
-                  if (sh) setShotPos(sh.id, p);
-                }}
-                onAim={(pos, rings) => setAim({ pos, rings })}
-                onMapTap={(pos) => setMapTap({ pos, at: Date.now() })}
-                onShotTap={setTappedShot}
-                style={s.map}
+          <View style={s.hbtns}>
+            {onEdit && feat && (
+              <Pressable onPress={onEdit} style={s.editBtn} hitSlop={8}>
+                <Feather name="edit-2" size={14} color={hud.onAccent} />
+                <Text style={s.editTxt}>{tl('map.edit')}</Text>
+              </Pressable>
+            )}
+            <Pressable
+              onPress={onClose}
+              style={s.closeBtn}
+              hitSlop={10}
+              testID="flyover-close"
+              accessibilityRole="button"
+              accessibilityLabel={tl('map.close')}
+            >
+              <Feather name="x" size={22} color={hud.text} />
+            </Pressable>
+          </View>
+        </View>
+        {data ? (
+          <View style={s.map}>
+            <HoleMapView
+              data={data}
+              player={position}
+              anchor={anchorInfo}
+              shots={shotPins}
+              seen={seenPins}
+              walk={seen.walk}
+              onSeenTap={setSeenIdx}
+              lastShot={lastShot}
+              plays={plays}
+              targets={targetsCmd}
+              placing={placing}
+              onShotMove={(i, p) => {
+                const sh = shotsForHole(roundId, roundIndex, holeNumber)[i];
+                if (sh) setShotPos(sh.id, p);
+              }}
+              onAim={(pos, rings) => setAim({ pos, rings })}
+              onMapTap={(pos) => setMapTap({ pos, at: Date.now() })}
+              onShotTap={setTappedShot}
+              style={s.map}
+            />
+            {roundId != null && (
+              <ShotTracker
+                roundId={roundId}
+                roundIndex={roundIndex}
+                holeNumber={holeNumber}
+                pos={position ?? null}
+                aimPos={aim?.pos ?? null}
+                aimRings={aim?.rings ?? null}
+                courseName={courseName}
+                targetPos={feat?.greenCenter ?? null}
+                greenPolygon={feat?.green ?? null}
+                // The seen card spans the bottom of the map; the FABs would
+                // sit under it, and marking a shot mid-review is a second
+                // decision on top of the card's.
+                hideFabs={!!seenSel}
+                tappedShotIndex={tappedShot}
+                onConsumeShotTap={() => setTappedShot(null)}
+                onCollapseTargets={(t) => setTargetsCmd(t)}
+                mapTap={mapTap}
+                onPlacing={setPlacing}
+                holeDone={holeDone}
+                missing={seen.missing}
               />
-              {roundId != null && (
-                <ShotTracker
-                  roundId={roundId}
-                  roundIndex={roundIndex}
-                  holeNumber={holeNumber}
-                  pos={position ?? null}
-                  aimPos={aim?.pos ?? null}
-                  aimRings={aim?.rings ?? null}
-                  courseName={courseName}
-                  targetPos={feat?.greenCenter ?? null}
-                  greenPolygon={feat?.green ?? null}
-                  // The seen card spans the bottom of the map; the FABs would
-                  // sit under it, and marking a shot mid-review is a second
-                  // decision on top of the card's.
-                  hideFabs={!!seenSel}
-                  tappedShotIndex={tappedShot}
-                  onConsumeShotTap={() => setTappedShot(null)}
-                  onCollapseTargets={(t) => setTargetsCmd(t)}
-                  mapTap={mapTap}
-                  onPlacing={setPlacing}
-                  holeDone={holeDone}
-                  missing={seen.missing}
-                />
-              )}
-              {seenSel ? (
-                <SeenMapCard
-                  proposal={seenSel}
-                  missing={seen.missing}
-                  onAdd={(p) => { seen.confirm([p]); setSeenIdx(null); }}
-                  onPlusOne={(p) => { seen.plusOne(p); setSeenIdx(null); }}
-                  onDismiss={() => { seen.dismiss(seenSel.id); setSeenIdx(null); }}
-                />
-              ) : <MissingPill missing={seen.missing} />}
-            </View>
-          ) : (
-            <View style={s.center}><Text style={s.muted}>{tl('map.noGeometry')}</Text></View>
-          )}
-        </Animated.View>
+            )}
+            {seenSel ? (
+              <SeenMapCard
+                proposal={seenSel}
+                missing={seen.missing}
+                onAdd={(p) => { seen.confirm([p]); setSeenIdx(null); }}
+                onPlusOne={(p) => { seen.plusOne(p); setSeenIdx(null); }}
+                onDismiss={() => { seen.dismiss(seenSel.id); setSeenIdx(null); }}
+              />
+            ) : <MissingPill missing={seen.missing} />}
+          </View>
+        ) : (
+          <View style={s.center}><Text style={s.muted}>{tl('map.noGeometry')}</Text></View>
+        )}
       </View>
     </Modal>
   );
 }
 
 const s = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(12,26,20,0.38)', justifyContent: 'flex-end' },
-  // The scorecard showing above the sheet closes it. The sheet renders after
-  // it, so the part it covers stays the sheet's.
-  backdropTouch: { ...StyleSheet.absoluteFillObject },
-  sheet: {
-    height: '68%',
-    backgroundColor: hud.bg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: 'hidden',
-  },
-  sheetFull: { height: '96%' },
-  grabber: {
-    alignSelf: 'center', width: 36, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.35)', marginTop: 8,
-  },
+  page: { flex: 1, backgroundColor: hud.bg },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10,
+    paddingHorizontal: 14, paddingTop: 12, paddingBottom: 10,
   },
   titleWrap: { flex: 1, gap: 1 },
   title: { color: hud.text, fontSize: 17, fontWeight: '800' },
