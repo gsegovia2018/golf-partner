@@ -25,6 +25,8 @@ const WEB_KEYS = {
   'swing.profileSheet.body': 'swing.web.profileSheetBody',
   'swing.mark.saveFailedBody': 'swing.web.saveFailedBody',
   'swing.results.errorBody.cancelled': 'swing.web.cancelledBody',
+  'swing.results.errorBody.video': 'swing.web.videoBody',
+  'swing.errors.video': 'swing.web.videoError',
 };
 const leaf = (key) => t(Platform.OS === 'web' && WEB_KEYS[key] ? WEB_KEYS[key] : key);
 
@@ -223,6 +225,7 @@ export const SWING_STRINGS = build({
     no_pose: L,
     partial_pose: L,
     too_long: L,
+    video: L,
     failed: L,
     cancelled: L,
     update: L,
@@ -488,16 +491,18 @@ export const SWING_STRINGS = build({
     retry: L,
     recordAgain: L,
     backToSwings: L,
+    sendDetails: L,
     errorBody: {
       no_pose: L,
       partial_pose: L,
       too_long: L,
+      video: L,
       failed: L,
       cancelled: L,
       update: L,
     },
     errorTitle: {
-      no_pose: L, partial_pose: L, too_long: L,
+      no_pose: L, partial_pose: L, too_long: L, video: L,
       failed: L, cancelled: L, update: L,
     },
   },

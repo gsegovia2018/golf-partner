@@ -20,6 +20,7 @@ import {
 import { expectedShaftPx } from './scale';
 import { marksForAnalyze } from './labels';
 import { frameOfKey } from './checkpointChecks';
+import { failureOf } from './failureReport';
 import { APPROX_FPS } from './fpsModel';
 import {
   getSwing, getSwingProfile, swingVideoUri, saveAnalysis, markSwingFailed, readMarks,
@@ -77,7 +78,8 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
   const profile = getSwingProfile();
   const path = swingVideoUri(swingId);
   let first = null; // set once the first save landed: from then on the swing is usable
-  const fail = async (error) => { await markSwingFailed(swingId, error); return { error }; };
+  const fail = async (error, detail = null) => { await markSwingFailed(swingId, error, detail); return { error, detail }; };
+  let stage = 'reading'; // where a native failure happened, for the report
 
   try {
     const saved = await readMarks(swingId);
@@ -97,6 +99,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
     if (isCancelled()) return { cancelled: true };
     onProgress({ stage: 'reading', probe });
 
+    stage = 'pose';
     onProgress({ stage: 'pose', done: 0, total: 0, probe });
     let posing = false;
     const sub = api.addListener?.('progress', (e) => {
@@ -115,6 +118,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
     // the duplicate-frame check runs inside analyzePose (it decodes every frame anyway)
     if (typeof pose?.duplicateFrameRatio === 'number') probe = { ...probe, duplicateFrameRatio: pose.duplicateFrameRatio };
 
+    stage = 'planes';
     onProgress({ stage: 'planes', probe });
     const opts = { ...base, probe };
     const a1 = analyze(pose, opts);
@@ -180,8 +184,11 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
     if (isCancelled()) return { cancelled: true }; // a cancelled pass 2 often fails too: it is not a finished swing
     if (pass2 !== 'done') await saveAnalysis(swingId, first, { thumb: getStill(swingId, frameOfKey(first, 'impact')) });
     return { analysis: final, pass2 };
-  } catch {
-    if (!first) return fail('failed');
+  } catch (err) {
+    if (!first) {
+      const f = failureOf(err, stage);
+      return fail(f.error, f.detail);
+    }
     try { await saveAnalysis(swingId, first); } catch { /* the row stays pending and is analysed again */ }
     return { analysis: first, pass2: 'failed' };
   }
