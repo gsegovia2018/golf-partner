@@ -245,6 +245,11 @@ describe('league notifications', () => {
         .toEqual({ screen: 'LeagueBoard', params: { leagueId: 'L1' } }));
   });
 
+  test('an app card announced or teeing off opens its round, live', () => {
+    ['league_card_announced', 'league_tee_off'].forEach((type) => expect(notificationLink(type, { ...base, tournament_id: 'T1', round_id: 'R1' }))
+      .toEqual({ screen: 'RoundSummary', params: { tournamentId: 'T1', roundId: 'R1' } }));
+  });
+
   test('"Ranking updated" opens the board on that month\'s "is final" banner', () => {
     expect(notificationLink('league_ranking_updated', { league_id: 'L1', month: '2026-09-01' }))
       .toEqual({ screen: 'LeagueBoard', params: { leagueId: 'L1', finalMonth: '2026-09' } });
