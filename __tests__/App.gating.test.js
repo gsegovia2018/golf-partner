@@ -129,6 +129,7 @@ jest.mock('../src/store/courseGeometryStore', () => ({ hydrateCourseGeometry: je
 jest.mock('../src/store/shotStore', () => ({ hydrateShots: jest.fn() }));
 jest.mock('../src/store/settingsStore', () => ({ hydrateAppSettings: jest.fn() }));
 jest.mock('../src/lib/uploadWorker', () => ({ startUploadWorker: jest.fn() }));
+jest.mock('../src/lib/crashReporting', () => ({ startCrashReporting: jest.fn(), setCrashReportUser: jest.fn() }));
 jest.mock('../src/lib/pushNotifications', () => ({
   registerPushToken: jest.fn(),
   configureNotificationHandler: jest.fn(),

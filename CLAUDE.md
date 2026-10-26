@@ -99,6 +99,19 @@ fetches in the background, applying on the next start. Rounds get played on
 courses with no signal, and a launch that blocks on the network is worse
 than a day-old bundle.
 
+### Crash reports (Sentry)
+
+`src/lib/crashReporting.js` starts `@sentry/react-native` (Sentry org `golf-partner`,
+project `golf-partner-app`, EU region) once settings hydrate, and forwards every
+`captureException` / `captureMessage` from `lib/errorReporting.js`. It follows the
+`usageStats` switch (off = nothing sent, and an opted-out user's earlier crash is never
+flushed), sends the account id only (`sendDefaultPii: false`), and is off in dev builds
+and without `EXPO_PUBLIC_SENTRY_DSN` (`.env`, and the EAS `preview` environment).
+The Expo plugin uploads source maps during `eas build` with `SENTRY_AUTH_TOKEN` (EAS
+`preview` secret); without that token set `SENTRY_DISABLE_AUTO_UPLOAD=true` there, or
+the Android build fails. OTA bundles need their own upload after `eas update`:
+`npx sentry-expo-upload-sourcemaps dist` with `SENTRY_AUTH_TOKEN` in the shell.
+
 ### Wear OS companion
 
 The watch app is a native Kotlin/Compose module in `wear/` (same package,

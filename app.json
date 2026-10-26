@@ -78,7 +78,15 @@
         }
       ],
       "./modules/golf-swing/app.plugin.js",
-      "./plugins/withWearApp"
+      "./plugins/withWearApp",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "golf-partner",
+          "project": "golf-partner-app",
+          "url": "https://de.sentry.io/"
+        }
+      ]
     ],
     "extra": {
       "eas": {
