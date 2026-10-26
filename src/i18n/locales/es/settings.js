@@ -13,7 +13,7 @@ export default {
   "settings.section.notifications": "NOTIFICACIONES",
   "settings.section.privacy": "PRIVACIDAD",
   "settings.usageStats.label": "Compartir estadísticas de uso",
-  "settings.usageStats.hint": "Cuenta qué funciones usas (vueltas, golpes, swing, Entrenador, ligas) para saber qué mejorar. Nunca resultados, nombres ni ubicaciones.",
+  "settings.usageStats.hint": "Cuenta qué funciones usas (vueltas, golpes, swing, Entrenador, ligas) y envía informes de errores, para saber qué mejorar y qué arreglar. Nunca resultados, nombres ni ubicaciones.",
   "settings.gps.label": "Distancias GPS",
   "settings.gps.hint": "Distancias en directo desde tu posición. Desactivado: las distancias se miden desde la salida y la app nunca pide tu ubicación.",
   "settings.recordGpsTrail.label": "Grabar recorrido GPS (prueba)",

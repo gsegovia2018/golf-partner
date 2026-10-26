@@ -13,7 +13,7 @@ export default {
   "settings.section.notifications": "NOTIFICATIONS",
   "settings.section.privacy": "PRIVACY",
   "settings.usageStats.label": "Share usage stats",
-  "settings.usageStats.hint": "Counts which features you use (rounds, shots, swing, Coach, leagues) so we know what to improve. Never scores, names or locations.",
+  "settings.usageStats.hint": "Counts which features you use (rounds, shots, swing, Coach, leagues) and sends crash reports, so we know what to improve and what to fix. Never scores, names or locations.",
   "settings.gps.label": "GPS distances",
   "settings.gps.hint": "Live distances from your position. Off: distances measure from the tee and the app never asks for your location.",
   "settings.recordGpsTrail.label": "Record GPS trail (test)",

@@ -4,7 +4,9 @@
 // are inputs of the Android runtime fingerprint: changing them would strand OTA updates.
 const { execFileSync } = require('child_process');
 const path = require('path');
-const { getDefaultConfig } = require('expo/metro-config');
+// Sentry's wrapper around Expo's config stamps a debug id into each bundle so its source map
+// matches crash reports.
+const { getSentryExpoConfig } = require('@sentry/react-native/metro');
 
 try {
   execFileSync(process.execPath, [path.join(__dirname, 'scripts', 'copySwingWebAssets.mjs')], { stdio: 'inherit' });
@@ -12,4 +14,4 @@ try {
   console.warn(`swing-web: could not copy the runtime files (${e.message})`);
 }
 
-module.exports = getDefaultConfig(__dirname);
+module.exports = getSentryExpoConfig(__dirname);

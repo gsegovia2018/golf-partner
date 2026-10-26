@@ -104,6 +104,7 @@ import { hydrateCourseGeometry } from './src/store/courseGeometryStore';
 import { hydrateShots } from './src/store/shotStore';
 import { startGpsTrailSync } from './src/store/gpsTrailStore';
 import { startTelemetry, track } from './src/lib/telemetry';
+import { startCrashReporting, setCrashReportUser } from './src/lib/crashReporting';
 import { hydrateAppSettings } from './src/store/settingsStore';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Notifications from 'expo-notifications';
@@ -335,6 +336,7 @@ function AppNavigator() {
     // Local mirror loads even signed-out; server reconcile happens once a
     // session exists (hydrateAppSettings no-ops server-side without a user).
     hydrateAppSettings();
+    setCrashReportUser(session?.user?.id);
     if (session) registerPushToken();
   }, [session]);
 
@@ -616,6 +618,8 @@ export default function App() {
     startGpsTrailSync();
     // Usage counts (opt-out in Settings): sends what earlier runs queued.
     startTelemetry();
+    // Crash reports (same opt-out): Sentry starts once settings hydrate.
+    startCrashReporting();
     return () => { cancelled = true; };
   }, []);
 
