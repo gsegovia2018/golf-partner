@@ -5,9 +5,9 @@
 // The tab navigator still owns the bar's state: its tabBar renders a
 // TabBarPublisher, which hands this host the tabs' state and navigation.
 import React, { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { StackActions } from '@react-navigation/native';
-import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import FloatingTabBar from './FloatingTabBar';
 import { showsTabBar } from './tabBarModel';
@@ -59,9 +59,18 @@ export default function TabBarHost({ navigationRef }) {
 
   const visible = showsTabBar(top);
   const shown = useSharedValue(visible ? 1 : 0);
+  // On the web pointerEvents is CSS, where a child's own `auto` (Play's disc,
+  // the tabs under box-none) still takes clicks under a `none` parent: the
+  // faded-out disc ate taps meant for the screen below (the course picker's
+  // Add button went Home). Once faded out, the bar is hidden there outright.
+  const [gone, setGone] = useState(!visible);
   useEffect(() => {
     const to = visible ? 1 : 0;
-    shown.value = reduced ? to : withTiming(to, { duration: visible ? duration.state : duration.touch });
+    if (visible) setGone(false);
+    else if (reduced) setGone(true);
+    shown.value = reduced ? to : withTiming(to, { duration: visible ? duration.state : duration.touch }, (finished) => {
+      if (finished && !visible) runOnJS(setGone)(true);
+    });
   }, [visible, reduced, shown]);
   const fadeStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
 
@@ -77,7 +86,7 @@ export default function TabBarHost({ navigationRef }) {
       pointerEvents={visible ? 'box-none' : 'none'}
       accessibilityElementsHidden={!visible}
       importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
-      style={[StyleSheet.absoluteFill, fadeStyle]}
+      style={[StyleSheet.absoluteFill, fadeStyle, Platform.OS === 'web' && gone && !visible ? s.gone : null]}
       testID="tab-bar-host"
     >
       <FloatingTabBar
@@ -89,3 +98,7 @@ export default function TabBarHost({ navigationRef }) {
     </Animated.View>
   );
 }
+
+const s = StyleSheet.create({
+  gone: { visibility: 'hidden' },
+});
