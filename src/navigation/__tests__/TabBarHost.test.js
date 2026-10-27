@@ -1,4 +1,5 @@
 import React from 'react';
+import { Platform, StyleSheet } from 'react-native';
 import { act, render } from '@testing-library/react-native';
 import TabBarHost, { TabBarPublisher } from '../TabBarHost';
 
@@ -71,5 +72,25 @@ describe('TabBarHost', () => {
     act(() => utils.getByTestId('bar').props.bar.leaveScreen());
 
     expect(ref.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'POP_TO_TOP', target: 'root' }));
+  });
+
+  test('on the web, a faded-out bar is hidden so it cannot take clicks', () => {
+    const os = Platform.OS;
+    Platform.OS = 'web';
+    try {
+      const ref = makeRef(['Main']);
+      const utils = renderHost(ref);
+      const visibility = () => StyleSheet.flatten(
+        utils.getByTestId('tab-bar-host', { includeHiddenElements: true }).props.style,
+      ).visibility;
+
+      expect(visibility()).toBeUndefined();
+      act(() => ref.go(['Main', 'Setup', 'CoursePicker']));
+      expect(visibility()).toBe('hidden');
+      act(() => ref.go(['Main']));
+      expect(visibility()).toBeUndefined();
+    } finally {
+      Platform.OS = os;
+    }
   });
 });
