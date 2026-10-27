@@ -107,10 +107,14 @@ project `golf-partner-app`, EU region) once settings hydrate, and forwards every
 `usageStats` switch (off = nothing sent, and an opted-out user's earlier crash is never
 flushed), sends the account id only (`sendDefaultPii: false`), and is off in dev builds
 and without `EXPO_PUBLIC_SENTRY_DSN` (`.env`, and the EAS `preview` environment).
-The Expo plugin uploads source maps during `eas build` with `SENTRY_AUTH_TOKEN` (EAS
-`preview` secret); without that token set `SENTRY_DISABLE_AUTO_UPLOAD=true` there, or
-the Android build fails. OTA bundles need their own upload after `eas update`:
-`npx sentry-expo-upload-sourcemaps dist` with `SENTRY_AUTH_TOKEN` in the shell.
+Source maps: the Expo plugin uploads them during the Android build with the org token
+`SENTRY_AUTH_TOKEN` — an EAS `preview` secret for `eas build`, and
+`C:/Users/marco/gp/.env.sentry-build-plugin` (git-ignored, next to `credentials.json`)
+for local builds there; Sentry's Gradle step reads that file by itself. Without a token
+the build fails unless `SENTRY_DISABLE_AUTO_UPLOAD=true`. Every OTA needs its own
+upload, right after `eas update` and from the same checkout (it reads `dist/`):
+`SENTRY_AUTH_TOKEN=$(sed -n 's/^SENTRY_AUTH_TOKEN=//p' C:/Users/marco/gp/.env.sentry-build-plugin) npx sentry-expo-upload-sourcemaps dist`.
+Never print or commit the token.
 
 ### Wear OS companion
 
