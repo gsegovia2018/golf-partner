@@ -49,7 +49,6 @@ const judgeRange = (v, { green: [gLo, gHi], yellow: [yLo, yHi] }) => {
 // (plan L1) calibrates it on the owner's marked clips; iron and driver share them unless listed.
 export const CLUBS = ['iron', 'driver'];
 const SHARED = {
-  handsUnderShoulders: [8, 12], // cm, |grip x - shoulder-midpoint x|; 4 cm was ~4 deg of arm lean, inside landmark noise
   // degrees between ear->shoulder and shoulder->hip. Looking down at the ball bends the neck,
   // so a dropped head gets that room (the owner's straight back reads 33-38); a lifted one does not.
   backLine: { dropped: [40, 50], up: [10, 20] },
@@ -59,7 +58,6 @@ const SHARED = {
   // 2026-10-18 lab table (owner-approved): 7-10 deg of straightening going back is common while the
   // leg keeps its flex at the top; red only when it nears straight.
   kneeHold: [10, 15], // degrees of trail-knee flex gained or lost since address
-  leadArmSpine: [10, 20], // degrees off perpendicular to the spine at the top
   handsOverHeels: [6, 18], // cm, |grip x - trail heel x| at the top; owner's ~15 cm is a "watch", not a "fix"
   downPlane: { above: [4, 10], under: [12, 20] }, // cm, clubhead above / under the address plane at P6
   downVsTakeaway: [0, 10], // cm, P6 clubhead minus P2 clubhead vs the plane (+ = steeper coming down)
@@ -82,6 +80,8 @@ export const THRESHOLDS = {
     spineHold: [3, 6], // degrees of tilt lost (or gained) since address, P2-P6
     buttYellowCm: 15,
     headDrift: [5, 10], // cm
+    handsUnderShoulders: [8, 12], // cm, |grip x - shoulder-midpoint x|; 4 cm was ~4 deg of arm lean, inside landmark noise
+    leadArmSpine: [10, 20], // degrees off perpendicular to the spine at the top
     ...SHARED,
   },
   driver: {
@@ -93,6 +93,11 @@ export const THRESHOLDS = {
     spineHold: [4, 7],
     buttYellowCm: 20,
     headDrift: [6, 12],
+    // The longer, flatter shaft sets the hands further out and the top more upright: the tour
+    // driver reference swings read hands 1 and 12 cm (Oosthuizen red on the iron limit) and the
+    // lead arm 14 and 17 deg (McIlroy's iron 8), 2026-10-30.
+    handsUnderShoulders: [12, 18],
+    leadArmSpine: [15, 24],
     ...SHARED,
   },
 };

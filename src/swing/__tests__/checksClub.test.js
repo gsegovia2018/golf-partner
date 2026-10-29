@@ -34,13 +34,11 @@ const at = (frame, hands, head = null) => ({
 
 // The limits both clubs share (D21, checks v2): provisional until the lab table (plan L1).
 const SHARED = {
-  handsUnderShoulders: [8, 12],
   backLine: { dropped: [40, 50], up: [10, 20] },
   kneeFlex: { green: [15, 30], yellow: [10, 35] },
   shaftPlane: [10, 18],
   takeawayPlane: [8, 15],
   kneeHold: [10, 15],
-  leadArmSpine: [10, 20],
   handsOverHeels: [6, 18],
   downPlane: { above: [4, 10], under: [12, 20] },
   downVsTakeaway: [0, 10],
@@ -67,6 +65,8 @@ describe('THRESHOLDS table (D19)', () => {
       spineHold: [3, 6],
       buttYellowCm: 15,
       headDrift: [5, 10],
+      handsUnderShoulders: [8, 12],
+      leadArmSpine: [10, 20],
       ...SHARED,
     });
     expect(THRESHOLDS.driver).toEqual({
@@ -78,7 +78,35 @@ describe('THRESHOLDS table (D19)', () => {
       spineHold: [4, 7],
       buttYellowCm: 20,
       headDrift: [6, 12],
+      handsUnderShoulders: [12, 18],
+      leadArmSpine: [15, 24],
       ...SHARED,
+    });
+  });
+});
+
+describe('driver setup and top (tour driver reference swings)', () => {
+  test('hands_under_shoulders: a driver sets the hands further out', () => {
+    [[5, 'green', 'green'], [10, 'yellow', 'green'], [-10, 'yellow', 'green'], [14, 'red', 'yellow'], [16, 'red', 'yellow'], [20, 'red', 'red']].forEach(([d, iron, driver]) => {
+      // pose33 puts the shoulder midpoint at x = 100 sin(30 deg) = 50
+      const input = { checkpoints: { address: at(1, H(50 + d, 0)) }, pose: () => pose33({ tilt: 30 }) };
+      expect([d, status('iron', 'hands_under_shoulders', input)]).toEqual([d, iron]);
+      expect([d, status('driver', 'hands_under_shoulders', input)]).toEqual([d, driver]);
+    });
+  });
+
+  test('lead_arm_spine: a driver top sits more upright', () => {
+    const top = (d) => {
+      const lm = pose33({ tilt: 30 });
+      const [sx, sy] = lm[11];
+      const a = Math.atan2(sy, sx) + rad(90 - d); // the arm (90 - d) deg off the spine
+      lm[15] = [sx + 100 * Math.cos(a), sy + 100 * Math.sin(a), 1];
+      return lm;
+    };
+    [[8, 'green', 'green'], [14, 'yellow', 'green'], [17, 'yellow', 'yellow'], [22, 'red', 'yellow'], [26, 'red', 'red']].forEach(([d, iron, driver]) => {
+      const input = { checkpoints: { top: at(1, H(0, 0)) }, pose: () => top(d) };
+      expect([d, status('iron', 'lead_arm_spine', input)]).toEqual([d, iron]);
+      expect([d, status('driver', 'lead_arm_spine', input)]).toEqual([d, driver]);
     });
   });
 });
@@ -203,7 +231,8 @@ describe('the golden owner swing', () => {
     expect(driver.butt_extension).toBe('yellow'); // red -> yellow: 20 cm limit
     expect(driver.hands_height_impact).toBe('yellow'); // ~11 cm: yellow in both, band(8, 12) and band(10, 14)
     expect(driver['spine_hold@shaftDown']).toBe('green'); // 3 degrees: yellow -> green, band(4, 7)
+    expect(driver.hands_under_shoulders).toBe('green'); // 8 cm: yellow -> green, band(12, 18)
     const changed = Object.keys(iron).filter((k) => iron[k] !== driver[k]).sort();
-    expect(changed).toEqual(['butt_extension', 'spine_hold@shaftDown']);
+    expect(changed).toEqual(['butt_extension', 'hands_under_shoulders', 'spine_hold@shaftDown']);
   });
 });

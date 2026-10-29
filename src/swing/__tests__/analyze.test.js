@@ -17,10 +17,10 @@ const byId = (a, id, cp) => a.checks.find((c) => c.id === id && (!cp || c.cp ===
 describe('analyze: the whole pipeline on the fixture', () => {
   const a = analyze(native(), { pass2, handedness: 'right', heightCm: 176, club: 'iron', source: 'import', swingId: 's1', createdAt: 'x' });
 
-  test('shape of analysis.json (schema swing-analysis/5)', () => {
+  test('shape of analysis.json (schema swing-analysis/6)', () => {
     expect(a.error).toBeUndefined();
     expect(a.schema).toBe(SCHEMA);
-    expect(SCHEMA).toBe('swing-analysis/5');
+    expect(SCHEMA).toBe('swing-analysis/6');
     expect(a).toMatchObject({ swingId: 's1', club: 'iron', handedness: 'right', view: 'dtl', source: 'import' });
     expect(a.fps).toMatchObject({ factor: 8, source: 'estimate', approximate: false });
     expect(a.scale.approx).toBe(false);

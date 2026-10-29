@@ -74,7 +74,7 @@ describe('runAnalysis', () => {
 
     expect(res.pass2).toBe('done');
     expect(res.analysis.main.fault).toBe('early_extension'); // checks v2: impact is tier 1 and red
-    expect(res.analysis.schema).toBe('swing-analysis/5');
+    expect(res.analysis.schema).toBe('swing-analysis/6');
     expect([...new Set(stages)]).toEqual(['reading', 'pose', 'planes']);
     expect(api.analyzePose).toHaveBeenCalledWith('file:///doc/swings/s1/video.mp4', { model: 'full', handedness: 'right', heightCm: 176 });
     // The result opens after the first save, before pass 2 finishes.
