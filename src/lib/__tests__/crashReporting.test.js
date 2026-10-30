@@ -87,6 +87,18 @@ test('forwards the app\'s reported errors and warnings', () => {
   expect(Sentry.captureMessage).toHaveBeenCalledWith('queue stuck', { level: 'warning', extra: undefined });
 });
 
+test('an offline network failure stays in the app and is not sent', () => {
+  load().startCrashReporting();
+  hydrate();
+  // What supabase-js returns for an upsert with no signal (the replicator's push).
+  captureException({ message: 'TypeError: Network request failed', code: '' }, { scope: 'cards.replicator' });
+  captureException(new TypeError('Network request failed'));
+  expect(Sentry.captureException).not.toHaveBeenCalled();
+  expect(reporting.getRecentEvents()).toHaveLength(2);
+  captureException({ message: 'new row violates row-level security', code: '42501' });
+  expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+});
+
 test('turning the switch off closes it and drops queued events; on starts it again', () => {
   load().startCrashReporting();
   hydrate();

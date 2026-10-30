@@ -7,6 +7,7 @@ import { authUserId } from '../lib/authUser';
 import { takesMonth } from './leagueRules';
 import { leagueErrorDescriptor } from './leagueErrors';
 import { track } from '../lib/telemetry';
+import { isNetworkFailure } from '../lib/errorReporting';
 
 // Client surface for the league tables and RPCs (see
 // supabase/migrations/20261004000000_leagues.sql and
@@ -45,14 +46,9 @@ function isOfflineNow() {
   return Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.onLine === false;
 }
 
-// A postgres/PostgREST error always carries a `code`; only a real network
-// failure (fetch TypeError, "Network request failed", offline browser) maps to
-// the offline message. Anything else keeps its own message.
-export function isNetworkFailure(error) {
-  if (!error || error.code) return false;
-  if (error instanceof TypeError) return true;
-  return /network request failed|failed to fetch|networkerror|load failed|network error/i.test(String(error.message ?? ''));
-}
+// Only a real network failure (lib/errorReporting isNetworkFailure) or an
+// offline browser maps to the offline message. Anything else keeps its own message.
+export { isNetworkFailure };
 
 export function toLeagueError(error) {
   if (error instanceof LeagueError) return error;
