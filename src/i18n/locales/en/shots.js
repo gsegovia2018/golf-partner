@@ -197,7 +197,6 @@ export default {
   'shots.seen.notAShot': 'Not a shot',
   'shots.seen.add': 'Add',
   'shots.seen.addWith': 'Add · {club}',
-  'shots.seen.clubA11y': 'Club: {club}. Tap to change it',
   'shots.seen.missing': {
     one: '{count} shot not on the map',
     other: '{count} shots not on the map',
