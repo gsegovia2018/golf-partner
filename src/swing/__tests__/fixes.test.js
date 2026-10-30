@@ -27,6 +27,8 @@ const KEYS = {
   hands_height_impact: ['up', 'down'],
   hands_out_impact: ['in', 'out'],
   shaft_angle_impact: ['up', 'down'],
+  hands_bicep: ['out', 'deep'],
+  finish_trail_foot: ['flat'],
 };
 // The fault each row names (checks.js), by id and, where it depends on it, direction.
 const FAULT = {
@@ -40,6 +42,7 @@ const FAULT = {
   shaft_through_ball: { beyond: 'flip', inside: 'over_the_top' }, through_vs_halfway: 'flip',
   tempo: { fast: 'tempo_fast', slow: 'tempo_slow' }, finish_balance: 'balance', head_drift: 'head_sway',
   hands_height_impact: 'early_extension', hands_out_impact: 'early_extension', shaft_angle_impact: 'early_extension',
+  hands_bicep: { out: 'steep_backswing', deep: 'flat_backswing' }, finish_trail_foot: 'balance',
 };
 const faultOf = (id, dir) => (typeof FAULT[id] === 'object' ? FAULT[id][dir] : FAULT[id]) ?? null;
 const POS = { hip_drift: 'impact', spine_loss: 'impact', hands_under_shoulders: 'address', back_line: 'address', knee_flex: 'address' };

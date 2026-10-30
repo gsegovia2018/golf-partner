@@ -17,10 +17,10 @@ const byId = (a, id, cp) => a.checks.find((c) => c.id === id && (!cp || c.cp ===
 describe('analyze: the whole pipeline on the fixture', () => {
   const a = analyze(native(), { pass2, handedness: 'right', heightCm: 176, club: 'iron', source: 'import', swingId: 's1', createdAt: 'x' });
 
-  test('shape of analysis.json (schema swing-analysis/6)', () => {
+  test('shape of analysis.json (schema swing-analysis/7)', () => {
     expect(a.error).toBeUndefined();
     expect(a.schema).toBe(SCHEMA);
-    expect(SCHEMA).toBe('swing-analysis/6');
+    expect(SCHEMA).toBe('swing-analysis/7');
     expect(a).toMatchObject({ swingId: 's1', club: 'iron', handedness: 'right', view: 'dtl', source: 'import' });
     expect(a.fps).toMatchObject({ factor: 8, source: 'estimate', approximate: false });
     expect(a.scale.approx).toBe(false);
@@ -32,11 +32,11 @@ describe('analyze: the whole pipeline on the fixture', () => {
     expect(Math.abs(a.reference.shaftPlaneDeg - 52)).toBeLessThanOrEqual(6);
   });
 
-  test('all 27 rows produce a status; counts add up', () => {
-    expect(a.checks).toHaveLength(27);
+  test('all 30 rows produce a status; counts add up', () => {
+    expect(a.checks).toHaveLength(30);
     a.checks.forEach((c) => expect(['green', 'yellow', 'red', 'unknown']).toContain(c.status));
     const c = a.counts;
-    expect(c.green + c.yellow + c.red + c.unknown).toBe(27);
+    expect(c.green + c.yellow + c.red + c.unknown).toBe(30);
   });
 
   test('D16: without placed marks the club-dependent checks are unknown, the rest are measured', () => {
@@ -53,8 +53,10 @@ describe('analyze: the whole pipeline on the fixture', () => {
 
   test('main fault (spec §6): impact is tier 1 and red, so early extension leads; nothing red before it', () => {
     // Without marks the takeaway and halfway-back clubheads are unplaced, and the top is a yellow
-    // since the lab table (hands over heels 6 / 18 cm), so there is no earlier red to start from.
+    // since the lab table (hands over heels 6 / 18 cm). The hands sit 28 cm in front of the trail
+    // shoulder halfway back (hands_bicep): past every tour swing, a watch rather than a fix.
     expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: null, consequences: [] });
+    expect(byId(a, 'hands_bicep')).toMatchObject({ status: 'yellow', value: 28, dir: 'out', fault: 'steep_backswing' });
     expect(a.main.evidence[0].id).toBe('spine_loss');
     expect(a.main.drills[0]).toBe('ee-silla');
   });

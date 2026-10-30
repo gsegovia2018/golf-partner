@@ -13,6 +13,7 @@ import {
   LM, angleAboveHorizontal, angleBetween, sideOfLine, extendToY, spineTiltDeg, mid, trailShoulder, kneeFlexDeg,
 } from './geometry';
 import { headTrusted } from './club';
+import { median } from './smoothing';
 import { SWING_STRINGS as T } from './strings';
 import { t } from '../i18n';
 
@@ -65,6 +66,13 @@ const SHARED = {
   // cm, the hip point farthest from the ball. Reference swings: five tour swings -3..+1, the
   // owner's five calibrated ones +5..+12 (his early extension is real, #238).
   hipDrift: [3, 6],
+  // The coach series (plan 2026-10-30), set from the seven tour swings (2026-10-31): green is the tour range
+  // widened by a sixth of its spread on each side, yellow a further third, so red is clearly outside them all.
+  // cm, grip vs the trail shoulder at halfway back (+ = toward the ball). Tour -4..+20.
+  handsBicep: { green: [-8, 24], yellow: [-16, 32] },
+  // cm, median distance of the exiting hands from the ball -> top-hands line (+ = above). Tour -6..+14.
+  symmetry: { green: [-10, 18], yellow: [-18, 26] },
+  trailFoot: { green: [2, Infinity], yellow: [-1, Infinity] }, // cm, trail heel above its toe at the finish. Tour 3..12.
 };
 export const DEFAULT_CLUB = 'iron';
 export const THRESHOLDS = {
@@ -116,6 +124,7 @@ const LANDING_CAP_CM = 50;
 // Checks whose value depends on the impact frame inherit `approximate` from the fps model.
 const IMPACT_DEPENDENT = new Set([
   'hands_height_impact', 'hands_out_impact', 'shaft_angle_impact', 'spine_loss', 'hip_drift', 'head_drift', 'tempo',
+  'swing_symmetry',
 ]);
 
 /**
@@ -186,8 +195,8 @@ export function runChecks(input) {
     return p && q ? mid(p, q) : null;
   };
   const left = handedness === 'left';
-  const [trailHipIdx, trailKneeIdx, trailAnkIdx, trailHeelIdx] = left
-    ? [LM.lHip, LM.lKnee, LM.lAnk, LM.lHeel] : [LM.rHip, LM.rKnee, LM.rAnk, LM.rHeel];
+  const [trailHipIdx, trailKneeIdx, trailAnkIdx, trailHeelIdx, trailToeIdx, trailShIdx] = left
+    ? [LM.lHip, LM.lKnee, LM.lAnk, LM.lHeel, LM.lToe, LM.lSh] : [LM.rHip, LM.rKnee, LM.rAnk, LM.rHeel, LM.rToe, LM.rSh];
   const [leadShIdx, leadWrIdx, leadAnkIdx] = left ? [LM.rSh, LM.rWr, LM.rAnk] : [LM.lSh, LM.lWr, LM.lAnk];
   const planes = getPlanes(input);
   const rows = [];
@@ -397,6 +406,24 @@ export function runChecks(input) {
       push(m, j, round(r.fromBall, 0), 'cm', text, {
         dir, miss: round(r.miss, 0), capped: r.capped, fault: dir === 'steep' ? 'steep_backswing' : dir === 'flat' ? 'flat_backswing' : null,
       });
+    }
+  }
+  // hands_bicep: the grip against the trail shoulder (+ = toward the ball). Seen from behind, the hands
+  // should cover the trail biceps; in front of the shoulder they sit over the chest (lifted up and away),
+  // far behind it they were whipped inside. The shoulder, not the elbow: the trail elbow landmark wanders
+  // behind the body down the line.
+  {
+    const m = M('hands_bicep', 'leadArm', ['leadArm']);
+    const c = C.leadArm;
+    const sh = lm('leadArm', trailShIdx);
+    if (!c) rows.push(unknown(m, 'nodata', why('noMark', { what: cpName('leadArm') })));
+    else if (!sh) rows.push(unknown(m, 'nopose', T.reason.nopose(cpName('leadArm'))));
+    else {
+      const d = (c.hands.x - sh.x) * cm;
+      const j = judgeRange(d, TH.handsBicep);
+      const dir = j.side === 'high' ? 'out' : j.side === 'low' ? 'deep' : null;
+      push(m, j, round(d, 0), 'cm', T.checkText.hands_bicep(d, dir),
+        { dir, fault: dir === 'out' ? 'steep_backswing' : dir === 'deep' ? 'flat_backswing' : null });
     }
   }
   spineHold('leadArm');
@@ -620,6 +647,55 @@ export function runChecks(input) {
     } else {
       const d = angleAboveHorizontal(i.head, i.hands) - angleAboveHorizontal(a.head, a.hands);
       push(m, judge(d, TH.shaftAngle), round(d, 0), '°', d >= 0 ? T.checkText.shaft_angle_impact_up(d) : T.checkText.shaft_angle_impact_down(-d));
+    }
+  }
+
+  // swing_symmetry: a line from the ball through the hands at the top; after impact the hands should exit
+  // along it. The median distance (+ = above / outside it) over the stretch where the hands climb from
+  // the trail shoulder's height to the top hands' height. Shown, not tied to a fault yet (plan 2026-10-30).
+  {
+    const m = X('swing_symmetry', ['top', 'impact', 'finish']);
+    const wristsAt = (f) => {
+      const row = pose?.(f);
+      const a = row?.[LM.lWr];
+      const b = row?.[LM.rWr];
+      return a && b && Number.isFinite(a[0]) && Number.isFinite(b[0]) ? { x: mx((a[0] + b[0]) / 2), y: (a[1] + b[1]) / 2 } : null;
+    };
+    const tp = cps.top?.frame;
+    const im = cps.impact?.frame;
+    const fin = cps.finish?.frame;
+    const top = tp != null ? wristsAt(tp) : null;
+    const sh = lm('impact', trailShIdx);
+    if (!ball) rows.push(unknown(m, 'nodata', why('noAddressPlane')));
+    else if (tp == null || im == null || fin == null || fin <= im) rows.push(unknown(m, 'nodata', why('needsOrder')));
+    else if (!top || !sh) rows.push(unknown(m, 'nopose', T.reason.nopose(at('top'))));
+    else {
+      const ds = [];
+      for (let f = im + 1; f <= fin; f++) {
+        const p = wristsAt(f);
+        if (p && p.y <= sh.y && p.y >= top.y) ds.push(sideOfLine(p, ball, top) * cm);
+      }
+      if (ds.length < 3) rows.push(unknown(m, 'nodata', why('noExit')));
+      else {
+        const d = median(ds);
+        const j = judgeRange(d, TH.symmetry);
+        const dir = d > 0 ? 'above' : 'under';
+        push(m, j, round(d, 0), 'cm', j.status === 'green' ? T.checkText.swing_symmetry_ok : T.checkText.swing_symmetry(d, dir), { dir });
+      }
+    }
+  }
+
+  // finish_trail_foot: the weight is off the trail foot, up on its toe (the trail heel above the toe).
+  {
+    const m = X('finish_trail_foot', ['finish'], { fault: 'balance' });
+    const heel = lm('finish', trailHeelIdx);
+    const toe = lm('finish', trailToeIdx);
+    if (!heel || !toe) rows.push(unknown(m, 'nopose', T.reason.nopose(at('finish'))));
+    else {
+      const v = (toe.y - heel.y) * cm;
+      const j = judgeRange(v, TH.trailFoot);
+      push(m, j, round(v, 0), 'cm', j.status === 'green' ? T.checkText.finish_trail_foot_ok : T.checkText.finish_trail_foot(v),
+        j.side ? { dir: 'flat' } : {});
     }
   }
 

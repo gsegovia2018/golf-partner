@@ -281,6 +281,26 @@ export function highlightFor(check, ctx) {
       const a = lm('finish', leadAnkle);
       return a ? [{ t: 'line', a: [a[0], Math.max(0, a[1] - 0.4)], b: a, dash: true, role: 'target' }] : [];
     }
+    case 'hands_bicep': {
+      // straight down from the trail shoulder to the hands' height: the hands should cover that line
+      const sh = lm('leadArm', left ? LM.lSh : LM.rSh);
+      const g = hands('leadArm');
+      if (!sh || !g) return [];
+      return [{ t: 'line', a: sh, b: [sh[0], g[1]], dash: true, role: 'target' }, { t: 'rect', c: g, half: 0.018 }, ...text(g, signed(check))];
+    }
+    case 'swing_symmetry': {
+      // the ball -> top-hands line the hands should exit on, and where the hands are on this still
+      const ball = analysis.reference?.ball;
+      const top = hands('top');
+      const g = hands(homeOf(check));
+      if (!ball || !top) return [];
+      return [{ t: 'line', a: ball, b: extendToEdge(ball, top), dash: true, role: 'target' }, ...(g ? [{ t: 'dot', c: g }, ...text(g, signed(check))] : [])];
+    }
+    case 'finish_trail_foot': {
+      const heel = lm('finish', trailHeel);
+      const toe = lm('finish', left ? LM.lToe : LM.rToe);
+      return heel && toe ? [{ t: 'line', a: heel, b: toe }, { t: 'dot', c: heel }, ...text(heel, valueText(check))] : [];
+    }
     default: {
       const h = hands(homeOf(check));
       return h ? text(h, valueText(check)) : [];
