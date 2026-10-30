@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/react-native';
-import { installReporter } from './errorReporting';
+import { installReporter, isNetworkFailure } from './errorReporting';
 import {
   getAppSettings, isSettingsHydrated, subscribeSettingsHydration, subscribeAppSettings,
 } from '../store/settingsStore';
@@ -33,6 +33,9 @@ function start() {
   // Every captureException / captureMessage in the app already goes through
   // errorReporting; this forwards them.
   installReporter((event, error) => {
+    // No signal is normal on a course: the offline-first sync retries, and
+    // the failure stays in the in-app buffer. Not a crash.
+    if (isNetworkFailure(error)) return;
     if (event.level === 'error') {
       Sentry.captureException(error instanceof Error ? error : new Error(event.message), { extra: event.context ?? undefined });
     } else {

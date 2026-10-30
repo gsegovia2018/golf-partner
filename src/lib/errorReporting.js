@@ -46,6 +46,16 @@ function record(level, error, context) {
   return event;
 }
 
+// A postgres/PostgREST error always carries a `code`; only a real network
+// failure (fetch TypeError, "Network request failed", offline browser) has none
+// and matches. supabase-js returns it as `{ message: 'TypeError: Network request
+// failed', code: '' }`.
+export function isNetworkFailure(error) {
+  if (!error || error.code) return false;
+  if (error instanceof TypeError) return true;
+  return /network request failed|failed to fetch|networkerror|load failed|network error/i.test(String(error.message ?? ''));
+}
+
 export function captureException(error, context) {
   console.error('[report]', (error && error.message) || error, context ?? '');
   return record('error', error, context);
