@@ -116,7 +116,6 @@ export default {
   'swing.checkLabel.hands_bicep': 'Hands over the trail biceps',
   'swing.checkLabel.swing_symmetry': 'Swing symmetry',
   'swing.checkLabel.finish_trail_foot': 'Up on the trail toe at the finish',
-  'swing.checkLabel.shaft_top': 'Shaft on line at the top',
   'swing.checkText.hands_bicep_ok': 'Hands cover the trail biceps halfway back',
   'swing.checkText.hands_bicep_out': 'Hands {cm} cm in front of the trail shoulder: over the chest, lifted up and away',
   'swing.checkText.hands_bicep_deep': 'Hands {cm} cm behind the trail shoulder: whipped inside',
@@ -125,7 +124,4 @@ export default {
   'swing.checkText.swing_symmetry_under': 'Hands exit {cm} cm under the line they went back on',
   'swing.checkText.finish_trail_foot_ok': 'Trail heel up: the weight is off the trail foot',
   'swing.checkText.finish_trail_foot': 'Trail heel only {cm} cm above the toe: weight left on the trail foot',
-  'swing.checkText.shaft_top_ok': 'Shaft points down the target line at the top',
-  'swing.checkText.shaft_top_across': 'Shaft points {deg}° right of the target line at the top (across the line)',
-  'swing.checkText.shaft_top_laid_off': 'Shaft points {deg}° left of the target line at the top (laid off)',
 };

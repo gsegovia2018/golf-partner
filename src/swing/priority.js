@@ -16,7 +16,7 @@ import { POSITIONS, TIER, EXTRA_TIER } from './checkpointChecks';
 /** Every fault id a row can name (each has a label, copy and drills). */
 export const FAULTS = [
   'posture', 'posture_loss', 'steep_backswing', 'flat_backswing', 'top_position', 'over_the_top', 'stuck',
-  'early_extension', 'flip', 'head_sway', 'tempo_fast', 'tempo_slow', 'balance', 'across_the_line', 'laid_off',
+  'early_extension', 'flip', 'head_sway', 'tempo_fast', 'tempo_slow', 'balance',
 ];
 
 const RANK = { red: 0, yellow: 1 };

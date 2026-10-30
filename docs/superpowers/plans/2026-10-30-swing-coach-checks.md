@@ -57,10 +57,7 @@ join `FAULTS` (`priority.js`).
 - **R2** is the median over the climb from trail-shoulder height to top-hands height; tour −6..+14 cm → 15 / 25 cm.
   No fault: it shows, it never becomes the main fault.
 - **R3** green from 3 cm of heel above toe, red under 1 (all 13 reference swings 3–24 cm).
-- **R4** is an extra (it never colours Top), graded only while the shaft is shorter than 0.6 × the address
-  shaft (pointing into the picture); the target line's vanishing point is the frame middle at the address hands'
-  height. The owner's five marked tops read 11–46° across the line: **owner to judge on the stills before
-  shipping.**
+- **R4 removed** (owner, 2026-10-30): one down-the-line picture gives no reliable target line at the top.
 - Drills: `sb-muslo` (stick down the lead thigh), `fb-pared` (wall at the trail side), `ott-bolsa` (swivel the
   bag), `fl-bombeo` (pump and stop); `bal-tres-seg` gained the toe tap. Overlays reuse the existing drawing
   vocabulary (no three-design step).

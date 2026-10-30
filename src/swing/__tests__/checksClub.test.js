@@ -47,7 +47,6 @@ const SHARED = {
   handsBicep: { green: [-8, 15], yellow: [-14, 22] },
   symmetry: [15, 25],
   trailFoot: { green: [3, Infinity], yellow: [1, Infinity] },
-  shaftTop: [20, 35],
 };
 
 describe('THRESHOLDS table (D19)', () => {

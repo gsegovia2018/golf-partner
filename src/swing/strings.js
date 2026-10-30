@@ -548,7 +548,6 @@ export const SWING_STRINGS = build({
     shaft_angle_impact: L,
     swing_symmetry: L,
     finish_trail_foot: L,
-    shaft_top: L,
   },
 
   fault: {
@@ -628,8 +627,6 @@ export const SWING_STRINGS = build({
     swing_symmetry: (cm, dir) => t(dir === 'above' ? 'swing.checkText.swing_symmetry_above' : 'swing.checkText.swing_symmetry_under', { cm: n0(Math.abs(cm)) }),
     finish_trail_foot_ok: L,
     finish_trail_foot: (cm) => t('swing.checkText.finish_trail_foot', { cm: n0(Math.max(0, cm)) }),
-    shaft_top_ok: L,
-    shaft_top: (deg, dir) => t(dir === 'across' ? 'swing.checkText.shaft_top_across' : 'swing.checkText.shaft_top_laid_off', { deg: n0(Math.abs(deg)) }),
   },
 
   // Plain-language coaching per check and direction (see fixes.js for how the key is chosen).
@@ -893,20 +890,6 @@ export const SWING_STRINGS = build({
         steps: [L, L, L],
       },
       deep: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-    },
-    shaft_top: {
-      across: {
-        headline: L,
-        cost: L,
-        cue: L,
-        steps: [L, L, L],
-      },
-      laid_off: {
         headline: L,
         cost: L,
         cue: L,

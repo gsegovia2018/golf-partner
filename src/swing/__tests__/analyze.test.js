@@ -32,17 +32,17 @@ describe('analyze: the whole pipeline on the fixture', () => {
     expect(Math.abs(a.reference.shaftPlaneDeg - 52)).toBeLessThanOrEqual(6);
   });
 
-  test('all 31 rows produce a status; counts add up', () => {
-    expect(a.checks).toHaveLength(31);
+  test('all 30 rows produce a status; counts add up', () => {
+    expect(a.checks).toHaveLength(30);
     a.checks.forEach((c) => expect(['green', 'yellow', 'red', 'unknown']).toContain(c.status));
     const c = a.counts;
-    expect(c.green + c.yellow + c.red + c.unknown).toBe(31);
+    expect(c.green + c.yellow + c.red + c.unknown).toBe(30);
   });
 
   test('D16: without placed marks the club-dependent checks are unknown, the rest are measured', () => {
     expect(a.checks.filter((c) => c.status === 'unknown').map((c) => c.id)).toEqual([
       'shaft_plane', 'clubhead_plane_takeaway', 'butt_extension', 'clubhead_plane_down', 'down_vs_takeaway',
-      'shaft_through_ball', 'through_vs_halfway', 'shaft_angle_impact', 'shaft_top',
+      'shaft_through_ball', 'through_vs_halfway', 'shaft_angle_impact',
     ]);
     a.checks.filter((c) => c.status === 'unknown').forEach((c) => expect(c.reason).toBe('unplaced'));
     expect(byId(a, 'spine_loss').status).not.toBe('unknown');

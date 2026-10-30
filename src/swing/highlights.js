@@ -301,15 +301,6 @@ export function highlightFor(check, ctx) {
       const toe = lm('finish', left ? LM.lToe : LM.rToe);
       return heel && toe ? [{ t: 'line', a: heel, b: toe }, { t: 'dot', c: heel }, ...text(heel, valueText(check))] : [];
     }
-    case 'shaft_top': {
-      // the target line's vanishing point (frame middle, at the address hands' height) against your shaft
-      const g = hands('top');
-      const c = head('top');
-      const addr = analysis.reference?.handsAddress;
-      if (!g || !addr) return [];
-      const vp = [0.5, addr[1]];
-      return [{ t: 'line', a: g, b: vp, dash: true, role: 'target' }, ...(c ? [{ t: 'line', a: g, b: c }, ...text(c, signed(check))] : [])];
-    }
     default: {
       const h = hands(homeOf(check));
       return h ? text(h, valueText(check)) : [];

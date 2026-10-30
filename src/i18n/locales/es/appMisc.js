@@ -27,5 +27,4 @@ export default {
   "misc.friend.golfer": "Golfista",
   "misc.holeMap.title": "Mapa del hoyo",
   "misc.swing.why.noExit": "No se ven las manos subir después del impacto",
-  "misc.swing.why.shortOfParallel": "El palo no llega a la horizontal en el top",
 };

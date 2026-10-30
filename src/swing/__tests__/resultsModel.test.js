@@ -40,7 +40,7 @@ describe('checkpointChecks', () => {
   });
 
   test('every check has a home among the ten checkpoints: its position, or (an extra) impact or the finish', () => {
-    expect(unmarked.checks).toHaveLength(31);
+    expect(unmarked.checks).toHaveLength(30);
     unmarked.checks.forEach((c) => expect(checksAt(unmarked.checks, homeOf(c))).toContain(c));
     expect(checksAt(unmarked.checks, 'takeaway').map(CHECK_KEY)).toEqual(['clubhead_plane_takeaway', 'spine_hold@takeaway', 'knee_hold@takeaway']);
     expect(checksAt(unmarked.checks, 'transition')).toHaveLength(0);

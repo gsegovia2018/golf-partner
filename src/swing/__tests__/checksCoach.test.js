@@ -1,5 +1,5 @@
-// The coach-series rows (plan 2026-10-30): hands_bicep, swing_symmetry, finish_trail_foot and
-// shaft_top, driven with tiny synthetic poses (1 px = 1 cm, ball at (300, 200) on the +x side,
+// The coach-series rows (plan 2026-10-30): hands_bicep, swing_symmetry and finish_trail_foot,
+// driven with tiny synthetic poses (1 px = 1 cm, ball at (300, 200) on the +x side,
 // right-handed unless said). The limits are provisional; a calibration moves the numbers, not the shapes.
 import { runChecks } from '../checks';
 import { homeOf } from '../checkpointChecks';
@@ -86,38 +86,5 @@ describe('finish_trail_foot (extra, listed under the finish)', () => {
   });
   test('unknown without the trail foot', () => {
     expect(one(run({ finish: mark(40, pt(0, 0)) }), 'finish_trail_foot')).toMatchObject({ status: 'unknown', reason: 'nopose' });
-  });
-});
-
-describe('shaft_top (extra, listed under the top)', () => {
-  // Address: hands (200, 100), clubhead on the ball, a 141 cm picture shaft. A 600 px frame puts the
-  // vanishing point at (300, 100). At the top the hands are at (100, 0) and a 50 cm shaft points `d`
-  // degrees right of the vanishing point (+ = across the line).
-  const ADDRESS = mark(1, pt(200, 100), pt(300, 200));
-  const HANDS = pt(100, 0);
-  const toVp = Math.atan2(100, 200);
-  const headAt = (d, len = 50) => pt(HANDS.x + len * Math.cos(toVp - (d * Math.PI) / 180), HANDS.y + len * Math.sin(toVp - (d * Math.PI) / 180));
-  const read = (d, { len, extra } = {}) => one(run({ address: ADDRESS, top: mark(4, HANDS, headAt(d, len)) }, () => null, { frameW: 600, ...extra }), 'shaft_top');
-  test('within 20 degrees green, to 35 yellow, else red; across the line or laid off', () => {
-    expect(read(0)).toMatchObject({ status: 'green', value: 0, extra: true, fault: null });
-    expect(read(25)).toMatchObject({ status: 'yellow', value: 25, dir: 'across', fault: 'across_the_line' });
-    expect(read(-40)).toMatchObject({ status: 'red', value: -40, dir: 'laid_off', fault: 'laid_off' });
-    expect(read(25).text).toMatch(/25° right of the target line/);
-    expect(homeOf(read(0))).toBe('top');
-  });
-  test('a left-hander mirrored around the ball reads the same', () => {
-    const m = (p) => pt(mirrorX(p.x), p.y);
-    const left = one(run({ address: mark(1, m(ADDRESS.hands), m(ADDRESS.head)), top: mark(4, m(HANDS), m(headAt(25))) }, () => null,
-      { frameW: 600, handedness: 'left' }), 'shaft_top');
-    expect(left).toMatchObject({ status: 'yellow', value: 25, dir: 'across' });
-  });
-  test('not graded short of parallel, without the clubheads or without the frame width', () => {
-    expect(read(0, { len: 100 })).toMatchObject({ status: 'unknown', reason: 'nodata' });
-    expect(read(0, { len: 100 }).text).toMatch(/short of parallel/);
-    expect(read(-144)).toMatchObject({ status: 'unknown', reason: 'nodata' }); // pointing back at the camera
-    const top = (extra) => one(run({ address: ADDRESS, top: mark(4, HANDS, null, extra) }, () => null, { frameW: 600 }), 'shaft_top');
-    expect(top({ source: 'prior' })).toMatchObject({ status: 'unknown', reason: 'unplaced' });
-    expect(top({ hidden: true })).toMatchObject({ status: 'unknown', reason: 'hidden' });
-    expect(read(0, { extra: { frameW: undefined } })).toMatchObject({ status: 'unknown', reason: 'nodata' });
   });
 });
