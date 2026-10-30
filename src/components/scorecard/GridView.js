@@ -7,6 +7,8 @@ import { View, Text, TextInput, Pressable, useWindowDimensions } from 'react-nat
 import Animated from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
 import useSlidingPill from '../ui/useSlidingPill';
+import Reveal from '../ui/Reveal';
+import { duration } from '../../theme/motion';
 import { useT, t as tNow, formatNumber } from '../../i18n';
 import { unitText } from '../../lib/pointsText';
 import { playersMeFirst } from '../../lib/playerOrder';
@@ -436,7 +438,8 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
       </View>
       )}
 
-      <View style={sideBySide ? s.soloNinesRow : s.soloNinesStack}>
+      {/* Replays on a Strokes | Points switch, like the stats scorecards. */}
+      <Reveal replay={displayMode} dy={4} duration={duration.state} style={sideBySide ? s.soloNinesRow : s.soloNinesStack}>
         <View style={sideBySide ? s.soloNineFlex : null}>
           <NineBlock
             holes={front}
@@ -482,7 +485,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
             />
           </View>
         )}
-      </View>
+      </Reveal>
 
       {/* Round total — single bar for solo (course par + personal totals),
           compact per-player leaderboard for 2+ players. The multi-player card
