@@ -124,4 +124,5 @@ export default {
   'swing.checkText.swing_symmetry_under': 'Las manos salen {cm} cm por debajo de la línea por la que subieron',
   'swing.checkText.finish_trail_foot_ok': 'Talón trasero levantado: el peso ha salido del pie trasero',
   'swing.checkText.finish_trail_foot': 'Talón trasero solo {cm} cm por encima de la punta: el peso se queda en el pie trasero',
+  'swing.checkText.finish_trail_foot_down': 'Talón trasero aún apoyado: el peso se queda en el pie trasero',
 };

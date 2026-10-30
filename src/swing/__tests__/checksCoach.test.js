@@ -24,17 +24,17 @@ const mirrorX = (x) => 600 - x; // around the ball's x
 describe('hands_bicep (halfway back)', () => {
   // Trail shoulder (12) at the origin; the grip `d` cm toward the ball of it.
   const read = (d) => one(run({ leadArm: mark(3, pt(d, 25)) }, () => pose({ 12: [0, 0] })), 'hands_bicep');
-  test('-8..15 green, -14..22 yellow, else red; in front = out (steep), behind = deep (flat)', () => {
-    expect(read(5)).toMatchObject({ status: 'green', value: 5, dir: null, fault: null, position: 'leadArm' });
-    expect(read(18)).toMatchObject({ status: 'yellow', dir: 'out', fault: 'steep_backswing' });
-    expect(read(25)).toMatchObject({ status: 'red', dir: 'out', fault: 'steep_backswing' });
-    expect(read(-10)).toMatchObject({ status: 'yellow', dir: 'deep', fault: 'flat_backswing' });
+  test('-8..24 green, -16..32 yellow, else red; in front = out (steep), behind = deep (flat)', () => {
+    expect(read(20)).toMatchObject({ status: 'green', value: 20, dir: null, fault: null, position: 'leadArm' });
+    expect(read(28)).toMatchObject({ status: 'yellow', dir: 'out', fault: 'steep_backswing' });
+    expect(read(35)).toMatchObject({ status: 'red', dir: 'out', fault: 'steep_backswing' });
+    expect(read(-12)).toMatchObject({ status: 'yellow', dir: 'deep', fault: 'flat_backswing' });
     expect(read(-20)).toMatchObject({ status: 'red', dir: 'deep' });
-    expect(read(25).text).toMatch(/25 cm in front of the trail shoulder/);
+    expect(read(35).text).toMatch(/35 cm in front of the trail shoulder/);
   });
   test('a left-hander mirrored around the ball reads the same (the trail shoulder is 11)', () => {
-    const left = one(run({ leadArm: mark(3, pt(mirrorX(18), 25)) }, () => pose({ 11: [mirrorX(0), 0] }), { handedness: 'left' }), 'hands_bicep');
-    expect(left).toMatchObject({ status: 'yellow', value: 18, dir: 'out' });
+    const left = one(run({ leadArm: mark(3, pt(mirrorX(28), 25)) }, () => pose({ 11: [mirrorX(0), 0] }), { handedness: 'left' }), 'hands_bicep');
+    expect(left).toMatchObject({ status: 'yellow', value: 28, dir: 'out' });
   });
   test('unknown without the pose or the halfway-back mark', () => {
     expect(one(run({ leadArm: mark(3, pt(5, 25)) }), 'hands_bicep')).toMatchObject({ status: 'unknown', reason: 'nopose' });
@@ -59,10 +59,12 @@ describe('swing_symmetry (extra, listed under the follow-through)', () => {
   };
   const cps = { top: mark(10, TOP), impact: mark(20, pt(290, 190)), finish: mark(30, TOP) };
   const read = (d, extra) => one(run(cps, poseAt(d), extra), 'swing_symmetry');
-  test('within 15 cm green, to 25 yellow, else red; above or under the line; no fault yet', () => {
+  test('-10..18 green, -18..26 yellow, else red; above or under the line; no fault yet', () => {
     expect(read(0)).toMatchObject({ status: 'green', value: 0, extra: true });
     expect(read(-30).fault).toBeUndefined();
-    expect(read(18)).toMatchObject({ status: 'yellow', value: 18, dir: 'above' });
+    expect(read(16)).toMatchObject({ status: 'green', value: 16 });
+    expect(read(22)).toMatchObject({ status: 'yellow', value: 22, dir: 'above' });
+    expect(read(-14)).toMatchObject({ status: 'yellow', value: -14, dir: 'under' });
     expect(read(-30)).toMatchObject({ status: 'red', value: -30, dir: 'under' });
     expect(read(-30).text).toMatch(/30 cm under the line/);
     expect(homeOf(read(0))).toBe('trailArm');
@@ -77,11 +79,13 @@ describe('swing_symmetry (extra, listed under the follow-through)', () => {
 describe('finish_trail_foot (extra, listed under the finish)', () => {
   // Trail heel (30) `v` cm above the trail toe (32) at the finish.
   const read = (v) => one(run({ finish: mark(40, pt(0, 0)) }, () => pose({ 30: [0, 100 - v], 32: [10, 100] })), 'finish_trail_foot');
-  test('3 cm and up green, 1-3 yellow, under 1 red; fault balance', () => {
-    expect(read(8)).toMatchObject({ status: 'green', value: 8, extra: true, fault: 'balance' });
-    expect(read(2)).toMatchObject({ status: 'yellow', dir: 'flat' });
-    expect(read(0)).toMatchObject({ status: 'red', dir: 'flat' });
-    expect(read(0).text).toMatch(/only 0 cm above the toe/);
+  test('2 cm and up green, -1..2 yellow, below -1 red; fault balance', () => {
+    expect(read(3)).toMatchObject({ status: 'green', value: 3, extra: true, fault: 'balance' });
+    expect(read(1)).toMatchObject({ status: 'yellow', dir: 'flat' });
+    expect(read(1).text).toMatch(/only 1 cm above the toe/);
+    expect(read(0)).toMatchObject({ status: 'yellow', dir: 'flat' });
+    expect(read(-3)).toMatchObject({ status: 'red', dir: 'flat' });
+    expect(read(-3).text).toMatch(/Trail heel still down/);
     expect(homeOf(read(8))).toBe('finish');
   });
   test('unknown without the trail foot', () => {

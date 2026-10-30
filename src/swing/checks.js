@@ -66,11 +66,13 @@ const SHARED = {
   // cm, the hip point farthest from the ball. Reference swings: five tour swings -3..+1, the
   // owner's five calibrated ones +5..+12 (his early extension is real, #238).
   hipDrift: [3, 6],
-  // The coach series (plan 2026-10-30). PROVISIONAL until the owner's bad-swing clips set the red sides.
-  // cm, grip vs the trail shoulder at halfway back (+ = toward the ball). Tour -4..+20, the owner -3..+7.
-  handsBicep: { green: [-8, 15], yellow: [-14, 22] },
-  symmetry: [15, 25], // cm (tour -6..+14), median distance of the exiting hands from the ball -> top-hands line
-  trailFoot: { green: [3, Infinity], yellow: [1, Infinity] }, // cm, trail heel above its toe at the finish
+  // The coach series (plan 2026-10-30), set from the seven tour swings (2026-10-31): green is the tour range
+  // widened by a sixth of its spread on each side, yellow a further third, so red is clearly outside them all.
+  // cm, grip vs the trail shoulder at halfway back (+ = toward the ball). Tour -4..+20.
+  handsBicep: { green: [-8, 24], yellow: [-16, 32] },
+  // cm, median distance of the exiting hands from the ball -> top-hands line (+ = above). Tour -6..+14.
+  symmetry: { green: [-10, 18], yellow: [-18, 26] },
+  trailFoot: { green: [2, Infinity], yellow: [-1, Infinity] }, // cm, trail heel above its toe at the finish. Tour 3..12.
 };
 export const DEFAULT_CLUB = 'iron';
 export const THRESHOLDS = {
@@ -676,7 +678,7 @@ export function runChecks(input) {
       if (ds.length < 3) rows.push(unknown(m, 'nodata', why('noExit')));
       else {
         const d = median(ds);
-        const j = sym(d, TH.symmetry);
+        const j = judgeRange(d, TH.symmetry);
         const dir = d > 0 ? 'above' : 'under';
         push(m, j, round(d, 0), 'cm', j.status === 'green' ? T.checkText.swing_symmetry_ok : T.checkText.swing_symmetry(d, dir), { dir });
       }

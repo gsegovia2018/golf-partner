@@ -58,6 +58,11 @@ join `FAULTS` (`priority.js`).
   No fault: it shows, it never becomes the main fault.
 - **R3** green from 3 cm of heel above toe, red under 1 (all 13 reference swings 3–24 cm).
 - **R4 removed** (owner, 2026-10-30): one down-the-line picture gives no reliable target line at the top.
+- **Limits from the tour swings (2026-10-31, owner).** Green = the range of the seven tour swings widened by a
+  sixth of its spread on each side, yellow a further third: `hands_bicep` −8..24 / −16..32 cm (tour −4..+20),
+  `swing_symmetry` −10..18 / −18..26 cm (tour −6..+14, Woods' and Rose's balls marked on the stills for the
+  table), `finish_trail_foot` ≥ 2 / ≥ −1 cm (tour 3..12). A guard test keeps every tour swing green on them.
+  The 10 Oct test swing's 28 cm is now a yellow, so its main fault no longer "starts" halfway back.
 - Drills: `sb-muslo` (stick down the lead thigh), `fb-pared` (wall at the trail side), `ott-bolsa` (swivel the
   bag), `fl-bombeo` (pump and stop); `bal-tres-seg` gained the toe tap. Overlays reuse the existing drawing
   vocabulary (no three-design step).

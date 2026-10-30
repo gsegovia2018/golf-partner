@@ -44,9 +44,9 @@ const SHARED = {
   downVsTakeaway: [0, 10],
   throughVsHalfway: [10, 20],
   hipDrift: [3, 6],
-  handsBicep: { green: [-8, 15], yellow: [-14, 22] },
-  symmetry: [15, 25],
-  trailFoot: { green: [3, Infinity], yellow: [1, Infinity] },
+  handsBicep: { green: [-8, 24], yellow: [-16, 32] },
+  symmetry: { green: [-10, 18], yellow: [-18, 26] },
+  trailFoot: { green: [2, Infinity], yellow: [-1, Infinity] },
 };
 
 describe('THRESHOLDS table (D19)', () => {

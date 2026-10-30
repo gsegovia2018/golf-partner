@@ -124,4 +124,5 @@ export default {
   'swing.checkText.swing_symmetry_under': 'Hands exit {cm} cm under the line they went back on',
   'swing.checkText.finish_trail_foot_ok': 'Trail heel up: the weight is off the trail foot',
   'swing.checkText.finish_trail_foot': 'Trail heel only {cm} cm above the toe: weight left on the trail foot',
+  'swing.checkText.finish_trail_foot_down': 'Trail heel still down: weight left on the trail foot',
 };

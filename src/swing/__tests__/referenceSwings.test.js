@@ -35,6 +35,14 @@ describe('reference swings', () => {
   test('early extension stays the main fault on four of the owner\'s five swings', () => {
     expect(OWNER.filter((fx) => analyzeReference(fx).main?.fault === 'early_extension')).toHaveLength(4);
   });
+
+  // The coach-series rows take their limits from the tour swings (plan 2026-10-30): none of them may
+  // read anything but green, or unknown where a swing has no ball for the symmetry line.
+  test.each(REFERENCE.filter((f) => f.name.startsWith('tour-')).map((f) => [f.name, f]))('%s is green on the coach rows', (_n, fx) => {
+    const rows = analyzeReference(fx).checks.filter((c) => ['hands_bicep', 'swing_symmetry', 'finish_trail_foot'].includes(c.id));
+    expect(rows).toHaveLength(3);
+    rows.forEach((c) => expect([c.id, c.status]).toEqual([c.id, c.id === 'swing_symmetry' && !fx.ball ? 'unknown' : 'green']));
+  });
 });
 
 describe('view (face-on flag)', () => {

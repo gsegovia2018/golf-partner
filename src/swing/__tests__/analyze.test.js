@@ -51,12 +51,12 @@ describe('analyze: the whole pipeline on the fixture', () => {
     expect(a.clubMarks.top.priorHead).toBeUndefined();
   });
 
-  test('main fault (spec §6): impact is tier 1 and red, so early extension leads; it likely starts halfway back', () => {
+  test('main fault (spec §6): impact is tier 1 and red, so early extension leads; nothing red before it', () => {
     // Without marks the takeaway and halfway-back clubheads are unplaced, and the top is a yellow
     // since the lab table (hands over heels 6 / 18 cm). The hands sit 28 cm in front of the trail
-    // shoulder halfway back (hands_bicep, plan 2026-10-30): the earlier red it likely starts from.
-    expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: 'leadArm', consequences: [] });
-    expect(byId(a, 'hands_bicep')).toMatchObject({ status: 'red', value: 28, dir: 'out', fault: 'steep_backswing' });
+    // shoulder halfway back (hands_bicep): past every tour swing, a watch rather than a fix.
+    expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: null, consequences: [] });
+    expect(byId(a, 'hands_bicep')).toMatchObject({ status: 'yellow', value: 28, dir: 'out', fault: 'steep_backswing' });
     expect(a.main.evidence[0].id).toBe('spine_loss');
     expect(a.main.drills[0]).toBe('ee-silla');
   });
