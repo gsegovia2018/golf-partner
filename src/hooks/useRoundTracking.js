@@ -6,6 +6,7 @@ import { setShotListening } from '../lib/shotSense';
 import { useAppSettings } from './useAppSettings';
 import { formatDistance, unitSuffix } from '../lib/units';
 import { t, useT, getLanguage, formatNumber } from '../i18n';
+import { captureMessage } from '../lib/errorReporting';
 
 // Drives the round tracker's persistent notification from the scorecard's
 // state: what the header shows, in one title and one body line, so the
@@ -46,7 +47,14 @@ export function roundTrackingText({ courseName, holeNumber, distances, source, u
 // GPS trail experiment records under while tracking is active; whether it
 // records at all is the `recordGpsTrail` setting, checked per fix in
 // store/gpsTrailStore.
-export function useRoundTracking({ active, courseName, holeNumber, distances, source, units, trail }) {
+// A scorecard mounted again within this long of unmounting was rebuilt in
+// place, not left and reopened.
+export const REMOUNT_WINDOW_MS = 5000;
+let lastUnmount = null; // { at, round } of the last live scorecard to unmount
+
+// `why` ({ viewOnly, finished, hasMap, permissionGranted, fixState }) are the
+// inputs `active` is made of, reported when tracking stops on its own.
+export function useRoundTracking({ active, courseName, holeNumber, distances, source, units, trail, why }) {
   const last = useRef(null); // { holeNumber, source, center, lang } of the last update sent
   const settings = useAppSettings();
   useT(); // re-render (and re-send the text) when the language changes
@@ -78,12 +86,40 @@ export function useRoundTracking({ active, courseName, holeNumber, distances, so
   // Leaving the scorecard ends tracking whatever `active` last said.
   useEffect(() => () => setRoundTracking(null), []);
 
+  // Diagnostics. On 2026-10-30 tracking (GPS, trail and shot listening) stopped
+  // twice mid-round with the app on screen, cause unknown: report which input
+  // turned it off, a trail that dropped while tracking stayed on, and a
+  // scorecard rebuilt in place. Leaving the scorecard is not reported.
+  const whyRef = useRef(why);
+  whyRef.current = why;
+  const roundRef = useRef(null);
+  roundRef.current = trail?.roundId ?? null;
+  const wasActive = useRef(false);
+  useEffect(() => {
+    if (wasActive.current && !active) {
+      captureMessage('round tracking stopped', { ...whyRef.current, hole: holeNumber });
+    }
+    wasActive.current = !!active;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
   // Keyed by value, not identity: a fresh `trail` object per render must not
   // stop and restart the trail. Stopping (inactive, another round, unmount)
   // uploads what was recorded.
   const trailKey = active && trail?.userId && trail.tournamentId && trail.roundId && Number.isInteger(trail.roundIndex)
     ? JSON.stringify([trail.userId, trail.tournamentId, trail.roundId, trail.roundIndex])
     : null;
+  const hadTrail = useRef(false);
+  useEffect(() => {
+    if (hadTrail.current && !trailKey && active) {
+      captureMessage('round trail stopped', {
+        user: !!trail?.userId, tournament: !!trail?.tournamentId, round: !!trail?.roundId,
+        roundIndex: Number.isInteger(trail?.roundIndex), hole: holeNumber,
+      });
+    }
+    hadTrail.current = !!trailKey;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trailKey]);
   useEffect(() => {
     if (!trailKey) return undefined;
     const [userId, tournamentId, roundId, roundIndex] = JSON.parse(trailKey);
@@ -103,4 +139,17 @@ export function useRoundTracking({ active, courseName, holeNumber, distances, so
     setShotListening(proposalRoundKey(roundId, roundIndex), t('shots.sense.notification'));
     return () => setShotListening(null);
   }, [listenKey]);
+
+  // The round loads after the screen mounts, so check once its id is known.
+  const roundId = trail?.roundId ?? null;
+  useEffect(() => {
+    if (!roundId || lastUnmount?.round !== roundId) return;
+    const afterMs = Date.now() - lastUnmount.at;
+    lastUnmount = null;
+    if (afterMs < REMOUNT_WINDOW_MS) captureMessage('scorecard remounted', { afterMs, hole: holeNumber });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roundId]);
+  useEffect(() => () => {
+    if (wasActive.current) lastUnmount = { at: Date.now(), round: roundRef.current };
+  }, []);
 }
