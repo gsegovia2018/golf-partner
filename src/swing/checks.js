@@ -720,10 +720,14 @@ export function runChecks(input) {
       const vp = { x: mx(input.frameW / 2), y: a.hands.y };
       const ang = (q) => Math.atan2(q.y - c.hands.y, q.x - c.hands.x) * (180 / Math.PI);
       const d = ((ang(vp) - ang(c.head) + 540) % 360) - 180;
-      const j = sym(d, TH.shaftTop);
-      const dir = d > 0 ? 'across' : 'laid_off';
-      push(m, j, round(d, 0), '°', j.status === 'green' ? T.checkText.shaft_top_ok : T.checkText.shaft_top(d, dir),
-        { dir, fault: j.status === 'green' ? null : dir === 'across' ? 'across_the_line' : 'laid_off' });
+      // Past 90 degrees the short shaft points back at the camera, not into the picture: no aim to read.
+      if (Math.abs(d) > 90) rows.push(unknown(m, 'nodata', why('shortOfParallel')));
+      else {
+        const j = sym(d, TH.shaftTop);
+        const dir = d > 0 ? 'across' : 'laid_off';
+        push(m, j, round(d, 0), '°', j.status === 'green' ? T.checkText.shaft_top_ok : T.checkText.shaft_top(d, dir),
+          { dir, fault: j.status === 'green' ? null : dir === 'across' ? 'across_the_line' : 'laid_off' });
+      }
     }
   }
 

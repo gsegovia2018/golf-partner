@@ -114,6 +114,7 @@ describe('shaft_top (extra, listed under the top)', () => {
   test('not graded short of parallel, without the clubheads or without the frame width', () => {
     expect(read(0, { len: 100 })).toMatchObject({ status: 'unknown', reason: 'nodata' });
     expect(read(0, { len: 100 }).text).toMatch(/short of parallel/);
+    expect(read(-144)).toMatchObject({ status: 'unknown', reason: 'nodata' }); // pointing back at the camera
     const top = (extra) => one(run({ address: ADDRESS, top: mark(4, HANDS, null, extra) }, () => null, { frameW: 600 }), 'shaft_top');
     expect(top({ source: 'prior' })).toMatchObject({ status: 'unknown', reason: 'unplaced' });
     expect(top({ hidden: true })).toMatchObject({ status: 'unknown', reason: 'hidden' });
