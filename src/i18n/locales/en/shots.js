@@ -196,6 +196,7 @@ export default {
   'shots.seen.mapWhen': 'You stood here {seconds} s at {time}, then walked on.',
   'shots.seen.notAShot': 'Not a shot',
   'shots.seen.add': 'Add',
+  'shots.seen.addWith': 'Add · {club}',
   'shots.seen.clubA11y': 'Club: {club}. Tap to change it',
   'shots.seen.missing': {
     one: '{count} shot not on the map',

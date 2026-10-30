@@ -13,8 +13,6 @@ import {
 import { pairDifferenceByHole } from '../../store/statsEngine';
 import RaceChart from './RaceChart';
 import ShotScorecard from '../scorecard/ShotScorecard';
-import Reveal from '../ui/Reveal';
-import { duration } from '../../theme/motion';
 import PairDifferenceChart from './PairDifferenceChart';
 import { holeSheet } from './sheets';
 import { Chip, ModeToggle, SectionTitle, firstName, joinNames, num, useStatStyles } from './ui';
@@ -146,9 +144,7 @@ export default function RoundsTab({
             <SectionTitle right={<ModeToggle value={mode} onChange={onModeChange} testID="card-mode" />}>{t('stats.game.card.title')}</SectionTitle>
           </View>
           {/* Keyed by round: each round opens with my shots expanded again. */}
-          <Reveal replay={mode} dy={4} duration={duration.state}>
-            <ShotScorecard key={ri} card={card} mode={mode} />
-          </Reveal>
+          <ShotScorecard key={ri} card={card} mode={mode} />
         </View>
       )}
 

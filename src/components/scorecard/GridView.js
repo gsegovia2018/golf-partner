@@ -7,8 +7,7 @@ import { View, Text, TextInput, Pressable, useWindowDimensions } from 'react-nat
 import Animated from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
 import useSlidingPill from '../ui/useSlidingPill';
-import Reveal from '../ui/Reveal';
-import { duration } from '../../theme/motion';
+import CellRoll from './CellRoll';
 import { useT, t as tNow, formatNumber } from '../../i18n';
 import { unitText } from '../../lib/pointsText';
 import { playersMeFirst } from '../../lib/playerOrder';
@@ -163,6 +162,15 @@ function NineBlock({
 
   const sumPar = holes.reduce((acc, h) => acc + h.par, 0);
 
+  // What the other mode shows in a cell: CellRoll rolls it out on a switch.
+  const strokesFace = (player, h) => {
+    const v = scores[player.id]?.[h.number];
+    return <Text numberOfLines={1} style={s.soloNineStrokeText}>{v != null ? String(v) : '·'}</Text>;
+  };
+  const ptsStyle = (pts) => [s.soloNinePtsText, { color: ptsColorFor(pts) }];
+  const ptsFace = (pts) => <Text numberOfLines={1} style={ptsStyle(pts)}>{pts ?? '·'}</Text>;
+  const totalIndex = holes[holes.length - 1]?.number ?? 0;
+
   const labelCell = { width: labelW };
   const holeCell = { width: holeW };
   const aggCell = { width: aggW };
@@ -198,11 +206,11 @@ function NineBlock({
             const isCurrent = currentHoleByPlayer?.[player.id] === h.number;
             return (
               <View key={h.number} style={[s.soloNineCell, holeCell]}>
-                <View style={[s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent]}>
-                  <Text numberOfLines={1} style={[s.soloNinePtsText, { color: ptsColorFor(pts) }]}>
-                    {pts ?? '·'}
-                  </Text>
-                </View>
+                <CellRoll mode={displayMode} index={h.number - 1} leaving={strokesFace(player, h)}>
+                  <View style={[s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent]}>
+                    {ptsFace(pts)}
+                  </View>
+                </CellRoll>
                 <View style={s.soloNineExtraDots} pointerEvents="none">
                   {extra > 0 && Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
                     <View key={i} testID={`hcp-dot-${player.id}-h${h.number}`} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
@@ -211,7 +219,11 @@ function NineBlock({
               </View>
             );
           })}
-          <Text numberOfLines={1} style={[s.soloNineCell, aggCell, s.soloNineAggDivider, s.soloNineAggPtsTotal]}>{sumPts}</Text>
+          <View style={[s.soloNineCell, aggCell, s.soloNineAggDivider]}>
+            <CellRoll mode={displayMode} index={totalIndex} leaving={<Text numberOfLines={1} style={s.soloNineAggStrokesTotal}>{sumStr || '·'}</Text>}>
+              <Text numberOfLines={1} style={s.soloNineAggPtsTotal}>{sumPts}</Text>
+            </CellRoll>
+          </View>
         </View>
       );
     }
@@ -236,37 +248,39 @@ function NineBlock({
               {/* Digit box: chip + digit share this 30px box so they stay
                   concentric; the handicap pips get their own lane below it
                   and can never collide with the chip. */}
-              <View style={[s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent]}>
-                {/* Chip first so the digit renders on top of the soft fill. */}
-                <ScoreShape result={shape} theme={theme} s={s} />
-                {cellEditable ? (
-                  <TextInput
-                    ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
-                    style={[s.soloNineStrokeInput, rawScore == null && s.soloNineStrokeInputEmpty, digitOnSolid]}
-                    accessibilityLabel={t('shared.grid.strokesFor', { name: player.name, hole: h.number })}
-                    keyboardType="numeric"
-                    keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                    selectionColor={theme.accent.primary}
-                    maxLength={2}
-                    value={cellValue}
-                    onChangeText={(v) => onSetScore(player.id, h.number, v)}
-                    placeholder="·"
-                    placeholderTextColor={theme.text.muted}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => focusNext(player.id, h.number)}
-                  />
-                ) : (
-                  // Plain Text keeps centering reliable in view-only mode —
-                  // a readonly TextInput can pick up browser user-agent
-                  // styles that override textAlign on web. The digit box
-                  // already centers via flex, so the Text only needs the
-                  // typographic styles.
-                  <Text style={[s.soloNineStrokeText, digitOnSolid]} numberOfLines={1}>
-                    {cellValue || '·'}
-                  </Text>
-                )}
-              </View>
+              <CellRoll mode={displayMode} index={h.number - 1} leaving={ptsFace(ptsFor(h, player))}>
+                <View style={[s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent]}>
+                  {/* Chip first so the digit renders on top of the soft fill. */}
+                  <ScoreShape result={shape} theme={theme} s={s} />
+                  {cellEditable ? (
+                    <TextInput
+                      ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
+                      style={[s.soloNineStrokeInput, rawScore == null && s.soloNineStrokeInputEmpty, digitOnSolid]}
+                      accessibilityLabel={t('shared.grid.strokesFor', { name: player.name, hole: h.number })}
+                      keyboardType="numeric"
+                      keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                      selectionColor={theme.accent.primary}
+                      maxLength={2}
+                      value={cellValue}
+                      onChangeText={(v) => onSetScore(player.id, h.number, v)}
+                      placeholder="·"
+                      placeholderTextColor={theme.text.muted}
+                      returnKeyType="next"
+                      blurOnSubmit={false}
+                      onSubmitEditing={() => focusNext(player.id, h.number)}
+                    />
+                  ) : (
+                    // Plain Text keeps centering reliable in view-only mode —
+                    // a readonly TextInput can pick up browser user-agent
+                    // styles that override textAlign on web. The digit box
+                    // already centers via flex, so the Text only needs the
+                    // typographic styles.
+                    <Text style={[s.soloNineStrokeText, digitOnSolid]} numberOfLines={1}>
+                      {cellValue || '·'}
+                    </Text>
+                  )}
+                </View>
+              </CellRoll>
               {/* Always rendered so every cell is the same height. */}
               <View style={s.soloNineExtraDots} pointerEvents="none">
                 {extra > 0 && Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
@@ -276,7 +290,11 @@ function NineBlock({
             </View>
           );
         })}
-        <Text numberOfLines={1} style={[s.soloNineCell, aggCell, s.soloNineAggDivider, s.soloNineAggStrokesTotal]}>{sumStr || '·'}</Text>
+        <View style={[s.soloNineCell, aggCell, s.soloNineAggDivider]}>
+          <CellRoll mode={displayMode} index={totalIndex} leaving={<Text numberOfLines={1} style={s.soloNineAggPtsTotal}>{sumPts}</Text>}>
+            <Text numberOfLines={1} style={s.soloNineAggStrokesTotal}>{sumStr || '·'}</Text>
+          </CellRoll>
+        </View>
       </View>
     );
   };
@@ -438,8 +456,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
       </View>
       )}
 
-      {/* Replays on a Strokes | Points switch, like the stats scorecards. */}
-      <Reveal replay={displayMode} dy={4} duration={duration.state} style={sideBySide ? s.soloNinesRow : s.soloNinesStack}>
+      <View style={sideBySide ? s.soloNinesRow : s.soloNinesStack}>
         <View style={sideBySide ? s.soloNineFlex : null}>
           <NineBlock
             holes={front}
@@ -485,7 +502,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
             />
           </View>
         )}
-      </Reveal>
+      </View>
 
       {/* Round total — single bar for solo (course par + personal totals),
           compact per-player leaderboard for 2+ players. The multi-player card

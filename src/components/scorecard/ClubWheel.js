@@ -38,9 +38,11 @@ const PAD = (WHEEL_H - ITEM_H) / 2;
 // clubs: [{ key, label, distance }] (distance in metres, measured or nominal).
 // pickClub=false drops the wheel and its confirm, leaving the edit buttons and
 // a Close — for a spot that takes no club (the first putt, on the green).
+// confirmKey: the confirm's label ({club} filled in), when confirming does more
+// than set the club (a seen pin's wheel adds the shot).
 export function ClubWheel({
   visible, clubs, value, units, pickClub = true,
-  seqLabel, carryMeters, toPinMeters,
+  seqLabel, carryMeters, toPinMeters, confirmKey = 'shots.wheel.set',
   onSelect, onMove, onInsert, onRepeat, onDelete, onClose,
 }) {
   const ref = useRef(null);
@@ -110,7 +112,7 @@ export function ClubWheel({
               </View>
 
               <PressableScale style={s.confirm} onPress={confirm}>
-                <Text style={s.confirmText}>{tl('shots.wheel.set', { club: clubs[focus]?.label ?? '' })}</Text>
+                <Text style={s.confirmText}>{tl(confirmKey, { club: clubs[focus]?.label ?? '' })}</Text>
               </PressableScale>
             </>
           )}

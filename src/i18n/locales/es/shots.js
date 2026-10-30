@@ -196,6 +196,7 @@ export default {
   'shots.seen.mapWhen': 'Estuviste aquí {seconds} s a las {time} y luego seguiste.',
   'shots.seen.notAShot': 'No es un golpe',
   'shots.seen.add': 'Añadir',
+  'shots.seen.addWith': 'Añadir · {club}',
   'shots.seen.clubA11y': 'Palo: {club}. Toca para cambiarlo',
   'shots.seen.missing': {
     one: 'Falta {count} golpe en el mapa',
