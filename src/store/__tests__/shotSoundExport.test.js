@@ -6,7 +6,8 @@ jest.mock('expo-file-system', () => ({ Directory: jest.fn(), File: jest.fn(), Pa
 test('each stop carries my answer and its sound level, with every event', () => {
   const events = [
     { type: 'start', t: 0 },
-    { type: 'strike', t: 150000, gyroPeak: 5, accPeak: 2, clip: '150000.wav' },
+    { type: 'swing', t: 149900, gyroPeak: 9, accPeak: 20 },
+    { type: 'strike', t: 150000, riseMs: 3, gyroPeak: 9, accPeak: 2, clip: '150000.wav' },
     { type: 'stop', t: 600000 },
   ];
   const stops = [
