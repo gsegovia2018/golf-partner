@@ -5,8 +5,6 @@ import RoundScoreboard from '../../components/RoundScoreboard';
 import { resolveScorecardRows } from '../../components/scorecard/GridView';
 import ShotScorecard from '../../components/scorecard/ShotScorecard';
 import { ModeToggle } from '../../components/gamestats/ui';
-import Reveal from '../../components/ui/Reveal';
-import { duration } from '../../theme/motion';
 import { scorecardModel } from '../../store/scorecardView';
 import { useT } from '../../i18n';
 
@@ -110,9 +108,7 @@ export function PastRoundScorecard({ round, settings, players, meId, s, title = 
         {title ?? <View style={s.cardTitleLeft} />}
         <ModeToggle value={mode} onChange={setMode} testID="past-round-mode" />
       </View>
-      <Reveal replay={mode} dy={4} duration={duration.state}>
-        <ShotScorecard card={card} mode={mode} />
-      </Reveal>
+      <ShotScorecard card={card} mode={mode} />
     </View>
   );
 }
