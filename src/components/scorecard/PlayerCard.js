@@ -70,16 +70,32 @@ export const PlayerCard = React.memo(function PlayerCard({
   // Birdie or better (gross): the gold ring around the number.
   const underPar = strokes != null && hole?.par != null && strokes < hole.par;
 
-  const t = totals ?? { pts: 0, str: 0, parPlayed: 0 };
-  const vsPar = t.parPlayed > 0 ? t.str - t.parPlayed : 0;
-  const vsParLabel = t.parPlayed === 0 ? '—'
-    : vsPar === 0 ? 'E'
-    : vsPar > 0 ? `+${vsPar}` : String(vsPar);
-  const vsParColor = t.parPlayed === 0 ? theme.text.muted
-    : vsPar <= -1 ? theme.scoreColor('excellent')
-    : vsPar === 0 ? theme.text.primary
-    : vsPar <= 2 ? theme.scoreColor('neutral')
-    : theme.scoreColor('poor');
+  const t = totals ?? { pts: 0, str: 0, parPlayed: 0, netParPlayed: 0 };
+  // Gross vs the course par, and net vs the player's own par (par + their
+  // handicap strokes on the holes played). Same label and tone ladder.
+  const vsParLabelOf = (diff) => (t.parPlayed === 0 ? '—'
+    : diff === 0 ? 'E'
+    : diff > 0 ? `+${diff}` : String(diff));
+  const vsParColorOf = (diff) => (t.parPlayed === 0 ? theme.text.muted
+    : diff <= -1 ? theme.scoreColor('excellent')
+    : diff === 0 ? theme.text.primary
+    : diff <= 2 ? theme.scoreColor('neutral')
+    : theme.scoreColor('poor'));
+  const vsPar = t.str - t.parPlayed;
+  const vsMyPar = t.str - (t.netParPlayed ?? t.parPlayed);
+  const vsParLabel = vsParLabelOf(vsPar);
+  const vsMyParLabel = vsParLabelOf(vsMyPar);
+  const runningStats = [
+    { key: 'str', label: tx('scorecard.player.statStrokes'), value: t.str || '—', color: theme.text.primary },
+    { key: 'pts', label: tx('scorecard.player.statPoints'), value: t.pts, color: theme.accent.primary },
+    { key: 'par', label: tx('scorecard.player.statVsPar'), value: vsParLabel, color: vsParColorOf(vsPar) },
+    {
+      key: 'myPar',
+      label: tx(isMe ? 'scorecard.player.statVsMyPar' : 'scorecard.player.statVsTheirPar'),
+      value: vsMyParLabel,
+      color: vsParColorOf(vsMyPar),
+    },
+  ];
 
   // Team glow halo — only when this player is on a team (two-pair rounds).
   const haloColor = team ? teamColor(theme, team.index) : null;
@@ -302,20 +318,15 @@ export const PlayerCard = React.memo(function PlayerCard({
 
       {showRunning && !conflicted && (
         <View style={s.soloStatsRow}>
-          <View style={s.soloStatItem}>
-            <Text style={s.soloStatLabel}>{tx('scorecard.player.statStrokes')}</Text>
-            <Text style={s.soloStatValue}>{t.str || '—'}</Text>
-          </View>
-          <View style={s.soloStatDivider} />
-          <View style={s.soloStatItem}>
-            <Text style={s.soloStatLabel}>{tx('scorecard.player.statPoints')}</Text>
-            <Text style={[s.soloStatValue, { color: theme.accent.primary }]}>{t.pts}</Text>
-          </View>
-          <View style={s.soloStatDivider} />
-          <View style={s.soloStatItem}>
-            <Text style={s.soloStatLabel}>{tx('scorecard.player.statVsPar')}</Text>
-            <Text style={[s.soloStatValue, { color: vsParColor }]}>{vsParLabel}</Text>
-          </View>
+          {runningStats.map((stat, i) => (
+            <React.Fragment key={stat.key}>
+              {i > 0 && <View style={s.soloStatDivider} />}
+              <View style={s.soloStatItem} accessible accessibilityLabel={`${stat.label}, ${stat.value}`}>
+                <Text style={[s.soloStatValue, { color: stat.color }]}>{stat.value}</Text>
+                <Text style={s.soloStatLabel}>{stat.label}</Text>
+              </View>
+            </React.Fragment>
+          ))}
         </View>
       )}
 
