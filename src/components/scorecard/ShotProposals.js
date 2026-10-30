@@ -78,8 +78,9 @@ export function SoundEvidence({ level }) {
 }
 
 // The card for one tapped "seen" pin: where it is, a club button that opens
-// the shot tracker's club wheel, what the phone heard there, then Not a shot /
-// Add · club, and "+1 from here" while the score says shots are missing.
+// the shot tracker's club wheel (confirming a club there adds the shot with it,
+// one tap), what the phone heard there, then Not a shot / Add, and "+1 from
+// here" while the score says shots are missing.
 export function SeenMapCard({ proposal, onAdd, onDismiss, onPlusOne, missing }) {
   const tl = useT();
   const settings = useAppSettings();
@@ -140,7 +141,8 @@ export function SeenMapCard({ proposal, onAdd, onDismiss, onPlusOne, missing }) 
         units={units}
         seqLabel={tl('shots.wheel.club')}
         toPinMeters={proposal.toGreen}
-        onSelect={(k) => { if (k) setClub(k); setWheel(false); }}
+        confirmKey="shots.seen.addWith"
+        onSelect={(k) => { setWheel(false); if (k) onAdd({ ...proposal, club: k }); }}
         onClose={() => setWheel(false)}
       />
     </View>
