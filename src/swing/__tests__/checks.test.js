@@ -29,9 +29,9 @@ const byId = (checks, id, cp) => checks.find((c) => c.id === id && (!cp || c.cp 
 describe('golden checks on the owner marks', () => {
   const { checks } = runChecks(input());
 
-  test('all 27 rows produce a status (23 ids: spine_hold at four positions, knee_hold at two)', () => {
-    expect(checks).toHaveLength(27);
-    expect(new Set(checks.map((c) => c.id)).size).toBe(23);
+  test('all 31 rows produce a status (27 ids: spine_hold at four positions, knee_hold at two)', () => {
+    expect(checks).toHaveLength(31);
+    expect(new Set(checks.map((c) => c.id)).size).toBe(27);
     checks.forEach((c) => expect(['green', 'yellow', 'red', 'unknown']).toContain(c.status));
     expect(checks.filter((c) => c.id === 'spine_hold').map((c) => c.cp)).toEqual(['takeaway', 'leadArm', 'top', 'shaftDown']);
     expect(checks.filter((c) => c.id === 'knee_hold').map((c) => c.cp)).toEqual(['takeaway', 'leadArm']);
@@ -140,7 +140,7 @@ describe('club-dependent checks stay unknown until the clubhead is placed (D16)'
     });
     expect(byId(checks, 'spine_loss').status).toBe('red');
     expect(byId(checks, 'hands_out_impact').status).toBe('yellow');
-    expect(checks).toHaveLength(27);
+    expect(checks).toHaveLength(31);
   });
 
   test('the owner swing with every clubhead a weak model detection (0.05) reads like no clubhead at all', () => {
@@ -154,7 +154,7 @@ describe('club-dependent checks stay unknown until the clubhead is placed (D16)'
 
   test('missing ball or pose degrades to unknown, not an exception', () => {
     const { checks } = runChecks(input({ ball: null, pose: () => null }));
-    expect(checks).toHaveLength(27);
+    expect(checks).toHaveLength(31);
     ['posture_address', 'hands_under_shoulders', 'back_line', 'knee_flex', 'shaft_plane', 'clubhead_plane_takeaway',
       'hands_over_heels', 'lead_arm_spine', 'spine_loss', 'knee_hold']
       .forEach((id) => expect(byId(checks, id).status).toBe('unknown'));

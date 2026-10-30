@@ -25,6 +25,9 @@ const EXTRA_HOME = {
   hands_out_impact: 'impact',
   shaft_angle_impact: 'impact',
   finish_balance: 'finish',
+  finish_trail_foot: 'finish',
+  swing_symmetry: 'trailArm',
+  shaft_top: 'top',
 };
 
 export const CHECK_KEY = (c) => (c.cp ? `${c.id}@${c.cp}` : c.id);

@@ -17,10 +17,10 @@ const byId = (a, id, cp) => a.checks.find((c) => c.id === id && (!cp || c.cp ===
 describe('analyze: the whole pipeline on the fixture', () => {
   const a = analyze(native(), { pass2, handedness: 'right', heightCm: 176, club: 'iron', source: 'import', swingId: 's1', createdAt: 'x' });
 
-  test('shape of analysis.json (schema swing-analysis/6)', () => {
+  test('shape of analysis.json (schema swing-analysis/7)', () => {
     expect(a.error).toBeUndefined();
     expect(a.schema).toBe(SCHEMA);
-    expect(SCHEMA).toBe('swing-analysis/6');
+    expect(SCHEMA).toBe('swing-analysis/7');
     expect(a).toMatchObject({ swingId: 's1', club: 'iron', handedness: 'right', view: 'dtl', source: 'import' });
     expect(a.fps).toMatchObject({ factor: 8, source: 'estimate', approximate: false });
     expect(a.scale.approx).toBe(false);
@@ -32,17 +32,17 @@ describe('analyze: the whole pipeline on the fixture', () => {
     expect(Math.abs(a.reference.shaftPlaneDeg - 52)).toBeLessThanOrEqual(6);
   });
 
-  test('all 27 rows produce a status; counts add up', () => {
-    expect(a.checks).toHaveLength(27);
+  test('all 31 rows produce a status; counts add up', () => {
+    expect(a.checks).toHaveLength(31);
     a.checks.forEach((c) => expect(['green', 'yellow', 'red', 'unknown']).toContain(c.status));
     const c = a.counts;
-    expect(c.green + c.yellow + c.red + c.unknown).toBe(27);
+    expect(c.green + c.yellow + c.red + c.unknown).toBe(31);
   });
 
   test('D16: without placed marks the club-dependent checks are unknown, the rest are measured', () => {
     expect(a.checks.filter((c) => c.status === 'unknown').map((c) => c.id)).toEqual([
       'shaft_plane', 'clubhead_plane_takeaway', 'butt_extension', 'clubhead_plane_down', 'down_vs_takeaway',
-      'shaft_through_ball', 'through_vs_halfway', 'shaft_angle_impact',
+      'shaft_through_ball', 'through_vs_halfway', 'shaft_angle_impact', 'shaft_top',
     ]);
     a.checks.filter((c) => c.status === 'unknown').forEach((c) => expect(c.reason).toBe('unplaced'));
     expect(byId(a, 'spine_loss').status).not.toBe('unknown');
@@ -51,10 +51,12 @@ describe('analyze: the whole pipeline on the fixture', () => {
     expect(a.clubMarks.top.priorHead).toBeUndefined();
   });
 
-  test('main fault (spec §6): impact is tier 1 and red, so early extension leads; nothing red before it', () => {
+  test('main fault (spec §6): impact is tier 1 and red, so early extension leads; it likely starts halfway back', () => {
     // Without marks the takeaway and halfway-back clubheads are unplaced, and the top is a yellow
-    // since the lab table (hands over heels 6 / 18 cm), so there is no earlier red to start from.
-    expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: null, consequences: [] });
+    // since the lab table (hands over heels 6 / 18 cm). The hands sit 28 cm in front of the trail
+    // shoulder halfway back (hands_bicep, plan 2026-10-30): the earlier red it likely starts from.
+    expect(a.main).toMatchObject({ fault: 'early_extension', position: 'impact', startsAt: 'leadArm', consequences: [] });
+    expect(byId(a, 'hands_bicep')).toMatchObject({ status: 'red', value: 28, dir: 'out', fault: 'steep_backswing' });
     expect(a.main.evidence[0].id).toBe('spine_loss');
     expect(a.main.drills[0]).toBe('ee-silla');
   });

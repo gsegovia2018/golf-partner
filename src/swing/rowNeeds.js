@@ -11,7 +11,7 @@ import { headTrusted } from './club';
 /** Rows measured from the ball: the address plane (clubhead against it) and the shaft line carried to ball height. */
 export const BALL_ROWS = [
   'clubhead_plane_takeaway', 'clubhead_plane_down', 'down_vs_takeaway',
-  'butt_extension', 'shaft_through_ball', 'through_vs_halfway',
+  'butt_extension', 'shaft_through_ball', 'through_vs_halfway', 'swing_symmetry',
 ];
 
 /** A clubhead the golfer has not decided and the checks would not read (below the gate, or none). */

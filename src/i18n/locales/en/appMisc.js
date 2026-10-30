@@ -26,4 +26,6 @@ export default {
   "misc.swipeDelete": "Delete",
   "misc.friend.golfer": "Golfer",
   "misc.holeMap.title": "Hole map",
+  "misc.swing.why.noExit": "Hands not seen climbing after impact",
+  "misc.swing.why.shortOfParallel": "Club short of parallel at the top",
 };

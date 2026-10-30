@@ -16,7 +16,7 @@ describe('drills catalogue (plan 5.6)', () => {
     const ids = DRILLS.map((d) => d.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(drillsForFault('early_extension').map((d) => d.id)).toEqual(['ee-silla', 'ee-pared', 'ee-palo-talones']);
-    expect(drillsForFault('over_the_top').map((d) => d.id)).toEqual(['pl-palo-atras', 'ott-toalla', 'ott-caja', 'ott-pausa']);
+    expect(drillsForFault('over_the_top').map((d) => d.id)).toEqual(['pl-palo-atras', 'ott-toalla', 'ott-caja', 'ott-pausa', 'ott-bolsa']);
   });
 
   test('every string is non-empty English', () => {
@@ -28,7 +28,7 @@ describe('drills catalogue (plan 5.6)', () => {
   });
 
   test('a fault can borrow a neighbour\'s drill (also), after its own', () => {
-    expect(drillsForFault('top_position').map((d) => d.id)).toEqual(['pl-vidrio', 'fb-codo', 'atl-objetivo']);
+    expect(drillsForFault('top_position').map((d) => d.id)).toEqual(['pl-vidrio', 'fb-codo', 'fb-pared', 'atl-objetivo']);
     expect(drillsForFault('flat_backswing')[0].id).toBe('fb-codo');
   });
 

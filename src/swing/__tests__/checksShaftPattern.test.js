@@ -60,6 +60,6 @@ describe('both need the clubhead (D16)', () => {
   test('they live at their positions', () => {
     const checks = run({ leadArm: shaft(5, 320), trailArm: shaft(20, 260) });
     expect(checksAt(checks, 'leadArm').map((c) => c.id)).toContain('butt_extension');
-    expect(checksAt(checks, 'trailArm').map((c) => c.id)).toEqual(['shaft_through_ball', 'through_vs_halfway']);
+    expect(checksAt(checks, 'trailArm').map((c) => c.id)).toEqual(['shaft_through_ball', 'through_vs_halfway', 'swing_symmetry']);
   });
 });

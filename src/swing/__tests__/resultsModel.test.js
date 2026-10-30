@@ -40,12 +40,12 @@ describe('checkpointChecks', () => {
   });
 
   test('every check has a home among the ten checkpoints: its position, or (an extra) impact or the finish', () => {
-    expect(unmarked.checks).toHaveLength(27);
+    expect(unmarked.checks).toHaveLength(31);
     unmarked.checks.forEach((c) => expect(checksAt(unmarked.checks, homeOf(c))).toContain(c));
     expect(checksAt(unmarked.checks, 'takeaway').map(CHECK_KEY)).toEqual(['clubhead_plane_takeaway', 'spine_hold@takeaway', 'knee_hold@takeaway']);
     expect(checksAt(unmarked.checks, 'transition')).toHaveLength(0);
     expect(checksAt(unmarked.checks, 'shaftThrough')).toHaveLength(0);
-    expect(checksAt(unmarked.checks, 'finish').map((c) => c.id)).toEqual(['finish_balance']);
+    expect(checksAt(unmarked.checks, 'finish').map((c) => c.id)).toEqual(['finish_balance', 'finish_trail_foot']);
   });
 
   test('a timeline dot is the worst measured status; unknowns do not count', () => {

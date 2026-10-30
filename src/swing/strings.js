@@ -531,6 +531,7 @@ export const SWING_STRINGS = build({
     spine_hold: L,
     knee_hold: L,
     butt_extension: L,
+    hands_bicep: L,
     lead_arm_spine: L,
     hands_over_heels: L,
     clubhead_plane_down: L,
@@ -545,6 +546,9 @@ export const SWING_STRINGS = build({
     hands_height_impact: L,
     hands_out_impact: L,
     shaft_angle_impact: L,
+    swing_symmetry: L,
+    finish_trail_foot: L,
+    shaft_top: L,
   },
 
   fault: {
@@ -590,6 +594,7 @@ export const SWING_STRINGS = build({
     butt_extension_ok: L,
     butt_extension_flat: (cm) => t('swing.checkText.butt_extension_flat', { cm: n0(cm) }),
     butt_extension_steep: (cm) => t('swing.checkText.butt_extension_steep', { cm: n0(cm) }),
+    hands_bicep: (cm, dir) => t(dir === 'out' ? 'swing.checkText.hands_bicep_out' : dir === 'deep' ? 'swing.checkText.hands_bicep_deep' : 'swing.checkText.hands_bicep_ok', { cm: n0(Math.abs(cm)) }),
     lead_arm_spine_ok: L,
     lead_arm_spine: (deg, dir) => t(dir === 'upright' ? 'swing.checkText.lead_arm_spine_upright' : 'swing.checkText.lead_arm_spine_flat', { deg: n0(Math.abs(deg)) }),
     hands_over_heels_ok: L,
@@ -619,6 +624,12 @@ export const SWING_STRINGS = build({
       if (balanced) return t('swing.checkText.finish_balance.balanced');
       return t('swing.checkText.finish_balance.neither');
     },
+    swing_symmetry_ok: L,
+    swing_symmetry: (cm, dir) => t(dir === 'above' ? 'swing.checkText.swing_symmetry_above' : 'swing.checkText.swing_symmetry_under', { cm: n0(Math.abs(cm)) }),
+    finish_trail_foot_ok: L,
+    finish_trail_foot: (cm) => t('swing.checkText.finish_trail_foot', { cm: n0(Math.max(0, cm)) }),
+    shaft_top_ok: L,
+    shaft_top: (deg, dir) => t(dir === 'across' ? 'swing.checkText.shaft_top_across' : 'swing.checkText.shaft_top_laid_off', { deg: n0(Math.abs(deg)) }),
   },
 
   // Plain-language coaching per check and direction (see fixes.js for how the key is chosen).
@@ -860,6 +871,42 @@ export const SWING_STRINGS = build({
     },
     finish_balance: {
       off: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    finish_trail_foot: {
+      flat: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    hands_bicep: {
+      out: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+      deep: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    shaft_top: {
+      across: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+      laid_off: {
         headline: L,
         cost: L,
         cue: L,
