@@ -85,7 +85,7 @@ describe('SwingHomeScreen', () => {
     expect(getByText(SWING_STRINGS.home.emptyTitle)).toBeTruthy();
     expect(getByText(/or from the front, at hand height/)).toBeTruthy();
     expect(getByText('Stored on this phone')).toBeTruthy();
-    expect(queryByText('Your video and analysis stay on this phone. Nothing is uploaded.')).toBeNull();
+    expect(queryByText('Your video and analysis stay on this phone. They are only uploaded if you share the swing as a link.')).toBeNull();
     expect(queryByText(/long-press it for more/)).toBeNull();
   });
 
@@ -133,7 +133,7 @@ describe('SwingHomeScreen', () => {
     expect(queryByText(/YOLOX/)).toBeNull();
     fireEvent.press(getByLabelText('More'));
     expect(getByText(SWING_STRINGS.home.about)).toBeTruthy();
-    expect(getByText('Your video and analysis stay on this phone. Nothing is uploaded.')).toBeTruthy();
+    expect(getByText('Your video and analysis stay on this phone. They are only uploaded if you share the swing as a link.')).toBeTruthy();
     expect(getByText('2 swings · 184 MB on this phone')).toBeTruthy();
     expect(getByText('Swipe a row to delete, long-press it for more')).toBeTruthy();
     expect(getByText(/MediaPipe \(Apache 2\.0\)/)).toBeTruthy();

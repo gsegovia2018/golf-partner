@@ -321,6 +321,22 @@ export async function renameSwing(id, name) {
   return next;
 }
 
+/** The swing's public link ({ token, at }) while it is shared, or null to clear it (swingShareStore). */
+export async function setSwingShare(id, share) {
+  if (!getSwing(id)) return null;
+  const next = patchRow(id, { share: share ?? null });
+  emit();
+  await persistIndex();
+  return next;
+}
+
+/** The bytes of a file in the swing's folder ('video.mp4', 'frames/12.jpg'), or null when it is missing. */
+export async function readSwingBytes(id, relPath) {
+  const f = new File(Paths.document, 'swings', id, ...relPath.split('/'));
+  if (!f.exists) return null;
+  return f.bytes();
+}
+
 export async function setSwingClub(id, club) {
   const next = patchRow(id, { club: normClub(club) });
   if (!next) return null;

@@ -10,7 +10,7 @@ jest.mock('../../lib/supabase', () => ({ supabase: { rpc: jest.fn(), auth: { get
 
 // Functions in those migrations that are not league functions (their errors
 // never reach leagueErrorText).
-const NOT_LEAGUE = new Set(['set_my_locale']);
+const NOT_LEAGUE = new Set(['set_my_locale', 'start_swing_share']);
 
 // Every RAISE EXCEPTION in the latest definition of each league function,
 // with its hint and a sample of what %-placeholders become.

@@ -8,11 +8,12 @@ import { useTheme } from '../theme/ThemeContext';
 
 // Login: the hole-plan frame (AuthShell) around a "Sign in" / "Create your
 // account" heading, the form and a link under it that switches between them.
-export default function AuthScreen() {
+// From a public page (a shared swing) it opens in `initialMode` with a link back to it.
+export default function AuthScreen({ initialMode = 'signin', onBack = null, backLabel = null } = {}) {
   const { theme } = useTheme();
   const t = useT();
   const s = makeStyles(theme);
-  const [mode, setMode] = useState('signin');
+  const [mode, setMode] = useState(initialMode);
   const signin = mode === 'signin';
 
   return (
@@ -35,6 +36,11 @@ export default function AuthScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+      {onBack ? (
+        <TouchableOpacity onPress={onBack} accessibilityRole="button" style={s.back} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }} testID="auth-back">
+          <Text style={s.switchAction}>{`‹ ${backLabel}`}</Text>
+        </TouchableOpacity>
+      ) : null}
     </AuthShell>
   );
 }
@@ -48,5 +54,6 @@ const makeStyles = (theme) => ({
     },
     switchLead: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 14, color: theme.text.secondary },
     switchAction: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: theme.accent.primary },
+    back: { alignSelf: 'center', marginTop: 16, minHeight: 44, justifyContent: 'center' },
   }),
 });
