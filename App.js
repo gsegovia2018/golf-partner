@@ -94,6 +94,10 @@ import SwingCaptureScreen from './src/screens/SwingCaptureScreen';
 import SwingResultsScreen from './src/screens/SwingResultsScreen';
 import SwingCompareScreen from './src/screens/SwingCompareScreen';
 import SwingEditMarksScreen from './src/screens/SwingEditMarksScreen';
+import SwingSharedScreen from './src/screens/SwingSharedScreen';
+import { swingShareTokenFromPath, swingShareTokenFromUrl } from './src/store/swingShare';
+import { setAfterAuth, takeAfterAuth } from './src/lib/afterAuth';
+import { SWING_STRINGS } from './src/swing/strings';
 import ClubStatScreen from './src/screens/ClubStatScreen';
 import PlayersScreen from './src/screens/PlayersScreen';
 import FinishedScreen from './src/screens/FinishedScreen';
@@ -280,6 +284,15 @@ function AppNavigator() {
     }
     return undefined;
   });
+  // A shared swing (/s/TOKEN), same three-state sentinel.
+  const [swingToken, setSwingToken] = useState(() => {
+    if (typeof window !== 'undefined' && window.location) {
+      return swingShareTokenFromPath(window.location.pathname);
+    }
+    return undefined;
+  });
+  // "Create account" / "Sign in" on a shared swing: the auth screen over it (null = the swing).
+  const [swingAuth, setSwingAuth] = useState(null);
   // The league invite code (/league/CODE), same three-state sentinel. A league
   // link also counts as a join link; this picks the league screen over the
   // generic tournament guest/login choice.
@@ -296,7 +309,7 @@ function AppNavigator() {
 
   useEffect(() => {
     if (isJoinLink !== null && boardToken !== undefined && markerToken !== undefined
-      && leagueCode !== undefined && leagueBoardToken !== undefined) return undefined;
+      && leagueCode !== undefined && leagueBoardToken !== undefined && swingToken !== undefined) return undefined;
     let cancelled = false;
     Linking.getInitialURL().then((url) => {
       if (cancelled) return;
@@ -305,6 +318,7 @@ function AppNavigator() {
       setMarkerToken(markerTokenFromUrl(url));
       setLeagueCode(leagueCodeFromUrl(url));
       setLeagueBoardToken(leagueBoardTokenFromUrl(url));
+      setSwingToken(swingShareTokenFromUrl(url));
     }).catch(() => {
       if (cancelled) return;
       setIsJoinLink(false);
@@ -312,9 +326,10 @@ function AppNavigator() {
       setMarkerToken(null);
       setLeagueCode(null);
       setLeagueBoardToken(null);
+      setSwingToken(null);
     });
     return () => { cancelled = true; };
-  }, [isJoinLink, boardToken, markerToken, leagueCode, leagueBoardToken]);
+  }, [isJoinLink, boardToken, markerToken, leagueCode, leagueBoardToken, swingToken]);
 
   useEffect(() => {
     const sub = Linking.addEventListener('url', ({ url }) => {
@@ -328,6 +343,8 @@ function AppNavigator() {
       if (mToken) setMarkerToken(mToken);
       const lbToken = leagueBoardTokenFromUrl(url);
       if (lbToken) setLeagueBoardToken(lbToken);
+      const sToken = swingShareTokenFromUrl(url);
+      if (sToken) setSwingToken(sToken);
     });
     return () => sub.remove();
   }, []);
@@ -385,8 +402,25 @@ function AppNavigator() {
     return () => sub.remove();
   }, []);
 
+  // A new player who came from a shared swing ("Create account") lands on the Swing tab once
+  // signed in and past onboarding. The flag survives the web's Google redirect (afterAuth).
+  useEffect(() => {
+    if (!session || onboarding !== false) return undefined;
+    let stop = false;
+    takeAfterAuth().then((target) => {
+      if (target !== 'swing') return;
+      const go = (n) => {
+        if (stop) return;
+        if (navigationRef.isReady()) navigationRef.reset({ index: 1, routes: [{ name: 'Main' }, { name: 'SwingHome' }] });
+        else if (n > 0) setTimeout(() => go(n - 1), 100);
+      };
+      go(30);
+    });
+    return () => { stop = true; };
+  }, [session, onboarding]);
+
   if (loading || isJoinLink === null || boardToken === undefined || markerToken === undefined
-    || leagueCode === undefined || leagueBoardToken === undefined) {
+    || leagueCode === undefined || leagueBoardToken === undefined || swingToken === undefined) {
     return <LoadingSplash />;
   }
 
@@ -420,6 +454,14 @@ function AppNavigator() {
     if (leagueBoardToken) return <LeagueBoardPublicScreen token={leagueBoardToken} />;
     // The marker page likewise: anon RPCs only, no account, no navigator.
     if (markerToken) return <MarkerCardScreen token={markerToken} />;
+    // A shared swing: no account needed to watch; "Create account" opens the auth screen over it
+    // and the new player lands on the Swing tab (afterAuth).
+    if (swingToken && swingAuth) {
+      return <AuthScreen key={swingAuth} initialMode={swingAuth} onBack={() => setSwingAuth(null)} backLabel={SWING_STRINGS.share.public.backToSwing} />;
+    }
+    if (swingToken) {
+      return <SwingSharedScreen token={swingToken} onAuth={(mode) => { setAfterAuth('swing'); setSwingAuth(mode); }} />;
+    }
     return <AuthScreen />;
   }
 
@@ -500,6 +542,7 @@ function AppNavigator() {
         <Stack.Screen name="SwingCapture" component={SwingCaptureScreen} options={RISE_OPTIONS} />
         <Stack.Screen name="SwingResults" component={SwingResultsScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
         <Stack.Screen name="SwingEditMarks" component={SwingEditMarksScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
+        <Stack.Screen name="SwingShared" component={SwingSharedScreen} />{/* /s/:token — a shared swing; signed-out visitors are short-circuited above */}
         <Stack.Screen name="SwingCompare" component={SwingCompareScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
         <Stack.Screen name="ClubStat" component={ClubStatScreen} />
         <Stack.Screen name="Players" component={PlayersScreen} />
@@ -586,6 +629,7 @@ const linking = {
       SharedBoard: 'board/:token',
       MarkerCard: 'm/:token',
       LeagueBoardPublic: 'league-board/:token',
+      SwingShared: 's/:token',
       ResetPassword: 'reset-password',
     },
   },

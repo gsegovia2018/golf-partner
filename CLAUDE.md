@@ -234,8 +234,12 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
 - Swing native change ⇒ new APK (`preview-arm64`); JS-only ⇒ OTA. Dev build
   `GOLF_APP_VARIANT=dev` (`com.golfpartner.app.dev`, scheme `golf-dev`) is
   never set for `eas build`/`eas update` (see "Shipping to Android").
-- Swing videos and analysis never leave the phone; the only planned exit is
-  the explicit training-data export (plan §7.3).
+- Swing videos and analysis stay on the phone. They leave it only by the golfer's tap: the
+  training-data export (plan §7.3), or sharing a swing as a link (plan `2026-10-31-swing-share.md`:
+  `/s/<token>`, the bucket `swing-shares`, `store/swingShareStore.js`). Sharing uploads the video,
+  `share.json` and the key-frame stills. Stopping, or deleting the swing, removes them. The public
+  page is the Results view with `readOnly`, and "Create account" there lands the new player on
+  `SwingHome` (`lib/afterAuth.js`).
 - Swing analyzer on the web (plan `2026-10-23-swing-analyzer-web.md`; iPhone users on the PWA):
   `src/swing/native.web.js` implements the native contract in the browser at apiVersion 6, import
   only (no capture). `src/swing/web/`: `mp4.js` reads the sample table, `source.js` decodes with

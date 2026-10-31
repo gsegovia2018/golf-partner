@@ -23,6 +23,7 @@ import {
   fixtureNative, TRUTH, W, H,
 } from '../../swing/__tests__/helpers';
 import { setLanguagePref } from '../../i18n';
+import { shareSwing, unshareSwing, deleteSharedSwing } from '../../store/swingShareStore';
 
 const lab = require('../../swing/__tests__/fixtures/lab-d15-pass1.json');
 
@@ -57,6 +58,11 @@ jest.mock('../../store/swingStore', () => ({
   swingVideoUri: jest.fn(() => 'file:///doc/swings/s1/video.mp4'),
 }));
 jest.mock('../../swing/shareExport', () => ({ shareSwingExport: jest.fn(() => Promise.resolve('shared')) }));
+jest.mock('../../store/swingShareStore', () => ({
+  shareSwing: jest.fn(() => Promise.resolve('TOKEN')),
+  unshareSwing: jest.fn(() => Promise.resolve()),
+  deleteSharedSwing: jest.fn(() => Promise.resolve()),
+}));
 jest.mock('../../swing/runAnalysis', () => ({ runAnalysis: jest.fn() }));
 jest.mock('../../swing/frames', () => ({
   nativeApi: jest.fn(() => ({ cancelAnalysis: jest.fn() })),
@@ -998,5 +1004,54 @@ describe('SwingResultsScreen: a swing still to analyse', () => {
     fireEvent.press(await findByLabelText(T.retry));
     expect((await findAllByText(T.stages.reading)).length).toBeGreaterThan(0);
     expect(runAnalysis).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('SwingResultsScreen: share as a link (plan 2026-10-31-swing-share)', () => {
+  const S = SWING_STRINGS.share;
+
+  test('More > Share link opens the sheet; uploading shares the swing', async () => {
+    const { findByLabelText, getByLabelText, findByTestId, getByTestId } = setup();
+    fireEvent.press(await findByLabelText(T.menu));
+    fireEvent.press(getByLabelText(S.menu));
+    await findByTestId('swing-share-sheet');
+    await act(async () => { fireEvent.press(getByTestId('swing-share-upload')); });
+    expect(shareSwing).toHaveBeenCalledWith('s1', expect.objectContaining({ onProgress: expect.any(Function) }));
+  });
+
+  test('a shared swing shows its link and can stop sharing', async () => {
+    const { findByLabelText, getByLabelText, findByTestId, getByTestId } = setup({ row: { ...ROW, share: { token: 'TK' } } });
+    fireEvent.press(await findByLabelText(T.menu));
+    fireEvent.press(getByLabelText(S.menu));
+    expect((await findByTestId('swing-share-url')).props.children).toMatch(/\/s\/TK$/);
+    await act(async () => { fireEvent.press(getByTestId('swing-share-stop')); });
+    expect(unshareSwing).toHaveBeenCalledWith('s1');
+  });
+
+  test('deleting a shared swing says the link closes too, and closes it first', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const { findByLabelText, getByLabelText, navigation } = setup({ row: { ...ROW, share: { token: 'TK' } } });
+    fireEvent.press(await findByLabelText(T.menu));
+    fireEvent.press(getByLabelText(T.deleteSwing));
+    const [title, body, buttons] = alertSpy.mock.calls[0];
+    expect(title).toBe(S.deleteTitle);
+    expect(body).toBe(S.deleteBody);
+    await act(async () => { await buttons.find((b) => b.style === 'destructive').onPress(); });
+    expect(deleteSharedSwing).toHaveBeenCalledWith('s1');
+    expect(store.deleteSwing).not.toHaveBeenCalled();
+    expect(navigation.goBack).toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+
+  test('when the link cannot be closed the swing stays and the golfer is told', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    deleteSharedSwing.mockRejectedValueOnce(new Error('offline'));
+    const { findByLabelText, getByLabelText, navigation } = setup({ row: { ...ROW, share: { token: 'TK' } } });
+    fireEvent.press(await findByLabelText(T.menu));
+    fireEvent.press(getByLabelText(T.deleteSwing));
+    await act(async () => { await alertSpy.mock.calls[0][2].find((b) => b.style === 'destructive').onPress(); });
+    expect(alertSpy).toHaveBeenLastCalledWith(S.deleteStopFailed);
+    expect(navigation.goBack).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
   });
 });
