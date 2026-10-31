@@ -8,6 +8,7 @@ import Animated from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
 import useSlidingPill from '../ui/useSlidingPill';
 import CellRoll from './CellRoll';
+import CountUpText from '../ui/CountUpText';
 import { useT, t as tNow, formatNumber } from '../../i18n';
 import { unitText } from '../../lib/pointsText';
 import { playersMeFirst } from '../../lib/playerOrder';
@@ -169,7 +170,8 @@ function NineBlock({
   };
   const ptsStyle = (pts) => [s.soloNinePtsText, { color: ptsColorFor(pts) }];
   const ptsFace = (pts) => <Text numberOfLines={1} style={ptsStyle(pts)}>{pts ?? '·'}</Text>;
-  const totalIndex = holes[holes.length - 1]?.number ?? 0;
+  // The strokes mode's score chip, which CellRoll swaps a beat after the figure.
+  const chipFor = (player, h) => <View style={s.soloNineDigitBox}><ScoreShape result={classifyHoleResult(h.par, scores[player.id]?.[h.number])} theme={theme} s={s} /></View>;
 
   const labelCell = { width: labelW };
   const holeCell = { width: holeW };
@@ -206,7 +208,7 @@ function NineBlock({
             const isCurrent = currentHoleByPlayer?.[player.id] === h.number;
             return (
               <View key={h.number} style={[s.soloNineCell, holeCell]}>
-                <CellRoll mode={displayMode} index={h.number - 1} leaving={strokesFace(player, h)}>
+                <CellRoll mode={displayMode} index={h.number - 1} leaving={strokesFace(player, h)} underLeaving={chipFor(player, h)}>
                   <View style={[s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent]}>
                     {ptsFace(pts)}
                   </View>
@@ -220,9 +222,7 @@ function NineBlock({
             );
           })}
           <View style={[s.soloNineCell, aggCell, s.soloNineAggDivider]}>
-            <CellRoll mode={displayMode} index={totalIndex} leaving={<Text numberOfLines={1} style={s.soloNineAggStrokesTotal}>{sumStr || '·'}</Text>}>
-              <Text numberOfLines={1} style={s.soloNineAggPtsTotal}>{sumPts}</Text>
-            </CellRoll>
+            <CountUpText numberOfLines={1} style={s.soloNineAggPtsTotal}>{sumPts}</CountUpText>
           </View>
         </View>
       );
@@ -248,10 +248,13 @@ function NineBlock({
               {/* Digit box: chip + digit share this 30px box so they stay
                   concentric; the handicap pips get their own lane below it
                   and can never collide with the chip. */}
-              <CellRoll mode={displayMode} index={h.number - 1} leaving={ptsFace(ptsFor(h, player))}>
+              <CellRoll
+                mode={displayMode}
+                index={h.number - 1}
+                leaving={ptsFace(ptsFor(h, player))}
+                under={<View style={s.soloNineDigitBox}><ScoreShape result={shape} theme={theme} s={s} /></View>}
+              >
                 <View style={[s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent]}>
-                  {/* Chip first so the digit renders on top of the soft fill. */}
-                  <ScoreShape result={shape} theme={theme} s={s} />
                   {cellEditable ? (
                     <TextInput
                       ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
@@ -291,9 +294,7 @@ function NineBlock({
           );
         })}
         <View style={[s.soloNineCell, aggCell, s.soloNineAggDivider]}>
-          <CellRoll mode={displayMode} index={totalIndex} leaving={<Text numberOfLines={1} style={s.soloNineAggPtsTotal}>{sumPts}</Text>}>
-            <Text numberOfLines={1} style={s.soloNineAggStrokesTotal}>{sumStr || '·'}</Text>
-          </CellRoll>
+          <CountUpText numberOfLines={1} style={s.soloNineAggStrokesTotal}>{sumStr || '·'}</CountUpText>
         </View>
       </View>
     );

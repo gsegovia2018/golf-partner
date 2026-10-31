@@ -27,6 +27,7 @@ import { initialExpanded, toggleExpanded } from '../../store/scorecardView';
 import { heatColors, signed } from '../gamestats/ui';
 import { renderMsg } from '../mystats/msg';
 import CellRoll from './CellRoll';
+import CountUpText from '../ui/CountUpText';
 
 const LABEL_W = 42;
 const TOTAL_W = 30;
@@ -61,7 +62,7 @@ function deepHeat(level) {
   return { bg: '#ffe08a', fg: '#00553c' };
 }
 
-function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID, labelStyle, totalRoll }) {
+function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID, labelStyle, countTotal }) {
   return (
     <View style={[s.row, style]}>
       {typeof label === 'string' ? <Text style={[s.label, labelStyle]} numberOfLines={1}>{label}</Text> : label}
@@ -76,10 +77,9 @@ function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint,
         </View>
       ))}
       <View style={[s.total, { height }, totalStyle]}>
-        {totalRoll ? (
-          <CellRoll mode={totalRoll.mode} index={totalRoll.index} leaving={<Text style={s.totalText} numberOfLines={1}>{totalRoll.leaving ?? '–'}</Text>}>
-            <Text style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={totalTestID}>{total ?? '–'}</Text>
-          </CellRoll>
+        {countTotal ? (
+          // Counts to the other mode's total on a Strokes | Points switch.
+          <CountUpText style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={totalTestID}>{total ?? '–'}</CountUpText>
         ) : (
           <Text style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={totalTestID}>{total ?? '–'}</Text>
         )}
@@ -221,7 +221,7 @@ function scoreCells({ row, nine, mode, card, s, theme, t, idp, heat }) {
     const dot = level === 4 ? fg : theme.accent.primary;
     return {
       key: c.number,
-      // The tint lives on the rolling face, so it turns over with the figure.
+      // The tint is CellRoll's mark: it pops in a beat after the figure rolls.
       style: s.rollCell,
       a11y: card.solo ? withStrokes : t('stats.game.ledger.a11y.who', { name: row.player.name ?? row.label, text: withStrokes }),
       child: (
@@ -230,11 +230,11 @@ function scoreCells({ row, nine, mode, card, s, theme, t, idp, heat }) {
             mode={mode}
             index={c.number - 1}
             style={s.rollBox}
-            leaving={<View style={[s.rollFace, { backgroundColor: other.bg }]}><Text style={[s.value, { color: other.fg }]} numberOfLines={1}>{otherValue}</Text></View>}
+            leaving={<Text style={[s.value, { color: other.fg }]} numberOfLines={1}>{otherValue}</Text>}
+            underLeaving={other.level == null ? null : <View style={[s.rollFace, { backgroundColor: other.bg }]} />}
+            under={level == null ? null : <View style={[s.rollFace, { backgroundColor: bg }]} />}
           >
-            <View style={[s.rollFace, { backgroundColor: bg }]}>
-              <Text style={[s.value, { color: fg }]} testID={`${idp}-cell-${c.number}`} numberOfLines={1}>{value}</Text>
-            </View>
+            <Text style={[s.value, { color: fg }]} testID={`${idp}-cell-${c.number}`} numberOfLines={1}>{value}</Text>
           </CellRoll>
           {c.extra > 0 && (
             <View style={s.dots} pointerEvents="none">
@@ -328,7 +328,7 @@ export default function ShotScorecard({
                     label={label}
                     cells={scoreCells({ row, nine, mode, card, s, theme, t, idp, heat }).map((c) => (c.key === currentHole ? { ...c, style: [c.style, s.currentCell] } : c))}
                     total={totalOf(nine)}
-                    totalRoll={{ mode, index: nine.cells[nine.cells.length - 1]?.number ?? 0, leaving: totalOf(nine, !isPoints) }}
+                    countTotal
                     totalTestID={`${idp}-total-${head.key}`}
                     style={row.isMe && labelOf ? s.meRow : null}
                     labelStyle={wide}
