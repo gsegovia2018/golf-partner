@@ -708,12 +708,23 @@ describe('SwingResultsScreen: a stored swing', () => {
     expect(u.getByText(T.approxBallBanner)).toBeTruthy();
   });
 
-  test('a face-on clip adds its reason to the same notice', async () => {
+  test('a face-on swing shows its five positions and says how it was filmed, with no "take with care" notice', async () => {
     const u = setup({ analysis: { ...MARKED, view: 'faceOn' } });
     await ready(u);
-    expect(u.getByText(T.approxShort(T.approxFaceOn))).toBeTruthy();
-    fireEvent.press(u.getByTestId('results-approx'));
-    expect(u.getByText(T.approxFaceOnBanner)).toBeTruthy();
+    ['address', 'top', 'shaftDown', 'impact', 'finish', 'extras'].forEach((k) => expect(u.getByTestId(`summary-step-${k}`)).toBeTruthy());
+    ['takeaway', 'leadArm', 'trailArm'].forEach((k) => expect(u.queryByTestId(`summary-step-${k}`)).toBeNull());
+    expect(u.getByLabelText(`${T.viewFaceOn}. ${T.switchToDtl}`)).toBeTruthy();
+    expect(u.queryByTestId('results-approx')).toBeNull();
+  });
+
+  test('the view row asks before analysing the swing as filmed from the other side', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const u = setup();
+    await ready(u);
+    fireEvent.press(u.getByTestId('results-view'));
+    expect(alert).toHaveBeenCalledWith(T.switchTitleFaceOn, T.switchBody, expect.any(Array));
+    expect(alert.mock.calls[0][2][1].text).toBe(T.switchConfirmFaceOn);
+    alert.mockRestore();
   });
 
   test('Edit marks from the header menu and from the button both open on the position on screen; Rename saves', async () => {

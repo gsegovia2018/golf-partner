@@ -31,10 +31,15 @@ const SCORE = {
   // either way; a row without it (written before checks v2) falls back to the distance from the ball.
   butt_extension: { of: (v, c) => c?.miss ?? Math.abs(v), eps: 1 },
   shaft_through_ball: { of: (v, c) => c?.miss ?? Math.abs(v), eps: 1 },
+  // Face-on (plan 2026-10-30): more is better for these; sway, slide, head moves and dip use the default.
+  fo_hips_shift: { of: (v) => -v, eps: 1 },
+  fo_head_behind: { of: (v) => -v, eps: 1 },
+  fo_finish_weight: { of: (v) => -v, eps: 3 },
+  fo_hips_impact: { of: (v) => -v, eps: 1 },
 }; // down_vs_takeaway: smaller is better, the default
 const DEFAULT_SCORE = { of: (v) => v, eps: 1 };
 // Posture tilt is an angle with no better direction, only a band: inside one band the swings are the same.
-const BAND_ONLY = new Set(['posture_address']);
+const BAND_ONLY = new Set(['posture_address', 'fo_stance', 'fo_ball_pos', 'fo_setup_tilt', 'fo_hands_ahead']);
 
 const known = (c) => c && c.status !== 'unknown' && c.value != null;
 

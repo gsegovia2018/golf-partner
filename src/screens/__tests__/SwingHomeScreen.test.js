@@ -83,7 +83,7 @@ describe('SwingHomeScreen', () => {
   test('empty state teaches the set-up; the header says where swings are stored', () => {
     const { getByText, queryByText } = setup();
     expect(getByText(SWING_STRINGS.home.emptyTitle)).toBeTruthy();
-    expect(getByText(/phone at hand height on your toe line/)).toBeTruthy();
+    expect(getByText(/or from the front, at hand height/)).toBeTruthy();
     expect(getByText('Stored on this phone')).toBeTruthy();
     expect(queryByText('Your video and analysis stay on this phone. Nothing is uploaded.')).toBeNull();
     expect(queryByText(/long-press it for more/)).toBeNull();

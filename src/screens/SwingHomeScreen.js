@@ -23,7 +23,7 @@ import { pickSwingVideo } from '../swing/importVideo';
 import { displayUri } from '../swing/fs';
 import { defaultHeightCm } from '../swing/scale';
 import { normClub } from '../swing/checks';
-import { passDone, MARK_TOTAL } from '../swing/markPass';
+import { passDone, markTotalOf } from '../swing/markPass';
 import { SWING_STRINGS } from '../swing/strings';
 import { useT } from '../i18n';
 import { formatDate, formatNumber } from '../i18n/format';
@@ -132,8 +132,11 @@ export default function SwingHomeScreen({ navigation }) {
 
   // D26: a swing whose marking pass is unfinished resumes it; Results come after.
   const unmarked = (sw) => sw.status === 'ready' && !!sw.marked && !passDone(sw.marked);
+  // Compare pairs swings filmed from the same side: their checks are different lists (plan 2026-10-30)
+  const pickView = selecting && picked.length ? (swings.find((x) => x.id === picked[0])?.view ?? 'dtl') : null;
+  const blocked = (sw) => !!pickView && !picked.includes(sw.id) && (sw.view ?? 'dtl') !== pickView;
   const onRowPress = (sw) => {
-    if (selecting) { toggle(sw.id); return; }
+    if (selecting) { if (!blocked(sw)) toggle(sw.id); return; }
     if (unmarked(sw)) navigation.navigate('SwingEditMarks', { swingId: sw.id, mode: 'pass' });
     else navigation.navigate('SwingResults', { swingId: sw.id });
   };
@@ -172,7 +175,7 @@ export default function SwingHomeScreen({ navigation }) {
     const fps = sw.fps && fpsLow(sw.fps) ? Math.round(sw.fps.effective) : null;
     const a11y = [
       headline,
-      marking ? T.markProgress(sw.marked.count, MARK_TOTAL) : null,
+      marking ? T.markProgress(sw.marked.count, markTotalOf(sw.view)) : null,
       `${lead} · ${clubName}`,
       c ? T.countLabel(c.green, c.yellow, c.red) : null,
       fps != null ? T.fpsWarnA11y(fps) : null,
@@ -180,12 +183,12 @@ export default function SwingHomeScreen({ navigation }) {
     return (
       <SwipeToDelete key={sw.id} enabled={!selecting} onDelete={() => confirmDelete(sw)} borderRadius={0} accessibilityLabel={T.deleteA11y(sw.name)}>
         <PressableScale
-          style={s.row}
+          style={[s.row, blocked(sw) && s.rowBlocked]}
           onPress={() => onRowPress(sw)}
           onLongPress={() => onRowLongPress(sw)}
           accessibilityRole="button"
           accessibilityLabel={a11y}
-          accessibilityState={sel == null ? undefined : { selected: sel }}
+          accessibilityState={sel == null ? undefined : { selected: sel, disabled: blocked(sw) }}
         >
           {sel != null ? (
             <View style={[s.selCircle, sel && s.selCircleOn]}>
@@ -204,7 +207,7 @@ export default function SwingHomeScreen({ navigation }) {
             </Text>
             {marking ? (
               <View style={s.prog} testID={`mark-progress-${sw.id}`}>
-                <View style={[s.progFill, { width: `${Math.min(100, (sw.marked.count / MARK_TOTAL) * 100)}%` }]} />
+                <View style={[s.progFill, { width: `${Math.min(100, (sw.marked.count / markTotalOf(sw.view)) * 100)}%` }]} />
               </View>
             ) : null}
             {c || fps != null ? (
@@ -463,6 +466,7 @@ const makeStyles = (theme) => {
     flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12,
     backgroundColor: theme.bg.card,
   },
+  rowBlocked: { opacity: 0.4 }, // compare: filmed from the other side
   thumb: {
     width: 64, height: 86, borderRadius: 10, overflow: 'hidden',
     backgroundColor: theme.bg.secondary, alignItems: 'center', justifyContent: 'center',

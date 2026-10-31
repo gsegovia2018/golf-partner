@@ -11,37 +11,39 @@
 
 import { drillsForMain } from './drills';
 import { SWING_STRINGS as T } from './strings';
-import { POSITIONS, TIER, EXTRA_TIER } from './checkpointChecks';
+import { EXTRA_TIER, positionsOf, tiersOf } from './checkpointChecks';
 
 /** Every fault id a row can name (each has a label, copy and drills). */
 export const FAULTS = [
   'posture', 'posture_loss', 'steep_backswing', 'flat_backswing', 'top_position', 'over_the_top', 'stuck',
   'early_extension', 'flip', 'head_sway', 'tempo_fast', 'tempo_slow', 'balance',
+  // face-on (plan 2026-10-30 §4)
+  'stance_width', 'ball_position', 'sway', 'hanging_back', 'slide', 'head_dip', 'scoop', 'excess_lean',
 ];
 
 const RANK = { red: 0, yellow: 1 };
-export const tierOf = (row) => (row.extra ? EXTRA_TIER : TIER[row.position] ?? EXTRA_TIER);
-const orderOf = (row) => (row.extra ? POSITIONS.length : POSITIONS.indexOf(row.position));
+export const tierOf = (row, view) => (row.extra ? EXTRA_TIER : tiersOf(view)[row.position] ?? EXTRA_TIER);
+const orderOf = (row, view) => (row.extra ? positionsOf(view).length : positionsOf(view).indexOf(row.position));
 
 /**
  * The red and yellow rows that name a fault, most important first: red before yellow, then tier,
  * then severity (highest first), then swing order; a full tie keeps the analysis order.
  */
-export function rankedRows(checks) {
+export function rankedRows(checks, view) {
   return checks
     .map((c, n) => ({ c, n }))
     .filter(({ c }) => c.status in RANK && c.fault)
     .sort((a, b) => RANK[a.c.status] - RANK[b.c.status]
-      || tierOf(a.c) - tierOf(b.c)
+      || tierOf(a.c, view) - tierOf(b.c, view)
       || (b.c.severity ?? 0) - (a.c.severity ?? 0)
-      || orderOf(a.c) - orderOf(b.c)
+      || orderOf(a.c, view) - orderOf(b.c, view)
       || a.n - b.n)
     .map(({ c }) => c);
 }
 
-/** { address: 'red' | 'yellow' | 'green' | 'unknown', ... } over the seven positions (extras excluded). */
-export function positionStatuses(checks) {
-  return Object.fromEntries(POSITIONS.map((k) => {
+/** { address: 'red' | 'yellow' | 'green' | 'unknown', ... } over the view's positions (extras excluded). */
+export function positionStatuses(checks, view) {
+  return Object.fromEntries(positionsOf(view).map((k) => {
     const at = checks.filter((c) => !c.extra && c.position === k && c.status !== 'unknown');
     const s = !at.length ? 'unknown'
       : at.some((c) => c.status === 'red') ? 'red' : at.some((c) => c.status === 'yellow') ? 'yellow' : 'green';
@@ -50,26 +52,28 @@ export function positionStatuses(checks) {
 }
 
 /**
- * @param {object[]} checks  rows from runChecks
+ * @param {object[]} checks  rows from runChecks (runFaceOnChecks for a face-on swing)
+ * @param {'dtl'|'faceOn'} [view]  whose positions and tiers rank the rows
  * @returns {{fault: string, label: string, position: string|null, phase: string, tier: number,
  *   severity: number, startsAt: string|null, evidence: object[], consequences: string[], drills: string[]} | null}
  *   `position` is null for an extra; `phase` repeats the position ('extras' for an extra) for older readers.
  */
-export function mainFault(checks) {
-  const ranked = rankedRows(checks);
+export function mainFault(checks, view) {
+  const POSITIONS = positionsOf(view);
+  const ranked = rankedRows(checks, view);
   if (!ranked.length) return null;
   const top = ranked[0];
-  const status = positionStatuses(checks);
+  const status = positionStatuses(checks, view);
   const position = top.extra ? null : top.position;
-  const idx = orderOf(top);
-  const worstRed = (k) => rankedRows(checks.filter((c) => !c.extra && c.position === k && c.status === 'red'))[0];
+  const idx = orderOf(top, view);
+  const worstRed = (k) => rankedRows(checks.filter((c) => !c.extra && c.position === k && c.status === 'red'), view)[0];
   const evidence = ranked.filter((c) => c.fault === top.fault);
   return {
     fault: top.fault,
     label: T.fault[top.fault],
     position,
     phase: position ?? 'extras',
-    tier: tierOf(top),
+    tier: tierOf(top, view),
     severity: top.severity ?? 0,
     startsAt: POSITIONS.slice(0, idx).find((k) => status[k] === 'red') ?? null,
     evidence,

@@ -30,7 +30,8 @@ import {
 import { formatDate } from '../i18n/format';
 import { normClub } from '../swing/checks';
 import { runAnalysis } from '../swing/runAnalysis';
-import { MARK_TOTAL, markedFromMarks, passDone } from '../swing/markPass';
+import { markTotalOf, markedFromMarks, passDone } from '../swing/markPass';
+import { reanalyzeForClub } from '../swing/reanalyze';
 import { shareSwingExport } from '../swing/shareExport';
 import { failureReport } from '../swing/failureReport';
 import { apiVersion } from '../swing/native';
@@ -39,7 +40,7 @@ import { poseAtFrame } from '../swing/poseAt';
 import { highlightFor, keyLinesAt } from '../swing/highlights';
 import { unplacedCheckpoint, CHECK_KEY, frameOfKey } from '../swing/checkpointChecks';
 import {
-  STEPS, EXTRAS, stepRows, stepStatuses, pendingSteps, mainSoFar, openingStep, neighbour, defaultRow, clubheadOpen,
+  stepsOf, EXTRAS, stepRows, stepStatuses, pendingSteps, mainSoFar, openingStep, neighbour, defaultRow, clubheadOpen,
 } from '../swing/resultsSteps';
 import { placeHead } from '../swing/placeHead';
 import { askAt, rowNeeds, unlockedBy } from '../swing/rowNeeds';
@@ -167,7 +168,7 @@ function NavRow({
 export function SwingResultsView({
   row, phase, analysis, pose, progress, error, errorDetail = null, stillTick = 0, stillFor, placed = null,
   onBack, onCancel, onDelete, onRetry, onSendDetails, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport,
-  onPlaceHead, onUndoPlace,
+  onPlaceHead, onUndoPlace, onSwitchView,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
@@ -195,6 +196,8 @@ export function SwingResultsView({
 
   const checks = useMemo(() => analysis?.checks ?? [], [analysis]);
   const main = analysis?.main ?? null;
+  const steps = useMemo(() => stepsOf(analysis), [analysis]); // the view's positions, then Extras
+  const faceOn = analysis?.view === 'faceOn';
   const cp = step === EXTRAS ? 'finish' : step; // the frame the step shows
   const rows = useMemo(() => stepRows(checks, step), [checks, step]);
   const selected = rows.find((c) => CHECK_KEY(c) === selKey) ?? (ready ? defaultRow(checks, step, main) : null);
@@ -243,7 +246,7 @@ export function SwingResultsView({
   const startPlace = (k) => goTo(k, { placing: true });
   // a clubhead is placed on the still; the ball only exists at Address, in the canvas
   const onAsk = (a) => (a.kind === 'ball' ? openEdit('address', { active: 'ball' }) : startPlace(a.cp));
-  const stepBy = (dir) => { const k = neighbour(step, dir); if (k) goTo(k); };
+  const stepBy = (dir) => { const k = neighbour(step, dir, steps); if (k) goTo(k); };
   const seeOnSwing = (c) => goTo(c.extra ? EXTRAS : c.position, { row: CHECK_KEY(c) });
   const mainStep = main ? main.position ?? EXTRAS : null;
   const groupDrills = ready && main ? drillsForMain(main) : [];
@@ -254,7 +257,6 @@ export function SwingResultsView({
     analysis.approximate ? { short: T.approxFps, long: T.approxBanner } : null,
     analysis.scale?.approx ? { short: T.approxHeight, long: T.approxHeightBanner } : null,
     analysis.impactFromPose ? { short: T.approxBall, long: T.approxBallBanner } : null,
-    analysis.view === 'faceOn' ? { short: T.approxFaceOn, long: T.approxFaceOnBanner } : null,
   ].filter(Boolean) : [];
   const openEdit = (k, opts) => onEditMarks?.(k, opts);
   const place_ = async (pt) => {
@@ -331,8 +333,20 @@ export function SwingResultsView({
               current={step}
               onSelect={(k) => goTo(k)}
               onAsk={onAsk}
-              unconfirmed={MARK_TOTAL - (row?.marked?.count ?? MARK_TOTAL)}
+              unconfirmed={markTotalOf(analysis.view) - (row?.marked?.count ?? markTotalOf(analysis.view))}
+              steps={steps}
             />
+            <PressableScale
+              style={s.viewRow}
+              onPress={onSwitchView}
+              accessibilityRole="button"
+              accessibilityLabel={`${faceOn ? T.viewFaceOn : T.viewDtl}. ${faceOn ? T.switchToDtl : T.switchToFaceOn}`}
+              testID="results-view"
+            >
+              <Feather name="repeat" size={14} color={theme.text.secondary} />
+              <Text style={s.viewText}>{`${faceOn ? T.viewFaceOn : T.viewDtl} · `}</Text>
+              <Text style={s.link}>{faceOn ? T.switchToDtl : T.switchToFaceOn}</Text>
+            </PressableScale>
             {approxReasons.length ? (
               <View>
                 <Notice
@@ -383,7 +397,7 @@ export function SwingResultsView({
               onOpenEdit={() => openEdit(cp, { active: 'head' })}
             />
             {/* the badge is gone from the picture; TalkBack still hears where a swipe landed */}
-            <View style={s.srOnly} accessible accessibilityLiveRegion="polite" accessibilityLabel={T.posOf(stepName(step), STEPS.indexOf(step) + 1, STEPS.length)} testID="position-bar" />
+            <View style={s.srOnly} accessible accessibilityLiveRegion="polite" accessibilityLabel={T.posOf(stepName(step), steps.indexOf(step) + 1, steps.length)} testID="position-bar" />
             {placing ? null : (
               <View style={s.caption} testID="results-caption">
                 {focusOn ? (
@@ -741,6 +755,35 @@ export default function SwingResultsScreen({ navigation, route }) {
       },
     ]);
   };
+  // "Filmed from behind?" (plan 2026-10-30 F4): the golfer's word wins over the detection. The swing
+  // re-runs with the other view's checks; positions that view marks and this one did not send the
+  // golfer to the marking pass.
+  const onSwitchView = () => {
+    const toFaceOn = dataRef.current.analysis?.view !== 'faceOn';
+    Alert.alert(toFaceOn ? T.switchTitleFaceOn : T.switchTitleDtl, T.switchBody, [
+      { text: H.cancel, style: 'cancel' },
+      {
+        text: toFaceOn ? T.switchConfirmFaceOn : T.switchConfirmDtl,
+        onPress: async () => {
+          try {
+            const cur = dataRef.current;
+            const marks = { ...(cur.marks ?? (await readMarks(swingId)) ?? {}), viewOverride: toFaceOn ? 'faceOn' : 'dtl' };
+            const next = reanalyzeForClub({
+              pose: cur.pose ?? (await readPose(swingId)), probe: await readProbe(swingId), marks, analysis: cur.analysis,
+            }, cur.analysis.club);
+            if (next.error) throw new Error(next.error);
+            await saveMarks(swingId, marks);
+            await saveAnalysis(swingId, next);
+            if (!alive.current) return;
+            if (!passDone(getSwing(swingId)?.marked)) toMarking();
+            else setData({ analysis: next, pose: cur.pose, marks });
+          } catch {
+            Alert.alert(T.switchFailed);
+          }
+        },
+      },
+    ]);
+  };
   const onExport = async () => {
     try {
       if ((await shareSwingExport(swingId)) === 'unavailable') Alert.alert(SWING_STRINGS.exportSwing.unavailable);
@@ -775,6 +818,7 @@ export default function SwingResultsScreen({ navigation, route }) {
         onExport={onExport}
         onPlay={() => setPlaying(true)}
         onNeedStills={onNeedStills}
+        onSwitchView={onSwitchView}
       />
       <PlayerHost visible={playing} uri={swingVideoUri(swingId)} onClose={() => setPlaying(false)} />
     </>
@@ -855,6 +899,8 @@ const makeStyles = (theme) => StyleSheet.create({
   sheet: { backgroundColor: theme.bg.primary, padding: 20, paddingBottom: 32, borderTopLeftRadius: 24, borderTopRightRadius: 24, gap: 8 },
   sheetTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary, marginBottom: 6 },
   menuRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 4 },
+  viewRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 2, marginTop: -6 },
+  viewText: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: theme.text.secondary },
   menuText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: theme.text.primary },
   input: {
     minHeight: 48, borderRadius: 12, borderWidth: 1.5, borderColor: theme.border.default, backgroundColor: theme.bg.card,

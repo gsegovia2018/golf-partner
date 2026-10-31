@@ -19,6 +19,7 @@ export function valueText(check) {
     case ':1': return `${check.value}:1`;
     case 'H': return `${check.value} H`;
     case 'of 2': return t('swing.value.ofTwo', { n: check.value });
+    case '×': return `${check.value}×`;
     default: return `${check.value}${check.unit ? ` ${check.unit}` : ''}`;
   }
 }
@@ -86,6 +87,7 @@ function toolkit(ctx) {
 export function keyLinesAt(cp, ctx) {
   const none = { shaft: false, shoulder: false, extra: [] };
   if (!ctx?.analysis) return none;
+  if (ctx.analysis.view === 'faceOn') return none; // the address planes are down-the-line lines
   const { lm, ground, landing } = toolkit(ctx);
   // your shaft line to the ground, with the toes and the ball to land on (no ticks without a line)
   const down = (k) => {
@@ -135,6 +137,7 @@ export function highlightFor(check, ctx) {
   const { hands, head, shaftPlane, ground, landing } = toolkit(ctx);
   const text = (at, t) => (ok(at) && t ? [{ t: 'label', at: [at[0] + 0.03, at[1]], text: t }] : []);
   const out = [];
+  if (analysis.view === 'faceOn') return faceOnHighlight(check, { lm, hands, text, analysis });
 
   switch (check.id) {
     case 'posture_address':
@@ -284,6 +287,106 @@ export function highlightFor(check, ctx) {
     default: {
       const h = hands(homeOf(check));
       return h ? text(h, valueText(check)) : [];
+    }
+  }
+}
+
+// Face-on drawings (plan 2026-10-30 §4): a dashed upright line where the body part should stay
+// (role 'target'), the golfer's own point or line, and the value. Lead / trail are picked by the
+// target side (analysis.targetDir), as the checks pick them.
+function faceOnHighlight(check, { lm, hands, text, analysis }) {
+  const dir = analysis.targetDir === -1 ? -1 : 1;
+  const pick = (key, a, b, lead) => {
+    const p = lm(key, a);
+    const q = lm(key, b);
+    if (!p || !q) return null;
+    const pLead = dir * p[0] >= dir * q[0];
+    return pLead === lead ? p : q;
+  };
+  const ankle = (lead) => pick('address', LM.lAnk, LM.rAnk, lead);
+  const hip = (key, lead) => pick(key, LM.lHip, LM.rHip, lead);
+  const pelvis = (key) => {
+    const p = lm(key, LM.lHip);
+    const q = lm(key, LM.rHip);
+    return p && q ? midOf(p, q) : null;
+  };
+  const upright = (x, y0, y1) => ({ t: 'line', a: [x, y0], b: [x, y1], dash: true, role: 'target' });
+  const headAt = (key) => {
+    const a = lm(key, LM.lEar);
+    const b = lm(key, LM.rEar);
+    return a && b ? midOf(a, b) : lm(key, LM.nose);
+  };
+  const value = valueText(check);
+  switch (check.id) {
+    case 'fo_stance':
+    case 'fo_ball_pos': {
+      const a = ankle(false);
+      const b = ankle(true);
+      if (!a || !b) return [];
+      const ball = analysis.reference?.ball;
+      return [
+        upright(a[0], a[1], a[1] - 0.25), upright(b[0], b[1], b[1] - 0.25),
+        ...(check.id === 'fo_ball_pos' && ball ? [{ t: 'circle', c: ball, r: 0.02 }] : []),
+        ...text([b[0], b[1] - 0.2], value),
+      ];
+    }
+    case 'fo_setup_tilt': {
+      const pv = pelvis('address');
+      const s1 = lm('address', LM.lSh);
+      const s2 = lm('address', LM.rSh);
+      if (!pv || !s1 || !s2) return [];
+      const sh = midOf(s1, s2);
+      return [upright(pv[0], pv[1], sh[1]), { t: 'line', a: pv, b: sh }, ...text(sh, value)];
+    }
+    case 'fo_sway':
+    case 'fo_slide': {
+      const lead = check.id === 'fo_slide';
+      const a = ankle(lead);
+      const h = hip(lead ? 'impact' : 'top', lead);
+      if (!a || !h) return [];
+      return [upright(a[0], a[1], h[1] - 0.06), { t: 'circle', c: h, r: 0.015 }, ...text(h, value)];
+    }
+    case 'fo_hips_shift': {
+      const a = pelvis('top');
+      const b = pelvis('shaftDown');
+      return a && b ? [upright(a[0], a[1] + 0.06, a[1] - 0.06), { t: 'line', a, b }, { t: 'dot', c: b }, ...text(b, value)] : [];
+    }
+    case 'fo_head_top':
+    case 'fo_head_back':
+    case 'fo_head_dip': {
+      const n = headAt('address');
+      const at = { fo_head_top: 'top', fo_head_back: 'shaftDown', fo_head_dip: 'impact' }[check.id];
+      const now = headAt(at);
+      return n ? [{ t: 'circle', c: n, r: 0.04, dash: true, role: 'target' }, ...(now ? [{ t: 'dot', c: now }] : []), ...text([n[0] + 0.03, n[1] - 0.04], value)] : [];
+    }
+    case 'fo_head_behind': {
+      const ball = analysis.reference?.ball;
+      const n = headAt('impact');
+      return ball && n ? [upright(ball[0], ball[1], n[1] - 0.04), { t: 'dot', c: n }, ...text(n, value)] : [];
+    }
+    case 'fo_hands_ahead': {
+      const g = hands('impact');
+      const ball = analysis.reference?.ball;
+      return g && ball ? [upright(ball[0], ball[1], g[1] - 0.04), { t: 'dot', c: g }, ...text(g, value)] : [];
+    }
+    case 'fo_hips_impact': {
+      const a = pelvis('address');
+      const b = pelvis('impact');
+      return a && b ? [upright(a[0], a[1] + 0.06, a[1] - 0.06), { t: 'line', a, b }, { t: 'dot', c: b }, ...text(b, value)] : [];
+    }
+    case 'fo_finish_head': {
+      const a = ankle(true);
+      const n = headAt('finish');
+      return a && n ? [upright(a[0], a[1], n[1] - 0.04), { t: 'dot', c: n }, ...text(n, value)] : [];
+    }
+    case 'fo_finish_weight': {
+      const a = ankle(true);
+      const pv = pelvis('finish');
+      return a && pv ? [upright(a[0], a[1], pv[1] - 0.06), { t: 'circle', c: pv, r: 0.015 }, ...text(pv, value)] : [];
+    }
+    default: {
+      const h = hands(homeOf(check));
+      return h ? text(h, value) : [];
     }
   }
 }

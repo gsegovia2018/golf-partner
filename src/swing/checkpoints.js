@@ -61,10 +61,17 @@ const swapLR = (text) => (getLanguage() === 'es'
   ? text.replace(/\b(izquierd|derech)([oa]s?)\b/gi, (m, stem, end) => flip('izquierd', 'derech')(stem) + end)
   : text.replace(/\b(left|right)\b/gi, (m) => flip('left', 'right')(m)));
 
+// Face-on (plan 2026-10-30): the cues whose down-the-line wording ("from behind it points at the
+// camera") does not hold from the front read their own sentences.
+const FACE_ON_CUES = { shaftDown: ['stopWhen', 'markTips'] };
+
 /** The cue card for a checkpoint, mirrored for left-handers; null for an unknown key. */
-export function cueFor(key, handedness = 'right') {
-  const d = [...CHECKPOINT_DEFS, ...INTERNAL_DEFS].find((c) => c.key === key);
-  if (!d) return null;
+export function cueFor(key, handedness = 'right', view = 'dtl') {
+  const found = [...CHECKPOINT_DEFS, ...INTERNAL_DEFS].find((c) => c.key === key);
+  if (!found) return null;
+  const d = view === 'faceOn' && FACE_ON_CUES[key]
+    ? { ...found, ...Object.fromEntries(FACE_ON_CUES[key].map((f) => [f, cueText(`fo.${key}`, f)])) }
+    : found;
   if (handedness !== 'left') return { ...d };
   const s = d.stop;
   const stop = s ? { ...s, line: swapLR(s.line) } : undefined;

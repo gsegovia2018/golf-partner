@@ -65,7 +65,7 @@ export async function hydrateSwings() {
   const old = SWINGS.filter((r) => r.status === 'ready' && !r.marked);
   if (!old.length) return;
   const got = await Promise.all(old.map((r) => readMarks(r.id)));
-  old.forEach((r, k) => patchRow(r.id, { marked: markedFromMarks(got[k]) }));
+  old.forEach((r, k) => patchRow(r.id, { marked: markedFromMarks(got[k], r.view) }));
   emit();
   await persistIndex();
 }
@@ -259,8 +259,17 @@ export async function saveAnalysis(id, analysis, {
   if (pose) writeJson(id, 'pose.json', pose);
   if (probe) writeJson(id, 'probe.json', probe);
   if (!swingFile(id, 'marks.json').exists) {
-    writeJson(id, 'marks.json', { ...emptyMarks({ swingId: id, video: pose?.video ?? null, handedness: analysis.handedness }), pass: newPass() });
+    writeJson(id, 'marks.json', {
+      ...emptyMarks({
+        swingId: id, video: pose?.video ?? null, handedness: analysis.handedness, view: analysis.view === 'faceOn' ? 'faceOn' : 'dtl',
+      }),
+      pass: newPass(),
+    });
   }
+  // the view decides which positions the pass marks: a view that changed (the golfer's correction,
+  // a re-run) recounts the pass against the new positions
+  const view = analysis.view === 'faceOn' ? 'faceOn' : 'dtl';
+  const marked = (row.view ?? 'dtl') !== view && row.marked ? markedFromMarks(await readMarks(id), view) : undefined;
   const next = patchRow(id, {
     status,
     error: undefined,
@@ -268,6 +277,8 @@ export async function saveAnalysis(id, analysis, {
     fps: analysis.fps
       ? { capture: analysis.fps.capture, effective: analysis.fps.effective, factor: analysis.fps.factor, approximate: !!analysis.fps.approximate }
       : null,
+    view,
+    ...(marked ? { marked } : {}),
     mainFault: analysis.main?.fault ?? null,
     consequences: analysis.main?.consequences ?? [], // coach v2 swing link; rows saved earlier have neither field
     handedness: analysis.handedness ?? PROFILE.handedness,
@@ -294,7 +305,7 @@ export async function markSwingFailed(id, error, detail = null) {
 export async function saveMarks(id, marks) {
   if (!getSwing(id)) return null;
   writeJson(id, 'marks.json', marks);
-  patchRow(id, { bytes: dirBytes(id), marked: markedFromMarks(marks) });
+  patchRow(id, { bytes: dirBytes(id), marked: markedFromMarks(marks, getSwing(id).view) });
   emit();
   await persistIndex();
   return marks;

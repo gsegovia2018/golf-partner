@@ -146,6 +146,11 @@ export const SWING_STRINGS = build({
     guideToggle: L,
     guideTitle: L,
     guideTips: [L, L, L, L],
+    guideViewDtl: L,
+    guideViewFaceOn: L,
+    guideTitleFaceOn: L,
+    guideTipsFaceOn: [L, L, L, L],
+    guideAuto: L,
     guideBox: L,
     gotIt: L,
     fps: (fps) => t(fps >= 240 ? 'swing.capture.fps.high' : fps >= 120 ? 'swing.capture.fps.ok' : 'swing.capture.fps.low', { fps }),
@@ -332,12 +337,24 @@ export const SWING_STRINGS = build({
   position: {
     short: {
       address: L, takeaway: L, leadArm: L, top: L, shaftDown: L, impact: L, trailArm: L, extras: L,
+      finish: L, // face-on's fifth position
     },
   },
 
   // Swing results (S6, design B; checks v2 design D: summary + stepper).
   results: {
     workFirst: L,
+    // the view row under the strip and its switch (plan 2026-10-30 F4)
+    viewFaceOn: L,
+    viewDtl: L,
+    switchToDtl: L,
+    switchToFaceOn: L,
+    switchTitleFaceOn: L,
+    switchTitleDtl: L,
+    switchBody: L,
+    switchConfirmFaceOn: L,
+    switchConfirmDtl: L,
+    switchFailed: L,
     startsAt: (name) => t('swing.results.startsAt', { name }),
     mainSoFar: L,
     placeToFinish: (name) => t('swing.results.placeToFinish', { name: getLanguage() === 'es' ? name.toLowerCase() : name }),
@@ -371,7 +388,6 @@ export const SWING_STRINGS = build({
     approxFps: L,
     approxHeight: L,
     approxBall: L,
-    approxFaceOn: L,
     planRow: L,
     planSub: L,
     startsAtShort: (name) => t('swing.results.startsAtShort', { name: getLanguage() === 'es' ? name.toLowerCase() : name }),
@@ -398,7 +414,6 @@ export const SWING_STRINGS = build({
     approxBanner: L,
     approxHeightBanner: L,
     approxBallBanner: L,
-    approxFaceOnBanner: L,
     noStill: L,
     estimated: L,
     clubHidden: L,
@@ -545,6 +560,20 @@ export const SWING_STRINGS = build({
     hands_height_impact: L,
     hands_out_impact: L,
     shaft_angle_impact: L,
+    fo_stance: L,
+    fo_ball_pos: L,
+    fo_setup_tilt: L,
+    fo_sway: L,
+    fo_head_top: L,
+    fo_hips_shift: L,
+    fo_head_back: L,
+    fo_hands_ahead: L,
+    fo_hips_impact: L,
+    fo_slide: L,
+    fo_head_behind: L,
+    fo_head_dip: L,
+    fo_finish_weight: L,
+    fo_finish_head: L,
   },
 
   fault: {
@@ -563,6 +592,14 @@ export const SWING_STRINGS = build({
     posture_loss: L,
     top_position: L,
     flip: L,
+    stance_width: L,
+    ball_position: L,
+    sway: L,
+    hanging_back: L,
+    slide: L,
+    head_dip: L,
+    scoop: L,
+    excess_lean: L,
   },
 
   // Reasons a check has no verdict ('unknown'), shown instead of a value.
@@ -619,6 +656,20 @@ export const SWING_STRINGS = build({
       if (balanced) return t('swing.checkText.finish_balance.balanced');
       return t('swing.checkText.finish_balance.neither');
     },
+    // face-on (plan 2026-10-30 §4): `side` is judgeRange's 'low' | 'high' | null
+    fo_stance: (ratio, side) => t(side === 'low' ? 'swing.checkText.fo_stance_narrow' : side === 'high' ? 'swing.checkText.fo_stance_wide' : 'swing.checkText.fo_stance', { ratio: formatNumber(ratio, { maxDecimals: 2 }) }),
+    fo_ball_pos: (side) => t(side === 'low' ? 'swing.checkText.fo_ball_pos_back' : side === 'high' ? 'swing.checkText.fo_ball_pos_forward' : 'swing.checkText.fo_ball_pos'),
+    fo_setup_tilt: (deg) => t(deg < 0 ? 'swing.checkText.fo_setup_tilt_toward' : 'swing.checkText.fo_setup_tilt', { deg: n0(Math.abs(deg)) }),
+    fo_sway: (cm) => t(cm > 0 ? 'swing.checkText.fo_sway' : 'swing.checkText.fo_sway_ok', { cm: n0(Math.abs(cm)) }),
+    fo_head_move: (cm) => t(cm > 0 ? 'swing.checkText.fo_head_forward' : 'swing.checkText.fo_head_back', { cm: n0(Math.abs(cm)) }),
+    fo_hips_shift: (cm) => t(cm >= 0 ? 'swing.checkText.fo_hips_shift' : 'swing.checkText.fo_hips_shift_back', { cm: n0(Math.abs(cm)) }),
+    fo_hands_ahead: (cm) => t(cm >= 0 ? 'swing.checkText.fo_hands_ahead' : 'swing.checkText.fo_hands_behind', { cm: n0(Math.abs(cm)) }),
+    fo_hips_impact: (cm) => t(cm >= 0 ? 'swing.checkText.fo_hips_impact' : 'swing.checkText.fo_hips_impact_back', { cm: n0(Math.abs(cm)) }),
+    fo_slide: (cm) => t(cm > 0 ? 'swing.checkText.fo_slide' : 'swing.checkText.fo_slide_ok', { cm: n0(Math.abs(cm)) }),
+    fo_head_behind: (cm) => t(cm >= 0 ? 'swing.checkText.fo_head_behind' : 'swing.checkText.fo_head_ahead', { cm: n0(Math.abs(cm)) }),
+    fo_head_dip: (cm) => t(cm > 0 ? 'swing.checkText.fo_head_dip' : 'swing.checkText.fo_head_dip_ok', { cm: n0(Math.abs(cm)) }),
+    fo_finish_weight: (share) => t('swing.checkText.fo_finish_weight', { pct: n0(share * 100) }),
+    fo_finish_head: (cm) => t(cm > 0 ? 'swing.checkText.fo_finish_head' : 'swing.checkText.fo_finish_head_ok', { cm: n0(Math.abs(cm)) }),
   },
 
   // Plain-language coaching per check and direction (see fixes.js for how the key is chosen).
@@ -868,6 +919,142 @@ export const SWING_STRINGS = build({
     },
     head_drift: {
       moved: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_stance: {
+      narrow: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+      wide: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_ball_pos: {
+      back: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+      forward: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_setup_tilt: {
+      upright: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+      much: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_sway: {
+      out: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_head_top: {
+      moved: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_hips_shift: {
+      stuck: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_head_back: {
+      forward: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_hands_ahead: {
+      back: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+      forward: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_slide: {
+      past: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_head_behind: {
+      ahead: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_head_dip: {
+      down: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_finish_weight: {
+      back: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_hips_impact: {
+      stuck: {
+        headline: L,
+        cost: L,
+        cue: L,
+        steps: [L, L, L],
+      },
+    },
+    fo_finish_head: {
+      back: {
         headline: L,
         cost: L,
         cue: L,

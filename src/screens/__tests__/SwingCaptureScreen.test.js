@@ -110,6 +110,20 @@ test('shows the 240 fps pill, the privacy line and the set-up guide, locked to p
   expect(utils.queryByTestId('capture-guide-card')).toBeNull();
 });
 
+test('the guide shows the face-on set-up on request and says the view is read from the video', async () => {
+  const utils = setup();
+  await waitFor(() => expect(utils.getByTestId('native-camera')).toBeTruthy());
+  // the guide opens by itself only until it has been dismissed once (the test above did): open it
+  if (!utils.queryByTestId('capture-guide-card')) fireEvent.press(utils.getByTestId('capture-guide-toggle'));
+  await waitFor(() => expect(utils.getByTestId('capture-guide-card')).toBeTruthy());
+  expect(utils.getByText(T.guideTitle)).toBeTruthy();
+  expect(utils.getByText(T.guideAuto)).toBeTruthy();
+  fireEvent.press(utils.getByTestId('capture-guide-faceOn'));
+  expect(utils.getByText(T.guideTitleFaceOn)).toBeTruthy();
+  T.guideTipsFaceOn.forEach((tip) => expect(utils.getByText(tip)).toBeTruthy());
+  expect(utils.queryByText(T.guideTitle)).toBeNull();
+});
+
 test('records into the cache and stops into the review step without analysing', async () => {
   const utils = setup();
   await recordAndStop(utils);

@@ -153,6 +153,37 @@ export const DRILLS = [
     instruction: L,
     passTarget: L,
   },
+  // Face-on (plan 2026-10-30 §6).
+  {
+    id: 'fo-varilla-atras', fault: 'sway', checks: ['fo_sway'], title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
+    id: 'fo-varilla-adelante', fault: 'slide', checks: ['fo_slide'], title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
+    id: 'fo-paso', fault: 'hanging_back', checks: ['fo_hips_shift', 'fo_hips_impact', 'fo_finish_weight', 'fo_finish_head'], title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
+    id: 'fo-sombra', fault: 'head_dip', checks: ['fo_head_top', 'fo_head_back', 'fo_head_behind', 'fo_head_dip'], also: ['head_sway'], title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
+    id: 'fo-dos-varillas', fault: 'ball_position', checks: ['fo_ball_pos', 'fo_stance'], also: ['stance_width'], title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
+    id: 'fo-bolsa', fault: 'scoop', checks: ['fo_hands_ahead'], also: ['excess_lean'], title: L,
+    instruction: L,
+    passTarget: L,
+  },
 ].map(localised);
 
 /** The main fault's drills: those aimed at its evidence checks first, then the fault's own (D24). */

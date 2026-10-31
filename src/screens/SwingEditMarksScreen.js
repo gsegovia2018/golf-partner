@@ -32,7 +32,7 @@ import {
 } from '../swing/editMarks';
 import { proposeClub, warmClub, releaseClubDetector } from '../swing/clubOnDemand';
 import {
-  MARKED_KEYS, MARK_TOTAL, isMarkedKey, nextTodo, resumeKey, passCounts, positionStatus, markedFromMarks,
+  markedKeysOf, markTotalOf, isMarkedKey, nextTodo, resumeKey, passCounts, positionStatus, markedFromMarks,
 } from '../swing/markPass';
 import { LOUPE_SIZE, loupeSide } from '../swing/loupe';
 import {
@@ -229,15 +229,18 @@ export function SwingMarkCanvas({
   // A position opens at step 1 in the pass (the frame first), at step 2 once it is confirmed and
   // always in edit mode (Results' "Edit marks" opens the saved frame, "‹ Frame" is one tap away).
   const stepFor = (key, status) => (!pass || status[key] === 'confirmed' ? 2 : 1);
+  // the camera view decides which positions the pass marks (face-on: four, down the line: seven)
+  const swingView = analysis.view;
+  const MARKED = markedKeysOf(swingView);
   const startPhase = () => {
     if (!pass) return 'canvas';
-    const marked = markedFromMarks(marks);
+    const marked = markedFromMarks(marks, swingView);
     if (marked.state === 'none') return 'club';
-    return resumeKey(startDraft.status) ? 'canvas' : 'finish';
+    return resumeKey(startDraft.status, swingView) ? 'canvas' : 'finish';
   };
-  const firstCp = pass ? resumeKey(startDraft.status) ?? MARKED_KEYS[0] : initialCp;
+  const firstCp = pass ? resumeKey(startDraft.status, swingView) ?? MARKED[0] : initialCp;
   const [phase, setPhase] = useState(startPhase); // club | canvas | finish
-  const [club, setClub] = useState(normClub(pass && markedFromMarks(marks).state === 'none' ? lastClub : analysis.club));
+  const [club, setClub] = useState(normClub(pass && markedFromMarks(marks, swingView).state === 'none' ? lastClub : analysis.club));
   const [cp, setCp] = useState(firstCp);
   const [step, setStep] = useState(() => stepFor(firstCp, startDraft.status));
   const [view, setView] = useState(startDraft.cps[firstCp].frame); // step 1's cursor; the frozen frame in step 2
@@ -275,15 +278,15 @@ export function SwingMarkCanvas({
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const d = draft.cps[cp];
-  const chapter = isMarkedKey(cp);
-  const cue = useMemo(() => cueFor(cp, handedness), [cp, handedness, getLanguage()]); // eslint-disable-line react-hooks/exhaustive-deps
+  const chapter = isMarkedKey(cp, swingView);
+  const cue = useMemo(() => cueFor(cp, handedness, swingView), [cp, handedness, swingView, getLanguage()]); // eslint-disable-line react-hooks/exhaustive-deps
   const statuses = useMemo(() => ({
     hands: markStatus(draft, base, cp, 'hands'),
-    head: markStatus(draft, base, cp, 'head'),
+    head: swingView === 'faceOn' ? null : markStatus(draft, base, cp, 'head'), // face-on marks no clubhead
     ball: cp === 'address' ? markStatus(draft, base, cp, 'ball') : null,
-  }), [draft, base, cp]);
+  }), [draft, base, cp, swingView]);
   const handsNow = d.hands ?? live.clubMarks[cp].hands;
-  const headNow = d.hidden ? null : d.head;
+  const headNow = d.hidden || swingView === 'faceOn' ? null : d.head; // face-on: nothing to drag or tap
   const ballNow = cp === 'address' ? draft.ball : null;
 
   // --- layout: the video takes everything between the top row and the panel ----------------------
@@ -468,7 +471,7 @@ export function SwingMarkCanvas({
   };
 
   // --- saving ---------------------------------------------------------------------------------------
-  const passStateNow = useRef(markedFromMarks(marks).state);
+  const passStateNow = useRef(markedFromMarks(marks, swingView).state);
   const write = async (next, passState) => {
     try {
       const a = recompute({ pose, probe, analysis: scored, draft: next, base });
@@ -512,7 +515,7 @@ export function SwingMarkCanvas({
   };
   /** Run `then(draft)` once the position has nothing unconfirmed to lose (the discard sheet asks). */
   const guard = (then) => {
-    if (phase === 'canvas' && pendingMoves(draft, base, snap.current, cp)) setDialog({ then });
+    if (phase === 'canvas' && pendingMoves(draft, base, snap.current, cp, swingView)) setDialog({ then });
     else then(draft);
   };
   const goto = useStable((key) => { if (key !== cp || fixFrom || !chapter) guard((dr) => { setFixFrom(null); enter(key, dr); }); });
@@ -520,7 +523,7 @@ export function SwingMarkCanvas({
     const { then } = dialog;
     setDialog(null);
     if (choice === 'keep') return;
-    const next = choice === 'confirm' ? confirmMoves(draft, base, cp) : restorePosition(draft, snap.current, cp);
+    const next = choice === 'confirm' ? confirmMoves(draft, base, cp, swingView) : restorePosition(draft, snap.current, cp);
     commit(next);
     then(next);
   };
@@ -535,12 +538,12 @@ export function SwingMarkCanvas({
   };
 
   const advance = (next) => {
-    const key = nextTodo(next.status, cp);
+    const key = nextTodo(next.status, cp, swingView);
     if (key) enter(key, next); else setPhase('finish');
   };
   const primary = async () => {
     if (loading) return;
-    const next = confirmPosition(draft, base, cp);
+    const next = confirmPosition(draft, base, cp, swingView);
     commit(next);
     if (pass && !fixFrom) {
       advance(next);
@@ -590,7 +593,7 @@ export function SwingMarkCanvas({
   // --- the club sheet and the finish sheet (the pass) ----------------------------------------------
   const startMarking = async () => {
     onClub?.(club);
-    if (await persistNow(draft, 'partial')) enter(resumeKey(draft.status) ?? MARKED_KEYS[0], draft);
+    if (await persistNow(draft, 'partial')) enter(resumeKey(draft.status, swingView) ?? MARKED[0], draft);
   };
   const seeResults = async () => {
     if (await persistNow(draft, 'done')) onResults();
@@ -598,10 +601,10 @@ export function SwingMarkCanvas({
   const fixFinish = () => { setFixFrom('finish'); enter('finish', draft, 1); };
 
   // --- rendering ------------------------------------------------------------------------------------
-  const counts = passCounts(draft.status);
+  const counts = passCounts(draft.status, swingView);
   const editLike = !pass || !!fixFrom;
   const action = useMemo(() => primaryAction(draft, base, cp), [draft, base, cp]);
-  const willChange = useMemo(() => isDirty(confirmPosition(draft, base, cp), startDraft), [draft, base, cp, startDraft]);
+  const willChange = useMemo(() => isDirty(confirmPosition(draft, base, cp, swingView), startDraft), [draft, base, cp, startDraft, swingView]);
   // the one confirm: it confirms every mark on screen and moves on (or saves, in edit)
   const primaryLabel = editLike ? (willChange || fixFrom ? T.primary.editSave : T.primary.editDone) : action === 'noHead' ? T.primary.noHead : T.primary.confirmNext;
   const proposed = proposalFrame;
@@ -631,11 +634,11 @@ export function SwingMarkCanvas({
   const marksNow = useMemo(() => ({
     hands: { pt: handsNow, status: statuses.hands },
     // a missing head with the hands placed: the target ring goes just under the hands
-    head: { pt: headNow, status: statuses.head, prior: priorHead ?? (statuses.head === 'missing' && handsNow ? [handsNow[0], Math.min(0.97, handsNow[1] + 0.08)] : undefined) },
+    head: statuses.head == null ? null : { pt: headNow, status: statuses.head, prior: priorHead ?? (statuses.head === 'missing' && handsNow ? [handsNow[0], Math.min(0.97, handsNow[1] + 0.08)] : undefined) },
     ball: ballNow ? { pt: ballNow, status: statuses.ball } : null,
   }), [handsNow, headNow, priorHead, ballNow, statuses]);
-  const tickKey = MARKED_KEYS.map((k) => `${draft.cps[k].frame}${positionStatus(draft.status, k)[0]}`).join(',');
-  const ticks = useMemo(() => MARKED_KEYS.map((k) => ({
+  const tickKey = MARKED.map((k) => `${draft.cps[k].frame}${positionStatus(draft.status, k)[0]}`).join(',');
+  const ticks = useMemo(() => MARKED.map((k) => ({
     key: k, p: cueFor(k).p, frame: draft.cps[k].frame, done: positionStatus(draft.status, k) === 'confirmed', cur: k === cp,
   })), [tickKey, cp]); // eslint-disable-line react-hooks/exhaustive-deps
   // the zoomed row's stills: `stillFor` is stable, so the row is told when one of its frames has arrived
@@ -678,8 +681,8 @@ export function SwingMarkCanvas({
   }
 
   if (phase === 'finish') {
-    const missing = MARKED_KEYS.filter((k) => markStatus(draft, base, k, 'head') === 'missing').map((k) => SWING_STRINGS.checkpoint[k]);
-    const skipped = MARKED_KEYS.filter((k) => positionStatus(draft.status, k) === 'skipped').map((k) => SWING_STRINGS.checkpoint[k]);
+    const missing = MARKED.filter((k) => swingView !== 'faceOn' && markStatus(draft, base, k, 'head') === 'missing').map((k) => SWING_STRINGS.checkpoint[k]);
+    const skipped = MARKED.filter((k) => positionStatus(draft.status, k) === 'skipped').map((k) => SWING_STRINGS.checkpoint[k]);
     return (
       <View style={s.screen} testID="mark-finish-sheet">
         <StatusBar barStyle="light-content" />
@@ -687,17 +690,17 @@ export function SwingMarkCanvas({
         <View style={[s.sheet, s.sheetTall, { paddingBottom: 24 + insets.bottom }]}>
           <View style={s.handle} />
           <ScrollView contentContainerStyle={s.sheetBody}>
-            <Text style={s.sheetTitle}>{T.finishTitle(counts.confirmed, MARK_TOTAL)}</Text>
+            <Text style={s.sheetTitle}>{T.finishTitle(counts.confirmed, markTotalOf(swingView))}</Text>
             {missing.length ? (
               <Text style={[s.sheetSub, s.warn]}><Text style={s.bold}>{T.noClubhead(missing)}</Text>{T.noClubheadBody}</Text>
             ) : null}
             {skipped.length ? (
               <Text style={s.sheetSub}><Text style={[s.bold, s.white]}>{T.skippedLine(skipped)}</Text>{T.skippedBody}</Text>
             ) : null}
-            {MARKED_KEYS.map((k) => {
+            {MARKED.map((k) => {
               const st = positionStatus(draft.status, k);
-              const head = markStatus(draft, base, k, 'head');
-              const sub = T.rowSub[head];
+              const head = swingView === 'faceOn' ? null : markStatus(draft, base, k, 'head');
+              const sub = head ? T.rowSub[head] : null;
               return (
                 <Pressable key={k} style={s.finRow} onPress={() => enter(k, draft)} accessibilityRole="button" accessibilityLabel={`${SWING_STRINGS.checkpoint[k]}, ${T.chip[st]}${sub ? `, ${sub}` : ''}`} testID={`finish-row-${k}`}>
                   <Text style={s.finP}>{cueFor(k).p}</Text>
@@ -735,13 +738,14 @@ export function SwingMarkCanvas({
           onSelect={goto}
           onClose={onCloseTap}
           closeLabel={editLike ? T.cancel : T.close}
+          keys={MARKED}
         />
 
         <View style={s.video} onLayout={(e) => { const { width: w, height: h } = e.nativeEvent.layout; if (w && h) setArea({ w, h }); }} testID="mark-video">
           {step1 ? (
             <>
               <ScrubPicture scrub={scrub.current} view={view} shown={shown} stillFor={stillFor} proxyFor={proxyFor} box={box} video={video} name={cue?.name ?? cp} />
-              <CueCard cue={cue} title={cueTitle} open={cueOpen} onToggle={toggleCue} mirror={handedness === 'left'} />
+              <CueCard cue={cue} title={cueTitle} open={cueOpen} onToggle={toggleCue} mirror={handedness === 'left'} pictogram={swingView !== 'faceOn'} />
               {toast ? (
                 <View style={s.loadingPill} pointerEvents="none" accessibilityLiveRegion="polite" testID="mark-toast">
                   <Text style={[s.loadingText, s.toast]}>{toast}</Text>
@@ -763,7 +767,7 @@ export function SwingMarkCanvas({
                   <Text style={s.pospillSmall}>{T.posTail(d.frame)}</Text>
                 </Text>
               </View>
-              <MarkDock style={s.dock} active={active} statuses={statuses} ballOff={cp !== 'address'} onSelect={selectMark} />
+              <MarkDock style={s.dock} active={active} statuses={statuses} ballOff={cp !== 'address'} onSelect={selectMark} marks={swingView === 'faceOn' ? ['hands', 'ball'] : undefined} />
               {loading ? (
                 <View style={s.loadingPill} pointerEvents="none" accessibilityLiveRegion="polite" testID="mark-loading">
                   <Text style={s.loadingText}>{T.loadingFrame(view)}</Text>

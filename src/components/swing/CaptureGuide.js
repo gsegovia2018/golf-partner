@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
 import { hud } from '../../theme/tokens';
 
-// Down-the-line set-up silhouette for the capture preview (plan S2, R5): our own drawing, a
+// Set-up silhouette for the capture preview (plan S2, R5; face-on: plan 2026-10-30): our own drawing, a
 // golfer at address seen from behind the hands, ball on the right for a right-hander (the
 // golfer's back to the left edge), mirrored for left-handers. The box is where the whole body
 // and the club should fit; the room above the head is for the top of the swing.
@@ -21,20 +21,43 @@ const FIGURE = [
   'M184 152 L198 222 L204 282',
   'M204 282 L270 434',
 ];
+const HEAD = [196, 120];
+const BALL = [277, 440];
 
-export default function CaptureGuide({ rect, left = false, label }) {
+// Face-on (plan 2026-10-30): the golfer facing the camera at address, feet apart, arms hanging to
+// the hands in front of the belt, club down to the ball a little toward the target (the right for a
+// right-hander).
+const FIGURE_FO = [
+  'M180 137 L182 262',
+  'M148 152 L212 150',
+  'M148 152 L176 300 M212 150 L186 300',
+  'M181 300 L188 436',
+  'M160 262 L204 262',
+  'M160 262 L144 350 L128 442 M204 262 L220 350 L236 442',
+];
+const HEAD_FO = [180, 118];
+const BALL_FO = [194, 442];
+
+export default function CaptureGuide({
+  rect, left = false, label, view = 'dtl',
+}) {
   if (!rect || !rect.width || !rect.height) return null;
+  const fo = view === 'faceOn';
+  const figure = fo ? FIGURE_FO : FIGURE;
+  const [hx, hy] = fo ? HEAD_FO : HEAD;
+  const [bx, by] = fo ? BALL_FO : BALL;
+  const mirror = fo ? 'translate(360 0) scale(-1 1)' : 'translate(380 0) scale(-1 1)';
   return (
     <View pointerEvents="none" style={[styles.wrap, { left: rect.x, top: rect.y, width: rect.width, height: rect.height }]}>
       <Svg width="100%" height="100%" viewBox="0 0 360 640" preserveAspectRatio="xMidYMid meet">
         <Rect x={70} y={70} width={240} height={400} rx={16} fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={1.5} />
-        <G transform={left ? 'translate(380 0) scale(-1 1)' : undefined} fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <G transform={left ? mirror : undefined} fill="none" strokeLinecap="round" strokeLinejoin="round">
           {/* a soft dark underlay keeps the dashes visible on bright backgrounds */}
-          {FIGURE.map((d) => <Path key={`u${d}`} d={d} stroke={SHADOW} strokeWidth={4.5} />)}
-          {FIGURE.map((d) => <Path key={d} d={d} stroke="rgba(255,255,255,0.85)" strokeWidth={2.5} strokeDasharray="7 6" />)}
-          <Circle cx={196} cy={120} r={17} stroke={SHADOW} strokeWidth={4.5} />
-          <Circle cx={196} cy={120} r={17} stroke="rgba(255,255,255,0.85)" strokeWidth={2.5} strokeDasharray="7 6" />
-          <Circle cx={277} cy={440} r={6} stroke="rgba(255,255,255,0.85)" strokeWidth={2} />
+          {figure.map((d) => <Path key={`u${d}`} d={d} stroke={SHADOW} strokeWidth={4.5} />)}
+          {figure.map((d) => <Path key={d} d={d} stroke="rgba(255,255,255,0.85)" strokeWidth={2.5} strokeDasharray="7 6" />)}
+          <Circle cx={hx} cy={hy} r={17} stroke={SHADOW} strokeWidth={4.5} />
+          <Circle cx={hx} cy={hy} r={17} stroke="rgba(255,255,255,0.85)" strokeWidth={2.5} strokeDasharray="7 6" />
+          <Circle cx={bx} cy={by} r={6} stroke="rgba(255,255,255,0.85)" strokeWidth={2} />
         </G>
       </Svg>
       {label ? (

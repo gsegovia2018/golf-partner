@@ -62,4 +62,6 @@ export default {
   'swing.cue.postImpact.what': 'Just after impact: about ten frames later.',
   'swing.cue.postImpact.stopWhen': 'the frame ten frames after impact.',
   'swing.cue.postImpact.markTips': 'Hands: middle of the grip. Clubhead: centre of the head.',
+  'swing.cue.fo.shaftDown.stopWhen': 'the first frame the shaft is level on the way down. From the front the shaft is seen side-on, pointing away from the target.',
+  'swing.cue.fo.shaftDown.markTips': 'Hands: middle of the grip. Clubhead: centre of the head (it may be blurred: tap the middle of the streak).',
 };
