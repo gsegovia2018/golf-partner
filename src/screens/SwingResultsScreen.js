@@ -20,6 +20,7 @@ import SwingCheckRow from '../components/swing/SwingCheckRow';
 import SwingFixPeek from '../components/swing/SwingFixPeek';
 import SwingFixSheet from '../components/swing/SwingFixSheet';
 import SwingProcessing from '../components/swing/SwingProcessing';
+import SwingShareSheet from '../components/swing/SwingShareSheet';
 import { useSwingTone, focusTone } from '../components/swing/swingTone';
 import { useTheme } from '../theme/ThemeContext';
 import { hud } from '../theme/tokens';
@@ -33,6 +34,7 @@ import { runAnalysis } from '../swing/runAnalysis';
 import { markTotalOf, markedFromMarks, passDone } from '../swing/markPass';
 import { reanalyzeForClub } from '../swing/reanalyze';
 import { shareSwingExport } from '../swing/shareExport';
+import { deleteSharedSwing } from '../store/swingShareStore';
 import { failureReport } from '../swing/failureReport';
 import { apiVersion } from '../swing/native';
 import { nativeApi, getStill, ensureStills } from '../swing/frames';
@@ -168,7 +170,10 @@ function NavRow({
 export function SwingResultsView({
   row, phase, analysis, pose, progress, error, errorDetail = null, stillTick = 0, stillFor, placed = null,
   onBack, onCancel, onDelete, onRetry, onSendDetails, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport,
-  onPlaceHead, onUndoPlace, onSwitchView,
+  onPlaceHead, onUndoPlace, onSwitchView, onShare,
+  // The shared swing page (/s/<token>): the same screen without the owner's tools: no menu, no
+  // marking, no view switch, no frame nudge (only the key frames' stills are uploaded).
+  readOnly = false, title = null, topSlot = null, bottomSlot = null,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
@@ -192,7 +197,7 @@ export function SwingResultsView({
   // Open where the owner picked: the Downswing in place mode when its clubhead is unplaced, else the main fault.
   const opening = useMemo(() => (ready ? openingStep(analysis) : null), [ready, analysis]);
   const step = stepState ?? opening?.step ?? 'address';
-  const place = placeState ?? opening?.place ?? false;
+  const place = !readOnly && (placeState ?? opening?.place ?? false);
 
   const checks = useMemo(() => analysis?.checks ?? [], [analysis]);
   const main = analysis?.main ?? null;
@@ -204,8 +209,8 @@ export function SwingResultsView({
   const statuses = useMemo(() => (ready ? stepStatuses(analysis) : {}), [ready, analysis]);
   const pending = useMemo(() => (ready ? pendingSteps(analysis) : {}), [ready, analysis]);
   const soFar = ready ? mainSoFar(analysis) : false;
-  const ask = useMemo(() => (ready ? askAt(analysis, 'shaftDown') : null), [ready, analysis]); // what "main fault so far" waits for
-  const stepAsk = useMemo(() => (ready && step !== EXTRAS ? askAt(analysis, step) : null), [ready, analysis, step]);
+  const ask = useMemo(() => (ready && !readOnly ? askAt(analysis, 'shaftDown') : null), [ready, readOnly, analysis]); // what "main fault so far" waits for
+  const stepAsk = useMemo(() => (ready && !readOnly && step !== EXTRAS ? askAt(analysis, step) : null), [ready, readOnly, analysis, step]);
 
   useEffect(() => { setShowPlaced(true); }, [placed]);
 
@@ -269,7 +274,7 @@ export function SwingResultsView({
     return (
       <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <IconButton icon="chevron-left" accessibilityLabel={T.back} onPress={onBack} />
+          {onBack ? <IconButton icon="chevron-left" accessibilityLabel={T.back} onPress={onBack} /> : <View style={s.headerSpacer} />}
           <View style={s.flex} />
           <View style={s.headerSpacer} />
         </View>
@@ -282,13 +287,13 @@ export function SwingResultsView({
 
   const header = (
     <View style={s.header}>
-      <IconButton icon="chevron-left" accessibilityLabel={T.back} onPress={onBack} />
-      <Text style={s.headerTitle} numberOfLines={1} testID="results-title">{phase === 'processing' ? T.newSwing : swingTitle(row)}</Text>
+      {onBack ? <IconButton icon="chevron-left" accessibilityLabel={T.back} onPress={onBack} /> : <View style={s.headerSpacer} />}
+      <Text style={s.headerTitle} numberOfLines={1} testID="results-title">{phase === 'processing' ? T.newSwing : title ?? swingTitle(row)}</Text>
       {phase === 'processing' ? (
         <PressableScale style={s.headerAction} onPress={onCancel} accessibilityRole="button" accessibilityLabel={T.cancelAnalysis}>
           <Text style={s.headerActionText}>{T.cancelAnalysis}</Text>
         </PressableScale>
-      ) : ready ? (
+      ) : ready && !readOnly ? (
         <IconButton icon="more-horizontal" accessibilityLabel={T.menu} onPress={() => setSheet('menu')} />
       ) : <View style={s.headerSpacer} />}
     </View>
@@ -298,6 +303,7 @@ export function SwingResultsView({
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       {header}
       <ScrollView ref={scroll} style={s.scroll} contentContainerStyle={s.content}>
+        {topSlot}
         {phase === 'error' ? (
           <>
             <ErrorSlot
@@ -336,6 +342,7 @@ export function SwingResultsView({
               unconfirmed={markTotalOf(analysis.view) - (row?.marked?.count ?? markTotalOf(analysis.view))}
               steps={steps}
             />
+            {readOnly ? null : (
             <PressableScale
               style={s.viewRow}
               onPress={onSwitchView}
@@ -347,6 +354,7 @@ export function SwingResultsView({
               <Text style={s.viewText}>{`${faceOn ? T.viewFaceOn : T.viewDtl} · `}</Text>
               <Text style={s.link}>{faceOn ? T.switchToDtl : T.switchToFaceOn}</Text>
             </PressableScale>
+            )}
             {approxReasons.length ? (
               <View>
                 <Notice
@@ -408,24 +416,28 @@ export function SwingResultsView({
                     <Text style={s.legendText}>{SWING_STRINGS.results.fixes.legendTarget}</Text>
                   </View>
                 ) : <View />}
+                {readOnly ? null : (
                 <View style={s.stepper} testID="results-nudge">
                   <IconButton icon="chevron-left" size={18} style={[s.stepBtn, off <= -MAX_NUDGE && s.stepOff]} disabled={off <= -MAX_NUDGE} onPress={() => setOff((o) => Math.max(-MAX_NUDGE, o - 1))} accessibilityLabel={T.prevFrame} />
                   <Text style={s.stepText} accessibilityLabel={T.frameShort(frame)}>{`${frame}${off ? ` (${off > 0 ? '+' : ''}${off})` : ''}`}</Text>
                   <IconButton icon="chevron-right" size={18} style={[s.stepBtn, off >= MAX_NUDGE && s.stepOff]} disabled={off >= MAX_NUDGE} onPress={() => setOff((o) => Math.min(MAX_NUDGE, o + 1))} accessibilityLabel={T.nextFrame} />
                 </View>
+                )}
               </View>
             )}
 
             <View style={s.listHead}>
               <Overline style={s.flex}>{T.checksAt(stepName(step))}</Overline>
+              {readOnly ? null : (
               <PressableScale style={s.editLink} onPress={() => openEdit(cp)} accessibilityRole="button" accessibilityLabel={T.editMarks} testID="results-edit-marks">
                 <Text style={s.link}>{T.editMarks}</Text>
               </PressableScale>
+              )}
             </View>
             <View style={s.card} testID="results-rows">
               {rows.map((row0) => {
                 // a row waiting for more than one mark says which; its button only when one clubhead is all it lacks
-                const needs = rowNeeds(analysis, row0);
+                const needs = readOnly ? [] : rowNeeds(analysis, row0);
                 const c = needs.length && !unlockedBy(analysis, row0, needs[0].cp)
                   ? { ...row0, text: T.waitingFor(needs.map((n) => (n.kind === 'ball' ? T.needBall : T.needHead(SWING_STRINGS.checkpoint[n.cp]))).join(', ')) } : row0;
                 const isSel = !!selected && CHECK_KEY(selected) === CHECK_KEY(c);
@@ -483,6 +495,7 @@ export function SwingResultsView({
             ) : null}
           </>
         ) : null}
+        {bottomSlot}
       </ScrollView>
 
       {ready ? (
@@ -556,6 +569,15 @@ export function SwingResultsView({
               <Feather name="edit-2" size={18} color={theme.text.primary} />
               <Text style={s.menuText}>{T.editMarks}</Text>
             </PressableScale>
+            {onShare ? (
+              <PressableScale style={s.menuRow} onPress={() => { setSheet(null); onShare(); }} accessibilityRole="button" accessibilityLabel={SWING_STRINGS.share.menu} testID="results-menu-share">
+                <Feather name="link" size={18} color={theme.text.primary} />
+                <View style={s.flex}>
+                  <Text style={s.menuText}>{SWING_STRINGS.share.menu}</Text>
+                  <Text style={s.hint}>{row?.share ? SWING_STRINGS.share.menuShared : SWING_STRINGS.share.menuHint}</Text>
+                </View>
+              </PressableScale>
+            ) : null}
             <PressableScale style={s.menuRow} onPress={() => { setSheet(null); onExport?.(); }} accessibilityRole="button" accessibilityLabel={SWING_STRINGS.exportSwing.menu}>
               <Feather name="share" size={18} color={theme.text.primary} />
               <View style={s.flex}>
@@ -591,6 +613,7 @@ export default function SwingResultsScreen({ navigation, route }) {
   const [errorDetail, setErrorDetail] = useState(null);
   const [stillTick, setStillTick] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [placed, setPlaced] = useState(null); // the last head placed here: { cp, mainBefore, mainAfter, prev } | { failed }
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -740,8 +763,10 @@ export default function SwingResultsScreen({ navigation, route }) {
     Share.share({ message }).catch(() => {});
   };
   // Same confirm as the swings list. A run in flight is stopped (JS and pass 2) before the files go.
+  // A shared swing closes its link first; when that fails the swing stays (its link would live on).
   const onDelete = () => {
-    Alert.alert(H.deleteTitle, H.deleteBody, [
+    const shared = !!getSwing(swingId)?.share?.token;
+    Alert.alert(shared ? SWING_STRINGS.share.deleteTitle : H.deleteTitle, shared ? SWING_STRINGS.share.deleteBody : H.deleteBody, [
       { text: H.cancel, style: 'cancel' },
       {
         text: H.delete,
@@ -749,7 +774,12 @@ export default function SwingResultsScreen({ navigation, route }) {
         onPress: async () => {
           cancelled.current = true;
           try { nativeApi()?.cancelAnalysis?.(); } catch { /* best effort */ }
-          await deleteSwing(swingId);
+          try {
+            if (shared) await deleteSharedSwing(swingId); else await deleteSwing(swingId);
+          } catch {
+            Alert.alert(SWING_STRINGS.share.deleteStopFailed);
+            return;
+          }
           navigation.goBack();
         },
       },
@@ -819,13 +849,15 @@ export default function SwingResultsScreen({ navigation, route }) {
         onPlay={() => setPlaying(true)}
         onNeedStills={onNeedStills}
         onSwitchView={onSwitchView}
+        onShare={() => setSharing(true)}
       />
+      <SwingShareSheet visible={sharing} onClose={() => setSharing(false)} swingId={swingId} row={row} />
       <PlayerHost visible={playing} uri={swingVideoUri(swingId)} onClose={() => setPlaying(false)} />
     </>
   );
 }
 
-function PlayerHost({ visible, uri, onClose }) {
+export function PlayerHost({ visible, uri, onClose }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   return <Player visible={visible} uri={uri} onClose={onClose} s={s} />;

@@ -25,6 +25,7 @@ import { defaultHeightCm } from '../swing/scale';
 import { normClub } from '../swing/checks';
 import { passDone, markTotalOf } from '../swing/markPass';
 import { SWING_STRINGS } from '../swing/strings';
+import { deleteSharedSwing } from '../store/swingShareStore';
 import { useT } from '../i18n';
 import { formatDate, formatNumber } from '../i18n/format';
 import { useTabBarScroll, useTabBarClearance } from '../navigation/tabBarChrome';
@@ -152,10 +153,19 @@ export default function SwingHomeScreen({ navigation }) {
     setPicked([sw.id]);
   };
 
+  // A shared swing closes its link first; when that fails the swing stays (its link would live on).
   const confirmDelete = (sw) => {
-    Alert.alert(T.deleteTitle, T.deleteBody, [
+    const shared = !!sw.share?.token;
+    Alert.alert(shared ? SWING_STRINGS.share.deleteTitle : T.deleteTitle, shared ? SWING_STRINGS.share.deleteBody : T.deleteBody, [
       { text: T.cancel, style: 'cancel' },
-      { text: T.delete, style: 'destructive', onPress: () => { deleteSwing(sw.id); } },
+      {
+        text: T.delete,
+        style: 'destructive',
+        onPress: () => {
+          if (!shared) { deleteSwing(sw.id); return; }
+          deleteSharedSwing(sw.id).catch(() => Alert.alert(SWING_STRINGS.share.deleteStopFailed));
+        },
+      },
     ]);
   };
 
