@@ -157,3 +157,32 @@ describe('shot listening', () => {
     expect(setShotListening).not.toHaveBeenCalled();
   });
 });
+
+describe('diagnostics: why tracking stopped', () => {
+  const reporting = require('../../lib/errorReporting');
+  const trail = { userId: 'u1', tournamentId: 't1', roundId: 't1-r0', roundIndex: 0 };
+  const why = { viewOnly: false, finished: false, hasMap: true, permissionGranted: true, fixState: 'ok' };
+  let spy;
+  beforeEach(() => { spy = jest.spyOn(reporting, 'captureMessage').mockImplementation(() => {}); });
+  afterEach(() => spy.mockRestore());
+
+  test('tracking turning off with the scorecard open reports its inputs', () => {
+    const r = render(<Probe {...base} trail={trail} why={why} />);
+    r.rerender(<Probe {...base} active={false} trail={trail} why={{ ...why, hasMap: false }} />);
+    expect(spy).toHaveBeenCalledWith('round tracking stopped', expect.objectContaining({ hasMap: false, hole: 7 }));
+  });
+
+  test('a trail that drops while tracking stays on is reported, without ids', () => {
+    const r = render(<Probe {...base} trail={trail} why={why} />);
+    r.rerender(<Probe {...base} trail={null} why={why} />);
+    expect(spy).toHaveBeenCalledWith('round trail stopped', expect.objectContaining({ user: false, round: false }));
+  });
+
+  test('leaving the scorecard is not reported; coming straight back to the same round is', () => {
+    const r = render(<Probe {...base} trail={trail} why={why} />);
+    r.unmount();
+    expect(spy).not.toHaveBeenCalled();
+    render(<Probe {...base} trail={trail} why={why} />);
+    expect(spy).toHaveBeenCalledWith('scorecard remounted', expect.objectContaining({ hole: 7 }));
+  });
+});

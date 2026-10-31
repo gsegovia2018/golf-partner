@@ -81,8 +81,17 @@ describe('roundTotals', () => {
     const scores = { a: { 1: 4, 2: 3 }, b: { 1: 5 } };
     const round = { holes };
     const totals = roundTotals({ mode: 'stableford', round, players, scores, handicaps });
-    expect(totals.get('a')).toEqual({ pts: 4, str: 7, parPlayed: 7 });
-    expect(totals.get('b')).toEqual({ pts: 1, str: 5, parPlayed: 4 });
+    expect(totals.get('a')).toEqual({ pts: 4, str: 7, parPlayed: 7, netParPlayed: 7 });
+    expect(totals.get('b')).toEqual({ pts: 1, str: 5, parPlayed: 4, netParPlayed: 4 });
+  });
+
+  test('netParPlayed adds the handicap strokes received on the holes played', () => {
+    // Handicap 6 on 18 holes: a stroke on SI 1-6, so hole 1 (SI 5) gets one
+    // and hole 2 (SI 11) none. Unplayed holes never count.
+    const scores = { a: { 1: 6, 2: 4 }, b: { 2: 3 } };
+    const totals = roundTotals({ mode: 'stableford', round: { holes }, players, scores, handicaps: { a: 6, b: 6 } });
+    expect(totals.get('a')).toMatchObject({ str: 10, parPlayed: 7, netParPlayed: 8 });
+    expect(totals.get('b')).toMatchObject({ str: 3, parPlayed: 3, netParPlayed: 3 });
   });
 });
 

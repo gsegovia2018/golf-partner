@@ -85,6 +85,36 @@ export async function hydrateShots() {
   }
 }
 
+// Uploads run one at a time in the background, in the order they were asked
+// for, each sending the shot as it is when its turn comes. Callers never wait
+// on them: on a weak signal a request can hang for a long time, and while the
+// tracker awaited it every further tap was ignored and a seen pin stayed open
+// (tap Add again, get the shot twice). A shot changed while its upload was in
+// flight stays pending; its own later upload sends the change.
+let uploads = Promise.resolve();
+function enqueue(job) {
+  uploads = uploads.then(job).catch(() => { /* stays pending, retried on the next hydrate/flush */ });
+  return uploads;
+}
+
+function upload(list) {
+  return enqueue(async () => {
+    if (!userId) return;
+    let acked = false;
+    for (const s of list) {
+      if (!SHOTS.includes(s)) continue; // deleted meanwhile
+      const row = shotToRow(s);
+      const sent = JSON.stringify(row);
+      const { error } = await supabase.from('golf_shot').upsert(row);
+      if (!error && JSON.stringify(shotToRow(s)) === sent) { delete s.pending; acked = true; }
+    }
+    if (acked) { await persistCache(); emit(); }
+  });
+}
+
+// Settles when every upload asked for so far has run. For tests.
+export function __shotUploadsSettled() { return uploads; }
+
 async function flushPending() {
   const pend = SHOTS.filter((s) => s.pending);
   if (!pend.length || !userId) return;
@@ -127,12 +157,7 @@ export async function logShot({ roundId, roundIndex, holeNumber, pos, club = nul
   emit();
   track('shot_logged', { round: roundId, hole: holeNumber });
   await persistCache();
-  try {
-    if (userId) {
-      const { error } = await supabase.from('golf_shot').upsert(shotToRow(shot));
-      if (!error) { delete shot.pending; await persistCache(); emit(); }
-    }
-  } catch { /* stays pending, retried on next hydrate/flush */ }
+  upload([shot]);
   return shot;
 }
 
@@ -144,12 +169,7 @@ export async function setShotClub(id, club) {
   shot.pending = true;
   emit();
   await persistCache();
-  try {
-    if (userId) {
-      const { error } = await supabase.from('golf_shot').upsert(shotToRow(shot));
-      if (!error) { delete shot.pending; await persistCache(); emit(); }
-    }
-  } catch { /* stays pending */ }
+  upload([shot]);
 }
 
 // Move an already-logged shot to a new [lat, lng] (drag/re-place the spot).
@@ -160,12 +180,7 @@ export async function setShotPos(id, pos) {
   shot.pending = true;
   emit();
   await persistCache();
-  try {
-    if (userId) {
-      const { error } = await supabase.from('golf_shot').upsert(shotToRow(shot));
-      if (!error) { delete shot.pending; await persistCache(); emit(); }
-    }
-  } catch { /* stays pending */ }
+  upload([shot]);
 }
 
 // Insert a spot immediately after `id` — for a shot you played but never
@@ -204,16 +219,7 @@ export async function insertShotAt({ roundId, roundIndex, holeNumber, seq, pos, 
   SHOTS = [...SHOTS, shot];
   emit();
   await persistCache();
-  try {
-    if (userId) {
-      for (const s of [shot, ...later]) {
-        const { error } = await supabase.from('golf_shot').upsert(shotToRow(s));
-        if (!error) delete s.pending;
-      }
-      await persistCache();
-      emit();
-    }
-  } catch { /* stays pending, retried on the next flush */ }
+  upload([shot, ...later]);
   return shot;
 }
 
@@ -224,9 +230,8 @@ export async function deleteShot(id) {
   SHOTS = SHOTS.filter((s) => s.id !== id);
   emit();
   await persistCache();
-  try {
-    if (userId && !shot.pending) await supabase.from('golf_shot').delete().eq('id', id);
-  } catch { /* server row lingers; harmless, re-hydrate reconciles */ }
+  // Queued, so it lands after an upload of this shot still in flight.
+  enqueue(async () => { if (userId) await supabase.from('golf_shot').delete().eq('id', id); });
 }
 
 // Remove every shot belonging to a round (cascade when a round is deleted).
@@ -289,9 +294,7 @@ export async function undoLastShot(roundId, roundIndex, holeNumber) {
   SHOTS = SHOTS.filter((s) => s.id !== last.id);
   emit();
   await persistCache();
-  try {
-    if (userId && !last.pending) await supabase.from('golf_shot').delete().eq('id', last.id);
-  } catch { /* server row lingers; harmless, re-hydrate reconciles */ }
+  enqueue(async () => { if (userId) await supabase.from('golf_shot').delete().eq('id', last.id); });
 }
 
 // How close a new mark must be to the hole's last spot to count as that same

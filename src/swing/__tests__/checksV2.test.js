@@ -263,6 +263,7 @@ describe('positions and left-handers', () => {
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(right.filter((c) => c.extra).map((c) => c.id)).toEqual([
       'tempo', 'finish_balance', 'head_drift', 'hands_height_impact', 'hands_out_impact', 'shaft_angle_impact',
+      'swing_symmetry', 'finish_trail_foot',
     ]);
   });
 

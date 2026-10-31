@@ -8,7 +8,7 @@ const indexes = new Map(); // session -> soundIndex
 const reading = new Map(); // session -> Promise
 let version = 0;
 const listeners = new Set();
-const EMPTY = { strikes: [], spans: [] };
+const EMPTY = { strikes: [], swings: [], spans: [] };
 
 export function subscribeShotSound(cb) { listeners.add(cb); return () => listeners.delete(cb); }
 export function getShotSoundVersion() { return version; }

@@ -26,6 +26,8 @@ import { cellLevel, ledgerBestRun } from '../../store/gameStatsView';
 import { initialExpanded, toggleExpanded } from '../../store/scorecardView';
 import { heatColors, signed } from '../gamestats/ui';
 import { renderMsg } from '../mystats/msg';
+import CellRoll from './CellRoll';
+import CountUpText from '../ui/CountUpText';
 
 const LABEL_W = 42;
 const TOTAL_W = 30;
@@ -60,7 +62,7 @@ function deepHeat(level) {
   return { bg: '#ffe08a', fg: '#00553c' };
 }
 
-function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID, labelStyle }) {
+function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID, labelStyle, countTotal }) {
   return (
     <View style={[s.row, style]}>
       {typeof label === 'string' ? <Text style={[s.label, labelStyle]} numberOfLines={1}>{label}</Text> : label}
@@ -75,7 +77,12 @@ function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint,
         </View>
       ))}
       <View style={[s.total, { height }, totalStyle]}>
-        <Text style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={totalTestID}>{total ?? '–'}</Text>
+        {countTotal ? (
+          // Counts to the other mode's total on a Strokes | Points switch.
+          <CountUpText style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={totalTestID}>{total ?? '–'}</CountUpText>
+        ) : (
+          <Text style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={totalTestID}>{total ?? '–'}</Text>
+        )}
       </View>
     </View>
   );
@@ -198,9 +205,14 @@ function scoreCells({ row, nine, mode, card, s, theme, t, idp, heat }) {
     if (c.strokes == null) {
       return { key: c.number, style: s.empty, a11y: t('stats.game.card.notPlayed') };
     }
-    const level = isPoints && !card.pointsTinted ? null : cellLevel(mode, c);
-    const { bg, fg } = level == null ? { bg: 'transparent', fg: theme.text.primary } : heat(level);
+    const tileOf = (m) => {
+      const lv = m === 'points' && !card.pointsTinted ? null : cellLevel(m, c);
+      return { level: lv, ...(lv == null ? { bg: 'transparent', fg: theme.text.primary } : heat(lv)) };
+    };
+    const { level, bg, fg } = tileOf(mode);
+    const other = tileOf(isPoints ? 'strokes' : 'points');
     const value = isPoints ? formatNumber(c.points ?? 0) : c.strokes;
+    const otherValue = isPoints ? c.strokes : formatNumber(c.points ?? 0);
     const base = isPoints
       ? t('stats.game.ledger.a11y.points', { hole: c.number, count: c.points ?? 0 })
       : t('stats.game.ledger.a11y.strokes', { hole: c.number, count: c.strokes, result: t(`stats.game.ledger.result.${c.gross}`) });
@@ -209,11 +221,21 @@ function scoreCells({ row, nine, mode, card, s, theme, t, idp, heat }) {
     const dot = level === 4 ? fg : theme.accent.primary;
     return {
       key: c.number,
-      style: { backgroundColor: bg },
+      // The tint is CellRoll's mark: it pops in a beat after the figure rolls.
+      style: s.rollCell,
       a11y: card.solo ? withStrokes : t('stats.game.ledger.a11y.who', { name: row.player.name ?? row.label, text: withStrokes }),
       child: (
         <>
-          <Text style={[s.value, { color: fg }]} testID={`${idp}-cell-${c.number}`} numberOfLines={1}>{value}</Text>
+          <CellRoll
+            mode={mode}
+            index={c.number - 1}
+            style={s.rollBox}
+            leaving={<Text style={[s.value, { color: other.fg }]} numberOfLines={1}>{otherValue}</Text>}
+            underLeaving={other.level == null ? null : <View style={[s.rollFace, { backgroundColor: other.bg }]} />}
+            under={level == null ? null : <View style={[s.rollFace, { backgroundColor: bg }]} />}
+          >
+            <Text style={[s.value, { color: fg }]} testID={`${idp}-cell-${c.number}`} numberOfLines={1}>{value}</Text>
+          </CellRoll>
           {c.extra > 0 && (
             <View style={s.dots} pointerEvents="none">
               {Array.from({ length: Math.min(c.extra, 2) }).map((_, i) => (
@@ -250,8 +272,8 @@ export default function ShotScorecard({
   const isPoints = mode === 'points';
   const onToggle = (id) => setExpanded((cur) => toggleExpanded(card, cur, id));
 
-  const totalOf = (block) => {
-    const v = isPoints ? block.points : block.strokes;
+  const totalOf = (block, points = isPoints) => {
+    const v = points ? block.points : block.strokes;
     return v == null ? null : formatNumber(v);
   };
   const wide = labelWidth ? { width: labelWidth } : null;
@@ -306,6 +328,7 @@ export default function ShotScorecard({
                     label={label}
                     cells={scoreCells({ row, nine, mode, card, s, theme, t, idp, heat }).map((c) => (c.key === currentHole ? { ...c, style: [c.style, s.currentCell] } : c))}
                     total={totalOf(nine)}
+                    countTotal
                     totalTestID={`${idp}-total-${head.key}`}
                     style={row.isMe && labelOf ? s.meRow : null}
                     labelStyle={wide}
@@ -395,6 +418,10 @@ function makeStyles(theme) {
       flex: 1, marginHorizontal: 1, borderRadius: 5, alignItems: 'center', justifyContent: 'center',
     },
     tint: { backgroundColor: theme.accent.light },
+    // A score cell's tile (tint + figure) fills the cell so it can roll over.
+    rollCell: { overflow: 'hidden' },
+    rollBox: { ...StyleSheet.absoluteFillObject },
+    rollFace: { flexGrow: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
     empty: { borderWidth: 1, borderStyle: 'dashed', borderColor: theme.border.default },
     dim: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme.text.muted, fontVariant: ['tabular-nums'] },
     value: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, fontVariant: ['tabular-nums'], marginBottom: 2 },

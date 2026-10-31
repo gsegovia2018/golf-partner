@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
@@ -8,7 +8,7 @@ import { useAppSettings } from '../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { clubLabel } from '../../lib/clubs';
 import { getShots } from '../../store/shotStore';
-import { ClubWheel, wheelClubsFor } from './ClubWheel';
+import { InlineClubWheel, wheelClubsFor } from './ClubWheel';
 
 // Review UI for automatically detected shots (hooks/useShotProposals): a
 // quiet badge on the hole header's map button, and on the hole map hollow
@@ -77,16 +77,21 @@ export function SoundEvidence({ level }) {
   );
 }
 
-// The card for one tapped "seen" pin: where it is, a club button that opens
-// the shot tracker's club wheel, what the phone heard there, then Not a shot /
-// Add · club, and "+1 from here" while the score says shots are missing.
+// The card for one tapped "seen" pin: where it is, then what the phone heard
+// there beside a small club wheel (opens on the suggested club, carries
+// shown), then Not a shot / Add · <club>, and "+1 from here" while the score
+// says shots are missing. Picking a club and adding is one scroll and one tap.
 export function SeenMapCard({ proposal, onAdd, onDismiss, onPlusOne, missing }) {
   const tl = useT();
   const settings = useAppSettings();
   const { units } = settings;
   const [club, setClub] = useState(proposal?.club ?? null);
-  const [wheel, setWheel] = useState(false);
-  useEffect(() => { setClub(proposal?.club ?? null); setWheel(false); }, [proposal?.id, proposal?.club]);
+  const clubs = useMemo(
+    () => wheelClubsFor(settings.bag, settings.clubDistances, getShots()),
+    // A new pin re-reads the measured carries; scrolling must not rebuild the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settings.bag, settings.clubDistances, proposal?.id],
+  );
   if (!proposal) return null;
 
   const dist = (m) => `${formatDistance(m, units)} ${unitSuffix(units)}`;
@@ -99,27 +104,29 @@ export function SeenMapCard({ proposal, onAdd, onDismiss, onPlusOne, missing }) 
   return (
     <View style={s.card} testID="seen-map-card">
       <Text style={s.ask}>{tl('shots.seen.mapAsk').toUpperCase()}</Text>
-      <View style={s.whereRow}>
-        <Text style={s.where} numberOfLines={1}>{where}</Text>
-        <Pressable
-          style={s.clubBtn}
-          onPress={() => setWheel(true)}
-          accessibilityRole="button"
-          accessibilityLabel={tl('shots.seen.clubA11y', { club: club ? clubLabel(club) : tl('shots.wheel.club') })}
-          testID="seen-club"
-        >
-          <Text style={s.clubTxt}>{club ? clubLabel(club) : tl('shots.wheel.club')}</Text>
-          <Feather name="chevron-down" size={16} color={hud.text} />
-        </Pressable>
+      <Text style={[s.where, s.whereRow]} numberOfLines={1}>{where}</Text>
+      <View style={s.split}>
+        <View style={s.info}>
+          <Text style={s.when}>{tl('shots.seen.mapWhen', { seconds, time: formatTime(proposal.start) })}</Text>
+          <SoundEvidence level={proposal.sound} />
+        </View>
+        <InlineClubWheel
+          key={proposal.id}
+          clubs={clubs}
+          value={proposal.club ?? null}
+          units={units}
+          onChange={setClub}
+          style={s.wheel}
+        />
       </View>
-      <Text style={s.when}>{tl('shots.seen.mapWhen', { seconds, time: formatTime(proposal.start) })}</Text>
-      <SoundEvidence level={proposal.sound} />
       <View style={s.btns}>
         <Pressable style={s.btn2} onPress={onDismiss} accessibilityRole="button">
           <Text style={s.btn2Txt}>{tl('shots.seen.notAShot')}</Text>
         </Pressable>
-        <Pressable style={s.btn1} onPress={() => onAdd(withClub)} accessibilityRole="button">
-          <Text style={s.btn1Txt} numberOfLines={1}>{tl('shots.seen.add')}</Text>
+        <Pressable style={s.btn1} onPress={() => onAdd(withClub)} accessibilityRole="button" testID="seen-add">
+          <Text style={s.btn1Txt} numberOfLines={1}>
+            {club ? tl('shots.seen.addWith', { club: clubLabel(club) }) : tl('shots.seen.add')}
+          </Text>
         </Pressable>
       </View>
       {missing > 0 ? (
@@ -133,16 +140,6 @@ export function SeenMapCard({ proposal, onAdd, onDismiss, onPlusOne, missing }) 
           <Text style={s.plusOneTxt}>{tl('shots.seen.plusOne')}</Text>
         </Pressable>
       ) : null}
-      <ClubWheel
-        visible={wheel}
-        clubs={wheelClubsFor(settings.bag, settings.clubDistances, getShots())}
-        value={club}
-        units={units}
-        seqLabel={tl('shots.wheel.club')}
-        toPinMeters={proposal.toGreen}
-        onSelect={(k) => { if (k) setClub(k); setWheel(false); }}
-        onClose={() => setWheel(false)}
-      />
     </View>
   );
 }
@@ -164,13 +161,11 @@ const s = StyleSheet.create({
     backgroundColor: hud.card, borderWidth: 1, borderColor: hud.line, borderRadius: 16, padding: 14,
   },
   ask: { color: hud.textMuted, fontSize: 10, letterSpacing: 1.5, fontFamily: 'PlusJakartaSans-Bold' },
-  whereRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-  where: { flex: 1, color: hud.text, fontSize: 17, fontFamily: 'PlusJakartaSans-Bold' },
-  clubBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 12,
-    borderRadius: 12, borderWidth: 1, borderColor: hud.border, backgroundColor: hud.inset,
-  },
-  clubTxt: { color: hud.text, fontSize: 14, fontFamily: 'PlusJakartaSans-Bold' },
+  whereRow: { marginTop: 4 },
+  where: { color: hud.text, fontSize: 17, fontFamily: 'PlusJakartaSans-Bold' },
+  split: { flexDirection: 'row', alignItems: 'stretch', gap: 12, marginTop: 6 },
+  info: { flex: 1, minWidth: 0 },
+  wheel: { width: 156 },
   when: { color: hud.textSoft, fontSize: 13, fontFamily: 'PlusJakartaSans-Medium', marginTop: 2 },
   ev: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   evChip: {

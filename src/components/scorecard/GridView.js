@@ -7,6 +7,8 @@ import { View, Text, TextInput, Pressable, useWindowDimensions } from 'react-nat
 import Animated from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
 import useSlidingPill from '../ui/useSlidingPill';
+import CellRoll from './CellRoll';
+import CountUpText from '../ui/CountUpText';
 import { useT, t as tNow, formatNumber } from '../../i18n';
 import { unitText } from '../../lib/pointsText';
 import { playersMeFirst } from '../../lib/playerOrder';
@@ -161,6 +163,16 @@ function NineBlock({
 
   const sumPar = holes.reduce((acc, h) => acc + h.par, 0);
 
+  // What the other mode shows in a cell: CellRoll rolls it out on a switch.
+  const strokesFace = (player, h) => {
+    const v = scores[player.id]?.[h.number];
+    return <Text numberOfLines={1} style={s.soloNineStrokeText}>{v != null ? String(v) : '·'}</Text>;
+  };
+  const ptsStyle = (pts) => [s.soloNinePtsText, { color: ptsColorFor(pts) }];
+  const ptsFace = (pts) => <Text numberOfLines={1} style={ptsStyle(pts)}>{pts ?? '·'}</Text>;
+  // The strokes mode's score chip, which CellRoll swaps a beat after the figure.
+  const chipFor = (player, h) => <View style={s.soloNineDigitBox}><ScoreShape result={classifyHoleResult(h.par, scores[player.id]?.[h.number])} theme={theme} s={s} /></View>;
+
   const labelCell = { width: labelW };
   const holeCell = { width: holeW };
   const aggCell = { width: aggW };
@@ -196,11 +208,11 @@ function NineBlock({
             const isCurrent = currentHoleByPlayer?.[player.id] === h.number;
             return (
               <View key={h.number} style={[s.soloNineCell, holeCell]}>
-                <View style={[s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent]}>
-                  <Text numberOfLines={1} style={[s.soloNinePtsText, { color: ptsColorFor(pts) }]}>
-                    {pts ?? '·'}
-                  </Text>
-                </View>
+                <CellRoll mode={displayMode} index={h.number - 1} leaving={strokesFace(player, h)} underLeaving={chipFor(player, h)}>
+                  <View style={[s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent]}>
+                    {ptsFace(pts)}
+                  </View>
+                </CellRoll>
                 <View style={s.soloNineExtraDots} pointerEvents="none">
                   {extra > 0 && Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
                     <View key={i} testID={`hcp-dot-${player.id}-h${h.number}`} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
@@ -209,7 +221,9 @@ function NineBlock({
               </View>
             );
           })}
-          <Text numberOfLines={1} style={[s.soloNineCell, aggCell, s.soloNineAggDivider, s.soloNineAggPtsTotal]}>{sumPts}</Text>
+          <View style={[s.soloNineCell, aggCell, s.soloNineAggDivider]}>
+            <CountUpText numberOfLines={1} style={s.soloNineAggPtsTotal}>{sumPts}</CountUpText>
+          </View>
         </View>
       );
     }
@@ -234,37 +248,42 @@ function NineBlock({
               {/* Digit box: chip + digit share this 30px box so they stay
                   concentric; the handicap pips get their own lane below it
                   and can never collide with the chip. */}
-              <View style={[s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent]}>
-                {/* Chip first so the digit renders on top of the soft fill. */}
-                <ScoreShape result={shape} theme={theme} s={s} />
-                {cellEditable ? (
-                  <TextInput
-                    ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
-                    style={[s.soloNineStrokeInput, rawScore == null && s.soloNineStrokeInputEmpty, digitOnSolid]}
-                    accessibilityLabel={t('shared.grid.strokesFor', { name: player.name, hole: h.number })}
-                    keyboardType="numeric"
-                    keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                    selectionColor={theme.accent.primary}
-                    maxLength={2}
-                    value={cellValue}
-                    onChangeText={(v) => onSetScore(player.id, h.number, v)}
-                    placeholder="·"
-                    placeholderTextColor={theme.text.muted}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => focusNext(player.id, h.number)}
-                  />
-                ) : (
-                  // Plain Text keeps centering reliable in view-only mode —
-                  // a readonly TextInput can pick up browser user-agent
-                  // styles that override textAlign on web. The digit box
-                  // already centers via flex, so the Text only needs the
-                  // typographic styles.
-                  <Text style={[s.soloNineStrokeText, digitOnSolid]} numberOfLines={1}>
-                    {cellValue || '·'}
-                  </Text>
-                )}
-              </View>
+              <CellRoll
+                mode={displayMode}
+                index={h.number - 1}
+                leaving={ptsFace(ptsFor(h, player))}
+                under={<View style={s.soloNineDigitBox}><ScoreShape result={shape} theme={theme} s={s} /></View>}
+              >
+                <View style={[s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent]}>
+                  {cellEditable ? (
+                    <TextInput
+                      ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
+                      style={[s.soloNineStrokeInput, rawScore == null && s.soloNineStrokeInputEmpty, digitOnSolid]}
+                      accessibilityLabel={t('shared.grid.strokesFor', { name: player.name, hole: h.number })}
+                      keyboardType="numeric"
+                      keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                      selectionColor={theme.accent.primary}
+                      maxLength={2}
+                      value={cellValue}
+                      onChangeText={(v) => onSetScore(player.id, h.number, v)}
+                      placeholder="·"
+                      placeholderTextColor={theme.text.muted}
+                      returnKeyType="next"
+                      blurOnSubmit={false}
+                      onSubmitEditing={() => focusNext(player.id, h.number)}
+                    />
+                  ) : (
+                    // Plain Text keeps centering reliable in view-only mode —
+                    // a readonly TextInput can pick up browser user-agent
+                    // styles that override textAlign on web. The digit box
+                    // already centers via flex, so the Text only needs the
+                    // typographic styles.
+                    <Text style={[s.soloNineStrokeText, digitOnSolid]} numberOfLines={1}>
+                      {cellValue || '·'}
+                    </Text>
+                  )}
+                </View>
+              </CellRoll>
               {/* Always rendered so every cell is the same height. */}
               <View style={s.soloNineExtraDots} pointerEvents="none">
                 {extra > 0 && Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
@@ -274,7 +293,9 @@ function NineBlock({
             </View>
           );
         })}
-        <Text numberOfLines={1} style={[s.soloNineCell, aggCell, s.soloNineAggDivider, s.soloNineAggStrokesTotal]}>{sumStr || '·'}</Text>
+        <View style={[s.soloNineCell, aggCell, s.soloNineAggDivider]}>
+          <CountUpText numberOfLines={1} style={s.soloNineAggStrokesTotal}>{sumStr || '·'}</CountUpText>
+        </View>
       </View>
     );
   };

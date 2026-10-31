@@ -157,6 +157,8 @@ export default {
   'scorecard.player.statStrokes': 'STROKES',
   'scorecard.player.statPoints': 'POINTS',
   'scorecard.player.statVsPar': 'vs PAR',
+  'scorecard.player.statVsMyPar': 'vs YOUR PAR',
+  'scorecard.player.statVsTheirPar': 'vs THEIR PAR',
 
   'scorecard.hole.finishGame': 'Finish game',
   'scorecard.hole.finishing': 'Finishing',

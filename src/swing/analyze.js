@@ -14,7 +14,7 @@ import { runChecks, normClub } from './checks';
 import { runFaceOnChecks } from './checksFaceOn';
 import { mainFault } from './priority';
 
-export const SCHEMA = 'swing-analysis/7'; // 2: the v2 checks (spec 2026-10-18); 3: their lab-calibrated limits (spec §8a); 4: tempo from backswingStart; 5: tour reference swings (spec §8b: backside hip line, impact hands, implausible clubheads, no-ball and face-on flags); 6: driver limits for the setup reach and the top; 7: face-on checks (plan 2026-10-30). Older ones re-run on open
+export const SCHEMA = 'swing-analysis/8'; // 2: the v2 checks (spec 2026-10-18); 3: their lab-calibrated limits (spec §8a); 4: tempo from backswingStart; 5: tour reference swings (spec §8b: backside hip line, impact hands, implausible clubheads, no-ball and face-on flags); 6: driver limits for the setup reach and the top; 7: the coach-series rows (hands_bicep, swing_symmetry, finish_trail_foot); 8: face-on checks (plan 2026-10-30). Older ones re-run on open
 export const MAX_CLIP_S = 15; // captured seconds; the importer warns above this
 const MIN_USABLE = 10;
 const MIN_COVERAGE = 0.8;

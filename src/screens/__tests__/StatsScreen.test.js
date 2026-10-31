@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, act, within } from '@testing-library/react-native';
+import { render, fireEvent, act, within, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import { setLanguagePref } from '../../i18n';
 import StatsScreen from '../StatsScreen';
@@ -209,9 +209,12 @@ describe('Rounds tab', () => {
     expect(getByTestId('card-fx-me-total-in').props.children).toBe('48');
     fireEvent.press(getByTestId('card-mode-points'));
     expect(out().getByTestId('card-fx-me-cell-1').props.children).toBe('2');
-    expect(getByTestId('card-fx-me-total-out').props.children).toBe('8');
-    expect(getByTestId('card-fx-nac-total-out').props.children).toBe('13');
-    expect(getByTestId('card-fx-me-total-in').props.children).toBe('14');
+    // The totals count to their points value.
+    await waitFor(() => {
+      expect(getByTestId('card-fx-me-total-out').props.children).toBe('8');
+      expect(getByTestId('card-fx-nac-total-out').props.children).toBe('13');
+      expect(getByTestId('card-fx-me-total-in').props.children).toBe('14');
+    });
   });
 
   test('a team round shows pair totals and the pair-vs-pair chart', async () => {

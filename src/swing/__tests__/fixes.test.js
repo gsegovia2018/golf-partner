@@ -42,6 +42,8 @@ const KEYS = {
   fo_head_behind: ['ahead'],
   fo_head_dip: ['down'],
   fo_finish_weight: ['back'],
+  hands_bicep: ['out', 'deep'],
+  finish_trail_foot: ['flat'],
 };
 // The fault each row names (checks.js), by id and, where it depends on it, direction.
 const FAULT = {
@@ -59,6 +61,7 @@ const FAULT = {
   fo_hips_shift: 'hanging_back', fo_head_back: 'head_sway', fo_hands_ahead: { back: 'scoop', forward: 'excess_lean' }, fo_slide: 'slide',
   fo_hips_impact: 'hanging_back', fo_finish_head: 'hanging_back',
   fo_head_behind: 'head_sway', fo_head_dip: 'head_dip', fo_finish_weight: 'hanging_back',
+  hands_bicep: { out: 'steep_backswing', deep: 'flat_backswing' }, finish_trail_foot: 'balance',
 };
 const faultOf = (id, dir) => (typeof FAULT[id] === 'object' ? FAULT[id][dir] : FAULT[id]) ?? null;
 const POS = { hip_drift: 'impact', spine_loss: 'impact', hands_under_shoulders: 'address', back_line: 'address', knee_flex: 'address' };

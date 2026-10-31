@@ -583,6 +583,10 @@ export default function ScorecardScreen({ navigation, route }) {
     trail: user?.id && meId && tournament?.id && round?.id
       ? { userId: user.id, tournamentId: tournament.id, roundId: round.id, roundIndex }
       : null,
+    why: {
+      viewOnly, finished: !!tournament?.finishedAt, hasMap: trackingGps.hasMap,
+      permissionGranted: trackingGps.permissionGranted, fixState: trackingGps.fixState,
+    },
   });
 
   // Lock a freshly opened finished round to view-only. "Finished" means

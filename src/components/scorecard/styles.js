@@ -1063,8 +1063,8 @@ export function makeScorecardStyles(theme) {
       fontFamily: 'PlusJakartaSans-ExtraBold',
       letterSpacing: 0.3,
     },
-    // Round running totals under the stepper: one line, each label beside
-    // its number, so it reads as a footnote to the hole's score above.
+    // Round running totals under the stepper: four cells, number over its
+    // label, so "vs PAR" and "vs TU PAR" fit side by side on a 360 px phone.
     soloStatsRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1075,21 +1075,21 @@ export function makeScorecardStyles(theme) {
     },
     soloStatItem: {
       flex: 1,
-      flexDirection: 'row',
-      alignItems: 'baseline',
+      alignItems: 'center',
       justifyContent: 'center',
-      gap: 6,
+      gap: 1,
     },
     soloStatDivider: {
       width: 1,
       alignSelf: 'stretch',
       backgroundColor: theme.isDark ? theme.glass?.border : theme.border.default,
     },
+    // Slate, not olive: The Neutral Must Read Rule (outdoors).
     soloStatLabel: {
-      color: theme.text.muted,
-      fontSize: 9,
+      color: theme.text.secondary,
+      fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
-      letterSpacing: 1.5,
+      letterSpacing: 1,
     },
     soloStatValue: {
       color: theme.text.primary,

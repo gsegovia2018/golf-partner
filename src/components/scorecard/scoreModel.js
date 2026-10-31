@@ -69,24 +69,30 @@ export function holeEdgeShots({ players, handicaps, strokeIndex, holeCount = 18 
     .map(({ id, name, extra }) => ({ id, name, edge: extra - min }));
 }
 
-// Per-player round totals. Returns Map<playerId, { pts, str, parPlayed }>.
+// Per-player round totals. Returns Map<playerId, { pts, str, parPlayed, netParPlayed }>.
+// netParPlayed is the player's own par on the holes played: par plus the
+// handicap strokes they receive there, from the same handicap the points use.
 export function roundTotals({ mode, round, players, scores, handicaps }) {
   const hcaps = handicaps ?? round?.playerHandicaps ?? {};
   const map = new Map();
   const holes = round?.holes ?? [];
+  const holeCount = holeCountOf(round);
   for (const p of players) {
+    const hcp = hcaps[p.id] ?? p.handicap ?? 0;
     let pts = 0;
     let str = 0;
     let parPlayed = 0;
+    let netParPlayed = 0;
     for (const hole of holes) {
       const sc = scores?.[p.id]?.[hole.number];
       if (sc == null) continue;
       str += sc;
       parPlayed += hole.par;
+      netParPlayed += hole.par + calcExtraShots(hcp, hole.strokeIndex, holeCount);
       const hp = holePoints({ mode, hole, players, scores, handicaps: hcaps, round });
       pts += hp[p.id] ?? 0;
     }
-    map.set(p.id, { pts, str, parPlayed });
+    map.set(p.id, { pts, str, parPlayed, netParPlayed });
   }
   return map;
 }

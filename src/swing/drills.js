@@ -99,6 +99,11 @@ export const DRILLS = [
     passTarget: L,
   },
   {
+    id: 'ott-bolsa', fault: 'over_the_top', title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
     id: 'st-salida', fault: 'stuck', title: L,
     instruction: L,
     passTarget: L,
@@ -109,12 +114,27 @@ export const DRILLS = [
     passTarget: L,
   },
   {
+    id: 'fl-bombeo', fault: 'flip', title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
     id: 'sb-plano', fault: 'steep_backswing', title: L,
     instruction: L,
     passTarget: L,
   },
   {
+    id: 'sb-muslo', fault: 'steep_backswing', checks: ['hands_bicep'], also: ['flat_backswing'], title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
     id: 'fb-codo', fault: 'flat_backswing', also: ['top_position'], title: L,
+    instruction: L,
+    passTarget: L,
+  },
+  {
+    id: 'fb-pared', fault: 'flat_backswing', checks: ['hands_bicep'], also: ['top_position'], title: L,
     instruction: L,
     passTarget: L,
   },

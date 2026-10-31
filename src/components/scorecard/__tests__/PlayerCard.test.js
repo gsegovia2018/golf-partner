@@ -240,3 +240,38 @@ describe('PlayerCard polish (Spanish and English)', () => {
     expect(queryByText('Por defecto')).toBeNull();
   });
 });
+
+describe('PlayerCard running totals', () => {
+  // 8 holes: 40 strokes on par 32 (+8 gross), 6 handicap strokes received (+2 net).
+  const totals = { pts: 14, str: 40, parPlayed: 32, netParPlayed: 38 };
+
+  test('shows gross vs par and net vs the player own par', () => {
+    const { getByLabelText } = renderPlayerCard({ showRunning: true, isMe: true, totals });
+    expect(getByLabelText('STROKES, 40')).toBeTruthy();
+    expect(getByLabelText('POINTS, 14')).toBeTruthy();
+    expect(getByLabelText('vs PAR, +8')).toBeTruthy();
+    expect(getByLabelText('vs YOUR PAR, +2')).toBeTruthy();
+  });
+
+  test('another player card names it as their par', () => {
+    const { getByLabelText } = renderPlayerCard({ showRunning: true, isMe: false, totals });
+    expect(getByLabelText('vs THEIR PAR, +2')).toBeTruthy();
+  });
+
+  test('level with their own par reads E; nothing played reads —', () => {
+    const level = renderPlayerCard({ showRunning: true, isMe: true, totals: { pts: 16, str: 38, parPlayed: 32, netParPlayed: 38 } });
+    expect(level.getByLabelText('vs YOUR PAR, E')).toBeTruthy();
+    const none = renderPlayerCard({ showRunning: true, isMe: true, totals: { pts: 0, str: 0, parPlayed: 0, netParPlayed: 0 } });
+    expect(none.getByLabelText('vs YOUR PAR, —')).toBeTruthy();
+  });
+
+  test('Spanish labels', async () => {
+    await setLanguagePref('es');
+    try {
+      const { getByLabelText } = renderPlayerCard({ showRunning: true, isMe: true, totals });
+      expect(getByLabelText('vs TU PAR, +2')).toBeTruthy();
+    } finally {
+      await setLanguagePref('en');
+    }
+  });
+});

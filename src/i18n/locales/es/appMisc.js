@@ -30,4 +30,5 @@ export default {
   "misc.swipeDelete": "Eliminar",
   "misc.friend.golfer": "Golfista",
   "misc.holeMap.title": "Mapa del hoyo",
+  "misc.swing.why.noExit": "No se ven las manos subir después del impacto",
 };

@@ -155,6 +155,81 @@ export function ClubWheel({
   );
 }
 
+// The same wheel, small and in place: three rows with each club's carry, for a
+// card that picks a club and acts on it (a seen pin: Add · <club>). Opens on
+// `value` (the middle club without one) and reports every club it settles on.
+const MINI_H = 44;
+const MINI_VISIBLE = 3;
+
+export function InlineClubWheel({ clubs, value, units, onChange, style }) {
+  const ref = useRef(null);
+  const start = useMemo(() => {
+    const i = clubs.findIndex((c) => c.key === value);
+    return i >= 0 ? i : Math.floor(clubs.length / 2);
+  }, [clubs, value]);
+  const [focus, setFocus] = useState(start);
+  const tl = useT();
+  const suffix = unitSuffix(units);
+
+  useEffect(() => {
+    setFocus(start);
+    onChange?.(clubs[start]?.key ?? null);
+    const id = setTimeout(() => ref.current?.scrollTo({ y: start * MINI_H, animated: false }), 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start]);
+
+  const onScroll = (e) => {
+    const i = Math.max(0, Math.min(clubs.length - 1, Math.round(e.nativeEvent.contentOffset.y / MINI_H)));
+    if (i === focus) return;
+    setFocus(i);
+    haptic('selection');
+    onChange?.(clubs[i]?.key ?? null);
+  };
+
+  return (
+    <View
+      style={[s.mini, style]}
+      accessibilityRole="adjustable"
+      accessibilityLabel={tl('shots.wheel.club')}
+      accessibilityValue={{ text: clubs[focus]?.label ?? '' }}
+      testID="inline-club-wheel"
+    >
+      <View pointerEvents="none" style={s.miniBand} />
+      <ScrollView
+        ref={ref}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={MINI_H}
+        decelerationRate="fast"
+        scrollEventThrottle={16}
+        onScroll={onScroll}
+        nestedScrollEnabled
+        testID="inline-club-wheel-scroll"
+        contentContainerStyle={{ paddingVertical: MINI_H * ((MINI_VISIBLE - 1) / 2) }}
+      >
+        {clubs.map((c, i) => {
+          const active = i === focus;
+          return (
+            <Pressable
+              key={c.key}
+              style={s.miniRow}
+              onPress={() => ref.current?.scrollTo({ y: i * MINI_H, animated: true })}
+              testID={`inline-club-${c.key}`}
+            >
+              <Text style={[s.miniClub, active && s.miniClubActive]} numberOfLines={1}>{c.label}</Text>
+              {c.distance != null && c.distance > 0 ? (
+                <Text style={[s.rowDist, s.miniDist, active && s.rowDistActive, active && s.miniDistActive]}>
+                  {`${formatDistance(c.distance, units)} ${suffix}`}
+                </Text>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   backdrop: {
     flex: 1, backgroundColor: hud.scrim,
@@ -210,4 +285,23 @@ const s = StyleSheet.create({
   editText: { color: hud.textSoft, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
   editTextDanger: { color: hud.danger },
   closeBtn: { flex: 0, marginTop: 10 },
+
+  mini: {
+    height: MINI_H * MINI_VISIBLE, borderRadius: 12, overflow: 'hidden',
+    backgroundColor: hud.inset, borderWidth: 1, borderColor: hud.border,
+  },
+  miniBand: {
+    position: 'absolute', left: 0, right: 0, top: MINI_H, height: MINI_H,
+    borderRadius: 12, backgroundColor: hud.accent + '24',
+    borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: hud.accent + '66',
+  },
+  miniRow: {
+    height: MINI_H, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 10, gap: 6,
+  },
+  miniClub: { flexShrink: 1, color: hud.textDim, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13 },
+  miniClubActive: { color: hud.text, fontFamily: 'PlusJakartaSans-Bold', fontSize: 15 },
+  miniDist: { fontSize: 11 },
+  miniDistActive: { fontSize: 12 },
 });
