@@ -894,6 +894,10 @@ NOISE_MULT = 3.0
 # a short segment; the labeller marks the first frame that LOOKS level, i.e. entering this band.
 LEVEL_TOL_DEG = 5.0
 FINISH_HOLD_S = 0.15     # task brief: stopped for >= 0.15 s of real time
+DOWNSWING_END_H = 0.15   # a downswing ends within this share of H of the hands' lowest (address) level
+FOLLOW_UP_X = 3          # the follow-through lifts the hands again within this many times the descent's duration
+MIN_DOWNSWING_SAMPLES = 5
+FULL_DROP = 0.7          # of the biggest qualifying descent: a smaller one first is a half swing or a waggle
 ONSET_SUSTAIN_S = 0.02   # clubhead motion must last >= 0.02 s (5 frames at 240 fps): a single
                          # compression pop (WhatsApp re-encode) can't count as the takeaway
 
@@ -997,10 +1001,24 @@ def downswing_d15(S: dict, body_h: float) -> tuple[int, int]:
     beat the downswing in largest_descent() once the grip, not the wrists, is tracked).
     Returns (fastest sample, run end) like downswing_anchor()."""
     y, t = S["hands"][:, 1], S["t"]
-    runs_ = [(a, b) for a, b in descents(y, 0.02 * body_h) if y[b] - y[a] >= 0.2 * body_h]
-    if not runs_:
-        return downswing_anchor(S, body_h)
-    a, b = max(runs_, key=lambda r: (y[r[1]] - y[r[0]]) / (t[r[1]] - t[r[0]]))
+    all_ = [(a, b) for a, b in descents(y, 0.02 * body_h)
+            if y[b] - y[a] >= 0.2 * body_h and b - a >= MIN_DOWNSWING_SAMPLES - 1]   # fewer: the grip estimate jumping
+    # Face-on (plan 2026-10-30 S0, phases.js twin): the downswing ends with the hands back near their
+    # address height, and the follow-through lifts them again soon after (FOLLOW_UP_X); the hands coming
+    # down from a high finish, or lowered to walk away, do neither.
+    low = np.percentile(y, 90) - DOWNSWING_END_H * body_h
+    reach = [(a, b) for a, b in all_ if y[b] >= low]
+    through = [(a, b) for a, b in reach
+               if any(y[b] - y[k] >= 0.2 * body_h for k in range(b + 1, len(y)) if t[k] - t[b] <= FOLLOW_UP_X * (t[b] - t[a]))]
+    if through:
+        # the first full-size one: the finish, or a pose jump after it, comes later and can be faster
+        biggest = max(y[r[1]] - y[r[0]] for r in through)
+        a, b = next(r for r in through if y[r[1]] - y[r[0]] >= FULL_DROP * biggest)
+    else:
+        runs_ = reach or all_
+        if not runs_:
+            return downswing_anchor(S, body_h)
+        a, b = max(runs_, key=lambda r: (y[r[1]] - y[r[0]]) / (t[r[1]] - t[r[0]]))
     vy = np.r_[0.0, np.diff(y) / np.diff(t)]
     return a + int(np.argmax(vy[a:b + 1])), b
 

@@ -11,9 +11,10 @@ import { defaultHeightCm, scaleFromWindow } from './scale';
 import { detectPhases, CHECKPOINT_KEYS } from './phases';
 import { resolveClub } from './club';
 import { runChecks, normClub } from './checks';
+import { runFaceOnChecks } from './checksFaceOn';
 import { mainFault } from './priority';
 
-export const SCHEMA = 'swing-analysis/7'; // 2: the v2 checks (spec 2026-10-18); 3: their lab-calibrated limits (spec §8a); 4: tempo from backswingStart; 5: tour reference swings (spec §8b: backside hip line, impact hands, implausible clubheads, no-ball and face-on flags); 6: driver limits for the setup reach and the top; 7: the coach-series rows (hands_bicep, swing_symmetry, finish_trail_foot). Older ones re-run on open
+export const SCHEMA = 'swing-analysis/8'; // 2: the v2 checks (spec 2026-10-18); 3: their lab-calibrated limits (spec §8a); 4: tempo from backswingStart; 5: tour reference swings (spec §8b: backside hip line, impact hands, implausible clubheads, no-ball and face-on flags); 6: driver limits for the setup reach and the top; 7: the coach-series rows (hands_bicep, swing_symmetry, finish_trail_foot); 8: face-on checks (plan 2026-10-30). Older ones re-run on open
 export const MAX_CLIP_S = 15; // captured seconds; the importer warns above this
 const MIN_USABLE = 10;
 const MIN_COVERAGE = 0.8;
@@ -24,9 +25,10 @@ export const CLUB_KEYS = ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 
 const BODY_LM = [LM.lSh, LM.rSh, LM.lHip, LM.rHip, LM.lKnee, LM.rKnee, LM.lAnk, LM.rAnk];
 
 // Face-on at address: the spine stands almost upright and the feet sit apart in the picture.
-// Down the line every lab clip reads >= 22 deg of tilt and an ankle span <= 0.34 torso; face-on 1 deg and 1.1.
-const FACE_ON_MAX_TILT = 12;
-const FACE_ON_MIN_ANKLES = 0.6;
+// Down the line every lab clip reads >= 22 deg of tilt and an ankle span <= 0.34 torso. Face-on, the 14
+// web clips of S0 (plan 2026-10-30) read 0-13 deg (a driver tilts away from the target) and 0.55-1.31.
+const FACE_ON_MAX_TILT = 20;
+const FACE_ON_MIN_ANKLES = 0.45;
 
 /** 'faceOn' | 'dtl' from the median address-run pose (px landmarks). */
 function viewOf(idx, L, [a0, a1]) {
@@ -70,6 +72,7 @@ function makePoseAt(idx, L) {
  * @param {'male'|'female'} [opts.gender]
  * @param {'iron'|'driver'|null} [opts.club]  selects the per-club thresholds (checks.js THRESHOLDS); null reads as iron
  * @param {'camera'|'import'} [opts.source]
+ * @param {'faceOn'|'dtl'} [opts.view]  the golfer's view correction (marks.json viewOverride); detected when absent
  * @returns {object|{error:'no_pose'|'partial_pose'|'too_long'}}
  */
 export function analyze(native, opts = {}) {
@@ -137,7 +140,9 @@ export function analyze(native, opts = {}) {
     cps[k] = { frame: f, ...c };
   });
 
-  const { checks } = runChecks({
+  const detectedView = viewOf(idx, L, ph.addressRun);
+  const view = opts.view === 'faceOn' || opts.view === 'dtl' ? opts.view : detectedView;
+  const { checks, dir: targetDir = null } = (view === 'faceOn' ? runFaceOnChecks : runChecks)({
     checkpoints: cps,
     ball: ballPx,
     pose: poseAt,
@@ -150,7 +155,7 @@ export function analyze(native, opts = {}) {
     finishQuietS: ph.finishQuietS,
     approximate: ph.fps.approximate,
   });
-  const main = mainFault(checks);
+  const main = mainFault(checks, view);
 
   const addr = poseAt(frames.address);
   const reference = ballPx && addr ? {
@@ -167,7 +172,9 @@ export function analyze(native, opts = {}) {
     source,
     club,
     handedness,
-    view: viewOf(idx, L, ph.addressRun),
+    view,
+    viewDetected: detectedView,
+    ...(targetDir ? { targetDir } : {}), // face-on: +1 = the target is to the right of the picture
     fps: ph.fps,
     approximate: ph.fps.approximate,
     scale: { pxPerCm: scale.pxPerCm, heightCm, approx: approxHeight },

@@ -92,6 +92,20 @@ export const SWING_FAULT_LINKS = {
   tempo_fast: { clubs: 'driverFirst', causes: ['tee:trouble:driver', 'tee:side:left', 'tee:side:right', 'penalty:tee'] },
   tempo_slow: { clubs: 'driver', causes: ['tee:distance'] },
   balance: { clubs: 'driverFirst', causes: ['tee:side:left', 'tee:side:right', 'tee:distance'] },
+  // Face-on faults (plan 2026-10-30 §6). sway / hanging_back / head_dip move the low point (fat and
+  // thin strikes); slide leaves the face open (pushes); scoop is flip's face-on twin; excess_lean
+  // de-lofts and opens the face with an iron; ball_position and stance_width shape the start line.
+  sway: { clubs: 'both', causes: ['approach:short', 'approach:distance', 'approach:why:swing:lowPoint', 'tee:side:right'] },
+  hanging_back: { clubs: 'both', causes: ['approach:short', 'approach:distance', 'approach:why:swing:lowPoint', 'short:why:swing:lowPoint'] },
+  head_dip: { clubs: 'both', causes: ['approach:short', 'short:chip', 'approach:why:swing:lowPoint'] },
+  slide: { clubs: 'both', causes: ['tee:side:right', 'approach:side:right', 'approach:why:swing:start:right'] },
+  scoop: {
+    clubs: 'iron',
+    causes: ['approach:short', 'approach:distance', 'short:chip', 'approach:why:swing:lowPoint', 'short:why:swing:lowPoint'],
+  },
+  excess_lean: { clubs: 'iron', causes: ['approach:side:right', 'approach:why:swing:start:right'] },
+  ball_position: { clubs: 'both', causes: ['approach:why:swing:lowPoint', 'tee:side:left', 'tee:side:right'] },
+  stance_width: { clubs: 'driverFirst', causes: ['tee:distance', 'tee:side:left', 'tee:side:right'] },
 };
 
 const stripPrefix = (id) => String(id ?? '').replace(/^cause:/, '');

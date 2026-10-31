@@ -27,6 +27,21 @@ const KEYS = {
   hands_height_impact: ['up', 'down'],
   hands_out_impact: ['in', 'out'],
   shaft_angle_impact: ['up', 'down'],
+  // face-on (plan 2026-10-30)
+  fo_stance: ['narrow', 'wide'],
+  fo_ball_pos: ['back', 'forward'],
+  fo_setup_tilt: ['upright', 'much'],
+  fo_sway: ['out'],
+  fo_head_top: ['moved'],
+  fo_hips_shift: ['stuck'],
+  fo_head_back: ['forward'],
+  fo_hands_ahead: ['back', 'forward'],
+  fo_hips_impact: ['stuck'],
+  fo_finish_head: ['back'],
+  fo_slide: ['past'],
+  fo_head_behind: ['ahead'],
+  fo_head_dip: ['down'],
+  fo_finish_weight: ['back'],
   hands_bicep: ['out', 'deep'],
   finish_trail_foot: ['flat'],
 };
@@ -42,6 +57,10 @@ const FAULT = {
   shaft_through_ball: { beyond: 'flip', inside: 'over_the_top' }, through_vs_halfway: 'flip',
   tempo: { fast: 'tempo_fast', slow: 'tempo_slow' }, finish_balance: 'balance', head_drift: 'head_sway',
   hands_height_impact: 'early_extension', hands_out_impact: 'early_extension', shaft_angle_impact: 'early_extension',
+  fo_stance: 'stance_width', fo_ball_pos: 'ball_position', fo_setup_tilt: 'posture', fo_sway: 'sway', fo_head_top: 'head_sway',
+  fo_hips_shift: 'hanging_back', fo_head_back: 'head_sway', fo_hands_ahead: { back: 'scoop', forward: 'excess_lean' }, fo_slide: 'slide',
+  fo_hips_impact: 'hanging_back', fo_finish_head: 'hanging_back',
+  fo_head_behind: 'head_sway', fo_head_dip: 'head_dip', fo_finish_weight: 'hanging_back',
   hands_bicep: { out: 'steep_backswing', deep: 'flat_backswing' }, finish_trail_foot: 'balance',
 };
 const faultOf = (id, dir) => (typeof FAULT[id] === 'object' ? FAULT[id][dir] : FAULT[id]) ?? null;

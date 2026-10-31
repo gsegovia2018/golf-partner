@@ -8,6 +8,9 @@ import { SWING_STRINGS as T } from './strings';
 // Checks with no `dir` (or a dir that is not a copy key) read their key from the value.
 const SINGLE = {
   spine_loss: 'lost', hip_drift: 'toward', head_drift: 'moved', finish_balance: 'off', down_vs_takeaway: 'steeper',
+  // face-on (plan 2026-10-30): each of these goes wrong one way only
+  fo_sway: 'out', fo_head_top: 'moved', fo_hips_shift: 'stuck', fo_head_back: 'forward', fo_slide: 'past',
+  fo_head_behind: 'ahead', fo_head_dip: 'down', fo_finish_weight: 'back', fo_hips_impact: 'stuck', fo_finish_head: 'back',
 };
 const POSTURE_MID = 30; // degrees of spine tilt: a row without a dir (schema 1) reads below = too upright
 
@@ -50,7 +53,7 @@ export function drillForCheck(check) {
  */
 export function fixesFor(analysis, max = 3) {
   const out = [];
-  rankedRows(analysis?.checks || []).forEach((check) => {
+  rankedRows(analysis?.checks || [], analysis?.view).forEach((check) => {
     if (!fixCopy(check) || out.some((f) => f.fault === check.fault)) return;
     out.push({ check, copy: fixCopy(check), drill: drillForCheck(check), fault: check.fault });
   });

@@ -25,6 +25,12 @@ const ONSET_SUSTAIN_S = 0.02; // clubhead motion at address must last this long 
 const PRE_IMPACT_S = 0.025; // preImpact = impact - 25 ms
 const POST_IMPACT_FRAMES = 10;
 const BACKSWING_START_FRAC = 0.1; // of the grip's rise from address to motionStart
+const DOWNSWING_END_H = 0.15; // a downswing ends within this share of the height of the hands' lowest (address) level
+// The follow-through lifts the hands again within this many times the descent's own duration: a ratio,
+// not seconds, so a wrong slow-motion factor (guessed before the phases) cannot reject the real downswing.
+const FOLLOW_UP_X = 3;
+const MIN_DOWNSWING_SAMPLES = 5;
+const FULL_DROP = 0.7; // of the biggest qualifying descent: a smaller one first is a half swing or a waggle
 
 // Python's round() is banker's rounding; the lab's window midpoints rely on it.
 const pyRound = (x) => {
@@ -51,10 +57,27 @@ function downswingAnchor(S) {
   const y = S.hands.map((p) => p[1]);
   const { t, bodyH } = S;
   const vy = y.map((v, k) => (k ? (v - y[k - 1]) / (t[k] - t[k - 1]) : 0));
-  const runs = descents(y, 0.02 * bodyH).filter(([a, b]) => y[b] - y[a] >= 0.2 * bodyH);
-  const pick = runs.length
-    ? runs.reduce((best, r) => ((y[r[1]] - y[r[0]]) / (t[r[1]] - t[r[0]]) > (y[best[1]] - y[best[0]]) / (t[best[1]] - t[best[0]]) ? r : best))
-    : largestDescent(y, 0.02 * bodyH);
+  // a downswing spans several samples even at 30 fps; a drop over two or three is the grip estimate jumping
+  const all = descents(y, 0.02 * bodyH).filter(([a, b]) => y[b] - y[a] >= 0.2 * bodyH && b - a >= MIN_DOWNSWING_SAMPLES - 1);
+  // A downswing ends with the hands back near their address height (impact). The hands coming down
+  // from a high finish stop around the chest: face-on they can drop faster than the downswing on
+  // screen (the wrists fold behind the head), so a descent that never gets back down is not one
+  // (plan 2026-10-30, S0: four of four web face-on clips locked onto the finish).
+  const low = percentile(y, 90) - DOWNSWING_END_H * bodyH;
+  const reach = all.filter(([, b]) => y[b] >= low);
+  // ...and the follow-through lifts the hands again right after it; lowering the club to walk away does not
+  const through = reach.filter(([a, b]) => {
+    const span = FOLLOW_UP_X * (t[b] - t[a]);
+    for (let k = b + 1; k < y.length && t[k] - t[b] <= span; k++) if (y[b] - y[k] >= 0.2 * bodyH) return true;
+    return false;
+  });
+  const fastest = (rs) => rs.reduce((best, r) => ((y[r[1]] - y[r[0]]) / (t[r[1]] - t[r[0]]) > (y[best[1]] - y[best[0]]) / (t[best[1]] - t[best[0]]) ? r : best));
+  // Of the descents that pass both, the downswing is the first full-size one: what follows it (the
+  // finish, a pose jump after it) comes later, and can be faster on screen.
+  const drop = (r) => y[r[1]] - y[r[0]];
+  const biggest = through.length ? Math.max(...through.map(drop)) : 0;
+  const pick = through.length ? through.find((r) => drop(r) >= FULL_DROP * biggest)
+    : reach.length ? fastest(reach) : all.length ? fastest(all) : largestDescent(y, 0.02 * bodyH);
   const [a, b] = pick;
   let kMax = a;
   for (let k = a; k <= b; k++) if (vy[k] > vy[kMax]) kMax = k;

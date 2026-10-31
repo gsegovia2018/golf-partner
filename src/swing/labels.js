@@ -9,13 +9,20 @@
 
 export const LABELS_SCHEMA = 'swing-club-labels/1';
 
-/** An empty label file for a freshly analysed swing. */
-export function emptyMarks({ swingId, video = null, handedness = 'right' }) {
+/**
+ * An empty label file for a freshly analysed swing. `view` is the camera view the labels were made
+ * in (the training export reads it); `viewOverride`, when present, is the golfer's correction of the
+ * detected view (Results: "Filmed from behind?") and wins over the detection on every re-analysis.
+ */
+export function emptyMarks({
+  swingId, video = null, handedness = 'right', view = 'dtl', viewOverride = null,
+}) {
   return {
     schema: LABELS_SCHEMA,
     swingId,
     video,
-    view: 'dtl',
+    view,
+    ...(viewOverride ? { viewOverride } : {}),
     handedness,
     ball: { proposed: null, final: null, corrected: false },
     frames: [],
@@ -93,6 +100,9 @@ export function marksForAnalyze(marks) {
   });
   return out;
 }
+
+/** The golfer's view correction in marks.json ('faceOn' | 'dtl'), or undefined: analyze() then detects it. */
+export const viewOverrideOf = (marks) => (marks?.viewOverride === 'faceOn' || marks?.viewOverride === 'dtl' ? marks.viewOverride : undefined);
 
 /** Parsed marks, or null if the input is not a swing-club-labels/1 file. */
 export function parseMarks(raw) {

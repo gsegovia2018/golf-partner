@@ -14,20 +14,21 @@ export const stepName = (k) => (k === EXTRAS ? R.extras : SWING_STRINGS.checkpoi
  * The top of the results screen (checks v2, polish): the verdict and the position strip.
  * Verdict: "Work on first" over the fault's name (the one thing to read), then where it shows and
  * where it starts ("Downswing · starts at Top ›"), what it likely causes, and, while the Downswing
- * clubhead is unplaced, the place line. Strip: seven position dots and the Extras step; a dot is a
+ * clubhead is unplaced, the place line. Strip: the view's position dots (seven down the line, five
+ * face-on) and the Extras step; a dot is a
  * tab (a tap jumps to its step). The main fault's position wears a red ring instead of a text badge;
  * a position waiting for its clubhead is a dashed "+"; the Extras dot is a ring because extras never
  * colour a position. Status is a dot AND a word in each tab's a11y label.
  */
 export default function SwingSummary({
-  statuses, pending = {}, main, soFar = false, ask = null, current, onSelect, onAsk, unconfirmed = 0,
+  statuses, pending = {}, main, soFar = false, ask = null, current, onSelect, onAsk, unconfirmed = 0, steps = STEPS,
 }) {
   const { theme } = useTheme();
   const tone = useSwingTone();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const fault = main ? SWING_STRINGS.fault[main.fault] ?? main.label : null;
-  // "Every position is green" only when all seven are measured; a missing clubhead or nothing measured says so
-  const positions = STEPS.filter((k) => k !== EXTRAS);
+  // "Every position is green" only when all of them are measured; a missing clubhead or nothing measured says so
+  const positions = steps.filter((k) => k !== EXTRAS);
   const waiting = positions.some((k) => pending[k]);
   const measured = positions.filter((k) => statuses[k] !== 'unknown');
   const noFault = measured.length === positions.length && !waiting ? { line: R.noFaultAll, why: true }
@@ -86,7 +87,7 @@ export default function SwingSummary({
       </View>
 
       <View style={s.strip} accessibilityRole="tablist">
-        {STEPS.map((k) => {
+        {steps.map((k) => {
           const on = k === current;
           const st = statuses[k];
           const wait = !!pending[k];

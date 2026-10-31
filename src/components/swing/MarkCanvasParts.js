@@ -197,11 +197,11 @@ function DockBadge({ mark, status }) {
 }
 
 function MarkDockImpl({
-  active, statuses, ballOff, onSelect, style,
+  active, statuses, ballOff, onSelect, style, marks = ['hands', 'head', 'ball'],
 }) {
   return (
     <View style={[styles.dock, style]} accessibilityRole="radiogroup" accessibilityLabel={T.dock}>
-      {['hands', 'head', 'ball'].map((m) => {
+      {marks.map((m) => {
         const off = m === 'ball' && ballOff;
         const on = m === active;
         const word = off ? T.addressOnly : T.status[statuses[m]] ?? '';
@@ -243,7 +243,7 @@ export function Swatch({ mark, on = false, size = 16 }) {
  * `stopWhen` sentence.
  */
 function CueCardImpl({
-  cue, title, open, onToggle, mirror = false,
+  cue, title, open, onToggle, mirror = false, pictogram = true,
 }) {
   if (!cue) return null;
   const stop = cue.stop;
@@ -251,7 +251,7 @@ function CueCardImpl({
     return (
       <Pressable style={[styles.cueFull, glass.panel]} onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded: true }} accessibilityLabel={T.less} testID="mark-cue">
         <View style={styles.cueHead}>
-          {PICTOGRAM_KEYS.includes(cue.key) ? (
+          {pictogram && PICTOGRAM_KEYS.includes(cue.key) ? (
             <View style={styles.pict}>
               <Pictogram swingKey={cue.key} size={CUE_PICT} color={hud.textSoft} accent={hud.accent} mirror={mirror} testID="mark-pictogram" />
             </View>
@@ -297,7 +297,7 @@ function CueCardImpl({
 
 export const CueCard = memo(CueCardImpl);
 
-// --- The top row: close and the seven positions as chips (status dot, short name) ---------------------
+// --- The top row: close and the marked positions as chips (status dot, short name) --------------------
 
 /**
  * `current` is the open position (none for an automatic frame). The dots are the progress: there is no
@@ -305,7 +305,7 @@ export const CueCard = memo(CueCardImpl);
  * colour. The P-number is on the video's position pill and the cue, not here.
  */
 function MarkChipsImpl({
-  status, current = null, onSelect, onClose, closeLabel,
+  status, current = null, onSelect, onClose, closeLabel, keys = MARKED_KEYS,
 }) {
   return (
     <View style={styles.chrow} testID="mark-chapters">
@@ -313,7 +313,7 @@ function MarkChipsImpl({
         <Feather name="x" size={20} color={hud.text} />
       </Pressable>
       <View style={styles.chips} accessibilityRole="tablist">
-        {MARKED_KEYS.map((k) => {
+        {keys.map((k) => {
           const st = positionStatus(status, k);
           const on = k === current;
           return (

@@ -63,4 +63,6 @@ export default {
   'swing.cue.postImpact.what': 'Justo después del impacto: unos diez fotogramas más tarde.',
   'swing.cue.postImpact.stopWhen': 'el fotograma diez fotogramas después del impacto.',
   'swing.cue.postImpact.markTips': 'Manos: centro del grip. Cabeza del palo: centro de la cabeza.',
+  'swing.cue.fo.shaftDown.stopWhen': 'el primer fotograma en que el palo está horizontal en la bajada. De frente el palo se ve de lado, apuntando lejos del objetivo.',
+  'swing.cue.fo.shaftDown.markTips': 'Manos: centro del grip. Cabeza del palo: centro de la cabeza (puede salir movida: toca el centro de la estela).',
 };

@@ -3,7 +3,7 @@
 // lists. Pure: the screen only draws what this returns.
 
 import {
-  POSITIONS, unplacedCheckpoint, CHECK_KEY,
+  POSITIONS, unplacedCheckpoint, CHECK_KEY, positionsOf,
 } from './checkpointChecks';
 import { positionStatuses } from './priority';
 import { clubheadOpen, askAt } from './rowNeeds';
@@ -12,6 +12,8 @@ export { clubheadOpen };
 
 export const EXTRAS = 'extras';
 export const STEPS = [...POSITIONS, EXTRAS];
+/** The steps of a swing's results: its view's positions, then Extras. */
+export const stepsOf = (analysis) => [...positionsOf(analysis?.view), EXTRAS];
 export const DOWNSWING = 'shaftDown';
 
 const RANK = { red: 3, yellow: 2, green: 1 };
@@ -33,7 +35,7 @@ export function pendingSteps(analysis) {
 
 /** 'red' | 'yellow' | 'green' | 'unknown' per step; the Extras step is the worst extra (drawn grey-ringed). */
 export function stepStatuses(analysis) {
-  const out = positionStatuses(analysis.checks);
+  const out = positionStatuses(analysis.checks, analysis.view);
   const extras = analysis.checks.filter((c) => c.extra && c.status in RANK);
   out[EXTRAS] = extras.length ? extras.reduce((w, c) => (RANK[c.status] > RANK[w] ? c.status : w), 'green') : 'unknown';
   return out;
@@ -66,8 +68,8 @@ export function tagOf(step, main) {
   return step === main.startsAt ? 'starts' : null;
 }
 
-/** The step to the left / right of `step` (null at either end). */
-export const neighbour = (step, dir) => STEPS[STEPS.indexOf(step) + dir] ?? null;
+/** The step to the left / right of `step` among `steps` (null at either end). */
+export const neighbour = (step, dir, steps = STEPS) => steps[steps.indexOf(step) + dir] ?? null;
 
 /**
  * The row selected when a step opens: on the main fault's step its first red evidence (else its first),

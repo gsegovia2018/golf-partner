@@ -115,6 +115,9 @@ export default function SwingCaptureScreen({ navigation }) {
   const mounted = useRef(true);
   const [elapsed, setElapsed] = useState(0);
   const [guideOpen, setGuideOpen] = useState(false);
+  // Which set-up the guide shows. It only changes the drawing and the tips: the analysis reads the
+  // view from the video (plan 2026-10-30 F4).
+  const [guideView, setGuideView] = useState('dtl');
   const [box, setBox] = useState({ width: 0, height: 0 });
 
   // Set-up guide: open until the golfer has dismissed it once (remembered on this phone).
@@ -298,13 +301,29 @@ export default function SwingCaptureScreen({ navigation }) {
   } else if (guideOpen && phase === 'live') {
     card = (
       <View style={styles.card} testID="capture-guide-card">
-        <Text style={styles.cardTitle}>{T.guideTitle}</Text>
-        {T.guideTips.map((tip) => (
+        <View style={styles.seg} accessibilityRole="tablist">
+          {['dtl', 'faceOn'].map((v) => (
+            <Pressable
+              key={v}
+              style={[styles.segBtn, guideView === v && styles.segOn]}
+              onPress={() => setGuideView(v)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: guideView === v }}
+              accessibilityLabel={v === 'faceOn' ? T.guideViewFaceOn : T.guideViewDtl}
+              testID={`capture-guide-${v}`}
+            >
+              <Text style={[styles.segText, guideView === v && styles.segTextOn]}>{v === 'faceOn' ? T.guideViewFaceOn : T.guideViewDtl}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.cardTitle}>{guideView === 'faceOn' ? T.guideTitleFaceOn : T.guideTitle}</Text>
+        {(guideView === 'faceOn' ? T.guideTipsFaceOn : T.guideTips).map((tip) => (
           <View key={tip} style={styles.tipRow}>
             <View style={styles.tipDot} />
             <Text style={styles.cardBody}>{tip}</Text>
           </View>
         ))}
+        <Text style={styles.cardNote}>{T.guideAuto}</Text>
         <HudButton label={T.gotIt} onPress={dismissGuide} style={styles.alignStart} testID="capture-guide-dismiss" />
       </View>
     );
@@ -327,7 +346,7 @@ export default function SwingCaptureScreen({ navigation }) {
         ) : null}
         {phase === 'review' || phase === 'saving' ? <ReviewPlayer take={take} /> : null}
         {phase === 'live' && !card && portrait ? (
-          <CaptureGuide rect={rect} left={left} label={T.guideBox} />
+          <CaptureGuide rect={rect} left={left} label={T.guideBox} view={guideView} />
         ) : null}
       </View>
 
@@ -455,6 +474,12 @@ const styles = StyleSheet.create({
   cardTitle: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15, color: hud.text },
   cardBody: { flex: 1, fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, lineHeight: 19, color: hud.textSoft },
   tipRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  cardNote: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, lineHeight: 17, color: hud.textMuted },
+  seg: { flexDirection: 'row', padding: 3, borderRadius: 12, backgroundColor: hud.fill },
+  segBtn: { flex: 1, minHeight: 36, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  segOn: { backgroundColor: 'rgba(255,255,255,0.16)' },
+  segText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: hud.textMuted },
+  segTextOn: { color: hud.text },
   tipDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: hud.textSoft, marginTop: 7 },
   alignStart: { alignSelf: 'flex-start' },
   hudBtn: {

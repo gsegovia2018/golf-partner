@@ -21,11 +21,13 @@
 
 import { analyze, CLUB_KEYS } from './analyze';
 import {
-  emptyMarks, frameLabel, withFrame, withBall, handsPlaced,
+  emptyMarks, frameLabel, withFrame, withBall, handsPlaced, viewOverrideOf,
 } from './labels';
-import { frameOfKey } from './checkpointChecks';
+import { frameOfKey, normView } from './checkpointChecks';
 import { headTrusted } from './club';
-import { MARKED_KEYS, statusFromMarks, passCounts, MARK_TOTAL } from './markPass';
+import {
+  statusFromMarks, passCounts, markedKeysOf, markTotalOf,
+} from './markPass';
 
 export const EDIT_KEYS = CLUB_KEYS;
 export const HIT_RADIUS_PX = 28; // 56 px across: comfortably over the 44 px minimum
@@ -103,7 +105,7 @@ export function buildDraft(analysis, pose, marks) {
   const kept = (marks?.frames ?? []).filter((f) => !EDIT_KEYS.includes(f.checkpoint));
   return {
     draft: {
-      cps, ball, ballConfirmed, status: statusFromMarks(marks), kept,
+      cps, ball, ballConfirmed, status: statusFromMarks(marks), kept, viewOverride: viewOverrideOf(marks),
     },
     base: { cps: proposed, ball: ballProposed },
   };
@@ -141,6 +143,7 @@ export function recompute({ pose, probe, analysis, draft, base }) {
     probe: probe ?? {},
     marks: analyzeMarks(draft, base),
     ball: draft.ball ?? undefined,
+    view: draft.viewOverride,
     handedness: analysis.handedness,
     heightCm: analysis.scale?.approx ? undefined : analysis.scale?.heightCm,
     club: analysis.club,
@@ -152,12 +155,16 @@ export function recompute({ pose, probe, analysis, draft, base }) {
 
 /**
  * The draft as marks.json (swing-club-labels/1): proposed and final for every corrected or
- * confirmed frame, plus the pass (D26). `passState` defaults to done once all seven are confirmed.
+ * confirmed frame, plus the pass (D26). `passState` defaults to done once every position of the swing's
+ * view (`live.view`) is confirmed.
  */
 export function draftToMarks({
   draft, base, live, swingId, video = null, handedness = 'right', editedAt, passState,
 }) {
-  let m = emptyMarks({ swingId, video, handedness });
+  const view = live?.view;
+  let m = emptyMarks({
+    swingId, video, handedness, view: normView(view), viewOverride: draft.viewOverride,
+  });
   const status = draft.status ?? {};
   EDIT_KEYS.forEach((k) => {
     const d = draft.cps[k];
@@ -193,9 +200,9 @@ export function draftToMarks({
     if (label.corrected || confirmed || ok.hands || ok.head) m = withFrame(m, label);
   });
   (draft.kept ?? []).forEach((f) => { m = withFrame(m, f); });
-  const state = passState ?? (passCounts(status).confirmed === MARK_TOTAL ? 'done' : 'partial');
+  const state = passState ?? (passCounts(status, view).confirmed === markTotalOf(view) ? 'done' : 'partial');
   m = withBall(m, { proposed: base.ball, final: draft.ball, confirmed: !!draft.ballConfirmed });
-  return { ...m, pass: { state, skipped: MARKED_KEYS.filter((k) => status[k] === 'skipped') } };
+  return { ...m, pass: { state, skipped: markedKeysOf(view).filter((k) => status[k] === 'skipped') } };
 }
 
 export const isDirty = (draft, initial) => JSON.stringify(draft) !== JSON.stringify(initial);
@@ -205,7 +212,13 @@ export const patchCheckpoint = (draft, key, patch) => ({ ...draft, cps: { ...dra
 
 // --- The marking canvas (D26): per-mark status, confirmation, skip and discard -------------------
 
-const MARKS_AT = (key) => (key === 'address' ? ['hands', 'head', 'ball'] : ['hands', 'head']);
+// Face-on nothing reads the clubhead (swingcheck.org's rule set, plan 2026-10-30): the golfer marks
+// the hands, and the ball at address.
+export const MARKS_AT = (key, view = 'dtl') => {
+  const fo = normView(view) === 'faceOn';
+  if (key === 'address') return fo ? ['hands', 'ball'] : ['hands', 'head', 'ball'];
+  return fo ? ['hands'] : ['hands', 'head'];
+};
 const okOf = (d) => d.confirmed ?? { hands: false, head: false };
 
 /**
@@ -312,16 +325,16 @@ export function confirmMark(draft, base, key, mark) {
 }
 
 /** "Looks right": every mark that is there is confirmed, and so is the position. */
-export function confirmPosition(draft, base, key) {
+export function confirmPosition(draft, base, key, view) {
   let next = draft;
-  MARKS_AT(key).forEach((m) => { next = confirmMark(next, base, key, m); });
+  MARKS_AT(key, view).forEach((m) => { next = confirmMark(next, base, key, m); });
   return { ...next, status: { ...next.status, [key]: 'confirmed' } };
 }
 
 /** "Confirm and leave": confirm the marks that moved, without deciding the position. */
-export function confirmMoves(draft, base, key) {
+export function confirmMoves(draft, base, key, view) {
   let next = draft;
-  MARKS_AT(key).forEach((m) => { if (markStatus(next, base, key, m) === 'moved') next = confirmMark(next, base, key, m); });
+  MARKS_AT(key, view).forEach((m) => { if (markStatus(next, base, key, m) === 'moved') next = confirmMark(next, base, key, m); });
   return next;
 }
 
@@ -338,10 +351,10 @@ export function skipPosition(draft, snapshot, key) {
 }
 
 /** Leaving this position would lose an unconfirmed move: ask first (the discard sheet). */
-export function pendingMoves(draft, base, snapshot, key) {
+export function pendingMoves(draft, base, snapshot, key, view) {
   const pick = (d) => JSON.stringify([d.cps[key], key === 'address' ? [d.ball, d.ballConfirmed] : null]);
   if (pick(draft) === pick(snapshot)) return false;
-  return MARKS_AT(key).some((m) => markStatus(draft, base, key, m) === 'moved');
+  return MARKS_AT(key, view).some((m) => markStatus(draft, base, key, m) === 'moved');
 }
 
 /**

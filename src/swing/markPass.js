@@ -7,13 +7,21 @@
 // written before the mark-first flow has no `pass`: its corrected frames count as confirmed and
 // the pass reads as partial until all seven are.
 
+import { normView } from './checkpointChecks';
+
 export const MARKED_KEYS = ['address', 'takeaway', 'leadArm', 'top', 'shaftDown', 'impact', 'trailArm'];
 export const AUTO_KEYS = ['finish'];
 export const MARK_TOTAL = MARKED_KEYS.length;
+// Face-on (plan 2026-10-30 §3): four marked positions; the finish stays automatic as down the line.
+export const MARKED_KEYS_FO = ['address', 'top', 'shaftDown', 'impact'];
+/** The positions a view's pass marks, in pass order. */
+export const markedKeysOf = (view) => (normView(view) === 'faceOn' ? MARKED_KEYS_FO : MARKED_KEYS);
+/** How many positions a view's pass marks. */
+export const markTotalOf = (view) => markedKeysOf(view).length;
 const LEGACY_KEYS = ['address', 'leadArm', 'top', 'shaftDown', 'impact', 'shaftThrough']; // the D25 pass
 const STATES = ['none', 'partial', 'done'];
 
-export const isMarkedKey = (key) => MARKED_KEYS.includes(key);
+export const isMarkedKey = (key, view) => markedKeysOf(view).includes(key);
 export const newPass = () => ({ state: 'none', skipped: [] });
 
 /** { [key]: 'confirmed' | 'skipped' } as stored in marks.json (sparse: to do is absent). */
@@ -32,21 +40,21 @@ export function statusFromMarks(marks) {
 /** 'confirmed' | 'skipped' | 'todo' for one marked position. */
 export const positionStatus = (status, key) => status?.[key] ?? 'todo';
 
-/** { confirmed, skipped, todo } over the seven. */
-export function passCounts(status) {
+/** { confirmed, skipped, todo } over the view's marked positions. */
+export function passCounts(status, view) {
   const n = { confirmed: 0, skipped: 0, todo: 0 };
-  MARKED_KEYS.forEach((k) => { n[positionStatus(status, k)] += 1; });
+  markedKeysOf(view).forEach((k) => { n[positionStatus(status, k)] += 1; });
   return n;
 }
 
-/** The index row's `marked`: { state: 'none' | 'partial' | 'done', count } (count = confirmed of seven). */
-export function markedFromMarks(marks) {
+/** The index row's `marked`: { state: 'none' | 'partial' | 'done', count } (count = confirmed of the view's positions). */
+export function markedFromMarks(marks, view) {
   const status = statusFromMarks(marks);
-  const count = passCounts(status).confirmed;
+  const count = passCounts(status, view).confirmed;
   if (marks?.pass) return { state: STATES.includes(marks.pass.state) ? marks.pass.state : 'partial', count };
   // before D26, or no file at all: done when every position of that time's pass was corrected, so
   // checks v2 (seven positions) does not hide the results of a swing that was finished then
-  const done = count === MARK_TOTAL || LEGACY_KEYS.every((k) => status[k] === 'confirmed');
+  const done = count === markTotalOf(view) || LEGACY_KEYS.every((k) => status[k] === 'confirmed');
   return { state: done ? 'done' : 'partial', count };
 }
 
@@ -54,10 +62,11 @@ export function markedFromMarks(marks) {
 export const passDone = (marked) => marked?.state === 'done';
 
 /** The first position still to do after `from` (in pass order), or null when none is left. */
-export function nextTodo(status, from = null) {
-  const start = from == null ? 0 : MARKED_KEYS.indexOf(from) + 1;
-  return MARKED_KEYS.slice(start).find((k) => positionStatus(status, k) === 'todo') ?? null;
+export function nextTodo(status, from = null, view = 'dtl') {
+  const keys = markedKeysOf(view);
+  const start = from == null ? 0 : keys.indexOf(from) + 1;
+  return keys.slice(start).find((k) => positionStatus(status, k) === 'todo') ?? null;
 }
 
 /** Where a resumed pass opens: the first position to do, or null for the finish sheet. */
-export const resumeKey = (status) => nextTodo(status, null);
+export const resumeKey = (status, view) => nextTodo(status, null, view);

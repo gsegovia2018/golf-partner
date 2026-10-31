@@ -17,6 +17,19 @@ export const TIER = {
 };
 export const EXTRA_TIER = 3;
 
+// Face-on (plan 2026-10-30 §3, §4): five positions; tiers 1 = address, impact; 2 = top, downswing; 3 = finish.
+export const POSITIONS_FO = ['address', 'top', 'shaftDown', 'impact', 'finish'];
+export const TIER_FO = {
+  address: 1, impact: 1, top: 2, shaftDown: 2, finish: 3,
+};
+
+/** 'faceOn' | 'dtl': anything that is not face-on (an analysis from before the view existed) reads as down the line. */
+export const normView = (view) => (view === 'faceOn' ? 'faceOn' : 'dtl');
+/** The positions of a view, in swing order. */
+export const positionsOf = (view) => (normView(view) === 'faceOn' ? POSITIONS_FO : POSITIONS);
+/** The importance tiers of a view. */
+export const tiersOf = (view) => (normView(view) === 'faceOn' ? TIER_FO : TIER);
+
 // Where an extra is listed on the results screen (it does not colour that checkpoint).
 const EXTRA_HOME = {
   tempo: 'impact',

@@ -18,7 +18,7 @@ import {
   nativeApi, getStill, proxyDir, proxyWindow, proxyEveryFor,
 } from './frames';
 import { expectedShaftPx } from './scale';
-import { marksForAnalyze } from './labels';
+import { marksForAnalyze, viewOverrideOf } from './labels';
 import { frameOfKey } from './checkpointChecks';
 import { failureOf } from './failureReport';
 import { APPROX_FPS } from './fpsModel';
@@ -92,6 +92,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
       source: row.source,
       marks: marksForAnalyze(saved),
       ball: saved?.ball?.final ?? undefined,
+      view: viewOverrideOf(saved),
     };
 
     onProgress({ stage: 'reading' });
@@ -126,6 +127,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
     await saveAnalysis(swingId, a1, { pose, probe, status: 'pending' });
     first = a1;
     onPartial(first);
+    onProgress({ stage: 'planes', probe, view: a1.view }); // the processing screen lists the view's positions to mark
 
     // Pass 2 (stills + the address / impact clubhead seeds). Failing here is survivable.
     let final = first;
@@ -170,6 +172,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
         club: getSwing(swingId)?.club ?? opts.club,
         marks: marksForAnalyze(latest),
         ball: latest?.ball?.final ?? opts.ball,
+        view: viewOverrideOf(latest) ?? opts.view,
       });
       if (!second.error) {
         final = second;

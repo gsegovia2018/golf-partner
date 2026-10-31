@@ -4,7 +4,7 @@
 // which THRESHOLDS column the checks read. Pure.
 
 import { analyze, SCHEMA } from './analyze';
-import { marksForAnalyze } from './labels';
+import { marksForAnalyze, viewOverrideOf } from './labels';
 
 /**
  * @param {{pose:object, probe:object|null, marks:object|null, analysis:object}} stored
@@ -19,6 +19,7 @@ export function reanalyzeForClub({
     probe: probe ?? {},
     marks: marksForAnalyze(marks),
     ball: marks?.ball?.final ?? undefined,
+    view: viewOverrideOf(marks),
     handedness: analysis.handedness,
     heightCm: analysis.scale?.approx ? undefined : analysis.scale?.heightCm,
     club,

@@ -6,7 +6,7 @@ import { withAlpha } from '../../theme/alpha';
 import { formatNumber } from '../../i18n/format';
 import { SWING_STRINGS } from '../../swing/strings';
 import { CHECKPOINT_DEFS } from '../../swing/checkpoints';
-import { MARKED_KEYS } from '../../swing/markPass';
+import { markedKeysOf } from '../../swing/markPass';
 
 const T = SWING_STRINGS.results;
 const ORDER = ['reading', 'pose', 'planes'];
@@ -35,6 +35,7 @@ export default function SwingProcessing({ progress }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const stage = progress?.stage ?? 'reading';
+  const marked = markedKeysOf(progress?.view); // down the line until the first pass says the view
   const at = Math.max(0, ORDER.indexOf(stage));
   const total = progress?.total ?? 0;
   const done = progress?.done ?? 0;
@@ -102,10 +103,10 @@ export default function SwingProcessing({ progress }) {
 
       <View style={s.next} testID="processing-up-next">
         <Text style={s.overline}>{T.upNext}</Text>
-        <Text style={s.nextTitle}>{T.upNextTitle(MARKED_KEYS.length)}</Text>
+        <Text style={s.nextTitle}>{T.upNextTitle(marked.length)}</Text>
         <Text style={s.nextBody}>{T.upNextBody}</Text>
         <View style={s.positions}>
-          {MARKED_KEYS.map((k) => (
+          {marked.map((k) => (
             <View key={k} style={s.position}>
               <Text style={s.posP}>{P_OF[k]}</Text>
               <Text style={s.posName}>{SWING_STRINGS.checkpoint[k]}</Text>

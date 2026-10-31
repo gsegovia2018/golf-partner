@@ -1,11 +1,13 @@
 // Reference swings: pass-1 pose of real swings (landmarks only), written by
-// tools/swing-lab/export_fixture.py. Tour players filmed down the line (public videos), one
-// face-on clip, and the owner's calibrated swings with the frames he confirmed. Not a test file.
+// tools/swing-lab/export_fixture.py. Tour players filmed down the line (public videos), face-on
+// clips (public videos, S0 of plan 2026-10-30), and the owner's calibrated swings with the frames he
+// confirmed. Not a test file.
 import { analyze } from '../analyze';
 
 const NAMES = [
   'tour-scott-iron', 'tour-oosthuizen-driver', 'tour-els-hybrid', 'tour-mcilroy-iron', 'tour-mcilroy-driver',
   'tour-woods-iron', 'tour-rose-iron', 'faceon-mcilroy-driver',
+  'faceon-oosthuizen-driver', 'faceon-amateur-iron-240', 'faceon-amateur-iron-120',
   'owner-dom-18-oct-01-08', 'owner-dom-18-oct-20-20', 'owner-dom-18-oct-22-34', 'owner-jue-15-oct-17-42', 'owner-vie-16-oct-00-31',
 ];
 export const REFERENCE = NAMES.map((n) => require(`./fixtures/reference/${n}.json`));
@@ -27,13 +29,14 @@ export function referenceNative(fx) {
 
 /**
  * Both passes, as runAnalysis does: pass 1, then the address / impact clubhead proposals asked
- * at pass 1's frames (a binary without the club model proposes only those two).
+ * at pass 1's frames (a binary without the club model proposes only those two). `extra` adds to
+ * analyze()'s options (e.g. `view`, the golfer's view correction).
  */
-export function analyzeReference(fx) {
+export function analyzeReference(fx, extra = {}) {
   const native = referenceNative(fx);
   const opts = {
     handedness: fx.handedness, heightCm: fx.heightCm, club: fx.club, source: 'import',
-    probe: { captureFps: fx.video.captureFps }, marks: fx.marks ?? {},
+    probe: { captureFps: fx.video.captureFps }, marks: fx.marks ?? {}, ...extra,
   };
   const first = analyze(native, opts);
   if (first.error) return first;
