@@ -13,7 +13,7 @@
 //   { cancelled: true }
 
 import { Paths, Directory } from './fs';
-import { analyze, CLUB_KEYS } from './analyze';
+import { analyze, CLUB_KEYS, nativeBallOf } from './analyze';
 import {
   nativeApi, getStill, proxyDir, proxyWindow, proxyEveryFor,
 } from './frames';
@@ -143,11 +143,15 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
         : {};
       // apiVersion 4: also ask for the learned club detector; an older binary is not asked
       const club = api.clubModelSupport?.() ? { clubModel: true } : {};
+      // apiVersion 7: face-on, also the ball's flight and the clubhead's speed (plan 2026-10-30 §5)
+      const faceOn = first.view === 'faceOn';
+      const canSpeed = faceOn && !!api.speedSupport?.();
+      const speed = canSpeed ? { speedDir: first.targetDir ?? 1 } : {};
       const r = await api.extractCheckpoints(path, {
         frames: PASS2_KEYS.map((key) => ({
           key, i: frameOfKey(first, key), hands: first.clubMarks[key].hands, neighbours: 2,
         })),
-        ball: pass2Ball(saved?.ball?.final, pose.ball),
+        ball: pass2Ball(saved?.ball?.final, nativeBallOf(pose, first.view)),
         expectedShaftPx: expectedShaftPx(first.scale.pxPerCm),
         addressSearch: first.addressSearch ?? null,
         // apiVersion 6 times the address track with it (older binaries ignore it)
@@ -155,6 +159,7 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
         outDir: dir.uri,
         ...proxies,
         ...club,
+        ...speed,
       });
       if (isCancelled()) return { cancelled: true };
       const p2 = { shaft: r?.shaft ?? {}, addressFrame: r?.addressFrame ?? null };
@@ -164,6 +169,9 @@ export async function runAnalysis(swingId, { onProgress = () => {}, onPartial = 
       if (r?.proxies) p2.proxies = r.proxies;
       // what ran ({ model, input, conf, nms }) or null: says whether a stored swing was analysed with the model
       p2.club = r?.club ?? null;
+      // face-on: what pass 2 measured (null = no ball found), or that this binary cannot measure it
+      if (canSpeed) p2.speed = r?.speed ?? null;
+      else if (faceOn) p2.speed = { unsupported: true };
       // The club and marks as they are now, not as they were when the run started.
       const latest = await readMarks(swingId);
       const second = analyze(pose, {

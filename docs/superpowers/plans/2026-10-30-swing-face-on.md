@@ -189,7 +189,7 @@ the image work is native (§7).
   reads the clubhead face-on, so the face-on marking pass asks for the hands (and the ball at address)
   only: `MARKS_AT(key, view)`, no Clubhead tile. A "ball" more than half a stance outside the feet reads
   as no ball. Verified on the web (dock = Manos, Bola; the pass confirms all four).
-- **Not built:** speed (S3, native + web) and so the Extras speed rows; calibration (S4).
+- **Not built:** calibration (S4). (S3: see below.)
 - **Verified:** `npm test` 485 suites green, lint 0 errors, `npm run build:web` exports; web walkthrough
   (Expo web, a minted account, a downloaded face-on clip and one of the owner's DTL clips): 4 marking chips
   and "0 de 4" face-on, 7 down the line; Results strip 5 + Extras face-on, 7 + Extras down the line; the
@@ -221,6 +221,44 @@ the image work is native (§7).
   pass 2's clubhead onset sets it.
 - **Known small issue:** the processing screen lists the 7 down-the-line positions until pass 1 says
   the view (a few seconds of "Revisa 7 posiciones" on a face-on clip).
+- **S1/S2 shipped** (OTA 2026-10-31, master `3f0f1aba`, group 1b906e94; schema 8, the coach rows took 7).
+- **S3 built (2026-10-31, `feat/swing-speed`, uncommitted), apiVersion 7 (native + web):**
+  - *The face-on ball (pass 1).* The down-the-line ball search (lead toe -> hands + 0.3 W) never covers a
+    face-on ball, so every face-on clip read "ball not seen" and timed impact from the pose. Pass 1 also
+    searches between the feet, under the toes (`Ball.roiFaceOn`: the toes +-25 % of the stance, from the
+    lower toe + 0.01 H to + 0.2 H; under the toes keeps the white shoes out), the blob nearest the
+    vertical below the hands, with face-on blob rules (area 0.3-3.4 of the leg-scale ball: a half-lit
+    few-pixel ball, nearer the camera; fill > 0.4), and returns `ballFaceOn` / `ballGoneFrameFaceOn`.
+    `analyze` decides the view on the first phases, then re-runs them with the face-on ball's impact;
+    `nativeBallOf(pose, view)` everywhere a stored pose's ball is read.
+  - *Speed (pass 2, `BallFlight.kt`, twin `web/core/ballFlight.js`, lab `tools/swing-lab/ball_flight.py`).*
+    Background = median of top +-6 (every 2nd); the ball's own diameter on it (the half-level blob's
+    widest extent over four directions: a half-lit sphere spans the diameter along its terminator; 16.6
+    px whatever the guess on the iPhone clip, area-based read 11). Ball: bright blobs in a corridor toward
+    the target (35 d, up to 40 deg), runs with a constant step; of the runs through the rest spot that fit
+    a line within d/2, stay under 210 mph and leave the spot within 4 frames of impact, the one covering
+    the most ground (neither the longest - turf lingers, a fast ball exits - nor the fastest - noise).
+    Contact = the frame nearest when the line is at the spot; the club (leading edge of the moving bright
+    blob in a band behind the ball, 3 frames before contact) is timed by it, since a pose-timed impact is
+    off by a few frames and the club fit needs the exact one. Grids sampled so the ball spans ~8 samples
+    (step 1-3 agree within 1 % ball / 4 % club).
+  - *JS.* `speed.js`: m/s at the ball's own scale and the capture fps; launch against the ankles' line;
+    gates: fps >= 120, ball scale / leg scale in [0.9, 2.0] (the iPhone clip reads 1.54), 40-210 mph ball,
+    30-140 mph club, smash 1.15-1.55 (else the club is dropped). Extras rows (design A): ball, club, smash,
+    launch, "≈", "Estimación", no dot, no rank; one row with the reason when nothing was measured ("Update
+    the app" on an older binary); stored in m/s, shown in mph (yards) or km/h (meters).
+  - *Numbers (the only 240 fps face-on clip with a sharp ball, `web-am-iphone5-240`, an amateur iron):*
+    lab ball 98-103 mph, launch 26 deg, club 66-70 mph, smash ~1.5, the same for an impact guess -4..+3
+    frames; the web app (same clip, real decode) shows ≈ 156 km/h / ≈ 106 km/h. The club reads ~8 %
+    under a by-eye measure of the head (the leading edge, not the face centre): S4's launch monitor sets
+    the factor. No truth speed exists for any clip yet.
+  - *Verified:* JVM `BallFlightTest` (9, synthetic: half-lit ball, sampling, left-handed, turf beside the
+    ball, a pose impact +-3 off) and the 97 module tests on the gp build tree; JS twin tests (9), speed
+    tests, face-on/runAnalysis tests, 490 suites; web walkthrough above. Native capture -> pass 1 -> pass
+    2 on the phone: not verified (needs the APK and Marcos).
+  - *Known:* the face-on gone frame needs the ball >= ~2.5 diameters from the frame's bottom edge (the
+    iPhone clip has it at 2.2: impact stays pose-timed there, the flight still times the club). The
+    golfer's moved impact does not re-run the speed (pass 2 is not re-run).
 
 ## 10. Risks
 

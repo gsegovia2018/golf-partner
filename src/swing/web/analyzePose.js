@@ -69,6 +69,7 @@ export async function analyzePoseWeb(clip, opts = {}, { cancelled = () => false,
   let stillFrom = 0;
   let addressHands = null;
   let addressRoi = null;
+  let faceOnRoi = null; // apiVersion 7: between the feet; the strips cover both
   let expDWork = 0;
   let decodedUpTo = -1;
   let decodeMs = 0;
@@ -90,11 +91,16 @@ export async function analyzePoseWeb(clip, opts = {}, { cancelled = () => false,
     const workW = Math.round(dispW * ws);
     const workH = Math.round(dispH * ws);
     const roi = Ball.roi(med((s) => s.x(toe)), ankleY, hands.x, rightHanded ? 1 : -1, dispW, dispH, ws, workW, workH);
+    const toeY = Math.max(med((s) => s.y(Lm.L_TOE)), med((s) => s.y(Lm.R_TOE)));
+    let fo = Ball.roiFaceOn(med((s) => s.x(Lm.L_TOE)), med((s) => s.x(Lm.R_TOE)), toeY, dispH, ws, workW, workH);
+    if (fo.isEmpty()) fo = null;
     const margin = Math.ceil(SEARCH_MARGIN_CM * pxCm * ws);
     addressRoi = roi;
+    faceOnRoi = fo;
     addressHands = pt(hands.x * ws, hands.y * ws);
-    stripRect = roi.isEmpty() ? null
-      : new Rect(Math.max(0, roi.x0 - margin), Math.max(0, roi.y0 - margin), Math.min(workW, roi.x1 + margin), Math.min(workH, roi.y1 + margin));
+    const both = fo ? new Rect(Math.min(roi.x0, fo.x0), Math.min(roi.y0, fo.y0), Math.max(roi.x1, fo.x1), Math.max(roi.y1, fo.y1)) : roi;
+    stripRect = roi.isEmpty() && !fo ? null
+      : new Rect(Math.max(0, both.x0 - margin), Math.max(0, both.y0 - margin), Math.min(workW, both.x1 + margin), Math.min(workH, both.y1 + margin));
   }
 
   async function runPose(wf) {
@@ -199,6 +205,7 @@ export async function analyzePoseWeb(clip, opts = {}, { cancelled = () => false,
 
   const list = [...samples.values()].sort((a, b) => a.frame - b.frame);
   const [ball, ballGoneFrame] = findBall(list);
+  const [ballFaceOn, ballGoneFrameFaceOn] = findBall(list, true);
   const totalMs = performance.now() - t0;
   const frames = [...norm.keys()].sort((a, b) => a - b).map((i) => {
     const lm = norm.get(i);
@@ -213,6 +220,8 @@ export async function analyzePoseWeb(clip, opts = {}, { cancelled = () => false,
     frames,
     ball,
     ballGoneFrame,
+    ballFaceOn,
+    ballGoneFrameFaceOn,
     duplicateFrameRatio: Probe.duplicateRatio(diffs),
     timings: {
       decodeMs: Math.round(Math.max(0, decodeMs)),
@@ -227,15 +236,17 @@ export async function analyzePoseWeb(clip, opts = {}, { cancelled = () => false,
     },
   };
 
-  /** Ball on three frames between lead-arm level and the hands' top, then ballGoneFrame. */
-  function findBall(list) {
-    if (!addressRoi || !addressHands || policy.triggerFrame < 0 || !list.length) return [null, null];
+  /** Ball on three frames between lead-arm level and the hands' top, then ballGoneFrame; `faceOn` = between the feet. */
+  function findBall(list, faceOn = false) {
+    const roi = faceOn ? faceOnRoi : addressRoi;
+    if (!roi || roi.isEmpty() || !addressHands || policy.triggerFrame < 0 || !list.length) return [null, null];
     const end = policy.impactFrame >= 0 ? policy.impactFrame : list[list.length - 1].frame;
     const win = BallWindow.find(list, policy.triggerFrame, end, rightHanded);
     if (!win) return [null, null];
     const mid = Math.trunc((win.leadArm + win.handsTop) / 2);
     const picks = [...new Set([win.leadArm, mid, win.handsTop])].map((f) => strips.get(f)).filter(Boolean);
-    const b = Ball.detect(picks, addressRoi, addressHands, rightHanded ? 1 : -1, expDWork, ws);
+    const sgn = rightHanded ? 1 : -1;
+    const b = faceOn ? Ball.detect(picks, roi, addressHands, sgn, expDWork, ws, 0, 1, Ball.FO_MIN_AREA, Ball.FO_MIN_FILL, Ball.FO_MAX_AREA) : Ball.detect(picks, roi, addressHands, sgn, expDWork, ws);
     if (!b) return [null, null];
     const gone = Ball.goneFrame(strips, b.x * ws, b.y * ws, expDWork, [win.leadArm, win.handsTop], win.handsTop, fps);
     return [{

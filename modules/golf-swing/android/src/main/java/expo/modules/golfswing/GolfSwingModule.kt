@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * refuses to call a binary whose apiVersion is older than the one it was written for, so an
  * OTA bundle never calls a method the installed APK lacks.
  */
-const val API_VERSION = 6 // 2: N2 pass 2 and GolfSwingCamera (capture, N3), one APK; 3: pass-2 scrub proxies (D28); 4: learned club detector in pass 2 (plan 2026-10-16); 5: detectClub / releaseClub, pass2.club.scenery (plan 2026-10-16 on demand); 6: ballGoneFrame from the ball's own picture, addressFrame from the clubhead's track (extractCheckpoints captureFps), 240 px proxies, warm extractFrames + releaseFrames
+const val API_VERSION = 7 // 2: N2 pass 2 and GolfSwingCamera (capture, N3), one APK; 3: pass-2 scrub proxies (D28); 4: learned club detector in pass 2 (plan 2026-10-16); 5: detectClub / releaseClub, pass2.club.scenery (plan 2026-10-16 on demand); 6: ballGoneFrame from the ball's own picture, addressFrame from the clubhead's track (extractCheckpoints captureFps), 240 px proxies, warm extractFrames + releaseFrames; 7: face-on speed (extractCheckpoints speedDir -> pass2.speed, plan 2026-10-30 §5)
 
 private const val MIN_HEIGHT_CM = 120.0
 private const val MAX_HEIGHT_CM = 230.0
@@ -84,6 +84,8 @@ class ExtractCheckpointsOptions : Record {
   @Field val clubModel: Boolean = false
   /** apiVersion 6: capture rate of one container frame step (the address track's time base); null = 240. */
   @Field val captureFps: Double? = null
+  /** apiVersion 7: a face-on swing; +1 / -1 = the target is to the right / left of the picture. null = no speed. */
+  @Field val speedDir: Int? = null
 }
 
 class ExtractFramesOptions : Record {
@@ -260,6 +262,7 @@ class GolfSwingModule : Module() {
           proxyRange = options.proxyRange?.takeIf { it.size == 2 }?.let { it[0]..it[1] },
           clubModel = options.clubModel,
           captureFps = options.captureFps?.takeIf { it.isFinite() && it > 0 },
+          speedDir = options.speedDir?.takeIf { it == 1 || it == -1 },
         )
         frameSessions.release()
         Checkpoints(ctx, req, cancelled).run(path)

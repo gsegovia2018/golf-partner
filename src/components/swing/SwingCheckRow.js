@@ -24,16 +24,19 @@ export default function SwingCheckRow({
   // the list header names the position on screen: a row only names its checkpoint when it is another one
   const name = check.cp && check.cp !== step && SWING_STRINGS.checkpoint[check.cp] ? `${check.label}, ${SWING_STRINGS.checkpoint[check.cp].toLowerCase()}` : check.label;
   const { status } = check;
-  const word = status === 'unknown'
-    ? (check.reason === 'hidden' ? SWING_STRINGS.statusWord.unknown : '—')
-    : SWING_STRINGS.statusWord[status];
+  // an estimate (face-on speed, `info`): no dot, no verdict, the word says what it is
+  const word = check.info
+    ? (check.value == null ? '—' : SWING_STRINGS.estimate)
+    : status === 'unknown'
+      ? (check.reason === 'hidden' ? SWING_STRINGS.statusWord.unknown : '—')
+      : SWING_STRINGS.statusWord[status];
   const value = valueText(check);
   const cta = placeAt && onPlace;
   const a11y = `${name}, ${value ? `${value}, ` : ''}${cta ? T.placeClubhead : word}`;
 
   const body = (
     <View style={[s.row, selected && s.rowOn, cta && s.rowPlace]}>
-      <View style={[s.dot, cta ? [s.dotWait, { borderColor: tone.unknown }] : { backgroundColor: tone[status] }]} />
+      <View style={[s.dot, cta ? [s.dotWait, { borderColor: tone.unknown }] : { backgroundColor: check.info ? 'transparent' : tone[status] }]} />
       <View style={s.mid}>
         <Text style={s.label}>{name}</Text>
         {check.text ? <Text style={s.text}>{check.text}</Text> : null}

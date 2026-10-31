@@ -31,6 +31,7 @@ import {
 import { formatDate } from '../i18n/format';
 import { normClub } from '../swing/checks';
 import { runAnalysis } from '../swing/runAnalysis';
+import { nativeBallOf } from '../swing/analyze';
 import { markTotalOf, markedFromMarks, passDone } from '../swing/markPass';
 import { reanalyzeForClub } from '../swing/reanalyze';
 import { shareSwingExport } from '../swing/shareExport';
@@ -228,7 +229,7 @@ export function SwingResultsView({
   const placing = place && ready && step !== EXTRAS && clubheadOpen(analysis.clubMarks, cp);
   const proposal = placing && club?.head && club.source !== 'prior' ? club.head : null;
   const ballOn = ready && CHECKPOINT_KEYS.indexOf(cp) <= CHECKPOINT_KEYS.indexOf('impact') && analysis.reference?.ball;
-  const ball = ballOn ? [...analysis.reference.ball, pose?.ball?.r ?? 0.012] : null;
+  const ball = ballOn ? [...analysis.reference.ball, nativeBallOf(pose, analysis.view)?.r ?? 0.012] : null;
   const highlight = useMemo(() => (ready && selected && step !== EXTRAS ? highlightFor(selected, {
     analysis, cp, poseAt: (f) => poseAtFrame(pose, f), frameOf: (k) => frameOfKey(analysis, k),
   }) : []), [ready, selected, step, analysis, cp, pose]);

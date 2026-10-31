@@ -44,5 +44,5 @@ export function analyzeReference(fx, extra = {}) {
   Object.entries(fx.proposals).forEach(([k, p]) => {
     if (p) shaft[first.checkpoints[k].i] = { ...p, source: 'edge' };
   });
-  return analyze(native, { ...opts, pass2: { shaft, addressFrame: fx.addressFrame } });
+  return analyze(native, { ...opts, pass2: { shaft, addressFrame: fx.addressFrame, ...(extra.pass2 ?? {}) } });
 }

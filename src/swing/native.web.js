@@ -3,7 +3,7 @@
 // Metro picks this file for web builds; Android keeps native.js and the Kotlin module.
 //
 // What the web has: analysis (probe, pass 1, pass 2 with stills, proxies and the club model) and
-// the scrubber's frames, at apiVersion 6. What it doesn't: recording (no browser records
+// the scrubber's frames, at apiVersion 7 (face-on speed included). What it doesn't: recording (no browser records
 // high-speed video), so captureSupport() says 'platform' and the UI offers import only.
 //
 // Jobs run one at a time, like the module's single worker thread: a scrubber request made during
@@ -28,9 +28,10 @@ export const PROXY_API_VERSION = 3;
 export const CLUB_MODEL_API_VERSION = 4;
 export const CLUB_ONDEMAND_API_VERSION = 5;
 export const SCRUB_API_VERSION = 6;
+export const SPEED_API_VERSION = 7;
 
 /** The web implementation's contract version (GolfSwingModule.kt API_VERSION). */
-const WEB_API_VERSION = 6;
+const WEB_API_VERSION = 7;
 
 const STILL_QUALITY = 0.85;
 /** The scrubber's decoder stays open this long after its last request (FrameSessions). */
@@ -60,6 +61,7 @@ export function captureSupport() {
 export const proxySupport = () => swingSupport().supported;
 export const clubModelSupport = () => swingSupport().supported;
 export const scrubSupport = () => swingSupport().supported;
+export const speedSupport = () => swingSupport().supported;
 export const clubOnDemandSupport = () => swingSupport().supported;
 
 export async function listRecordingModes() {

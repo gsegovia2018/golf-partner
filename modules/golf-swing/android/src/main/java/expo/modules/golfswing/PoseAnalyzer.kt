@@ -119,6 +119,8 @@ internal class PoseAnalyzer(
   private var ws = 1.0
   private var addressHands: Pt? = null
   private var addressRoi: Rect? = null
+  /** apiVersion 7: the face-on search area (between the feet); the strips cover both. */
+  private var faceOnRoi: Rect? = null
   private var expDWork = 0.0
 
   fun run(path: String): Map<String, Any?> {
@@ -202,6 +204,7 @@ internal class PoseAnalyzer(
 
     val list = samples.values.toList()
     val ball = findBall(list)
+    val ballFo = findBall(list, faceOn = true)
     val timings = mapOf(
       "decodeMs" to ((totalNs - blockedNs).coerceAtLeast(0) / 1e6).roundToInt(),
       "inferMs" to (worker.inferNs / 1e6).roundToInt(),
@@ -239,6 +242,9 @@ internal class PoseAnalyzer(
       },
       "ball" to ball.first,
       "ballGoneFrame" to ball.second,
+      // apiVersion 7: the ball searched between the feet (a face-on clip), and its impact
+      "ballFaceOn" to ballFo.first,
+      "ballGoneFrameFaceOn" to ballFo.second,
       "duplicateFrameRatio" to Probe.duplicateRatio(diffs.copyOf(nDiffs)),
       "timings" to timings,
     )
@@ -400,28 +406,33 @@ internal class PoseAnalyzer(
     val workW = (track.dispW * ws).roundToInt()
     val workH = (track.dispH * ws).roundToInt()
     val roi = Ball.roi(med { it.x(toe) }, ankleY, hands.x, if (right) 1 else -1, track.dispW, track.dispH, ws, workW, workH)
+    val toeY = max(med { it.y(Lm.L_TOE) }, med { it.y(Lm.R_TOE) })
+    val fo = Ball.roiFaceOn(med { it.x(Lm.L_TOE) }, med { it.x(Lm.R_TOE) }, toeY, track.dispH, ws, workW, workH).takeIf { !it.isEmpty() }
     val margin = ceil(SEARCH_MARGIN_CM * pxCm * ws).toInt()
     addressRoi = roi
+    faceOnRoi = fo
     addressHands = Pt((hands.x * ws).toFloat(), (hands.y * ws).toFloat())
-    stripRect = Rect(max(0, roi.x0 - margin), max(0, roi.y0 - margin), min(workW, roi.x1 + margin), min(workH, roi.y1 + margin))
-      .takeIf { !roi.isEmpty() }
+    val both = if (fo == null) roi else Rect(min(roi.x0, fo.x0), min(roi.y0, fo.y0), max(roi.x1, fo.x1), max(roi.y1, fo.y1))
+    stripRect = Rect(max(0, both.x0 - margin), max(0, both.y0 - margin), min(workW, both.x1 + margin), min(workH, both.y1 + margin))
+      .takeIf { !roi.isEmpty() || fo != null }
   }
 
-  /** Ball on three frames between lead-arm level and the hands' top, then ballGoneFrame. */
-  private fun findBall(list: List<PoseSample>): Pair<Map<String, Any?>?, Int?> {
-    val roi = addressRoi ?: return Pair(null, null)
+  /** Ball on three frames between lead-arm level and the hands' top, then ballGoneFrame; [faceOn] = between the feet. */
+  private fun findBall(list: List<PoseSample>, faceOn: Boolean = false): Pair<Map<String, Any?>?, Int?> {
+    val roi = (if (faceOn) faceOnRoi else addressRoi)?.takeIf { !it.isEmpty() } ?: return Pair(null, null)
     val hands = addressHands ?: return Pair(null, null)
     if (policy.triggerFrame < 0) return Pair(null, null)
     val end = if (policy.impactFrame >= 0) policy.impactFrame else list.last().frame
     val win = BallWindow.find(list, policy.triggerFrame, end, opts.rightHanded) ?: return Pair(null, null)
     val mid = (win.leadArm + win.handsTop) / 2
     val frames = listOf(win.leadArm, mid, win.handsTop).distinct().mapNotNull { strips[it] }
-    val b = Ball.detect(frames, roi, hands, if (opts.rightHanded) 1 else -1, expDWork, ws) ?: run {
-      Log.i(TAG, "ball not found in ${win.leadArm}..${win.handsTop}")
+    val sgn = if (opts.rightHanded) 1 else -1
+    val b = (if (faceOn) Ball.detect(frames, roi, hands, sgn, expDWork, ws, 0.0, 1.0, Ball.FO_MIN_AREA, Ball.FO_MIN_FILL, Ball.FO_MAX_AREA) else Ball.detect(frames, roi, hands, sgn, expDWork, ws)) ?: run {
+      Log.i(TAG, "ball${if (faceOn) " (face-on)" else ""} not found in ${win.leadArm}..${win.handsTop}")
       return Pair(null, null)
     }
     val gone = Ball.goneFrame(strips, b.x * ws, b.y * ws, expDWork, win.leadArm..win.handsTop, win.handsTop, fps)
-    Log.i(TAG, "ball search window ${win.leadArm}..${win.handsTop}: $b gone=$gone")
+    Log.i(TAG, "ball${if (faceOn) " (face-on)" else ""} search window ${win.leadArm}..${win.handsTop}: $b gone=$gone")
     val ball = mapOf(
       "x" to b.x / track.dispW,
       "y" to b.y / track.dispH,

@@ -49,6 +49,36 @@ internal object Ball {
     )
   }
 
+  /**
+   * Face-on (apiVersion 7): the ball sits between the feet and in front of them, so below the toes in
+   * the picture (nearer the camera): x from the trail to the lead toe widened by [FO_WIDEN] of the
+   * stance each side; y from the lower toe + [FO_UP] H to + [FO_DOWN] H (H = frame height). Starting
+   * under the toes keeps the white shoes out.
+   */
+  const val FO_WIDEN = 0.25
+  const val FO_UP = 0.01
+  const val FO_DOWN = 0.2
+  /**
+   * Face-on blob rules: often only the lit half of a few-pixel ball passes the threshold (area from
+   * 0.3, fill from 0.4), and the ball is nearer the camera than the legs that size it (up to 1.5 ×
+   * wider, so 1.5² × the area, times the usual 1.5).
+   */
+  const val FO_MIN_AREA = 0.3
+  const val FO_MAX_AREA = 3.4
+  const val FO_MIN_FILL = 0.4
+
+  fun roiFaceOn(toeAX: Float, toeBX: Float, toeY: Float, h: Int, ws: Double, workW: Int, workH: Int): Rect {
+    val lo = min(toeAX, toeBX).toDouble()
+    val hi = max(toeAX, toeBX).toDouble()
+    val pad = FO_WIDEN * (hi - lo)
+    return Rect(
+      max(0.0, (lo - pad) * ws).toInt(),
+      max(0.0, (toeY + FO_UP * h) * ws).toInt(),
+      min(workW.toDouble(), (hi + pad) * ws).toInt(),
+      min(workH.toDouble(), (toeY + FO_DOWN * h) * ws).toInt(),
+    )
+  }
+
   private class Cand(val dist: Double, val cx: Double, val cy: Double, val circ: Double, val contrast: Double)
 
   /**
@@ -57,13 +87,28 @@ internal object Ball {
    * the enclosing circle > 0.7, the one closest to the ray from the hands 45° down towards
    * the ball side. Median over the frames. [hands] and [roi] in work px; result in display px.
    */
-  fun detect(frames: List<Gray>, roi: Rect, hands: Pt, sgn: Int, expDWork: Double, ws: Double): BallFound? {
+  fun detect(
+    frames: List<Gray>,
+    roi: Rect,
+    hands: Pt,
+    sgn: Int,
+    expDWork: Double,
+    ws: Double,
+    // the ray the ball is looked for along (unit): down the line 45° below the hands toward the ball
+    // side; face-on (apiVersion 7) straight down from them
+    rayX: Double = sgn / sqrt(2.0),
+    rayY: Double = 1 / sqrt(2.0),
+    // minArea ≤ area / the expected ball's ≤ maxArea, fill of the enclosing circle > minFill
+    minArea: Double = 0.5,
+    minFill: Double = 0.7,
+    maxArea: Double = 1.5,
+  ): BallFound? {
     val expArea = PI * (expDWork / 2) * (expDWork / 2)
     val found = ArrayList<Cand>()
     for (g in frames) {
       val r = Rect(max(roi.x0, g.x0), max(roi.y0, g.y0), min(roi.x1, g.x0 + g.w), min(roi.y1, g.y0 + g.h))
       if (r.isEmpty()) continue
-      val best = bestBlob(g, r, hands, sgn, expArea) ?: continue
+      val best = bestBlob(g, r, hands, rayX, rayY, expArea, minArea, minFill, maxArea) ?: continue
       found.add(best)
     }
     if (found.isEmpty()) return null
@@ -79,7 +124,7 @@ internal object Ball {
     )
   }
 
-  private fun bestBlob(g: Gray, r: Rect, hands: Pt, sgn: Int, expArea: Double): Cand? {
+  private fun bestBlob(g: Gray, r: Rect, hands: Pt, dx: Double, dy: Double, expArea: Double, minArea: Double, minFill: Double, maxArea: Double): Cand? {
     val w = r.w
     val h = r.h
     val v = IntArray(w * h) { g.at(r.x0 + it % w, r.y0 + it / w) }
@@ -88,8 +133,6 @@ internal object Ball {
     var best: Cand? = null
     var next = 0
     val stack = IntArray(w * h)
-    val dx = 1 / sqrt(2.0) * sgn
-    val dy = 1 / sqrt(2.0)
     for (start in 0 until w * h) {
       if (v[start] < thr || label[start] != 0) continue
       next++
@@ -128,12 +171,12 @@ internal object Ball {
           }
         }
       }
-      if (area < 0.5 * expArea || area > 1.5 * expArea) continue
+      if (area < minArea * expArea || area > maxArea * expArea) continue
       val bw = maxX - minX + 1
       val bh = maxY - minY + 1
       val rad = max(bw, bh) / 2.0
       val circ = area / (PI * rad * rad)
-      if (circ <= 0.7) continue
+      if (circ <= minFill) continue
       val cx = sx.toDouble() / area + r.x0
       val cy = sy.toDouble() / area + r.y0
       val relX = cx - hands.x
