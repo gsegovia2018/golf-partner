@@ -53,6 +53,8 @@ internal class Pass2Request(
   val clubModel: Boolean = false,
   /** Capture rate of one container frame step (the address track's time base); null = 240. */
   val captureFps: Double? = null,
+  /** Face-on speed (apiVersion 7, [BallFlight]): +1 / -1 = the target to the right / left of the picture; null = none. */
+  val speedDir: Int? = null,
 )
 
 /**
@@ -143,6 +145,21 @@ internal class Checkpoints(
     // and at most JPEG_IN_FLIGHT + 2 full frames (~3 MB each at 1080p) waiting for the encoders.
     val addrRoi = addr?.let { roi(it.hands!!, exp, ballD) }
     val impRoi = imp?.let { roi(it.hands!!, exp, ballD) }
+    // apiVersion 7 face-on speed ([BallFlight]): the background around the top, the club band before
+    // impact and the flight corridor after it, sampled so the ball spans ~8 samples (≤ 21 grids of
+    // ≤ 60 × 50 ball diameters / step², ~3 MB at 1080p), plus the ball's full-resolution patch.
+    val topF = cps.firstOrNull { it.key == "top" }?.frame
+    val impF = cps.firstOrNull { it.key == "impact" }?.frame
+    val speedDir = req.speedDir?.takeIf { ballF != null && pxPerCm != null && topF != null && impF != null }
+    val speedD = pxCmF * Ball.BALL_CM
+    val speedStep = BallFlight.step(speedD)
+    val speedRect = speedDir?.let { BallFlight.area(ballF!!.x.toDouble(), ballF.y.toDouble(), speedD, it, frameW, frameH) }?.takeIf { !it.isEmpty() }
+    val speedPatch = speedRect?.let { BallFlight.patch(ballF!!.x.toDouble(), ballF.y.toDouble(), speedD, frameW, frameH) }
+    val speedBg = if (speedRect != null) BallFlight.bgFrames(topF!!, n).toSet() else emptySet()
+    val speedMoving = if (speedRect != null) (BallFlight.clubFrames(impF!!, n) + BallFlight.flightFrames(impF, n)).toSet() else emptySet()
+    val speedBgArea = ConcurrentHashMap<Int, Gray>()
+    val speedBgPatch = ConcurrentHashMap<Int, Gray>()
+    val speedFrames = ConcurrentHashMap<Int, Gray>()
 
     // filled from both decoder threads (decodeSplit)
     val strips = ConcurrentHashMap<Int, Gray>()
@@ -227,8 +244,10 @@ internal class Checkpoints(
     var clubScenery: List<ClubBox> = emptyList()
     var clubDelegate = "cpu"
     var detector: ClubDetector? = null
+    var speed: SpeedRaw? = null
+    var speedMs = 0L
     try {
-      val wanted = stills + (addrRange?.toSet() ?: emptySet()) + listOfNotNull(addr?.frame, imp?.frame) + proxyFrames + clubFrames
+      val wanted = stills + (addrRange?.toSet() ?: emptySet()) + listOfNotNull(addr?.frame, imp?.frame) + proxyFrames + clubFrames + speedBg + speedMoving
       var t = SystemClock.elapsedRealtime()
       decodeSplit(path, wanted, keep = { it in stills }) { f, y ->
         if (addrRange != null && f in addrRange) strips[f] = y.graySampled(strip!!.first, strip.second)
@@ -238,11 +257,33 @@ internal class Checkpoints(
           impactShaft.set(seeded(y.grayStrip(impRoi!!, step), imp.hands!!, ball!!, exp, ballD))
           shaftNs.addAndGet(System.nanoTime() - s)
         }
+        if (f in speedBg) {
+          speedBgArea[f] = y.graySampled(speedRect!!, speedStep)
+          speedBgPatch[f] = y.grayStrip(speedPatch!!, 1)
+        }
+        if (f in speedMoving) speedFrames[f] = y.graySampled(speedRect!!, speedStep)
         if (f in proxyFrames) proxy(f, y)
         if (f in clubFrames) clubInput(f, y)
         if (f in stills) encode(f, y)
       }
       mainMs = SystemClock.elapsedRealtime() - t
+      if (speedRect != null) {
+        t = SystemClock.elapsedRealtime()
+        // an estimate on top of pass 2: a failure here never fails the stills
+        speed = try {
+          BallFlight.measure(
+            speedBgArea.toSortedMap().values.toList(), speedBgPatch.toSortedMap().values.toList(), speedFrames, speedRect, speedStep,
+            ballF!!.x.toDouble(), ballF.y.toDouble(), speedD, speedDir!!, impF!!, fps,
+          )
+        } catch (e: Exception) {
+          Log.w(PoseAnalyzer.TAG, "speed failed", e)
+          null
+        }
+        speedBgArea.clear()
+        speedBgPatch.clear()
+        speedFrames.clear()
+        speedMs = SystemClock.elapsedRealtime() - t
+      }
 
       // The detector, opened once for the address samples, the checkpoints and the moved address. A
       // failure to open (no model, no runtime) leaves today's proposals and the fallback head.
@@ -377,6 +418,7 @@ internal class Checkpoints(
       "proxies" to proxiesWritten.get(),
       "proxyMs" to (proxyNs.get() / 1_000_000).toInt(),
       "proxyFailures" to proxyFailures.get(),
+      "speedMs" to speedMs.toInt(),
     ) + if (!req.clubModel) emptyMap() else mapOf(
       "clubMs" to clubMs.toInt(),
       "clubFrames" to (clubDets?.size ?: 0),
@@ -399,7 +441,25 @@ internal class Checkpoints(
     if (req.clubModel) {
       Log.i(PoseAnalyzer.TAG, "pass2 club frames=${clubDets?.size ?: 0} ms=$clubMs failures=${clubFailures.get()} sources=${shaft.values.groupingBy { it["source"] }.eachCount()}")
     }
-    val out = mapOf("stills" to stillsOut, "shaft" to shaft, "addressFrame" to addressFrame, "proxies" to proxies, "timings" to timings)
+    // apiVersion 7: display px; null when not asked, or no ball at rest was found in the background
+    val speedOut = if (speedRect == null) null else speed?.let { r ->
+      val k = decim.toDouble()
+      mapOf(
+        "x" to r.x * k, "y" to r.y * k, "d" to r.d * k, "step" to r.step,
+        "ball" to r.ball?.let { b ->
+          mapOf(
+            "vx" to b.vx * k, "vy" to b.vy * k, "residual" to b.residual * k, "kept" to b.kept,
+            "points" to b.chain.map { (f, p) -> listOf(f.toDouble(), p.x * k, p.y * k) },
+          )
+        },
+        "club" to r.club?.let { it * k },
+        "clubPoints" to r.clubPoints,
+        "contact" to r.contact,
+      )
+    }
+    if (speedRect != null) Log.i(PoseAnalyzer.TAG, "pass2 speed=$speedOut ms=$speedMs")
+    val out = mapOf("stills" to stillsOut, "shaft" to shaft, "addressFrame" to addressFrame, "proxies" to proxies, "timings" to timings) +
+      (if (speedRect != null) mapOf("speed" to speedOut) else emptyMap())
     // what ran (stored as pose.pass2.club); null when the detector could not run at all. scenery
     // (apiVersion 5): what the static vote removed, clustered, for detectClub on frames that cannot vote
     return if (!req.clubModel) out else out + ("club" to clubDets?.let {

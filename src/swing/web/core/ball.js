@@ -23,7 +23,7 @@ const medianOf = (v) => {
  * The best blob of one frame inside `r` (see Ball.detect): `{ dist, cx, cy, circ, contrast }` or
  * null.
  */
-function bestBlob(g, r, hands, sgn, expArea) {
+function bestBlob(g, r, hands, dx, dy, expArea, minArea, minFill, maxArea) {
   const { w, h } = r;
   const v = new Int32Array(w * h);
   for (let i = 0; i < w * h; i += 1) v[i] = g.at(r.x0 + (i % w), r.y0 + Math.trunc(i / w));
@@ -32,8 +32,6 @@ function bestBlob(g, r, hands, sgn, expArea) {
   let best = null;
   let next = 0;
   const stack = new Int32Array(w * h);
-  const dx = (1 / Math.sqrt(2)) * sgn;
-  const dy = 1 / Math.sqrt(2);
   for (let start = 0; start < w * h; start += 1) {
     if (v[start] < thr || label[start] !== 0) continue;
     next += 1;
@@ -74,12 +72,12 @@ function bestBlob(g, r, hands, sgn, expArea) {
         }
       }
     }
-    if (area < 0.5 * expArea || area > 1.5 * expArea) continue;
+    if (area < minArea * expArea || area > maxArea * expArea) continue;
     const bw = maxX - minX + 1;
     const bh = maxY - minY + 1;
     const rad = Math.max(bw, bh) / 2.0;
     const circ = area / (Math.PI * rad * rad);
-    if (circ <= 0.7) continue;
+    if (circ <= minFill) continue;
     const cx = sx / area + r.x0;
     const cy = sy / area + r.y0;
     const relX = cx - hands.x;
@@ -123,6 +121,30 @@ export const Ball = {
     );
   },
 
+  FO_WIDEN: 0.25,
+  FO_UP: 0.01,
+  FO_DOWN: 0.2,
+  FO_MIN_AREA: 0.3,
+  FO_MAX_AREA: 3.4,
+  FO_MIN_FILL: 0.4,
+
+  /**
+   * Face-on (apiVersion 7, Ball.kt roiFaceOn): the ball between the feet and in front of them. x from
+   * the trail to the lead toe widened by FO_WIDEN of the stance each side; y from the lower toe +
+   * FO_UP H to + FO_DOWN H (under the toes: the white shoes stay out).
+   */
+  roiFaceOn(toeAX, toeBX, toeY, h, ws, workW, workH) {
+    const lo = Math.min(toeAX, toeBX);
+    const hi = Math.max(toeAX, toeBX);
+    const pad = Ball.FO_WIDEN * (hi - lo);
+    return new Rect(
+      Math.trunc(Math.max(0.0, (lo - pad) * ws)),
+      Math.trunc(Math.max(0.0, (toeY + Ball.FO_UP * h) * ws)),
+      Math.trunc(Math.min(workW, (hi + pad) * ws)),
+      Math.trunc(Math.min(workH, (toeY + Ball.FO_DOWN * h) * ws)),
+    );
+  },
+
   /**
    * detect.py `detect_ball` on the search frames (club in the air, scene static, D17):
    * brightest-2 % components inside `roi`, area within ±50 % of the expected ball, fill of
@@ -130,7 +152,7 @@ export const Ball = {
    * the ball side. Median over the frames. `hands` and `roi` in work px; result (BallFound
    * `{ x, y, r, conf, frames }`) in display px, or null.
    */
-  detect(frames, roi, hands, sgn, expDWork, ws) {
+  detect(frames, roi, hands, sgn, expDWork, ws, rayX = sgn / Math.sqrt(2), rayY = 1 / Math.sqrt(2), minArea = 0.5, minFill = 0.7, maxArea = 1.5) {
     const expArea = Math.PI * (expDWork / 2) * (expDWork / 2);
     const found = [];
     for (const g of frames) {
@@ -141,7 +163,7 @@ export const Ball = {
         Math.min(roi.y1, g.y0 + g.h),
       );
       if (r.isEmpty()) continue;
-      const best = bestBlob(g, r, hands, sgn, expArea);
+      const best = bestBlob(g, r, hands, rayX, rayY, expArea, minArea, minFill, maxArea);
       if (best) found.push(best);
     }
     if (!found.length) return null;

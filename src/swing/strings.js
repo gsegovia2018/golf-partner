@@ -71,6 +71,7 @@ function build(node, path = []) {
 export const SWING_STRINGS = build({
   privacy: L,
   approximate: L,
+  estimate: L,
 
   // Club picker (D19): exactly two clubs.
   club: {
@@ -577,6 +578,10 @@ export const SWING_STRINGS = build({
     fo_finish_head: L,
     swing_symmetry: L,
     finish_trail_foot: L,
+    speed_ball: L,
+    speed_club: L,
+    speed_smash: L,
+    speed_launch: L,
   },
 
   fault: {
@@ -678,6 +683,12 @@ export const SWING_STRINGS = build({
     swing_symmetry: (cm, dir) => t(dir === 'above' ? 'swing.checkText.swing_symmetry_above' : 'swing.checkText.swing_symmetry_under', { cm: n0(Math.abs(cm)) }),
     finish_trail_foot_ok: L,
     finish_trail_foot: (cm) => (cm > 0 ? t('swing.checkText.finish_trail_foot', { cm: n0(cm) }) : t('swing.checkText.finish_trail_foot_down')),
+    // face-on speed (plan 2026-10-30 §5): estimates, the reason when not measured
+    speed_ball: L,
+    speed_club: L,
+    speed_smash: L,
+    speed_launch: L,
+    speed_none: (reason) => t(`swing.checkText.speed_none_${reason}`),
   },
 
   // Plain-language coaching per check and direction (see fixes.js for how the key is chosen).

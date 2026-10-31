@@ -49,6 +49,42 @@ beforeEach(() => {
   store.getSwing.mockReturnValue({ id: 's1', createdAt: '2026-10-11T16:42:00.000Z', club: 'iron', source: 'import', status: 'pending' });
 });
 
+describe('runAnalysis: face-on speed (apiVersion 7)', () => {
+  const speed = { x: 600, y: 680, d: 16, step: 2, ball: { vx: 60, vy: -30, residual: 2, kept: 6, points: [] }, club: 45, clubPoints: 3 };
+  const faceOnMarks = { viewOverride: 'faceOn' };
+
+  test('a face-on swing asks pass 2 for the speed toward its target and keeps what came back', async () => {
+    store.readMarks.mockResolvedValue(faceOnMarks);
+    const api = makeApi({
+      speedSupport: () => true,
+      extractCheckpoints: jest.fn(async () => ({ shaft: {}, addressFrame: null, stills: {}, speed })),
+    });
+    frames.nativeApi.mockReturnValue(api);
+    const res = await runAnalysis('s1', {});
+    const req = api.extractCheckpoints.mock.calls[0][1];
+    expect(res.analysis.view).toBe('faceOn');
+    expect(req.speedDir).toBe(res.analysis.targetDir);
+    const saved = store.saveAnalysis.mock.calls.at(-1)[2].pose.pass2;
+    expect(saved.speed).toEqual(speed);
+    store.readMarks.mockResolvedValue(null);
+  });
+
+  test('an older binary is not asked: the row says to update the app; down the line nothing changes', async () => {
+    store.readMarks.mockResolvedValue(faceOnMarks);
+    const old = makeApi({ speedSupport: () => false });
+    frames.nativeApi.mockReturnValue(old);
+    await runAnalysis('s1', {});
+    expect(old.extractCheckpoints.mock.calls[0][1].speedDir).toBeUndefined();
+    expect(store.saveAnalysis.mock.calls.at(-1)[2].pose.pass2.speed).toEqual({ unsupported: true });
+    store.readMarks.mockResolvedValue(null);
+    const dtl = makeApi({ speedSupport: () => true });
+    frames.nativeApi.mockReturnValue(dtl);
+    await runAnalysis('s1', {});
+    expect(dtl.extractCheckpoints.mock.calls[0][1].speedDir).toBeUndefined();
+    expect(store.saveAnalysis.mock.calls.at(-1)[2].pose.pass2).not.toHaveProperty('speed');
+  });
+});
+
 describe('runAnalysis', () => {
   test('decode events stop moving the stage once pose frames arrive (native interleaves them)', async () => {
     const listeners = [];

@@ -12,6 +12,7 @@ import { detectPhases, CHECKPOINT_KEYS } from './phases';
 import { resolveClub } from './club';
 import { runChecks, normClub } from './checks';
 import { runFaceOnChecks } from './checksFaceOn';
+import { speedRows } from './speed';
 import { mainFault } from './priority';
 
 export const SCHEMA = 'swing-analysis/8'; // 2: the v2 checks (spec 2026-10-18); 3: their lab-calibrated limits (spec §8a); 4: tempo from backswingStart; 5: tour reference swings (spec §8b: backside hip line, impact hands, implausible clubheads, no-ball and face-on flags); 6: driver limits for the setup reach and the top; 7: the coach-series rows (hands_bicep, swing_symmetry, finish_trail_foot); 8: face-on checks (plan 2026-10-30). Older ones re-run on open
@@ -75,6 +76,14 @@ function makePoseAt(idx, L) {
  * @param {'faceOn'|'dtl'} [opts.view]  the golfer's view correction (marks.json viewOverride); detected when absent
  * @returns {object|{error:'no_pose'|'partial_pose'|'too_long'}}
  */
+/**
+ * The ball pass 1 proposed for this view: face-on the one found between the feet (apiVersion 7,
+ * `ballFaceOn`), else the down-the-line search's; null when none.
+ */
+export function nativeBallOf(pose, view) {
+  return (view === 'faceOn' && pose?.ballFaceOn) || pose?.ball || null;
+}
+
 export function analyze(native, opts = {}) {
   const t0 = Date.now();
   const { probe = {}, pass2 = {}, marks = {}, handedness = 'right', source = 'import' } = opts;
@@ -89,23 +98,35 @@ export function analyze(native, opts = {}) {
 
   const idx = samples.map((f) => f.i);
   const L = samples.map((f) => f.lm.map(([x, y, v]) => [x * W, y * H, v]));
-  // opts.ball: the golfer's own ball mark from Edit marks, [x, y, r] normalised; it wins over the proposal.
-  const ballN = opts.ball ?? (native.ball ? [native.ball.x, native.ball.y, native.ball.r] : null);
-  const ballPx = ballN ? { x: ballN[0] * W, y: ballN[1] * H, r: ballN[2] * W } : null;
-
+  const phasesWith = (ballGoneFrame) => detectPhases(idx, L, {
+    containerFps,
+    captureFps: probe.captureFps ?? null,
+    duplicateFrameRatio: probe.duplicateFrameRatio ?? 0,
+    handedness,
+    ballGoneFrame: ballGoneFrame ?? null,
+    addressFrame: pass2.addressFrame ?? null,
+  });
   let ph;
+  let view;
+  let detectedView;
+  // apiVersion 7: pass 1 also searches between the feet (the face-on ball) and times its impact
+  let nativeBall = native.ball;
+  let nativeGone = native.ballGoneFrame ?? null;
   try {
-    ph = detectPhases(idx, L, {
-      containerFps,
-      captureFps: probe.captureFps ?? null,
-      duplicateFrameRatio: probe.duplicateFrameRatio ?? 0,
-      handedness,
-      ballGoneFrame: native.ballGoneFrame ?? null,
-      addressFrame: pass2.addressFrame ?? null,
-    });
+    ph = phasesWith(native.ballGoneFrame);
+    detectedView = viewOf(idx, L, ph.addressRun);
+    view = opts.view === 'faceOn' || opts.view === 'dtl' ? opts.view : detectedView;
+    if (view === 'faceOn' && native.ballFaceOn) {
+      nativeBall = native.ballFaceOn;
+      nativeGone = native.ballGoneFrameFaceOn ?? null;
+      ph = phasesWith(nativeGone);
+    }
   } catch {
     return { error: 'partial_pose' };
   }
+  // opts.ball: the golfer's own ball mark from Edit marks, [x, y, r] normalised; it wins over the proposal.
+  const ballN = opts.ball ?? (nativeBall ? [nativeBall.x, nativeBall.y, nativeBall.r] : null);
+  const ballPx = ballN ? { x: ballN[0] * W, y: ballN[1] * H, r: ballN[2] * W } : null;
   if (frameCount / ph.fps.capture > MAX_CLIP_S) return { error: 'too_long' };
 
   const approxHeight = opts.heightCm == null;
@@ -140,8 +161,6 @@ export function analyze(native, opts = {}) {
     cps[k] = { frame: f, ...c };
   });
 
-  const detectedView = viewOf(idx, L, ph.addressRun);
-  const view = opts.view === 'faceOn' || opts.view === 'dtl' ? opts.view : detectedView;
   const { checks, dir: targetDir = null } = (view === 'faceOn' ? runFaceOnChecks : runChecks)({
     checkpoints: cps,
     ball: ballPx,
@@ -155,6 +174,14 @@ export function analyze(native, opts = {}) {
     finishQuietS: ph.finishQuietS,
     approximate: ph.fps.approximate,
   });
+  if (view === 'faceOn') {
+    // face-on speed (plan 2026-10-30 §5): Extras estimates from pass 2's ball flight; none before pass 2
+    const at = cps.address?.frame != null ? poseAt(cps.address.frame) : null;
+    const ank = at && [at[LM.lAnk], at[LM.rAnk]].every((p) => p && Number.isFinite(p[0])) ? [at[LM.lAnk], at[LM.rAnk]] : null;
+    const dir = targetDir ?? 1;
+    const ankles = ank ? (ank[0][0] * dir >= ank[1][0] * dir ? { lead: ank[0], trail: ank[1] } : { lead: ank[1], trail: ank[0] }) : null;
+    checks.push(...speedRows(pass2.speed, { fps: ph.fps.capture, pxPerCm: scale.pxPerCm, dir, ankles }));
+  }
   const main = mainFault(checks, view);
 
   const addr = poseAt(frames.address);
@@ -198,7 +225,7 @@ export function analyze(native, opts = {}) {
       unknown: checks.filter((c) => c.status === 'unknown').length,
     },
     main,
-    impactFromPose: native.ballGoneFrame == null, // no ball seen: impact and address come from the pose alone
+    impactFromPose: nativeGone == null, // no ball seen: impact and address come from the pose alone
     notes: ph.notes,
     timings: { analyzeMs: Date.now() - t0 },
   };

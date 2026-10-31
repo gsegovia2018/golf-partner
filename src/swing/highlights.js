@@ -9,6 +9,8 @@
 import { LM } from './geometry';
 import { homeOf } from './checkpointChecks';
 import { t } from '../i18n';
+import { formatNumber } from '../i18n/format';
+import { getAppSettings } from '../store/settingsStore';
 
 /** "10 cm", "7°", "1.8:1", "0.12 H": a check's value as it is shown (D14: in ink). */
 export function valueText(check) {
@@ -20,6 +22,13 @@ export function valueText(check) {
     case 'H': return `${check.value} H`;
     case 'of 2': return t('swing.value.ofTwo', { n: check.value });
     case '×': return `${check.value}×`;
+    // face-on speed (speed.js): stored in m/s, shown in the player's units (yards -> mph, meters -> km/h)
+    case 'speed': {
+      const mph = getAppSettings()?.units === 'yards';
+      return `≈ ${formatNumber(check.value * (mph ? 2.23694 : 3.6), { decimals: 0 })} ${mph ? 'mph' : 'km/h'}`;
+    }
+    case 'smash': return `≈ ${formatNumber(check.value, { decimals: 2 })}`;
+    case 'launch': return `≈ ${formatNumber(check.value, { decimals: 0 })}°`;
     default: return `${check.value}${check.unit ? ` ${check.unit}` : ''}`;
   }
 }

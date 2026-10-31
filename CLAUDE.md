@@ -212,7 +212,7 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   decode, MediaPipe pose in `PoseAnalyzer.kt`, pass-2 `extractCheckpoints` in
   `Checkpoints.kt`, Camera2 high-speed capture in `camera/`); pure JS analysis
   in `src/swing/`; screens `Swing*Screen.js`. Plan: `docs/superpowers/plans/2026-10-11-swing-analyzer.md`.
-- Swing `apiVersion` gate: native `API_VERSION` (`GolfSwingModule.kt`, currently 6)
+- Swing `apiVersion` gate: native `API_VERSION` (`GolfSwingModule.kt`, currently 7)
   vs JS `REQUIRED_API_VERSION` (`src/swing/native.js`, currently 2): a binary below
   REQUIRED shows "Update the app" instead of crashing. Bump native on every contract
   change; raise REQUIRED only when the bundle cannot work without the new methods.
@@ -220,7 +220,9 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
   and `PROXY_API_VERSION` 3 (pass-2 scrub proxies, D28), and `CLUB_MODEL_API_VERSION`
   4 (learned club detector, `clubModelSupport()`) and `CLUB_ONDEMAND_API_VERSION` 5
   (`detectClub` on a chosen frame, `clubOnDemandSupport()`), and `SCRUB_API_VERSION` 6 (warm
-  frame decoder, `releaseFrames()`, dense 240 px proxies every 2nd frame, `scrubSupport()`), so
+  frame decoder, `releaseFrames()`, dense 240 px proxies every 2nd frame, `scrubSupport()`), and
+  `SPEED_API_VERSION` 7 (face-on: pass 1's `ballFaceOn` between the feet, pass 2's `speed` from
+  `BallFlight.kt` given `speedDir`, `speedSupport()`; lab twin `tools/swing-lab/ball_flight.py`), so
   older binaries still analyse and mark. Address/Impact from the image (6): `Clubhead.kt` tracks
   the resting clubhead, `Ball.goneFrame` matches the ball's own picture; the lab twin is
   `tools/swing-lab/detect.py`, scored by `eval_address_impact.py` on exported swings.
@@ -237,7 +239,7 @@ at prebuild and adds `include ':wear'`; the phone build never compiles it.
 - Swing videos and analysis never leave the phone; the only planned exit is
   the explicit training-data export (plan §7.3).
 - Swing analyzer on the web (plan `2026-10-23-swing-analyzer-web.md`; iPhone users on the PWA):
-  `src/swing/native.web.js` implements the native contract in the browser at apiVersion 6, import
+  `src/swing/native.web.js` implements the native contract in the browser at apiVersion 7, import
   only (no capture). `src/swing/web/`: `mp4.js` reads the sample table, `source.js` decodes with
   WebCodecs or seeks a `<video>` (HEVC on iOS), `analyzePose.js` / `checkpoints.js` are pass 1 / 2,
   `core/*` are line-for-line ports of the Kotlin (keep them in step when the Kotlin changes).

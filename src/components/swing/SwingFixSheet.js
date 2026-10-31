@@ -15,6 +15,7 @@ import { highlightFor } from '../../swing/highlights';
 import { homeOf, frameOfKey } from '../../swing/checkpointChecks';
 import { CHECKPOINT_KEYS } from '../../swing/phases';
 import { poseAtFrame } from '../../swing/poseAt';
+import { nativeBallOf } from '../../swing/analyze';
 import { circleText } from '../../theme/circleText';
 
 const F = SWING_STRINGS.results.fixes;
@@ -45,7 +46,7 @@ export default function SwingFixSheet({
   const video = pose?.video ?? null;
   const boxH = video ? Math.min(width * (video.height / video.width), winH * 0.4) : width * 0.9;
   const ball = key && CHECKPOINT_KEYS.indexOf(key) <= CHECKPOINT_KEYS.indexOf('impact') && analysis.reference?.ball
-    ? [...analysis.reference.ball, pose?.ball?.r ?? 0.012] : null;
+    ? [...analysis.reference.ball, nativeBallOf(pose, analysis.view)?.r ?? 0.012] : null;
   const cpName = key ? SWING_STRINGS.checkpoint[key] : '';
 
   return (

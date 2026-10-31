@@ -19,7 +19,7 @@
 // chose (club on demand, plan 2026-10-16): the status of a head is judged against the proposal at
 // the draft's own frame.
 
-import { analyze, CLUB_KEYS } from './analyze';
+import { analyze, CLUB_KEYS, nativeBallOf } from './analyze';
 import {
   emptyMarks, frameLabel, withFrame, withBall, handsPlaced, viewOverrideOf,
 } from './labels';
@@ -98,7 +98,8 @@ export function buildDraft(analysis, pose, marks) {
         frame, hands: cm.hands, head: cm.head ?? null, hidden: !!cm.hidden, conf: cm.conf, source: cm.source, atFrame: {},
       };
   });
-  const nativeBall = pose?.ball ? [pose.ball.x, pose.ball.y, pose.ball.r] : null;
+  const pb = nativeBallOf(pose, analysis.view);
+  const nativeBall = pb ? [pb.x, pb.y, pb.r] : null;
   const ballProposed = marks?.ball?.proposed ?? nativeBall ?? (analysis.reference?.ball ? [...analysis.reference.ball, 0.012] : null);
   const ball = marks?.ball?.final ?? ballProposed;
   const ballConfirmed = !!(marks?.ball?.confirmed ?? (legacy && marks.ball?.corrected));

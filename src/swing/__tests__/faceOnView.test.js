@@ -147,3 +147,29 @@ describe('face-on phases on public clips (S0): the downswing, not the finish', (
     ['fo_sway', 'fo_hips_shift', 'fo_hips_impact', 'fo_slide'].forEach((id) => expect([id, st(id)]).toEqual([id, 'green']));
   });
 });
+
+describe('face-on speed rows (plan 2026-10-30 §5)', () => {
+  const speed = { x: 600, y: 680, d: 16, step: 2, ball: { vx: 60, vy: -30, residual: 2, kept: 6 }, club: 45, clubPoints: 3 };
+  test('Extras estimates that never colour a step or become the main fault', () => {
+    const fx = byName('faceon-oosthuizen-driver');
+    const plain = analyzeReference(fx);
+    // a 70 m/s ball at 14° and a 48 m/s club, at this clip's own scale (the ball 1.1 x the legs) and fps
+    const d = plain.scale.pxPerCm * 4.27 * 1.1;
+    const pxf = (ms) => (ms * 100 * (d / 4.27)) / plain.fps.capture;
+    const up = (14 * Math.PI) / 180;
+    const raw = { ...speed, d, ball: { vx: plain.targetDir * pxf(70) * Math.cos(up), vy: -pxf(70) * Math.sin(up), residual: 1, kept: 6 }, club: pxf(48) };
+    const a = analyzeReference(fx, { pass2: { speed: raw } });
+    expect(plain.checks.some((c) => c.id.startsWith('speed_'))).toBe(false); // pass 2 never asked: no row
+    const rows = a.checks.filter((c) => c.id.startsWith('speed_'));
+    expect(rows.map((c) => c.id)).toEqual(['speed_ball', 'speed_club', 'speed_smash', 'speed_launch']);
+    expect(rows.every((c) => c.extra && c.info && c.status === 'unknown')).toBe(true);
+    expect(stepStatuses(a)).toEqual(stepStatuses(plain));
+    expect(a.main).toEqual(plain.main);
+  });
+
+  test('down the line gets no speed rows, whatever pass 2 returned', () => {
+    const a = analyzeReference(byName('tour-mcilroy-driver'), { pass2: { speed } });
+    expect(a.checks.some((c) => c.id.startsWith('speed_'))).toBe(false);
+  });
+});
+

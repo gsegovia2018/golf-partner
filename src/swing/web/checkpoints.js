@@ -13,6 +13,7 @@ import { ShaftSearch, ClubheadTrack } from './core/clubhead';
 import { ClubRules } from './core/clubRules';
 import { ClubDecode } from './core/clubDecode';
 import { Proxies } from './core/framePlan';
+import { BallFlight } from './core/ballFlight';
 import {
   WebFrame, makeCanvas, canvasJpeg, decimation,
 } from './webFrame';
@@ -95,6 +96,24 @@ export async function extractCheckpointsWeb(clip, req, { cancelled = () => false
   };
   const addrRoi = addrOk ? roi(addrOk.hands) : null;
   const impRoi = impOk ? roi(impOk.hands) : null;
+  // apiVersion 7 face-on speed (BallFlight): the background around the top, the club band before
+  // impact and the flight corridor after it, sampled so the ball spans ~8 samples, plus the ball's
+  // full-resolution patch (Checkpoints.kt)
+  const topF = cps.find((c) => c.key === 'top')?.frame;
+  const impF = imp?.frame;
+  const speedDir = (req.speedDir === 1 || req.speedDir === -1) && ballF && pxPerCm != null && topF != null && impF != null ? req.speedDir : null;
+  const speedD = pxCmF * Ball.BALL_CM;
+  const speedStep = BallFlight.step(speedD);
+  let speedRect = speedDir != null ? BallFlight.area(ballF.x, ballF.y, speedD, speedDir, frameW, frameH) : null;
+  if (speedRect && speedRect.isEmpty()) speedRect = null;
+  const speedPatch = speedRect ? BallFlight.patch(ballF.x, ballF.y, speedD, frameW, frameH) : null;
+  const speedBg = new Set(speedRect ? BallFlight.bgFrames(topF, n) : []);
+  const speedMoving = new Set(speedRect ? [...BallFlight.clubFrames(impF, n), ...BallFlight.flightFrames(impF, n)] : []);
+  const speedBgArea = new Map();
+  const speedBgPatch = new Map();
+  const speedFrames = new Map();
+  let speed = null;
+  let speedMs = 0;
   const seeded = (g, h) => {
     const seed = (toDeg(Math.atan2(ball.y - h.y, ball.x - h.x)) + 360) % 360;
     return ShaftSearch.search(g, workW, workH, h.x * ws, h.y * ws, exp, ballD, seed);
@@ -138,6 +157,11 @@ export async function extractCheckpointsWeb(clip, req, { cancelled = () => false
 
   async function handle(f, wf, which) {
     if (which.addrStrip) strips.set(f, wf.graySampled(strip[0], strip[1]));
+    if (speedBg.has(f)) {
+      speedBgArea.set(f, wf.graySampled(speedRect, speedStep));
+      speedBgPatch.set(f, wf.grayStrip(speedPatch, 1));
+    }
+    if (speedMoving.has(f)) speedFrames.set(f, wf.graySampled(speedRect, speedStep));
     if (which.addrGray) addrGrays.set(f, wf.grayStrip(addrRoi, step));
     if (which.impact) {
       const t = performance.now();
@@ -196,7 +220,7 @@ export async function extractCheckpointsWeb(clip, req, { cancelled = () => false
   const dets = new Map();
 
   try {
-    const wanted = new Set([...stills, ...proxyFrames, ...clubFrames]);
+    const wanted = new Set([...stills, ...proxyFrames, ...clubFrames, ...speedBg, ...speedMoving]);
     if (addrRange) for (let f = addrRange[0]; f <= addrRange[1]; f += 1) wanted.add(f);
     if (addrOk) wanted.add(addrOk.frame);
     if (impOk) wanted.add(impOk.frame);
@@ -210,6 +234,21 @@ export async function extractCheckpointsWeb(clip, req, { cancelled = () => false
       still: stills.has(f),
     }));
     mainMs = performance.now() - t;
+    if (speedRect) {
+      t = performance.now();
+      // an estimate on top of pass 2: a failure here never fails the stills
+      try {
+        const sorted = (m) => [...m.keys()].sort((a, b) => a - b).map((k) => m.get(k));
+        speed = BallFlight.measure(sorted(speedBgArea), sorted(speedBgPatch), speedFrames, speedRect, speedStep, ballF.x, ballF.y, speedD, speedDir, impF, fps);
+      } catch (e) {
+        console.warn('[swing] speed failed', e);
+        speed = null;
+      }
+      speedBgArea.clear();
+      speedBgPatch.clear();
+      speedFrames.clear();
+      speedMs = performance.now() - t;
+    }
 
     const infer = async (frames) => {
       if (!detector) return;
@@ -357,6 +396,7 @@ export async function extractCheckpointsWeb(clip, req, { cancelled = () => false
     proxies: proxiesWritten,
     proxyMs: Math.round(proxyMs),
     proxyFailures,
+    speedMs: Math.round(speedMs),
     backend: clip.backend,
   };
   if (req.clubModel) {
@@ -374,6 +414,25 @@ export async function extractCheckpointsWeb(clip, req, { cancelled = () => false
     } : null,
     timings,
   };
+  if (speedRect) {
+    // display px (Checkpoints.kt); null when no ball at rest was found in the background
+    out.speed = speed ? {
+      x: speed.x * decim,
+      y: speed.y * decim,
+      d: speed.d * decim,
+      step: speed.step,
+      ball: speed.ball ? {
+        vx: speed.ball.vx * decim,
+        vy: speed.ball.vy * decim,
+        residual: speed.ball.residual * decim,
+        kept: speed.ball.kept,
+        points: speed.ball.chain.map(([f, p]) => [f, p.x * decim, p.y * decim]),
+      } : null,
+      club: speed.club != null ? speed.club * decim : null,
+      clubPoints: speed.clubPoints,
+      contact: speed.contact,
+    } : null;
+  }
   if (req.clubModel) {
     out.club = clubDets ? {
       model: MODEL, input: ClubDecode.SIZE, conf: ClubDecode.CONF, nms: ClubDecode.NMS_IOU, scenery: ClubRules.boxJson(clubScenery),

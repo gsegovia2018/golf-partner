@@ -43,6 +43,11 @@ export const CLUB_ONDEMAND_API_VERSION = 5;
 // new rules; their contract is unchanged, so nothing here gates on them.
 export const SCRUB_API_VERSION = 6;
 
+// apiVersion 7 (face-on speed, plan 2026-10-30 §5): extractCheckpoints takes `speedDir` (+1 / -1, the
+// target's side of the picture) and returns `speed` (the ball at rest, its own diameter, its flight
+// and the clubhead's px per frame). An older binary is not asked; the row says "Update the app".
+export const SPEED_API_VERSION = 7;
+
 // Finished text in the active language: call at the moment it is shown (docs/i18n.md).
 export const updateAppMessage = () => t('misc.swing.updateApp');
 
@@ -128,6 +133,12 @@ export function clubModelSupport() {
 export function scrubSupport() {
   const s = swingSupport();
   return s.supported && s.apiVersion >= SCRUB_API_VERSION;
+}
+
+/** Does this binary measure face-on ball and clubhead speed in pass 2 (apiVersion >= SPEED_API_VERSION)? */
+export function speedSupport() {
+  const s = swingSupport();
+  return s.supported && s.apiVersion >= SPEED_API_VERSION;
 }
 
 /** Can this binary propose a clubhead on a chosen frame (apiVersion >= CLUB_ONDEMAND_API_VERSION)? */

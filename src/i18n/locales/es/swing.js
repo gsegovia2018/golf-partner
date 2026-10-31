@@ -2,6 +2,7 @@
 export default {
   'swing.privacy': 'Tu vídeo y el análisis se quedan en este móvil. No se sube nada.',
   'swing.approximate': 'aprox.',
+  'swing.estimate': 'Estimación',
   'swing.club.label': 'Palo',
   'swing.club.iron': 'Hierro',
   'swing.club.driver': 'Driver',
