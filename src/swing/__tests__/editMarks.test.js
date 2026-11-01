@@ -203,14 +203,26 @@ describe('marks.json', () => {
 });
 
 describe('helpers', () => {
-  test('hitTest picks the nearest handle inside 28 px and prefers the active target on a tie', () => {
+  test('hitTest picks the nearest handle inside 28 px; the selected one wins while within reach', () => {
     const h = { hands: [100, 100], head: [130, 100], ball: null };
     expect(hitTest([104, 100], h)).toBe('hands');
     expect(hitTest([128, 102], h)).toBe('head');
     expect(hitTest([115, 100], h, 'head')).toBe('head');
     expect(hitTest([115, 100], h, 'hands')).toBe('hands');
+    expect(hitTest([126, 100], h, 'hands')).toBe('hands'); // nearer the head, but the hands are selected and in reach
+    expect(hitTest([150, 100], h, 'hands')).toBe('head'); // the hands out of reach: the nearest handle
     expect(hitTest([300, 300], h)).toBeNull();
     expect(hitTest([100, 100], { hands: null, head: null, ball: [102, 100] })).toBe('ball');
+  });
+
+  test('hitTest: a selected mark not placed yet is placed where touched, never swapped for a nearby one', () => {
+    // phone test 2026-11 (down the line, address): the ball lies a few px from the clubhead mark
+    const h = { hands: [100, 60], head: [200, 200], ball: null };
+    expect(hitTest([204, 202], h, 'ball')).toBeNull();
+    expect(hitTest([102, 60], h, 'ball')).toBeNull();
+    // once placed, a touch on it drags the ball even with the clubhead nearer
+    const placed = { ...h, ball: [210, 200] };
+    expect(hitTest([204, 200], placed, 'ball')).toBe('ball');
   });
 
   test('clampPt keeps points in the frame', () => {

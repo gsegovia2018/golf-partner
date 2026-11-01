@@ -2,7 +2,7 @@
 // state, and the canvas operations of the editMarks draft, on the owner fixture.
 import { analyze } from '../analyze';
 import {
-  MARKED_KEYS, AUTO_KEYS, statusFromMarks, passCounts, markedFromMarks, nextTodo, resumeKey, passDone,
+  MARKED_KEYS, AUTO_KEYS, statusFromMarks, passCounts, markedFromMarks, nextTodo, resumeKey, passDone, poseTimingUnchecked,
 } from '../markPass';
 import {
   buildDraft, recompute, draftToMarks, markStatus, placeMark, setHidden, confirmMark, confirmPosition, confirmMoves,
@@ -212,5 +212,20 @@ describe('confirmed / pass persistence in marks.json (swing-club-labels/1, exten
     const d = buildDraft(analyze(pose, { ...opts, marks: marksForAnalyze(old) }), pose, old).draft;
     expect(d.status).toEqual({ top: 'confirmed' });
     expect(markStatus(d, c.base, 'top', 'head')).toBe('confirmed');
+  });
+});
+
+describe('poseTimingUnchecked (the "impact timed from your body" notice)', () => {
+  const pass = { state: 'done', skipped: [] };
+  const at = (checkpoint, confirmed) => ({ checkpoint, confirmed, corrected: confirmed });
+  test('only when the ball was not seen', () => {
+    expect(poseTimingUnchecked({ impactFromPose: false }, null)).toBe(false);
+    expect(poseTimingUnchecked({ impactFromPose: true }, null)).toBe(true);
+  });
+  test('gone once the golfer confirmed both the address and the impact frames', () => {
+    const a = { impactFromPose: true };
+    expect(poseTimingUnchecked(a, { pass, frames: [at('address', true), at('impact', true)] })).toBe(false);
+    expect(poseTimingUnchecked(a, { pass, frames: [at('address', true)] })).toBe(true);
+    expect(poseTimingUnchecked(a, { pass: { state: 'done', skipped: ['impact'] }, frames: [at('address', true)] })).toBe(true);
   });
 });

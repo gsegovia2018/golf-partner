@@ -427,7 +427,7 @@ export default {
   'swing.results.approxShort': 'Approximate: {list}',
   'swing.results.approxFps': 'low frame rate',
   'swing.results.approxHeight': 'height not set',
-  'swing.results.approxBall': 'ball not seen',
+  'swing.results.approxBall': 'impact timed from your body',
   'swing.results.planRow': '60-minute practice plan',
   'swing.results.planSub': 'Built around this drill',
   'swing.results.startsAtShort': 'starts at {name}',
