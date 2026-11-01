@@ -25,6 +25,7 @@ jest.mock('../../lib/supabase', () => ({
 jest.mock('expo-linking', () => ({
   getInitialURL: jest.fn(),
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+  createURL: jest.fn((path) => `golf://${path}`),
 }));
 
 jest.mock('expo-auth-session', () => ({
@@ -116,5 +117,20 @@ describe('AuthScreen OAuth callbacks', () => {
 
     expect(getByText('Continue with Google')).toBeTruthy();
     expect(queryByText('Continue with Apple')).toBeNull();
+  });
+
+  test('a rate-limited reset email shows a plain explanation, not the raw Supabase message', async () => {
+    supabase.auth.resetPasswordForEmail.mockResolvedValue({
+      error: { code: 'over_email_send_rate_limit', status: 429, message: 'email rate limit exceeded' },
+    });
+    const { getByText, getByLabelText } = render(wrap(<AuthScreen />));
+
+    fireEvent.changeText(getByLabelText('Email'), 'golfer@example.com');
+    fireEvent.press(getByText('Forgot password?'));
+
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith(
+      'Error',
+      expect.stringMatching(/^Too many emails were sent in the last hour/),
+    ));
   });
 });

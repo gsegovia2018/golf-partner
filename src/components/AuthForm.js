@@ -146,12 +146,6 @@ const makeStyles = (theme) => {
   return {
     ...fields,
     ...StyleSheet.create({
-    passwordRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 0, paddingLeft: 14 },
-    passwordInput: {
-      flex: 1, alignSelf: 'stretch', color: theme.text.primary, fontSize: 16,
-      fontFamily: 'PlusJakartaSans-Medium',
-    },
-    eyeBtn: { width: 46, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
     forgotRow: { minHeight: 40, alignItems: 'flex-end', justifyContent: 'center' },
     forgotText: {
       fontFamily: 'PlusJakartaSans-SemiBold',

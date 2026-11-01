@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import {
-  Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { validateNewPassword, MIN_LENGTH } from '../lib/passwordReset';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +27,7 @@ export default function SetNewPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [touched, setTouched] = useState(false);
   const [focused, setFocused] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { valid, error } = validateNewPassword(password, confirm);
   const fieldError = touched ? error : null;
@@ -69,7 +71,8 @@ export default function SetNewPasswordScreen() {
   };
   const fieldProps = {
     placeholderTextColor: theme.text.secondary,
-    secureTextEntry: true,
+    style: s.passwordInput,
+    secureTextEntry: !showPassword,
     autoCapitalize: 'none',
     autoCorrect: false,
     autoComplete: 'new-password',
@@ -78,32 +81,49 @@ export default function SetNewPasswordScreen() {
     onBlur: blur,
   };
 
+  // One switch for both fields: the eye in either one shows or hides both.
+  const eye = (
+    <TouchableOpacity
+      style={s.eyeBtn}
+      onPress={() => setShowPassword((v) => !v)}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+    >
+      <Feather name={showPassword ? 'eye-off' : 'eye'} size={19} color={theme.text.secondary} />
+    </TouchableOpacity>
+  );
+
   return (
     <AuthShell>
       <Text style={s.heading} accessibilityRole="header">{t('auth.setNewPassword.tagline')}</Text>
 
       <Text style={s.label}>{t('auth.newPassword')}</Text>
-      <TextInput
-        {...fieldProps}
-        style={[s.input, focused === 'password' && s.inputFocused, fieldError && s.inputError]}
-        accessibilityLabel={t('auth.newPassword')}
-        placeholder={t('auth.newPassword.placeholder', { min: MIN_LENGTH })}
-        value={password}
-        onChangeText={setPassword}
-        onFocus={() => setFocused('password')}
-      />
+      <View style={[s.input, s.passwordRow, focused === 'password' && s.inputFocused, fieldError && s.inputError]}>
+        <TextInput
+          {...fieldProps}
+          accessibilityLabel={t('auth.newPassword')}
+          placeholder={t('auth.newPassword.placeholder', { min: MIN_LENGTH })}
+          value={password}
+          onChangeText={setPassword}
+          onFocus={() => setFocused('password')}
+        />
+        {eye}
+      </View>
 
       <Text style={[s.label, s.labelGap]}>{t('auth.confirmPassword')}</Text>
-      <TextInput
-        {...fieldProps}
-        style={[s.input, focused === 'confirm' && s.inputFocused, fieldError && s.inputError]}
-        accessibilityLabel={t('auth.confirmPassword')}
-        placeholder={t('auth.confirmPassword.placeholder')}
-        value={confirm}
-        onChangeText={setConfirm}
-        onFocus={() => setFocused('confirm')}
-        onSubmitEditing={submit}
-      />
+      <View style={[s.input, s.passwordRow, focused === 'confirm' && s.inputFocused, fieldError && s.inputError]}>
+        <TextInput
+          {...fieldProps}
+          accessibilityLabel={t('auth.confirmPassword')}
+          placeholder={t('auth.confirmPassword.placeholder')}
+          value={confirm}
+          onChangeText={setConfirm}
+          onFocus={() => setFocused('confirm')}
+          onSubmitEditing={submit}
+        />
+        {eye}
+      </View>
       {fieldError && <Text style={s.fieldError}>{tr(fieldError)}</Text>}
 
       <TouchableOpacity
