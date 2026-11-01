@@ -40,5 +40,13 @@ export default function makeFieldStyles(theme) {
     },
     btnTextDisabled: { color: theme.isDark ? '#a9b8b0' : '#3f5a4c' },
     fieldBorderColor: { borderColor: fieldBorder },
+    // Password field with the show/hide eye: `input` + `passwordRow` on the
+    // wrapper, `passwordInput` on the TextInput, `eyeBtn` on the toggle.
+    passwordRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 0, paddingLeft: 14 },
+    passwordInput: {
+      flex: 1, alignSelf: 'stretch', color: theme.text.primary, fontSize: 16,
+      fontFamily: 'PlusJakartaSans-Medium',
+    },
+    eyeBtn: { width: 46, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   });
 }

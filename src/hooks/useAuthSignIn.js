@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { parseOAuthError, getWebRedirectTo, getPasswordResetRedirectTo } from '../lib/oauth';
 import { isResetPasswordUrl } from '../lib/passwordReset';
 import { EMAIL_RE } from '../lib/email';
+import { isEmailThrottledError } from '../lib/guestAccount';
 import { t as translate } from '../i18n';
 
 const isWeb = Platform.OS === 'web';
@@ -18,6 +19,14 @@ const isWeb = Platform.OS === 'web';
 // success nothing navigates: AuthContext's onAuthStateChange swaps in the app.
 // `mode` is 'signin' | 'signup'; `onSignedUp` runs after a successful sign-up
 // (the account still needs its email confirmed).
+// Supabase's built-in mailer allows only a few emails an hour for the whole
+// project, so sign-up and "Forgot password?" can hit it; its raw message is
+// English and unhelpful.
+function showAuthError(error) {
+  const message = isEmailThrottledError(error) ? translate('auth.emailThrottled') : error.message;
+  Alert.alert(translate('common.error'), message);
+}
+
 export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -126,7 +135,7 @@ export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
           return;
         }
       }
-      if (error) Alert.alert(translate('common.error'), error.message);
+      if (error) showAuthError(error);
     } finally {
       setLoading(false);
     }
@@ -143,7 +152,7 @@ export default function useAuthSignIn({ mode = 'signin', onSignedUp } = {}) {
       const redirectTo = getPasswordResetRedirectTo(Platform.OS, Linking.createURL('reset-password'));
       const options = redirectTo ? { redirectTo } : undefined;
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), options);
-      if (error) Alert.alert(translate('common.error'), error.message);
+      if (error) showAuthError(error);
       else Alert.alert(translate('auth.checkEmail.title'), translate('auth.resetSent.body'));
     } finally {
       setLoading(false);

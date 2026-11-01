@@ -42,4 +42,5 @@ export default {
   "auth.resetSent.body": "Te hemos enviado a tu correo un enlace para restablecer la contraseña.",
   "auth.newPassword.required": "Escribe una contraseña nueva",
   "auth.newPassword.mismatch": "Las contraseñas no coinciden",
+  "auth.emailThrottled": "Se han enviado demasiados correos en la última hora. Espera un rato y vuelve a intentarlo, o entra con Google.",
 };

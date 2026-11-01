@@ -42,4 +42,5 @@ export default {
   "auth.resetSent.body": "We sent a password reset link to your email.",
   "auth.newPassword.required": "Enter a new password",
   "auth.newPassword.mismatch": "Passwords do not match",
+  "auth.emailThrottled": "Too many emails were sent in the last hour. Wait a while and try again, or continue with Google.",
 };

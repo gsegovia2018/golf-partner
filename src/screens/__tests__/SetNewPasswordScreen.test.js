@@ -108,4 +108,18 @@ describe('SetNewPasswordScreen', () => {
 
     await waitFor(() => expect(mockClearPasswordRecovery).toHaveBeenCalled());
   });
+
+  test('the eye shows and hides both password fields', () => {
+    const { getAllByLabelText, getByLabelText } = render(<SetNewPasswordScreen />);
+
+    expect(getByLabelText('New password').props.secureTextEntry).toBe(true);
+    expect(getByLabelText('Confirm new password').props.secureTextEntry).toBe(true);
+
+    fireEvent.press(getAllByLabelText('Show password')[0]);
+    expect(getByLabelText('New password').props.secureTextEntry).toBe(false);
+    expect(getByLabelText('Confirm new password').props.secureTextEntry).toBe(false);
+
+    fireEvent.press(getAllByLabelText('Hide password')[1]);
+    expect(getByLabelText('New password').props.secureTextEntry).toBe(true);
+  });
 });
