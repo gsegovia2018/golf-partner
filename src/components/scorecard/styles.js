@@ -1,5 +1,6 @@
 import { Platform, StyleSheet } from 'react-native';
 import { semantic } from '../../theme/tokens';
+import { circleText } from '../../theme/circleText';
 
 // Shared StyleSheet for the scorecard screen and the scorecard/* components.
 export function makeScorecardStyles(theme) {
@@ -1419,6 +1420,8 @@ export function makeScorecardStyles(theme) {
       // solid eagle chip).
       position: 'relative',
       zIndex: 1,
+      // Android's font padding pushed the digit ~2 dp below the chip's centre.
+      ...circleText,
     },
     soloNineStrokeInputEmpty: {
       backgroundColor: theme.isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.035)',
@@ -1436,6 +1439,7 @@ export function makeScorecardStyles(theme) {
       // Same stacking fix as soloNineStrokeInput for the view-only twin.
       position: 'relative',
       zIndex: 1,
+      ...circleText,
     },
     // The 30px box that keeps the stroke digit and its result chip
     // concentric; the pip lane stacks below it inside the cell.
