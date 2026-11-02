@@ -1,7 +1,11 @@
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render as rtlRender } from '@testing-library/react-native';
 import LeagueListSection from '../LeagueListSection';
+import { ThemeProvider } from '../../theme/ThemeContext';
 import { setLanguagePref } from '../../i18n';
+
+// The section takes its card colours from the theme.
+const render = (ui) => rtlRender(<ThemeProvider>{ui}</ThemeProvider>);
 
 describe('LeagueListSection', () => {
   test('renders nothing when I am in no league', () => {
