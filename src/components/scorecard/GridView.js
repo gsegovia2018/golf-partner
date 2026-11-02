@@ -2,7 +2,7 @@
 // same front-nine / back-nine block layout (ScorecardTable). Best Ball adds a
 // LiveMatchStrip below the table; there is no longer a separate "classic"
 // horizontally-scrolling grid for 4-player Best Ball.
-import React, { useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, useWindowDimensions } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useTheme } from '../../theme/ThemeContext';
@@ -117,6 +117,128 @@ function shortPlayerLabel(player, isSolo) {
   return name.slice(0, 3).toUpperCase();
 }
 
+// Rows roll top to bottom, this far apart.
+const ROW_STEP_MS = 28;
+
+// One player's row of a nine. Both strips (strokes: the editable entry over
+// its score-result chips; points) are built once and roll as a whole, with
+// the handicap dots in a static layer on top. Moving two views per row
+// instead of two per cell, and leaving the text alone on a switch, is what
+// keeps a 4-player card inside a 120 Hz frame on Android. Both strips share
+// the digit-box + pip-lane anatomy, so the row keeps its height.
+const PlayerRow = memo(function PlayerRow({
+  player, isFirst, holes, scores, pts, handicap, holeCount, displayMode, rollIndex,
+  cellEditable, onSetScore, registerRef, focusNext, currentHole, rowLabel, isMe,
+  labelW, holeW, aggW, labelFontSize, theme, s, t,
+}) {
+  const strips = useMemo(() => {
+    const holeCell = { width: holeW };
+    const aggCell = { width: aggW };
+    const ptsColorFor = (p) => (p == null ? theme.text.muted
+      : p >= 3 ? theme.scoreColor('excellent')
+        : p === 2 ? theme.text.primary // par is mid: ink, not green
+          : p === 1 ? theme.scoreColor('neutral')
+            : theme.scoreColor('poor'));
+    const row = scores[player.id] ?? {};
+    const sumStr = holes.reduce((acc, h) => (row[h.number] ? acc + row[h.number] : acc), 0);
+    const sumPts = holes.reduce((acc, h) => acc + (pts[h.number] ?? 0), 0);
+    const strokesCell = (h) => {
+      const rawScore = row[h.number];
+      const cellValue = rawScore != null ? String(rawScore) : '';
+      const shape = classifyHoleResult(h.par, rawScore);
+      // Eagle chips are solid-filled, so their digit flips to the
+      // inverse text colour to stay legible.
+      const digitOnSolid = shape === 'eagle' && { color: theme.text.inverse };
+      return (
+        <View style={[s.soloNineDigitBox, currentHole === h.number && s.soloNineDigitBoxCurrent]}>
+          <ScoreShape result={shape} theme={theme} s={s} />
+          {cellEditable ? (
+            <TextInput
+              ref={(el) => registerRef(player.id, h.number, el)}
+              style={[s.soloNineStrokeInput, rawScore == null && s.soloNineStrokeInputEmpty, digitOnSolid]}
+              accessibilityLabel={t('shared.grid.strokesFor', { name: player.name, hole: h.number })}
+              keyboardType="numeric"
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              maxLength={2}
+              value={cellValue}
+              onChangeText={(v) => onSetScore(player.id, h.number, v)}
+              placeholder="·"
+              placeholderTextColor={theme.text.muted}
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => focusNext(player.id, h.number)}
+            />
+          ) : (
+            // Plain Text keeps centering reliable in view-only mode — a
+            // readonly TextInput can pick up browser user-agent styles that
+            // override textAlign on web. The digit box already centers via
+            // flex, so the Text only needs the typographic styles.
+            <Text style={[s.soloNineStrokeText, digitOnSolid]} numberOfLines={1}>{cellValue || '·'}</Text>
+          )}
+        </View>
+      );
+    };
+    const pointsCell = (h) => (
+      <View style={[s.soloNineDigitBox, currentHole === h.number && s.soloNineDigitBoxCurrent]}>
+        <Text numberOfLines={1} style={[s.soloNinePtsText, { color: ptsColorFor(pts[h.number] ?? null) }]}>{pts[h.number] ?? '·'}</Text>
+      </View>
+    );
+    const strip = (cell, total) => (
+      <View style={s.soloNineStrip}>
+        {holes.map((h) => (
+          <View key={h.number} style={[s.soloNineCell, holeCell, s.soloNineYouCell]}>
+            {cell(h)}
+            {/* The pip lane: the dots themselves sit in the static layer. */}
+            <View style={s.soloNineExtraDots} />
+          </View>
+        ))}
+        <View style={[s.soloNineCell, aggCell, s.soloNineAggDivider]}>{total}</View>
+      </View>
+    );
+    return {
+      faces: {
+        strokes: strip(strokesCell, <CountUpText numberOfLines={1} style={s.soloNineAggStrokesTotal}>{sumStr || '·'}</CountUpText>),
+        points: strip(pointsCell, <CountUpText numberOfLines={1} style={s.soloNineAggPtsTotal}>{sumPts}</CountUpText>),
+      },
+      dots: (
+        <View style={[s.soloNineStrip, s.soloNineDotsLayer]} pointerEvents="none">
+          {holes.map((h) => {
+            const extra = calcExtraShots(handicap, h.strokeIndex, holeCount);
+            return (
+              <View key={h.number} style={[s.soloNineCell, holeCell]}>
+                <View style={s.soloNineDigitSpacer} />
+                <View style={s.soloNineExtraDots}>
+                  {extra > 0 && Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
+                    <View key={i} testID={`hcp-dot-${player.id}-h${h.number}`} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
+                  ))}
+                </View>
+              </View>
+            );
+          })}
+          <View style={aggCell} />
+        </View>
+      ),
+    };
+  }, [player, holes, scores, pts, handicap, holeCount, cellEditable, onSetScore, registerRef, focusNext, currentHole, holeW, aggW, theme, s, t]);
+
+  // Highlight only the viewer's own row — tinting every player row turns
+  // the "you" cue into background noise on a 4-player card.
+  const rowChrome = [s.soloNineRow, isMe && s.soloNineRowYou, !isFirst && s.soloNinePlayerSeparator];
+  return (
+    <View style={rowChrome}>
+      <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, { width: labelW }, s.soloNineRowLabel, s.soloNineYouLabel, { fontSize: labelFontSize }]}>
+        {rowLabel}
+      </Text>
+      <View>
+        {/* A current-hole glow must not be clipped, so that row rolls unclipped. */}
+        <CellRoll mode={displayMode} index={rollIndex} step={ROW_STEP_MS} clip={currentHole == null} faces={strips.faces} />
+        {strips.dots}
+      </View>
+    </View>
+  );
+});
+
 function NineBlock({
   holes, label, aggLabel, players, scores, onSetScore, editable,
   playerHandicaps, mode, round, theme, s, columns, meId, displayMode,
@@ -133,152 +255,39 @@ function NineBlock({
 
   // Refs for every stroke-entry cell, keyed `playerId:holeNumber`, plus the
   // flat tab order (player by player, hole by hole) so the keyboard "next"
-  // key advances focus through the card.
+  // key advances focus through the card. Both callbacks are stable so the
+  // memoised rows never rebuild for them.
   const cellRefs = useRef({});
-  const cellKey = (playerId, holeNumber) => `${playerId}:${holeNumber}`;
-  const focusOrder = [];
-  displayPlayers.forEach((p) => holes.forEach((h) => focusOrder.push(cellKey(p.id, h.number))));
-  const focusNext = (playerId, holeNumber) => {
-    const idx = focusOrder.indexOf(cellKey(playerId, holeNumber));
-    if (idx < 0 || idx + 1 >= focusOrder.length) return;
-    const next = cellRefs.current[focusOrder[idx + 1]];
+  const focusOrder = useRef([]);
+  focusOrder.current = [];
+  displayPlayers.forEach((p) => holes.forEach((h) => focusOrder.current.push(`${p.id}:${h.number}`)));
+  const registerRef = useCallback((playerId, holeNumber, el) => { cellRefs.current[`${playerId}:${holeNumber}`] = el; }, []);
+  const focusNext = useCallback((playerId, holeNumber) => {
+    const order = focusOrder.current;
+    const idx = order.indexOf(`${playerId}:${holeNumber}`);
+    if (idx < 0 || idx + 1 >= order.length) return;
+    const next = cellRefs.current[order[idx + 1]];
     if (next) next.focus();
-  };
+  }, []);
 
-  // Per-hole per-player points, computed once per block via scoreModel. The
-  // displayed numbers are identical to the previous inline branching — the
-  // scoreModel wraps the exact same scoring engines.
-  const holePtsByHole = {};
-  for (const h of holes) {
-    holePtsByHole[h.number] = holePoints({
-      mode, hole: h, players, scores, handicaps: playerHandicaps, round,
-    });
-  }
-  const ptsFor = (hole, player) => holePtsByHole[hole.number]?.[player.id] ?? null;
-
-  const ptsColorFor = (pts) => pts == null ? theme.text.muted
-    : pts >= 3 ? theme.scoreColor('excellent')
-    : pts === 2 ? theme.text.primary // par is mid: ink, not green
-    : pts === 1 ? theme.scoreColor('neutral')
-    : theme.scoreColor('poor');
+  // Per-hole per-player points, computed once per block via scoreModel and
+  // regrouped per player ({ [hole]: pts }) so each row gets a stable object.
+  const ptsByPlayer = useMemo(() => {
+    const out = Object.fromEntries(players.map((p) => [p.id, {}]));
+    for (const h of holes) {
+      const byPlayer = holePoints({ mode, hole: h, players, scores, handicaps: playerHandicaps, round });
+      for (const p of players) out[p.id][h.number] = byPlayer?.[p.id] ?? null;
+    }
+    return out;
+  }, [mode, holes, players, scores, playerHandicaps, round]);
 
   const sumPar = holes.reduce((acc, h) => acc + h.par, 0);
-  // A row's total rolls right after its last hole, as part of the same wave.
-  const lastIndex = holes.length ? holes[holes.length - 1].number : 0;
-
-  const ptsStyle = (pts) => [s.soloNinePtsText, { color: ptsColorFor(pts) }];
+  // The back nine's rows roll after the front nine's.
+  const rollBase = holes.length && holes[0].number > 9 ? displayPlayers.length : 0;
 
   const labelCell = { width: labelW };
   const holeCell = { width: holeW };
   const aggCell = { width: aggW };
-
-  const renderPlayerRows = (player, isFirst) => {
-    const handicap = playerHandicaps[player.id] ?? player.handicap ?? 0;
-    const sumStr = holes.reduce((acc, h) => {
-      const v = scores[player.id]?.[h.number];
-      return v ? acc + v : acc;
-    }, 0);
-    const sumPts = holes.reduce((acc, h) => acc + (ptsFor(h, player) ?? 0), 0);
-    const rowLabel = (isSolo && soloRowLabel) || shortPlayerLabel(player, isSolo);
-    // Highlight only the viewer's own row — tinting every player row turns
-    // the "you" cue into background noise on a 4-player card.
-    const isMe = isSolo || player.id === meId;
-    const rowChrome = [s.soloNineRow, isMe && s.soloNineRowYou, !isFirst && s.soloNinePlayerSeparator];
-
-    // One row for both modes: every cell holds its strokes face (the editable
-    // entry, over its score-result chip) and its points face, and CellRoll
-    // shows the one for displayMode. Both faces share the digit-box + pip-lane
-    // anatomy, so the handicap "strokes received" dots stay put and the row
-    // keeps its height across the toggle.
-    return (
-      <View key={player.id} style={rowChrome}>
-        <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineRowLabel, s.soloNineYouLabel, labelFont]}>
-          {rowLabel}
-        </Text>
-        {holes.map((h) => {
-          const extra = calcExtraShots(handicap, h.strokeIndex, holeCount);
-          const cellEditable = editable ? editable(player.id) !== false : true;
-          const rawScore = scores[player.id]?.[h.number];
-          const cellValue = rawScore != null ? String(rawScore) : '';
-          const shape = classifyHoleResult(h.par, rawScore);
-          const pts = ptsFor(h, player);
-          // Eagle chips are solid-filled, so their digit flips to the
-          // inverse text colour to stay legible.
-          const digitOnSolid = shape === 'eagle' && { color: theme.text.inverse };
-          const isCurrent = currentHoleByPlayer?.[player.id] === h.number;
-          const digitBox = [s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent];
-          return (
-            <View key={h.number} style={[s.soloNineCell, holeCell, s.soloNineYouCell]}>
-              {/* Digit box: chip + digit share this 30px box so they stay
-                  concentric; the handicap pips get their own lane below it
-                  and can never collide with the chip. A current-hole glow
-                  must not be clipped, so that cell rolls unclipped. */}
-              <CellRoll
-                mode={displayMode}
-                index={h.number - 1}
-                clip={!isCurrent}
-                marks={{ strokes: <View style={s.soloNineDigitBox}><ScoreShape result={shape} theme={theme} s={s} /></View> }}
-                faces={{
-                  strokes: (
-                    <View style={digitBox}>
-                      {cellEditable ? (
-                        <TextInput
-                          ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
-                          style={[s.soloNineStrokeInput, rawScore == null && s.soloNineStrokeInputEmpty, digitOnSolid]}
-                          accessibilityLabel={t('shared.grid.strokesFor', { name: player.name, hole: h.number })}
-                          keyboardType="numeric"
-                          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                          selectionColor={theme.accent.primary}
-                          maxLength={2}
-                          value={cellValue}
-                          onChangeText={(v) => onSetScore(player.id, h.number, v)}
-                          placeholder="·"
-                          placeholderTextColor={theme.text.muted}
-                          returnKeyType="next"
-                          blurOnSubmit={false}
-                          onSubmitEditing={() => focusNext(player.id, h.number)}
-                        />
-                      ) : (
-                        // Plain Text keeps centering reliable in view-only mode —
-                        // a readonly TextInput can pick up browser user-agent
-                        // styles that override textAlign on web. The digit box
-                        // already centers via flex, so the Text only needs the
-                        // typographic styles.
-                        <Text style={[s.soloNineStrokeText, digitOnSolid]} numberOfLines={1}>
-                          {cellValue || '·'}
-                        </Text>
-                      )}
-                    </View>
-                  ),
-                  points: (
-                    <View style={digitBox}>
-                      <Text numberOfLines={1} style={ptsStyle(pts)}>{pts ?? '·'}</Text>
-                    </View>
-                  ),
-                }}
-              />
-              {/* Always rendered so every cell is the same height. */}
-              <View style={s.soloNineExtraDots} pointerEvents="none">
-                {extra > 0 && Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
-                  <View key={i} testID={`hcp-dot-${player.id}-h${h.number}`} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
-                ))}
-              </View>
-            </View>
-          );
-        })}
-        <View style={[s.soloNineCell, aggCell, s.soloNineAggDivider]}>
-          <CellRoll
-            mode={displayMode}
-            index={lastIndex}
-            faces={{
-              strokes: <CountUpText numberOfLines={1} style={s.soloNineAggStrokesTotal}>{sumStr || '·'}</CountUpText>,
-              points: <CountUpText numberOfLines={1} style={s.soloNineAggPtsTotal}>{sumPts}</CountUpText>,
-            }}
-          />
-        </View>
-      </View>
-    );
-  };
 
   return (
     <View style={s.soloNineBlock}>
@@ -313,7 +322,34 @@ function NineBlock({
         <Text style={[s.soloNineCell, aggCell, s.soloNineAggDivider]} />
       </View>
 
-      {displayPlayers.map((player, i) => renderPlayerRows(player, i === 0))}
+      {displayPlayers.map((player, i) => (
+        <PlayerRow
+          key={player.id}
+          player={player}
+          isFirst={i === 0}
+          holes={holes}
+          scores={scores}
+          pts={ptsByPlayer[player.id]}
+          handicap={playerHandicaps[player.id] ?? player.handicap ?? 0}
+          holeCount={holeCount}
+          displayMode={displayMode}
+          rollIndex={rollBase + i}
+          cellEditable={editable ? editable(player.id) !== false : true}
+          onSetScore={onSetScore}
+          registerRef={registerRef}
+          focusNext={focusNext}
+          currentHole={currentHoleByPlayer?.[player.id] ?? null}
+          rowLabel={(isSolo && soloRowLabel) || shortPlayerLabel(player, isSolo)}
+          isMe={isSolo || player.id === meId}
+          labelW={labelW}
+          holeW={holeW}
+          aggW={aggW}
+          labelFontSize={labelFontSize}
+          theme={theme}
+          s={s}
+          t={t}
+        />
+      ))}
     </View>
   );
 }
@@ -360,16 +396,19 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
   // whole card fits in one screenful without scrolling.
   const sideBySide = width >= 720;
 
-  const holes = round.holes ?? [];
-  const front = holes.slice(0, 9);
-  const back = holes.slice(9, 18);
+  // Stable across a Strokes | Points switch, so the memoised rows keep their text.
+  const holes = useMemo(() => round.holes ?? [], [round.holes]);
+  const front = useMemo(() => holes.slice(0, 9), [holes]);
+  const back = useMemo(() => holes.slice(9, 18), [holes]);
   const hasBack = back.length > 0;
   // Scramble rows pass a team-handicap override (unitId -> team handicap) —
   // otherwise fall back to the round's individual player handicaps.
   // Match play modes stroke off the per-duel difference — show the dots
   // where the net comparison actually grants them.
-  const playerHandicaps = handicapsOverride
-    ?? matchPlayEffectiveHandicaps(mode, round, players);
+  const playerHandicaps = useMemo(
+    () => handicapsOverride ?? matchPlayEffectiveHandicaps(mode, round, players),
+    [handicapsOverride, mode, round, players],
+  );
   const displayPlayers = playersMeFirst(players, meId);
 
   // Block inner width: viewport minus content padding (14*2) minus card
@@ -379,7 +418,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
     const available = width - 14 * 2 - 2 - 2 * 2 - 4 * 2;
     return sideBySide ? (available - 16) / 2 : available;
   })();
-  const columns = getSoloColumns(innerWidth);
+  const columns = useMemo(() => getSoloColumns(innerWidth), [innerWidth]);
 
   const coursePar = holes.reduce((acc, h) => acc + h.par, 0);
   const isSolo = players.length === 1;
