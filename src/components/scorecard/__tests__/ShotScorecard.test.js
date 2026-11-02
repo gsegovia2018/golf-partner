@@ -1,9 +1,13 @@
 import React from 'react';
 import { render, act, fireEvent, within } from '@testing-library/react-native';
+import { Text } from 'react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import ShotScorecard from '../ShotScorecard';
 import { scorecardModel } from '../../../store/scorecardView';
 import { weekendFixture } from '../../../store/__tests__/fixtures/gameStatsFixture';
+
+// A Strokes | Points cell's test ID marks the face on show: read its figure.
+const faceText = (el) => el.findByType(Text).props.children;
 
 const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
@@ -51,7 +55,7 @@ test('match play points read untinted hole results', async () => {
   const card = scorecardModel({ round: round0(), players: roster().slice(0, 2), meId: 'fx-me', mode: 'matchplay' });
   const { getByTestId } = await show(card, 'points');
   const out = within(getByTestId('ledger-out'));
-  expect(['0', '1']).toContain(out.getByTestId('card-fx-me-cell-1').props.children);
+  expect(['0', '1']).toContain(faceText(out.getByTestId('card-fx-me-cell-1')));
 });
 
 test('one player: score and shot rows always shown, a totals line, no name buttons', async () => {

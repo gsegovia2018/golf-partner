@@ -1,9 +1,13 @@
 import React from 'react';
 import { render, fireEvent, act, within, waitFor } from '@testing-library/react-native';
+import { Text } from 'react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import { setLanguagePref } from '../../i18n';
 import StatsScreen from '../StatsScreen';
 import { weekendFixture } from '../../store/__tests__/fixtures/gameStatsFixture';
+
+// A Strokes | Points cell's test ID marks the face on show: read its figure.
+const faceText = (el) => el.findByType(Text).props.children;
 import { bestBallGameFixture } from '../../store/__tests__/fixtures/bestBallGameFixture';
 
 // loadTournament() resolves in a microtask after the first render; flush it.
@@ -204,16 +208,16 @@ describe('Rounds tab', () => {
     fireEvent.press(getByTestId('tab-rounds'));
     fireEvent.press(getByTestId('round-chip-2'));
     const out = () => within(getByTestId('ledger-out'));
-    expect(out().getByTestId('card-fx-me-cell-1').props.children).toBe(6);
-    expect(getByTestId('card-fx-me-total-out').props.children).toBe('54');
-    expect(getByTestId('card-fx-me-total-in').props.children).toBe('48');
+    expect(faceText(out().getByTestId('card-fx-me-cell-1'))).toBe(6);
+    expect(faceText(getByTestId('card-fx-me-total-out'))).toBe('54');
+    expect(faceText(getByTestId('card-fx-me-total-in'))).toBe('48');
     fireEvent.press(getByTestId('card-mode-points'));
-    expect(out().getByTestId('card-fx-me-cell-1').props.children).toBe('2');
+    expect(faceText(out().getByTestId('card-fx-me-cell-1'))).toBe('2');
     // The totals count to their points value.
     await waitFor(() => {
-      expect(getByTestId('card-fx-me-total-out').props.children).toBe('8');
-      expect(getByTestId('card-fx-nac-total-out').props.children).toBe('13');
-      expect(getByTestId('card-fx-me-total-in').props.children).toBe('14');
+      expect(faceText(getByTestId('card-fx-me-total-out'))).toBe('8');
+      expect(faceText(getByTestId('card-fx-nac-total-out'))).toBe('13');
+      expect(faceText(getByTestId('card-fx-me-total-in'))).toBe('14');
     });
   });
 
@@ -604,12 +608,12 @@ describe('a one-round game', () => {
     expect(getByTestId('ledger-out')).toBeTruthy();
     expect(getByTestId('ledger-in')).toBeTruthy();
     // Hole 1: 4 strokes on a par 4 with a handicap stroke = 3 points.
-    expect(ledger.getByTestId('ledger-cell-1').props.children).toBe(4);
+    expect(faceText(ledger.getByTestId('ledger-cell-1'))).toBe(4);
     expect(ledger.getByTestId('ledger-total').props.children).toBe('102 strokes · +30 · 36 putts');
     expect(within(getByTestId('ledger-out')).getByText('4/7')).toBeTruthy(); // fairways on the front nine
     fireEvent.press(getByTestId('ledger-mode-points'));
     const after = within(getByTestId('hole-ledger'));
-    expect(after.getByTestId('ledger-cell-1').props.children).toBe('3');
+    expect(faceText(after.getByTestId('ledger-cell-1'))).toBe('3');
     expect(after.getByTestId('ledger-total').props.children).toMatch(/^\d+ points · 102 strokes · 36 putts$/);
     expect(after.getByText(/holes of 2\+ points \(H\d+–H\d+\)$/)).toBeTruthy();
   });

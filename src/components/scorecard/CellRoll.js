@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { memo, useLayoutEffect, useRef } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withDelay, withTiming, useReducedMotion,
@@ -16,6 +16,10 @@ import { duration, ease } from '../../theme/motion';
 // cost two React commits per cell, staggered by the wave: on Android that was
 // ~60 view batches per switch landing mid-animation, and the roll stuttered.
 //
+// Pass `faces` / `marks` built once (memoised by the caller): a switch then
+// re-renders only the two face wrappers, never the text inside them, which
+// Android would otherwise re-measure across the whole card in one frame.
+// `testID` goes on the face on show.
 // `faces` / `marks` are { strokes, points }; `index` is the figure's place in
 // the round (a nine's total comes after its last hole), so a card rolls as a
 // short wave from hole 1 on. `clip={false}` leaves the box unclipped, for a
@@ -32,7 +36,7 @@ const MODES = ['strokes', 'points'];
 // sharper (it "re-focuses"). Keeping the layer at rest draws it one way only.
 const steadyLayer = Platform.OS === 'web' ? { willChange: 'transform, opacity' } : null;
 
-function Face({ k, on, active, p, h, mark, children }) {
+const Face = memo(function Face({ k, on, active, p, h, mark, testID, children }) {
   // Shown face: fades in from below. Other face: leaves upward and waits,
   // invisible, above the cell (it jumps below unseen when it next enters).
   const st = useAnimatedStyle(() => {
@@ -50,6 +54,7 @@ function Face({ k, on, active, p, h, mark, children }) {
           these props straight to the DOM. */}
       <View
         style={styles.face}
+        testID={on ? testID : undefined}
         pointerEvents={on ? 'box-none' : 'none'}
         accessibilityElementsHidden={!on}
         importantForAccessibility={on ? 'auto' : 'no-hide-descendants'}
@@ -60,9 +65,11 @@ function Face({ k, on, active, p, h, mark, children }) {
       </View>
     </Animated.View>
   );
-}
+});
 
-export default function CellRoll({ mode, index = 0, faces, marks = {}, clip = true, style }) {
+const NO_MARKS = {};
+
+function CellRoll({ mode, index = 0, faces, marks = NO_MARKS, clip = true, style, testID }) {
   const reduced = useReducedMotion();
   const idx = Math.max(0, MODES.indexOf(mode));
   const last = useRef(idx);
@@ -86,13 +93,15 @@ export default function CellRoll({ mode, index = 0, faces, marks = {}, clip = tr
       onLayout={(e) => { h.value = e.nativeEvent.layout.height; }}
     >
       {MODES.map((m, k) => (
-        <Face key={m} k={k} on={k === idx} active={active} p={p} h={h} mark={marks[m]}>
+        <Face key={m} k={k} on={k === idx} active={active} p={p} h={h} mark={marks[m]} testID={testID}>
           {faces[m]}
         </Face>
       ))}
     </View>
   );
 }
+
+export default memo(CellRoll);
 
 const styles = StyleSheet.create({
   box: { alignSelf: 'stretch' },

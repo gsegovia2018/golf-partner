@@ -15,7 +15,7 @@
 //
 // `tone="deep"` draws it on the deep-green hero (the Home cards): text,
 // accent and fills come from the onDeep set and the score tints from deepHeat.
-import React, { useMemo, useState } from 'react';
+import React, { memo, useCallback, useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
@@ -65,10 +65,8 @@ function deepHeat(level) {
 // { strokes, points } from one maker, for CellRoll's faces and marks.
 const rollFaces = (make) => ({ strokes: make('strokes'), points: make('points') });
 
-// `roll` ({ mode, index, totals: { strokes, points } }) makes the total roll
-// with the score cells on a Strokes | Points switch; each mode's figure still
-// counts up when it changes.
-function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID, labelStyle, roll }) {
+// `totalNode` replaces the plain total (the score rows' rolling totals).
+function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID, labelStyle, totalNode }) {
   return (
     <View style={[s.row, style]}>
       {typeof label === 'string' ? <Text style={[s.label, labelStyle]} numberOfLines={1}>{label}</Text> : label}
@@ -83,19 +81,7 @@ function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint,
         </View>
       ))}
       <View style={[s.total, { height }, totalStyle]}>
-        {roll ? (
-          <CellRoll
-            mode={roll.mode}
-            index={roll.index}
-            style={s.rollBox}
-            faces={rollFaces((m) => (
-              <CountUpText style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={m === roll.mode ? totalTestID : undefined}>{roll.totals[m] ?? '–'}</CountUpText>
-            ))}
-          />
-        ) : (
-          <Text style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={totalTestID}>{total ?? '–'}</Text>
-        )}
-      </View>
+        {totalNode ?? <Text style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={totalTestID}>{total ?? '–'}</Text>}      </View>
     </View>
   );
 }
@@ -186,6 +172,35 @@ function shotRows({ row, nine, s, theme, t, sub, idp }) {
   ];
 }
 
+// The rows that never change with Strokes | Points, memoised so a switch
+// leaves their text alone (Android re-measures every re-rendered text).
+const ShotRowsBlock = memo(function ShotRowsBlock(props) {
+  return <>{shotRows(props)}</>;
+});
+
+const NineHead = memo(function NineHead({ head, s, t, currentHole, wide }) {
+  const ring = (number) => (number === currentHole ? s.current : null);
+  return (
+    <>
+      <Row
+        s={s}
+        label={t('stats.game.ledger.hole')}
+        cells={head.holes.map((h) => ({ key: h.number, style: ring(h.number), child: <Text style={[s.dim, h.number === currentHole && s.currentText]}>{h.number}</Text> }))}
+        total={t(`stats.game.ledger.${head.key}`)}
+        totalStyle={s.totalHead}
+        labelStyle={wide}
+      />
+      <Row
+        s={s}
+        label={t('stats.game.ledger.par')}
+        cells={head.holes.map((h) => ({ key: h.number, child: <Text style={s.dim}>{h.par}</Text> }))}
+        total={head.par}
+        labelStyle={wide}
+      />
+    </>
+  );
+});
+
 function NameButton({ row, open, onToggle, s, theme, t }) {
   if (!row.canExpand) {
     return <Text style={[s.label, s.name, s.nameIdle]} numberOfLines={1} testID={`card-name-${row.id}`}>{row.label}</Text>;
@@ -211,53 +226,97 @@ function NameButton({ row, open, onToggle, s, theme, t }) {
   );
 }
 
-function scoreCells({ row, nine, mode, card, s, theme, t, idp, heat }) {
-  const isPoints = mode === 'points';
+// Its props are stable across a switch, so the name keeps its text.
+const NameButtonMemo = memo(NameButton);
+
+// A score row's cells for both modes at once: each cell's CellRoll faces and
+// marks, its a11y label and handicap dots per mode. Nothing here depends on
+// the mode on show, so the row memoises it and a switch re-renders none of
+// the text.
+function scoreCells({ row, nine, card, s, theme, t, idp, heat, currentHole }) {
   return nine.cells.map((c) => {
     if (c.strokes == null) {
-      return { key: c.number, style: s.empty, a11y: t('stats.game.card.notPlayed') };
+      const a11y = t('stats.game.card.notPlayed');
+      return { key: c.number, empty: true, style: c.number === currentHole ? [s.empty, s.currentCell] : s.empty, a11y: { strokes: a11y, points: a11y } };
     }
     const tileOf = (m) => {
       const lv = m === 'points' && !card.pointsTinted ? null : cellLevel(m, c);
       return { level: lv, ...(lv == null ? { bg: 'transparent', fg: theme.text.primary } : heat(lv)) };
     };
-    const { level, fg } = tileOf(mode);
-    const tiles = { strokes: tileOf('strokes'), points: tileOf('points') };
+    const tiles = rollFaces(tileOf);
     const values = { strokes: c.strokes, points: formatNumber(c.points ?? 0) };
-    const base = isPoints
-      ? t('stats.game.ledger.a11y.points', { hole: c.number, count: c.points ?? 0 })
-      : t('stats.game.ledger.a11y.strokes', { hole: c.number, count: c.strokes, result: t(`stats.game.ledger.result.${c.gross}`) });
-    const withStrokes = c.extra > 0 ? `${base}, ${t('stats.game.ledger.a11y.hcpStrokes', { count: c.extra })}` : base;
+    const a11yOf = (m) => {
+      const base = m === 'points'
+        ? t('stats.game.ledger.a11y.points', { hole: c.number, count: c.points ?? 0 })
+        : t('stats.game.ledger.a11y.strokes', { hole: c.number, count: c.strokes, result: t(`stats.game.ledger.result.${c.gross}`) });
+      const withStrokes = c.extra > 0 ? `${base}, ${t('stats.game.ledger.a11y.hcpStrokes', { count: c.extra })}` : base;
+      return card.solo ? withStrokes : t('stats.game.ledger.a11y.who', { name: row.player.name ?? row.label, text: withStrokes });
+    };
     // Dots read on every tint; on the solid accent cell they take its text colour.
-    const dot = level === 4 ? fg : theme.accent.primary;
+    const dotsOf = (m) => (c.extra > 0 ? (
+      <View style={s.dots} pointerEvents="none">
+        {Array.from({ length: Math.min(c.extra, 2) }).map((_, i) => (
+          <View key={i} style={[s.dot, { backgroundColor: tiles[m].level === 4 ? tiles[m].fg : theme.accent.primary }]} testID={`${idp}-hcp-${c.number}`} />
+        ))}
+      </View>
+    ) : null);
     return {
       key: c.number,
       // The tint is CellRoll's mark: it rolls with its figure.
-      style: s.rollCell,
-      a11y: card.solo ? withStrokes : t('stats.game.ledger.a11y.who', { name: row.player.name ?? row.label, text: withStrokes }),
-      child: (
-        <>
-          <CellRoll
-            mode={mode}
-            index={c.number - 1}
-            style={s.rollBox}
-            faces={rollFaces((m) => (
-              <Text style={[s.value, { color: tiles[m].fg }]} testID={m === mode ? `${idp}-cell-${c.number}` : undefined} numberOfLines={1}>{values[m]}</Text>
-            ))}
-            marks={rollFaces((m) => (tiles[m].level == null ? null : <View style={[s.rollFace, { backgroundColor: tiles[m].bg }]} />))}
-          />
-          {c.extra > 0 && (
-            <View style={s.dots} pointerEvents="none">
-              {Array.from({ length: Math.min(c.extra, 2) }).map((_, i) => (
-                <View key={i} style={[s.dot, { backgroundColor: dot }]} testID={`${idp}-hcp-${c.number}`} />
-              ))}
-            </View>
-          )}
-        </>
-      ),
+      style: c.number === currentHole ? [s.rollCell, s.currentCell] : s.rollCell,
+      a11y: rollFaces(a11yOf),
+      index: c.number - 1,
+      testID: `${idp}-cell-${c.number}`,
+      faces: rollFaces((m) => <Text style={[s.value, { color: tiles[m].fg }]} numberOfLines={1}>{values[m]}</Text>),
+      marks: rollFaces((m) => (tiles[m].level == null ? null : <View style={[s.rollFace, { backgroundColor: tiles[m].bg }]} />)),
+      dots: rollFaces(dotsOf),
     };
   });
 }
+
+// One player's score row. Its cells, faces and totals are built once per
+// card (not per mode), so on a switch only CellRoll's face wrappers, the a11y
+// labels and the dot colours update.
+const ScoreRow = memo(function ScoreRow({
+  row, nine, headKey, mode, card, s, theme, t, idp, heat, currentHole, label, style, wide,
+}) {
+  const built = useMemo(
+    () => scoreCells({ row, nine, card, s, theme, t, idp, heat, currentHole }),
+    [row, nine, card, s, theme, t, idp, heat, currentHole],
+  );
+  const total = useMemo(() => {
+    const of = (m) => {
+      const v = m === 'points' ? nine.points : nine.strokes;
+      return v == null ? '–' : formatNumber(v);
+    };
+    return {
+      index: nine.cells.length ? nine.cells[nine.cells.length - 1].number : 0,
+      faces: rollFaces((m) => <CountUpText style={s.totalText} numberOfLines={1} adjustsFontSizeToFit>{of(m)}</CountUpText>),
+    };
+  }, [nine, s]);
+  const cells = built.map((c) => ({
+    key: c.key,
+    style: c.style,
+    a11y: c.a11y[mode],
+    child: c.empty ? null : (
+      <>
+        <CellRoll mode={mode} index={c.index} style={s.rollBox} faces={c.faces} marks={c.marks} testID={c.testID} />
+        {c.dots[mode]}
+      </>
+    ),
+  }));
+  return (
+    <Row
+      s={s}
+      height={SCORE_H}
+      label={label}
+      cells={cells}
+      totalNode={<CellRoll mode={mode} index={total.index} style={s.rollBox} faces={total.faces} testID={`${idp}-total-${headKey}`} />}
+      style={style}
+      labelStyle={wide}
+    />
+  );
+});
 
 // Optional, for the Home cards: `currentHole` rings that hole's column,
 // `labelOf(row)` and `labelWidth` replace the three-letter row label,
@@ -278,16 +337,10 @@ export default function ShotScorecard({
   const [expanded, setExpanded] = useState(() => initialExpanded(card));
   const soloRow = card?.solo ? card.rows[0] : null;
   const run = useMemo(() => (soloRow ? ledgerBestRun(soloRow, mode) : null), [soloRow, mode]);
+  const onToggle = useCallback((id) => setExpanded((cur) => toggleExpanded(card, cur, id)), [card]);
+  const wide = useMemo(() => (labelWidth ? { width: labelWidth } : null), [labelWidth]);
   if (!card || card.rows.length === 0) return null;
   const isPoints = mode === 'points';
-  const onToggle = (id) => setExpanded((cur) => toggleExpanded(card, cur, id));
-
-  const totalOf = (block, points = isPoints) => {
-    const v = points ? block.points : block.strokes;
-    return v == null ? null : formatNumber(v);
-  };
-  const wide = labelWidth ? { width: labelWidth } : null;
-  const ring = (number) => (number === currentHole ? s.current : null);
 
   let totalLine = null;
   if (soloRow && summary) {
@@ -304,21 +357,7 @@ export default function ShotScorecard({
     <View testID={card.solo ? 'hole-ledger' : 'shot-scorecard'}>
       {card.nines.map((head, ni) => (
         <View key={head.key} style={s.nine} testID={`ledger-${head.key}`}>
-          <Row
-            s={s}
-            label={t('stats.game.ledger.hole')}
-            cells={head.holes.map((h) => ({ key: h.number, style: ring(h.number), child: <Text style={[s.dim, h.number === currentHole && s.currentText]}>{h.number}</Text> }))}
-            total={t(`stats.game.ledger.${head.key}`)}
-            totalStyle={s.totalHead}
-            labelStyle={wide}
-          />
-          <Row
-            s={s}
-            label={t('stats.game.ledger.par')}
-            cells={head.holes.map((h) => ({ key: h.number, child: <Text style={s.dim}>{h.par}</Text> }))}
-            total={head.par}
-            labelStyle={wide}
-          />
+          <NineHead head={head} s={s} t={t} currentHole={currentHole} wide={wide} />
           {(() => {
             const renderRow = (row) => {
               const nine = row.nines[ni];
@@ -328,20 +367,25 @@ export default function ShotScorecard({
                 ? t(isPoints ? 'stats.game.ledger.points' : 'stats.game.ledger.strokes')
                 : labelOf
                   ? <Text style={[s.label, s.name, s.nameText, wide, groups && s.memberLabel, row.isMe && s.meLabel]} numberOfLines={1} testID={`card-name-${row.id}`}>{labelOf(row)}</Text>
-                  : <NameButton row={row} open={open} onToggle={onToggle} s={s} theme={theme} t={t} />;
+                  : <NameButtonMemo row={row} open={open} onToggle={onToggle} s={s} theme={theme} t={t} />;
 
               return (
                 <View key={row.id} style={!card.solo && s.player}>
-                  <Row
+                  <ScoreRow
+                    row={row}
+                    nine={nine}
+                    headKey={head.key}
+                    mode={mode}
+                    card={card}
                     s={s}
-                    height={SCORE_H}
+                    theme={theme}
+                    t={t}
+                    idp={idp}
+                    heat={heat}
+                    currentHole={currentHole}
                     label={label}
-                    cells={scoreCells({ row, nine, mode, card, s, theme, t, idp, heat }).map((c) => (c.key === currentHole ? { ...c, style: [c.style, s.currentCell] } : c))}
-                    total={totalOf(nine)}
-                    roll={{ mode, index: nine.cells.length ? nine.cells[nine.cells.length - 1].number : 0, totals: { strokes: totalOf(nine, false), points: totalOf(nine, true) } }}
-                    totalTestID={`${idp}-total-${head.key}`}
                     style={row.isMe && labelOf ? s.meRow : null}
-                    labelStyle={wide}
+                    wide={wide}
                   />
                   {pointsRow && card.solo && (
                     <Row
@@ -356,7 +400,7 @@ export default function ShotScorecard({
                       total={nine.points == null ? null : formatNumber(nine.points)}
                     />
                   )}
-                  {open && shotRows({ row, nine, s, theme, t, sub: !card.solo, idp })}
+                  {open && <ShotRowsBlock row={row} nine={nine} s={s} theme={theme} t={t} sub={!card.solo} idp={idp} />}
                 </View>
               );
             };
