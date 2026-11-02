@@ -1,5 +1,12 @@
 // English catalogue: Scorecard. See docs/i18n.md.
 export default {
+  'scorecard.pace.finish': 'done ≈ {time}',
+  'scorecard.pace.finishTight': 'done {time}',
+  'scorecard.pace.dark': 'dark by hole {hole}',
+  'scorecard.pace.light': 'light until {time}',
+  'scorecard.pace.a11yFinish': 'Expected to finish around {time}',
+  'scorecard.pace.a11yDark': 'Daylight runs out on hole {hole}, at {time}',
+  'scorecard.pace.a11yLight': 'Daylight until {time}',
   'scorecard.grid.courseRound': '{course} · Round {n}',
   'scorecard.grid.strokes': 'Strokes',
   'scorecard.grid.points': 'Points',

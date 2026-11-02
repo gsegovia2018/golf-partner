@@ -21,6 +21,7 @@ import { loadMediaForTournaments } from './mediaStore';
 import { roundFinalizedAt, roundEndedAt, roundStartedAt } from './finishStamp';
 import { roundDurationMs } from './roundDuration';
 import { isRoundLive } from './liveRound';
+import { recordRoundPaces } from './paceHistory';
 import { t, t as translate } from '../i18n';
 import { buildRoundHighlights, selectAchievements } from './roundAchievements';
 import { listFriends, getCachedFriends } from './friendStore';
@@ -739,6 +740,8 @@ export async function buildFeed(options = {}) {
   }
 
   items.sort((a, b) => b.ts - a.ts);
+  // Each round's minutes per hole, for the live round's finish estimate.
+  recordRoundPaces(items).catch(() => {});
   const limitedItems = limit == null
     ? items.slice(offset)
     : items.slice(offset, offset + limit);

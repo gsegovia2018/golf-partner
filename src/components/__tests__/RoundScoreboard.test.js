@@ -146,4 +146,51 @@ describe('RoundScoreboard', () => {
     expect(queryByLabelText(/On hole/)).toBeNull();
     expect(getByText('Points')).toBeTruthy();
   });
+
+  describe('pace', () => {
+    const tenHoles = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [i + 1, 4]));
+    const at = (h, m) => new Date(2026, 10, 2, h, m).getTime();
+    const round = { holes, scores: { p1: tenHoles, p2: tenHoles } };
+
+    test('with light to spare: holes played and the finish time, no dusk mark', async () => {
+      const pace = { level: 'ok', finishAt: at(15, 40), dusk: at(18, 40), darkHole: null, darkAfter: null };
+      const { getByText, queryByTestId } = render(wrap(
+        <RoundScoreboard round={round} players={players} meId="p1" pace={pace} />,
+      ));
+      await flush();
+      expect(getByText(/10\/18 · done ≈ 15:40/)).toBeTruthy();
+      expect(queryByTestId('round-progress-dusk')).toBeNull();
+    });
+
+    test('at risk: the hole where light runs out, and the dusk mark on the bar', async () => {
+      const pace = { level: 'risk', finishAt: at(19, 6), dusk: at(18, 40), darkHole: 17, darkAfter: 6 };
+      const { getByText, getByTestId, getByLabelText } = render(wrap(
+        <RoundScoreboard round={round} players={players} meId="p1" pace={pace} />,
+      ));
+      await flush();
+      expect(getByText(/dark by hole 17/)).toBeTruthy();
+      expect(getByLabelText('Daylight runs out on hole 17, at 18:40')).toBeTruthy();
+      // 10 played + 6 more in daylight = 16 of 18
+      expect(getByTestId('round-progress-dusk').props.style).toEqual(
+        expect.arrayContaining([expect.objectContaining({ left: '89%' })]),
+      );
+    });
+
+    test('tight: the finish time and until when there is light', async () => {
+      const pace = { level: 'tight', finishAt: at(18, 32), dusk: at(18, 40), darkHole: null, darkAfter: null };
+      const { getByText, queryByTestId } = render(wrap(
+        <RoundScoreboard round={round} players={players} meId="p1" pace={pace} />,
+      ));
+      await flush();
+      expect(getByText(/done 18:32 · /)).toBeTruthy();
+      expect(getByText(/light until 18:40/)).toBeTruthy();
+      expect(queryByTestId('round-progress-dusk')).toBeNull();
+    });
+
+    test('without pace: the plain holes-played count', async () => {
+      const { getByText } = render(wrap(<RoundScoreboard round={round} players={players} meId="p1" />));
+      await flush();
+      expect(getByText('10 / 18')).toBeTruthy();
+    });
+  });
 });

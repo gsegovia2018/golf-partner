@@ -8,6 +8,7 @@ import { playersMeFirst } from '../lib/playerOrder';
 import { useT, formatNumber } from '../i18n';
 import { teeDisplayName } from '../lib/teeName';
 import { circleText } from '../theme/circleText';
+import RoundPaceText from './RoundPaceText';
 
 // Universal round scoreboard — the same player stat cards in every scoring
 // mode. Home shows it unranked (me first, no standings); the round summary
@@ -17,7 +18,7 @@ import { circleText } from '../theme/circleText';
 // showHoleBadges.
 export default function RoundScoreboard({
   round, players, meId, showRunning = true, ranked = false, teeLabels = null, showHoleBadges = true,
-  scoringMode = null,
+  scoringMode = null, pace = null,
 }) {
   const { theme } = useTheme();
   const t = useT();
@@ -74,6 +75,11 @@ export default function RoundScoreboard({
 
   const holesPlayed = rows.length ? Math.max(...rows.map((r) => r.played)) : 0;
   const progressPct = totalHoles > 0 ? Math.min(100, Math.round((holesPlayed / totalHoles) * 100)) : 0;
+  // Where daylight ends on the bar: after the holes that still finish in light.
+  const duskPct = pace?.level === 'risk' && totalHoles > 0
+    ? Math.min(100, Math.round(((holesPlayed + pace.darkAfter) / totalHoles) * 100))
+    : null;
+  const warn = theme.isDark ? semantic.warning.dark : semantic.warning.light;
 
   const vsParText = (r) => {
     if (r.played === 0) return '—';
@@ -92,8 +98,18 @@ export default function RoundScoreboard({
       <View style={s.roundProgressRow}>
         <View style={s.roundProgressTrack}>
           <View style={[s.roundProgressFill, { width: `${progressPct}%` }]} />
+          {duskPct != null && (
+            <View
+              testID="round-progress-dusk"
+              style={[s.roundProgressDark, { left: `${duskPct}%`, borderColor: warn }]}
+            />
+          )}
         </View>
-        <Text style={s.roundProgressText}>{holesPlayed} / {totalHoles}</Text>
+        {pace && pace.level !== 'ok'
+          ? <RoundPaceText pace={pace} style={s.roundProgressText} />
+          : pace
+            ? <RoundPaceText pace={pace} lead={`${holesPlayed}/${totalHoles}`} style={s.roundProgressText} />
+            : <Text style={s.roundProgressText}>{holesPlayed} / {totalHoles}</Text>}
       </View>
       <View style={{ gap: 10 }}>
         {rows.map((r, i) => {
@@ -164,6 +180,11 @@ const makeStyles = (t) => StyleSheet.create({
     overflow: 'hidden',
   },
   roundProgressFill: { height: 6, borderRadius: 3, backgroundColor: t.accent.primary },
+  // Holes that would end after dark: the rest of the track, edged at dusk.
+  roundProgressDark: {
+    position: 'absolute', top: 0, bottom: 0, right: 0,
+    borderLeftWidth: 2, backgroundColor: t.isDark ? 'rgba(224,178,77,0.25)' : 'rgba(184,121,26,0.22)',
+  },
   roundProgressText: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.muted, fontSize: 11 },
 
   gamePlayerCard: {

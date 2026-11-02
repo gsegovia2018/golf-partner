@@ -15,6 +15,7 @@ import { playersMeFirst } from '../../lib/playerOrder';
 import { calcExtraShots, scrambleUnits, matchPlayEffectiveHandicaps } from '../../store/tournamentStore';
 import { holeCountOf } from '../../store/scoring';
 import PullToRefresh from '../PullToRefresh';
+import RoundPaceText from '../RoundPaceText';
 import { makeScorecardStyles } from './styles';
 import { holePoints, roundTotals } from './scoreModel';
 import { classifyHoleResult } from './constants';
@@ -573,7 +574,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
   );
 }
 
-export function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, editable, refreshing, onRefresh, meId }) {
+export function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, editable, refreshing, onRefresh, meId, pace = null }) {
   const t = useT();
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
@@ -597,6 +598,7 @@ export function GridView({ round, roundIndex, players, scores, isBestBall, bbRes
             {t('scorecard.grid.courseRound', { course: round.courseName, n: formatNumber(roundIndex + 1) })}
           </Text>
         </View>
+        {pace && <RoundPaceText pace={pace} style={s.soloGridHeaderPace} testID="grid-pace" />}
       </View>
 
       <ScorecardTable

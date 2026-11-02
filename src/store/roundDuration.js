@@ -88,7 +88,7 @@ export function roundDurationMs({
   return null;
 }
 
-function roundStartAt(span, createdAt, startedAt) {
+export function roundStartAt(span, createdAt, startedAt) {
   const started = typeof startedAt === 'number' ? startedAt : Date.parse(startedAt ?? '');
   const created = typeof createdAt === 'number' ? createdAt : Date.parse(createdAt ?? '');
   if (Number.isFinite(started) && started <= span.lastAt) {

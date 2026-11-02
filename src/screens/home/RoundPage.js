@@ -7,6 +7,7 @@ import ShotScorecard from '../../components/scorecard/ShotScorecard';
 import { ModeToggle } from '../../components/gamestats/ui';
 import { scorecardModel } from '../../store/scorecardView';
 import { useT } from '../../i18n';
+import { useRoundPace } from '../../hooks/useRoundPace';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
 // RNW 0.21's `pagingEnabled` omits `scroll-snap-stop: always`, so a
@@ -34,9 +35,10 @@ const RoundPage = React.memo(function RoundPage({
   round, index, width, hasPrev, hasNext, revealed,
   players, meId, theme, s,
   onGoToRound, onOpenEdit, isSingleRound, showRunning = true, scoringMode = null,
-  scorecardSettings = null,
+  scorecardSettings = null, tournamentId = null, createdAt = null, live = false,
 }) {
   const t = useT();
+  const pace = useRoundPace({ tournamentId, round, createdAt, enabled: live });
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
   return (
     <View
@@ -81,7 +83,7 @@ const RoundPage = React.memo(function RoundPage({
       {scorecardSettings && hasScores ? (
         <PastRoundScorecard round={round} settings={scorecardSettings} players={players} meId={meId} s={s} />
       ) : hasScores || revealed ? (
-        <RoundScoreboard round={round} players={players} meId={meId} showRunning={showRunning} scoringMode={scoringMode} />
+        <RoundScoreboard round={round} players={players} meId={meId} showRunning={showRunning} scoringMode={scoringMode} pace={pace} />
       ) : (
         <Text style={s.emptyRoundHint}>{t('home.round.noScores')}</Text>
       )}

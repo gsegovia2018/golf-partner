@@ -11,6 +11,7 @@ import { semantic } from '../../theme/tokens';
 import { makeScorecardStyles } from './styles';
 import { teamColor } from './teamModel';
 import { summaryState } from './scoreModel';
+import RoundPaceText from '../RoundPaceText';
 
 export const RoundSummary = React.memo(function RoundSummary({
   mode,
@@ -20,6 +21,7 @@ export const RoundSummary = React.memo(function RoundSummary({
   settings,
   currentHole,
   meId,
+  pace = null,
 }) {
   const { theme } = useTheme();
   const tl = useT();
@@ -110,10 +112,13 @@ export const RoundSummary = React.memo(function RoundSummary({
         </View>
       )}
 
-      {state.status != null && (
-        <Text style={[s.summaryStatus, state.decided && s.summaryStatusWinner]}>
-          {tr(state.status)}
-        </Text>
+      {(state.status != null || pace) && (
+        <RoundPaceText
+          pace={pace}
+          lead={state.status != null ? tr(state.status) : null}
+          style={[s.summaryStatus, state.decided && s.summaryStatusWinner]}
+          testID="round-summary-status"
+        />
       )}
     </View>
   );
