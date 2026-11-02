@@ -62,7 +62,9 @@ function deepHeat(level) {
   return { bg: '#ffe08a', fg: '#00553c' };
 }
 
-function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID, labelStyle, countTotal }) {
+// `roll` ({ mode, index, leaving }) makes the total roll with the score cells
+// on a Strokes | Points switch; between switches it still counts up.
+function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint, totalTestID, labelStyle, roll }) {
   return (
     <View style={[s.row, style]}>
       {typeof label === 'string' ? <Text style={[s.label, labelStyle]} numberOfLines={1}>{label}</Text> : label}
@@ -77,9 +79,15 @@ function Row({ s, label, cells, total, totalStyle, style, height = CELL_H, tint,
         </View>
       ))}
       <View style={[s.total, { height }, totalStyle]}>
-        {countTotal ? (
-          // Counts to the other mode's total on a Strokes | Points switch.
-          <CountUpText style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={totalTestID}>{total ?? '–'}</CountUpText>
+        {roll ? (
+          <CellRoll
+            mode={roll.mode}
+            index={roll.index}
+            style={s.rollBox}
+            leaving={<Text style={s.totalText} numberOfLines={1} adjustsFontSizeToFit>{roll.leaving ?? '–'}</Text>}
+          >
+            <CountUpText scope={roll.mode} style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={totalTestID}>{total ?? '–'}</CountUpText>
+          </CellRoll>
         ) : (
           <Text style={s.totalText} numberOfLines={1} adjustsFontSizeToFit testID={totalTestID}>{total ?? '–'}</Text>
         )}
@@ -328,7 +336,7 @@ export default function ShotScorecard({
                     label={label}
                     cells={scoreCells({ row, nine, mode, card, s, theme, t, idp, heat }).map((c) => (c.key === currentHole ? { ...c, style: [c.style, s.currentCell] } : c))}
                     total={totalOf(nine)}
-                    countTotal
+                    roll={{ mode, index: nine.cells.length ? nine.cells[nine.cells.length - 1].number : 0, leaving: totalOf(nine, !isPoints) }}
                     totalTestID={`${idp}-total-${head.key}`}
                     style={row.isMe && labelOf ? s.meRow : null}
                     labelStyle={wide}
