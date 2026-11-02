@@ -1201,6 +1201,11 @@ export function makeScorecardStyles(theme) {
       gap: 6,
       ...(theme.isDark ? {} : theme.shadow.accent),
     },
+    // The tour's spotlight wrapper around the next-hole / Finish button. A
+    // row, so saveBtn's flex: 1 fills the width: in a column it applied to
+    // the height with a 0 basis, and the button shrank to its icon's height,
+    // clipping the label below the baseline ("Hoyo 9", "Terminar").
+    holeNavWrap: { flex: 1, flexDirection: 'row' },
     saveBtnText: {
       color: theme.text.inverse,
       fontFamily: 'PlusJakartaSans-ExtraBold',
@@ -1210,9 +1215,9 @@ export function makeScorecardStyles(theme) {
       // loses the bottom of the 2). Without the padding the line box ends at
       // the baseline-ish metric, so descenders were cut instead ("Hoyo 9"
       // lost the tail of the y): an explicit line height leaves them room.
-      // 22 left only ~1 dp under the descent and the y still clipped on
-      // device; 24 gives 2 dp each side of the glyph box.
-      lineHeight: 24,
+      // (The clipping that outlived both fixes was the tour wrapper below
+      // squeezing the button — see holeNavWrap.)
+      lineHeight: 22,
       ...(Platform.OS === 'web' ? {} : { includeFontPadding: false }),
       textAlign: 'center',
     },

@@ -483,7 +483,7 @@ export function HoleView({ leaguePlayers = '', medalLeague = false, round, round
             }
             const primaryDisabled = onLastHole && finishBusy;
             return (
-              <View ref={holeNavRef} collapsable={false} style={s.flex}>
+              <View ref={holeNavRef} collapsable={false} style={s.holeNavWrap}>
                 <TouchableOpacity
                   style={[s.saveBtn, primaryDisabled && s.saveBtnDisabled]}
                   onPress={onLastHole ? onFinish : onNext}
