@@ -6,6 +6,7 @@ import Animated, {
 import { useTheme } from '../../theme/ThemeContext';
 import { useT } from '../../i18n';
 import { scoreBandColors } from '../../theme/tone';
+import { duration as motion, ease } from '../../theme/motion';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 
@@ -27,6 +28,24 @@ function GrowRow({ style, children }) {
   }));
 
   return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
+}
+
+// One band. When the counts change (the Strokes | Points switch) it slides to
+// its new share instead of jumping, in step with the scorecard's roll. Every
+// band stays mounted so an empty one can shrink to nothing and grow back; the
+// 2 px gap is the fill's left margin, clipped away with the band.
+function Segment({ count, color, first, testID, s }) {
+  const reduced = useReducedMotion();
+  const grow = useSharedValue(count);
+  useEffect(() => {
+    grow.value = reduced ? count : withTiming(count, { duration: motion.place, easing: ease.out });
+  }, [count, reduced, grow]);
+  const growStyle = useAnimatedStyle(() => ({ flexGrow: grow.value }));
+  return (
+    <Animated.View testID={count > 0 ? testID : undefined} style={[s.segment, growStyle]}>
+      <View style={[s.fill, !first && s.fillGap, { backgroundColor: color }]} />
+    </Animated.View>
+  );
 }
 
 // The four bands (colour + label + count). Shared by the bar and the
@@ -85,11 +104,14 @@ export default function ScoreMixBar({ distribution, legend = true }) {
     >
       <View style={s.track}>
         <GrowRow style={s.segments}>
-          {shown.map((seg) => (
-            <View
+          {segments.map((seg) => (
+            <Segment
               key={seg.key}
+              s={s}
+              count={seg.count}
+              color={seg.color}
+              first={seg.key === shown[0].key}
               testID={`scoremix-segment-${seg.key}`}
-              style={[s.segment, { flexGrow: seg.count, backgroundColor: seg.color }]}
             />
           ))}
         </GrowRow>
@@ -122,13 +144,14 @@ function makeStyles(theme) {
       flexDirection: 'row',
       height: '100%',
       width: '100%',
-      gap: 2,
       transformOrigin: 'left',
     },
     segment: {
       flexBasis: 0,
-      minWidth: 3,
+      overflow: 'hidden',
     },
+    fill: { flex: 1 },
+    fillGap: { marginLeft: 2 },
     legend: {
       flexDirection: 'row',
       flexWrap: 'wrap',

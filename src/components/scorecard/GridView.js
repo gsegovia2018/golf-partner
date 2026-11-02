@@ -163,6 +163,8 @@ function NineBlock({
     : theme.scoreColor('poor');
 
   const sumPar = holes.reduce((acc, h) => acc + h.par, 0);
+  // A row's total rolls right after its last hole, as part of the same wave.
+  const lastIndex = holes.length ? holes[holes.length - 1].number : 0;
 
   // What the other mode shows in a cell: CellRoll rolls it out on a switch.
   const strokesFace = (player, h) => {
@@ -223,7 +225,9 @@ function NineBlock({
             );
           })}
           <View style={[s.soloNineCell, aggCell, s.soloNineAggDivider]}>
-            <CountUpText numberOfLines={1} style={s.soloNineAggPtsTotal}>{sumPts}</CountUpText>
+            <CellRoll mode={displayMode} index={lastIndex} leaving={<Text numberOfLines={1} style={s.soloNineAggStrokesTotal}>{sumStr || '·'}</Text>}>
+              <CountUpText scope={displayMode} numberOfLines={1} style={s.soloNineAggPtsTotal}>{sumPts}</CountUpText>
+            </CellRoll>
           </View>
         </View>
       );
@@ -295,7 +299,9 @@ function NineBlock({
           );
         })}
         <View style={[s.soloNineCell, aggCell, s.soloNineAggDivider]}>
-          <CountUpText numberOfLines={1} style={s.soloNineAggStrokesTotal}>{sumStr || '·'}</CountUpText>
+          <CellRoll mode={displayMode} index={lastIndex} leaving={<Text numberOfLines={1} style={s.soloNineAggPtsTotal}>{sumPts}</Text>}>
+            <CountUpText scope={displayMode} numberOfLines={1} style={s.soloNineAggStrokesTotal}>{sumStr || '·'}</CountUpText>
+          </CellRoll>
         </View>
       </View>
     );
