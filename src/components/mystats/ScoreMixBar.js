@@ -31,21 +31,28 @@ function GrowRow({ style, children }) {
 }
 
 // One band. When the counts change (the Strokes | Points switch) it slides to
-// its new share instead of jumping, in step with the scorecard's roll. Every
-// band stays mounted so an empty one can shrink to nothing and grow back; the
-// 2 px gap is the fill's left margin, clipped away with the band.
-function Segment({ count, color, first, testID, s }) {
+// its new place and share in step with the scorecard's roll. It moves by
+// transform only (translateX + scaleX of a full-width bar), never by layout,
+// so Android lays nothing out per frame. Every band stays mounted so an empty
+// one shrinks to nothing and grows back. `start` / `share` are fractions of
+// the track; `w` is the track width. A band after another keeps a 2 px gap.
+const GAP = 2;
+function Segment({ start, share, color, testID, w, s }) {
   const reduced = useReducedMotion();
-  const grow = useSharedValue(count);
+  const x = useSharedValue(start);
+  const k = useSharedValue(share);
   useEffect(() => {
-    grow.value = reduced ? count : withTiming(count, { duration: motion.place, easing: ease.out });
-  }, [count, reduced, grow]);
-  const growStyle = useAnimatedStyle(() => ({ flexGrow: grow.value }));
-  return (
-    <Animated.View testID={count > 0 ? testID : undefined} style={[s.segment, growStyle]}>
-      <View style={[s.fill, !first && s.fillGap, { backgroundColor: color }]} />
-    </Animated.View>
-  );
+    const to = (v) => (reduced ? v : withTiming(v, { duration: motion.place, easing: ease.out }));
+    x.value = to(start);
+    k.value = to(share);
+  }, [start, share, reduced, x, k]);
+  const st = useAnimatedStyle(() => {
+    const W = w.value || 1;
+    const gap = x.value > 0.0001 ? GAP : 0;
+    const width = Math.max(0, k.value * W - gap);
+    return { transform: [{ translateX: x.value * W + gap }, { scaleX: width / W }] };
+  });
+  return <Animated.View testID={share > 0 ? testID : undefined} style={[s.segment, { backgroundColor: color }, st]} />;
 }
 
 // The four bands (colour + label + count). Shared by the bar and the
@@ -91,6 +98,7 @@ export default function ScoreMixBar({ distribution, legend = true }) {
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   const segments = useMemo(() => mixSegments(distribution, theme, t), [distribution, theme, t]);
+  const trackW = useSharedValue(0);
 
   const total = segments.reduce((sum, seg) => sum + seg.count, 0);
   if (total <= 0) return null;
@@ -102,15 +110,16 @@ export default function ScoreMixBar({ distribution, legend = true }) {
       accessible
       accessibilityLabel={t('stats.my.mix.a11y', { total, parts: shown.map((seg) => `${seg.count} ${seg.label}`).join(', ') })}
     >
-      <View style={s.track}>
+      <View style={s.track} onLayout={(e) => { trackW.value = e.nativeEvent.layout.width; }}>
         <GrowRow style={s.segments}>
-          {segments.map((seg) => (
+          {segments.map((seg, i) => (
             <Segment
               key={seg.key}
               s={s}
-              count={seg.count}
+              w={trackW}
+              start={segments.slice(0, i).reduce((sum, x) => sum + x.count, 0) / total}
+              share={seg.count / total}
               color={seg.color}
-              first={seg.key === shown[0].key}
               testID={`scoremix-segment-${seg.key}`}
             />
           ))}
@@ -141,17 +150,19 @@ function makeStyles(theme) {
       backgroundColor: theme.bg.secondary,
     },
     segments: {
-      flexDirection: 'row',
       height: '100%',
       width: '100%',
       transformOrigin: 'left',
     },
+    // Full-width bar, placed and sized by Segment's transform.
     segment: {
-      flexBasis: 0,
-      overflow: 'hidden',
+      position: 'absolute',
+      top: 0,
+      bottom: 0,
+      left: 0,
+      width: '100%',
+      transformOrigin: 'left',
     },
-    fill: { flex: 1 },
-    fillGap: { marginLeft: 2 },
     legend: {
       flexDirection: 'row',
       flexWrap: 'wrap',

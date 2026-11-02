@@ -1457,6 +1457,18 @@ export function makeScorecardStyles(theme) {
       alignItems: 'center',
       gap: 3,
     },
+    // A player row's strip of cells (one per mode, rolled as a whole), and
+    // the static layer that holds its handicap dots over the pip lanes.
+    soloNineStrip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    soloNineDotsLayer: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    soloNineDigitSpacer: {
+      height: 30,
+    },
     soloNineExtraDot: {
       width: 4,
       height: 4,

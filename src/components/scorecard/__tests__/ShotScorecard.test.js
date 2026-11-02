@@ -5,6 +5,9 @@ import ShotScorecard from '../ShotScorecard';
 import { scorecardModel } from '../../../store/scorecardView';
 import { weekendFixture } from '../../../store/__tests__/fixtures/gameStatsFixture';
 
+// A score cell holds both modes' figures; the hidden one is out of the a11y tree.
+const SHOWN = { includeHiddenElements: false };
+
 const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 
 async function show(card, mode) {
@@ -51,7 +54,7 @@ test('match play points read untinted hole results', async () => {
   const card = scorecardModel({ round: round0(), players: roster().slice(0, 2), meId: 'fx-me', mode: 'matchplay' });
   const { getByTestId } = await show(card, 'points');
   const out = within(getByTestId('ledger-out'));
-  expect(['0', '1']).toContain(out.getByTestId('card-fx-me-cell-1').props.children);
+  expect(['0', '1']).toContain(out.getByTestId('card-fx-me-cell-1', SHOWN).props.children);
 });
 
 test('one player: score and shot rows always shown, a totals line, no name buttons', async () => {
