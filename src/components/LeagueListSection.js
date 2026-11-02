@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { light, onDeep, semantic } from '../theme/tokens';
+import { semantic } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeContext';
 import { useT, tr } from '../i18n';
 import { getTournamentSnapshot } from '../store/tournamentStore';
 import { leagueRoundIndex } from '../store/leagueGameCards';
@@ -34,18 +35,22 @@ function goAction(navigation, row) {
 }
 
 // LEAGUES section of the Play tab, given the rows from useMyLeagueRows. The
-// first league is a deep-green hero (my place, then what this month still
-// needs, and a button for its next step); any further leagues fold into
-// compact deep rows. Renders nothing when I'm in no league.
+// first league is a card (my place, then what this month still needs, and a
+// button for its next step); any further leagues fold into compact rows. Card
+// surfaces, not deep green: on Home the deep surface belongs to the round
+// that is ready or live, and the next-step button is the league's one green.
+// Renders nothing when I'm in no league.
 export default function LeagueListSection({ navigation, rows }) {
   const t = useT(); // re-render on a language switch
+  const { theme } = useTheme();
+  const st = useMemo(() => makeStyles(theme), [theme]);
   if (!rows || rows.length === 0) return null;
   const [first, ...rest] = rows;
   const open = (row) => navigation.navigate('LeagueBoard', { leagueId: row.id });
   return (
     <View style={st.section}>
-      <LeagueHero row={first} t={t} onPress={() => open(first)} onAction={() => goAction(navigation, first)} />
-      {rest.map((row) => <LeagueRow key={row.id} row={row} t={t} onPress={() => open(row)} />)}
+      <LeagueHero row={first} t={t} st={st} theme={theme} onPress={() => open(first)} onAction={() => goAction(navigation, first)} />
+      {rest.map((row) => <LeagueRow key={row.id} row={row} t={t} st={st} theme={theme} onPress={() => open(row)} />)}
     </View>
   );
 }
@@ -85,7 +90,7 @@ function monthParts(month) {
   }
 }
 
-function LeagueHero({ row, t, onPress, onAction }) {
+function LeagueHero({ row, t, st, theme, onPress, onAction }) {
   const kind = ACTION_LABEL[row.action?.kind] ? row.action.kind : 'open';
   const label = t(ACTION_LABEL[kind]);
   const pos = row.position;
@@ -93,6 +98,7 @@ function LeagueHero({ row, t, onPress, onAction }) {
   const monthKey = row.month?.params?.monthKey ?? currentMonthKey();
   // '1st' / '1.º' / 'T1st': top of the table, shared or not.
   const isLeader = /^T?1\D/.test(String(pos?.params?.place ?? ''));
+  const btnInk = theme.isDark ? theme.accent.primary : theme.text.inverse;
   return (
     <TouchableOpacity
       style={st.hero}
@@ -130,7 +136,7 @@ function LeagueHero({ row, t, onPress, onAction }) {
             accessibilityLabel={t('league.list.hero.view')}
           >
             <Text style={st.viewLinkText}>{t('league.list.hero.view')}</Text>
-            <Feather name="chevron-right" size={14} color={onDeep.strong} />
+            <Feather name="chevron-right" size={14} color={theme.accent.primary} />
           </TouchableOpacity>
         )}
       </View>
@@ -142,23 +148,23 @@ function LeagueHero({ row, t, onPress, onAction }) {
         </View>
         {/* The card itself opens the board; the button does the next step. */}
         <TouchableOpacity
-          style={st.btn}
+          style={[st.btn, kind === 'open' && st.btnOpen]}
           onPress={onAction}
           activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel={label}
           hitSlop={{ top: 4, bottom: 4 }}
         >
-          {kind === 'play' && <Feather name="play" size={12} color={DEEP} style={{ marginRight: 4 }} />}
-          <Text style={st.btnText}>{label}</Text>
-          {kind === 'open' && <Feather name="chevron-right" size={14} color={DEEP} />}
+          {kind === 'play' && <Feather name="play" size={12} color={btnInk} style={{ marginRight: 4 }} />}
+          <Text style={[st.btnText, kind === 'open' && st.btnTextOpen]}>{label}</Text>
+          {kind === 'open' && <Feather name="chevron-right" size={14} color={theme.text.primary} />}
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
 }
 
-function LeagueRow({ row, t, onPress }) {
+function LeagueRow({ row, t, st, theme, onPress }) {
   const pos = row.position;
   const place = pos && typeof pos === 'object' ? pos.params.place : '–';
   const line = row.month ? tr(row.month) : (typeof pos === 'string' ? pos : t('league.list.noCards'));
@@ -175,43 +181,57 @@ function LeagueRow({ row, t, onPress }) {
         <Text style={st.rowName} numberOfLines={1}>{row.name}</Text>
         <Text style={st.rowLine} numberOfLines={1}>{line}</Text>
       </View>
-      <Feather name="chevron-right" size={18} color={onDeep.dim} />
+      <Feather name="chevron-right" size={18} color={theme.text.muted} />
     </TouchableOpacity>
   );
 }
 
-const DEEP = light.bg.deep;
-
-const st = StyleSheet.create({
-  section: { marginTop: 12 },
-  hero: { backgroundColor: DEEP, borderRadius: 16, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, marginBottom: 10 },
-  overRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 22 },
-  overline: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: onDeep.faint },
-  chip: { backgroundColor: onDeep.chip, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-  chipText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: onDeep.primary },
-  heroName: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, lineHeight: 27, color: onDeep.primary, marginTop: 4, marginBottom: 10 },
-  stand: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  place: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 38, lineHeight: 42, color: onDeep.primary, fontVariant: ['tabular-nums'] },
-  placeSuffix: { fontSize: 18 },
-  placeLeader: { color: semantic.winner.dark },
-  standText: { paddingBottom: 4 },
-  of: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: onDeep.soft },
-  points: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: onDeep.primary },
-  noCards: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, lineHeight: 20, color: onDeep.soft },
-  divider: { height: 1, backgroundColor: onDeep.border, marginTop: 12, marginBottom: 10 },
-  monthRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  monthText: { flex: 1, minWidth: 0 },
-  monthTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: onDeep.primary },
-  monthSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: onDeep.soft, marginTop: 1 },
-  btn: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: onDeep.primary, borderRadius: 12, paddingHorizontal: 12, minHeight: 44 },
-  btnText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: DEEP, textAlign: 'center' },
-  standRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 },
-  viewLink: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 28, marginBottom: 2 },
-  viewLinkText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: onDeep.strong },
-  row: { backgroundColor: DEEP, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
-  rowPlace: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 18, color: onDeep.primary, minWidth: 40, fontVariant: ['tabular-nums'] },
-  rowPlaceSuffix: { fontSize: 12 },
-  rowBody: { flex: 1, minWidth: 0 },
-  rowName: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: onDeep.primary },
-  rowLine: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: onDeep.soft, marginTop: 1 },
-});
+// Card surface as the Home game cards (homeStyles.tournamentCard); the
+// next-step button is the primary button (homeStyles.primaryBtn).
+const makeStyles = (t) => {
+  const card = {
+    backgroundColor: t.bg.card, borderWidth: 1,
+    borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
+  };
+  return StyleSheet.create({
+    section: { marginTop: 12 },
+    hero: { ...card, borderRadius: 16, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, marginBottom: 10 },
+    overRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 22 },
+    overline: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: t.text.secondary },
+    chip: { backgroundColor: t.bg.secondary, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+    chipText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: t.text.primary },
+    heroName: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, lineHeight: 27, color: t.text.primary, marginTop: 4, marginBottom: 10 },
+    stand: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+    place: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 38, lineHeight: 42, color: t.text.primary, fontVariant: ['tabular-nums'] },
+    placeSuffix: { fontSize: 18 },
+    // Winner gold that reads on the surface: deep ledger gold on white, soft gold on dark.
+    placeLeader: { color: t.isDark ? semantic.winner.soft : semantic.winner.light },
+    standText: { paddingBottom: 4 },
+    of: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: t.text.secondary },
+    points: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: t.text.primary },
+    noCards: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, lineHeight: 20, color: t.text.secondary },
+    divider: { height: 1, backgroundColor: t.border.default, marginTop: 12, marginBottom: 10 },
+    monthRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    monthText: { flex: 1, minWidth: 0 },
+    monthTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: t.text.primary },
+    monthSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: t.text.secondary, marginTop: 1 },
+    btn: {
+      flexDirection: 'row', alignItems: 'center', gap: 2, borderRadius: 12, paddingHorizontal: 12, minHeight: 44,
+      backgroundColor: t.isDark ? t.accent.light : t.accent.primary,
+      borderWidth: t.isDark ? 1 : 0, borderColor: t.isDark ? t.accent.primary + '33' : 'transparent',
+    },
+    // "Ver liga" is navigation, not a card step: neutral, so green stays for steps.
+    btnOpen: { backgroundColor: t.bg.secondary, borderWidth: 0 },
+    btnText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: t.isDark ? t.accent.primary : t.text.inverse, textAlign: 'center' },
+    btnTextOpen: { color: t.text.primary },
+    standRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 },
+    viewLink: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 28, marginBottom: 2 },
+    viewLinkText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: t.accent.primary },
+    row: { ...card, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
+    rowPlace: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 18, color: t.text.primary, minWidth: 40, fontVariant: ['tabular-nums'] },
+    rowPlaceSuffix: { fontSize: 12 },
+    rowBody: { flex: 1, minWidth: 0 },
+    rowName: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: t.text.primary },
+    rowLine: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: t.text.secondary, marginTop: 1 },
+  });
+};
