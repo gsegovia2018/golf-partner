@@ -1404,6 +1404,9 @@ export function createTournament({ name, players, rounds, settings, kind = 'tour
     // Which player is the signed-in user. Set at creation so shot tracking
     // is pre-assigned without a library round-trip (works fully offline).
     meId,
+    // The creator owns it. Without this the role arrived only with the next
+    // list fetch, so owner-only actions (Delete) appeared seconds late.
+    _role: 'owner',
     // Round ids are GLOBALLY unique — the tournament id prefixes the round
     // index (`<tid>-r0`). The incoming rounds carry reused `r${i}` ids, which
     // are NOT unique across games; keying shots (and score/feed data) by them

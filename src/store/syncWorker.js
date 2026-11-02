@@ -322,6 +322,12 @@ export async function drainTournament(tournamentId, entries) {
           if (localBefore && 'meId' in localBefore) {
             merged.meId = localBefore.meId;
           }
+          // `_role` comes only from the list RPC; `fresh` has none. Without
+          // this every drained setup batch wiped it, hiding owner-only actions
+          // (Delete) until the next list fetch. Same rule as _overlayAndSave.
+          if (!('_role' in merged) && localBefore?._role != null) {
+            merged._role = localBefore._role;
+          }
           // makeActive: false — this is a background drain of whatever
           // tournament happened to have queued mutations, not the user
           // opening it. Defaulting to true (the old bug) made draining game

@@ -367,6 +367,20 @@ describe('createTournament', () => {
     expect(mockState.fromCalls).toHaveLength(0);
   });
 
+  test('never writes the device-local _role into props', async () => {
+    // _role is the caller's own role; stored in props it would come back to
+    // every player as 'owner'.
+    mockState.userId = 'u1';
+    const { createTournament } = require('../tournamentRepo');
+
+    await createTournament({
+      id: 't1', name: 'Cup', kind: 'game', createdAt: '2026-07-10T00:00:00Z',
+      currentRound: 0, players: [], rounds: [], _role: 'owner',
+    });
+
+    expect(createPayload().tournament.props).not.toHaveProperty('_role');
+  });
+
   test('maps domain kind onto the casual/official column and keeps it in props', async () => {
     // The tournaments.kind COLUMN has a CHECK constraint (casual/official
     // only), so a domain kind of 'game'/'tournament' must land as 'casual'

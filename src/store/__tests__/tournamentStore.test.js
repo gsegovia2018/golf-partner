@@ -96,6 +96,13 @@ describe('createTournament round ids', () => {
   });
 });
 
+describe('createTournament role', () => {
+  it('marks the creator as owner, so owner-only actions show before the list fetch', () => {
+    const t = createTournament({ name: 'G', players: [], settings: {}, rounds: [] });
+    expect(t._role).toBe('owner');
+  });
+});
+
 describe('reTeeRound', () => {
   const newTees = [
     { label: 'Black',  slope: 140, rating: 73.5 },

@@ -215,7 +215,8 @@ export async function createTournament(t) {
   const userId = await getCurrentUserId();
   const now = new Date().toISOString();
   const {
-    id, name, kind, createdAt, currentRound, players, rounds, meId, _meta, ...rest
+    // _role is the caller's own role (device-local), never shared state.
+    id, name, kind, createdAt, currentRound, players, rounds, meId, _meta, _role, ...rest
   } = t;
 
   // The tournaments.kind COLUMN is CHECK-constrained to 'casual'/'official',

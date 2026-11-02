@@ -420,6 +420,17 @@ describe('drainTournament', () => {
     expect(saveLocal.mock.calls[0][0].meId).toBe('p2');
   });
 
+  test('the reconcile save keeps the cached _role the server never returns', async () => {
+    // Regression: draining a new game's create wiped `_role: 'owner'`, so the
+    // settings sheet hid Delete until the next list fetch restored it.
+    fetchTournament.mockResolvedValue({ id: 't1', rounds: [] });
+    readLocal.mockResolvedValue({ ...localBlob, _role: 'owner' });
+
+    await drainTournament('t1', [{ id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } }]);
+
+    expect(saveLocal.mock.calls[0][0]._role).toBe('owner');
+  });
+
   test('reconcile preserves an explicit local meId null and survives a missing local blob', async () => {
     // Local wins INCLUDING an explicit null (same contract as
     // _overlayAndSave): a user who deliberately has no pick must not have one
