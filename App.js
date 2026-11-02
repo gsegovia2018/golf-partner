@@ -56,6 +56,7 @@ import LeagueAddScoreScreen from './src/screens/LeagueAddScoreScreen';
 import LeagueAddProofScreen from './src/screens/LeagueAddProofScreen';
 
 import TabBarHost, { TabBarPublisher } from './src/navigation/TabBarHost';
+import { stackTransitionListeners } from './src/navigation/stackTransition';
 import { TAB_ROUTE_NAMES } from './src/navigation/tabBarModel';
 import HomeScreen from './src/screens/HomeScreen';
 import FeedScreen from './src/screens/FeedScreen';
@@ -482,6 +483,7 @@ function AppNavigator() {
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
       <Stack.Navigator
         initialRouteName="Main"
+        screenListeners={stackTransitionListeners}
         screenOptions={{
           headerShown: false,
           cardStyle: { flex: 1, backgroundColor: theme.bg.primary },
