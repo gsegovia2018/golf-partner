@@ -1436,6 +1436,9 @@ export function makeScorecardStyles(theme) {
       fontSize: 16,
       fontFamily: 'PlayfairDisplay-Bold',
       fontVariant: ['lining-nums', 'tabular-nums'],
+      // Same optical lift as soloNineStrokeInput: Playfair's digits sit
+      // ~0.9 dp below their line box's centre.
+      paddingBottom: 2,
       // Same stacking fix as soloNineStrokeInput for the view-only twin.
       position: 'relative',
       zIndex: 1,
