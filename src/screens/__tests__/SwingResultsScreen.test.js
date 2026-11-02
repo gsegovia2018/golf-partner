@@ -706,12 +706,19 @@ describe('SwingResultsScreen: a stored swing', () => {
     expect(u.getAllByText(/approx\./).length).toBeGreaterThan(0);
   });
 
-  test('a swing whose ball was never found adds "ball not seen" to the notice', async () => {
-    const u = setup({ analysis: { ...MARKED, impactFromPose: true } });
+  test('a swing whose ball was never found, its impact not confirmed, adds "impact timed from your body" to the notice', async () => {
+    const marks = { ...emptyMarks({ swingId: 's1' }), pass: { state: 'done', skipped: ['address', 'impact'] } };
+    const u = setup({ analysis: { ...MARKED, impactFromPose: true }, marks });
     await ready(u);
     expect(u.getByText(T.approxShort(T.approxBall))).toBeTruthy();
     fireEvent.press(u.getByTestId('results-approx'));
     expect(u.getByText(T.approxBallBanner)).toBeTruthy();
+  });
+
+  test('no ball seen, but the golfer confirmed the address and impact frames: no notice', async () => {
+    const u = setup({ analysis: { ...MARKED, impactFromPose: true } });
+    await ready(u);
+    expect(u.queryByText(T.approxShort(T.approxBall))).toBeNull();
   });
 
   test('a face-on swing shows its five positions and says how it was filmed, with no "take with care" notice', async () => {

@@ -376,11 +376,19 @@ export function clampPt(p) {
 
 /**
  * Which handle a touch grabs. `pt` and the handles are in view px (inside the picture's
- * rect); the nearest handle within HIT_RADIUS_PX wins, ties go to `prefer`.
- * @returns {'hands'|'head'|'ball'|null}
+ * rect). The selected mark (`prefer`) wins when it is within HIT_RADIUS_PX, and one not placed yet
+ * grabs nothing: the touch places it (phone test 2026-11: at address the ball sits a few px from the
+ * clubhead, so a tap meant for the ball grabbed the clubhead and the ball could never be placed).
+ * Otherwise the nearest handle within reach wins.
+ * @returns {'hands'|'head'|'ball'|null}  null = place the selected mark at the touch
  */
-export function hitTest(pt, handles, prefer = 'hands', radius = HIT_RADIUS_PX) {
+export function hitTest(pt, handles, prefer = null, radius = HIT_RADIUS_PX) {
   'worklet'; // read on the UI thread when a drag starts (D28)
+  if (prefer) {
+    const own = handles[prefer];
+    if (!own) return null;
+    if (Math.hypot(own[0] - pt[0], own[1] - pt[1]) <= radius) return prefer;
+  }
   const names = ['hands', 'head', 'ball'];
   let best = null;
   let bestD = 0;
@@ -389,7 +397,7 @@ export function hitTest(pt, handles, prefer = 'hands', radius = HIT_RADIUS_PX) {
     const p = handles[t];
     if (p) {
       const d = Math.hypot(p[0] - pt[0], p[1] - pt[1]);
-      if (d <= radius && (best === null || d < bestD || (d === bestD && t === prefer))) { best = t; bestD = d; }
+      if (d <= radius && (best === null || d < bestD)) { best = t; bestD = d; }
     }
   }
   return best;

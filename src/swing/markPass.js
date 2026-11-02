@@ -58,6 +58,17 @@ export function markedFromMarks(marks, view) {
   return { state: done ? 'done' : 'partial', count };
 }
 
+/**
+ * The "ball not seen" notice: impact (and the address with it) was timed from the pose alone and the
+ * golfer has not confirmed both frames. Once they have, the frames are theirs and the warning is moot
+ * (phone test 2026-11: it stayed after every position was confirmed, and read as a missing ball mark).
+ */
+export function poseTimingUnchecked(analysis, marks) {
+  if (!analysis?.impactFromPose) return false;
+  const status = statusFromMarks(marks);
+  return status.address !== 'confirmed' || status.impact !== 'confirmed';
+}
+
 /** Results are shown only after the pass (D26). A row from before D26 has no `marked` yet: unknown. */
 export const passDone = (marked) => marked?.state === 'done';
 

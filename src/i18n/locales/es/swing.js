@@ -427,7 +427,7 @@ export default {
   'swing.results.approxShort': 'Aproximado: {list}',
   'swing.results.approxFps': 'pocos fotogramas por segundo',
   'swing.results.approxHeight': 'sin tu altura',
-  'swing.results.approxBall': 'bola no vista',
+  'swing.results.approxBall': 'impacto según tu cuerpo',
   'swing.results.planRow': 'Plan de práctica de 60 minutos',
   'swing.results.planSub': 'Con este ejercicio como base',
   'swing.results.startsAtShort': 'empieza en {name}',

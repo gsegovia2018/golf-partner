@@ -32,7 +32,9 @@ import { formatDate } from '../i18n/format';
 import { normClub } from '../swing/checks';
 import { runAnalysis } from '../swing/runAnalysis';
 import { nativeBallOf } from '../swing/analyze';
-import { markTotalOf, markedFromMarks, passDone } from '../swing/markPass';
+import {
+  markTotalOf, markedFromMarks, passDone, poseTimingUnchecked,
+} from '../swing/markPass';
 import { reanalyzeForClub } from '../swing/reanalyze';
 import { shareSwingExport } from '../swing/shareExport';
 import { deleteSharedSwing } from '../store/swingShareStore';
@@ -169,7 +171,7 @@ function NavRow({
 }
 
 export function SwingResultsView({
-  row, phase, analysis, pose, progress, error, errorDetail = null, stillTick = 0, stillFor, placed = null,
+  row, phase, analysis, pose, marks = null, progress, error, errorDetail = null, stillTick = 0, stillFor, placed = null,
   onBack, onCancel, onDelete, onRetry, onSendDetails, onRecord, onEditMarks, onRename, onPlay, onNeedStills, onExport,
   onPlaceHead, onUndoPlace, onSwitchView, onShare,
   // The shared swing page (/s/<token>): the same screen without the owner's tools: no menu, no
@@ -262,7 +264,7 @@ export function SwingResultsView({
   const approxReasons = ready ? [
     analysis.approximate ? { short: T.approxFps, long: T.approxBanner } : null,
     analysis.scale?.approx ? { short: T.approxHeight, long: T.approxHeightBanner } : null,
-    analysis.impactFromPose ? { short: T.approxBall, long: T.approxBallBanner } : null,
+    poseTimingUnchecked(analysis, marks) ? { short: T.approxBall, long: T.approxBallBanner } : null,
   ].filter(Boolean) : [];
   const openEdit = (k, opts) => onEditMarks?.(k, opts);
   const place_ = async (pt) => {
@@ -831,6 +833,7 @@ export default function SwingResultsScreen({ navigation, route }) {
         phase={phase}
         analysis={data.analysis}
         pose={data.pose}
+        marks={data.marks}
         progress={progress}
         error={error}
         errorDetail={errorDetail}
