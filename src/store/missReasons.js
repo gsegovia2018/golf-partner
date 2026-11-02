@@ -11,7 +11,7 @@
 // hasReason(shotType, detail)       → true when any of the type's keys is set
 // flightOf({ start, finish })       → { start, curve, family } | null
 //   start   'left'|'center'|'right' (absolute, golfer's view); anything else → null
-//   finish  the recorded outcome side (approachMiss / drive). Not left/right →
+//   finish  the recorded outcome side (approachMiss's side / drive). Not left/right →
 //           { start, curve: null, family: null }
 //   curve   'left'|'right'|'none'; family 'start'|'curve'|null. Derived, never stored.
 // shotName(flight, handedness)      → 'push'|'pull'|'slice'|'hook'|'pull-slice'|
@@ -36,12 +36,12 @@
 //   subs: { start:{left,right}, curve:{left,right}, strike:{left,right}, lowPoint },
 //   lies: { [situation]: count } } (every lie situation on a lie-family miss, so a
 //   shot below the feet in the wind counts in both; the strategy cards read the dominant one).
-//   Approach = par !== 3, approachBucket set, approachResult 'miss'; tee = par >= 4
+//   Approach = approachBucket set (a par 3's tee shot included), approachResult 'miss'; tee = par >= 4
 //   and drive left|right|short; short = green missed, not saved, strokes > par.
 
 import { msg } from './statsMsg';
 import { isGIR, recoveryOutcomeFromState } from './scoring';
-import { APPROACH_BUCKETS } from '../components/scorecard/constants';
+import { APPROACH_BUCKETS, missParts } from '../components/scorecard/constants';
 
 export const MISS_REASON_KEYS = {
   drive: ['driveStart', 'driveContact', 'driveSituation'],
@@ -114,6 +114,12 @@ const FIELDS = {
   short: { result: 'shortResult', contact: 'shortContact', situation: 'shortSituation' },
 };
 
+// The side a miss finished on: a drive's direction, or the left/right part of
+// an approach miss ('long-left' → 'left').
+const finishOf = (shotType, detail) => (shotType === 'approach'
+  ? missParts(detail.approachMiss).side
+  : detail[FIELDS[shotType].finish]);
+
 export function summaryOf(shotType, detail, handedness = 'right') {
   const f = FIELDS[shotType];
   if (!f || !detail) return [];
@@ -122,7 +128,7 @@ export function summaryOf(shotType, detail, handedness = 'right') {
   // A short drive (a top) has no start line: the sheet hides the band, so a
   // start kept from an earlier left/right pick stays out of the summary too.
   if (f.start && !(shotType === 'drive' && detail.drive === 'short')) {
-    const name = shotName(flightOf({ start: detail[f.start], finish: detail[f.finish] }), handedness);
+    const name = shotName(flightOf({ start: detail[f.start], finish: finishOf(shotType, detail) }), handedness);
     if (name) out.push(msg(`shots.why.name.${name}`));
     else if (detail[f.start]) out.push(msg(`shots.why.start.${detail[f.start]}`));
   }
@@ -156,7 +162,7 @@ export function classifyMiss(shotType, detail) {
   const contact = detail[f.contact];
   if (LOW_POINT[shotType].includes(contact)) return make('swing', 'lowPoint');
   if (shotType === 'short') return null;
-  const finish = detail[f.finish];
+  const finish = finishOf(shotType, detail);
   const flight = flightOf({ start: detail[f.start], finish });
   if (flight && flight.family) return make('swing', flight.family, finish);
   if (STRIKE.includes(contact)) return make('swing', 'strike', isSide(finish) ? finish : null);
@@ -217,11 +223,11 @@ export function missReasonStats(rounds, playerId) {
     (round.holes || []).forEach((hole) => {
       const d = byHole[hole.number];
       if (!d) return;
-      if (hole.par !== 3 && d.approachBucket && d.approachResult === 'miss') {
+      if (d.approachBucket && d.approachResult === 'miss') {
         if (byBucket[d.approachBucket]) addMiss(byBucket[d.approachBucket], 'approach', d);
         addMiss(all, 'approach', d);
       }
-      if (hole.par !== 3 && d.approachBucket
+      if (d.approachBucket
         && (d.approachResult === 'green' || d.approachResult === 'miss')) {
         if (byBucket[d.approachBucket]) addEncounter(byBucket[d.approachBucket], d);
         addEncounter(all, d);

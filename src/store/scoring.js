@@ -13,6 +13,7 @@
 // ============================================================================
 
 import { clearedReasonPatch } from './missReasons';
+import { MISS_DEPTHS, missParts, joinMiss, missDirs } from '../components/scorecard/constants';
 
 export const STANDARD_SLOPE = 113;
 
@@ -1290,7 +1291,9 @@ export function approachBucketPatch(key) {
 const approachMissResult = (dir, bunker) => (dir || bunker ? 'miss' : null);
 
 // Approach-finish grid tap: `green` is exclusive (clears direction + bunker);
-// the four directions are single-select and clear an on-green selection;
+// a direction clears an on-green selection and combines across the two axes:
+// one of long/short with one of left/right ('long-left'); tapping the other
+// end of an axis replaces it, tapping a selected one turns it off;
 // `bunker` toggles on top of a direction or stands alone. When the finish stops
 // being a miss (on green, or the last miss signal goes) the approach reasons clear,
 // except the situation: a lie is a fact about the shot, only the bucket clear drops it.
@@ -1312,7 +1315,10 @@ function approachFinishBase(detail, key) {
     const nextBunker = !bunker;
     return { approachBunker: nextBunker, approachResult: approachMissResult(dir, nextBunker) };
   }
-  const nextDir = dir === key && !onGreen ? null : key;
+  const { depth, side } = onGreen ? { depth: null, side: null } : missParts(dir);
+  const nextDir = MISS_DEPTHS.includes(key)
+    ? joinMiss(depth === key ? null : key, side)
+    : joinMiss(depth, side === key ? null : key);
   return { approachMiss: nextDir, approachResult: approachMissResult(nextDir, bunker) };
 }
 
@@ -1327,8 +1333,8 @@ export function recoveryOutcomePatch(effectiveOutcome, key) {
 
 // Turns a watch `shot` patch (absolute values) into the field changes the
 // panel's own handlers would have made, so the stored detail is the same.
-// Par 3s have no tee shot and no approach-finish rows (the panel hides them),
-// so those keys are ignored there. Returns a full patch to spread onto the
+// Par 3s have no tee shot rows, and the watch shows no approach finish there
+// (the phone does), so those keys are ignored there. Returns a full patch to spread onto the
 // detail; the caller reconciles against strokes.
 export function normalizeWatchShotPatch(detail, patch, par) {
   const d = detail ?? {};
@@ -1372,7 +1378,11 @@ export function normalizeWatchShotPatch(detail, patch, par) {
         });
       } else {
         const wasGreen = d.approachResult === 'green';
-        const dir = has('approachMiss') ? patch.approachMiss : (wasGreen ? null : d.approachMiss ?? null);
+        const kept = wasGreen ? null : d.approachMiss ?? null;
+        // The watch knows single directions only and is sent one part of a
+        // combined miss (watchShotOf): echoing that part back keeps the whole.
+        const dir = !has('approachMiss') || (patch.approachMiss && missDirs(kept).includes(patch.approachMiss))
+          ? kept : patch.approachMiss;
         const bunker = has('approachBunker') ? !!patch.approachBunker : (wasGreen ? false : !!d.approachBunker);
         Object.assign(out, {
           approachMiss: dir, approachBunker: bunker, approachResult: approachMissResult(dir, bunker),

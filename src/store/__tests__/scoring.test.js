@@ -1337,6 +1337,29 @@ describe('shot-detail edit helpers (ShotDetailPanel handlers, shared with the wa
       .toEqual({ approachMiss: null, approachResult: null, ...finishClear });
     expect(approachFinishPatch({ approachMiss: 'left', approachResult: 'miss' }, 'bunker'))
       .toEqual({ approachBunker: true, approachResult: 'miss' });
+
+  });
+
+  test('approach finish: one depth combines with one side', () => {
+    const at = (approachMiss) => ({ approachMiss, approachResult: 'miss' });
+    const dirAfter = (d, key) => approachFinishPatch(d, key).approachMiss;
+    expect(dirAfter(at('long'), 'left')).toBe('long-left');
+    expect(dirAfter(at('left'), 'long')).toBe('long-left');     // depth first, whatever the tap order
+    expect(dirAfter(at('long-left'), 'right')).toBe('long-right'); // the other side replaces
+    expect(dirAfter(at('long-left'), 'short')).toBe('short-left'); // the other depth replaces
+    expect(dirAfter(at('long-left'), 'long')).toBe('left');        // a selected one turns off
+    expect(dirAfter(at('long-left'), 'left')).toBe('long');
+    expect(dirAfter({ approachMiss: 'long-left', approachResult: 'green' }, 'right')).toBe('right');
+    expect(approachFinishPatch({ approachMiss: 'short-right', approachBunker: true, approachResult: 'miss' }, 'bunker'))
+      .toEqual({ approachBunker: false, approachResult: 'miss' });
+  });
+
+  test('watch: echoing one part of a combined miss keeps the whole', () => {
+    const d = { approachBucket: '100-150', approachMiss: 'long-left', approachResult: 'miss' };
+    expect(normalizeWatchShotPatch(d, { approachResult: 'miss', approachMiss: 'left', approachBunker: true }, 4))
+      .toMatchObject({ approachMiss: 'long-left', approachBunker: true });
+    expect(normalizeWatchShotPatch(d, { approachResult: 'miss', approachMiss: 'right', approachBunker: false }, 4))
+      .toMatchObject({ approachMiss: 'right' });
   });
 
   test('recovery chip toggles off the effective outcome', () => {

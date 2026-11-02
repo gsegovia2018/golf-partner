@@ -247,22 +247,25 @@ describe('missReasonStats', () => {
     shotDetails: { me: details },
   });
 
-  test('approach per bucket and pooled, tagged/untagged/blocked, sides', () => {
+  test('approach per bucket and pooled (a par 3 tee shot included), tagged/untagged/blocked, sides', () => {
     const r = round({
       1: { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'right', approachStart: 'right' },
       2: { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'left', approachSituation: ['blocked'] },
-      3: { approachBucket: '150-200', approachResult: 'miss', approachMiss: 'long' },
+      3: { approachBucket: '150-200', approachResult: 'miss', approachMiss: 'long-right', approachStart: 'right' },
       4: { approachBucket: '150-200', approachResult: 'green', putts: 2 },
       5: { approachBucket: '100-150', approachResult: 'miss', approachContact: 'fat' },
     }, { 1: 5, 2: 5, 3: 5, 4: 4, 5: 3 });
     const { approach } = missReasonStats([r], 'me');
     const b = approach.byBucket['100-150'];
-    expect(b).toMatchObject({ misses: 2, tagged: 2, untagged: 0, blocked: 1 });
-    expect(b.families).toEqual({ forced: 1, lie: 0, decision: 0, swing: 1 });
+    expect(b).toMatchObject({ misses: 3, tagged: 3, untagged: 0, blocked: 1 });
+    expect(b.families).toEqual({ forced: 1, lie: 0, decision: 0, swing: 2 });
     expect(b.subs.start).toEqual({ left: 0, right: 1 });
-    expect(approach.byBucket['150-200']).toMatchObject({ misses: 1, tagged: 0, untagged: 1 });
+    expect(b.subs.lowPoint).toBe(1);
+    // long-right reads its side: started right, finished right → a push.
+    expect(approach.byBucket['150-200']).toMatchObject({ misses: 1, tagged: 1, untagged: 0 });
+    expect(approach.byBucket['150-200'].subs.start).toEqual({ left: 0, right: 1 });
     expect(approach.byBucket['0-50'].misses).toBe(0);
-    expect(approach.all).toMatchObject({ misses: 3, tagged: 2, untagged: 1, blocked: 1 });
+    expect(approach.all).toMatchObject({ misses: 4, tagged: 4, untagged: 0, blocked: 1 });
   });
 
   test('lowPoint and strike side counts', () => {
@@ -346,13 +349,14 @@ describe('encounters', () => {
     expect(approach.all.encounters).toEqual({ wind: { shots: 2, greens: 1 } });
   });
 
-  test('bucket set but no result, no bucket, and par 3 are not counted', () => {
+  test('bucket set but no result and no bucket are not counted; a par 3 is', () => {
     const { approach } = stats({
       1: { approachBucket: '100-150', approachSituation: ['uphill'] },
       2: { approachResult: 'green', approachSituation: ['uphill'] },
-      5: { approachBucket: '100-150', approachResult: 'green', approachSituation: ['uphill'] },
     });
     expect(approach.all.encounters).toEqual({});
+    const par3 = stats({ 5: { approachBucket: '100-150', approachResult: 'green', approachSituation: ['uphill'] } });
+    expect(par3.approach.all.encounters).not.toEqual({});
   });
 
   test('tee and short rows have empty encounters', () => {

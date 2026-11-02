@@ -716,33 +716,35 @@ describe('approachMissTendency', () => {
           { par: 4, strokes: 4 },
           { par: 4, strokes: 5 },
           { par: 4, strokes: 6 },
-          { par: 3, strokes: 4 },   // par 3 → ignored
+          { par: 3, strokes: 4 },   // par 3 tee shot → counts
           { par: 4, strokes: 5 },   // no bucket → ignored
         ],
         [
           { approachBucket: '100-150', approachResult: 'green' },
           { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'left' },
           { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'short', approachBunker: true },
-          { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'long' },
+          { approachBucket: '150-200', approachResult: 'miss', approachMiss: 'long-left' },
           { approachResult: 'miss', approachMiss: 'right' },
         ],
       )],
     };
     const r = approachMissTendency(t, 'me');
     expect(r.hasData).toBe(true);
-    expect(r.attempts).toBe(3);
+    expect(r.attempts).toBe(4);
     expect(r.greens).toBe(1);
-    expect(r.greenRate).toBe(33);
-    expect(r.misses).toBe(2);
-    expect(r.byDirection).toEqual({ long: 0, short: 1, left: 1, right: 0 });
-    expect(r.directionKnown).toBe(2);
-    expect(r.shortRate).toBe(50);
-    expect(r.leftRate).toBe(50);
+    expect(r.greenRate).toBe(25);
+    expect(r.misses).toBe(3);
+    // long-left counts on both axes; the denominator is misses with a direction.
+    expect(r.byDirection).toEqual({ long: 1, short: 1, left: 2, right: 0 });
+    expect(r.directionKnown).toBe(3);
+    expect(r.shortRate).toBe(33);
+    expect(r.longRate).toBe(33);
+    expect(r.leftRate).toBe(67);
     expect(r.bunker).toBe(1);
-    expect(r.bunkerRate).toBe(50);
+    expect(r.bunkerRate).toBe(33);
   });
   test('no eligible approaches → hasData false', () => {
-    const t = { rounds: [makeRound([{ par: 3, strokes: 3 }], [{ approachBucket: '100-150', approachResult: 'miss' }])] };
+    const t = { rounds: [makeRound([{ par: 3, strokes: 3 }], [{ approachResult: 'miss' }])] };
     expect(approachMissTendency(t, 'me').hasData).toBe(false);
   });
 });
