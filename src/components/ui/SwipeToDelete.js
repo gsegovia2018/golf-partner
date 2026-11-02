@@ -21,6 +21,12 @@ export default function SwipeToDelete({
   const s = useMemo(() => makeStyles(theme, borderRadius), [theme, borderRadius]);
   const translateX = useRef(new Animated.Value(0)).current;
   const offsetRef = useRef(0);
+  // The red stays invisible until the row moves. A fading parent (Reveal)
+  // draws each child translucent on its own on Android, so a full-strength
+  // underlay showed through the row as a red flash while the list faded in.
+  const underOpacity = useMemo(() => translateX.interpolate({
+    inputRange: [-1, 0], outputRange: [1, 0], extrapolate: 'clamp',
+  }), [translateX]);
 
   const snapTo = useCallback((to) => {
     offsetRef.current = to;
@@ -55,7 +61,7 @@ export default function SwipeToDelete({
 
   return (
     <View style={s.wrap}>
-      <View style={s.under}>
+      <Animated.View style={[s.under, { opacity: underOpacity }]} testID="swipe-under">
         <Pressable
           style={s.deleteBtn}
           onPress={() => { snapTo(0); onDelete?.(); }}
@@ -65,7 +71,7 @@ export default function SwipeToDelete({
         >
           <Feather name="trash-2" size={20} color={theme.isDark ? theme.text.inverse : '#ffffff'} />
         </Pressable>
-      </View>
+      </Animated.View>
       <Animated.View
         style={[s.content, { transform: [{ translateX }] }]}
         testID="swipe-content"

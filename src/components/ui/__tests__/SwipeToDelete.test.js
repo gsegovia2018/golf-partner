@@ -57,6 +57,16 @@ describe('SwipeToDelete', () => {
     expect(style.backgroundColor).toBe(dark.bg.primary);
   });
 
+  test('enabled: the red underlay is invisible at rest, so a fading row cannot show it', async () => {
+    const { getByTestId } = await renderSwipe(
+      <SwipeToDelete enabled onDelete={() => {}}>
+        <Text>Sunday fourball</Text>
+      </SwipeToDelete>,
+    );
+    const style = StyleSheet.flatten(getByTestId('swipe-under').props.style);
+    expect(style.opacity).toBe(0);
+  });
+
   test('disabled: renders the child with no delete action in the tree', async () => {
     const { getByText, queryByTestId } = await renderSwipe(
       <SwipeToDelete enabled={false} onDelete={() => {}}>
