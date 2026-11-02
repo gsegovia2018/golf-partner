@@ -1210,7 +1210,9 @@ export function makeScorecardStyles(theme) {
       // loses the bottom of the 2). Without the padding the line box ends at
       // the baseline-ish metric, so descenders were cut instead ("Hoyo 9"
       // lost the tail of the y): an explicit line height leaves them room.
-      lineHeight: 22,
+      // 22 left only ~1 dp under the descent and the y still clipped on
+      // device; 24 gives 2 dp each side of the glyph box.
+      lineHeight: 24,
       ...(Platform.OS === 'web' ? {} : { includeFontPadding: false }),
       textAlign: 'center',
     },
