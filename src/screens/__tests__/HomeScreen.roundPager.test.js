@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet } from 'react-native';
 import HomeScreen, { chooseInitialRound } from '../HomeScreen';
 import { useAuth } from '../../context/AuthContext';
 import { fetchMyPlayers, loadQuickStartCourses } from '../../store/libraryStore';
@@ -15,8 +15,8 @@ import {
 } from '../../store/tournamentStore';
 import { shouldHandleStoreChange } from '../../lib/navigationFocus';
 
-// A Strokes | Points cell's test ID marks the face on show: read its figure.
-const faceText = (el) => el.findByType(Text).props.children;
+// A score cell holds both modes' figures; the hidden one is out of the a11y tree.
+const SHOWN = { includeHiddenElements: false };
 
 const mockTheme = {
   bg: {
@@ -455,9 +455,9 @@ test('a finished casual game shows the read-only scorecard instead of ROUND SCOR
   const card = within(view.getByTestId('finished-game-scorecard'));
   expect(card.getByTestId('shot-scorecard')).toBeTruthy();
   expect(card.getAllByTestId(/^card-name-/).map((n) => n.props.testID)).toEqual(['card-name-p1', 'card-name-p2']);
-  expect(faceText(card.getByTestId('card-p1-cell-1'))).toBe(4);
+  expect(card.getByTestId('card-p1-cell-1', SHOWN).props.children).toBe(4);
   fireEvent.press(card.getByTestId('past-round-mode-points'));
-  expect(faceText(card.getByTestId('card-p1-cell-1'))).toBe('2'); // a par, no strokes
+  expect(card.getByTestId('card-p1-cell-1', SHOWN).props.children).toBe('2'); // a par, no strokes
 });
 
 test('a casual game with every hole scored counts as past without a finish stamp', async () => {

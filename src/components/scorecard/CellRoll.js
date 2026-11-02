@@ -19,7 +19,7 @@ import { duration, ease } from '../../theme/motion';
 // Pass `faces` / `marks` built once (memoised by the caller): a switch then
 // re-renders only the two face wrappers, never the text inside them, which
 // Android would otherwise re-measure across the whole card in one frame.
-// `testID` goes on the face on show.
+// `step` is the wave's delay per `index` (a whole-row roll passes its own).
 // `faces` / `marks` are { strokes, points }; `index` is the figure's place in
 // the round (a nine's total comes after its last hole), so a card rolls as a
 // short wave from hole 1 on. `clip={false}` leaves the box unclipped, for a
@@ -36,7 +36,7 @@ const MODES = ['strokes', 'points'];
 // sharper (it "re-focuses"). Keeping the layer at rest draws it one way only.
 const steadyLayer = Platform.OS === 'web' ? { willChange: 'transform, opacity' } : null;
 
-const Face = memo(function Face({ k, on, active, p, h, mark, testID, children }) {
+const Face = memo(function Face({ k, on, active, p, h, mark, children }) {
   // Shown face: fades in from below. Other face: leaves upward and waits,
   // invisible, above the cell (it jumps below unseen when it next enters).
   const st = useAnimatedStyle(() => {
@@ -48,13 +48,16 @@ const Face = memo(function Face({ k, on, active, p, h, mark, testID, children })
   return (
     <Animated.View
       style={[k === 0 ? styles.flow : styles.layer, steadyLayer, st]}
+      collapsable={false}
       pointerEvents={on ? 'box-none' : 'none'}
     >
       {/* A plain View carries the hiding: Reanimated's web view would pass
           these props straight to the DOM. */}
       <View
         style={styles.face}
-        testID={on ? testID : undefined}
+        // Never flattened: toggling a flattenable wrapper's pointer / a11y props
+        // makes Android remount it and re-measure all the text inside.
+        collapsable={false}
         pointerEvents={on ? 'box-none' : 'none'}
         accessibilityElementsHidden={!on}
         importantForAccessibility={on ? 'auto' : 'no-hide-descendants'}
@@ -69,7 +72,7 @@ const Face = memo(function Face({ k, on, active, p, h, mark, testID, children })
 
 const NO_MARKS = {};
 
-function CellRoll({ mode, index = 0, faces, marks = NO_MARKS, clip = true, style, testID }) {
+function CellRoll({ mode, index = 0, step = WAVE_STEP_MS, faces, marks = NO_MARKS, clip = true, style }) {
   const reduced = useReducedMotion();
   const idx = Math.max(0, MODES.indexOf(mode));
   const last = useRef(idx);
@@ -84,8 +87,8 @@ function CellRoll({ mode, index = 0, faces, marks = NO_MARKS, clip = true, style
     p.value = 0;
     p.value = reduced
       ? 1
-      : withDelay(index * WAVE_STEP_MS, withTiming(1, { duration: duration.state, easing: ease.out }));
-  }, [idx, reduced, index, active, p]);
+      : withDelay(index * step, withTiming(1, { duration: duration.state, easing: ease.out }));
+  }, [idx, reduced, index, step, active, p]);
 
   return (
     <View
@@ -93,7 +96,7 @@ function CellRoll({ mode, index = 0, faces, marks = NO_MARKS, clip = true, style
       onLayout={(e) => { h.value = e.nativeEvent.layout.height; }}
     >
       {MODES.map((m, k) => (
-        <Face key={m} k={k} on={k === idx} active={active} p={p} h={h} mark={marks[m]} testID={testID}>
+        <Face key={m} k={k} on={k === idx} active={active} p={p} h={h} mark={marks[m]}>
           {faces[m]}
         </Face>
       ))}
