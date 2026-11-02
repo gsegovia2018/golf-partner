@@ -6,7 +6,7 @@ import { driveLieFromDetail } from '../store/statsEngine';
 import {
   watchStateOf, parseWatchCommand, decideWatchCommand, WATCH_SHOT_FIELDS,
 } from '../store/watchProtocol';
-import { DEFAULT_SHOT } from '../components/scorecard/constants';
+import { DEFAULT_SHOT, missParts } from '../components/scorecard/constants';
 import { NOTIFICATION_MIN_DELTA_M } from './useRoundTracking';
 
 // Mirrors the live scorecard to the Wear OS watch and applies the watch's
@@ -80,6 +80,9 @@ function watchShotOf(detail) {
   if (!detail) return null;
   const out = {};
   for (const k of WATCH_SHOT_FIELDS) out[k] = detail[k] ?? (k === 'approachBunker' ? false : DEFAULT_SHOT[k] ?? null);
+  // The watch picks one direction: a combined miss ('long-left') shows as its side.
+  const { depth, side } = missParts(out.approachMiss);
+  out.approachMiss = side ?? depth;
   return out;
 }
 

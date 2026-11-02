@@ -12,7 +12,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { useT } from '../../i18n';
 import { unitWord } from '../../lib/units';
 import { OPTIONS, flightOf, shotName, situations } from '../../store/missReasons';
-import { APPROACH_LABELS, APPROACH_LABELS_YD } from './constants';
+import { APPROACH_LABELS, APPROACH_LABELS_YD, missParts } from './constants';
 
 const KEYS = {
   drive: { start: 'driveStart', contact: 'driveContact', situation: 'driveSituation', finish: 'drive' },
@@ -77,8 +77,10 @@ export default function MissWhySheet({
   const isShortMode = mode === 'short';
   const isApproach = mode === 'approach';
   const bunker = isApproach && !!d.approachBunker;
-  const fin = isShortMode ? null : (isApproach ? d.approachMiss : d.drive) ?? null;
+  const parts = missParts(d.approachMiss);
+  const fin = isShortMode ? null : (isApproach ? (parts.side ?? parts.depth) : d.drive) ?? null;
   const side = fin === 'left' || fin === 'right' ? fin : null;
+  const depth = isApproach ? parts.depth : null;
   const driveShort = mode === 'drive' && d.drive === 'short';
   const start = isShortMode ? null : d[k.start] ?? null;
   const showBand = !isShortMode && !driveShort;
@@ -87,6 +89,7 @@ export default function MissWhySheet({
   if (isApproach) {
     if (bunker && side) title = t('shots.why.title.bunkerSide', { side: t(`shots.why.side.${side}`) });
     else if (bunker) title = t('shots.why.title.bunker');
+    else if (side && depth) title = t('shots.why.title.depthSide', { depth: t(`shots.why.side.${depth}`), side: t(`shots.why.side.${side}`) });
     else if (side) title = t(`shots.why.title.${side}`);
     else title = t(`shots.why.title.${fin === 'long' ? 'long' : 'short'}`);
   } else if (mode === 'drive') {
@@ -121,7 +124,10 @@ export default function MissWhySheet({
     pill = sideText ? t('shots.why.pill', { a: t(`shots.why.start.${start}`), b: sideText }) : t(`shots.why.start.${start}`);
   } else { pill = t('shots.why.bandHint'); pillAsk = true; }
 
-  const [fx, fy] = (isApproach ? FIN_A[fin] ?? [234, 132] : FIN_D[fin] ?? [179, 150]);
+  // A long-left miss lands left of the green and past it: x from the side, y from the depth.
+  const [fx, fy] = isApproach
+    ? (side && depth ? [FIN_A[side][0], FIN_A[depth][1]] : FIN_A[fin] ?? [234, 132])
+    : FIN_D[fin] ?? [179, 150];
   const target = isApproach
     ? 'M131 126 C131 118 227 118 227 126 C227 134 131 134 131 126 Z'
     : 'M150 176 L166 122 L192 122 L208 176 Z';

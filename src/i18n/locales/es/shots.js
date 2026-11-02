@@ -31,7 +31,7 @@ export default {
   'shots.detail.sandSave': 'Sand Save',
 
   'shots.explain.approachResultTitle': 'Resultado de la aproximación',
-  'shots.explain.approachResultBody': 'Dónde acabó la aproximación de juego reglamentario: en el green o hacia dónde se fue. Elige una dirección y añade Bunker si cayó en arena. Así las aproximaciones se separan de los golpes de recuperación y se registra tu tendencia a fallar.',
+  'shots.explain.approachResultBody': 'Dónde acabó la aproximación de juego reglamentario: en el green o hacia dónde se fue. Elige larga o corta, izquierda o derecha, o una de cada (larga e izquierda), y añade Bunker si cayó en arena. En un par 3 es el golpe de salida. Así las aproximaciones se separan de los golpes de recuperación y se registra tu tendencia a fallar.',
   'shots.explain.sandShotsTitle': 'Golpes de arena',
   'shots.explain.sandShotsBody': 'Total de golpes de bunker que hiciste en este hoyo, incluso desde un bunker de calle. Sirve para los sand saves y las visitas a bunkers por vuelta.',
   'shots.explain.teeClubTitle': 'Palo de salida',
@@ -121,6 +121,7 @@ export default {
   'shots.why.title.long': '¿Por qué se fue larga?',
   'shots.why.title.short': '¿Por qué se quedó corta?',
   'shots.why.title.bunker': '¿Por qué acabó en el búnker?',
+  'shots.why.title.depthSide': '¿Por qué se fue {depth} y a la {side}?',
   'shots.why.title.bunkerSide': '¿Por qué falló a la {side} y acabó en el búnker?',
   'shots.why.title.driveLeft': '¿Por qué se fue la salida a la izquierda?',
   'shots.why.title.driveRight': '¿Por qué se fue la salida a la derecha?',

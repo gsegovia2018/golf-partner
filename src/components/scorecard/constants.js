@@ -26,7 +26,7 @@ export const DEFAULT_SHOT = {
   firstPuttBucket: null,        // '0-1' | '1-2' | '2-3' | '3-6' | '6+' | null
   approachBucket: null,         // '0-50' | '50-100' | '100-150' | '150-200' | '200+' | null
   approachResult: null,         // 'green' | 'miss' | null (derived from the finish grid: green center = 'green', any dir/bunker = 'miss')
-  approachMiss: null,           // 'long' | 'short' | 'left' | 'right' | null — direction a missed green finished (single-select)
+  approachMiss: null,           // 'long' | 'short' | 'left' | 'right' | 'long-left' | 'long-right' | 'short-left' | 'short-right' | null — where a missed green finished (one depth and/or one side; see missParts)
   approachBunker: false,        // true when the miss finished in a greenside bunker (combines with a direction, or stands alone)
   approachLie: null,            // 'fairway' | 'rough' | 'sand' | null (null = drive's lie on par 4s, else fairway)
   approachStart: null,          // 'left' | 'center' | 'right' | null
@@ -62,9 +62,9 @@ export const DRIVE_META = {
 
 // Where a regulation approach finished, as an icon row mirroring the drive
 // row. `green` (center) is the on-green hit and is mutually exclusive with
-// everything else. The four directions are single-select among themselves;
-// `bunker` is a separate toggle that combines with a direction (or stands
-// alone). Icons come from Feather except `bunker`, which uses
+// everything else. Long/short and left/right each pick one, and the two
+// combine (long + left); `bunker` is a separate toggle that combines with
+// them (or stands alone). Icons come from Feather except `bunker`, which uses
 // MaterialCommunityIcons — see ShotDetailPanel's APPROACH_FINISH_ICON_SET.
 export const APPROACH_FINISH_ORDER = ['left', 'long', 'green', 'short', 'right', 'bunker'];
 export const APPROACH_FINISH_META = {
@@ -75,6 +75,31 @@ export const APPROACH_FINISH_META = {
   right: { label: 'Right', icon: 'arrow-right', set: 'feather' },
   bunker: { label: 'Bunker', icon: 'beach', set: 'material-community' },
 };
+
+// A missed green's direction is one depth (long/short) and/or one side
+// (left/right), stored as one string: 'long', 'left' or 'long-left' (depth
+// first). Older cards only ever hold the single values.
+export const MISS_DEPTHS = ['long', 'short'];
+export const MISS_SIDES = ['left', 'right'];
+
+export function missParts(miss) {
+  const parts = typeof miss === 'string' ? miss.split('-') : [];
+  return {
+    depth: parts.find((p) => MISS_DEPTHS.includes(p)) ?? null,
+    side: parts.find((p) => MISS_SIDES.includes(p)) ?? null,
+  };
+}
+
+export function joinMiss(depth, side) {
+  if (depth && side) return `${depth}-${side}`;
+  return depth ?? side ?? null;
+}
+
+// The single directions a stored miss is made of: 'long-left' → ['long', 'left'].
+export function missDirs(miss) {
+  const { depth, side } = missParts(miss);
+  return [depth, side].filter(Boolean);
+}
 
 // Labels omit the unit; the section's "metres" hint already states it.
 export const FIRST_PUTT_BUCKETS = ['0-1', '1-2', '2-3', '3-6', '6+'];

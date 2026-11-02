@@ -49,6 +49,13 @@ describe('MissWhySheet', () => {
     c.unmount();
     const d = setup({ detail: { approachMiss: 'left', approachBunker: true } });
     expect(d.getByText('Why did it miss left, into the bunker?')).toBeTruthy();
+    d.unmount();
+    const e = setup({ detail: { approachMiss: 'long-left' } });
+    expect(e.getByText('Why was it long and left?')).toBeTruthy();
+    e.unmount();
+    // A combined miss names its flight from the side: started right, finished left.
+    const f = setup({ detail: { approachMiss: 'short-left', approachStart: 'right' } });
+    expect(f.getByText(/Push-hook/i)).toBeTruthy();
   });
 
   test('band tap writes approachStart and the pill names the shot', () => {

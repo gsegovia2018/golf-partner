@@ -25,7 +25,7 @@ import {
   DRIVE_DIST_BUCKETS, DRIVE_DIST_LABELS, DRIVE_DIST_LABELS_YD,
   DRIVE_MISS_LIES, DRIVE_MISS_LIE_LABELS,
   APPROACH_LIES, APPROACH_LIE_LABELS,
-  APPROACH_FINISH_ORDER, APPROACH_FINISH_META,
+  APPROACH_FINISH_ORDER, APPROACH_FINISH_META, missDirs,
   TEE_CLUBS, TEE_CLUB_LABELS,
 } from './constants';
 import { useT } from '../../i18n';
@@ -152,13 +152,13 @@ function LieChipRow({ label, a11yPrefix, options, labels, effectiveValue, onSele
 
 // Icon row (mirrors the drive row) for where a regulation approach finished:
 // the green center, one of four miss directions, or a greenside bunker.
-// Selection rules: `green` is exclusive (clears direction + bunker); the four
-// directions are single-select among themselves; `bunker` toggles on top of a
-// direction or stands alone. `approachResult` is kept in sync ('green' vs
+// Selection rules: `green` is exclusive (clears direction + bunker); one of
+// long/short combines with one of left/right (approachFinishPatch); `bunker`
+// toggles on top of a direction or stands alone. `approachResult` is kept in sync ('green' vs
 // 'miss' vs null) so the stats engine and downstream rows read it unchanged.
 function ApproachFinishRow({ detail, onSelect, theme, s, isLast = false, noRule = false }) {
   const tl = useT();
-  const dir = detail.approachMiss ?? null;
+  const dirs = missDirs(detail.approachMiss);
   const bunker = !!detail.approachBunker;
   const onGreen = detail.approachResult === 'green';
 
@@ -166,7 +166,7 @@ function ApproachFinishRow({ detail, onSelect, theme, s, isLast = false, noRule 
     ? onGreen
     : key === 'bunker'
       ? bunker
-      : dir === key && !onGreen);
+      : dirs.includes(key) && !onGreen);
 
   const select = (key) => onSelect(key);
 
@@ -273,7 +273,10 @@ export function ShotDetailPanel({
     ...(statGroups ?? {}),
   };
   const isPar3 = hole.par === 3;
-  const showApproachExtrasFlag = g.approach && !isPar3 && d.approachBucket;
+  // Where the shot finished is asked on every hole (a par 3's tee shot is its
+  // approach); the lie only after a tee shot, so not on a par 3.
+  const showApproachFinish = !!(g.approach && d.approachBucket);
+  const showApproachExtrasFlag = showApproachFinish && !isPar3;
   const driveMissed = d.drive === 'left' || d.drive === 'right' || d.drive === 'short';
   const teeClub = d.teeClub ?? 'driver';
   const approachDistanceLabel = isPar3 ? tl('shots.detail.holeDistance') : tl('shots.detail.approach');
@@ -318,7 +321,7 @@ export function ShotDetailPanel({
   };
   const chipsOn = missSetting !== 'off';
   const driveChip = chipsOn && g.teeShot && !isPar3 && driveMissed;
-  const approachChip = chipsOn && showApproachExtrasFlag && d.approachResult === 'miss';
+  const approachChip = chipsOn && showApproachFinish && d.approachResult === 'miss';
   const shortChip = chipsOn && g.shortGame && missedGIR && strokes != null && strokes > hole.par
     && effectiveOutcome !== 'up-and-down' && effectiveOutcome !== 'sand-save';
   const onDriveTap = (key) => {
@@ -329,9 +332,11 @@ export function ShotDetailPanel({
   const onFinishTap = (key) => {
     const patch = approachFinishPatch(d, key);
     onChange(patch);
-    const turnedOn = key === 'bunker' ? patch.approachBunker === true
-      : key !== 'green' && patch.approachMiss === key;
-    if (canOpen('approach') && turnedOn) setSheet('approach');
+    // Only the tap that makes it a miss opens the sheet: adding the second
+    // direction or the bunker (long, then left) just refines the finish, and
+    // the "Why?" chip is there for the rest.
+    const becameMiss = patch.approachResult === 'miss' && d.approachResult !== 'miss';
+    if (canOpen('approach') && becameMiss) setSheet('approach');
   };
 
   // Stroke budget: every counter is one of the hole's strokes, so the four
@@ -366,7 +371,7 @@ export function ShotDetailPanel({
     ['driveLie', g.teeShot && !isPar3 && driveMissed],
     ['driveDistBucket', g.teeShot && !isPar3],
     ['approachBucket', g.approach],
-    ['approachResult', showApproachExtras],
+    ['approachResult', showApproachFinish],
     ['approachLie', showApproachExtras],
     ['firstPutt', g.putting && (d.putts ?? 0) >= 1],
     ['outcome', g.shortGame && missedGIR],
@@ -565,7 +570,7 @@ export function ShotDetailPanel({
           }
         />
       )}
-      {showApproachExtras && (
+      {showApproachFinish && (
         <ApproachFinishRow
           detail={d}
           onSelect={onFinishTap}
@@ -598,7 +603,7 @@ export function ShotDetailPanel({
           </TouchableOpacity>
         </View>
       )}
-      {showApproachExtras && approachChip && (
+      {approachChip && (
         <ReasonChip
           summary={summaryOf('approach', d, handedness)}
           onPress={() => setSheet('approach')}

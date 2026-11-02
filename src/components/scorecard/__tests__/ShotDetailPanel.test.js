@@ -236,12 +236,34 @@ describe('ShotDetailPanel approach finish grid', () => {
     expect(onChange).toHaveBeenCalledWith({ approachMiss: 'right', approachResult: 'miss' });
   });
 
-  test('finish grid hidden on par 3s', async () => {
+  test('finish grid shown on par 3s (the tee shot is the approach), without the lie row', async () => {
+    const onChange = jest.fn();
     const r = render(
-      <ShotDetailPanel hole={{ number: 2, par: 3 }} detail={withBucket()} onChange={jest.fn()} strokes={null} />,
+      <ShotDetailPanel hole={{ number: 2, par: 3 }} detail={withBucket()} onChange={onChange} strokes={null} />,
     );
     await flush();
-    expect(r.queryByText('Where did it finish?')).toBeNull();
+    expect(r.getByLabelText('Approach finish Short')).toBeTruthy();
+    expect(r.queryByText('Approach lie')).toBeNull();
+    fireEvent.press(r.getByLabelText('Approach finish Short'));
+    expect(onChange).toHaveBeenCalledWith({ approachMiss: 'short', approachResult: 'miss' });
+  });
+
+  test('a side combines with a depth, and both show selected', async () => {
+    const onChange = jest.fn();
+    const r = render(
+      <ShotDetailPanel
+        hole={par4}
+        detail={withBucket({ approachMiss: 'short-right', approachResult: 'miss', approachBunker: true })}
+        onChange={onChange}
+        strokes={null}
+      />,
+    );
+    await flush();
+    const selected = (label) => r.getByLabelText(`Approach finish ${label}`).props.accessibilityState.selected;
+    expect(['Short', 'Right', 'Bunker'].map(selected)).toEqual([true, true, true]);
+    expect(['Long', 'Left', 'On green'].map(selected)).toEqual([false, false, false]);
+    fireEvent.press(r.getByLabelText('Approach finish Left'));
+    expect(onChange).toHaveBeenLastCalledWith({ approachMiss: 'short-left', approachResult: 'miss' });
   });
 });
 
@@ -353,6 +375,13 @@ describe('ShotDetailPanel miss reasons', () => {
     const r = await renderPanel({ detail: withBucket() });
     fireEvent.press(r.getByLabelText('Approach finish Bunker'));
     expect(r.getByText('Not this round')).toBeTruthy();
+  });
+
+  test('does not reopen when a miss gains a second direction or the bunker', async () => {
+    const r = await renderPanel({ detail: withBucket({ approachMiss: 'long', approachResult: 'miss' }) });
+    fireEvent.press(r.getByLabelText('Approach finish Left'));
+    fireEvent.press(r.getByLabelText('Approach finish Bunker'));
+    expect(r.queryByText('Not this round')).toBeNull();
   });
 
   test('does not open on fairway, super or on green', async () => {

@@ -6,6 +6,7 @@ import {
 } from './strokesGainedBaseline';
 import { clubDistances } from '../lib/shotStats';
 import { isBlockedApproach } from './missReasons';
+import { missDirs } from '../components/scorecard/constants';
 
 // Scramble rounds store ONE team ball under the team's captain (pair[0]),
 // scored off a team handicap — there are no real personal scores, shot
@@ -1948,8 +1949,8 @@ export function approachScoreImpact(tournament, playerId) {
 }
 
 // ── Approach miss tendency (dispersion) ──
-// Over holes where the player logged an approach finish (non-par-3, with an
-// approachBucket and an explicit green/miss result), how the ball dispersed:
+// Over holes where the player logged an approach finish (with an approachBucket
+// and an explicit green/miss result; a par 3's tee shot counts), how the ball dispersed:
 // the green-hit rate, and among misses the short/long/left/right split plus
 // the greenside-bunker rate. Powers the miss-tendency readout — a coaching
 // cue for aim and club selection, independent of strokes gained.
@@ -1961,12 +1962,12 @@ export function approachMissTendency(tournament, playerId) {
   let misses = 0;
   let bunker = 0;
   let blocked = 0;
+  let directionKnown = 0;
   const dir = { long: 0, short: 0, left: 0, right: 0 };
   (tournament.rounds || []).forEach((round) => {
     const byHole = round.shotDetails?.[playerId];
     if (!byHole || !round.scores?.[playerId]) return;
     (round.holes || []).forEach((hole) => {
-      if (hole.par === 3) return;
       const d = byHole[hole.number];
       if (!d || !d.approachBucket) return;
       if (d.approachResult !== 'green' && d.approachResult !== 'miss') return;
@@ -1975,11 +1976,12 @@ export function approachMissTendency(tournament, playerId) {
       if (d.approachResult === 'green') { greens += 1; return; }
       misses += 1;
       if (d.approachBunker) bunker += 1;
-      if (dir[d.approachMiss] != null) dir[d.approachMiss] += 1;
+      const dirs = missDirs(d.approachMiss);
+      if (dirs.length) directionKnown += 1;
+      dirs.forEach((k) => { dir[k] += 1; });
     });
   });
   const pct = (num, den) => (den > 0 ? Math.round((num / den) * 100) : null);
-  const directionKnown = dir.long + dir.short + dir.left + dir.right;
   return {
     hasData: attempts > 0,
     attempts,
@@ -1990,7 +1992,9 @@ export function approachMissTendency(tournament, playerId) {
     bunkerRate: pct(bunker, misses),
     byDirection: dir,
     directionKnown,
-    // Split among misses with a known direction — the coaching signal.
+    // Share of the misses with a known direction that went each way — the
+    // coaching signal. A long-left miss counts as long and as left, so the
+    // depth pair and the side pair each sum to at most 100.
     shortRate: pct(dir.short, directionKnown),
     longRate: pct(dir.long, directionKnown),
     leftRate: pct(dir.left, directionKnown),
@@ -2022,7 +2026,6 @@ export function approachMissCost(tournament, playerId) {
     const handicap = getPlayingHandicap(round, player);
     const byHole = round.shotDetails?.[playerId] || {};
     (round.holes || []).forEach((hole) => {
-      if (hole.par === 3) return;
       const d = byHole[hole.number];
       if (!d || !d.approachBucket) return;
       if (d.approachResult !== 'green' && d.approachResult !== 'miss') return;
@@ -2033,7 +2036,7 @@ export function approachMissCost(tournament, playerId) {
       const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
       const add = (k) => { bucket[k].vsPar.push(vsPar); bucket[k].points.push(points); };
       if (d.approachResult === 'green') { add('green'); return; }
-      if (bucket[d.approachMiss]) add(d.approachMiss);
+      missDirs(d.approachMiss).forEach(add);
       if (d.approachBunker) add('bunker');
     });
   });
@@ -2065,7 +2068,6 @@ export function scramblingByMissType(rounds, playerId) {
     const byHole = round?.shotDetails?.[playerId];
     if (!byHole) return;
     (round.holes ?? []).forEach((hole) => {
-      if (hole.par === 3) return;
       const d = byHole[hole.number];
       if (!d || d.approachResult !== 'miss') return;
       const strokes = round?.scores?.[playerId]?.[hole.number];
@@ -2074,7 +2076,7 @@ export function scramblingByMissType(rounds, playerId) {
       });
       const saved = outcome === 'up-and-down' || outcome === 'sand-save';
       const record = (k) => { b[k].attempts += 1; if (saved) b[k].saves += 1; };
-      if (b[d.approachMiss]) record(d.approachMiss);
+      missDirs(d.approachMiss).forEach(record);
       if (d.approachBunker) record('bunker');
     });
   });
@@ -2142,13 +2144,12 @@ export function teeClubAccuracy(tournament, playerId) {
 export function approachMissByDistance(tournament, playerId) {
   const buckets = {};
   APPROACH_BUCKETS.forEach((bk) => {
-    buckets[bk] = { attempts: 0, misses: 0, dir: { long: 0, short: 0, left: 0, right: 0 }, bunker: 0, blocked: 0 };
+    buckets[bk] = { attempts: 0, misses: 0, known: 0, dir: { long: 0, short: 0, left: 0, right: 0 }, bunker: 0, blocked: 0 };
   });
   (tournament.rounds || []).forEach((round) => {
     const byHole = round.shotDetails?.[playerId];
     if (!byHole || !round.scores?.[playerId]) return;
     (round.holes || []).forEach((hole) => {
-      if (hole.par === 3) return;
       const d = byHole[hole.number];
       if (!d || !buckets[d.approachBucket]) return;
       if (d.approachResult !== 'green' && d.approachResult !== 'miss') return;
@@ -2157,7 +2158,9 @@ export function approachMissByDistance(tournament, playerId) {
       e.attempts += 1;
       if (d.approachResult === 'miss') {
         e.misses += 1;
-        if (e.dir[d.approachMiss] != null) e.dir[d.approachMiss] += 1;
+        const dirs = missDirs(d.approachMiss);
+        if (dirs.length) e.known += 1;
+        dirs.forEach((k) => { e.dir[k] += 1; });
         if (d.approachBunker) e.bunker += 1;
       }
     });
@@ -2169,7 +2172,7 @@ export function approachMissByDistance(tournament, playerId) {
     const e = buckets[bk];
     total += e.attempts;
     blocked += e.blocked;
-    const known = e.dir.long + e.dir.short + e.dir.left + e.dir.right;
+    const { known } = e;
     out[bk] = {
       attempts: e.attempts,
       // Denominators of the rates below (the coach's sample gates read them).

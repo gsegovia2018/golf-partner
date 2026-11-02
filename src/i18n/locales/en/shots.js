@@ -31,7 +31,7 @@ export default {
   'shots.detail.sandSave': 'Sand Save',
 
   'shots.explain.approachResultTitle': 'Approach result',
-  'shots.explain.approachResultBody': 'Where the regulation approach finished: on the green, or which way it missed. Pick a direction and add Bunker if it caught sand. This keeps approach shots separate from short-game recovery shots and builds your miss tendency.',
+  'shots.explain.approachResultBody': 'Where the regulation approach finished: on the green, or which way it missed. Pick long or short, left or right, or one of each (long and left), and add Bunker if it caught sand. On a par 3 this is the tee shot. This keeps approach shots separate from short-game recovery shots and builds your miss tendency.',
   'shots.explain.sandShotsTitle': 'Sand shots',
   'shots.explain.sandShotsBody': 'Total bunker shots you played on this hole — even from a fairway bunker. Used for sand saves and bunker visits per round.',
   'shots.explain.teeClubTitle': 'Tee club',
@@ -121,6 +121,7 @@ export default {
   'shots.why.title.long': 'Why was it long?',
   'shots.why.title.short': 'Why was it short?',
   'shots.why.title.bunker': 'Why did it find the bunker?',
+  'shots.why.title.depthSide': 'Why was it {depth} and {side}?',
   'shots.why.title.bunkerSide': 'Why did it miss {side}, into the bunker?',
   'shots.why.title.driveLeft': 'Why did the drive go left?',
   'shots.why.title.driveRight': 'Why did the drive go right?',
