@@ -66,7 +66,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   }
 }
 
-export function HoleView({ leaguePlayers = '', medalLeague = false, round, roundIndex, players, scores, myScores = null, ghostAuthors = null, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled, conflictHoles = new Set(), conflictCells = new Set(), conflictRows = EMPTY_CONFLICT_ROWS, localAuthorIds, focusTarget = null, aimStats = null, handedness = 'right' }) {
+export function HoleView({ leaguePlayers = '', medalLeague = false, round, roundIndex, players, scores, myScores = null, ghostAuthors = null, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled, conflictHoles = new Set(), conflictCells = new Set(), conflictRows = EMPTY_CONFLICT_ROWS, localAuthorIds, focusTarget = null, aimStats = null, handedness = 'right', pace = null }) {
   const { theme } = useTheme();
   const tl = useT();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
@@ -422,6 +422,7 @@ export function HoleView({ leaguePlayers = '', medalLeague = false, round, round
           settings={settings}
           currentHole={currentHole}
           meId={meId}
+          pace={pace}
         />
       )}
 

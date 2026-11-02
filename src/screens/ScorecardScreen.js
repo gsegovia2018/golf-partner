@@ -59,6 +59,7 @@ import { getRoundState, loadRound } from '../engine/store/roundState';
 import {
   closeLive, getLastError, onSynced, openLive, pull, reconnect, schedulePush,
 } from '../engine/store/replicator';
+import { useRoundPace } from '../hooks/useRoundPace';
 import { useRoundCards, useSyncStatus } from '../hooks/useRoundCards';
 import { useScoreCelebration } from '../hooks/useScoreCelebration';
 import { useCardViews } from '../hooks/useCardViews';
@@ -570,6 +571,15 @@ export default function ScorecardScreen({ navigation, route }) {
     userId: user?.id,
     enabled: !!round && !!meId && !official && !viewOnly && appSettings.aimTips
       && !isScrambleMode(roundScoringMode(tournament, round)),
+  });
+  // Finish estimate and daylight warning on the standings line and the
+  // full table's title (store/roundPace.js).
+  const roundPace = useRoundPace({
+    tournamentId: tid,
+    round,
+    scores,
+    createdAt: tournament?.createdAt ?? null,
+    enabled: !viewOnly && !tournament?.finishedAt,
   });
   useRoundTracking({
     active: !viewOnly && !tournament?.finishedAt && trackingGps.hasMap
@@ -1820,6 +1830,7 @@ export default function ScorecardScreen({ navigation, route }) {
           focusTarget={focusTargetValue}
           aimStats={aimStats}
           handedness={getSwingProfile().handedness}
+          pace={roundPace}
         />
       ) : (
         <GridView
@@ -1835,6 +1846,7 @@ export default function ScorecardScreen({ navigation, route }) {
           refreshing={refreshing}
           onRefresh={onRefresh}
           meId={meId}
+          pace={roundPace}
         />
       )}
 

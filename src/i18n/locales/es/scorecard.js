@@ -1,5 +1,12 @@
 // Spanish catalogue: Scorecard. See docs/i18n.md.
 export default {
+  'scorecard.pace.finish': 'fin ≈ {time}',
+  'scorecard.pace.finishTight': 'fin {time}',
+  'scorecard.pace.dark': 'sin luz en el {hole}',
+  'scorecard.pace.light': 'luz hasta {time}',
+  'scorecard.pace.a11yFinish': 'Fin previsto hacia las {time}',
+  'scorecard.pace.a11yDark': 'Sin luz en el hoyo {hole}, a las {time}',
+  'scorecard.pace.a11yLight': 'Hay luz hasta las {time}',
   'scorecard.grid.courseRound': '{course} · Vuelta {n}',
   'scorecard.grid.strokes': 'Golpes',
   'scorecard.grid.points': 'Puntos',

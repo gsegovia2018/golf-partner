@@ -1241,6 +1241,12 @@ export function makeScorecardStyles(theme) {
       fontFamily: 'PlayfairDisplay-Bold',
       letterSpacing: -0.3,
     },
+    soloGridHeaderPace: {
+      color: theme.text.muted,
+      fontSize: 11,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      flexShrink: 0,
+    },
     soloBoard: {
       gap: 14,
     },

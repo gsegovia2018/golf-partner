@@ -80,6 +80,9 @@ export default function RoundScoresPager({
           isSingleRound
           showRunning={showRunning}
           scoringMode={roundScoringMode(tournament, tournament.rounds[0])}
+          tournamentId={tournament.id}
+          createdAt={tournament.createdAt}
+          live={!isPast}
         />
       ) : (
         <ScrollView
@@ -163,6 +166,9 @@ export default function RoundScoresPager({
               showRunning={showRunning}
               scoringMode={roundScoringMode(tournament, round)}
               scorecardSettings={isPast ? tournament.settings : null}
+              tournamentId={tournament.id}
+              createdAt={tournament.createdAt}
+              live={!isPast && i === tournament.currentRound}
             />
           ))}
         </ScrollView>
