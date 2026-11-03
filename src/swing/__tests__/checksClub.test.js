@@ -39,7 +39,6 @@ const SHARED = {
   shaftPlane: [10, 18],
   takeawayPlane: [8, 15],
   kneeHold: [10, 15],
-  handsOverHeels: [6, 18],
   downPlane: { above: [4, 10], under: [12, 20] },
   downVsTakeaway: [0, 10],
   throughVsHalfway: [10, 20],
@@ -47,6 +46,8 @@ const SHARED = {
   handsBicep: { green: [-8, 24], yellow: [-16, 32] },
   symmetry: { green: [-10, 18], yellow: [-18, 26] },
   trailFoot: { green: [2, Infinity], yellow: [-1, Infinity] },
+  leadArmSpine: { green: [6, 24], yellow: [1, 29] },
+  handsOverHeels: { green: [-12, 17], yellow: [-19, 24] },
 };
 
 describe('THRESHOLDS table (D19)', () => {
@@ -69,7 +70,6 @@ describe('THRESHOLDS table (D19)', () => {
       buttYellowCm: 15,
       headDrift: [5, 10],
       handsUnderShoulders: [8, 12],
-      leadArmSpine: [10, 20],
       ...SHARED,
     });
     expect(THRESHOLDS.driver).toEqual({
@@ -82,7 +82,6 @@ describe('THRESHOLDS table (D19)', () => {
       buttYellowCm: 20,
       headDrift: [6, 12],
       handsUnderShoulders: [12, 18],
-      leadArmSpine: [15, 24],
       ...SHARED,
     });
   });
@@ -95,21 +94,6 @@ describe('driver setup and top (tour driver reference swings)', () => {
       const input = { checkpoints: { address: at(1, H(50 + d, 0)) }, pose: () => pose33({ tilt: 30 }) };
       expect([d, status('iron', 'hands_under_shoulders', input)]).toEqual([d, iron]);
       expect([d, status('driver', 'hands_under_shoulders', input)]).toEqual([d, driver]);
-    });
-  });
-
-  test('lead_arm_spine: a driver top sits more upright', () => {
-    const top = (d) => {
-      const lm = pose33({ tilt: 30 });
-      const [sx, sy] = lm[11];
-      const a = Math.atan2(sy, sx) + rad(90 - d); // the arm (90 - d) deg off the spine
-      lm[15] = [sx + 100 * Math.cos(a), sy + 100 * Math.sin(a), 1];
-      return lm;
-    };
-    [[8, 'green', 'green'], [14, 'yellow', 'green'], [17, 'yellow', 'yellow'], [22, 'red', 'yellow'], [26, 'red', 'red']].forEach(([d, iron, driver]) => {
-      const input = { checkpoints: { top: at(1, H(0, 0)) }, pose: () => top(d) };
-      expect([d, status('iron', 'lead_arm_spine', input)]).toEqual([d, iron]);
-      expect([d, status('driver', 'lead_arm_spine', input)]).toEqual([d, driver]);
     });
   });
 });

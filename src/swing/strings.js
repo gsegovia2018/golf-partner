@@ -676,7 +676,11 @@ export const SWING_STRINGS = build({
     butt_extension_steep: (cm) => t('swing.checkText.butt_extension_steep', { cm: n0(cm) }),
     hands_bicep: (cm, dir) => t(dir === 'out' ? 'swing.checkText.hands_bicep_out' : dir === 'deep' ? 'swing.checkText.hands_bicep_deep' : 'swing.checkText.hands_bicep_ok', { cm: n0(Math.abs(cm)) }),
     lead_arm_spine_ok: L,
-    lead_arm_spine: (deg, dir) => t(dir === 'upright' ? 'swing.checkText.lead_arm_spine_upright' : 'swing.checkText.lead_arm_spine_flat', { deg: n0(Math.abs(deg)) }),
+    // `band` is the green range ([lo, hi] degrees above square); under it but still above square is "only".
+    lead_arm_spine: (deg, dir, [lo, hi]) => t(
+      dir === 'upright' ? 'swing.checkText.lead_arm_spine_upright' : deg >= 0 ? 'swing.checkText.lead_arm_spine_low' : 'swing.checkText.lead_arm_spine_flat',
+      { deg: n0(Math.abs(deg)), lo: n0(lo), hi: n0(hi) },
+    ),
     hands_over_heels_ok: L,
     hands_over_heels_deep: (cm) => t('swing.checkText.hands_over_heels_deep', { cm: n0(cm) }),
     hands_over_heels_shallow: (cm) => t('swing.checkText.hands_over_heels_shallow', { cm: n0(cm) }),

@@ -45,6 +45,14 @@ describe('reference swings', () => {
   });
 });
 
+// The top rows were set from the same seven swings (2026-11-03), so every tour top reads green on both.
+test('tour swings are green on the top rows', () => {
+  const tops = REFERENCE.filter((f) => f.name.startsWith('tour-')).map(analyzeReference)
+    .flatMap((a) => a.checks.filter((c) => ['lead_arm_spine', 'hands_over_heels'].includes(c.id)));
+  expect(tops).toHaveLength(14);
+  tops.forEach((c) => expect([c.id, c.status]).toEqual([c.id, 'green']));
+});
+
 describe('view (face-on flag)', () => {
   test.each(REFERENCE.map((f) => [f.name, f]))('%s', (name, fx) => {
     expect(analyzeReference(fx).view).toBe(name.startsWith('faceon-') ? 'faceOn' : 'dtl');
