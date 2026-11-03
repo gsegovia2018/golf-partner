@@ -17,6 +17,7 @@ import {
 } from './tabBarChrome';
 import { markTabSwitch } from './tabSettle';
 import TabBarSurface from './TabBarSurface';
+import { noteTabBar, reportTabBarByUser, reportTabBarIfHidden, setTabBarProbe } from './tabBarWatch';
 import LiveRoundStrip from './LiveRoundStrip';
 import PlayQuickMenu, { playMenuHeight } from './PlayQuickMenu';
 import { openLiveScorecard } from './openScorecard';
@@ -108,6 +109,24 @@ export default function FloatingTabBar({ state, navigation, overScreen = false, 
     const sub = BackHandler.addEventListener('hardwareBackPress', () => { setMenuOpen(false); return true; });
     return () => sub.remove();
   }, [menuOpen]);
+
+  // Sentry trail for the vanishing bar (tabBarWatch).
+  useEffect(() => {
+    setTabBarProbe('bar', () => ({
+      mounted: true, tab: state.routes[active]?.name, collapsed, menuOpen, keyboard,
+      collapse: collapse.value, open: open.value,
+    }));
+    return () => setTabBarProbe('bar', null);
+  }, [state.routes, active, collapsed, menuOpen, keyboard, collapse, open]);
+  useEffect(() => { noteTabBar('keyboard', { keyboard }); }, [keyboard]);
+  useEffect(() => { noteTabBar('collapsed', { collapsed }); }, [collapsed]);
+  useEffect(() => { noteTabBar('menu', { menuOpen }); }, [menuOpen]);
+  const activeName = state.routes[active]?.name;
+  useEffect(() => {
+    noteTabBar('tab', { tab: activeName });
+    const id = setTimeout(() => reportTabBarIfHidden(), 1200);
+    return () => clearTimeout(id);
+  }, [activeName]);
 
   const indicator = useIndicator({ active, count, slot, centerIndex, reduced, fadeWith: [collapse, open] });
   const cup = useCupOnFocus(active === centerIndex, reduced);
@@ -226,6 +245,7 @@ export default function FloatingTabBar({ state, navigation, overScreen = false, 
               focused={active === index}
               reduced={reduced}
               onPress={() => pressTab(route, index)}
+              onLongPress={() => { if (reportTabBarByUser()) haptic('success'); }}
               theme={theme}
               s={s}
             />
@@ -317,7 +337,7 @@ function PlayDisc({ route, item, focused, menuOpen, menuMounted, style, faceStyl
   );
 }
 
-function TabItem({ route, item, focused, reduced, onPress, theme, s }) {
+function TabItem({ route, item, focused, reduced, onPress, onLongPress, theme, s }) {
   const tourRef = useTourTarget(TOUR_TARGET_KEYS[route.name] ?? null);
   const land = useLandOnFocus(focused, reduced);
   const color = focused ? theme.accent.primary : theme.text.secondary;
@@ -327,6 +347,7 @@ function TabItem({ route, item, focused, reduced, onPress, theme, s }) {
       accessibilityState={focused ? { selected: true } : {}}
       accessibilityLabel={item.label}
       onPress={onPress}
+      onLongPress={onLongPress}
       style={s.tab}
       testID={`${route.name}-tab`}
     >

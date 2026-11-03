@@ -12,7 +12,11 @@ import Animated, { runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, 
 import FloatingTabBar from './FloatingTabBar';
 import { showsTabBar } from './tabBarModel';
 import { setTabBarCollapsed } from './tabBarChrome';
+import { noteTabBar, reportTabBarIfHidden, setTabBarProbe } from './tabBarWatch';
 import { duration } from '../theme/motion';
+
+// After a route change, when the bar's fade has long settled.
+const CHECK_AFTER_MS = 1200;
 
 let published = null;
 const listeners = new Set();
@@ -73,6 +77,16 @@ export default function TabBarHost({ navigationRef }) {
     });
   }, [visible, reduced, shown]);
   const fadeStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
+
+  useEffect(() => {
+    setTabBarProbe('host', () => ({ top, visible, shown: shown.value, hasTabs: !!tabs }));
+    return () => setTabBarProbe('host', null);
+  }, [top, visible, shown, tabs]);
+  useEffect(() => {
+    noteTabBar('route', { top });
+    const id = setTimeout(() => reportTabBarIfHidden(), CHECK_AFTER_MS);
+    return () => clearTimeout(id);
+  }, [top]);
 
   if (!tabs) return null;
 
