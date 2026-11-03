@@ -170,12 +170,17 @@ describe('lead_arm_spine (top)', () => {
       23: [0, 0], 24: [0, 0], 11: sh, 12: sh, 15: [sh[0] + 60 * arm[0], sh[1] + 60 * arm[1]],
     })), 'lead_arm_spine');
   };
-  test('green within 10 degrees of square, yellow to 20, red beyond; + = upright, - = flat; fault top_position', () => {
-    expect(read(5)).toMatchObject({ status: 'green', value: 5, fault: 'top_position', position: 'top' });
-    expect(read(15)).toMatchObject({ status: 'yellow', dir: 'upright' });
-    expect(read(-15)).toMatchObject({ status: 'yellow', value: -15, dir: 'flat' });
-    expect(read(25)).toMatchObject({ status: 'red', dir: 'upright' });
-    expect(read(-25)).toMatchObject({ status: 'red', dir: 'flat' });
+  // The band sits where tour tops read from behind, 6-24 degrees above square (yellow 1-29), not on 0.
+  test('green 6-24 degrees above square, yellow 1-29, red beyond; + = upright, - = flat; fault top_position', () => {
+    expect(read(15)).toMatchObject({ status: 'green', value: 15, fault: 'top_position', position: 'top' });
+    expect(read(22)).toMatchObject({ status: 'green' });
+    expect(read(27)).toMatchObject({ status: 'yellow', dir: 'upright' });
+    expect(read(32)).toMatchObject({ status: 'red', dir: 'upright' });
+    expect(read(3)).toMatchObject({ status: 'yellow', value: 3, dir: 'flat' });
+    expect(read(3).text).toMatch(/only 3° above square.*6–24°/);
+    expect(read(-5)).toMatchObject({ status: 'red', value: -5, dir: 'flat' });
+    expect(read(-5).text).toMatch(/5° flatter than square/);
+    expect(read(32).text).toMatch(/32° more upright.*6–24°/);
   });
 });
 

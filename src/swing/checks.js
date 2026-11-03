@@ -59,7 +59,6 @@ const SHARED = {
   // 2026-10-18 lab table (owner-approved): 7-10 deg of straightening going back is common while the
   // leg keeps its flex at the top; red only when it nears straight.
   kneeHold: [10, 15], // degrees of trail-knee flex gained or lost since address
-  handsOverHeels: [6, 18], // cm, |grip x - trail heel x| at the top; owner's ~15 cm is a "watch", not a "fix"
   downPlane: { above: [4, 10], under: [12, 20] }, // cm, clubhead above / under the address plane at P6
   downVsTakeaway: [0, 10], // cm, P6 clubhead minus P2 clubhead vs the plane (+ = steeper coming down)
   throughVsHalfway: [10, 20], // cm, P9 shaft landing minus P3 shaft landing
@@ -73,6 +72,14 @@ const SHARED = {
   // cm, median distance of the exiting hands from the ball -> top-hands line (+ = above). Tour -6..+14.
   symmetry: { green: [-10, 18], yellow: [-18, 26] },
   trailFoot: { green: [2, Infinity], yellow: [-1, Infinity] }, // cm, trail heel above its toe at the finish. Tour 3..12.
+  // The top, set the same way (2026-11-03). Both rows were provisional and read tour players yellow or red
+  // (Scott's iron red on the arm, four of seven off on the heel). Read in 2D from behind, the lead arm of
+  // every tour top sits above square to the spine (the lead shoulder is hidden and the arm points partly at
+  // the camera), so the band is centred where they sit, not on 0.
+  // degrees, lead arm vs square to the spine (+ = upright). Tour +8..+22 (drivers 14, 17 inside it).
+  leadArmSpine: { green: [6, 24], yellow: [1, 29] },
+  // cm, grip vs the trail heel at the top (+ = toward the ball). Tour -8..+13.
+  handsOverHeels: { green: [-12, 17], yellow: [-19, 24] },
 };
 export const DEFAULT_CLUB = 'iron';
 export const THRESHOLDS = {
@@ -89,7 +96,6 @@ export const THRESHOLDS = {
     buttYellowCm: 15,
     headDrift: [5, 10], // cm
     handsUnderShoulders: [8, 12], // cm, |grip x - shoulder-midpoint x|; 4 cm was ~4 deg of arm lean, inside landmark noise
-    leadArmSpine: [10, 20], // degrees off perpendicular to the spine at the top
     ...SHARED,
   },
   driver: {
@@ -101,11 +107,9 @@ export const THRESHOLDS = {
     spineHold: [4, 7],
     buttYellowCm: 20,
     headDrift: [6, 12],
-    // The longer, flatter shaft sets the hands further out and the top more upright: the tour
-    // driver reference swings read hands 1 and 12 cm (Oosthuizen red on the iron limit) and the
-    // lead arm 14 and 17 deg (McIlroy's iron 8), 2026-10-30.
+    // The longer, flatter shaft sets the hands further out: the tour driver reference swings read
+    // hands 1 and 12 cm (Oosthuizen red on the iron limit), 2026-10-30.
     handsUnderShoulders: [12, 18],
-    leadArmSpine: [15, 24],
     ...SHARED,
   },
 };
@@ -445,9 +449,9 @@ export function runChecks(input) {
       // The spine points up and toward the ball, so an arm pointing more vertically closes the
       // angle with it: 90 - angle is + for an upright arm (the angle from the spine taken downward, - 90).
       const d = 90 - ang;
-      const j = sym(d, TH.leadArmSpine);
-      const dir = d > 0 ? 'upright' : 'flat';
-      push(m, j, round(d, 0), '°', j.status === 'green' ? T.checkText.lead_arm_spine_ok : T.checkText.lead_arm_spine(d, dir), { dir });
+      const j = judgeRange(d, TH.leadArmSpine);
+      const dir = j.side === 'low' ? 'flat' : j.side === 'high' ? 'upright' : d > 0 ? 'upright' : 'flat';
+      push(m, j, round(d, 0), '°', j.status === 'green' ? T.checkText.lead_arm_spine_ok : T.checkText.lead_arm_spine(d, dir, TH.leadArmSpine.green), { dir });
     }
   }
 
@@ -460,7 +464,7 @@ export function runChecks(input) {
     else if (!heel) rows.push(unknown(m, 'nopose', T.reason.nopose(at('top'))));
     else {
       const d = (c.hands.x - heel.x) * cm;
-      const j = sym(d, TH.handsOverHeels);
+      const j = judgeRange(d, TH.handsOverHeels);
       push(m, j, round(d, 0), 'cm', j.status === 'green' ? T.checkText.hands_over_heels_ok : d < 0 ? T.checkText.hands_over_heels_deep(-d) : T.checkText.hands_over_heels_shallow(d),
         { dir: d < 0 ? 'deep' : 'shallow' });
     }

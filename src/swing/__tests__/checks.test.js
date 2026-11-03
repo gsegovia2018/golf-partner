@@ -56,9 +56,9 @@ describe('golden checks on the owner marks', () => {
     expect(v('butt_extension')).toEqual(['red', 24, 'flat']);
     expect(v('spine_hold', 'leadArm')).toEqual(['green', -3, 'down']);
     expect(v('knee_hold', 'leadArm')).toEqual(['green', -5, 'straighten']);
-    // Top: the hands 16 cm in front of the trail heel (a watch since the lab table), the lead arm 17 degrees upright.
-    expect(v('lead_arm_spine')).toEqual(['yellow', 17, 'upright']);
-    expect(v('hands_over_heels')).toEqual(['yellow', 16, 'shallow']);
+    // Top: the hands 16 cm in front of the trail heel and the lead arm 17 degrees upright, both inside the tour band.
+    expect(v('lead_arm_spine')).toEqual(['green', 17, 'upright']);
+    expect(v('hands_over_heels')).toEqual(['green', 16, 'shallow']);
     expect(v('spine_hold', 'top')).toEqual(['green', -1, 'down']);
     // Downswing: the owner marked the clubhead hidden, so only the spine reads (3 degrees up: yellow).
     expect(byId(checks, 'clubhead_plane_down')).toMatchObject({ status: 'unknown', reason: 'hidden' });
@@ -72,7 +72,7 @@ describe('golden checks on the owner marks', () => {
     expect(byId(checks, 'through_vs_halfway')).toMatchObject({ status: 'unknown', reason: 'hidden' });
 
     expect(positionStatuses(checks)).toEqual({
-      address: 'yellow', takeaway: 'red', leadArm: 'red', top: 'yellow', shaftDown: 'yellow', impact: 'red', trailArm: 'unknown',
+      address: 'yellow', takeaway: 'red', leadArm: 'red', top: 'green', shaftDown: 'yellow', impact: 'red', trailArm: 'unknown',
     });
     // Tier 1 first: impact's hip drift (1.48 yellow bands past its red limit) leads; the takeaway is
     // the earliest red position. The spec expected the downswing, but the owner's P6 clubhead is hidden.
