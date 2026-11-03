@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { noteTabBar } from './tabBarWatch';
 
 // Whether a root-stack screen is sliding in or out right now. The tab bar's
 // blur (TabBarSurface) pauses while it is: on Android the blur re-draws the
@@ -45,6 +46,12 @@ export function useStackTransitioning() {
 
 // Root Stack.Navigator `screenListeners`.
 export const stackTransitionListeners = {
-  transitionStart: (e) => beginStackTransition(e.target),
-  transitionEnd: (e) => endStackTransition(e.target),
+  transitionStart: (e) => {
+    noteTabBar('slideStart', { closing: !!e.data?.closing });
+    beginStackTransition(e.target);
+  },
+  transitionEnd: (e) => {
+    noteTabBar('slideEnd', { closing: !!e.data?.closing });
+    endStackTransition(e.target);
+  },
 };
