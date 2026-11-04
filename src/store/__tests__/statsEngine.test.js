@@ -327,65 +327,60 @@ describe('bunkerVisits', () => {
 });
 
 describe('upAndDownRate', () => {
-  test('returns null below 6 missed-GIR holes', () => {
-    const round = makeRound(
-      [{ par: 4, strokes: 5 }],
-      [{ putts: 1, sandShots: 0, recoveryOutcome: 'up-and-down' }],
-    );
-    expect(upAndDownRate([round], 'me').rate).toBeNull();
+  const near = (detail) => ({ chipNear: true, sandShots: 0, ...detail });
+  const holes = (n, hole, detail) => Array.from({ length: n }, (_, i) => makeRound(
+    [hole], [typeof detail === 'function' ? detail(i) : detail],
+  ));
+
+  test('returns null below 6 attempts', () => {
+    const r = upAndDownRate(holes(5, { par: 4, strokes: 4 }, near({ putts: 1 })), 'me');
+    expect(r.attempts).toBe(5);
+    expect(r.rate).toBeNull();
   });
 
-  test('splits conversions by sand vs non-sand', () => {
-    const rounds = Array.from({ length: 8 }, (_, i) => makeRound(
-      [{ par: 4, strokes: 5 }],
-      [{
-        putts: 1,
-        sandShots: i % 2,                  // alternate
-        recoveryOutcome: i < 4 ? (i % 2 ? 'sand-save' : 'up-and-down') : 'none',
-      }],
-    ));
-    const r = upAndDownRate(rounds, 'me');
-    expect(r.attempts).toBe(8);
-    expect(r.conversions).toBe(4);
-    expect(r.rate).toBeCloseTo(0.5);
-    expect(r.byLie.sand.attempts).toBe(4);
-    expect(r.byLie.sand.conversions).toBe(2);
-    expect(r.byLie.nonSand.attempts).toBe(4);
-    expect(r.byLie.nonSand.conversions).toBe(2);
-  });
-
-  test('auto-derives conversions when recoveryOutcome was never stored', () => {
-    // Missed GIR, chipped on, holed the putt for par — the scorecard chip
-    // lights automatically but nothing is persisted. Must count.
-    const rounds = Array.from({ length: 6 }, () => makeRound(
-      [{ par: 4, strokes: 4 }],
-      [{ putts: 1, sandShots: 0 }],
-    ));
+  test('counts only missed greens answered "chip inside 20 m" yes', () => {
+    // A pitch from 70 m (no) and an unanswered hole are not attempts, even
+    // though both missed the green: they never count against the golfer.
+    const rounds = [
+      ...holes(6, { par: 4, strokes: 4 }, near({ putts: 1 })),
+      ...holes(3, { par: 4, strokes: 5 }, { putts: 1, chipNear: false }),
+      ...holes(3, { par: 4, strokes: 6 }, { putts: 2 }),
+    ];
     const r = upAndDownRate(rounds, 'me');
     expect(r.attempts).toBe(6);
     expect(r.conversions).toBe(6);
-    expect(r.rate).toBeCloseTo(1);
   });
 
-  test('stored none overrides the auto-derived conversion', () => {
-    const rounds = Array.from({ length: 6 }, () => makeRound(
-      [{ par: 4, strokes: 4 }],
-      [{ putts: 1, sandShots: 0, recoveryOutcome: 'none' }],
-    ));
-    const r = upAndDownRate(rounds, 'me');
+  test('a chip and one putt is an up and down whatever the score', () => {
+    const r = upAndDownRate(holes(6, { par: 4, strokes: 5 }, near({ putts: 1 })), 'me');
+    expect(r.attempts).toBe(6);
+    expect(r.conversions).toBe(6);
+  });
+
+  test('two putts after the chip is a failed attempt', () => {
+    const r = upAndDownRate(holes(6, { par: 4, strokes: 5 }, near({ putts: 2 })), 'me');
     expect(r.attempts).toBe(6);
     expect(r.conversions).toBe(0);
     expect(r.rate).toBeCloseTo(0);
   });
 
-  test('does not auto-credit 1-putts that fail to save par', () => {
-    const rounds = Array.from({ length: 6 }, () => makeRound(
-      [{ par: 4, strokes: 6 }],
-      [{ putts: 1, sandShots: 0 }],
-    ));
-    const r = upAndDownRate(rounds, 'me');
+  test('stored none overrides the putt-based conversion', () => {
+    const r = upAndDownRate(holes(6, { par: 4, strokes: 4 }, near({ putts: 1, recoveryOutcome: 'none' })), 'me');
     expect(r.attempts).toBe(6);
     expect(r.conversions).toBe(0);
+  });
+
+  test('splits conversions by sand vs non-sand', () => {
+    const rounds = holes(8, { par: 4, strokes: 5 }, (i) => near({
+      sandShots: i % 2,
+      putts: i < 4 ? 1 : 2,
+    }));
+    const r = upAndDownRate(rounds, 'me');
+    expect(r.attempts).toBe(8);
+    expect(r.conversions).toBe(4);
+    expect(r.rate).toBeCloseTo(0.5);
+    expect(r.byLie.sand).toMatchObject({ attempts: 4, conversions: 2 });
+    expect(r.byLie.nonSand).toMatchObject({ attempts: 4, conversions: 2 });
   });
 });
 

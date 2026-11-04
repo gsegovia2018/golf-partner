@@ -70,7 +70,7 @@ export default {
 
   "stats.explainer.recovery.title": "Patrones de recuperación",
   "stats.explainer.recovery.subtitle": "Reponerte y salvar el hoyo",
-  "stats.explainer.recovery.explainer": "La tasa de reacción es la frecuencia con la que sigues a un bogey o peor con un birdie o mejor. El scrambling, los salvados de arena, los salvados con un putt y las visitas al búnker muestran lo bien que limitas los daños después de fallar la ruta ideal.",
+  "stats.explainer.recovery.explainer": "La tasa de reacción es la frecuencia con la que sigues a un bogey o peor con un birdie o mejor. El scrambling, los salvados de arena, los up & down desde menos de 20 m y las visitas al búnker muestran lo bien que limitas los daños después de fallar la ruta ideal.",
 
   "stats.explainer.teeShot.title": "Patrones del golpe de salida",
   "stats.explainer.teeShot.subtitle": "Cómo cambian tus puntos según la salida",

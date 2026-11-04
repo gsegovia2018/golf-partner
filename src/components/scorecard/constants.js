@@ -19,6 +19,7 @@ export const DEFAULT_SHOT = {
   teePenalties: 0,
   otherPenalties: 0,
   sandShots: 0,
+  chipNear: null,               // true | false | null — "Chip inside 20 m?" on a missed green; only true holes are up-and-down attempts
   recoveryOutcome: null,        // 'up-and-down' | 'sand-save' | 'none' | null
   shortResult: null,            // 'short' | 'long' | null
   shortContact: null,           // 'fat' | 'thin' | null
@@ -40,7 +41,7 @@ export const STAT_GROUP_FIELDS = {
   putting: ['putts', 'firstPuttBucket'],
   teeShot: ['teeClub', 'drive', 'driveLie', 'driveDistBucket', 'driveStart', 'driveContact', 'driveSituation'],
   approach: ['approachBucket', 'approachResult', 'approachMiss', 'approachBunker', 'approachLie', 'approachStart', 'approachContact', 'approachSituation'],
-  shortGame: ['sandShots', 'recoveryOutcome', 'shortResult', 'shortContact', 'shortSituation'],
+  shortGame: ['sandShots', 'chipNear', 'recoveryOutcome', 'shortResult', 'shortContact', 'shortSituation'],
   penalties: ['teePenalties', 'otherPenalties'],
 };
 

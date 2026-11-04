@@ -29,6 +29,7 @@ import {
   tournamentSindicatoClinched,
   tournamentMatchPlayStandings,
   recoveryOutcomeFromState,
+  effectiveRecoveryOutcome,
   isGIR,
   shotDetailStrokeCount,
   reconcileShotDetail,
@@ -1026,6 +1027,25 @@ describe('isGIR', () => {
   });
   test('returns null when strokes missing', () => {
     expect(isGIR({ strokes: null, putts: 2, par: 4 })).toBeNull();
+  });
+});
+
+describe('effectiveRecoveryOutcome', () => {
+  const par = 4;
+  test('a stored outcome wins', () => {
+    expect(effectiveRecoveryOutcome({ putts: 1, chipNear: true, recoveryOutcome: 'none' }, { strokes: 4, par })).toBe('none');
+  });
+  test('near chip: 0 or 1 putt is a save whatever the score', () => {
+    expect(effectiveRecoveryOutcome({ putts: 1, chipNear: true }, { strokes: 5, par })).toBe('up-and-down');
+    expect(effectiveRecoveryOutcome({ putts: 0, chipNear: true, sandShots: 1 }, { strokes: 5, par })).toBe('sand-save');
+    expect(effectiveRecoveryOutcome({ putts: 2, chipNear: true }, { strokes: 5, par })).toBeNull();
+  });
+  test('near chip on a green hit in regulation is no recovery', () => {
+    expect(effectiveRecoveryOutcome({ putts: 1, chipNear: true }, { strokes: 3, par })).toBeNull();
+  });
+  test('unanswered or far: the score-based guess', () => {
+    expect(effectiveRecoveryOutcome({ putts: 1 }, { strokes: 5, par })).toBeNull();
+    expect(effectiveRecoveryOutcome({ putts: 1, chipNear: false }, { strokes: 4, par })).toBe('up-and-down');
   });
 });
 

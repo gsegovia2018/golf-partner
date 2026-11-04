@@ -1,5 +1,5 @@
 import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap } from './tournamentStore';
-import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore, resolvePairs, holeCountOf, isFullLengthRound, isRoundFullyScoredBy } from './scoring';
+import { isGIR, recoveryOutcomeFromState, effectiveRecoveryOutcome, roundScoringMode, isScrambleMode, isPickupScore, resolvePairs, holeCountOf, isFullLengthRound, isRoundFullyScoredBy } from './scoring';
 import {
   expectedFromBucket, expectedStrokes, BUCKETS,
   PAR_ANCHOR_DISTANCE, benchmarkTeeShotDistance, expectedPenaltiesPerRound, typicalScoreVsPar,
@@ -2422,9 +2422,7 @@ export function sandSaveRate(rounds, playerId) {
       roundAttempts += 1;
       // The scorecard auto-lights the outcome chip without persisting it, so
       // fall back to the same derivation; a stored 'none' stays an override.
-      const outcome = d.recoveryOutcome ?? recoveryOutcomeFromState({
-        strokes, putts: d.putts, sandShots: d.sandShots ?? 0, par: hole.par,
-      });
+      const outcome = effectiveRecoveryOutcome(d, { strokes, par: hole.par });
       if (outcome === 'sand-save' || outcome === 'up-and-down') roundSaves += 1;
     });
     if (roundAttempts > 0) perRound.push({ attempts: roundAttempts, saves: roundSaves });
@@ -2441,23 +2439,14 @@ export function sandSaveRate(rounds, playerId) {
 
 const UP_AND_DOWN_MIN_ATTEMPTS = 6;
 
-// ── Up-and-down rate (internal name) ──
-// Attempts are every missed-GIR hole with logged shot detail — the same as
-// scramblingStats above — including a two-putt from the fringe or a long
-// 3-putt where no chip/recovery shot was ever played near the green. There
-// is no reliable "played a greenside shot" marker in shot detail:
-// `approachResult` ('green' | 'miss') is optional and frequently unset (see
-// puttDeepDive's comment on the same gap), so it can't safely gate this
-// denominator. `sandShots` is a reliable signal but only covers the sand
-// half of the split (see sandSaveRate above, and the `byLie.sand` bucket
-// below); it says nothing about non-sand misses.
-//
-// Because the denominator can't be honestly restricted to real recovery
-// attempts, this is NOT the classic "up and down" stat (which implies a
-// chip/pitch onto the green followed by one putt) even though the
-// conversion side (`conversions`) does require a clean 0-or-1-putt save.
-// The UI surfaces this as a scrambling-family metric ("Scrambling (1-putt
-// saves)" in BreakdownTab.js) rather than "up and down" — see task-6-brief.
+// ── Up-and-down rate ──
+// The classic stat: a chip from inside 20 m, then 0 or 1 putt. An attempt is a
+// missed green the golfer marked "Chip inside 20 m?" Yes (`chipNear`); a miss
+// by 70 m, or a hole nobody answered, is not one. It converts on the effective
+// outcome (0 or 1 putt whatever the score, unless the chip was turned off by
+// hand). Scoring by putts makes it match the Coach's benchmark, a chip from
+// 20 m (coachCauses.expectedUpAndDown). The score-based save of any missed
+// green is scramblingStats.
 export function upAndDownRate(rounds, playerId) {
   let attempts = 0, conversions = 0;
   const byLie = {
@@ -2472,16 +2461,12 @@ export function upAndDownRate(rounds, playerId) {
       if (!d) return;
       const strokes = round?.scores?.[playerId]?.[hole.number];
       const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
-      if (gir !== false) return;
+      if (gir !== false || d.chipNear !== true) return;
       attempts += 1;
       const isSand = (d.sandShots ?? 0) >= 1;
       const lieKey = isSand ? 'sand' : 'nonSand';
       byLie[lieKey].attempts += 1;
-      // Same fallback as sandSaveRate: unstored auto-derived outcomes count,
-      // a stored 'none' remains an explicit override.
-      const outcome = d.recoveryOutcome ?? recoveryOutcomeFromState({
-        strokes, putts: d.putts, sandShots: d.sandShots ?? 0, par: hole.par,
-      });
+      const outcome = effectiveRecoveryOutcome(d, { strokes, par: hole.par });
       const saved = outcome === 'up-and-down' || outcome === 'sand-save';
       if (saved) {
         conversions += 1;

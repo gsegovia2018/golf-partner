@@ -29,6 +29,9 @@ export default {
   'shots.detail.outcome': 'Outcome',
   'shots.detail.upDown': 'Up & Down',
   'shots.detail.sandSave': 'Sand Save',
+  'shots.detail.chipNear': 'Chip inside 20 m?',
+  'shots.detail.chipNearYes': 'Yes',
+  'shots.detail.chipNearNo': 'No',
 
   'shots.explain.approachResultTitle': 'Approach result',
   'shots.explain.approachResultBody': 'Where the regulation approach finished: on the green, or which way it missed. Pick long or short, left or right, or one of each (long and left), and add Bunker if it caught sand. On a par 3 this is the tee shot. This keeps approach shots separate from short-game recovery shots and builds your miss tendency.',
@@ -47,7 +50,9 @@ export default {
   'shots.explain.firstPuttTitle': 'First putt distance',
   'shots.explain.firstPuttBody': 'How far away your first putt was (in meters). Lets us measure how well you lag long putts and how well you convert short ones.',
   'shots.explain.upDownTitle': 'Up & Down / Sand Save',
-  'shots.explain.upDownBody': 'A successful "up and down" means you missed the green in regulation but still saved par or better. A "sand save" is the same but from a bunker.',
+  'shots.explain.upDownBody': 'An "up and down" is a chip from inside 20 m followed by 0 or 1 putt, whatever the score. A "sand save" is the same from a greenside bunker. Filled in from your putts: tap to correct it, for example after two chips.',
+  'shots.explain.chipNearTitle': 'Chip inside 20 m?',
+  'shots.explain.chipNearBody': 'Answer Yes when, after missing the green, you played your next shot from within about 20 m of it. Only those holes count towards your up-and-down rate, so a pitch from 70 m never counts against you.',
 
   'shots.drive.left': 'Left',
   'shots.drive.fairway': 'Fairway',

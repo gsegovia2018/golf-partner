@@ -1197,6 +1197,20 @@ export function recoveryOutcomeFromState({ strokes, putts, sandShots = 0, par })
   return sandShots >= 1 ? 'sand-save' : 'up-and-down';
 }
 
+// The outcome the Up & Down / Sand Save chips show and the stats count. A stored
+// value wins. When the golfer said the chip was from inside 20 m (`chipNear`),
+// a chip and 0 or 1 putt is an up and down whatever the score, so a bogey
+// counts; otherwise it is the score-based guess above.
+export function effectiveRecoveryOutcome(detail, { strokes, par }) {
+  const d = detail ?? {};
+  if (d.recoveryOutcome != null) return d.recoveryOutcome;
+  const sandShots = d.sandShots ?? 0;
+  if (d.chipNear !== true) return recoveryOutcomeFromState({ strokes, putts: d.putts, sandShots, par });
+  if (isGIR({ strokes, putts: d.putts, par }) !== false) return null;
+  if (d.putts !== 0 && d.putts !== 1) return null;
+  return sandShots >= 1 ? 'sand-save' : 'up-and-down';
+}
+
 // Total strokes already accounted for by a hole's shot detail: every putt,
 // penalty, and sand shot is itself one of the hole's strokes. Missing or
 // null fields count as 0.

@@ -635,14 +635,9 @@ function makeRecoveryRows({
     } : null,
     upAndDown ? {
       key: 'upAndDown',
-      // Honest-labeling note: this counts every missed-GIR hole with logged
-      // putts as an "attempt" — including a two-putt from the fringe or a
-      // long 3-putt with no chip/recovery shot near the green. There's no
-      // reliable signal in shot detail (approachResult is optional and
-      // often unset) to gate that denominator to real around-the-green
-      // shots, so this is presented as a scrambling-family metric rather
-      // than the classic "up and down" (see statsEngine.js upAndDownRate).
-      label: t('stats.tab.breakdown.scramblingOnePutt'),
+      // Attempts are the missed greens the golfer marked "Chip inside 20 m?"
+      // Yes (see statsEngine.js upAndDownRate).
+      label: t('stats.tab.breakdown.upAndDownNear'),
       value: rateValue(upAndDown.conversions, upAndDown.attempts, upAndDown.rate),
       magnitude: isNumber(upAndDown.rate) ? upAndDown.rate * 100 : null,
       barGroup: 'pct',
