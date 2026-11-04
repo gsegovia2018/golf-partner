@@ -29,6 +29,9 @@ export default {
   'shots.detail.outcome': 'Resultado',
   'shots.detail.upDown': 'Up & Down',
   'shots.detail.sandSave': 'Sand Save',
+  'shots.detail.chipNear': '¿Chip a menos de 20 m?',
+  'shots.detail.chipNearYes': 'Sí',
+  'shots.detail.chipNearNo': 'No',
 
   'shots.explain.approachResultTitle': 'Resultado de la aproximación',
   'shots.explain.approachResultBody': 'Dónde acabó la aproximación de juego reglamentario: en el green o hacia dónde se fue. Elige larga o corta, izquierda o derecha, o una de cada (larga e izquierda), y añade Bunker si cayó en arena. En un par 3 es el golpe de salida. Así las aproximaciones se separan de los golpes de recuperación y se registra tu tendencia a fallar.',
@@ -47,7 +50,9 @@ export default {
   'shots.explain.firstPuttTitle': 'Distancia del primer putt',
   'shots.explain.firstPuttBody': 'A qué distancia estaba tu primer putt (en metros). Nos permite medir lo bien que aproximas los putts largos y lo bien que embocas los cortos.',
   'shots.explain.upDownTitle': 'Up & Down / Sand Save',
-  'shots.explain.upDownBody': 'Un "up and down" logrado significa que no llegaste al green en regulación pero aun así salvaste el par o mejor. El "sand save" es lo mismo, pero desde un bunker.',
+  'shots.explain.upDownBody': 'Un "up and down" es un chip desde menos de 20 m seguido de 0 o 1 putt, sea cual sea el resultado del hoyo. El "sand save" es lo mismo desde un bunker de green. Se rellena con tus putts: tócalo para corregirlo, por ejemplo si necesitaste dos chips.',
+  'shots.explain.chipNearTitle': '¿Chip a menos de 20 m?',
+  'shots.explain.chipNearBody': 'Responde Sí cuando, tras fallar el green, jugaste el siguiente golpe a unos 20 m o menos de él. Solo esos hoyos cuentan para tu porcentaje de up & down, así que un pitch desde 70 m nunca cuenta en tu contra.',
 
   'shots.drive.left': 'Izquierda',
   'shots.drive.fairway': 'Calle',

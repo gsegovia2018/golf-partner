@@ -13,61 +13,57 @@ const flush = () => act(() => new Promise((resolve) => setImmediate(resolve)));
 describe('ShotDetailPanel — outcome chips', () => {
   const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
   const par4 = { number: 1, par: 4, strokeIndex: 1 };
-
-  test('GIR hit → outcome chips hidden', async () => {
-    const { queryByText } = render(wrap(
-      <ShotDetailPanel
-        hole={par4}
-        strokes={4}
-        detail={{ putts: 2, sandShots: 0, recoveryOutcome: null }}
-        onChange={() => {}}
-      />
-    ));
+  const panel = async (detail, strokes, onChange = () => {}) => {
+    const r = render(wrap(<ShotDetailPanel hole={par4} strokes={strokes} detail={detail} onChange={onChange} />));
     await flush();
-    expect(queryByText('Up & Down')).toBeNull();
-    expect(queryByText('Sand Save')).toBeNull();
+    return r;
+  };
+  const selected = (r, label) => r.getByText(label).parent.props.accessibilityState?.selected;
+
+  test('GIR hit → neither the chip question nor the outcome chips', async () => {
+    const r = await panel({ putts: 2, sandShots: 0 }, 4);
+    expect(r.queryByText('Chip inside 20 m?')).toBeNull();
+    expect(r.queryByText('Up & Down')).toBeNull();
+    expect(r.queryByText('Sand Save')).toBeNull();
   });
 
-  test('Missed GIR + 1-putt par save + no sand → Up & Down auto-selected', async () => {
-    const { getByText } = render(wrap(
-      <ShotDetailPanel
-        hole={par4}
-        strokes={4}
-        detail={{ putts: 1, sandShots: 0, recoveryOutcome: null }}
-        onChange={() => {}}
-      />
-    ));
-    await flush();
-    const chip = getByText('Up & Down').parent;
-    expect(chip.props.accessibilityState?.selected).toBe(true);
+  test('missed green, unanswered → the question, no outcome chips yet', async () => {
+    const r = await panel({ putts: 1, sandShots: 0 }, 4);
+    expect(r.getByText('Chip inside 20 m?')).toBeTruthy();
+    expect(r.queryByText('Up & Down')).toBeNull();
   });
 
-  test('1-putt bogey → no chip auto-selected (save requires par or better)', async () => {
-    const { getByText } = render(wrap(
-      <ShotDetailPanel
-        hole={par4}
-        strokes={5}
-        detail={{ putts: 1, sandShots: 0, recoveryOutcome: null }}
-        onChange={() => {}}
-      />
-    ));
-    await flush();
-    const chip = getByText('Up & Down').parent;
-    expect(chip.props.accessibilityState?.selected).toBe(false);
+  test('answering writes chipNear; tapping the answer again clears it', async () => {
+    const onChange = jest.fn();
+    const r = await panel({ putts: 1, sandShots: 0 }, 4, onChange);
+    fireEvent.press(r.getByText('Yes'));
+    expect(onChange).toHaveBeenLastCalledWith({ chipNear: true });
+    fireEvent.press(r.getByText('No'));
+    expect(onChange).toHaveBeenLastCalledWith({ chipNear: false });
+    const yes = await panel({ putts: 1, sandShots: 0, chipNear: true }, 4, onChange);
+    fireEvent.press(yes.getAllByText('Yes').pop());
+    expect(onChange).toHaveBeenLastCalledWith({ chipNear: null });
+  });
+
+  test('"No" (played from far away) hides the outcome chips', async () => {
+    const r = await panel({ putts: 1, sandShots: 0, chipNear: false }, 4);
+    expect(r.getByLabelText('Chip inside 20 m? No').props.accessibilityState?.selected).toBe(true);
+    expect(r.queryByText('Up & Down')).toBeNull();
+  });
+
+  test('near chip + 1 putt → Up & Down auto-selected, even for a bogey', async () => {
+    expect(selected(await panel({ putts: 1, sandShots: 0, chipNear: true }, 4), 'Up & Down')).toBe(true);
+    expect(selected(await panel({ putts: 1, sandShots: 0, chipNear: true }, 5), 'Up & Down')).toBe(true);
+  });
+
+  test('near chip + 2 putts → no chip auto-selected', async () => {
+    expect(selected(await panel({ putts: 2, sandShots: 0, chipNear: true }, 5), 'Up & Down')).toBe(false);
   });
 
   test('Tapping an auto-selected chip writes recoveryOutcome="none"', async () => {
     const onChange = jest.fn();
-    const { getByText } = render(wrap(
-      <ShotDetailPanel
-        hole={par4}
-        strokes={4}
-        detail={{ putts: 1, sandShots: 1, recoveryOutcome: null }}
-        onChange={onChange}
-      />
-    ));
-    await flush();
-    fireEvent.press(getByText('Sand Save'));
+    const r = await panel({ putts: 1, sandShots: 1, chipNear: true }, 4, onChange);
+    fireEvent.press(r.getByText('Sand Save'));
     expect(onChange).toHaveBeenCalledWith({ recoveryOutcome: 'none' });
   });
 });

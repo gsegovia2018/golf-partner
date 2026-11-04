@@ -12,7 +12,7 @@ import {
   hydrateSwingProfile, getSwingProfile, subscribeSwings, getSwingsVersion,
 } from '../../store/swingStore';
 import {
-  isGIR, recoveryOutcomeFromState, holeStrokeAccount,
+  isGIR, effectiveRecoveryOutcome, holeStrokeAccount,
   driveDirectionPatch, teeClubPatch, approachBucketPatch, approachFinishPatch, recoveryOutcomePatch,
 } from '../../store/scoring';
 import { defaultApproachLie } from '../../store/statsEngine';
@@ -210,6 +210,7 @@ function ApproachFinishRow({ detail, onSelect, theme, s, isLast = false, noRule 
 }
 
 const DRIVE_MISSES = ['left', 'right', 'short'];
+const CHIP_NEAR_OPTIONS = ['yes', 'no'];
 const noop = () => {};
 
 // "Why?" chip under the row that recorded a miss. Answered: the summary
@@ -286,13 +287,11 @@ export function ShotDetailPanel({
   const firstPuttLabels = units === 'yards' ? FIRST_PUTT_LABELS_YD : FIRST_PUTT_LABELS;
   const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
   const missedGIR = gir === false;
-  const autoOutcome = recoveryOutcomeFromState({
-    strokes,
-    putts: d.putts,
-    sandShots: d.sandShots ?? 0,
-    par: hole.par,
-  });
-  const effectiveOutcome = d.recoveryOutcome ?? autoOutcome;
+  const effectiveOutcome = effectiveRecoveryOutcome(d, { strokes, par: hole.par });
+  // "Chip inside 20 m?" is asked on every missed green; the Up & Down / Sand
+  // Save chips follow only a yes (a chip from far away is not an up and down).
+  const askChipNear = g.shortGame && missedGIR;
+  const showOutcome = askChipNear && d.chipNear === true;
 
   // Miss reasons. The sheet opens only from the taps below, never from a
   // `detail` change (watch writes, peers and rehydrates arrive that way).
@@ -374,7 +373,8 @@ export function ShotDetailPanel({
     ['approachResult', showApproachFinish],
     ['approachLie', showApproachExtras],
     ['firstPutt', g.putting && (d.putts ?? 0) >= 1],
-    ['outcome', g.shortGame && missedGIR],
+    ['chipNear', askChipNear],
+    ['outcome', showOutcome],
   ];
   let lastVisibleRow = null;
   for (const [key, visible] of rowVisibility) if (visible) lastVisibleRow = key;
@@ -655,7 +655,27 @@ export function ShotDetailPanel({
           }
         />
       )}
-      {g.shortGame && missedGIR && (
+      {askChipNear && (
+        <LieChipRow
+          label={tl('shots.detail.chipNear')}
+          a11yPrefix={tl('shots.detail.chipNear')}
+          options={CHIP_NEAR_OPTIONS}
+          labels={{ yes: tl('shots.detail.chipNearYes'), no: tl('shots.detail.chipNearNo') }}
+          effectiveValue={d.chipNear === true ? 'yes' : d.chipNear === false ? 'no' : null}
+          onSelect={(key, active) => onChange({ chipNear: active ? null : key === 'yes' })}
+          theme={theme}
+          s={s}
+          isLast={lastVisibleRow === 'chipNear'}
+          explainer={
+            <ShotDetailExplainer
+              rowKey="chipNear"
+              title={tl('shots.explain.chipNearTitle')}
+              body={tl('shots.explain.chipNearBody')}
+            />
+          }
+        />
+      )}
+      {showOutcome && (
         <View style={[s.shotRow, s.shotRowLast]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text style={s.shotRowLabel}>{tl('shots.detail.outcome')}</Text>

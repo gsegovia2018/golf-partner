@@ -183,7 +183,7 @@ describe('readMetric on real computeMyStats output', () => {
     putts: 2, firstPuttBucket: '6+',
     drive: 'left', driveLie: 'rough', driveDistBucket: '210-240', teePenalties: 0,
     approachBucket: '150-200', approachResult: 'miss', approachMiss: 'short',
-    sandShots: 0,
+    sandShots: 0, chipNear: true,
   };
   const shotDetails = { p1: Object.fromEntries(holes.map((h) => [h.number, { ...detail }])) };
   const round = () => ({

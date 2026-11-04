@@ -53,7 +53,7 @@ export default {
   "stats.explainer.roundShape.explainer": "Average net points across the front and back nine, and across your opening and closing three holes — useful for spotting slow starts or fades.",
   "stats.explainer.recovery.title": "Recovery patterns",
   "stats.explainer.recovery.subtitle": "Bouncing back and scrambling",
-  "stats.explainer.recovery.explainer": "Bounce-back rate is how often you follow a bogey-or-worse with a birdie-or-better. Scrambling, sand saves, 1-putt saves, and bunker visits show how well you limit damage after missing the ideal route.",
+  "stats.explainer.recovery.explainer": "Bounce-back rate is how often you follow a bogey-or-worse with a birdie-or-better. Scrambling, sand saves, up-and-downs from inside 20 m, and bunker visits show how well you limit damage after missing the ideal route.",
   "stats.explainer.teeShot.title": "Tee result patterns",
   "stats.explainer.teeShot.subtitle": "How tee outcomes change your points",
   "stats.explainer.teeShot.explainer": "Average net Stableford points after each tee result, compared with your own average points per hole. Good rows are outcomes that lift your scoring; bad rows are tee outcomes that drag the hole below your normal level.",

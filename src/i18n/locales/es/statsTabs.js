@@ -85,7 +85,7 @@ export default {
   "stats.tab.breakdown.scrambling": "Scrambling",
   "stats.tab.breakdown.missedGir": "{count} GIR fallados",
   "stats.tab.breakdown.sandSave": "Salvado de arena",
-  "stats.tab.breakdown.scramblingOnePutt": "Scrambling (salvados con 1 putt)",
+  "stats.tab.breakdown.upAndDownNear": "Up & down (a menos de 20 m)",
   "stats.tab.breakdown.bunkerVisits": "Visitas al bunker",
   "stats.tab.breakdown.perRound": "{value} / vuelta",
   "stats.tab.breakdown.ownAvgBasis": "frente a tu media",

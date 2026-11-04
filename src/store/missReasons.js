@@ -40,7 +40,7 @@
 //   and drive left|right|short; short = green missed, not saved, strokes > par.
 
 import { msg } from './statsMsg';
-import { isGIR, recoveryOutcomeFromState } from './scoring';
+import { isGIR, effectiveRecoveryOutcome } from './scoring';
 import { APPROACH_BUCKETS, missParts } from '../components/scorecard/constants';
 
 export const MISS_REASON_KEYS = {
@@ -239,9 +239,7 @@ export function missReasonStats(rounds, playerId) {
       const greenMissed = d.approachResult === 'miss'
         || isGIR({ strokes, putts: d.putts, par: hole.par }) === false;
       if (!greenMissed || !(strokes > hole.par)) return;
-      const outcome = d.recoveryOutcome ?? recoveryOutcomeFromState({
-        strokes, putts: d.putts, sandShots: d.sandShots ?? 0, par: hole.par,
-      });
+      const outcome = effectiveRecoveryOutcome(d, { strokes, par: hole.par });
       if (outcome === 'up-and-down' || outcome === 'sand-save') return;
       addMiss(short, 'short', d);
     });
