@@ -702,6 +702,11 @@ export const SWING_STRINGS = build({
     hip_drift: (cm) => t('swing.checkText.hip_drift', { cm: n0(cm) }),
     head_drift: (cm) => t('swing.checkText.head_drift', { cm: n0(cm) }),
     tempo: (back, down, ratio) => t('swing.checkText.tempo', { back, down, ratio: formatNumber(ratio, { maxDecimals: 1 }) }),
+    tempoSeconds: (back, down, ratio) => t('swing.checkText.tempoSeconds', {
+      back: formatNumber(back, { decimals: 2 }),
+      down: formatNumber(down, { decimals: 2 }),
+      ratio: formatNumber(ratio, { maxDecimals: 1 }),
+    }),
     finish_balance: (quiet, balanced) => {
       if (quiet && balanced) return t('swing.checkText.finish_balance.both');
       if (quiet) return t('swing.checkText.finish_balance.quiet');
