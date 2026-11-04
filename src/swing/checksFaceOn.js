@@ -14,7 +14,7 @@
 
 import { LM, mid, spineTiltDeg } from './geometry';
 import { headTrusted } from './club';
-import { normClub } from './checks';
+import { normClub, tempoParts } from './checks';
 import { SWING_STRINGS as T } from './strings';
 import { t } from '../i18n';
 
@@ -369,10 +369,11 @@ export function runFaceOnChecks(input) {
     const im = cps.impact?.frame;
     if (start == null || tp == null || im == null || im <= tp || tp <= start) rows.push(unknown(m, 'nodata', why('needsOrder')));
     else {
-      const r = round((tp - start) / (im - tp), 1);
+      const { back, down, text } = tempoParts(input.timeMs, start, tp, im);
+      const r = round(back / down, 1);
       const j = judgeRange(r, { green: [2.5, 3.5], yellow: [1.6, 4.5] });
       const d = j.side === 'low' ? 'fast' : j.side === 'high' ? 'slow' : null;
-      push(m, j, r, ':1', T.checkText.tempo(tp - start, im - tp, r), { dir: d, fault: d ? `tempo_${d}` : null });
+      push(m, j, r, ':1', text(r), { dir: d, fault: d ? `tempo_${d}` : null });
     }
   }
 

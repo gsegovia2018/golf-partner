@@ -212,3 +212,22 @@ describe('thresholds and flags', () => {
     expect(getPlanes({ checkpoints: {}, ball: null, pose: poseAt }).shaft).toBeNull();
   });
 });
+
+describe('tempo timed by timestamps', () => {
+  const cps = { top: { frame: 30, hands: { x: 0, y: 0 } }, impact: { frame: 40, hands: { x: 0, y: 0 } } };
+  const row = (timeMs) => byId(runChecks({ checkpoints: cps, ball: null, pose: () => null, pxPerCm: 1, heightCm: 176, motionStart: 0, timeMs }).checks, 'tempo');
+
+  test('without timestamps it counts frames', () => {
+    expect(row(undefined).value).toBe(3);
+    expect(row(undefined).text).toMatch(/30 .* 10 /);
+  });
+
+  test('with them, the ratio is of times and the row reads seconds', () => {
+    // the downswing's 10 frames span twice their count: 2 dropped frames for every one kept
+    const timeMs = (f) => (f <= 30 ? f * 20 : 600 + (f - 30) * 40);
+    const r = row(timeMs);
+    expect(r.value).toBe(1.5);
+    expect(r.status).toBe('red');
+    expect(r.text).toMatch(/0[.,]60 s .* 0[.,]40 s/);
+  });
+});

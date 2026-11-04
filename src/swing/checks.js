@@ -116,6 +116,20 @@ export const THRESHOLDS = {
 
 /** 'iron' | 'driver'; anything else (null, undefined, an old 'wood') reads as the default. */
 export const normClub = (club) => (CLUBS.includes(club) ? club : DEFAULT_CLUB);
+
+/**
+ * Tempo's two spans and its row text. With `timeMs` (captured ms of a frame) they are timed, so a
+ * phone clip that dropped frames mid-swing (a 60 fps file at 44 fps) still reads right; without it,
+ * counted in frames.
+ */
+export function tempoParts(timeMs, start, top, impact) {
+  if (!timeMs) {
+    return { back: top - start, down: impact - top, text: (r) => T.checkText.tempo(top - start, impact - top, r) };
+  }
+  const back = timeMs(top) - timeMs(start);
+  const down = timeMs(impact) - timeMs(top);
+  return { back, down, text: (r) => T.checkText.tempoSeconds(back / 1000, down / 1000, r) };
+}
 const FINISH_BALANCE_H = 0.08; // mid-hip x within 0.08 H of the lead ankle x
 const BODY_FRONT_H = 0.05; // shaft_plane: the body front, this share of the height in front of the mid-hip
 // shaft_plane: the belt sits above the hip-joint landmarks; read from the owner's lab swings, where
@@ -160,6 +174,7 @@ export function getPlanes({ checkpoints = {}, ball, pose, handedness = 'right' }
  * @param {number} input.pxPerCm
  * @param {number} input.heightCm
  * @param {number} [input.motionStart]  frame; tempo's backswing starts here (D10), takeaway if absent
+ * @param {(frame:number)=>number} [input.timeMs]  captured ms of a frame; tempo counts frames without it
  * @param {number} [input.finishQuietS]  seconds the golfer stays still after the finish
  * @param {boolean} [input.approximate]  effective fps < 100 or interpolated slow-mo
  * @param {'iron'|'driver'|null} [input.club]  selects the THRESHOLDS column; default iron
@@ -581,10 +596,11 @@ export function runChecks(input) {
     const im = cps.impact?.frame;
     if (start == null || tp == null || im == null || im <= tp || tp <= start) rows.push(unknown(m, 'nodata', why('needsOrder')));
     else {
-      const r = round((tp - start) / (im - tp), 1); // judged at the precision shown
+      const { back, down, text } = tempoParts(input.timeMs, start, tp, im);
+      const r = round(back / down, 1); // judged at the precision shown
       const j = judgeRange(r, { green: [2.5, 3.5], yellow: [1.6, 4.5] });
       const dir = j.side === 'low' ? 'fast' : j.side === 'high' ? 'slow' : null;
-      push(m, j, r, ':1', T.checkText.tempo(tp - start, im - tp, r), { dir, fault: dir ? `tempo_${dir}` : null });
+      push(m, j, r, ':1', text(r), { dir, fault: dir ? `tempo_${dir}` : null });
     }
   }
 

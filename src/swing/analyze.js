@@ -15,7 +15,7 @@ import { runFaceOnChecks } from './checksFaceOn';
 import { speedRows } from './speed';
 import { mainFault } from './priority';
 
-export const SCHEMA = 'swing-analysis/9'; // 2: the v2 checks (spec 2026-10-18); 3: their lab-calibrated limits (spec §8a); 4: tempo from backswingStart; 5: tour reference swings (spec §8b: backside hip line, impact hands, implausible clubheads, no-ball and face-on flags); 6: driver limits for the setup reach and the top; 7: the coach-series rows (hands_bicep, swing_symmetry, finish_trail_foot); 8: face-on checks (plan 2026-10-30); 9: the top rows from the tour swings. Older ones re-run on open
+export const SCHEMA = 'swing-analysis/10'; // 2: the v2 checks (spec 2026-10-18); 3: their lab-calibrated limits (spec §8a); 4: tempo from backswingStart; 5: tour reference swings (spec §8b: backside hip line, impact hands, implausible clubheads, no-ball and face-on flags); 6: driver limits for the setup reach and the top; 7: the coach-series rows (hands_bicep, swing_symmetry, finish_trail_foot); 8: face-on checks (plan 2026-10-30); 9: the top rows from the tour swings; 10: tempo timed by the frames' timestamps, from the later of address and backswingStart. Older ones re-run on open
 export const MAX_CLIP_S = 15; // captured seconds; the importer warns above this
 const MIN_USABLE = 10;
 const MIN_COVERAGE = 0.8;
@@ -55,6 +55,20 @@ function makePoseAt(idx, L) {
     if (f < idx[0] || f > idx[idx.length - 1]) return null;
     return L[0].map((_, j) => [0, 1, 2].map((c) => interp(f, idx, L.map((lm) => lm[j][c]))));
   };
+}
+
+/**
+ * Captured ms of any frame: the samples' container timestamps (tMs), interpolated between them and
+ * divided by the slow-motion factor; frame / containerFps when the samples carry none. Timestamps,
+ * not counts: a phone that drops frames mid-swing spaces them unevenly.
+ */
+function frameTimeMs(native, containerFps, factor) {
+  const timed = (native.frames || []).filter((f) => f && Number.isFinite(f.i) && Number.isFinite(f.tMs));
+  const f2 = factor || 1;
+  if (timed.length < 2) return (f) => (f * 1000) / containerFps / f2;
+  const ti = timed.map((f) => f.i);
+  const tv = timed.map((f) => f.tMs);
+  return (f) => interp(f, ti, tv) / f2;
 }
 
 /**
@@ -169,8 +183,10 @@ export function analyze(native, opts = {}) {
     club,
     pxPerCm: scale.pxPerCm,
     heightCm,
-    // tempo's backswing starts at the address frame the golfer moved, else where the pose sees the grip rise
-    motionStart: Number.isFinite(marks.address?.frame) ? marks.address.frame : ph.internal.backswingStart,
+    // tempo's backswing starts where the pose sees the grip rise, or at the golfer's address frame when
+    // that is later: an address moved earlier is a setup frame, and its stillness is not backswing
+    motionStart: Math.max(ph.internal.backswingStart, Number.isFinite(marks.address?.frame) ? marks.address.frame : -Infinity),
+    timeMs: frameTimeMs(native, containerFps, ph.fps.factor),
     finishQuietS: ph.finishQuietS,
     approximate: ph.fps.approximate,
   });

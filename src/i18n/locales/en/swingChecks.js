@@ -70,6 +70,7 @@ export default {
   'swing.checkText.hip_drift': 'Hips {cm} cm toward the ball',
   'swing.checkText.head_drift': 'Head moved {cm} cm from address',
   'swing.checkText.tempo': 'Backswing {back} : downswing {down} frames = {ratio}:1 (2.5–3.5 is good)',
+  'swing.checkText.tempoSeconds': 'Backswing {back} s : downswing {down} s = {ratio}:1 (2.5–3.5 is good)',
   'swing.checkText.finish_balance.both': 'Held the finish, weight over the lead leg',
   'swing.checkText.finish_balance.quiet': 'Held still, but weight is not over the lead leg',
   'swing.checkText.finish_balance.balanced': 'Weight over the lead leg, but the finish was not held still',

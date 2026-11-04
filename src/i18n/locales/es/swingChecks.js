@@ -70,6 +70,7 @@ export default {
   'swing.checkText.hip_drift': 'Caderas {cm} cm hacia la bola',
   'swing.checkText.head_drift': 'La cabeza se movió {cm} cm desde la preparación',
   'swing.checkText.tempo': 'Subida {back} : bajada {down} fotogramas = {ratio}:1 (2,5–3,5 está bien)',
+  'swing.checkText.tempoSeconds': 'Subida {back} s : bajada {down} s = {ratio}:1 (2,5–3,5 está bien)',
   'swing.checkText.finish_balance.both': 'Acabado mantenido, con el peso sobre la pierna adelantada',
   'swing.checkText.finish_balance.quiet': 'Acabado quieto, pero el peso no está sobre la pierna adelantada',
   'swing.checkText.finish_balance.balanced': 'Peso sobre la pierna adelantada, pero el acabado no se mantuvo quieto',

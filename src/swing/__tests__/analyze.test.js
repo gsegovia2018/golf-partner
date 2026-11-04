@@ -1,6 +1,6 @@
 import { analyze, SCHEMA } from '../analyze';
 import { SWING_STRINGS } from '../strings';
-import { fixtureNative, TRUTH, W, H } from './helpers';
+import { fixtureNative, TRUTH, W, H, CONTAINER_FPS } from './helpers';
 import { analyzeReference, byName } from './referenceSwings';
 
 const lab = require('./fixtures/lab-d15-pass1.json');
@@ -17,10 +17,10 @@ const byId = (a, id, cp) => a.checks.find((c) => c.id === id && (!cp || c.cp ===
 describe('analyze: the whole pipeline on the fixture', () => {
   const a = analyze(native(), { pass2, handedness: 'right', heightCm: 176, club: 'iron', source: 'import', swingId: 's1', createdAt: 'x' });
 
-  test('shape of analysis.json (schema swing-analysis/9)', () => {
+  test('shape of analysis.json (schema swing-analysis/10)', () => {
     expect(a.error).toBeUndefined();
     expect(a.schema).toBe(SCHEMA);
-    expect(SCHEMA).toBe('swing-analysis/9');
+    expect(SCHEMA).toBe('swing-analysis/10');
     expect(a).toMatchObject({ swingId: 's1', club: 'iron', handedness: 'right', view: 'dtl', source: 'import' });
     expect(a.fps).toMatchObject({ factor: 8, source: 'estimate', approximate: false });
     expect(a.scale.approx).toBe(false);
@@ -187,13 +187,36 @@ describe('analyze: where tempo starts the backswing', () => {
     expect(byId(a, 'tempo').value).toBe(ratio(a, a.internal.backswingStart));
   });
 
-  test('a moved address frame is the start', () => {
+  test('an address moved earlier is a setup frame: its stillness is not backswing', () => {
     const auto = run(undefined);
     const frame = auto.internal.backswingStart - 20;
     const a = run({ address: { hands: null, head: null, hidden: false, frame } });
     expect(a.checkpoints.address.i).toBe(frame);
+    expect(byId(a, 'tempo').value).toBe(byId(auto, 'tempo').value);
+  });
+
+  test('an address moved past where the grip starts to rise is the start', () => {
+    const auto = run(undefined);
+    const frame = auto.internal.backswingStart + 10;
+    const a = run({ address: { hands: null, head: null, hidden: false, frame } });
     expect(byId(a, 'tempo').value).toBe(ratio(a, frame));
-    expect(byId(a, 'tempo').value).toBeGreaterThan(byId(auto, 'tempo').value);
+    expect(byId(a, 'tempo').value).toBeLessThan(byId(auto, 'tempo').value);
+  });
+
+  test('timed by the frames\' timestamps: frames dropped in the downswing make it longer than its count', () => {
+    const auto = run(undefined);
+    const { top, impact } = { top: auto.checkpoints.top.i, impact: auto.checkpoints.impact.i };
+    const gap = 1000 / CONTAINER_FPS; // every downswing frame twice as far apart, as a phone dropping every other one
+    const base = native();
+    const frames = base.frames.map((f) => ({ ...f, tMs: f.tMs + (Math.min(Math.max(f.i, top), impact) - top) * gap }));
+    const a = analyze({ ...base, frames }, { pass2, heightCm: 176 });
+    const t = (i) => frames.find((f) => f.i === i).tMs;
+    const start = a.internal.backswingStart;
+    expect(a.checkpoints.top.i).toBe(top);
+    expect(a.checkpoints.impact.i).toBe(impact);
+    expect(byId(a, 'tempo').value).toBe(Math.round(((t(top) - t(start)) / (t(impact) - t(top))) * 10) / 10);
+    expect(byId(a, 'tempo').value).toBeLessThan(byId(auto, 'tempo').value);
+    expect(byId(a, 'tempo').text).toMatch(/ s : .* s = /);
   });
 });
 
