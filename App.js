@@ -390,18 +390,47 @@ function AppNavigator() {
     return () => { cancelled = true; };
   }, [userId, isAnonUser]);
 
+  // A tapped push's deep link waits here until the Stack is mounted. A tap that
+  // launches the app (cold start, or Android killed the process) arrives while
+  // the splash is up and the navigator isn't ready; navigating then is a no-op,
+  // which left the player on Home. The launch tap is also only delivered via
+  // getLastNotificationResponse, not the listener. Deduped by identifier since
+  // both can report the same tap.
+  const pendingPushLink = useRef(null);
+  const handledPushId = useRef(null);
+  const [pushTick, setPushTick] = useState(0);
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+    const take = (response) => {
       const data = response?.notification?.request?.content?.data;
-      if (data?.screen && navigationRef.isReady()) {
-        // Legacy pushes carry a bare 'Home' target the root navigator can't
-        // resolve — normalize to the nested form before navigating.
-        const link = normalizeDeepLink(data);
-        navigationRef.navigate(link.screen, link.params);
-      }
-    });
+      const id = response?.notification?.request?.identifier ?? null;
+      if (!data?.screen || (id && id === handledPushId.current)) return;
+      handledPushId.current = id;
+      // Legacy pushes carry a bare 'Home' target the root navigator can't
+      // resolve — normalize to the nested form before navigating.
+      pendingPushLink.current = normalizeDeepLink(data);
+      setPushTick((n) => n + 1);
+    };
+    const sub = Notifications.addNotificationResponseReceivedListener(take);
+    try { take(Notifications.getLastNotificationResponse?.()); } catch { /* web: no launch response */ }
     return () => sub.remove();
   }, []);
+
+  useEffect(() => {
+    if (!session || onboarding !== false || !pendingPushLink.current) return undefined;
+    let stop = false;
+    const go = (n) => {
+      if (stop || !pendingPushLink.current) return;
+      if (navigationRef.isReady()) {
+        const link = pendingPushLink.current;
+        pendingPushLink.current = null;
+        // So a JS reload (an OTA applying on next start) doesn't replay it.
+        try { Notifications.clearLastNotificationResponse?.(); } catch { /* web */ }
+        navigationRef.navigate(link.screen, link.params);
+      } else if (n > 0) setTimeout(() => go(n - 1), 100);
+    };
+    go(30);
+    return () => { stop = true; };
+  }, [session, onboarding, pushTick]);
 
   // A new player who came from a shared swing ("Create account") lands on the Swing tab once
   // signed in and past onboarding. The flag survives the web's Google redirect (afterAuth).
