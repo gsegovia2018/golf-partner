@@ -4,7 +4,7 @@
 //
 // The tab navigator still owns the bar's state: its tabBar renders a
 // TabBarPublisher, which hands this host the tabs' state and navigation.
-import React, { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Platform, StyleSheet } from 'react-native';
 import { StackActions } from '@react-navigation/native';
 import Animated, { runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -36,9 +36,16 @@ function getPublished() {
 }
 
 // The tab navigator's tabBar: draws nothing, publishes { state, navigation }.
+// On unmount it clears only its own publish: when the tabs remount, the new
+// publisher's layout effect runs before the old one's passive cleanup, and an
+// unconditional publish(null) there left the bar with nothing to draw.
 export function TabBarPublisher({ state, navigation }) {
-  useLayoutEffect(() => { publish({ state, navigation }); }, [state, navigation]);
-  useEffect(() => () => publish(null), []);
+  const mine = useRef(null);
+  useLayoutEffect(() => {
+    mine.current = { state, navigation };
+    publish(mine.current);
+  }, [state, navigation]);
+  useEffect(() => () => { if (published === mine.current) publish(null); }, []);
   return null;
 }
 

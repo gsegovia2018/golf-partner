@@ -65,6 +65,37 @@ describe('TabBarHost', () => {
     expect(hidden(utils)).toBe(true);
   });
 
+  // Sentry 2026-11-04..07: the bar vanished with hasTabs false. A remounted
+  // publisher's layout effect publishes, then the old one's passive cleanup
+  // ran and wiped it, leaving nothing to draw until the tab state changed.
+  test('a remounted publisher keeps the bar', () => {
+    const ref = makeRef(['Main']);
+    const utils = render(
+      <>
+        <TabBarPublisher key="a" {...TABS} />
+        <TabBarHost navigationRef={ref} />
+      </>
+    );
+
+    utils.rerender(
+      <>
+        <TabBarPublisher key="b" {...TABS} />
+        <TabBarHost navigationRef={ref} />
+      </>
+    );
+
+    expect(utils.getByTestId('bar').props.bar.state).toBe(TABS.state);
+  });
+
+  test('the bar goes when the tabs unmount', () => {
+    const ref = makeRef(['Main']);
+    const utils = renderHost(ref);
+
+    utils.rerender(<TabBarHost navigationRef={ref} />);
+
+    expect(utils.queryByTestId('bar')).toBeNull();
+  });
+
   test('leaving a screen pops the root stack to the tabs', () => {
     const ref = makeRef(['Main', 'Settings']);
     const utils = renderHost(ref);
