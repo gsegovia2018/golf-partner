@@ -49,15 +49,20 @@ jest.mock('../src/components/LoadingSplash', () => {
 // Captured so the tests can assert on the deep-link config that turns a URL
 // into a route once a session exists (the post-sign-in half of the handoff).
 const mockNavigationProps = { current: null };
+const mockRegisteredScreens = [];
+// Ready once the Stack has registered its screens, like the real container.
+const mockNavRef = {
+  isReady: () => mockRegisteredScreens.includes('Main'),
+  navigate: jest.fn(),
+};
 jest.mock('@react-navigation/native', () => ({
   NavigationContainer: (props) => {
     mockNavigationProps.current = props;
     return props.children;
   },
-  createNavigationContainerRef: () => ({ isReady: () => false, navigate: jest.fn() }),
+  createNavigationContainerRef: () => mockNavRef,
 }));
 
-const mockRegisteredScreens = [];
 jest.mock('@react-navigation/stack', () => ({
   createStackNavigator: () => ({
     Navigator: ({ children }) => children,
@@ -104,8 +109,11 @@ jest.mock('expo-linking', () => ({
 // expo-font / expo-notifications resolve through Expo's own module graph at
 // runtime but aren't resolvable from the repo root under Jest.
 jest.mock('expo-font', () => ({ useFonts: () => [true] }), { virtual: true });
+const mockLaunchResponse = { current: null };
 jest.mock('expo-notifications', () => ({
   addNotificationResponseReceivedListener: () => ({ remove: jest.fn() }),
+  getLastNotificationResponse: () => mockLaunchResponse.current,
+  clearLastNotificationResponse: jest.fn(),
   setNotificationHandler: jest.fn(),
 }), { virtual: true });
 jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
@@ -437,5 +445,27 @@ describe('App gating: onboarding check', () => {
     mockProfileStore.loadCachedProfile.mockResolvedValueOnce({ userId: 'u1', username: 'marcos' });
     await renderAtUrl(null, { session: SESSION });
     expect(mockRegisteredScreens).toContain('Main');
+  });
+});
+
+// A push tapped while the app is closed launches it: the tap arrives while the
+// splash is up, before the Stack exists. It used to be dropped (the player
+// landed on Home); it must wait for the Stack and then open its screen.
+describe('App gating: push tap that launches the app', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    Linking.addEventListener.mockReturnValue({ remove: jest.fn() });
+    mockRegisteredScreens.length = 0;
+  });
+  afterEach(() => { mockLaunchResponse.current = null; });
+
+  test("a friend's round_finished push opens that round's summary", async () => {
+    const link = { screen: 'RoundSummary', params: { tournamentId: 't1', roundId: 'r1' } };
+    mockLaunchResponse.current = {
+      notification: { request: { identifier: 'n1', content: { data: link } } },
+    };
+    await renderAtUrl(null, { session: SESSION });
+    await waitFor(() => expect(mockNavRef.navigate).toHaveBeenCalledWith('RoundSummary', link.params));
+    expect(mockNavRef.navigate).toHaveBeenCalledTimes(1);
   });
 });
