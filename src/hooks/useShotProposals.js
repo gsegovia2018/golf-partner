@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useAppSettings } from './useAppSettings';
 import { useCourseGeometry } from './useCourseGeometry';
 import {
   subscribeShotProposals, getShotProposalsVersion, getRoundStops, getRoundWalk, loadShotProposals,
   confirmProposals, dismissProposal, closeHoleOnGreen, proposalRoundKey,
+  getDetectionHealth, storedShotProposalSizes,
 } from '../store/shotProposalStore';
 import { subscribeShotSound, getShotSoundVersion, getShotSoundIndex, refreshShotSound } from '../store/shotSoundStore';
 import { soundLevel } from '../store/shotSound';
-import { proposalsForHole, greenLandingStop } from '../store/shotDetection';
+import { proposalsForHole, greenLandingStop, holeStops, walkMissingHere } from '../store/shotDetection';
 import { holeStrokeAccount } from '../store/scoring';
 import { holeRefs, onGreen, walkForHole } from '../lib/gpsTrailStops';
 import {
@@ -15,6 +16,7 @@ import {
 } from '../store/shotStore';
 import { guessClub } from '../store/clubGuess';
 import { bearingDeg } from '../lib/geo';
+import { captureMessage } from '../lib/errorReporting';
 
 const EMPTY = [];
 
@@ -29,11 +31,13 @@ const EMPTY = [];
 // `sound`: what the phone heard and felt there ('shot' | 'heard' | 'quiet' |
 // null, store/shotSound), which only ranks it on the map.
 // `walk` is this hole's part of the walk the trail recorded ([[[lat,lng],...]],
-// one array per run), for the map's dotted line — computed only `withWalk`. While mounted, an open hole
+// one array per run), for the map's dotted line — computed only `withWalk`.
+// `position` ([lat,lng] or null) is the live fix, used only to report a hole
+// map with no walk where the golfer has clearly walked (once per hole). While mounted, an open hole
 // whose trail shows a stop on the green is ended there (greenLandingStop).
 export function useShotProposals({
   roundId, roundIndex, holeNumber, courseName, enabled,
-  strokes = null, detail = null, pickedUp = false, withWalk = false,
+  strokes = null, detail = null, pickedUp = false, withWalk = false, position = null,
 }) {
   const settings = useAppSettings();
   const on = !!enabled && settings.recordGpsTrail === true && roundId != null;
@@ -82,6 +86,37 @@ export function useShotProposals({
     ? walkForHole(getRoundWalk(roundId, roundIndex), course.holes, holeNumber) : EMPTY),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [on, withWalk, roundId, roundIndex, holeNumber, course, pv]);
+
+  // Diagnostics: on some holes (7 Nov 2026) the map showed no walk and no
+  // seen pins though the phone had detected the stops. Report what this
+  // context holds against storage and how current the feed is, once per hole.
+  const reported = useRef(new Set());
+  const walkMissing = on && withWalk && walkMissingHere(position, refs, walk);
+  useEffect(() => {
+    const tag = `${roundId}|${roundIndex}|${holeNumber}`;
+    if (!walkMissing || reported.current.has(tag)) return;
+    reported.current.add(tag);
+    const health = getDetectionHealth();
+    const all = getRoundStops(roundId, roundIndex);
+    storedShotProposalSizes(roundId, roundIndex).then((stored) => {
+      captureMessage('hole map walk missing', {
+        hole: holeNumber,
+        memWalk: getRoundWalk(roundId, roundIndex).length,
+        memStops: all.length,
+        storedWalk: stored.walk,
+        storedStops: stored.stops,
+        holeStops: holeStops(all, { holeNumber, course }).length,
+        open: open.length,
+        lastStopAgoS: all.length ? Math.round((Date.now() - Math.max(...all.map((st) => st.end))) / 1000) : null,
+        feeds: health.feeds,
+        lastFeedAgoS: health.lastFeedAt ? Math.round((Date.now() - health.lastFeedAt) / 1000) : null,
+        pending: health.pending,
+        buffer: health.buffer,
+        courseHoles: course?.holes?.length ?? 0,
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walkMissing, roundId, roundIndex, holeNumber]);
 
   // The approach's real landing: the first stop on the green, once the trail
   // has seen you walk off it. closeHoleOnGreen re-checks the stop, so two

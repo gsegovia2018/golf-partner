@@ -1,6 +1,6 @@
 import {
   cleanTrail, detectStops, mergeStops, assignStopsByPlay, holeRefs, onGreen, haversine,
-  MERGE_DIST_M,
+  distanceToHoleLine, MERGE_DIST_M,
 } from '../lib/gpsTrailStops';
 
 // Automatic shot detection, pure half: turns this phone's GPS fixes into
@@ -109,3 +109,13 @@ export function seqForProposal(proposal, shots, green) {
   return shots.length ? shots[shots.length - 1].seq + 1 : 1;
 }
 
+
+// Diagnostics: the hole map is open, the golfer stands on this hole well past
+// its tee (so the trail must have walked here), yet the hole has no walk to
+// draw. `pos` [lat,lng], `refs` holeRefs of the hole, `walk` its walkForHole runs.
+export const WALK_MISSING_PAST_TEE_M = 50;
+export const WALK_MISSING_LINE_M = 40;
+export function walkMissingHere(pos, refs, walk) {
+  if (!pos || !refs || walk?.length) return false;
+  return haversine(pos, refs.tee) >= WALK_MISSING_PAST_TEE_M && distanceToHoleLine(pos, refs) <= WALK_MISSING_LINE_M;
+}

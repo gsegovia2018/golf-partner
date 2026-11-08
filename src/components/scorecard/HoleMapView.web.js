@@ -19,6 +19,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, seen, wa
   useEffect(() => {
     const h = (e) => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.type === 'ready') live.current.forEach(send);
       if (m.type === 'point') onPoint?.(m.field, m.pos, m.drag);
       if (m.type === 'shot-move') onShotMove?.(m.index, m.pos);
       if (m.type === 'aim') onAim?.(m.pos, m.rings);
@@ -33,6 +34,22 @@ export function HoleMapView({ data, player, anchor, activeField, shots, seen, wa
     window.addEventListener('message', h);
     return () => window.removeEventListener('message', h);
   }, [onPoint, onShotMove, onAim, onMapTap, onShotTap, onSeenTap, bucket]);
+
+  // The live state below, replayed when the page reports `ready`: what was
+  // sent while it was still loading never reached it, so the walk, seen pins
+  // or shots stayed missing until they next changed.
+  const live = useRef([]);
+  live.current = [
+    { type: 'player', pos: player || null, anchor: anchor ?? null },
+    { type: 'shots', shots: shots || [] },
+    { type: 'seen', seen: seen || [] },
+    { type: 'walk', walk: walk || [] },
+    { type: 'last-shot', lastShot: lastShot ?? null },
+    { type: 'plays', plays: plays ?? null },
+    targets && { type: 'set-targets', targets },
+    { type: 'placing', on: placing },
+    activeField && { type: 'activeField', field: activeField },
+  ].filter(Boolean);
 
   useEffect(() => { send({ type: 'player', pos: player || null, anchor: anchor ?? null }); }, [player, anchor]);
   useEffect(() => { send({ type: 'shots', shots: shots || [] }); }, [shots]);

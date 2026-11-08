@@ -1,5 +1,5 @@
 import {
-  takeClosedStops, proposalsForHole, seqForProposal, greenLandingStop, holeStops,
+  takeClosedStops, proposalsForHole, seqForProposal, greenLandingStop, holeStops, walkMissingHere,
 } from '../shotDetection';
 
 // ~1 m of latitude.
@@ -99,6 +99,32 @@ describe('stops go to the hole being played when they were made', () => {
     expect(holeStops(stops, { holeNumber: 2, course: side }).map((s) => s.id).sort()).toEqual(['d', 'e', 'f']);
   });
 
+  test('the hole played last keeps its stops when its line was crossed earlier', () => {
+    // 7 Nov 2026: while playing hole 1 the golfer crossed hole 2's fairway
+    // (three stops, more than hole 2's real play), and hole 2 came last — its
+    // tee stop plus one fairway stop closed before the trail ended.
+    const crossing = [at('x1', 5, 150, -3.7 + east), at('x2', 6, 170, -3.7 + east), at('x3', 7, 190, -3.7 + east)];
+    const play = [at('t', 40, 360, -3.7 + east), at('u', 45, 250, -3.7 + east)];
+    const stops = [...holeOne, ...crossing, ...play];
+    expect(holeStops(stops, { holeNumber: 2, course: side }).map((s) => s.id)).toEqual(['t', 'u']);
+    expect(holeStops(stops, { holeNumber: 1, course: side }).map((s) => s.id).sort())
+      .toEqual(['a', 'b', 'c', 'x1', 'x2', 'x3']);
+    // From the tee shot on, not only once the hole is over.
+    expect(holeStops([...holeOne, ...crossing, play[0]], { holeNumber: 2, course: side }).map((s) => s.id)).toEqual(['t']);
+  });
+
+  test('a stop by a tee belongs to that hole even when another line passes closer', () => {
+    // Hole 3's tee is 20 m east of hole 1's line and the hole runs east; the
+    // golfer waits 12 m behind the tee, 8 m from hole 1's line.
+    const m = 1 / (111195 * Math.cos((40 * Math.PI) / 180));
+    const three = { number: 3, par: 3, start: [spot(200)[0], -3.7 + 20 * m], pin: [spot(200)[0], -3.7 + 170 * m] };
+    const course3 = { holes: [hole, three] };
+    expect(holeStops([at('w', 0, 200, -3.7 + 8 * m)], { holeNumber: 3, course: course3 }).map((s) => s.id)).toEqual(['w']);
+    // A stop on a green stays with that green, whatever tee is near.
+    const four = { number: 4, par: 4, start: [spot(360)[0], -3.7 + 20 * m], pin: [spot(360)[0], -3.69] };
+    expect(holeStops([at('g', 0, 360, -3.7)], { holeNumber: 1, course: { holes: [hole, four] } }).map((s) => s.id)).toEqual(['g']);
+  });
+
   test('a stray far from the hole being played is dropped', () => {
     const far = { holes: [hole, { number: 2, par: 3, start: [41, -3.7], pin: [41.001, -3.7] }] };
     const stray = at('x', 60, 100); // an hour later on hole 1's line
@@ -129,4 +155,14 @@ describe('greenLandingStop', () => {
     expect(greenLandingStop([stop('8', 352, { status: 'added' })], { holeNumber: 1, course, shots: open })).toBeNull();
     expect(greenLandingStop([stop('8', 352, { status: 'dismissed' })], { holeNumber: 1, course, shots: open })).toBeNull();
   });
+});
+
+test('walkMissingHere: on the hole well past its tee with nothing to draw', () => {
+  const refs = { tee: spot(0), green: spot(360), poly: null };
+  expect(walkMissingHere(spot(200), refs, [])).toBe(true);
+  expect(walkMissingHere(spot(200), refs, [[spot(0), spot(10)]])).toBe(false); // there is a walk
+  expect(walkMissingHere(spot(20), refs, [])).toBe(false); // still by the tee
+  expect(walkMissingHere([spot(200)[0], -3.699], refs, [])).toBe(false); // ~85 m off the line
+  expect(walkMissingHere(null, refs, [])).toBe(false);
+  expect(walkMissingHere(spot(200), null, [])).toBe(false);
 });

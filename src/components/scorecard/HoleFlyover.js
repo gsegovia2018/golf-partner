@@ -56,6 +56,7 @@ export function HoleFlyover({
   // "Shot from here?" card. `missing` drives the pill and "+1 from here".
   const seen = useShotProposals({
     roundId, roundIndex, holeNumber, courseName, enabled: seenEnabled, strokes, detail, pickedUp, withWalk: visible,
+    position,
   });
   const seenPins = useMemo(() => (seen.open.length ? seen.open.map((p) => ({ lat: p.lat, lng: p.lng, level: p.sound ?? null })) : NO_SEEN), [seen.open]);
   const [seenIdx, setSeenIdx] = useState(null);
