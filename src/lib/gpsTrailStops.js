@@ -119,6 +119,9 @@ function segmentDistance(p, a, b) {
   return Math.hypot(px - u * bx, py - u * by);
 }
 
+// Distance from `pos` to a hole's tee→green line (holeRefs), metres.
+export const distanceToHoleLine = (pos, refs) => segmentDistance(pos, refs.tee, refs.green);
+
 // The tee and green reference points of a geometry hole (assembleCourses shape).
 export function holeRefs(hole) {
   const tee = hole.start ?? centroid(hole.tees);
@@ -127,17 +130,25 @@ export function holeRefs(hole) {
 }
 
 // Each stop goes to the hole whose tee→green line is nearest, within
-// `maxM`; anything further (car park, between holes) stays unassigned.
+// `maxM`; anything further (car park, between holes) stays unassigned. Before
+// lines: a stop on a green is that hole's, and one within TEE_STOP_M of a tee
+// (and nearer it than to any flag) is that hole's tee shot, even when another
+// hole's line passes closer (a tee beside the previous green).
+export const TEE_STOP_M = 15;
 export function assignStopsToHoles(stops, holes, { maxM = 60 } = {}) {
   const refs = (holes ?? []).map((h) => ({ number: h.number, refs: holeRefs(h) })).filter((h) => h.refs);
   const byHole = new Map();
   const unassigned = [];
+  const nearest = (dist, within) => refs.reduce((best, h) => {
+    const d = dist(h.refs);
+    return d <= within && (!best || d < best.d) ? { number: h.number, d } : best;
+  }, null);
   for (const s of stops) {
-    let best = null;
-    for (const h of refs) {
-      const d = segmentDistance([s.lat, s.lng], h.refs.tee, h.refs.green);
-      if (d <= maxM && (!best || d < best.d)) best = { number: h.number, d };
-    }
+    const pos = [s.lat, s.lng];
+    const flag = Math.min(...refs.map((h) => haversine(pos, h.refs.green)));
+    const best = refs.find((h) => onGreen(pos, h.refs))
+      ?? nearest((r) => haversine(pos, r.tee), Math.min(TEE_STOP_M, flag))
+      ?? nearest((r) => segmentDistance(pos, r.tee, r.green), maxM);
     if (!best) { unassigned.push(s); continue; }
     if (!byHole.has(best.number)) byHole.set(best.number, []);
     byHole.get(best.number).push(s);
@@ -147,31 +158,45 @@ export function assignStopsToHoles(stops, holes, { maxM = 60 } = {}) {
 
 // assignStopsToHoles with time: holes are played one after another, so a stop
 // on a hole's line hours apart from the rest of that hole's stops was made
-// while playing another hole (a drive into the next fairway). Each hole's
-// play is its largest run of stops with no gap over `gapMs`; a stop outside
-// its hole's play (or near no hole line) goes to the hole being played at
-// that moment — the latest play started before it — when that hole's line
+// while playing another hole (a drive into the next fairway). A hole's stops
+// fall into runs with no gap over `gapMs`; its play is the largest run that
+// did not happen while another hole was being played (inside the time span of
+// that hole's largest run) — crossing a hole on the way to another tee can
+// leave more stops than its real play, which may still be under way. A stop
+// outside its hole's play (or near no hole line) goes to the hole being played
+// at that moment — the latest play started before it — when that hole's line
 // is within `strayM`, else it is dropped.
 export const PLAY_GAP_MS = 10 * 60000;
+const longest = (runs) => runs.reduce((a, b) => (b.length > a.length ? b : a));
 export function assignStopsByPlay(stops, holes, { maxM = 60, strayM = 150, gapMs = PLAY_GAP_MS } = {}) {
   const { byHole: geo, unassigned } = assignStopsToHoles(stops, holes, { maxM });
   const refs = new Map((holes ?? []).map((h) => [h.number, holeRefs(h)]).filter(([, r]) => r));
   const byHole = new Map();
   const add = (n, s) => { if (!byHole.has(n)) byHole.set(n, []); byHole.get(n).push(s); };
-  const plays = [];
-  const strays = [...unassigned];
+  const runsOf = new Map();
   for (const [n, list] of geo) {
-    const sorted = [...list].sort((a, b) => a.start - b.start);
     const runs = [];
-    for (const s of sorted) {
+    for (const s of [...list].sort((a, b) => a.start - b.start)) {
       const run = runs[runs.length - 1];
       if (run && s.start - run[run.length - 1].end <= gapMs) run.push(s);
       else runs.push([s]);
     }
-    const main = runs.reduce((a, b) => (b.length > a.length ? b : a));
+    runsOf.set(n, runs);
+  }
+  const spans = [...runsOf].map(([n, runs]) => {
+    const run = longest(runs);
+    return { n, start: run[0].start, end: run[run.length - 1].end };
+  });
+  const during = (n, run) => spans.some((sp) => sp.n !== n
+    && sp.start < run[0].start && run[run.length - 1].end < sp.end);
+  const plays = [];
+  const strays = [...unassigned];
+  for (const [n, runs] of runsOf) {
+    const own = runs.filter((run) => !during(n, run));
+    const main = longest(own.length ? own : runs);
     main.forEach((s) => add(n, s));
     plays.push({ number: n, start: main[0].start });
-    runs.filter((r) => r !== main).forEach((r) => strays.push(...r.map((s) => ({ s, own: n }))));
+    runs.filter((run) => run !== main).forEach((run) => strays.push(...run.map((s) => ({ s, own: n }))));
   }
   plays.sort((a, b) => a.start - b.start);
   for (const item of strays) {

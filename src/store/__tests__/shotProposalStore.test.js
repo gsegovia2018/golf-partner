@@ -3,6 +3,7 @@ import {
   feedShotDetection, getRoundStops, loadShotProposals, dismissProposal, confirmProposals,
   setDetectionHole, PROPOSALS_PREFIX, __resetShotProposalsForTests,
   getRoundWalk, closeHoleOnGreen, markProposalAdded, WALK_PREFIX,
+  getDetectionHealth, storedShotProposalSizes,
 } from '../shotProposalStore';
 import { shotsForHole, pruneShotsToRounds, logShot } from '../shotStore';
 import { getActiveTrailRound, isTrailRecordingEnabled } from '../gpsTrailStore';
@@ -105,4 +106,17 @@ describe('walk and green landing', () => {
     await markProposalAdded('t1-r0', 0, stop.id, 's1');
     expect(getRoundStops('t1-r0', 0)[0]).toMatchObject({ status: 'added', shotId: 's1' });
   });
+});
+
+test('detection health counts the feeds this context ran, and storage sizes can be compared', async () => {
+  expect(getDetectionHealth()).toMatchObject({ feeds: 0, lastFeedAt: null, pending: 0 });
+  await feedShotDetection(standThenWalk());
+  const h = getDetectionHealth();
+  expect(h.feeds).toBe(1);
+  expect(h.lastFeedAt).toBeGreaterThan(0);
+  expect(h.pending).toBe(0);
+  // Another context's writes show up in storage, not in this context's memory.
+  await AsyncStorage.setItem(`${WALK_PREFIX}t1-r0|0`, JSON.stringify([[40, -3.7], [40.001, -3.7], [40.002, -3.7]]));
+  expect(await storedShotProposalSizes('t1-r0', 0)).toEqual({ stops: 1, walk: 3 });
+  expect(getRoundWalk('t1-r0', 0).length).not.toBe(3);
 });

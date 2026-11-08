@@ -47,10 +47,30 @@ export function getRoundWalk(roundId, roundIndex) {
 }
 
 let chain = Promise.resolve();
+let pending = 0; // jobs queued or running on the chain
 function serial(job) {
-  const run = chain.then(job, job);
+  pending += 1;
+  const run = chain.then(job, job).finally(() => { pending -= 1; });
   chain = run.catch(() => {});
   return run;
+}
+
+// Diagnostics (hole map trail-missing report): whether fixes reach this JS
+// context, and how far the chain is behind them.
+let feeds = 0;
+let lastFeedAt = null;
+export function getDetectionHealth() {
+  return { feeds, lastFeedAt, pending, buffer: buffer.length };
+}
+
+// What storage holds for a round, to compare with this context's memory: a
+// gap means fixes are being processed somewhere else. Never throws.
+export async function storedShotProposalSizes(roundId, roundIndex) {
+  const key = proposalRoundKey(roundId, roundIndex);
+  const size = async (k) => {
+    try { return JSON.parse(await AsyncStorage.getItem(k))?.length ?? 0; } catch { return null; }
+  };
+  return { stops: await size(PROPOSALS_PREFIX + key), walk: await size(WALK_PREFIX + key) };
 }
 
 // Reads a round's stored proposals into memory (once). Never throws.
@@ -97,6 +117,8 @@ export function feedShotDetection(locations) {
       const active = await getActiveTrailRound();
       if (!active || !(await isTrailRecordingEnabled())) return 0;
       const key = proposalRoundKey(active.roundId, active.roundIndex);
+      feeds += 1;
+      lastFeedAt = Date.now();
       if (bufferKey !== key) { buffer = []; bufferKey = key; }
       const points = locations.map(toTrailPoint).filter(Boolean);
       buffer = buffer.concat(points).slice(-MAX_BUFFER);
@@ -188,4 +210,7 @@ export function __resetShotProposalsForTests() {
   bufferKey = null;
   holeNow = null;
   chain = Promise.resolve();
+  pending = 0;
+  feeds = 0;
+  lastFeedAt = null;
 }
